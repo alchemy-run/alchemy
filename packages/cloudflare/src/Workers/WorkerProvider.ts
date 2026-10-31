@@ -5,7 +5,6 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
-import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -17,6 +16,7 @@ import { cachedFunction } from "alchemy/Util/cached-function";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
@@ -46,10 +46,7 @@ import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { placeholderResetReason } from "./Placeholder.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
-import { makeSourceContext, resolveSource } from "./Source.ts";
-import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
-import { WorkerBundle } from "./Sources/Rolldown.ts";
+import { isAssetsOnly, makeSourceContext, resolveSource } from "./Source.ts";
 import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   Worker,
@@ -595,6 +592,25 @@ export const resolveWorkerDomain = (
     };
   });
 
+/**
+ * Preserve the resolved domain metadata only while the declared canonical
+ * hostname is attached. Alias, redirect, and unknown-hostname classification
+ * is supplied by `read`; zone and previews retain reconcile's persisted shape.
+ */
+const resolveObservedWorkerDomain = (
+  serving: readonly string[],
+  redirects: string[],
+  declared: ResolvedWorkerDomain | undefined,
+): ResolvedWorkerDomain | undefined =>
+  serving.length > 0
+    ? {
+        ...(declared?.name === serving[0] ? declared : {}),
+        name: serving[0],
+        aliases: serving.slice(1),
+        redirects,
+      }
+    : undefined;
+
 const isWorkersDevHostname = (hostname: string) => hostname.endsWith(".workers.dev");
 
 // Hostnames that only appear in local-dev state (the dev server's
@@ -829,6 +845,39 @@ const findWorkerId = (accountId: string, scriptName: string) =>
       schedule: Schedule.max([Schedule.spaced(2000), Schedule.recurs(3)]),
     }),
   );
+
+export class WorkerCodeUpdateStrategyError extends Data.TaggedError(
+  "WorkerCodeUpdateStrategyError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * Lower `codeUpdateStrategy` to its wire shape: `max_delay` is seconds with
+ * millisecond precision, between 0 and 24 hours, and only `deferred` accepts
+ * it (Cloudflare rejects `max_delay` alongside `immediate`).
+ */
+const resolveCodeUpdateStrategy = Effect.fn(function* (
+  strategy: WorkerProps["codeUpdateStrategy"],
+) {
+  if (strategy === undefined) return undefined;
+  if (strategy.mode === "immediate") {
+    return { mode: "immediate" } satisfies workers.CodeUpdateStrategy;
+  }
+  if (strategy.maxDelay === undefined) {
+    return { mode: "deferred" } satisfies workers.CodeUpdateStrategy;
+  }
+  const maxDelay = Duration.fromInput(strategy.maxDelay).pipe(
+    Option.map((d) => Math.round(Duration.toMillis(d)) / 1000),
+    Option.filter((seconds) => seconds >= 0 && seconds <= 86_400),
+  );
+  if (Option.isNone(maxDelay)) {
+    return yield* new WorkerCodeUpdateStrategyError({
+      message: `codeUpdateStrategy.maxDelay must be a duration between 0 and 24 hours, got ${JSON.stringify(strategy.maxDelay)}.`,
+    });
+  }
+  return { mode: "deferred", maxDelay: maxDelay.value } satisfies workers.CodeUpdateStrategy;
+});
 
 export const putWorkerScript = (params: {
   accountId: string;
@@ -1189,7 +1238,6 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
       const dotAlchemy = yield* dotAlchemyDirectory;
 
@@ -1627,14 +1675,27 @@ export const LiveWorkerProvider = () =>
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
           const ourExisting = existingRules.filter(isOurs);
+          // Compare the redirect target too: a changed canonical `name`
+          // keeps each rule's description and match expression, so those
+          // alone would skip the PUT and leave the old target in place.
+          // Fields are compared one by one because the read fills unset
+          // fields with `null`.
+          const existingFromValue = (rule: (typeof existingRules)[number]) =>
+            rule.action === "redirect" ? rule.actionParameters?.fromValue : undefined;
           const converged =
             ourExisting.length === ourDesired.length &&
             ourDesired.every((rule) =>
-              ourExisting.some(
-                (existing) =>
+              ourExisting.some((existing) => {
+                const fromValue = existingFromValue(existing);
+                const desiredFromValue = rule.actionParameters.fromValue;
+                return (
                   existing.description === rule.description &&
-                  existing.expression === rule.expression,
-              ),
+                  existing.expression === rule.expression &&
+                  fromValue?.targetUrl?.expression === desiredFromValue.targetUrl.expression &&
+                  fromValue?.statusCode === desiredFromValue.statusCode &&
+                  fromValue?.preserveQueryString === desiredFromValue.preserveQueryString
+                );
+              }),
             );
           if (converged) continue;
           // Pass foreign rules through untouched (minus the read-only
@@ -2229,31 +2290,6 @@ export const LiveWorkerProvider = () =>
         return yield* readAssets(typeof assets === "string" ? { directory: assets } : assets);
       });
 
-      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
-        (isPythonMain(props.main)
-          ? readPythonWorkerBundle({
-              id,
-              fqn,
-              main: props.main,
-              compatibility: getCompatibility(props),
-            })
-          : props.bundle === false
-            ? readPrebuiltWorkerBundle({ main: props.main!, rules: props.rules })
-            : bundler.build({
-                id,
-                main: props.main!,
-                compatibility: getCompatibility(props),
-                entry: props.isExternal
-                  ? { kind: "external" }
-                  : { kind: "effect", exports: props.exports ?? {} },
-                stack: { name: stack.name, stage: stack.stage },
-                extraOptions: props.build,
-              })
-        ).pipe(Artifacts.cached("build"));
-
-      const hashScript = (script: string) =>
-        Effect.sync(() => crypto.createHash("sha256").update(script).digest("hex"));
-
       const prepareAssetsAndBundle = (
         id: string,
         fqn: string,
@@ -2262,61 +2298,12 @@ export const LiveWorkerProvider = () =>
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
-          // Source provider — external (`props.source`) or the built-in
-          // vite source (`props.vite`): the provider is self-contained — it
-          // supplies the bundle, optionally its own assets (framework and
-          // vite builds), and the hash slots it owns. The props-level
-          // `assets` directory is still read here for sources that don't
-          // own assets.
-          if (props.source || props.vite) {
-            const source = yield* resolveSource(props);
-            const ctx = makeSourceContext({
-              dotAlchemy,
-              id,
-              fqn,
-              workerName,
-              props,
-              compatibility: getCompatibility(props),
-              stack: { name: stack.name, stage: stack.stage },
-              selfUrl: opts.selfUrl,
-            });
-            const [output, propsAssets] = yield* Effect.all(
-              [
-                source.build(ctx),
-                source.ownsAssets || opts.skipAssetsRead
-                  ? Effect.undefined
-                  : prepareAssets(props.assets),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return {
-              assets: output.assets ?? propsAssets,
-              bundle: output.bundle,
-              input: output.hash.input,
-              additionalWorkspaces: output.hash.additionalWorkspaces,
-            };
-          }
-          if (props.script !== undefined) {
-            const [assets, bundleHash] = yield* Effect.all(
-              [
-                opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
-                hashScript(props.script),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return {
-              assets,
-              bundle: { files: [{ path: "main.js", content: props.script }], hash: bundleHash },
-              input: undefined,
-              additionalWorkspaces: undefined,
-            };
-          }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
           // layer serves every request and applies `notFoundHandling`
           // (including SPA fallback) itself, exactly like Wrangler's
           // assets-only deploys.
-          if (props.main === undefined) {
+          if (isAssetsOnly(props)) {
             if (!props.assets) {
               return yield* Effect.die(
                 new Error(
@@ -2331,14 +2318,37 @@ export const LiveWorkerProvider = () =>
               additionalWorkspaces: undefined,
             };
           }
-          const [assets, bundle] = yield* Effect.all(
+          // Every other Worker builds through its source provider (see
+          // `resolveSource`): it supplies the bundle, optionally its own
+          // assets (framework and vite builds), and the hash slots it owns.
+          // The props-level `assets` directory is read here for sources
+          // that don't own assets.
+          const source = yield* resolveSource(props);
+          const ctx = makeSourceContext({
+            dotAlchemy,
+            id,
+            fqn,
+            workerName,
+            props,
+            compatibility: getCompatibility(props),
+            stack: { name: stack.name, stage: stack.stage },
+            selfUrl: opts.selfUrl,
+          });
+          const [output, propsAssets] = yield* Effect.all(
             [
-              opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
-              prepareBundle(id, fqn, props),
+              source.build(ctx),
+              source.ownsAssets || opts.skipAssetsRead
+                ? Effect.undefined
+                : prepareAssets(props.assets),
             ],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle, input: undefined, additionalWorkspaces: undefined };
+          return {
+            assets: output.assets ?? propsAssets,
+            bundle: output.bundle,
+            input: output.hash.input,
+            additionalWorkspaces: output.hash.additionalWorkspaces,
+          };
         }).pipe(
           Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
@@ -2347,7 +2357,7 @@ export const LiveWorkerProvider = () =>
               files: bundle?.files.map(
                 (file) =>
                   new File([file.content as BlobPart], file.path, {
-                    type: contentTypeForModule(file.path),
+                    type: contentTypeForModule(file.path, file.type),
                   }),
               ),
             },
@@ -2469,6 +2479,7 @@ export const LiveWorkerProvider = () =>
         versionId: string;
         traffic: number;
         message: string | undefined;
+        codeUpdateStrategy: workers.CodeUpdateStrategy | undefined;
       }) {
         const { accountId, scriptName, versionId, traffic } = params;
         const resolveSplit = Effect.gen(function* () {
@@ -2497,6 +2508,7 @@ export const LiveWorkerProvider = () =>
           strategy: "percentage",
           versions: split,
           annotations: params.message ? { workersMessage: params.message } : undefined,
+          codeUpdateStrategy: params.codeUpdateStrategy,
         });
         return deployment.id;
       });
@@ -2806,6 +2818,7 @@ export const LiveWorkerProvider = () =>
             versionId,
             traffic,
             message: version.message,
+            codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
           });
         }
         // Version-affinity transform rules (`version.affinity`): a canary
@@ -3772,6 +3785,7 @@ export const LiveWorkerProvider = () =>
           tailConsumers,
           streamingTailConsumers,
           usageModel: undefined,
+          codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
@@ -3874,6 +3888,7 @@ export const LiveWorkerProvider = () =>
               versionId,
               traffic: rolloutTraffic,
               message: news.version?.message,
+              codeUpdateStrategy: metadata.codeUpdateStrategy,
             });
           }
           worker = { id: name, logpush: existingSettings.logpush };
@@ -4397,56 +4412,10 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
-        // Source provider (external or vite): the source recomputes the
-        // hash slots it owns (without building where it can) and any
-        // defined slot that differs from state means an update.
-        // `additionalWorkspaces` is auxiliary metadata for the input hash,
-        // never a change signal.
-        if (props.source || props.vite) {
-          const source = yield* resolveSource(props);
-          const slots = yield* source.hash(
-            makeSourceContext({
-              dotAlchemy,
-              id,
-              fqn,
-              workerName: output.workerName,
-              props,
-              compatibility: getCompatibility(props),
-              stack: { name: stack.name, stage: stack.stage },
-            }),
-            output.hash,
-          );
-          for (const slot of ["bundle", "input", "assets"] as const) {
-            if (slots[slot] !== undefined && slots[slot] !== output.hash?.[slot]) {
-              return true;
-            }
-          }
-          if (source.ownsAssets) {
-            // Source-owned assets are covered by the `input` hash.
-            return false;
-          }
-          if (!props.assets) {
-            return false;
-          }
-          const assetsHash = Predicate.hasProperty(props.assets, "hash")
-            ? props.assets.hash
-            : undefined;
-          if (assetsHash === undefined) {
-            return true;
-          }
-          return assetsHash !== output.hash?.assets;
-        }
-        if (props.script !== undefined) {
-          const scriptHash = yield* hashScript(props.script);
-          if (scriptHash !== output.hash?.bundle) {
-            return true;
-          }
-          return yield* assetsChanged(props.assets, output);
-        }
         // Assets-only Worker — there is no bundle to hash. A stored bundle
         // hash means the Worker previously had a script and is being
         // converted to assets-only, which must deploy.
-        if (props.main === undefined) {
+        if (isAssetsOnly(props)) {
           if (output.hash?.bundle !== undefined) {
             return true;
           }
@@ -4457,9 +4426,43 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(Effect.map((b) => b.hash));
-        if (bundleHash !== output.hash?.bundle) {
-          return true;
+        // The source recomputes the hash slots it owns (without building
+        // where it can) and any defined slot that differs from state means
+        // an update. `additionalWorkspaces` is auxiliary metadata for the
+        // input hash, never a change signal.
+        const source = yield* resolveSource(props);
+        const slots = yield* source.hash(
+          makeSourceContext({
+            dotAlchemy,
+            id,
+            fqn,
+            workerName: output.workerName,
+            props,
+            compatibility: getCompatibility(props),
+            stack: { name: stack.name, stage: stack.stage },
+          }),
+          output.hash,
+        );
+        for (const slot of ["bundle", "input", "assets"] as const) {
+          if (slots[slot] !== undefined && slots[slot] !== output.hash?.[slot]) {
+            return true;
+          }
+        }
+        if (source.ownsAssets) {
+          // Source-owned assets are covered by the `input` hash.
+          return false;
+        }
+        if (props.source || props.vite) {
+          // An external or vite build may write the `assets` directory
+          // itself, so it can't be read before the build: only a supplied
+          // hash proves it unchanged.
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          return assetsHash === undefined || assetsHash !== output.hash?.assets;
         }
         return yield* assetsChanged(props.assets, output);
       });
@@ -4720,7 +4723,10 @@ export const LiveWorkerProvider = () =>
           // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
             const normalizeComparedProps = (props: WorkerProps) => {
-              const { env: _env, ...rest } = props;
+              // `codeUpdateStrategy` applies to a deploy, not to stored
+              // state: changing it alone must not redeploy (and so reset)
+              // the Worker's Durable Objects.
+              const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),
@@ -5195,10 +5201,7 @@ export const LiveWorkerProvider = () =>
             ]);
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
-            const observedDomain =
-              serving.length > 0
-                ? { name: serving[0], aliases: serving.slice(1), redirects: keptRedirects }
-                : undefined;
+            const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
@@ -5523,8 +5526,11 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
-/** @internal Upload content type of a bundled module, by path. */
-export const contentTypeForModule = (filePath: string) => {
+/** @internal Upload content type of a bundled module, by its rule's type or path. */
+export const contentTypeForModule = (filePath: string, type?: string) => {
+  if (type === "Text") return "text/plain";
+  if (type === "Data") return "application/octet-stream";
+  if (type === "CompiledWasm") return "application/wasm";
   // Vendored Python packages upload as opaque data, mirroring Wrangler's
   // vendored-module rules — with one exception: the `workers-runtime-sdk`
   // JS shims under `python_modules/workers/` must be ES modules so the

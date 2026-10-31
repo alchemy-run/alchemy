@@ -8,6 +8,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { logChildOutput } from "../core/ChildOutput.ts";
 
 export class RunnerError extends Data.TaggedError<"RunnerError">("RunnerError")<{
   readonly message: string;
@@ -132,15 +133,22 @@ export const runOpenNextBuild = (
             }),
         ),
       );
+      // Build output becomes log records, so the process that renders logs
+      // shows it and in-process capture (a test runner's log file) sees it.
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
-        dest: NodeJS.WriteStream,
-      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+        name: "stdout" | "stderr",
+      ) =>
+        stream.pipe(
+          Stream.decodeText,
+          Stream.splitLines,
+          Stream.runForEach((line) => logChildOutput(line, name)),
+        );
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
-          stdout: forward(child.stdout, process.stdout),
-          stderr: forward(child.stderr, process.stderr),
+          stdout: forward(child.stdout, "stdout"),
+          stderr: forward(child.stderr, "stderr"),
         },
         { concurrency: "unbounded" },
       ).pipe(

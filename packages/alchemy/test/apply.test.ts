@@ -97,7 +97,7 @@ const recordingCli = (events: Array<{ id: string; status: string }>) =>
         done: () => Effect.void,
         emit: (event) =>
           Effect.sync(() => {
-            if (event._tag === "apply.resource.status") {
+            if (event.type === "apply.resource.status") {
               events.push({ id: event.id, status: event.status });
             }
           }),
@@ -1737,7 +1737,7 @@ describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
               done: () => Effect.void,
               emit: (event) =>
                 Effect.sync(() => {
-                  if (event._tag === "apply.resource.status") {
+                  if (event.type === "apply.resource.status") {
                     events.push({ id: event.id, status: event.status });
                   }
                 }),
@@ -7599,7 +7599,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                     Effect.succeed({
                       done: () => Effect.void,
                       emit: (event) =>
-                        event._tag === "apply.resource.status" &&
+                        event.type === "apply.resource.status" &&
                         event.id === "Old" &&
                         event.status === "pending"
                           ? Deferred.succeed(oldCheckpointed, undefined).pipe(
@@ -7696,7 +7696,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                 Effect.succeed({
                   done: () => Effect.void,
                   emit: (event) =>
-                    event._tag === "apply.resource.status" &&
+                    event.type === "apply.resource.status" &&
                     event.id === "Old" &&
                     event.status === "pending"
                       ? Deferred.succeed(oldCheckpointed, undefined).pipe(Effect.asVoid)
@@ -9394,30 +9394,7 @@ describe("noop stable readiness", { tags: ["unit", "local"] }, () => {
       const plan = yield* stack.plan(program(2));
       expect(plan.resources.Source.action).toBe("noop");
       expect(plan.actions.Compute.action).toBe("run");
-      // The policy note holds the noop until the Action reports pending.
-      // One cooperative yield lets it await readyStable before publication;
-      // Deferred completion then resumes the waiting consumer synchronously.
-      const pending = yield* Deferred.make<void>();
-      expect(
-        yield* apply(plan, {
-          session: {
-            done: () => Effect.void,
-            emit: (event) => {
-              if (
-                event._tag === "apply.resource.status" &&
-                event.id === "Compute" &&
-                event.status === "pending"
-              ) {
-                return Deferred.succeed(pending, undefined).pipe(Effect.asVoid);
-              }
-              if (event._tag === "apply.resource.note" && event.id === "Source") {
-                return Deferred.await(pending).pipe(Effect.andThen(Effect.yieldNow));
-              }
-              return Effect.void;
-            },
-          },
-        }),
-      ).toBe("ready");
+      expect(yield* apply(plan)).toBe("ready");
       expect(runs).toBe(2);
       expect(yield* stack.deploy(program(2))).toBe("ready");
       expect(runs).toBe(2);

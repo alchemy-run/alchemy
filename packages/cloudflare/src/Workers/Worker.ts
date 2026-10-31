@@ -26,6 +26,7 @@ import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
 import type { ConfigError } from "effect/Config";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -103,6 +104,32 @@ export interface WorkerEntrypointSettings {
 }
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
+
+/**
+ * How a deploy rolls new code out to the Worker's running Durable Objects.
+ *
+ * - `{ mode: "deferred" }` — an active object keeps running its current code
+ *   while it waits to hibernate, for up to `maxDelay`, so in-flight work can
+ *   finish. Hibernation API WebSockets stay connected when the object picks
+ *   up the new code after hibernating.
+ * - `{ mode: "immediate" }` — every object resets onto the new code as soon
+ *   as the deploy lands.
+ *
+ * Deferral is best effort: an object can still reset before `maxDelay`
+ * elapses, e.g. during a Cloudflare runtime update.
+ */
+export type WorkerCodeUpdateStrategy =
+  | { mode: "immediate" }
+  | {
+      mode: "deferred";
+      /**
+       * The longest an active Durable Object may keep running old code before
+       * it is forced onto the new code — e.g. `"1 minute"`, `"30 seconds"`, or
+       * a `Duration`. Between 0 and 24 hours, millisecond precision.
+       * @default "5 minutes"
+       */
+      maxDelay?: Duration.Input;
+    };
 
 export type WorkerServices =
   | Worker
@@ -792,6 +819,21 @@ export interface WorkerProps<
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   /**
+   * How each deploy rolls new code out to this Worker's running Durable
+   * Objects. Cloudflare defers updates by default: an active object keeps
+   * running its current code for up to 5 minutes while it waits to
+   * hibernate. Use `{ mode: "immediate" }` when an object must run the new
+   * code right after the deploy (during an incident, or when a test drives
+   * it straight away), or set a different `maxDelay`.
+   *
+   * Applies per deploy, not as a stored setting: changing only this prop
+   * does not redeploy the Worker; the next deploy uses it. See
+   * {@link WorkerCodeUpdateStrategy}.
+   *
+   * @default { mode: "deferred", maxDelay: "5 minutes" }
+   */
+  codeUpdateStrategy?: WorkerCodeUpdateStrategy;
+  /**
    * Tracks Durable Object and Workflow exports and captured SQL migrations
    * for Effect-native Workers only.
    * Populated automatically from bindings; do not set manually.
@@ -950,14 +992,44 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting which files in the directory containing
-   * {@link main} are uploaded as additional modules when {@link bundle}
-   * is `false`. Each rule's globs are matched against POSIX-style paths
-   * relative to that directory, mirroring Wrangler's `rules`
-   * configuration. When provided, these rules replace
-   * {@link defaultModuleRules}.
+   * Module rules selecting files uploaded as their own Worker modules,
+   * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
+   * the directory containing {@link main}, and `**\/` matches any depth.
+   * Each rule's `type` decides how a file is imported: `Text` as a `string`,
+   * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
+   * Without one, the extension decides (`.wasm` CompiledWasm,
+   * `.txt`/`.html`/`.sql` Text), and other files are Data. When rules
+   * overlap, the first match decides.
    *
-   * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
+   * When Alchemy bundles {@link main}, rules add to the built-in ones
+   * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
+   * imported file that matches is uploaded as a module instead of bundled.
+   * JavaScript, TypeScript and JSON are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. For files outside the entry's
+   * directory, globs may start with `../` or be absolute. `!` globs exclude
+   * across your rules; an excluded `.txt` or `.wasm` still matches the
+   * built-in rules.
+   *
+   * When {@link bundle} is `false`, every file in the entry's directory that
+   * matches is uploaded, and the rules replace {@link defaultModuleRules}.
+   *
+   * Rules don't apply to an inline {@link script}, a {@link source}
+   * provider or a Python {@link main}.
+   *
+   * ```ts
+   * // worker.ts
+   * import font from "./font.ttf"; // ArrayBuffer
+   * import readme from "./README.md"; // string
+   *
+   * // alchemy.run.ts
+   * rules: [{ globs: ["**\/*.ttf"] }, { type: "Text", globs: ["**\/*.md"] }]
+   *
+   * // modules.d.ts, so TypeScript knows the imports
+   * declare module "*.ttf" { const data: ArrayBuffer; export default data; }
+   * declare module "*.md" { const text: string; export default text; }
+   * ```
+   *
+   * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
   rules?: ModuleRule[];
   /**
@@ -1031,6 +1103,27 @@ export interface WorkerProps<
            * e.g. `{ email: "dev@example.com" }`.
            */
           identity?: WorkerAccessIdentity;
+        };
+        /**
+         * Overrides for the `workerd` process that runs this Worker
+         * locally. Inert on deploy.
+         */
+        workerd?: {
+          /**
+           * Path to the workerd binary to run instead of the one from the
+           * `workerd` npm package. Use it where the npm binary can't
+           * start, e.g. NixOS. Set `ALCHEMY_WORKERD_PATH` instead to
+           * change the binary for every workerd process alchemy starts.
+           */
+          path?: string;
+          /**
+           * Extra V8 flags, e.g. `["--max-old-space-size=4096"]` to raise
+           * the heap limit. Applied after `ALCHEMY_WORKERD_V8_FLAGS`, so
+           * they win when both set the same flag.
+           */
+          v8Flags?: string[];
+          /** Extra environment variables for the workerd process. */
+          env?: Record<string, string>;
         };
       }
     | {
@@ -2004,6 +2097,25 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * }
  * ```
  *
+ * **Example:** Running a custom workerd binary in dev
+ * `dev.workerd` configures the local `workerd` process: `path` swaps
+ * the binary from the `workerd` npm package (e.g. on NixOS, where it
+ * can't start), `v8Flags` adds V8 flags and `env` adds environment
+ * variables. `ALCHEMY_WORKERD_PATH` sets the binary for every workerd
+ * process instead, including ones shared across Workers.
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   dev: {
+ *     workerd: {
+ *       path: "workerd",
+ *       v8Flags: ["--max-old-space-size=4096"],
+ *       env: { TZ: "UTC" },
+ *     },
+ *   },
+ * }
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -2658,6 +2770,27 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  *     return HttpServerResponse.text(String(value));
  *   }),
  * };
+ * ```
+ *
+ * By default a deploy lets an active Durable Object keep running its
+ * current code for up to 5 minutes while it waits to hibernate.
+ * `codeUpdateStrategy` changes how long, or applies the new code at once.
+ * See [Code updates](/cloudflare/compute/code-updates).
+ *
+ * **Example:** Shorter deferral for Durable Object code updates
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "deferred", maxDelay: "1 minute" },
+ * }
+ * ```
+ *
+ * **Example:** Apply Durable Object code updates immediately
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "immediate" },
+ * }
  * ```
  *
  * ### Containers

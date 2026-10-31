@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import type { Plugin, PluginOption } from "vite";
+import { makeChildOutput } from "../core/ChildOutput.ts";
 import { findEphemeralPort } from "../core/DevPort.ts";
 /**
  * Shared programmatic Vinext builds and native development CLI helpers.
@@ -303,47 +304,62 @@ export const spawnVinextDev = (options: {
   readonly host?: string | undefined;
 }): Effect.Effect<VinextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.try({
-      try: () => {
-        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
-        const child = cp.spawn(
-          "node",
-          [
-            options.cli,
-            "dev",
-            "--port",
-            String(options.port),
-            "--strictPort",
-            ...(options.host !== undefined ? ["--host", options.host] : []),
-          ],
-          {
-            cwd: options.root,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: false,
-          },
-        );
-        let exited = false;
-        let output = "";
-        const capture = (chunk: unknown) => {
-          output += String(chunk);
-          if (output.length > 65536) output = output.slice(-32768);
-          process.stderr.write(String(chunk));
-        };
-        child.stdout?.on("data", capture);
-        child.stderr?.on("data", capture);
-        child.once("exit", () => {
-          exited = true;
-        });
-        return {
-          child,
-          handle: {
-            exited: () => exited,
-            output: () => output,
-          } satisfies VinextDevChild,
-        };
-      },
-      catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
-    }),
+    Effect.flatMap(makeChildOutput, (childOutput) =>
+      Effect.try({
+        try: () => {
+          const cp = createRequire(import.meta.url)(
+            "child_process",
+          ) as typeof NodeChildProcessModule;
+          const child = cp.spawn(
+            "node",
+            [
+              options.cli,
+              "dev",
+              "--port",
+              String(options.port),
+              "--strictPort",
+              ...(options.host !== undefined ? ["--host", options.host] : []),
+            ],
+            {
+              cwd: options.root,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: false,
+            },
+          );
+          let exited = false;
+          let output = "";
+          const capture = (chunk: unknown) => {
+            output += String(chunk);
+            if (output.length > 65536) output = output.slice(-32768);
+          };
+          child.stdout?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stdout.push(String(chunk));
+          });
+          child.stderr?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stderr.push(String(chunk));
+          });
+          // Output without a trailing newline is still a line once the
+          // streams close.
+          child.once("close", () => {
+            childOutput.stdout.flush();
+            childOutput.stderr.flush();
+          });
+          child.once("exit", () => {
+            exited = true;
+          });
+          return {
+            child,
+            handle: {
+              exited: () => exited,
+              output: () => output,
+            } satisfies VinextDevChild,
+          };
+        },
+        catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
+      }),
+    ),
     ({ child }) =>
       Effect.callback<void>((resume) => {
         if (child.exitCode !== null) {

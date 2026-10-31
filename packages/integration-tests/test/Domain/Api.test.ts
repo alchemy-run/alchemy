@@ -1,7 +1,14 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as OpenApi from "effect/http-api/OpenApi";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -57,8 +64,16 @@ class Account extends Domain.Aggregate("Account", {
 
 class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Account, Withdraw) {}
-class CloseApi extends Domain.Api("CloseApi", Close, Account) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Deposit", "Withdraw"],
+  aggregates: ["Account"],
+}) {}
+class CloseApi extends Domain.Api("CloseApi", {
+  model: Bank,
+  commands: ["Close"],
+  aggregates: ["Account"],
+}) {}
 
 /** A helper written once for every Api: the tags of its commands. */
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
@@ -130,6 +145,135 @@ describe("Domain Api", () => {
       ),
     ),
   );
+
+  it.effect("an Api serves every command, view and stream it does not list", () =>
+    Effect.sync(() => {
+      class Everything extends Domain.Api("Everything", { model: Bank }) {}
+      expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
+      expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
+      // Aggregates are read directly only when listed.
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
+    }),
+  );
+
+  it.effect("an Api serves none of a kind it lists as empty", () =>
+    Effect.sync(() => {
+      class Reads extends Domain.Api("Reads", {
+        model: Bank,
+        commands: [],
+        aggregates: ["Account"],
+      }) {}
+      expect(Reads.commands).toEqual([]);
+      expect(Reads.serves).toEqual([Account]);
+    }),
+  );
+
+  it.effect("naming something its model does not hold is a type error", () =>
+    Effect.sync(() => {
+      class Vaulted extends Domain.Model("Vaulted", { aggregates: [Vault] }) {}
+      // @ts-expect-error Deposit is not a command of the Vaulted model
+      const api = Domain.Api("Wrong", { model: Vaulted, commands: ["Deposit"] });
+      expect(api.serves).toEqual([]);
+      // @ts-expect-error Account is an aggregate, not a command
+      Domain.Api("Mixed", { model: Bank, commands: ["Account"] });
+    }),
+  );
+
+  it.live("naming something its model does not hold dies with a DefinitionError", () =>
+    Effect.gen(function* () {
+      // Typed as any model, so only serving it can tell.
+      const model: Domain.Model.Any = Vaults;
+      class LooseApi extends Domain.Api("LooseApi", { model, commands: ["Deposit"] }) {}
+      const exit = yield* LooseApi.clientInProcess.pipe(Effect.scoped, Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag !== "Failure") return;
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Deposit is not part of the Vaults model",
+      });
+    }).pipe(Effect.provide(Bank.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
+  );
+});
+
+// ---------------------------------------------------------------- rejections
+
+/** A plain Effect tagged error, and a Domain shorthand with Effect's annotations. */
+class Frozen extends Schema.TaggedError<Frozen>()("Frozen", { until: Schema.String }) {}
+class NotOwner extends Domain.Rejection(
+  "NotOwner",
+  {},
+  { httpApiStatus: 403, description: "Only the vault's owner may do this." },
+) {}
+
+class Stored extends Domain.Event("Stored", { item: Schema.String }) {}
+class Store extends Domain.Command("Store", {
+  target: Schema.String,
+  input: { item: Schema.String },
+  events: [Stored],
+  // Any tagged error class can be a rejection, Effect's own HttpApiError included.
+  rejects: [Frozen, NotOwner, HttpApiError.Forbidden],
+}) {}
+class Vault extends Domain.Aggregate("Vault", {
+  id: Schema.String,
+  state: Schema.Struct({ items: Schema.Array(Schema.String) }),
+  initial: { items: [] },
+  commands: [Store],
+  decide: {
+    Store: (_, { item }) =>
+      item === "ice"
+        ? new Frozen({ until: "spring" })
+        : item === "gold"
+          ? new HttpApiError.Forbidden()
+          : item === "keys"
+            ? new NotOwner()
+            : [new Stored({ item })],
+  },
+  evolve: { Stored: (s, e) => ({ items: [...s.items, e.item] }) },
+}) {}
+class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
+class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
+// Vault declares no `read`, so its state is not for clients.
+class VaultStateApi extends Domain.Api("VaultStateApi", { model: Vaults, aggregates: ["Vault"] }) {}
+
+describe("Domain Rejection", () => {
+  it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
+    Effect.gen(function* () {
+      const vaults = yield* VaultApi.clientInProcess;
+      const frozen = yield* vaults.Store("v-1", { item: "ice" }).pipe(Effect.flip);
+      expect(frozen).toBeInstanceOf(Frozen);
+      expect(frozen).toMatchObject({ until: "spring" });
+      const forbidden = yield* vaults.Store("v-1", { item: "gold" }).pipe(Effect.flip);
+      expect(forbidden).toBeInstanceOf(HttpApiError.Forbidden);
+      expect((yield* vaults.Store("v-1", { item: "keys" }).pipe(Effect.flip))._tag).toBe(
+        "NotOwner",
+      );
+      const { reply } = yield* vaults.Store("v-1", { item: "coat" });
+      expect(reply).toBeUndefined();
+      // The Api's rejections decode every one of them.
+      expect(Schema.decodeUnknownSync(VaultApi.rejections)({ _tag: "Forbidden" })).toBeInstanceOf(
+        HttpApiError.Forbidden,
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
+    ),
+  );
+
+  it.effect(
+    "a Domain.Rejection takes Schema.TaggedError's annotations, read as Effect reads them",
+    () =>
+      Effect.sync(() => {
+        // An Effect HttpApi endpoint that declares the rejection gives it its status and description.
+        const api = HttpApi.make("Vaults").add(
+          HttpApiGroup.make("vaults").add(
+            HttpApiEndpoint.post("store", "/store", { error: [NotOwner, Frozen] }),
+          ),
+        );
+        const responses = OpenApi.fromApi(api).paths["/store"]!.post!.responses;
+        expect(Object.keys(responses).sort()).toEqual(["204", "403", "500"]);
+        expect(responses["403"]!.description).toBe("Only the vault's owner may do this.");
+      }),
+  );
 });
 
 // ---------------------------------------------------------------- calling in process
@@ -186,7 +330,11 @@ class Note extends Domain.Aggregate("Note", {
 }) {}
 
 class Notes extends Domain.Model("Notes", { aggregates: [Note] }) {}
-class NotesApi extends Domain.Api("NotesApi", Write, Note) {}
+class NotesApi extends Domain.Api("NotesApi", {
+  model: Notes,
+  commands: ["Write"],
+  aggregates: ["Note"],
+}) {}
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
@@ -257,6 +405,21 @@ describe("Domain Api in process", () => {
           Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
         ),
       ),
+    ),
+  );
+});
+
+describe("Domain Api exposing an aggregate", () => {
+  it.live("an aggregate without a read contract is never served", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(VaultStateApi.clientInProcess);
+      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+        _tag: "DefinitionError",
+        reason: { _tag: "Unreadable", aggregate: "Vault" },
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
     ),
   );
 });

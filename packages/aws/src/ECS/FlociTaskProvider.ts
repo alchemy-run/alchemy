@@ -67,7 +67,7 @@ export const FlociTaskProvider = () =>
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so restarting only from
     // the watch loop left running tasks on the old revision).
-    onReconciled: ({ id, previous, attrs }) =>
+    onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (previous?.taskDefinitionArn === attrs.taskDefinitionArn) return;
         const startedAt = Date.now();
@@ -77,13 +77,9 @@ export const FlociTaskProvider = () =>
           serviceManaged: false,
         });
         yield* Effect.logInfo(
-          `[alchemy dev] ${attrs.taskFamily}: task definition swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
         );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`[alchemy dev] ${id}: task restart failed`, cause),
-        ),
-      ),
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning(`task restart failed`, cause))),
     startWatch: (ctx) =>
       Effect.gen(function* () {
         const imageSource = yield* makeImageSource;
@@ -110,11 +106,7 @@ export const FlociTaskProvider = () =>
                   return hash === undefined || hash !== current.code.hash;
                 }),
               )
-              .pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
-                ),
-              ),
+              .pipe(Effect.catchCause((cause) => Effect.logWarning(`image swap failed`, cause))),
           ),
         );
       }),

@@ -5,14 +5,19 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Drift from "alchemy/Drift";
 import { State } from "alchemy/State";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -40,6 +45,23 @@ test.provider(
 
       const actualDatabase = yield* d1.getDatabase({ accountId, databaseId: database.databaseId });
       expect(actualDatabase.uuid).toEqual(database.databaseId);
+
+      // Cloudflare reports `{ mode: "disabled" }` for an omitted
+      // `readReplication`; `read` keeps the persisted shape, so an unchanged
+      // database is not reported as drifted.
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      const unchanged = yield* detectDrift();
+      expect(unchanged.resources.DefaultDatabase?.action).toBe("unchanged");
+
+      // Enabling replication outside Alchemy is still real drift.
+      yield* d1.patchDatabase({
+        accountId,
+        databaseId: database.databaseId,
+        readReplication: { mode: "auto" },
+      });
+      const changed = yield* detectDrift();
+      expect(changed.resources.DefaultDatabase?.action).toBe("drifted");
+      expect(changed.resources.DefaultDatabase?.attr.readReplication).toEqual({ mode: "auto" });
 
       yield* stack.destroy();
 
@@ -292,6 +314,141 @@ test.provider(
       yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+/**
+ * D1 can run a migration batch and still fail its reply (#1889), or fail a
+ * request it never ran. A blind resend of the first would run its DDL twice
+ * and fail with "table already exists". The deploy instead reads
+ * `__alchemy_migrations`: a batch that landed is done, and one that did not
+ * is resent once.
+ */
+class FlakyD1 extends Context.Service<FlakyD1, { sends: Ref.Ref<Record<string, number>> }>()(
+  "test/D1/FlakyD1",
+) {}
+
+// Forward every request to Cloudflare, except the first batch that creates
+// one of these tables: `lost_reply_notes` runs on D1 and its reply becomes a
+// 503; `dropped_request_notes` gets a 503 without reaching D1.
+const FlakyD1HttpClient = Layer.effect(
+  HttpClient.HttpClient,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const { sends } = yield* FlakyD1;
+    const unavailable = (request: HttpClientRequest.HttpClientRequest) =>
+      HttpClientResponse.fromWeb(request, new Response("Service Unavailable", { status: 503 }));
+    return HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const body =
+          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+        const table = request.url.endsWith("/query")
+          ? ["lost_reply_notes", "dropped_request_notes"].find((name) =>
+              body.includes(`CREATE TABLE ${name}`),
+            )
+          : undefined;
+        if (table === undefined) return yield* response;
+        const counts = yield* Ref.updateAndGet(sends, (counts) => ({
+          ...counts,
+          [table]: (counts[table] ?? 0) + 1,
+        }));
+        if (counts[table] !== 1) return yield* response;
+        if (table === "lost_reply_notes") yield* response;
+        return unavailable(request);
+      }),
+    );
+  }),
+);
+
+const flaky = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provide(FlakyD1HttpClient),
+    Layer.provideMerge(
+      Layer.effect(
+        FlakyD1,
+        Effect.map(Ref.make<Record<string, number>>({}), (sends) => ({ sends })),
+      ),
+    ),
+  ),
+});
+
+// D1 ran the batch, so its bookkeeping row is there and the deploy succeeds
+// without sending it again.
+flaky.test.provider(
+  "a migration batch whose reply is lost is not resent",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const { sends } = yield* FlakyD1;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-lost_reply_notes-" });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_notes.sql"),
+        "CREATE TABLE lost_reply_notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);",
+      );
+      const program = Effect.gen(function* () {
+        return yield* Cloudflare.D1.Database("LostReplyDb", { migrations: migrationsDir });
+      });
+
+      yield* stack.destroy();
+      // A retried attempt starts over, so its first batch is faulted again.
+      yield* Ref.update(sends, (counts) => ({ ...counts, lost_reply_notes: 0 }));
+
+      const database = yield* stack.deploy(program);
+      expect((yield* Ref.get(sends))["lost_reply_notes"]).toEqual(1);
+      expect(yield* listTables(accountId, database.databaseId)).toContain("lost_reply_notes");
+      const applied = yield* queryAll<{ name: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((row) => row.name)).toEqual(["0001_notes.sql"]);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"], timeout: 180_000 },
+);
+
+// D1 never ran the batch, so `__alchemy_migrations` has no row for it and the
+// deploy sends it once more.
+flaky.test.provider(
+  "a migration batch that never reached D1 is resent once",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const { sends } = yield* FlakyD1;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-dropped_request_notes-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_notes.sql"),
+        "CREATE TABLE dropped_request_notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);",
+      );
+      const program = Effect.gen(function* () {
+        return yield* Cloudflare.D1.Database("DroppedRequestDb", { migrations: migrationsDir });
+      });
+
+      yield* stack.destroy();
+      // A retried attempt starts over, so its first batch is faulted again.
+      yield* Ref.update(sends, (counts) => ({ ...counts, dropped_request_notes: 0 }));
+
+      const database = yield* stack.deploy(program);
+      expect((yield* Ref.get(sends))["dropped_request_notes"]).toEqual(2);
+      expect(yield* listTables(accountId, database.databaseId)).toContain("dropped_request_notes");
+      const applied = yield* queryAll<{ name: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((row) => row.name)).toEqual(["0001_notes.sql"]);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"], timeout: 180_000 },
 );
 
 /**

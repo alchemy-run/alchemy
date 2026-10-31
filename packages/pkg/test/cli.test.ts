@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -8,6 +9,7 @@ import * as UrlParams from "effect/http/UrlParams";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import {
   selectPackages,
   dependencyLevels,
@@ -289,7 +291,15 @@ const published = {
   })),
 };
 
-for (const scenario of ["already present", "upload", "still missing", "rejected"] as const) {
+const scenarios = [
+  "already present",
+  "upload",
+  "still missing",
+  "run catching up",
+  "rejected",
+] as const;
+
+for (const scenario of scenarios) {
   test(`publish: ${scenario}`, async () => {
     const requests: string[] = [];
     const reads: string[] = [];
@@ -310,7 +320,7 @@ for (const scenario of ["already present", "upload", "still missing", "rejected"
         }
         attempts++;
         const response =
-          scenario === "rejected"
+          scenario === "rejected" || (scenario === "run catching up" && attempts <= 2)
             ? Response.json(
                 { _tag: "RunNotInProgress", message: "run is not in progress" },
                 { status: 409 },
@@ -321,8 +331,10 @@ for (const scenario of ["already present", "upload", "still missing", "rejected"
         return HttpClientResponse.fromWeb(request, response);
       }),
     );
-    const result = await Effect.runPromise(
-      publish({
+    const result = await Effect.gen(function* () {
+      // Retries wait on the clock, so run against a test clock moved far
+      // enough for every retry to fire.
+      const fiber = yield* publish({
         cwd: "/workspace",
         dir: ".pkg",
         registry: "https://pkg.ing/",
@@ -340,10 +352,17 @@ for (const scenario of ["already present", "upload", "still missing", "rejected"
         ),
         Effect.provide(Path.layer),
         Effect.result,
-      ),
-    );
+        Effect.forkChild,
+      );
+      yield* TestClock.adjust("10 minutes");
+      return yield* Fiber.join(fiber);
+    }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
     const uploads = scenario === "upload" || scenario === "still missing";
-    expect(attempts).toBe(uploads ? 2 : 1);
+    // A run GitHub does not report as in progress yet is retried every five
+    // seconds for three minutes.
+    const publishes =
+      scenario === "rejected" ? 37 : scenario === "run catching up" ? 3 : uploads ? 2 : 1;
+    expect(attempts).toBe(publishes);
     expect(reads).toEqual(uploads ? ["/workspace/.pkg/1.tgz"] : []);
     expect(requests).toEqual(
       uploads
@@ -352,7 +371,7 @@ for (const scenario of ["already present", "upload", "still missing", "rejected"
             `PUT https://pkg.ing/api/tarballs/%40alchemy.run%2Fpkg/${"1".repeat(64)}?repo=alchemy-run%2Falchemy&runId=123&attempt=2`,
             "POST https://pkg.ing/api/publish",
           ]
-        : ["POST https://pkg.ing/api/publish"],
+        : Array.from({ length: publishes }, () => "POST https://pkg.ing/api/publish"),
     );
     if (scenario === "still missing" || scenario === "rejected") {
       expect(Result.isFailure(result)).toBe(true);
