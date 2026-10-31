@@ -103,6 +103,26 @@ const { handler } = HttpRouter.toWebHandler(BankMcp);
 
 `McpServer.layerHttp` keeps one server running for all requests. On a host where work must end with the request, such as a Cloudflare Worker, use `McpServer.layerHttpRequestScoped` with the sessionless protocol `McpProtocol.v2026_07_28`.
 
+## Views as resources
+
+`toMcp` also serves each view of the Api as a resource template, so an MCP client can read a view's state at a key without calling a tool:
+
+```json
+{ "uriTemplate": "domain://CustomerApi/AccountSummary/{key}", "name": "CustomerApi_AccountSummary", "mimeType": "application/json" }
+```
+
+Reading one answers with the view's state as JSON, `null` when the key has none:
+
+```json
+{ "contents": [{ "uri": "domain://CustomerApi/AccountSummary/a-1", "mimeType": "application/json", "text": "{\"balance\":1000}" }] }
+```
+
+The read goes through the Api with the request's headers, so the view's middleware and `validate` run. A refused read is an MCP error whose message is the failure's wire JSON:
+
+```json
+{ "error": { "code": -32603, "message": "{\"_tag\":\"NotOwner\"}" } }
+```
+
 ## Who the agent acts for
 
 Each tool call sends headers to the Api's middleware, as an HTTP client does. Set them with the `headers` option, an Effect that runs for each call. By default, a call sends the headers of the current `HttpServerRequest`, if there is one. So an MCP client signs in to your MCP server with the same header or cookie that your Api's session middleware reads, and an in-app agent that runs inside a request acts for the user who sent it.
@@ -124,13 +144,11 @@ A call with no session fails as it does for any client:
 
 ## Limits
 
-`watch` and `events` are not tools; an MCP resource subscription can serve them later.
+`watch` and `events` are not tools, and a view's resource does not notify subscribers when it changes, so a client reads it again to see a change.
 
 `tools/list` shows every tool to every MCP client. The Api still checks each call, so a caller who may not use a tool gets a rejection. Listing only the tools a caller may use needs `McpServer` to filter per request, which Effect does not do yet.
 
-Nothing asks a person before a dangerous write. `LanguageModel` can ask when a tool sets `needsApproval`, and an MCP server can ask with elicitation, but neither is set from the Api yet.
-
-Every call the Api serves is a tool, so give agents their own Api with only what they may reach:
+Every call the Api serves is a tool, and every view a resource, so give agents their own Api with only what they may reach:
 
 ```typescript
 export class AgentApi extends Domain.Api("AgentApi", {

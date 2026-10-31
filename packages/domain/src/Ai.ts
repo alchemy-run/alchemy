@@ -1,4 +1,5 @@
-import { McpServer, Tool, Toolkit } from "effect/ai";
+import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -267,10 +268,86 @@ export const toToolkit = <A extends Toolable, R = never>(
 };
 
 /**
- * Serve an Api's tools ({@link toToolkit}) from Effect's `McpServer`. Provide
- * an `McpServer` transport, such as `McpServer.layerHttp`. Over HTTP, each
- * call carries the headers of the MCP request to the Api's middleware, so
- * the Api authenticates an MCP client as it does any other.
+ * A read the Api refused: a view's rejection or its middleware's error. MCP
+ * answers a refused `resources/read` with an error, whose message is the
+ * failure's wire JSON (`{"_tag":"NotOwner"}`).
+ */
+class ReadRefused extends Data.TaggedError("ReadRefused")<{ readonly error: unknown }> {
+  override get message() {
+    return JSON.stringify(this.error);
+  }
+}
+
+/** The URI template of a view's resource: `domain://<api>/<view>/{key}`. */
+export const resourceUri = (api: string, view: string): string => `domain://${api}/${view}/{key}`;
+
+/**
+ * One MCP resource template per view the Api serves. Reading one gets the
+ * view's state at the key through the Api, with the request's headers, so
+ * its middleware and `validate` run as for any client.
+ */
+const viewResources = <R>(
+  api: Toolable,
+  headers: Effect.Effect<Headers.Input | undefined, never, R>,
+) =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      // Without the client half of any middleware (see `outsideClient`).
+      const client = (yield* outsideClient(api)) as Client;
+      for (const op of operationsOf(api.serves)) {
+        if (op.served.kind !== "View" || op.operation !== "get") continue;
+        const { rpc } = op;
+        const key = (rpc.payloadSchema as unknown as Schema.Struct<Schema.Struct.Fields>).fields
+          .key!;
+        const prefix = `domain://${api.apiName}/${op.name}/`;
+        const segments = Object.assign([prefix, ""], { raw: [prefix, ""] });
+        const encodeSuccess = Schema.encodeUnknownEffect(
+          rpc.successSchema.pipe(Schema.toCodecJson) as unknown as Schema.Codec<unknown, unknown>,
+        );
+        const failure = failures([
+          rpc.errorSchema,
+          ...[...rpc.middlewares].map((middleware) => middleware.error),
+        ]).pipe(Schema.toCodecJson) as unknown as Schema.Codec<unknown, unknown>;
+        const isFailure = Schema.is(failure);
+        const encodeFailure = Schema.encodeUnknownEffect(failure);
+        yield* McpServer.registerResource(
+          segments,
+          McpSchema.param("key", key),
+        )({
+          name: `${api.apiName}_${op.name}`,
+          description: `The current ${op.name} of a key, as JSON (null if it does not exist).`,
+          mimeType: "application/json",
+          content: (uri, key) =>
+            headers.pipe(
+              Effect.flatMap((headers) => invoke(client, op, { key }, headers)),
+              // A rejection or a middleware error is the read's typed refusal; anything else is a defect.
+              Effect.catch((error) =>
+                isFailure(error)
+                  ? encodeFailure(error).pipe(
+                      Effect.orDie,
+                      Effect.flatMap((wire) => Effect.fail(new ReadRefused({ error: wire }))),
+                    )
+                  : Effect.die(error),
+              ),
+              Effect.flatMap((value) => encodeSuccess(value).pipe(Effect.orDie)),
+              Effect.map((wire): McpSchema.ReadResourceResult => ({
+                contents: [{ uri, mimeType: "application/json", text: JSON.stringify(wire) }],
+              })),
+            ),
+        });
+      }
+    }),
+  );
+
+/**
+ * Serve an Api's tools ({@link toToolkit}) from Effect's `McpServer`, and
+ * each view it serves as a resource template, `domain://<api>/<view>/{key}`.
+ * Reading one answers with the view's state at the key as JSON, read through
+ * the Api: its middleware and `validate` run, and a refusal is an MCP error
+ * whose message is the failure's wire JSON. Provide an `McpServer`
+ * transport, such as `McpServer.layerHttp`. Over HTTP, each call and read
+ * carries the headers of the MCP request to the Api's middleware, so the Api
+ * authenticates an MCP client as it does any other.
  *
  * **Example:** An MCP server for an Api
  * ```typescript
@@ -298,9 +375,13 @@ export const toMcp = <A extends Toolable, R = never>(
   options: ToolkitOptions<R> = {},
 ): Layer.Layer<never, never, Services<A> | R> => {
   const { toolkit, layer } = toToolkit(api, options);
-  return McpServer.toolkit(toolkit).pipe(Layer.provide(layer)) as Layer.Layer<
+  const headers = (options.headers ?? requestHeaders) as Effect.Effect<
+    Headers.Input | undefined,
     never,
-    never,
-    Services<A> | R
+    R
   >;
+  return Layer.mergeAll(
+    McpServer.toolkit(toolkit).pipe(Layer.provide(layer)),
+    viewResources(api, headers),
+  ) as unknown as Layer.Layer<never, never, Services<A> | R>;
 };

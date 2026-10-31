@@ -164,7 +164,7 @@ export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
 );
 ```
 
-On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_28`. Each call carries the MCP request's headers to the Api's middleware, so an MCP client signs in like any other client, and a rejection comes back as the tool's typed failure.
+Each view is also a resource, `domain://<api>/<view>/{key}`, read through the Api. On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_28`. Each call carries the MCP request's headers to the Api's middleware, so an MCP client signs in like any other client, and a rejection comes back as the tool's typed failure.
 
 `toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
 

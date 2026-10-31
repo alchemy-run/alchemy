@@ -330,6 +330,65 @@ describe("Domain Ai: toMcp", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.live("serves each view as a resource, read through the Api with the request's headers", () =>
+    Effect.gen(function* () {
+      const { handler, dispose } = HttpRouter.toWebHandler(
+        DomainAi.toMcp(WalletApi).pipe(
+          Layer.provide(
+            McpServer.layerHttp({
+              name: "wallet",
+              version: "1.0.0",
+              path: "/mcp",
+              protocols: [McpProtocol.v2025_11_25],
+            }),
+          ),
+          Layer.provide(WalletsLive),
+        ),
+        { disableLogger: true },
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(dispose));
+      const mcp = mcpClient(handler);
+      yield* mcp.connect;
+
+      const templates = yield* mcp.request("resources/templates/list", {});
+      expect(templates!.result.resourceTemplates).toEqual([
+        expect.objectContaining({
+          uriTemplate: "domain://WalletApi/Balance/{key}",
+          name: "WalletApi_Balance",
+          mimeType: "application/json",
+        }),
+      ]);
+      expect(DomainAi.resourceUri("WalletApi", "Balance")).toBe("domain://WalletApi/Balance/{key}");
+
+      yield* mcp.request(
+        "tools/call",
+        {
+          name: "WalletApi_Deposit_send",
+          arguments: { target: "sam-wallet", input: { amount: 12 } },
+        },
+        { "x-owner": "sam" },
+      );
+      const read = (headers?: Record<string, string>) =>
+        mcp.request("resources/read", { uri: "domain://WalletApi/Balance/sam-wallet" }, headers);
+
+      const own = yield* read({ "x-owner": "sam" });
+      expect(own!.result.contents).toEqual([
+        {
+          uri: "domain://WalletApi/Balance/sam-wallet",
+          mimeType: "application/json",
+          text: JSON.stringify({ balance: 12 }),
+        },
+      ]);
+      // The view's validate refuses someone else, as it does any client.
+      const other = yield* read({ "x-owner": "kim" });
+      expect(JSON.parse(other!.error.message)).toEqual({ _tag: "NotOwner" });
+      expect(other!.error.code).toBe(-32603);
+      // No session, no read: the view's middleware refuses it.
+      const anonymous = yield* read();
+      expect(JSON.parse(anonymous!.error.message)).toEqual({ _tag: "Unauthenticated" });
+    }).pipe(Effect.scoped),
+  );
+
   it.live("serves a request-scoped MCP endpoint, as on a Worker", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(
@@ -390,6 +449,41 @@ describe("Domain Ai: toMcp", () => {
       const anonymous = yield* deposit({});
       expect(anonymous.isError).toBe(true);
       expect(JSON.parse(anonymous.content[0].text)).toEqual({ _tag: "Unauthenticated" });
+
+      // A view reads as a resource here too, with nothing kept between requests.
+      const uri = "domain://WalletApi/Balance/sam-wallet";
+      const response = yield* Effect.promise(() =>
+        handler(
+          new Request("http://localhost/mcp", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              "mcp-protocol-version": "2026-07-28",
+              "mcp-method": "resources/read",
+              "mcp-name": uri,
+              "x-owner": "sam",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 2,
+              method: "resources/read",
+              params: {
+                _meta: {
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientInfo": { name: "test", version: "1.0.0" },
+                  "io.modelcontextprotocol/clientCapabilities": {},
+                },
+                uri,
+              },
+            }),
+          }),
+        ),
+      );
+      const read = (yield* Effect.promise(() => response.json())) as { result: any };
+      expect(read.result.contents).toEqual([
+        { uri, mimeType: "application/json", text: JSON.stringify({ balance: 3 }) },
+      ]);
     }).pipe(Effect.scoped),
   );
 });
