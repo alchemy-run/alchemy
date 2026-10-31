@@ -14,7 +14,7 @@ import {
 
 export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * SvelteKit project root (the directory containing `package.json` and

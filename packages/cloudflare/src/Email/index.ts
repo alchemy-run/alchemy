@@ -6,6 +6,7 @@ export * from "./DmarcReports.ts";
 export * from "./Domain.ts";
 export * from "./ImpersonationRegistryEntry.ts";
 export * from "./Routing.ts";
+export * from "./RoutingSubdomain.ts";
 export * from "./Rule.ts";
 export * from "./Send.ts";
 export * from "./SendBinding.ts";

@@ -384,6 +384,8 @@ export interface CloudflareDevPlatformOptions {
    * cannot serve.
    */
   readonly services?: unknown;
+  /** `cloudflare-runtime` `WorkerdOptions` for the proxy's workerd process. */
+  readonly workerd?: unknown;
   /**
    * Directory whose files the `ASSETS` binding in `bindings` serves (kit's
    * static directory), as the deployed Worker's assets do.
@@ -418,6 +420,8 @@ export interface OpenDevPlatformProxyOptions {
   readonly bindings: ReadonlyArray<unknown>;
   /** See {@link CloudflareDevPlatformOptions.services}. */
   readonly services?: unknown;
+  /** See {@link CloudflareDevPlatformOptions.workerd}. */
+  readonly workerd?: unknown;
   /** Static assets served to an `Assets.local` binding. */
   readonly assets?: { readonly directory: string } | undefined;
 }
@@ -454,6 +458,9 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
       ? {
           services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
         }
+      : undefined),
+    ...(options.workerd !== undefined
+      ? { workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"] }
       : undefined),
   });
 };
@@ -507,6 +514,7 @@ export const makeDevPlatformEmulator = (
       compatibilityFlags: options.compatibilityFlags,
       bindings: options.bindings ?? [],
       services: options.services,
+      workerd: options.workerd,
       ...(options.assetsDirectory !== undefined
         ? { assets: { directory: options.assetsDirectory } }
         : undefined),
