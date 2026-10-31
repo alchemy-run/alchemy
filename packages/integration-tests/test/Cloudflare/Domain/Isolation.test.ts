@@ -1,12 +1,18 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
+import DuplicateWorker from "./fixtures/duplicate-worker.ts";
 import Stack from "./fixtures/isolation-stack.ts";
+import TwiceWorker from "./fixtures/twice-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -76,4 +82,51 @@ test(
     expect(yield* call(base, "POST", `/saga/Support/${key}/alex`)).toEqual({ owner: "alex" });
   }),
   { timeout: 180_000 },
+);
+
+test(
+  "a Worker hosting models records the Domain version it was deployed with",
+  Effect.gen(function* () {
+    const { workerName } = yield* stack;
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    expect(
+      (yield* getWorkerTags(workerName, accountId)).filter((tag) =>
+        tag.startsWith("alchemy:domain:"),
+      ),
+    ).toEqual(["alchemy:domain:v0"]);
+  }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
+  { timeout: 60_000 },
+);
+
+/**
+ * Model names are unique per Worker, even when each model's Layer builds its
+ * own platform: two different models named alike would share classes.
+ */
+test.provider(
+  "two different models with one name in a Worker fail; one model hosted twice shares its data",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+      const duplicate = yield* scratch
+        .deploy(
+          Effect.gen(function* () {
+            return { worker: yield* DuplicateWorker };
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(duplicate)).toBe(true);
+      expect(String(duplicate)).toContain("Model Billing is hosted twice on one platform");
+
+      const { worker } = yield* scratch.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* TwiceWorker };
+        }),
+      );
+      const base = worker.url!.replace(/\/+$/, "");
+      yield* call(base, "POST", "/open/a-1/sam");
+      expect(yield* call(base, "GET", "/state/a-1")).toEqual({ owner: "sam" });
+
+      yield* scratch.destroy();
+    }),
+  { timeout: 300_000 },
 );

@@ -295,6 +295,7 @@ const build = <A, E, R>(
     // The model's own storage: models sharing a definition never share its data.
     const platform = yield* (yield* Platform).model({
       modelName,
+      id: definitions,
       sagas: sagas.map((saga) => saga.workflow._tag),
       legacyData,
     });

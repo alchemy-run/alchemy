@@ -278,3 +278,37 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 600_000 },
 );
+
+/**
+ * Removing every model from a Worker at the current version is allowed: its
+ * classes are deleted like any Durable Object the Worker stops hosting, and
+ * its version tag goes with them.
+ */
+test.provider(
+  "removing every model from a Worker deletes its classes and version",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeWorker };
+        }),
+      );
+      const scriptName = worker.workerName;
+      yield* waitForVersion(worker.url!, 0);
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradePlainWorker };
+        }),
+      );
+      expect(yield* namespacesOf(scriptName)).toEqual({});
+      expect(
+        (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
+      ).toEqual([]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);

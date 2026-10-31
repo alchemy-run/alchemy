@@ -185,7 +185,7 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`.
+Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
 
 Renaming a model renames its classes, and the model starts empty under the new names.
 

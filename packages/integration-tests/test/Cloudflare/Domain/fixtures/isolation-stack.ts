@@ -8,6 +8,6 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const worker = yield* DomainIsolationWorker;
-    return { url: worker.url.as<string>() };
+    return { url: worker.url.as<string>(), workerName: worker.workerName };
   }),
 );

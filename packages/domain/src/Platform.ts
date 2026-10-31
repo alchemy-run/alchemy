@@ -539,6 +539,8 @@ export interface ModelHost {
 /** What a platform is told about a model it hosts. */
 export interface HostedModel {
   readonly modelName: string;
+  /** The same for every Layer of one model, and different for another model with the same name. */
+  readonly id: object;
   /** The names of the model's sagas, which run on the workflow engine. */
   readonly sagas: ReadonlyArray<string>;
   /** Whether this model keeps data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
@@ -568,17 +570,17 @@ export class Platform extends Context.Service<
  * @internal
  */
 export const hostedModels = () => {
-  const hosted = new Set<string>();
-  return (modelName: string): Effect.Effect<void> =>
+  const hosted = new Map<string, object | undefined>();
+  return (modelName: string, id?: object): Effect.Effect<void> =>
     Effect.suspend(() => {
-      if (hosted.has(modelName)) {
+      if (hosted.has(modelName) && (id === undefined || hosted.get(modelName) !== id)) {
         return Effect.die(
           new DefinitionError(
             `Model ${modelName} is hosted twice on one platform: give each model its own name`,
           ),
         );
       }
-      hosted.add(modelName);
+      hosted.set(modelName, id);
       return Effect.void;
     });
 };

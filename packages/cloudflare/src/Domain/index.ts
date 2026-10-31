@@ -863,6 +863,14 @@ const record = (modelName: string, legacyName: string, legacyData: boolean, name
     });
   });
 
+/** The models each Worker hosts, by name. */
+const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
+const claimsOf = (host: object) => {
+  let claim = claims.get(host);
+  if (claim === undefined) claims.set(host, (claim = hostedModels()));
+  return claim;
+};
+
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
 const durableObjectPlatform = (
   jurisdiction: DurableObjectJurisdiction | undefined,
@@ -884,7 +892,10 @@ const durableObjectPlatform = (
           jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
         );
 
-      const claim = hostedModels();
+      // Model names are unique per Worker, not per platform build: two
+      // different models named alike would declare the same classes. The
+      // same model hosted twice declares them again, which is harmless.
+      const claim = claimsOf(yield* Worker);
       const hostFor = ({ modelName, legacyData }: HostedModel): ModelHost => {
         // Every object of the model is declared through here, named after
         // the model, so models that share a definition never share its data.
@@ -1070,7 +1081,7 @@ const durableObjectPlatform = (
       return Platform.of({
         model: (model) =>
           Effect.gen(function* () {
-            yield* claim(model.modelName);
+            yield* claim(model.modelName, model.id);
             // Each saga's runs live on a Durable Object class of the workflow
             // engine, named after the model too.
             for (const saga of model.sagas)
