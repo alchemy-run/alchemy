@@ -43,6 +43,13 @@ export interface IngressConfig<Type extends string = string> {
    */
   readonly type: Type;
   /**
+   * What the route is called, for hostnames and logs (it becomes
+   * {@link IngressTarget.label}). Names within one stack and stage must be
+   * distinct, because an adapter derives the origin from it.
+   * @default the resource's logical id
+   */
+  readonly name?: string | undefined;
+  /**
    * Adapter-specific options, for example `{ domain: "myapp" }`. Plain JSON
    * data: values that are Outputs are resolved before the local provider
    * sees them.
@@ -74,9 +81,8 @@ export interface IngressTarget {
   /** The resource's logical id within its namespace. */
   readonly id: string;
   /**
-   * What the route is called, for hostnames and logs. The logical id for most
-   * resources; a composite names it after the site it builds, because the
-   * server inside it is always `"Build"`.
+   * What the route is called, for hostnames and logs: the {@link IngressConfig.name}
+   * the user gave, else the resource's logical id.
    */
   readonly label: string;
   /** The resource's type, for example `Cloudflare.Worker`. */
@@ -180,8 +186,8 @@ export class IngressAdapterNotFound extends Data.TaggedError("IngressAdapterNotF
 /**
  * The {@link IngressTarget} of a resource, from the identity its provider
  * already holds: the `Stack` service read when the provider layer was built,
- * and the `id` and `fqn` its lifecycle operation was called with. `label`
- * defaults to the logical id.
+ * and the `id` and `fqn` its lifecycle operation was called with. `label` is
+ * the config's {@link IngressConfig.name}, else the logical id.
  */
 export const createTarget = (resource: {
   readonly stack: { readonly name: string; readonly stage: string };
@@ -189,13 +195,14 @@ export const createTarget = (resource: {
   readonly fqn: string;
   /** The resource type, for example `Cloudflare.Worker`. */
   readonly type: string;
-  readonly label?: string;
+  /** The `dev.ingress` the resource was given. */
+  readonly config: IngressConfig;
 }): IngressTarget => ({
   stack: resource.stack.name,
   stage: resource.stack.stage,
   fqn: resource.fqn,
   id: resource.id,
-  label: resource.label ?? resource.id,
+  label: resource.config.name ?? resource.id,
   type: resource.type,
 });
 
