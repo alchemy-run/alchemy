@@ -113,5 +113,26 @@ Every call goes through the Api's own handlers, in process, with the HTTP reques
 
 ## Limits
 
-- A read's `where` filter is not published: a filter does not fit in a URL.
-- An endpoint's input and answer are the call's own JSON. To shape a public API differently, write your own `HttpApi` group and call the Api from its handlers.
+A read's `where` filter is not published, since a filter does not fit in a URL. An endpoint's input and answer are the call's own JSON. To shape a public API differently, write your own `HttpApi` group and call the Api's client from its handlers:
+
+```typescript
+const Partner = HttpApi.make("Partner").add(
+  HttpApiGroup.make("accounts").add(
+    HttpApiEndpoint.get("balance", "/balance/:id", {
+      params: { id: AccountId },
+      success: Schema.Struct({ balance: Schema.Number }),
+    }),
+  ),
+);
+
+const PartnerLive = HttpApiBuilder.group(Partner, "accounts", (handlers) =>
+  handlers.handle("balance", ({ params, request }) =>
+    Effect.gen(function* () {
+      const bank = yield* CustomerApi.clientInProcess;
+      // the caller's headers, so the view's middleware sees who is asking
+      const summary = yield* bank.AccountSummary.get(params.id, { headers: request.headers });
+      return { balance: summary?.balance ?? 0 };
+    }).pipe(Effect.scoped, Effect.orDie),
+  ),
+);
+```

@@ -74,7 +74,7 @@ More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#
 
 ## Plain HTTP and OpenAPI
 
-For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes chosen calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes an Api as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
 
 ```ts
 import * as DomainHttp from "@alchemy.run/domain/Http";
@@ -96,11 +96,54 @@ return {
 };
 ```
 
-- Paths: a command is `POST /<Command>` with the RPC payload as its JSON body (`target`, `commandId`, `input`). A `get` or `peek` is `GET /<Entry>/{key}`, and a `snapshot` `GET /<Entry>/{key}/snapshot`, with `?stream=&version=` from a receipt to read your own write. A `list` is `GET /<Entry>/{key}/list?order=&take=&after=`.
-- Every call runs through the Api's own handlers in process, with the request's headers: middleware, `validate` and rejections run as for any client, and input is decoded once.
-- To publish less over HTTP, give HTTP clients a smaller Api. Declare statuses on rejections: `Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`. A read's `where` is not published.
-- `watch` and `events` are `GET /<Entry>/{key}/watch` and `/events?after=`, answered with Server-Sent Events. A failure before the first value answers with its status; one after ends the stream with a typed failure event.
-- To serve the group with other groups, or under a prefix, add `BankHttp.group` to your own `HttpApi` and provide `BankHttp.layerFor(MyHttpApi)`.
+A command is a `POST` with the RPC payload as its JSON body, and answers with its receipt:
+
+```sh
+curl -X POST /DepositMoney -H "cookie: $SESSION" \
+  -d '{ "target": "a-1", "commandId": "d-1", "input": { "amount": 1000 } }'
+# { "reply": { "balance": 1000 }, "stream": "Account/a-1", "version": 3 }
+```
+
+A read is a `GET` by key, and the receipt's `stream` and `version` make it wait for your own write:
+
+```sh
+curl "/AccountSummary/a-1?stream=Account/a-1&version=3"
+curl "/AccountSummary/a-1/snapshot"
+curl "/AccountSummary/a-1/list?order=desc&take=20&after=118"
+```
+
+`watch` and `events` answer with Server-Sent Events, one value per event:
+
+```ts
+const summary = new EventSource(`/AccountSummary/${accountId}/events?after=${cursor}`);
+summary.onmessage = (event) => render(JSON.parse(event.data));
+```
+
+Every call runs through the Api's own handlers with the request's headers, so a rejection answers with the status its schema declares (422 if none):
+
+```ts
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
+// GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
+```
+
+What the Api serves is what is published, so HTTP clients get their own Api:
+
+```ts
+export class PartnerApi extends Domain.Api("PartnerApi", {
+  model: Bank,
+  commands: ["DepositMoney"],
+  views: ["AccountSummary"],
+  streams: [],
+}) {}
+const PartnerHttp = DomainHttp.toHttpApi(PartnerApi);
+```
+
+To serve the group next to others or under a prefix, add it to your own `HttpApi`:
+
+```ts
+const AppApi = HttpApi.make("App").add(BankHttp.group.prefix("/v1"));
+const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFor(AppApi)));
+```
 
 More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
 
