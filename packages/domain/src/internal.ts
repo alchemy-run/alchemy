@@ -1,22 +1,11 @@
 import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built, or when a handler returns something its declaration
- * does not allow.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export { DefinitionError } from "./DefinitionError.ts";
 
 const tags = new WeakMap<object, string>();
 
@@ -85,9 +74,14 @@ export const judge = (
     if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: String(rejection?._tag),
+            list: "rejects",
+          }),
+        }),
       };
     }
     return { _tag: "Rejected", rejection };
@@ -96,9 +90,14 @@ export const judge = (
     if (!command.events.some((e) => e.tag === event._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: event._tag,
+            list: "events",
+          }),
+        }),
       };
     }
   }
