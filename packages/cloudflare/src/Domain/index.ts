@@ -1061,11 +1061,17 @@ const viewObject = (
           reportDefects(sourceFor(key).read(target, reader, after, limit)),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
           reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
+        bfStart: (
+          key: string,
+          target: string,
+          ref: Backfill.SourceRef,
+          waitMillis?: number,
+          begun?: boolean,
+        ) =>
           reportDefects(
             Effect.gen(function* () {
               yield* state.storage.put(ID_KEY, key);
-              return yield* consumerFor(key).start(target, ref, waitMillis);
+              return yield* consumerFor(key).start(target, ref, waitMillis, begun);
             }),
           ),
         // The key lists itself in its merge job, before its first entry.
@@ -1300,6 +1306,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
           waitMillis: RELAY_ROOT_WAIT_MS,
           againMillis: 1_000,
+          // The run's root is of this generation's class, so it runs this code's hooks.
+          lifecycle: () => kit.lifecycle,
         }));
       const relay = Backfill.makeRelay(net);
       const consumerFor = (key: string): Backfill.Consumer =>
@@ -1314,6 +1322,16 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
             ),
           after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+          // Handled what it accepted; if not, make sure a drain is on its way.
+          drained: runtime.provide(
+            readMeta.pipe(
+              Effect.map((meta) => meta.processed >= meta.accepted),
+              Effect.tap((drained) =>
+                drained ? Effect.void : state.waitUntil(drain.pipe(Effect.ignoreCause)),
+              ),
+              Effect.orDie,
+            ),
+          ),
         }));
       const keep = (key: string) => state.storage.put(ID_KEY, key);
       return {
@@ -1334,9 +1352,15 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).push(target, deliveries)))),
         bfConsumerReady: (key: string, target: string, waitMillis?: number) =>
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target, waitMillis)))),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
+        bfStart: (
+          key: string,
+          target: string,
+          ref: Backfill.SourceRef,
+          waitMillis?: number,
+          begun?: boolean,
+        ) =>
           reportDefects(
-            keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref, waitMillis))),
+            keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref, waitMillis, begun))),
           ),
       };
     });
@@ -1585,9 +1609,9 @@ const durableObjectPlatform = (
             Effect.flatMap(consumerOf(target, key), (stub) =>
               callOnce(stub.bfConsumerReady(key, target, waitMillis)),
             ),
-          start: (target, key, ref, waitMillis) =>
+          start: (target, key, ref, waitMillis, begun) =>
             Effect.flatMap(consumerOf(target, key), (stub) =>
-              callOnce(stub.bfStart(key, target, ref, waitMillis)),
+              callOnce(stub.bfStart(key, target, ref, waitMillis, begun)),
             ),
         },
         // A source instance's scanner is an object of the consumer's own class: it has its routing.

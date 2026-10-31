@@ -1338,6 +1338,7 @@ const build = (
     batch: ReadonlyArray<Accepted>,
   ): ReadonlyArray<unknown> => {
     const keyRef = Key.refOf(projection.definition.key, key);
+    const generation = generationOf("projection", projection.projectionName);
     const inputs: Array<unknown> = [];
     for (const { delivery, position } of batch) {
       const upstream = sources.get(delivery.origin)!;
@@ -1357,7 +1358,7 @@ const build = (
         appends: 0,
       };
       for (const route of delivery.routes ?? [undefined]) {
-        const input = { key: keyRef, route, source, event, envelope, state, position };
+        const input = { key: keyRef, route, source, event, envelope, state, position, generation };
         Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
         inputs.push(input);
       }

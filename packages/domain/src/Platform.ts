@@ -484,6 +484,17 @@ export interface ProjectionKit {
    * the run as processed.
    */
   readonly run: (key: string, batch: ReadonlyArray<Accepted>) => Effect.Effect<void>;
+  /**
+   * The projection's lifecycle for this generation, run by its backfill's run:
+   * `start` before any key handles an input, `complete` once its history is in.
+   */
+  readonly lifecycle?: Lifecycle;
+}
+
+/** What a consumer's backfill run does around it: see `ProjectionKit.lifecycle`. */
+export interface Lifecycle {
+  readonly start?: Effect.Effect<void>;
+  readonly complete?: Effect.Effect<void>;
 }
 
 /**

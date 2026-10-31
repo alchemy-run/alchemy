@@ -88,6 +88,38 @@ const timelineLayer = (options?: Domain.Projection.Options) =>
   );
 const TimelineLive = timelineLayer();
 
+/**
+ * A projection keyed by its source that rebuilds into a table per generation:
+ * `Feed` records its hooks and each input, tagged with the generation. Its
+ * `start` fails the first `failures` times.
+ */
+class Ledger extends Domain.Projection("Ledger", {
+  from: [Account],
+  key: Account,
+  on: [Deposited],
+}) {}
+const ledgerLayer = (options?: Domain.Projection.Options, failures = 0) =>
+  Ledger.toLayer(
+    Effect.gen(function* () {
+      const feed = yield* Feed;
+      const record = (line: string) => Ref.update(feed, (all) => [...all, line]);
+      let attempts = 0;
+      return {
+        handle: Effect.fn(function* (batch) {
+          for (const { event, generation } of batch)
+            yield* record(`g${generation} deposit ${event.amount}`);
+        }),
+        start: ({ generation, previous }) =>
+          attempts++ < failures
+            ? Effect.die(new Error("store unavailable"))
+            : record(`start g${generation} after ${previous ?? "none"}`),
+        complete: ({ generation, previous }) =>
+          record(`complete g${generation} after ${previous ?? "none"}`),
+      };
+    }),
+    options,
+  );
+
 /** The same view, redefined: it now records each deposit doubled. */
 class DoubledDeposits extends Domain.View("Deposits", {
   from: [Account],
@@ -131,6 +163,10 @@ class WithView extends Domain.Model("Bank", {
 class Redefined extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   views: [DoubledDeposits],
+}) {}
+class WithLedger extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  projections: [Ledger],
 }) {}
 class WithTimeline extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
@@ -465,6 +501,71 @@ describe("Domain catch-up", () => {
         bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
       );
       expect(feed).toEqual(["deposit 1", "deposit 2", "deposit 1", "deposit 2"]);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live(
+    "a projection's start runs before its first input and complete once its history is in, for each generation",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(Before, Layer.empty, Effect.all([deposit("a-1", 1), deposit("a-2", 2)]));
+        const first = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer(),
+          bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
+        );
+        expect(first[0]).toBe("start g0 after none");
+        expect(first.slice(1, 3).sort()).toEqual(["g0 deposit 1", "g0 deposit 2"]);
+        expect(first[3]).toBe("complete g0 after none");
+        expect(first).toHaveLength(4);
+
+        // A live input after the history is in carries the same generation.
+        const live = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer(),
+          deposit("a-1", 3).pipe(
+            Effect.andThen(bank.settle),
+            Effect.andThen(Effect.flatMap(Feed, Ref.get)),
+          ),
+        );
+        expect(live.slice(4)).toEqual(["g0 deposit 3"]);
+
+        // A version bump: a new generation, told which one it replaces.
+        const rebuilt = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer({ version: 1 }),
+          bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
+        );
+        const second = rebuilt.slice(5);
+        expect(second[0]).toBe("start g1 after 0");
+        expect(second.slice(1, 4).sort()).toEqual(["g1 deposit 1", "g1 deposit 2", "g1 deposit 3"]);
+        expect(second[4]).toBe("complete g1 after 0");
+      }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("a projection's start that fails holds every key back until it succeeds", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Before, Layer.empty, deposit("a-1", 1));
+      const feed = yield* bank.deploy(
+        WithLedger,
+        ledgerLayer(undefined, 2),
+        // A live deposit while `start` keeps failing: its key waits for it too.
+        deposit("a-2", 2).pipe(
+          Effect.andThen(bank.settle),
+          Effect.andThen(Effect.flatMap(Feed, Ref.get)),
+        ),
+      );
+      // Nothing before `start`; the history before `complete` (the live deposit may land either side).
+      expect(feed[0]).toBe("start g0 after none");
+      expect(feed.indexOf("g0 deposit 1")).toBeLessThan(feed.indexOf("complete g0 after none"));
+      expect([...feed].sort()).toEqual([
+        "complete g0 after none",
+        "g0 deposit 1",
+        "g0 deposit 2",
+        "start g0 after none",
+      ]);
     }).pipe(Effect.provide(platform().services)),
   );
 });

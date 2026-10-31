@@ -204,7 +204,14 @@ const count = (n: number) => n.toLocaleString("en-US");
 /** One run's progress, as the deploy notes it. */
 export const describeProgress = (run: Progress) => {
   if (run.phase === "complete") return `${run.target} complete`;
-  if (run.phase === "unknown") return `${run.target} starting`;
+  // A projection's `start` or `complete` hook that failed: the run retries it.
+  const hook = /^(start|complete): /.exec(run.lastError ?? "");
+  const failed = hook
+    ? ` (${hook[1]} failed, retrying: ${run.lastError!.slice(hook[0].length, hook[0].length + 200).split("\n")[0]})`
+    : "";
+  if (run.phase === "unknown") return `${run.target} starting${failed}`;
+  if (failed && run.subtrees > 0 && run.done === run.subtrees)
+    return `${run.target} completing${failed}`;
   const what = run.phase === "discover" ? "reading history" : "applying history";
   if (run.subtrees === 0) return `${run.target} ${what}`;
   const percent = Math.floor((100 * run.done) / run.subtrees);

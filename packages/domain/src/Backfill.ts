@@ -204,13 +204,15 @@ export interface ConsumerRpc {
   /**
    * Start a key of a consumer keyed by its source: it reads `ref`'s log itself.
    * `"settled"` once it has its history: it works on it for up to `waitMillis`
-   * before it answers.
+   * before it answers. `begun`: the run asks, so it has started (and run the
+   * consumer's `start`); anyone else leaves the key to ask the run.
    */
   readonly start: (
     target: string,
     key: string,
     ref: SourceRef,
     waitMillis?: number,
+    begun?: boolean,
   ) => Effect.Effect<"pending" | "settled">;
 }
 
@@ -1050,6 +1052,12 @@ export interface ConsumerHost {
   readonly apply: (deliveries: ReadonlyArray<Delivery>) => Effect.Effect<void>;
   /** Work an `apply` left for after its exclusive section commits (pushes, sends). */
   readonly after?: Effect.Effect<void>;
+  /**
+   * Whether it has handled everything applied (a projection handles what it
+   * accepted later, in batches): its history isn't in until it has, so the run
+   * waits for it before the consumer's `complete`.
+   */
+  readonly drained?: Effect.Effect<boolean>;
 }
 
 /**
@@ -1096,6 +1104,11 @@ export const makeConsumer = (
     readonly ready: boolean;
     /** A scanner pushed it history: that scanner tells it when it is ready. */
     readonly pushed?: boolean;
+    /**
+     * Keyed by its source: its run has started (and run the consumer's `start`),
+     * so it may apply. A key that follows its source on a live delivery asks first.
+     */
+    readonly begun?: boolean;
   }
 
   const begin = (target: string) =>
@@ -1325,22 +1338,26 @@ export const makeConsumer = (
       }),
     );
 
-  /** Keyed by its source: it has its history (read to the end of its log, or done). */
+  /** Keyed by its source: it has its history (read to the end of its log and applied, or done). */
   const settled = (target: string) =>
-    Effect.map(
-      Effect.all([storage.get(doneKey(target)), storage.get(caughtKey(target))]),
-      ([done, caught]) => done !== undefined || caught !== undefined,
-    );
+    Effect.gen(function* () {
+      if ((yield* storage.get(doneKey(target))) !== undefined) return true;
+      if ((yield* storage.get(caughtKey(target))) === undefined) return false;
+      return (yield* storage.list({ prefix: bufferPrefix(target), limit: 1 })).length === 0;
+    });
 
   /**
    * Keyed by its source: read `ref`'s log from the start. Ready at once, since
-   * it has no other source to wait for. Callers hold the exclusive section.
+   * it has no other source to wait for; `begun` when its run started it. Callers
+   * hold the exclusive section.
    */
-  const follow = (target: string, ref: SourceRef) =>
+  const follow = (target: string, ref: SourceRef, begun: boolean) =>
     Effect.gen(function* () {
       const backfill = yield* begin(target);
-      if (!backfill.ready)
-        yield* storage.put({ [backfillKey(target)]: { ...backfill, ready: true } });
+      if (!backfill.ready || (begun && !backfill.begun))
+        yield* storage.put({
+          [backfillKey(target)]: { ...backfill, ready: true, ...(begun ? { begun } : {}) },
+        });
       const stream = `${ref.source}/${ref.id}`;
       const feed = yield* storage.get<Feed>(feedKey(target, stream));
       if (feed === undefined || feed.ref === null)
@@ -1352,7 +1369,21 @@ export const makeConsumer = (
         });
     });
 
-  /** The merge job for one target. */
+  /**
+   * It has its history: `settled` once it has also handled it (see
+   * `ConsumerHost.drained`), waiting up to `waitMillis` for that.
+   */
+  const handled = (target: string, waitMillis: number) =>
+    Effect.gen(function* () {
+      if (host.drained === undefined || target !== host.target()) return "settled" as const;
+      const until = (yield* Clock.currentTimeMillis) + waitMillis;
+      while (true) {
+        if (yield* host.drained) return "settled" as const;
+        if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
+        yield* Effect.sleep("100 millis");
+      }
+    });
+
   /** The merge job for one target: `true` when it couldn't go on (a call failed), and waits. */
   const merge = (target: string): Effect.Effect<boolean> =>
     Effect.gen(function* () {
@@ -1372,6 +1403,21 @@ export const makeConsumer = (
           Effect.gen(function* () {
             const current = yield* storage.get<Backfill>(backfillKey(target));
             if (current) yield* storage.put({ [backfillKey(target)]: { ...current, ready: true } });
+          }),
+        );
+      }
+      if (host.singleSource?.() === true && !backfill.begun) {
+        // Followed on a live delivery: apply nothing until the run has started, and
+        // with it the consumer's `start`.
+        const phase = yield* net.run.phase(target).pipe(Effect.catchCause(() => Effect.void));
+        if (phase === undefined)
+          return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
+        if (phase === "unknown")
+          return yield* Effect.as(jobs.schedule(jobId(target), limits.pollMillis), false);
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const current = yield* storage.get<Backfill>(backfillKey(target));
+            if (current) yield* storage.put({ [backfillKey(target)]: { ...current, begun: true } });
           }),
         );
       }
@@ -1413,7 +1459,7 @@ export const makeConsumer = (
           const source = deliveries[0]!.origin;
           yield* storage.exclusive(
             Effect.gen(function* () {
-              yield* follow(target, { source, id: host.key });
+              yield* follow(target, { source, id: host.key }, false);
               yield* buffer(target, deliveries, true);
             }),
           );
@@ -1462,7 +1508,7 @@ export const makeConsumer = (
         if (applied && host.after) yield* host.after;
       }),
 
-    start: (target: string, ref: SourceRef, waitMillis = 0) =>
+    start: (target: string, ref: SourceRef, waitMillis = 0, begun = false) =>
       Effect.gen(function* () {
         const started = yield* storage.exclusive(
           Effect.gen(function* () {
@@ -1473,11 +1519,11 @@ export const makeConsumer = (
               return "settled" as const;
             }
             if (yield* settled(target)) return "settled" as const;
-            yield* follow(target, ref);
+            yield* follow(target, ref, begun);
             return "pending" as const;
           }),
         );
-        if (started === "settled") return started;
+        if (started === "settled") return yield* handled(target, waitMillis);
         // Worked on here when asked to wait; the job takes over only if it isn't done in time.
         if (waitMillis <= 0) return yield* Effect.as(jobs.schedule(jobId(target), 0), started);
         // Work on it here, rather than wait for an alarm to run the job: read its
@@ -1485,7 +1531,8 @@ export const makeConsumer = (
         const until = (yield* Clock.currentTimeMillis) + waitMillis;
         for (let failures = 0; ;) {
           failures = (yield* merge(target)) ? failures + 1 : 0;
-          if (yield* settled(target)) return "settled" as const;
+          if (yield* settled(target))
+            return yield* handled(target, until - (yield* Clock.currentTimeMillis));
           if ((yield* Clock.currentTimeMillis) >= until)
             return yield* Effect.as(jobs.schedule(jobId(target), 0), "pending" as const);
           yield* Effect.sleep(`${yield* pause(failures)} millis`);
@@ -1508,14 +1555,15 @@ export const makeConsumer = (
             return "pending" as const;
           }),
         );
-        if (told === "settled") return told;
+        if (told === "settled") return yield* handled(target, waitMillis);
         yield* jobs.schedule(jobId(target), 0);
         if (waitMillis <= 0) return told;
         // Apply it here, rather than wait for an alarm to run the job.
         const until = (yield* Clock.currentTimeMillis) + waitMillis;
         for (let failures = 0; ;) {
           failures = (yield* merge(target)) ? failures + 1 : 0;
-          if (yield* storage.get(doneKey(target))) return "settled" as const;
+          if (yield* storage.get(doneKey(target)))
+            return yield* handled(target, until - (yield* Clock.currentTimeMillis));
           if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
           yield* Effect.sleep(`${yield* pause(failures)} millis`);
         }
@@ -1807,7 +1855,7 @@ export const makeRelay = (net: Network) => {
       const call = (wait: number): Effect.Effect<boolean> =>
         run.plan.singleSource
           ? Effect.map(
-              net.consumer.start(run.target, ref.id, ref, wait),
+              net.consumer.start(run.target, ref.id, ref, wait, true),
               (started) => started === "settled",
             )
           : run.phase === "discover"
@@ -1951,7 +1999,21 @@ interface RunState {
   readonly misses?: number;
   /** How many subtrees it works through at once: see {@link makeRun}. */
   readonly window?: number;
+  /** The consumer's `start` hasn't run yet: until it has, the run's phase is `unknown`. */
+  readonly starting?: true;
+  /** Its history is in, and the consumer's `complete` hasn't run yet. */
+  readonly completing?: true;
 }
+
+/** What a consumer does around its run: see `Projection.Lifecycle`. */
+export interface RunLifecycle {
+  readonly start?: Effect.Effect<void>;
+  readonly complete?: Effect.Effect<void>;
+}
+
+/** A run's phase as keys see it: `unknown` until the consumer's `start` has run. */
+const phaseOf = (state: RunState | undefined): Phase =>
+  state === undefined || state.starting ? "unknown" : state.phase;
 
 /** Subtrees a run's root starts with at once: it grows to all of them while the account takes the load. */
 const RUN_WINDOW = 16;
@@ -1976,6 +2038,8 @@ export const makeRun = (
     readonly waitMillis: number;
     /** How long before a pass that wasn't done runs again, doubling each time up to 30s. */
     readonly againMillis: number;
+    /** The consumer's hooks, run at least once each: `start` before any key applies, `complete` before the run is. */
+    readonly lifecycle?: (target: string) => RunLifecycle | undefined;
   },
 ) => {
   const relay = makeRelay(net);
@@ -1988,10 +2052,90 @@ export const makeRun = (
   const doneKey = (target: string, phase: string, item: RelayItem) =>
     `rd:${enc(target)}:${phase}:${"path" in item ? `p:${item.path}` : `i:${refKey(item.ref)}`}`;
 
+  /**
+   * Run one of the consumer's hooks: `true` once it has. A hook that fails is
+   * recorded as the run's last error and runs again after a wait that doubles.
+   */
+  const hook = (target: string, state: RunState, name: "start" | "complete") =>
+    Effect.gen(function* () {
+      const run = options.lifecycle?.(target)?.[name];
+      if (run === undefined) return true;
+      const failure = yield* run.pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(cause.pipe(Cause.pretty))),
+      );
+      if (failure === undefined) {
+        // It went through: a failure it left recorded no longer stands.
+        const recorded = yield* getProgress(target);
+        if (recorded?.lastError?.startsWith(`${name}: `)) {
+          const { lastError: _, ...rest } = recorded;
+          yield* storage.put({ [progressKey(target)]: rest });
+        }
+        return true;
+      }
+      yield* Effect.logWarning(`backfill ${target} ${name} failed: ${failure}`);
+      const misses = (state.misses ?? 0) + 1;
+      const now = yield* Clock.currentTimeMillis;
+      const before = yield* getProgress(target);
+      yield* storage.put({
+        [stateKey(target)]: { ...state, misses },
+        [progressKey(target)]: {
+          target,
+          phase: before?.phase ?? "unknown",
+          subtrees: 0,
+          done: 0,
+          instances: 0,
+          passes: 0,
+          refused: 0,
+          ...before,
+          startedAt: before?.startedAt ?? now,
+          updatedAt: now,
+          lastError: `${name}: ${failure}`,
+        } satisfies Progress,
+      });
+      yield* jobs.schedule(
+        `drive:${target}`,
+        Math.min(RELAY_RETRY_MAX_MS, options.againMillis * 2 ** (misses - 1)),
+      );
+      return false;
+    });
+
+  /** The history is in: run `complete`, then mark the run complete. */
+  const finish = (target: string, state: RunState) =>
+    Effect.gen(function* () {
+      if (!(yield* hook(target, state, "complete"))) return;
+      const progress = yield* getProgress(target);
+      yield* storage.put({
+        [stateKey(target)]: {
+          plan: state.plan,
+          phase: "complete",
+          ...(state.window === undefined ? {} : { window: state.window }),
+        } satisfies RunState,
+        ...(progress === undefined
+          ? {}
+          : {
+              [progressKey(target)]: {
+                ...progress,
+                phase: "complete",
+                updatedAt: yield* Clock.currentTimeMillis,
+              } satisfies Progress,
+            }),
+      });
+      yield* clearPrefix(`rd:${enc(target)}:`);
+    });
+
   const drive = (target: string): Effect.Effect<void> =>
     Effect.gen(function* () {
-      const state = yield* getState(target);
-      if (state === undefined || state.phase === "complete") return;
+      const found = yield* getState(target);
+      if (found === undefined || found.phase === "complete") return;
+      if (found.completing) return yield* finish(target, found);
+      if (found.starting) {
+        if (!(yield* hook(target, found, "start"))) return;
+        const { starting: _, misses: __, ...begun } = found;
+        yield* storage.put({ [stateKey(target)]: begun });
+      }
+      const state = (yield* getState(target))!;
+      if (state.phase === "complete") return;
       const started = yield* Clock.currentTimeMillis;
       const deadline = started + options.waitMillis;
       // One try at everything: every round runs in this pass, whatever the clock says.
@@ -2106,18 +2250,29 @@ export const makeRun = (
           Math.min(RELAY_RETRY_MAX_MS, options.againMillis * 2 ** (misses - 1)),
         );
       }
-      const phase =
-        state.plan.singleSource || state.phase === "ready" ? "complete" : ("ready" as const);
+      if (state.plan.singleSource || state.phase === "ready") {
+        // Recorded first, so a `complete` that fails runs again without another pass.
+        const completing: RunState = {
+          plan: state.plan,
+          phase: state.phase,
+          window,
+          completing: true,
+        };
+        yield* storage.put({
+          [stateKey(target)]: completing,
+          [progressKey(target)]: { ...progress, updatedAt: yield* Clock.currentTimeMillis },
+        });
+        return yield* finish(target, completing);
+      }
       yield* storage.put({
-        [stateKey(target)]: { plan: state.plan, phase, window },
+        [stateKey(target)]: { plan: state.plan, phase: "ready", window },
         [progressKey(target)]: {
           ...progress,
-          phase,
+          phase: "ready",
           updatedAt: yield* Clock.currentTimeMillis,
         } satisfies Progress,
       });
-      if (phase !== "complete") yield* jobs.schedule(`drive:${target}`, 0);
-      else yield* clearPrefix(`rd:${enc(target)}:`);
+      yield* jobs.schedule(`drive:${target}`, 0);
     });
 
   const clearPrefix = (prefix: string) =>
@@ -2140,19 +2295,23 @@ export const makeRun = (
               return { status: "changed", started: state.plan } satisfies Begin;
             return { status: state.phase === "complete" ? "complete" : "started" } satisfies Begin;
           }
+          const starting = options.lifecycle?.(target)?.start !== undefined;
           yield* storage.put({
-            [stateKey(target)]: { plan, phase: "discover" } satisfies RunState,
+            [stateKey(target)]: {
+              plan,
+              phase: "discover",
+              ...(starting ? { starting } : {}),
+            } satisfies RunState,
           });
           yield* jobs.schedule(`drive:${target}`, 0);
           return { status: "started" } satisfies Begin;
         }),
       ),
-    phase: (target: string) =>
-      Effect.map(getState(target), (state): Phase => state?.phase ?? "unknown"),
+    phase: (target: string) => Effect.map(getState(target), phaseOf),
     /** How far the run has got; its phase is the run's own, so it never reads ahead of it. */
     progress: (target: string) =>
       Effect.gen(function* () {
-        const phase: Phase = (yield* getState(target))?.phase ?? "unknown";
+        const phase = phaseOf(yield* getState(target));
         const progress = yield* getProgress(target);
         return {
           target,

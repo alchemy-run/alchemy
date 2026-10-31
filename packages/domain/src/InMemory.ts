@@ -222,6 +222,8 @@ export const make = (
     }
     return found;
   };
+  /** Each projection's hooks, as of the latest build: what its run calls. */
+  const lifecycles = new Map<string, Backfill.RunLifecycle>();
   const runs = new Map<string, Backfill.Run>();
   /** The root of a consumer generation's run. Each pass is one try at everything; keys work between. */
   const run = (target: string) => {
@@ -233,7 +235,14 @@ export const make = (
         memoryStorage(address, lock),
         memoryJobs(address, (id) => role.run(id)),
         net,
-        { waitMillis: 0, againMillis: 0 },
+        {
+          waitMillis: 0,
+          againMillis: 0,
+          lifecycle: (target) => {
+            const { kind, name } = Backfill.consumerOf(target);
+            return lifecycles.get(`${kind}:${name}`);
+          },
+        },
       );
       runs.set(target, (found = role));
     }
@@ -277,10 +286,10 @@ export const make = (
             consumerRole(target, key)?.ready(target, waitMillis) ??
             Effect.succeed("settled" as const),
         ),
-      start: (target, key, ref, waitMillis) =>
+      start: (target, key, ref, waitMillis, begun) =>
         Effect.suspend(
           () =>
-            consumerRole(target, key)?.start(target, ref, waitMillis) ??
+            consumerRole(target, key)?.start(target, ref, waitMillis, begun) ??
             Effect.succeed("settled" as const),
         ),
     },
@@ -912,12 +921,18 @@ export const make = (
               sources: () => planOf(target)?.sources ?? [],
               history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
               apply: (deliveries) => Effect.forEach(deliveries, intake, { discard: true }),
+              drained: Effect.sync(() => {
+                const p = partition(key);
+                return p.processed >= p.log.length;
+              }),
             },
             limits,
           );
           return role;
         });
         consumerRoles.set(`projection:${kit.name}`, consumer);
+        if (kit.lifecycle) lifecycles.set(`projection:${kit.name}`, kit.lifecycle);
+        else lifecycles.delete(`projection:${kit.name}`);
         consumerRoutes.set(`projection:${kit.name}`, (target, ref, rows) =>
           kit.history(target, ref.source, ref.id, rows),
         );
