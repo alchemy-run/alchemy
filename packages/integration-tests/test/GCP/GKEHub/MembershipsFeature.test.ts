@@ -125,7 +125,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
 
-      const updated = yield* stack.deploy(
+      const feature = (labels: Record<string, string>) =>
         Effect.gen(function* () {
           yield* fleetMembership({ env: "test" });
           return yield* GCP.GKEHub.MembershipsFeature("ConfigSync", {
@@ -137,13 +137,21 @@ test.provider.skipIf(!runLifecycle)(
                 configSync: { enabled: false, preventDrift: true },
               },
             },
-            labels: { env: "prod", role: "hub" },
+            labels,
           });
-        }),
-      );
+        });
 
+      // The spec updates in place.
+      const updated = yield* stack.deploy(feature({ env: "test" }));
       expect(updated.name).toEqual(created.name);
-      expect(updated.labels).toMatchObject({ env: "prod", role: "hub" });
+      const refetched = yield* gkehub.getProjectsLocationsMembershipsFeatures({
+        name: created.name,
+      });
+      expect(refetched.spec?.configmanagement?.configSync?.preventDrift).toEqual(true);
+
+      // Labels are set only at create, so changing them replaces the feature.
+      const relabel = yield* stack.plan(feature({ env: "prod", role: "hub" }));
+      expect(relabel.resources.ConfigSync?.action).toEqual("replace");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
