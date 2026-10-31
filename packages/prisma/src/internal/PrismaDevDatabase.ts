@@ -49,8 +49,13 @@ const toError = (message: string) => (cause: unknown) =>
     cause,
   });
 
+// A literal specifier makes bundlers follow `@prisma/dev` (and its runtime
+// tarballs) into every Worker that imports a Prisma Database. It is only ever
+// loaded at deploy time, by the local provider.
+const PRISMA_DEV = "@prisma/dev";
+
 const importPrismaDev = Effect.tryPromise({
-  try: () => import("@prisma/dev"),
+  try: (): Promise<typeof import("@prisma/dev")> => import(PRISMA_DEV),
   catch: toError("Failed to load @prisma/dev"),
 });
 

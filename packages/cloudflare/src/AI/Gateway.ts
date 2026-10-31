@@ -212,7 +212,9 @@ export type GatewayProps = {
    */
   rateLimitingTechnique?: GatewayRateLimitingTechnique;
   /**
-   * Whether gateway authentication is enabled.
+   * Whether gateway authentication is enabled. Cloudflare requires it on new
+   * gateways. When omitted, a new gateway enables it and an existing one
+   * keeps its current setting.
    */
   authentication?: boolean;
   /**
@@ -490,7 +492,10 @@ export const GatewayResourceProvider = () =>
       }
 
       const oldMutable = mutable(output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]));
-      const nextMutable = mutable(next as Gateway["Attributes"]);
+      const nextMutable = mutable({
+        ...next,
+        authentication: next.authentication ?? oldMutable.authentication,
+      } as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
       }
@@ -533,7 +538,7 @@ export const GatewayResourceProvider = () =>
       // Prefer the deployed id: regenerating would target a different
       // resource if the generator's output for this id ever drifts.
       const update = {
-        ...(yield* updateRequest(id, news, acct)),
+        ...(yield* updateRequest(id, news, acct, observed?.authentication)),
         id: gatewayId,
       };
       const gateway = yield* aiGateway.updateAiGateway(update);
@@ -598,10 +603,9 @@ const desired = (id: string, props: GatewayProps | undefined) =>
       rateLimitingInterval: props?.rateLimitingInterval ?? null,
       rateLimitingLimit: props?.rateLimitingLimit ?? null,
       rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
-      // Defaults align with what Cloudflare's API returns for an
-      // unconfigured gateway, so the reconciler converges to noop
-      // when the user didn't explicitly set the field.
-      authentication: props?.authentication ?? false,
+      // Unmanaged when omitted: Cloudflare requires it on new gateways, and
+      // an existing gateway keeps its current setting.
+      authentication: props?.authentication,
       dlp: props?.dlp ?? undefined,
       isDefault: props?.isDefault ?? false,
       logManagement: props?.logManagement ?? 100_000,
@@ -776,7 +780,8 @@ const createRequest = Effect.fn(function* (id: string, props: GatewayProps | und
     rateLimitingInterval: next.rateLimitingInterval,
     rateLimitingLimit: next.rateLimitingLimit,
     rateLimitingTechnique: next.rateLimitingTechnique,
-    authentication: next.authentication,
+    // Cloudflare rejects new gateways without authentication (code 7001).
+    authentication: next.authentication ?? true,
     logManagement: next.logManagement,
     logManagementStrategy: next.logManagementStrategy,
     logpush: next.logpush,
@@ -789,6 +794,7 @@ const updateRequest = Effect.fn(function* (
   id: string,
   props: GatewayProps | undefined,
   accountId: string,
+  observedAuthentication: boolean | null | undefined,
 ) {
   const next = yield* desired(id, props);
   return {
@@ -800,7 +806,8 @@ const updateRequest = Effect.fn(function* (
     rateLimitingInterval: next.rateLimitingInterval,
     rateLimitingLimit: next.rateLimitingLimit,
     rateLimitingTechnique: next.rateLimitingTechnique,
-    authentication: next.authentication,
+    // The update is a full PATCH: an omitted prop keeps what the gateway has.
+    authentication: next.authentication ?? observedAuthentication ?? true,
     dlp: next.dlp,
     logManagement: next.logManagement,
     logManagementStrategy: next.logManagementStrategy,

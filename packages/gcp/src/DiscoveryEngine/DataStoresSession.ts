@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -208,7 +208,7 @@ export const DataStoresSessionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const sessionId = yield* toPhysical(id, olds?.sessionId, output?.sessionId, sessionIdOf);
       const parent = olds?.dataStore
@@ -220,7 +220,7 @@ export const DataStoresSessionProvider = () =>
       const attrs = toAttrs(existing, env.project);
       return (yield* hasAlchemyLabels(id, alchemyLabelsOf(existing.labels)))
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

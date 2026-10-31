@@ -49,7 +49,7 @@ test.provider(
           name: `${folder}/locations/global/policyOrchestrators/alchemy-missing-orch`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

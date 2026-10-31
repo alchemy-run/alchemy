@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -180,7 +180,7 @@ export const FolderBucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const linkId = yield* toLinkId(id, olds?.linkId, output?.linkId);
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (bucketName === undefined) return undefined;
@@ -189,7 +189,7 @@ export const FolderBucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, bucketName);
       const { labels } = parseDescription(existing.description);
-      return (yield* ownedBy(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* ownedBy(id, labels)) ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

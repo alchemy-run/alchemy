@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -123,13 +123,13 @@ export const CustomDomainProvider = () =>
       )
         return { action: "replace", deleteFirst: true };
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (!output && (!olds?.function || !olds.hostname)) return undefined;
       const fn = output ? { ...output, url: output.nativeUrl } : olds!.function;
       const domain = yield* observe(scopeOf(fn), output?.hostname ?? normalize(olds!.hostname));
       if (!domain) return undefined;
       const result = attrs(fn, domain);
-      return output ? result : Unowned(result);
+      return output ? result : unownedUnlessPrevious(result, previous, "hostname");
     }),
     reconcile: Effect.fn(function* ({ news }) {
       const scope = scopeOf(news.function);

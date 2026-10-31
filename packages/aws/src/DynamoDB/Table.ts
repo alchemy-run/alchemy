@@ -2,7 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { havePropsChanged, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -1662,7 +1662,7 @@ export const TableProvider = () =>
             );
             return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const tableName =
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
@@ -1674,7 +1674,9 @@ export const TableProvider = () =>
             ...toAttrs(state),
             ...(yield* observeTableConfiguration(state, olds)),
           };
-          return (yield* hasAlchemyTags(id, state.tags as any)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, state.tags as any))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "tableName");
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;

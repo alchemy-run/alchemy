@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
@@ -277,7 +277,7 @@ export const AuthProvider = () =>
       )
         return { action: "update" } as const;
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (
         !output &&
         !(olds?.branch?.projectId && olds.branch.branchId) &&
@@ -288,7 +288,7 @@ export const AuthProvider = () =>
       const observed = yield* observeAuth(scope);
       if (!observed) return undefined;
       const attrs = yield* attributes(scope, observed);
-      return output ? attrs : Unowned(attrs);
+      return output ? attrs : unownedUnlessPrevious(attrs, previous, "database");
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateAuthRemoval(olds, news);

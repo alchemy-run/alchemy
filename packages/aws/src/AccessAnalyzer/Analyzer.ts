@@ -1,5 +1,5 @@
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -163,7 +163,7 @@ export const AnalyzerProvider = () =>
             }));
           }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = output?.analyzerName ?? (yield* createName(id, olds ?? {}));
           const analyzer = yield* observe(name);
           if (analyzer === undefined) return undefined;
@@ -174,7 +174,9 @@ export const AnalyzerProvider = () =>
             status: analyzer.status,
           };
           const tags = analyzer.tags ?? {};
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "analyzerName");
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {

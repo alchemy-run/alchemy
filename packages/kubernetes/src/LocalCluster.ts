@@ -1,4 +1,4 @@
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -559,7 +559,7 @@ export const LocalClusterProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = yield* clusterName(id, olds, output);
           if (!(yield* clusterExists(name))) return undefined;
           const registryInfo = yield* inspectRegistry(`${name}-registry`);
@@ -574,7 +574,7 @@ export const LocalClusterProvider = () =>
           // kind clusters carry no ownership marker; the registry container
           // we start next to them does. Anything else is foreign.
           const owned = yield* hasAlchemyTags(id, registryInfo?.Config?.Labels ?? undefined);
-          return owned ? attrs : Unowned(attrs);
+          return owned ? attrs : unownedUnlessPrevious(attrs, previous, "name");
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* clusterName(id, news, output);

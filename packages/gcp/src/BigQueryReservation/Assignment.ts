@@ -1,5 +1,5 @@
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -280,7 +280,7 @@ export const AssignmentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parentRef = olds?.reservation ?? output?.reservation;
       // A recovery read of an interrupted create gets persisted props whose
@@ -308,7 +308,9 @@ export const AssignmentProvider = () =>
         ));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, attrs.assignmentId)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, attrs.assignmentId))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

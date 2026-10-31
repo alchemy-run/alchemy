@@ -243,7 +243,7 @@ export const RecordsProvider = () =>
       }
     }),
 
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       if (output === undefined) {
         // No state of our own: records already at the declared names were
         // not created by this set (DNS records carry no ownership markers),
@@ -267,14 +267,20 @@ export const RecordsProvider = () =>
         )).flat();
         const sample = found[0]?.record;
         if (sample === undefined) return undefined;
-        return Unowned({
+        const attrs = {
           zoneId,
           type: olds.type,
           content: sample.content ?? olds.content,
           proxied: sample.proxied ?? false,
           ttl: sample.ttl ?? 1,
           names: found.map(({ name }) => name),
-        });
+        };
+        // The record set a replacement is replacing is ours.
+        const isPrevious =
+          previous?.zoneId === zoneId &&
+          previous.type === olds.type &&
+          attrs.names.every((name) => previous.names?.includes(name));
+        return isPrevious ? attrs : Unowned(attrs);
       }
       if (output.zoneId === undefined) return output;
       const zoneId = output.zoneId;

@@ -553,7 +553,7 @@ export const SubscriptionProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!output) {
         yield* validateSourceAccount(accountId, olds?.sourceAccountId);
@@ -571,7 +571,10 @@ export const SubscriptionProvider = () =>
       const match = yield* findByName(acct, name);
       if (!match) return undefined;
       const attributes = toAttributes(match, acct);
-      return olds?.name !== undefined ? Unowned(attributes) : attributes;
+      // The generation a replacement is replacing is ours.
+      return olds?.name !== undefined && attributes.subscriptionId !== previous?.subscriptionId
+        ? Unowned(attributes)
+        : attributes;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -1,5 +1,5 @@
 import * as dns from "@distilled.cloud/gcp/dns_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -312,14 +312,16 @@ export const PolicyProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const policyName = yield* toPolicyName(id, olds?.policyName, output?.policyName);
       const existing = yield* getByName(env.project, policyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "policyName");
     }),
 
     list: () =>

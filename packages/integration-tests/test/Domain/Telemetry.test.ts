@@ -194,7 +194,7 @@ const recording = () => {
 
 const parentId = (span: Tracer.Span) => Option.getOrUndefined(span.parent)?.spanId;
 
-describe("Domain telemetry", () => {
+describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
   it.effect("a command's whole flow is one trace, with one correlation id", () =>
     Effect.gen(function* () {
       const { tracer, one, spans } = recording();

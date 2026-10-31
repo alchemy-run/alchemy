@@ -1,5 +1,5 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -158,7 +158,7 @@ export const AndroidAppProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
@@ -177,7 +177,9 @@ export const AndroidAppProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

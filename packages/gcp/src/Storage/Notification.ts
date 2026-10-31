@@ -1,7 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -387,7 +387,7 @@ export const NotificationProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (!bucketName) return undefined;
@@ -404,7 +404,7 @@ export const NotificationProvider = () =>
       const owned =
         (existing.id !== undefined && existing.id === output?.notificationId) ||
         (yield* hasAlchemyLabels(id, tagRecord(existing.custom_attributes)));
-      return owned ? attrs : Unowned(attrs);
+      return owned ? attrs : unownedUnlessPrevious(attrs, previous, "notificationId");
     }),
 
     list: () =>

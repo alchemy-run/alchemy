@@ -15,11 +15,15 @@ interface TraceContextArg {
   readonly [TRACEPARENT_KEY]: string;
 }
 
+// Checked on every call's last argument, which is often a large payload: test
+// the key before counting keys, since `Object.keys` of a multi-megabyte
+// `Uint8Array` allocates a string per byte and exhausts the isolate's memory.
 const isTraceContextArg = (value: unknown): value is TraceContextArg =>
   typeof value === "object" &&
   value !== null &&
-  Object.keys(value).length === 1 &&
-  typeof (value as Record<string, unknown>)[TRACEPARENT_KEY] === "string";
+  Object.getPrototypeOf(value) === Object.prototype &&
+  typeof (value as Record<string, unknown>)[TRACEPARENT_KEY] === "string" &&
+  Object.keys(value).length === 1;
 
 /**
  * Append the caller's active span to an RPC call's arguments. Without an

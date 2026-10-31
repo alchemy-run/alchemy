@@ -1,5 +1,5 @@
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -277,7 +277,7 @@ export const LocationsDlpJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, LOCATION);
       const jobId = yield* toJobId(id, olds?.jobId, output?.jobId);
@@ -294,7 +294,9 @@ export const LocationsDlpJobProvider = () =>
       const attrs = toAttrs(existing, env.project);
       const hybrid = hybridOf(existing);
       const owned = yield* ownedByAlchemy(id, hybrid?.description);
-      return owned || hasHybridOwnership(hybrid?.labels) ? attrs : Unowned(attrs);
+      return owned || hasHybridOwnership(hybrid?.labels)
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

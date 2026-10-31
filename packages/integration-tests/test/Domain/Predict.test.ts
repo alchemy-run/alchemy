@@ -194,7 +194,7 @@ const serve = (command: Domain.Aggregate.CommandOf<typeof Account>, operator = "
     return { result, state: yield* accounts.state(a1) };
   });
 
-describe("Domain Aggregate.predict", () => {
+describe("Domain Aggregate.predict", { tags: ["unit", "local"] }, () => {
   it.live("an accepted command: the same events and state as the server", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
@@ -361,7 +361,7 @@ describe("Domain Aggregate.predict", () => {
   );
 });
 
-describe("Domain View.evolve", () => {
+describe("Domain View.evolve", { tags: ["unit", "local"] }, () => {
   it.live("predicted events folded by the view give the server's view state", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;

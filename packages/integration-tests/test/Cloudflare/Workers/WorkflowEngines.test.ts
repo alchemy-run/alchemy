@@ -74,6 +74,12 @@ describe.concurrent.each([
     dev,
     stage,
   });
+  const tags = [
+    "provider:cloudflare",
+    "provider:cloudflare:worker",
+    "provider:cloudflare:workflow",
+    dev ? "local" : "live",
+  ];
 
   const stack = beforeAll(
     Effect.gen(function* () {
@@ -107,7 +113,7 @@ describe.concurrent.each([
       expect(result).toEqual({ _tag: "Completed", result: "hello sam" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["greet", "log"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -124,7 +130,7 @@ describe.concurrent.each([
       });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["greet", "log"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -136,7 +142,7 @@ describe.concurrent.each([
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "after"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -167,7 +173,7 @@ describe.concurrent.each([
         "approved:agent",
       ]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -186,7 +192,7 @@ describe.concurrent.each([
         "release",
       ]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -198,7 +204,7 @@ describe.concurrent.each([
       expect(result).toEqual({ _tag: "Completed", result: "charged" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["reserve", "charged"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -218,7 +224,7 @@ describe.concurrent.each([
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["requested"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 
   test(
@@ -231,6 +237,6 @@ describe.concurrent.each([
       expect(yield* request<string[]>(`${url}/journal/${id}-child`)).toEqual(["greet", "log"]);
       expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["parent:hello child"]);
     }),
-    { timeout: 90_000 },
+    { timeout: 90_000, tags },
   );
 });

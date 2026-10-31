@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -187,7 +187,7 @@ export const FunctionTriggerProvider = () =>
       )
         return { action: "replace", deleteFirst: true };
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       if (!output && !olds?.function) return undefined;
       const fn = output ?? olds!.function;
       const name =
@@ -198,7 +198,7 @@ export const FunctionTriggerProvider = () =>
       });
       if (!found) return undefined;
       const result = attrs(fn, found);
-      return output ? result : Unowned(result);
+      return output ? result : unownedUnlessPrevious(result, previous, "triggerId");
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const scope = scopeOf(news.function);

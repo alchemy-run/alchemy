@@ -462,7 +462,7 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ id, output, olds = {} }) {
+        read: Effect.fn(function* ({ id, output, olds = {}, previous }) {
           const projectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           const project = projectId
             ? yield* getProject({ id: projectId }).pipe(
@@ -485,8 +485,13 @@ const ProviderLive = () =>
           });
           // An omitted name is derived from this exact PlanScope instance ID.
           // Finding it proves this is create-recovery, not a foreign natural-
-          // key match. User-supplied names still require explicit adoption.
-          return projectId === undefined && olds.name !== undefined ? Unowned(attrs) : attrs;
+          // key match. User-supplied names still require explicit adoption,
+          // except for the generation a replacement is replacing.
+          return projectId === undefined &&
+            olds.name !== undefined &&
+            project.id !== previous?.projectId
+            ? Unowned(attrs)
+            : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const name = yield* createName(id, news.name);

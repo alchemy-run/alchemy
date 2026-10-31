@@ -168,3 +168,41 @@ it.effect(
     }),
   { tags: ["unit", "local"] },
 );
+
+it.effect(
+  "settles a provider that dies, like a rejected credential layer",
+  () =>
+    Effect.gen(function* () {
+      const provider: ProviderService = {
+        list: () => Effect.die({ _tag: "RailwayForbidden", message: "Not Authorized" }),
+        reconcile: () => Effect.succeed({}),
+        delete: () => Effect.die({ _tag: "RailwayForbidden", message: "Not Authorized" }),
+      };
+      const healthy: ProviderService = {
+        list: () => Effect.succeed([{ name: "kept" }]),
+        reconcile: () => Effect.succeed({}),
+        delete: () => Effect.void,
+      };
+      const context = Context.make(Context.Service<ProviderService>("Test.Dies"), provider).pipe(
+        Context.add(Context.Service<ProviderService>("Test.Healthy"), healthy),
+      );
+      const scan = yield* Nuke.list({ context, mode: "live" });
+      expect(scan.resources.map((resource) => resource.providerId)).toEqual(["Test.Healthy"]);
+      expect(scan.failures.map((failure) => failure.provider)).toEqual(["Test.Dies"]);
+      expect(scan.failures[0]?.message).toContain("Not Authorized");
+      for (const strategy of [
+        { type: "coordinated" },
+        { type: "independent", retries: 0 },
+      ] as const) {
+        const result = yield* Nuke.destroy({
+          targets: [
+            { key: "t1", providerId: "Test.Dies", displayName: "x", attributes: {}, provider },
+          ],
+          context,
+          strategy,
+        });
+        expect(result.failed[0]?.failure.message).toContain("Not Authorized");
+      }
+    }),
+  { tags: ["unit", "local"] },
+);

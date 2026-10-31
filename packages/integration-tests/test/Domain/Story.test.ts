@@ -314,7 +314,7 @@ const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");
 
-describe("Domain Story", () => {
+describe("Domain Story", { tags: ["unit", "local"] }, () => {
   it.effect("decides, evolves, replies and projects", () =>
     story(
       Story.given(c1, new Incremented({ by: 2, total: 2 })),
@@ -1189,7 +1189,7 @@ export const unionErrors = [
 // @ts-expect-error LockJammed is not in the union
 export const undeclaredInUnion = Story.fail(UnionKeypad.setCode, new LockJammed());
 
-describe("Domain Story: an operation with several errors", () => {
+describe("Domain Story: an operation with several errors", { tags: ["unit", "local"] }, () => {
   it.effect("fails a pending call with each declared error", () =>
     doorStory(
       Story.when(d1, new RequestCode({ code: "1234" })),

@@ -79,5 +79,5 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(replaced.key.name, { accountDeleted: true })).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:gcp", "provider:gcp:iam", "live"] },
 );

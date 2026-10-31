@@ -133,7 +133,7 @@ export const SubscriptionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const streamId = output?.streamId ?? streamIdOf(olds?.stream);
       if (!streamId) return undefined;
       if (output?.subscriptionId) {
@@ -144,7 +144,10 @@ export const SubscriptionProvider = () =>
       const match = yield* findSubscriptionByName(streamId, name);
       if (match) {
         const attrs = toAttributes(match, streamId);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        // The generation a replacement is replacing is ours.
+        return olds?.name !== undefined && attrs.subscriptionId !== previous?.subscriptionId
+          ? Unowned(attrs)
+          : attrs;
       }
       return undefined;
     }),

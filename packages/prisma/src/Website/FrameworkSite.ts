@@ -185,7 +185,7 @@ export const deployWebsite = Effect.fn(function* (
       ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
           name: domainName,
           target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
+            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
           },
         })
       : undefined;
@@ -195,10 +195,7 @@ export const deployWebsite = Effect.fn(function* (
         hostname:
           routing === undefined
             ? domainName
-            : (Output.map(
-                Output.of(routing as ResourceLike),
-                () => domainName,
-              ) as unknown as string),
+            : Output.map(Output.of(routing as ResourceLike), () => domainName),
       })
     : undefined;
   return {

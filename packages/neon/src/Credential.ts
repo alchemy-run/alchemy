@@ -148,7 +148,7 @@ export const CredentialProvider = () =>
         };
       }
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       if (!output && !olds?.branch && !olds?.project) return undefined;
       const scope = output ?? (yield* resolveBranchScope(olds!));
       const name =
@@ -156,7 +156,10 @@ export const CredentialProvider = () =>
       const metadata = yield* findCredential(scope, name, output?.tokenId);
       if (!metadata) return undefined;
       const attrs = yield* hydrateCredential(scope, metadata);
-      return !output && olds?.name !== undefined ? Unowned(attrs) : attrs;
+      // The generation a replacement is replacing is ours.
+      return !output && olds?.name !== undefined && attrs.tokenId !== previous?.tokenId
+        ? Unowned(attrs)
+        : attrs;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const scope = yield* resolveBranchScope(news);

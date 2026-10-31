@@ -1,5 +1,5 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -172,7 +172,7 @@ export const TransformerProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const found = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
@@ -181,7 +181,9 @@ export const TransformerProvider = () =>
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* readB2biTags(attrs.transformerArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "transformerId");
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

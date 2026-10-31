@@ -202,6 +202,7 @@ interface NodeDns {
   readonly Resolver: new () => {
     setServers(servers: string[]): void;
     resolveCname(name: string): Promise<string[]>;
+    cancel(): void;
   };
 }
 
@@ -215,9 +216,9 @@ interface NodeDns {
  */
 const waitForAuthoritativeCname = (hostname: string) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const dns = yield* Effect.tryPromise((): Promise<NodeDns> => import("node:dns/promises")).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     if (dns === undefined || typeof dns.Resolver !== "function") return;
     const labels = hostname.split(".");
     let servers: string[] = [];
@@ -243,7 +244,10 @@ const waitForAuthoritativeCname = (hostname: string) =>
           instance.setServers([server]);
           return instance;
         });
-        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
+        // A timed-out query keeps retrying in c-ares unless cancelled.
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname)).pipe(
+          Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
+        );
         return answers.length > 0;
       }).pipe(
         Effect.timeout("3 seconds"),

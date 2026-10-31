@@ -218,10 +218,15 @@ export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
     Effect.gen(function* () {
+      // DAX cluster names must start with a letter. At its 20-character limit
+      // a generated name is all hash and instance suffix, which can start
+      // with a digit, so lead with a letter then.
       const toName = (id: string, props: Partial<ClusterProps>) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
-          : createPhysicalName({ id, maxLength: 20, lowercase: true });
+          : createPhysicalName({ id, maxLength: 20, lowercase: true }).pipe(
+              Effect.map((name) => (/^[a-z]/.test(name) ? name : `d${name.slice(0, 19)}`)),
+            );
 
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
