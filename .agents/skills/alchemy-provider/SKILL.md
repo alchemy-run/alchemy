@@ -319,8 +319,8 @@ a hosted runtime, websites). A package holds:
 
 `Contributions.ts` is imported on every CLI start, so it holds metadata and
 `Contributions.lazy(() => import(...), pick)` fields only. Contribute `auth`
-always; add `stateStores`, `cli`, `testServices`, and `devEnv` when the
-provider has them (`packages/aws/src/Contributions.ts` uses all of them).
+always; add `stateStores`, `cli`, `testServices`, `devEnv`, and `devTrust` when the
+provider has them (`packages/aws/src/Contributions.ts` is the fullest example).
 Declare it in `package.json`:
 
 ```json

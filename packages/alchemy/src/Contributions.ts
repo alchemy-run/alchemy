@@ -61,11 +61,23 @@ export interface Contributions {
   readonly testServices?: Lazy<TestServices>;
   /**
    * Environment variables `alchemy dev` sets on itself before it starts, so
-   * its sidecars and the processes they launch inherit them, e.g. a local
-   * emulator's CA bundle. A variable that is already set wins.
+   * its sidecars and the processes they launch inherit them. A variable that
+   * is already set wins. A certificate authority goes in {@link devTrust}.
    */
   readonly devEnv?: Lazy<
     Effect.Effect<Readonly<Record<string, string>>, never, FileSystem.FileSystem | Path.Path>
+  >;
+  /**
+   * PEM files of certificate authorities `alchemy dev` trusts, e.g. a local
+   * emulator's CA. Local Workers and the processes `Command.Dev` starts trust
+   * every provider's files together, plus the caller's `NODE_EXTRA_CA_CERTS`.
+   *
+   * A file may not exist yet, since a provider can create its CA during the
+   * first apply. It is read each time a Worker's runtime starts and each time
+   * `Command.Dev` spawns a process.
+   */
+  readonly devTrust?: Lazy<
+    Effect.Effect<ReadonlyArray<string>, never, FileSystem.FileSystem | Path.Path>
   >;
 }
 
@@ -522,6 +534,20 @@ export const devEnv = Effect.fn("Contributions.devEnv")(function* () {
     Object.assign(env, yield* contribute);
   }
   return env;
+});
+
+/**
+ * The PEM files every provider contributes to `alchemy dev` (see
+ * {@link Contributions.devTrust}), each listed once.
+ */
+export const devTrust = Effect.fn("Contributions.devTrust")(function* () {
+  const files = new Set<string>();
+  for (const provider of yield* load()) {
+    if (provider.devTrust === undefined) continue;
+    const contribute = yield* resolve(provider, "devTrust", provider.devTrust);
+    for (const file of yield* contribute) files.add(file);
+  }
+  return [...files];
 });
 
 /** Every provider's state stores, by `--backend` name, with their provider. */

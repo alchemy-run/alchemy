@@ -139,6 +139,37 @@ export default { name: ${JSON.stringify(name)}, devEnv: Effect.succeed(Effect.su
       { exclusive: true },
     );
 
+    it.effect(
+      "unions the trusted CAs providers contribute, each file once",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          // Imports `effect`, so the project lives under this package.
+          const devTrustProvider = (name: string, files: ReadonlyArray<string>) =>
+            contributingPackage(
+              name,
+              `import * as Effect from "effect/Effect";
+export default { name: ${JSON.stringify(name)}, devTrust: Effect.succeed(Effect.succeed(${JSON.stringify(files)})) };`,
+            );
+          const root = yield* project(
+            {
+              "trust-one": devTrustProvider("trust-one", ["/ca/one.pem", "/ca/shared.pem"]),
+              "trust-two": devTrustProvider("trust-two", ["/ca/shared.pem", "/ca/two.pem"]),
+              "trust-none": contributingPackage("trust-none", `export default { name: "none" };`),
+            },
+            { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
+          );
+          const files = yield* inDirectory(root, Contributions.devTrust());
+          // alchemy's own providers contribute theirs too.
+          for (const file of ["/ca/one.pem", "/ca/shared.pem", "/ca/two.pem"]) {
+            expect(files).toContain(file);
+          }
+          expect(files.filter((file) => file === "/ca/shared.pem")).toHaveLength(1);
+        }).pipe(Effect.scoped),
+      // Exclusive: changes the process's working directory.
+      { exclusive: true },
+    );
+
     it.effect("skips a second dependency provider with a taken name", () =>
       Effect.gen(function* () {
         const root = yield* project({

@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import * as NodeV8 from "node:v8";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { BundleError } from "alchemy/Bundle/Bundle";
+import * as DevTrust from "alchemy/Local/DevTrust";
 import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,
@@ -112,6 +113,10 @@ export const startViteChild = (
     };
     const childEnv: Record<string, string | undefined> = {
       ...process.env,
+      // Under `alchemy dev`, one bundle of every CA the session trusts as of
+      // now, so the dev server's Node process sees a CA minted after the
+      // sidecar started. Removed with the child's scope, after the child.
+      ...(yield* DevTrust.nodeEnv()),
       [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(childEnvironment),
     };
     // The parent CLI process sets NODE_ENV for its own React/renderer
