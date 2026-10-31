@@ -427,7 +427,7 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   );
 });
 
-describe("Domain Api exposing an aggregate", () => {
+describe("Domain Api exposing an aggregate", { tags: ["unit", "local"] }, () => {
   it.live("an aggregate without a read contract is never served", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(VaultStateApi.clientInProcess);

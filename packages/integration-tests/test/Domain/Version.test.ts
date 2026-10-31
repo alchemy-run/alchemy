@@ -142,7 +142,7 @@ const history = [
   send("a-2", new Deposit({ amount: 3 })),
 ];
 
-describe("Domain view versions", () => {
+describe("Domain view versions", { tags: ["unit", "local"] }, () => {
   it.live(
     "a view keyed by its aggregate is rebuilt in place: each key reads its events again",
     () =>
