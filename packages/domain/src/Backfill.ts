@@ -1619,8 +1619,8 @@ export const RELAY_FANOUT = 6;
 /** How long a key works on its history before it answers a relay that is waiting for it. */
 const RELAY_KEY_WAIT_MS = 10_000;
 
-/** How many subtrees a run's root lists the directory into, at least: see `makeRelay`. */
-const FRONTIER_SIZE = 512;
+/** How many subtrees a run's root lists the directory into, at least: subtrees grow with the keyspace, so a window of them holds enough keys at any width (see `makeRelay`). */
+const FRONTIER_SIZE = 256;
 
 /** A relay's count of the calls the account's load refused. */
 interface Tally {
