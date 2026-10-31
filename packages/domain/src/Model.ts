@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
@@ -111,7 +112,7 @@ export interface ModelClass<
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptions,
+    options?: LayerOptions<Parts["views"][number]["viewName"]>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
@@ -163,9 +164,17 @@ type ProvidedBy<
   | Projection.ProgressIdentifier<J[number]>;
 
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
-export interface LayerOptions {
+export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
+  /**
+   * Each view's version, by name (0 when omitted). Bump a view's version to
+   * rebuild it from the history: after its state was lost, or once its
+   * `evolve` or routing changed what it should hold. Every view and
+   * projection that reads it is rebuilt with it. Until the rebuild is
+   * complete, the view's `history` says so.
+   */
+  readonly versions?: { readonly [View in Views]?: number };
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -235,7 +244,13 @@ export const make = <
     static readonly streams = definitions.streams;
     static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
-        build(definitions, handlers, members.sagas ?? [], Telemetry.resolve(options?.telemetry)),
+        build(
+          definitions,
+          handlers,
+          members.sagas ?? [],
+          Telemetry.resolve(options?.telemetry),
+          options?.versions ?? {},
+        ),
       );
     }
   } as unknown as ModelClass<
@@ -321,10 +336,14 @@ const build = <A, E, R>(
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
+  versions: { readonly [view: string]: number | undefined },
 ) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
     const kernel = yield* Kernel.make(definitions, telemetry);
+    for (const [view, version] of Object.entries(versions)) {
+      if (version) kernel.setVersion(`view:${view}`, version);
+    }
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -345,19 +364,22 @@ const build = <A, E, R>(
     for (const aggregate of definitions.aggregates) {
       aggregateStores.set(
         aggregate.aggregateName,
-        yield* platform.aggregate(aggregate, {
-          ...kernel.aggregateKit(aggregate, deliver),
-          push: Watch.aggregatePush(kernel, aggregate),
-        }),
+        // Assigned, not spread: a kit's `targets` is read when used, once versions are set.
+        yield* platform.aggregate(
+          aggregate,
+          Object.assign(kernel.aggregateKit(aggregate, deliver), {
+            push: Watch.aggregatePush(kernel, aggregate),
+          }),
+        ),
       );
     }
     for (const view of definitions.views) {
       viewStores.set(
         view.viewName,
-        yield* platform.view(view, {
-          ...kernel.viewKit(view, deliver),
-          push: Watch.viewPush(kernel, view),
-        }),
+        yield* platform.view(
+          view,
+          Object.assign(kernel.viewKit(view, deliver), { push: Watch.viewPush(kernel, view) }),
+        ),
       );
     }
 
@@ -384,7 +406,18 @@ const build = <A, E, R>(
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
     for (const view of definitions.views) {
-      const host = viewHost(kernel, view, viewStores.get(view.viewName)!);
+      const host = viewHost(
+        kernel,
+        view,
+        viewStores.get(view.viewName)!,
+        history(platform, () =>
+          CatchUp.targetId({
+            kind: "view",
+            name: view.viewName,
+            generation: kernel.generationOf("view", view.viewName),
+          }),
+        ),
+      );
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
     }
@@ -398,8 +431,17 @@ const build = <A, E, R>(
       hosts = Context.add(
         hosts,
         projection.Progress,
-        projectionProgress(kernel, projection, () =>
-          projectionStores.get(projection.projectionName)!,
+        projectionProgress(
+          kernel,
+          projection,
+          () => projectionStores.get(projection.projectionName)!,
+          history(platform, () =>
+            CatchUp.targetId({
+              kind: "projection",
+              name: projection.projectionName,
+              generation: kernel.generationOf("projection", projection.projectionName),
+            }),
+          ),
         ),
       );
     }
@@ -419,11 +461,17 @@ const build = <A, E, R>(
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
-    for (const projection of definitions.projections) {
-      const implementation = Context.getUnsafe(
+    const implementationOf = (projection: Projection.Any) =>
+      Context.getUnsafe(
         implementations as Context.Context<unknown>,
         projection as Context.Key<unknown, Projection.Implementation<unknown>>,
       );
+    for (const projection of definitions.projections) {
+      const version = implementationOf(projection).options.version;
+      if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
+    }
+    for (const projection of definitions.projections) {
+      const implementation = implementationOf(projection);
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
@@ -432,6 +480,9 @@ const build = <A, E, R>(
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
+          generation: kernel.generationOf("projection", projection.projectionName),
+          singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
+          history: kernel.history,
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
@@ -465,6 +516,8 @@ const build = <A, E, R>(
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),
       );
     }
+    // Every store is built: catch up the consumers that are new to the platform.
+    if (platform.start) yield* platform.start(kernel.targets, kernel.planOf);
 
     return Context.add(hosts, Internals, {
       kernel,
@@ -587,6 +640,7 @@ const viewHost = (
   kernel: Kernel.Kernel,
   view: View.Any,
   store: ViewStore,
+  history: Effect.Effect<View.History>,
 ): View.Host<unknown, Key.Any, unknown> => {
   const watch = (key: Key.RefOf<Key.Any>, options?: View.WatchOptions<unknown>) =>
     store.changes(Aggregate.targetId(key)).pipe(
@@ -661,6 +715,7 @@ const viewHost = (
     );
   };
   return {
+    history,
     query: (key, options) =>
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
@@ -819,11 +874,24 @@ const streamHost = (
   };
 };
 
+/** How much history has reached a consumer, as the platform reports it. */
+const history = (
+  platform: Platform["Service"],
+  target: () => string,
+): Effect.Effect<View.History> =>
+  Effect.suspend(() =>
+    platform.history
+      ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))
+      : Effect.succeed({ complete: true }),
+  );
+
 const projectionProgress = (
   kernel: Kernel.Kernel,
   projection: Projection.Any,
   store: () => ProjectionStore,
+  history: Effect.Effect<View.History>,
 ): Projection.Progress => ({
+  history,
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
       const [aggregate, ...rest] = receipt.stream.split("/");
