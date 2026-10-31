@@ -153,13 +153,16 @@ export const RulesetProvider = () =>
       return { action: "replace" as const, deleteFirst: false };
     }),
 
-    read: Effect.fn(function* ({ id, output }) {
+    read: Effect.fn(function* ({ id, output, previous }) {
       const env = yield* GcpEnvironment.current;
       let existing = yield* getRuleset(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findOwnedRuleset(yield* listFullRulesets(env.project), id, output?.name);
       }
       if (existing === undefined) return undefined;
+      // A replacement creates a new ruleset under the same logical id: the one
+      // it is replacing is not the replacement.
+      if (output === undefined && existing.name === previous?.name) return undefined;
       const attrs = toAttrs(existing, env.project);
       return (yield* ownedByAlchemy(id, existing.source)) ? attrs : Unowned(attrs);
     }),
@@ -228,8 +231,9 @@ export const RulesetProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* firebaserules.deleteProjectsRulesets({ name: output.name }).pipe(
+        // A just-deleted release's reference to this ruleset lingers briefly.
         Effect.retry({
-          while: (error) => error._tag === "Conflict",
+          while: (error) => error._tag === "Conflict" || error._tag === "RulesetInUse",
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
