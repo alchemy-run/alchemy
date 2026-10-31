@@ -72,6 +72,144 @@ Clients that `watch` or read `events` open a WebSocket per read, with `Domain.pr
 
 More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
 
+## Plain HTTP and OpenAPI
+
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes an Api as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+
+```ts
+import * as DomainHttp from "@alchemy.run/domain/Http";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+
+// every call the Api serves; a typed failure answers at its `httpApiStatus`, else 422
+const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+
+// in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
+return {
+  fetch: HttpApiBuilder.layer(BankHttp.api, { openapiPath: "/openapi.json" }).pipe(
+    Layer.provide(BankHttp.layer),
+    Layer.provide([HttpPlatform.layer, Etag.layer]),
+    HttpRouter.toHttpEffect,
+  ),
+};
+```
+
+A command is a `POST` with the RPC payload as its JSON body, and answers with its receipt:
+
+```sh
+curl -X POST /DepositMoney -H "cookie: $SESSION" \
+  -d '{ "target": "a-1", "commandId": "d-1", "input": { "amount": 1000 } }'
+# { "reply": { "balance": 1000 }, "stream": "Account/a-1", "version": 3 }
+```
+
+A read is a `GET` by key, and the receipt's `stream` and `version` make it wait for your own write:
+
+```sh
+curl "/AccountSummary/a-1?stream=Account/a-1&version=3"
+curl "/AccountSummary/a-1/snapshot"
+curl "/AccountSummary/a-1/list?order=desc&take=20&after=118"
+```
+
+`watch` and `events` answer with Server-Sent Events, one value per event:
+
+```ts
+const summary = new EventSource(`/AccountSummary/${accountId}/events?after=${cursor}`);
+summary.onmessage = (event) => render(JSON.parse(event.data));
+```
+
+Every call runs through the Api's own handlers with the request's headers, so a rejection answers with the status its schema declares (422 if none):
+
+```ts
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
+// GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
+```
+
+What the Api serves is what is published, so HTTP clients get their own Api:
+
+```ts
+export class PartnerApi extends Domain.Api("PartnerApi", {
+  model: Bank,
+  commands: ["DepositMoney"],
+  views: ["AccountSummary"],
+  streams: [],
+  aggregates: [],
+}) {}
+const PartnerHttp = DomainHttp.toHttpApi(PartnerApi);
+```
+
+To serve the group next to others or under a prefix, add it to your own `HttpApi`:
+
+```ts
+const AppApi = HttpApi.make("App").add(BankHttp.group.prefix("/v1"));
+const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFor(AppApi)));
+```
+
+More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
+
+## MCP
+
+`toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
+
+```ts
+import * as DomainAi from "@alchemy.run/domain/Ai";
+import { McpProtocol, McpServer } from "effect/ai";
+
+// packages/server/src/BankMcp.ts
+export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
+  Layer.provide(
+    McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] }),
+  ),
+  Layer.provide(BankLive),
+);
+```
+
+On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_28`. Each call carries the MCP request's headers to the Api's middleware, so an MCP client signs in like any other client, and a rejection comes back as the tool's typed failure.
+
+`toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
+
+```ts
+const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
+  headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
+});
+const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
+```
+
+More: [MCP](https://alchemy.run/domain/mcp).
+
+## CLI
+
+`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
+
+```ts
+// packages/cli/src/bank.ts
+const bank = toCli(CustomerApi, {
+  name: "bank",
+  headers: Config.redacted("BANK_TOKEN").pipe(
+    Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
+  ),
+});
+Command.run(bank, { version: "1.0.0" }).pipe(
+  Effect.provide(
+    Layer.mergeAll(
+      Domain.protocolHttp(url).pipe(Layer.provide(FetchHttpClient.layer)),
+      BunServices.layer,
+    ),
+  ),
+  BunRuntime.runMain,
+);
+```
+
+Fields are flags, and the result is JSON on stdout; a rejection is its wire JSON on stderr with exit code 1:
+
+```sh
+$ bank deposit-money --target a-1 --amount 1000
+$ bank account-summary get --key a-1
+```
+
+More: [CLI](https://alchemy.run/domain/cli).
+
 ## Deploying
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
