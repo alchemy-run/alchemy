@@ -329,6 +329,10 @@ set it for records that must outlive the resource, such as ACM validation
 
 ### Register it in your providers layer
 
+`adapterLayer` only registers the adapter service. It does not register the
+native record providers declared by `alias`, `aliasSet`, or `records`, so
+include those providers in the host package's `providers()` layer as well.
+
 `DNS.adapterLayer` registers the adapter under the `type` your constructor
 returns. Merge it into the same `providers()` layer that registers your
 record providers:
@@ -385,8 +389,8 @@ test.provider("publishes an alias", (stack) =>
 );
 ```
 
-`packages/alchemy/test/DNS/Adapter.test.ts` does this for the built-in
-adapters.
+`packages/integration-tests/test/DNS/Adapter.test.ts` does this for the
+built-in adapters.
 
 ## Troubleshooting
 
