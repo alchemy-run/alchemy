@@ -126,8 +126,8 @@ export interface Any extends Servable {
 
 /**
  * What an Api over a model may serve, in the order the model lists them:
- * its aggregates, their commands, its views and its streams. Pass them to
- * an Api to serve all of one kind: `commands: Bank.commands`.
+ * its aggregates, their commands, its views and its streams. An Api names
+ * what it serves from these.
  */
 export interface Servable {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;

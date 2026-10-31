@@ -55,67 +55,52 @@ import * as Watch from "./Watch.ts";
  */
 export type Servable = Command.Any | View.Any | Aggregate.Any | DomainStream.Any;
 
-/** The name an Api serves something under: a command's tag, or a view's, stream's or aggregate's name. */
-type NameOf<S> = S extends Command.Any
-  ? S["tag"]
-  : S extends View.Any
-    ? S["viewName"]
-    : S extends DomainStream.Any
-      ? S["streamName"]
-      : S extends Aggregate.Any
-        ? S["aggregateName"]
-        : never;
-
-/** Something the model holds, or a message naming what it does not. */
-type CheckInModel<InModel, S> = [S] extends [InModel]
-  ? S
-  : `${NameOf<S>} is not part of this Api's model`;
-
-/** Each of a list, checked against what the model holds of its kind. */
-type Checked<InModel, Xs extends ReadonlyArray<unknown>> = {
-  readonly [K in keyof Xs]: CheckInModel<InModel, Xs[K]>;
-};
+/** The names of the commands a model holds: their tags. */
+export type CommandName<M extends Model.Any> = M["commands"][number]["tag"];
+/** The names of the views a model holds. */
+export type ViewName<M extends Model.Any> = M["views"][number]["viewName"];
+/** The names of the streams a model holds. */
+export type StreamName<M extends Model.Any> = M["streams"][number]["streamName"];
+/** The names of the aggregates a model holds. */
+export type AggregateName<M extends Model.Any> = M["aggregates"][number]["aggregateName"];
 
 /**
- * Everything an Api serves must be part of its model. Something that is not
- * is a type error on its place in the list.
- */
-export interface ServesInModel<
-  M extends Model.Any,
-  C extends ReadonlyArray<Command.Any>,
-  V extends ReadonlyArray<View.Any>,
-  S extends ReadonlyArray<DomainStream.Any>,
-  A extends ReadonlyArray<Aggregate.Any>,
-> {
-  readonly commands?: Checked<M["commands"][number], C>;
-  readonly views?: Checked<M["views"][number], V>;
-  readonly streams?: Checked<M["streams"][number], S>;
-  readonly aggregates?: Checked<M["aggregates"][number], A>;
-}
-
-/**
- * What {@link make} takes: the model, and what of it the Api serves. What it
- * does not list has no route; to serve every one of a kind, pass the model's
- * own list (`commands: Bank.commands`).
+ * What {@link make} takes: the model, and the names of what of it the Api
+ * serves. A kind it does not list is served whole: every command, view and
+ * stream of the model. `[]` serves none of a kind. Aggregates are read
+ * directly only when listed.
  */
 export interface Options<
   M extends Model.Any,
-  C extends ReadonlyArray<Command.Any>,
-  V extends ReadonlyArray<View.Any>,
-  S extends ReadonlyArray<DomainStream.Any>,
-  A extends ReadonlyArray<Aggregate.Any>,
+  C extends ReadonlyArray<CommandName<M>>,
+  V extends ReadonlyArray<ViewName<M>>,
+  S extends ReadonlyArray<StreamName<M>>,
+  A extends ReadonlyArray<AggregateName<M>>,
 > {
   /** The model the Api is over. */
   readonly model: M;
-  /** The commands a client may send. */
+  /** The commands a client may send. Every command of the model by default. */
   readonly commands?: C;
-  /** The views a client may read. */
+  /** The views a client may read. Every view of the model by default. */
   readonly views?: V;
-  /** The streams a client may read. */
+  /** The streams a client may read. Every stream of the model by default. */
   readonly streams?: S;
-  /** The aggregates a client may read directly, through their `read` contract. */
+  /** The aggregates a client may read directly, through their `read` contract. None by default. */
   readonly aggregates?: A;
 }
+
+/** What an Api over `M` serves, from the names it lists. */
+export type ServedBy<
+  M extends Model.Any,
+  C extends ReadonlyArray<string>,
+  V extends ReadonlyArray<string>,
+  S extends ReadonlyArray<string>,
+  A extends ReadonlyArray<string>,
+> =
+  | Extract<M["commands"][number], { readonly tag: C[number] }>
+  | Extract<M["views"][number], { readonly viewName: V[number] }>
+  | Extract<M["streams"][number], { readonly streamName: S[number] }>
+  | Extract<M["aggregates"][number], { readonly aggregateName: A[number] }>;
 
 type Commands<E extends Servable> = Extract<E, Command.Any>;
 type Views<E extends Servable> = Extract<E, View.Any>;
@@ -544,32 +529,24 @@ const withCaughtUp = <A>(
 type Handler = (input: never) => unknown;
 
 /**
- * The first thing an Api serves that its model does not hold. The type of
- * `serves` rules it out; this catches a model typed as `Model.Any`.
+ * A name an Api lists that its model does not hold. The type of the options
+ * rules it out; this catches a model typed as `Model.Any`.
  */
 const notInModel = (
   apiModel: Model.Any,
-  entries: ReadonlyArray<Servable>,
-): DefinitionError | undefined => {
-  const { aggregates, views, streams } = apiModel.definitions;
-  const held = new Set<unknown>([
-    ...aggregates,
-    ...aggregates.flatMap((aggregate) => aggregate.definition.commands),
-    ...views,
-    ...streams,
-  ]);
-  const missing = entries.find((entry) => !held.has(entry));
-  if (missing === undefined) return undefined;
-  const name = missing.kind === "Command" ? missing.tag : nameOf(missing);
-  return new DefinitionError(`${name} is not part of the ${apiModel.modelName} model`);
-};
+  unresolved: ReadonlyArray<string>,
+): DefinitionError | undefined =>
+  unresolved.length === 0
+    ? undefined
+    : new DefinitionError(`${unresolved[0]} is not part of the ${apiModel.modelName} model`);
 
 const handlersOf = (
   apiModel: Model.Any,
   entries: ReadonlyArray<Servable>,
+  unresolved: ReadonlyArray<string>,
 ): Effect.Effect<Record<string, Handler>, never, Model.Internals> =>
   Effect.gen(function* () {
-    const problem = notInModel(apiModel, entries);
+    const problem = notInModel(apiModel, unresolved);
     if (problem) return yield* Effect.die(problem);
     const internals = yield* Model.Internals;
     const handlers: Record<string, Handler> = {};
@@ -989,6 +966,7 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
 const makeProtocolInProcess = (
   model: Model.Any,
   entries: ReadonlyArray<Servable>,
+  unresolved: ReadonlyArray<string>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
 ): Layer.Layer<RpcClient.Protocol, never, Model.Internals> =>
   Layer.effect(
@@ -1027,7 +1005,7 @@ const makeProtocolInProcess = (
           codecFor,
         });
       });
-      const handlers = yield* handlersOf(model, entries);
+      const handlers = yield* handlersOf(model, entries, unresolved);
       // The middleware services in the caller's scope run for every request.
       yield* RpcServer.make(group).pipe(
         Effect.provide(
@@ -1054,11 +1032,15 @@ const makeProtocolInProcess = (
     }),
   );
 
+// The names an Api lists that its model does not hold.
+const Unresolved = Symbol.for("alchemy/Domain/Api/Unresolved");
+
 // A class so `class BankApi extends Domain.Api(...) {}` works.
 const build = (
   name: string,
   model: Model.Any,
   entries: ReadonlyArray<Servable>,
+  unresolved: ReadonlyArray<string>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
 ): unknown => {
   const client = RpcClient.make(group).pipe(
@@ -1070,7 +1052,7 @@ const build = (
   const rejections = rejectionClasses.length === 0 ? Schema.Never : Schema.Union(rejectionClasses);
   // Serve the Api over HTTP (Effect RPC, NDJSON), with live reads over WebSockets.
   const serve = Effect.gen(function* () {
-    const handlers = yield* handlersOf(model, entries);
+    const handlers = yield* handlersOf(model, entries, unresolved);
     // The middleware services (declared in the Api's requirements), for every request.
     const middleware = yield* captureContext();
     const layer = Layer.mergeAll(
@@ -1091,7 +1073,7 @@ const build = (
   const clientOver = <R>(protocol: Layer.Layer<RpcClient.Protocol, never, R>) =>
     Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(client, context));
   const layerClient = Layer.effect(Client, client);
-  const inProcess = makeProtocolInProcess(model, entries, group);
+  const inProcess = makeProtocolInProcess(model, entries, unresolved, group);
   return Object.assign(
     class {},
     // The class is an Effect: `yield* MyApi` serves it.
@@ -1101,6 +1083,7 @@ const build = (
       apiName: name,
       model,
       serves: entries,
+      [Unresolved]: unresolved,
       commands,
       rejections,
       group,
@@ -1138,9 +1121,9 @@ const build = (
  * // Serving something Bank does not hold is a type error; nothing unlisted is served.
  * export class CustomerApi extends Domain.Api("CustomerApi", {
  *   model: Bank,
- *   commands: [DepositMoney, WithdrawMoney],
- *   views: [AccountSummary],
- *   aggregates: [Account],
+ *   commands: ["DepositMoney", "WithdrawMoney"],
+ *   views: ["AccountSummary"],
+ *   aggregates: ["Account"],
  * }) {}
  * ```
  *
@@ -1204,26 +1187,41 @@ const build = (
 export const make = <
   const Name extends string,
   M extends Model.Any,
-  const C extends ReadonlyArray<Command.Any> = readonly [],
-  const V extends ReadonlyArray<View.Any> = readonly [],
-  const S extends ReadonlyArray<DomainStream.Any> = readonly [],
-  const A extends ReadonlyArray<Aggregate.Any> = readonly [],
+  const C extends ReadonlyArray<CommandName<M>> = ReadonlyArray<CommandName<M>>,
+  const V extends ReadonlyArray<ViewName<M>> = ReadonlyArray<ViewName<M>>,
+  const S extends ReadonlyArray<StreamName<M>> = ReadonlyArray<StreamName<M>>,
+  const A extends ReadonlyArray<AggregateName<M>> = readonly [],
 >(
   name: Name,
-  options: Options<M, C, V, S, A> & ServesInModel<M, C, V, S, A>,
-): ApiClass<Name, ReadonlyArray<C[number] | V[number] | S[number] | A[number]>> => {
+  options: Options<M, C, V, S, A>,
+): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>> => {
+  const { model } = options;
+  const unresolved: Array<string> = [];
+  const pick = <T>(
+    all: ReadonlyArray<T>,
+    names: ReadonlyArray<string> | undefined,
+    nameOfT: (t: T) => string,
+  ): ReadonlyArray<T> =>
+    names === undefined
+      ? all
+      : names.flatMap((n) => {
+          const found = all.find((t) => nameOfT(t) === n);
+          if (found === undefined) unresolved.push(n);
+          return found === undefined ? [] : [found];
+        });
   const serves: ReadonlyArray<Servable> = [
-    ...(options.commands ?? []),
-    ...(options.views ?? []),
-    ...(options.streams ?? []),
-    ...(options.aggregates ?? []),
+    ...pick(model.commands, options.commands, (c) => c.tag),
+    ...pick(model.views, options.views, (v) => v.viewName),
+    ...pick(model.streams, options.streams, (s) => s.streamName),
+    ...pick(model.aggregates, options.aggregates ?? [], (a) => a.aggregateName),
   ];
   return build(
     name,
-    options.model,
+    model,
     serves,
+    unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
-  ) as ApiClass<Name, ReadonlyArray<C[number] | V[number] | S[number] | A[number]>>;
+  ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>>;
 };
 
 /**
@@ -1247,7 +1245,12 @@ export const protocolHttp = (
 export const protocolInProcess = <Name extends string, Serves extends ReadonlyArray<Servable>>(
   api: ApiClass<Name, Serves>,
 ): Layer.Layer<RpcClient.Protocol, never, Model.Internals | MiddlewareServices<Serves>> =>
-  makeProtocolInProcess(api.model, api.serves, api.group);
+  makeProtocolInProcess(
+    api.model,
+    api.serves,
+    (api as unknown as { readonly [Unresolved]: ReadonlyArray<string> })[Unresolved],
+    api.group,
+  );
 
 /** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
 const LiveFrame = Schema.StructWithRest(

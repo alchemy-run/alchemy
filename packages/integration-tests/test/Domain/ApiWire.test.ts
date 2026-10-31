@@ -97,9 +97,9 @@ class Bank extends Domain.Model("Bank", {
 
 class BankApi extends Domain.Api("BankApi", {
   model: Bank,
-  commands: [Deposit, Ship],
-  views: [Bookings],
-  aggregates: [Wallet, Ledger, Parcel],
+  commands: ["Deposit", "Ship"],
+  views: ["Bookings"],
+  aggregates: ["Wallet", "Ledger", "Parcel"],
 }) {}
 
 const Hosted = Bank.layer(BookDepositsLive).pipe(Layer.provide(InMemory));

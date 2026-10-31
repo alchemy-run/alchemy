@@ -59,10 +59,10 @@ export class Counters extends Domain.Model("Counters", {
 }) {}
 export class CounterApi extends Domain.Api("CounterApi", {
   model: Counters,
-  commands: [Increment, Reset],
-  views: [Total],
-  streams: [Outputs],
-  aggregates: [Counter],
+  commands: ["Increment", "Reset"],
+  views: ["Total"],
+  streams: ["Outputs"],
+  aggregates: ["Counter"],
 }) {}
 export const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory));
 export const Client = CounterApi.layerClientInProcess.pipe(

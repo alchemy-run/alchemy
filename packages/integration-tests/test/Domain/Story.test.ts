@@ -656,7 +656,7 @@ describe("Domain Story", () => {
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", {
         model: Counters,
-        commands: [ResetCounter],
+        commands: ["ResetCounter"],
       }) {}
       const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
@@ -697,9 +697,9 @@ describe("Domain Story", () => {
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", {
         model: Counters,
-        commands: [ResetCounter],
-        views: [Totals],
-        aggregates: [Counter],
+        commands: ["ResetCounter"],
+        views: ["Totals"],
+        aggregates: ["Counter"],
       }) {}
       const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;

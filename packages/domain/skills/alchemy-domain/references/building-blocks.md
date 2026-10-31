@@ -329,13 +329,13 @@ More: [Stream](https://alchemy.run/domain/stream).
 ```ts
 // CustomerApi.api.ts
 export class CustomerApi extends Domain.Api("CustomerApi", {
-  model: Bank, // everything served must be part of it
-  commands: [RegisterCustomer, DepositMoney, WithdrawMoney], // client methods
-  views: [AccountSummary, Statement],
-  streams: [AccountCard],
-  aggregates: [Account], // read directly, through their `read` contract
+  model: Bank, // names must be part of it
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"], // client methods
+  views: ["AccountSummary", "Statement"],
+  streams: ["AccountCard"],
+  aggregates: ["Account"], // read directly, through their `read` contract
 }) {}
-// Nothing unlisted is served. All of one kind: `commands: Bank.commands`.
+// A kind left out is served whole; `[]` serves none. Aggregates only when named.
 ```
 
 Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.

@@ -390,16 +390,12 @@ A story has no middleware, so `Story.provide` stands in for it, giving the follo
 ```typescript
 // src/BankApi.api.ts
 import * as Domain from "@alchemy.run/domain";
-import { AccountSummary } from "./AccountSummary.view.ts";
 import { Bank } from "./Bank.model.ts";
-import { DepositMoney } from "./DepositMoney.command.ts";
-import { RegisterCustomer } from "./RegisterCustomer.command.ts";
-import { WithdrawMoney } from "./WithdrawMoney.command.ts";
 
 export class BankApi extends Domain.Api("BankApi", {
   model: Bank,
-  commands: [RegisterCustomer, DepositMoney, WithdrawMoney],
-  views: [AccountSummary],
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"],
+  views: ["AccountSummary"],
 }) {}
 ```
 
