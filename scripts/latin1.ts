@@ -177,12 +177,9 @@ const codeRanges = (code: string, filename: string): Array<Range> => {
   return ranges.sort((a, b) => a.start - b.start);
 };
 
+/** `\u` escapes for one code point: two (a surrogate pair) above U+FFFF. */
 const escape = (c: string): string =>
-  [...c]
-    .flatMap((ch) => {
-      const cp = ch.codePointAt(0)!;
-      return cp > 0xffff ? [ch.charCodeAt(0), ch.charCodeAt(1)] : [cp];
-    })
+  Array.from({ length: c.length }, (_, i) => c.charCodeAt(i))
     .map((u) => `\\u${u.toString(16).padStart(4, "0")}`)
     .join("");
 

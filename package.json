@@ -65,7 +65,7 @@
     "prepare": "pnpm prepare:hooks && pnpm prepare:patch && pnpm ensure:built",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint -c oxlint.config.ts"
+    "lint": "oxlint -c oxlint.config.ts && pnpm latin1:check"
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",

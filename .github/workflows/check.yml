@@ -58,7 +58,8 @@ jobs:
       - name: Lint providers
         run: pnpm lint:providers
 
-      # Type-aware, so it also needs the build above.
+      # Type-aware, so it also needs the build above. Also checks that package
+      # sources are Latin-1 (`pnpm latin1:check`).
       - name: Run Lint
         run: pnpm lint
 
@@ -85,9 +86,6 @@ jobs:
 
       - name: Check package exports
         run: pnpm exports:check
-
-      - name: Check package sources are Latin-1
-        run: pnpm latin1:check
 
       # An internal PR carrying `deploy-website` gets a full Astro build in
       # website.yml via StaticSite. That build runs the same output validators,
