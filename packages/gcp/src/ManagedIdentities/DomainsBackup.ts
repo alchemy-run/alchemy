@@ -210,12 +210,15 @@ export const DomainsBackupProvider = () =>
               created === undefined ? Effect.void : waitForOperation(created),
             ),
             // Just after a domain becomes READY, its backup operation can
-            // fail on an internal snapshot that "is not ready" yet.
+            // fail on an internal snapshot that isn't ready yet. Google cuts
+            // the message short ("... is not rea"), so match its prefix.
+            // Each failed attempt takes ~8 minutes.
             Effect.retry({
               while: (error) =>
-                error._tag === "GCP.OperationFailed" && error.message.includes("is not ready"),
-              schedule: Schedule.spaced("1 minute"),
-              times: 10,
+                error._tag === "GCP.OperationFailed" &&
+                error.message.includes("createResourcesForValidation failed"),
+              schedule: Schedule.spaced("2 minutes"),
+              times: 4,
             }),
           );
         current = yield* waitUntilExists(getByName(name), name);
