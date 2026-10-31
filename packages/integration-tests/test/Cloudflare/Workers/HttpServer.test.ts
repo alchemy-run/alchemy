@@ -15,6 +15,7 @@ import { expectUrlContains } from "../Utils/Http.ts";
 import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import HttpServerWorker, { readyMarker, sensitiveContext } from "./fixtures/http-server-worker.ts";
 import RawResponseWorker from "./fixtures/raw-response/worker.ts";
+import NoSignalWorker from "./fixtures/request-abort/no-signal-worker.ts";
 import RequestAbortWorker from "./fixtures/request-abort/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -220,6 +221,55 @@ const rawRequest = (host: string, request: string) =>
     },
   );
 
+/**
+ * Deploy `worker`, send `/slow` over a raw connection, kill the client once
+ * the handler has started, and return what the handler recorded within
+ * `polls` seconds afterwards.
+ */
+const disconnectMidRequest = (worker: { url: string | undefined }, polls: number) =>
+  Effect.gen(function* () {
+    // `/ready` calls the journal Durable Object, whose first calls after a
+    // deploy can fail with an opaque "internal error".
+    yield* waitUntilStable(
+      `request-abort Worker at ${worker.url}`,
+      requestWorker(HttpClientRequest.get(`${worker.url!}/ready`)).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.map((body) => body === "request-abort:ready"),
+        Effect.catch(() => Effect.succeed(false)),
+      ),
+      { timeout: "60 seconds" },
+    );
+    const id = yield* Effect.sync(() => crypto.randomUUID());
+    const events = requestWorker(HttpClientRequest.get(`${worker.url!}/events?id=${id}`)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((response) => response.json),
+      Effect.map((body) => body as string[]),
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+    );
+
+    const host = yield* Effect.sync(() => new URL(worker.url!).host);
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* rawRequest(host, `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
+        yield* events.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            times: 30,
+            until: (events) => events.includes("started"),
+          }),
+        );
+      }),
+    );
+
+    return yield* events.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: polls,
+        until: (events) => events.some((event) => event.startsWith("released:")),
+      }),
+    );
+  });
+
 // A client that disconnects interrupts the handler, so its resources are
 // released as an interruption instead of staying open for nobody. Live only:
 // local workerd does not fire `request.signal` when the client disconnects.
@@ -229,49 +279,23 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const worker = yield* stack.deploy(RequestAbortWorker);
-      // `/ready` calls the journal Durable Object, whose first calls after a
-      // deploy can fail with an opaque "internal error".
-      yield* waitUntilStable(
-        `request-abort Worker at ${worker.url}`,
-        requestWorker(HttpClientRequest.get(`${worker.url!}/ready`)).pipe(
-          Effect.flatMap((response) => response.text),
-          Effect.map((body) => body === "request-abort:ready"),
-          Effect.catch(() => Effect.succeed(false)),
-        ),
-        { timeout: "60 seconds" },
-      );
-      const id = yield* Effect.sync(() => crypto.randomUUID());
-      const events = requestWorker(HttpClientRequest.get(`${worker.url!}/events?id=${id}`)).pipe(
-        Effect.flatMap(HttpClientResponse.filterStatusOk),
-        Effect.flatMap((response) => response.json),
-        Effect.map((body) => body as string[]),
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
-      );
+      const events = yield* disconnectMidRequest(worker, 20);
+      expect(events).toEqual(["started", "released:interrupt"]);
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);
 
-      // Send `/slow` over a raw connection, wait until the handler has
-      // started, then kill the client.
-      const host = yield* Effect.sync(() => new URL(worker.url!).host);
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* rawRequest(host, `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
-          yield* events.pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("500 millis"),
-              times: 30,
-              until: (events) => events.includes("started"),
-            }),
-          );
-        }),
-      );
-
-      const released = yield* events.pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          times: 20,
-          until: (events) => events.some((event) => event.startsWith("released:")),
-        }),
-      );
-      expect(released).toEqual(["started", "released:interrupt"]);
+// Without `enable_request_signal`, Cloudflare cancels the request when the
+// client disconnects and the handler's finalizers never run.
+test.provider(
+  "without enable_request_signal a client disconnect skips the handler's release",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const worker = yield* stack.deploy(NoSignalWorker);
+      const events = yield* disconnectMidRequest(worker, 10);
+      expect(events).toEqual(["started"]);
       yield* stack.destroy();
     }),
   { timeout: 120_000 },
