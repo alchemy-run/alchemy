@@ -141,6 +141,9 @@
       "ListMirroringDeployments": "us-central1-a"
     },
     "networks": 2,
-    "deployMinutes": 60
+    "deployMinutes": 60,
+    "skip": {
+      "ListFirewallEndpointWildfireVerdictChangeRequests": "a plain read needs WildFire enabled on the endpoint (Cloud NGFW threat-prevention add-on); the probe endpoint answers \"WildFire is disabled for endpoint\""
+    }
   }
 }

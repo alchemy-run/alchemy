@@ -191,13 +191,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListFirewallEndpointWildfireVerdictChangeRequests@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.list)",
-        () => probe("ListFirewallEndpointWildfireVerdictChangeRequests@FirewallEndpoint", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListFirewallEndpointWildfireVerdictChangeRequests@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): a plain read needs WildFire enabled on the endpoint (Cloud NGFW threat-prevention add-on); the probe endpoint answers "WildFire is disabled for endpoint"',
+        () => Effect.void,
       );
     });
 
@@ -367,7 +363,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "ListFirewallEndpointWildfireVerdictChangeRequests@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): OrganizationsFirewallEndpoint: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+        'ListFirewallEndpointWildfireVerdictChangeRequests@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): a plain read needs WildFire enabled on the endpoint (Cloud NGFW threat-prevention add-on); the probe endpoint answers "WildFire is disabled for endpoint"',
         () => Effect.void,
       );
     });
