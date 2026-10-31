@@ -33,8 +33,8 @@ export const withConnection =
     options: {
       /**
        * Attempts before giving up on a control plane that is still starting,
-       * 5 seconds apart.
-       * @default 72 (6 minutes)
+       * each bounded at 20 seconds and 5 seconds apart.
+       * @default 15 (about 6 minutes)
        */
       readonly attempts?: number;
     } = {},
@@ -54,7 +54,7 @@ export const withConnection =
           error._tag === "TimeoutError" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
         schedule: Schedule.spaced("5 seconds"),
-        times: options.attempts ?? 72,
+        times: options.attempts ?? 15,
       }),
       // This retry owns the whole wait: the SDK's own retry of the same
       // errors would multiply it.

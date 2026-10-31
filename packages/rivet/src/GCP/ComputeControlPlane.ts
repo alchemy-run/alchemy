@@ -80,6 +80,8 @@ docker run -d --name rivet-engine --restart always --network host \\
   -e RIVET__API_PEER__ADVERTISE_ADDRESS="$PRIVATE_IP:${PEER_PORT}" \\
   -e RIVET__TELEMETRY__ENABLED=false \\
   '${options.image}'
+# The engine's logs on the serial console (\`gcloud compute instances get-serial-port-output\`).
+setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > /dev/ttyS0' >/dev/null 2>&1 < /dev/null &
 `;
 
 /**
