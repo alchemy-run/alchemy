@@ -47,5 +47,7 @@ export const ledgerWorker = (
   });
 
 /** Host a model on Durable Objects. */
-export const hosted = <L extends Layer.Layer<any, any, any>>(model: L) =>
-  model.pipe(Layer.provide(DomainCloudflare.layerDurableObjects()));
+export const hosted = <L extends Layer.Layer<any, any, any>>(
+  model: L,
+  options?: DomainCloudflare.DurableObjectsOptions,
+) => model.pipe(Layer.provide(DomainCloudflare.layerDurableObjects(options)));

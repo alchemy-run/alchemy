@@ -295,6 +295,7 @@ export const make = (
     run: {
       begin: (target, plan) => Effect.suspend(() => run(target).begin(target, plan)),
       phase: (target) => Effect.suspend(() => run(target).phase(target)),
+      progress: (target) => Effect.suspend(() => run(target).progress(target)),
     },
   };
   const relay = Backfill.makeRelay(net);

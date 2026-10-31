@@ -284,6 +284,19 @@ describe("Domain backfill (simulated)", () => {
     }),
   );
 
+  scenario("a run reports its progress: every subtree and instance, once it is complete", (sim) =>
+    Effect.gen(function* () {
+      yield* backfill(sim, 9, 60, 5);
+      const progress = yield* sim.run_(TARGET).role.progress(TARGET);
+      expect(progress.phase).toBe("complete");
+      expect(progress.subtrees).toBeGreaterThan(0);
+      expect(progress.done).toBe(progress.subtrees);
+      // Two passes for a consumer with many sources: each instance's scanner, in the last.
+      expect(progress.instances).toBeGreaterThanOrEqual(9);
+      expect(progress.passes).toBeGreaterThanOrEqual(1);
+    }),
+  );
+
   scenario("a run started again, from several places, runs once", (sim) =>
     Effect.gen(function* () {
       for (const commit of history(sim, 5, 20, 3)) yield* commit();

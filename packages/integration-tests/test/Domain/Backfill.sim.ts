@@ -576,6 +576,12 @@ export class Sim {
         ),
       phase: (target) =>
         this.call(this.run_(target).object, () => this.run_(target).role.phase(target), "phase"),
+      progress: (target) =>
+        this.call(
+          this.run_(target).object,
+          () => this.run_(target).role.progress(target),
+          "progress",
+        ),
     },
   };
 

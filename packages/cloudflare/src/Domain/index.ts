@@ -31,6 +31,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -639,6 +640,7 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
   ) => reportDefects(relay.run(name, relayRun, items)),
   bfRunBegin: (target: string, plan: Backfill.Plan) => reportDefects(run().begin(target, plan)),
   bfRunPhase: (target: string) => reportDefects(run().phase(target)),
+  bfRunProgress: (target: string) => reportDefects(run().progress(target)),
 });
 
 /** How long before a key that couldn't list itself in the directory tries again. */
@@ -1454,6 +1456,8 @@ const pollAfter = <A>(
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
 const durableObjectPlatform = (
   jurisdiction: DurableObjectJurisdiction | undefined,
+  /** How long a deploy waits for a backfill, in seconds. */
+  backfillTimeoutSeconds: number | undefined,
 ): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
     Platform,
@@ -1624,6 +1628,10 @@ const durableObjectPlatform = (
                     }),
                   ),
                 ),
+          progress: (target) =>
+            Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
+              callOnce<Backfill.Progress>(stub.bfRunProgress(target)),
+            ),
         },
       };
       directory = yield* inInit(declareIn("DomainDirectory", directoryObject(net)));
@@ -1662,19 +1670,22 @@ const durableObjectPlatform = (
                     ),
                     { retries: REACH_RETRIES },
                   );
+                // Each check's output is the runs' progress: the deploy reads the latest one
+                // from the instance's steps, and reports it while it waits.
                 for (let check = 0; ; check++) {
-                  const phases = yield* task(
+                  const progress = yield* task(
                     `check-${check}`,
                     reachable(
                       Effect.forEach(targets, (target) =>
                         Effect.flatMap(root(target), (stub) =>
-                          unwrapDefects<Backfill.Phase>(stub.bfRunPhase(target)),
+                          unwrapDefects<Backfill.Progress>(stub.bfRunProgress(target)),
                         ),
                       ),
                     ),
                     { retries: REACH_RETRIES },
                   );
-                  if (phases.every((phase) => phase === "complete")) return { complete: true };
+                  if (progress.every((run) => run.phase === "complete"))
+                    return { complete: true, progress };
                   yield* sleep(
                     `wait-${check}`,
                     // Soon at first, then less often: each check is a step (an instance has 10,000).
@@ -1901,6 +1912,9 @@ const durableObjectPlatform = (
                       string,
                       { sources?: string[]; singleSource: boolean }
                     >,
+                    ...(backfillTimeoutSeconds === undefined
+                      ? {}
+                      : { timeoutSeconds: backfillTimeoutSeconds }),
                   }) as unknown as Effect.Effect<unknown>;
                 }),
               );
@@ -1997,19 +2011,25 @@ const durableObjectPlatform = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
+export function layerDurableObjects({
+  jurisdiction,
+  backfillTimeout,
+}: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
   Worker
 > {
+  const timeoutSeconds =
+    backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  let platform = platforms.get(jurisdiction);
+  const key = `${jurisdiction ?? ""}|${timeoutSeconds ?? ""}`;
+  let platform = platforms.get(key);
   if (platform === undefined)
     platforms.set(
-      jurisdiction,
+      key,
       (platform = Layer.merge(
-        durableObjectPlatform(jurisdiction),
+        durableObjectPlatform(jurisdiction, timeoutSeconds),
         layerDurableObjectEngine({ jurisdiction }),
       )),
     );
@@ -2036,9 +2056,18 @@ export interface DurableObjectsOptions {
    * @default undefined (no jurisdiction restriction)
    */
   readonly jurisdiction?: DurableObjectJurisdiction;
+  /**
+   * How long a deploy waits for the backfill of the views and projections it
+   * adds or rebuilds. Past it the deploy fails with `BackfillStillRunning`,
+   * naming how far each one has got, while the backfill keeps running on
+   * Cloudflare: the next deploy waits on it again, from where it is.
+   *
+   * @default "30 minutes"
+   */
+  readonly backfillTimeout?: Duration.Input;
 }
 
 const platforms = new Map<
-  DurableObjectJurisdiction | undefined,
+  string,
   Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
 >();
