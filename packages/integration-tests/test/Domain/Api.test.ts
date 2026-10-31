@@ -3,6 +3,7 @@ import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiError from "effect/http-api/HttpApiError";
@@ -171,21 +172,6 @@ describe("Domain Api", () => {
     }),
   );
 
-  it.live("naming an aggregate without read dies with a DefinitionError", () =>
-    Effect.gen(function* () {
-      // Typed as any model, so only serving it can tell.
-      const model: Domain.Model.Any = Vaults;
-      class LooseReads extends Domain.Api("LooseReads", { model, aggregates: ["Vault"] }) {}
-      const exit = yield* LooseReads.clientInProcess.pipe(Effect.scoped, Effect.exit);
-      expect(exit._tag).toBe("Failure");
-      if (exit._tag !== "Failure") return;
-      expect(Cause.squash(exit.cause)).toMatchObject({
-        _tag: "DefinitionError",
-        message: "Vault has no `read` contract, so an Api cannot serve it",
-      });
-    }).pipe(Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
-  );
-
   it.effect("an Api serves none of a kind it lists as empty", () =>
     Effect.sync(() => {
       class Reads extends Domain.Api("Reads", {
@@ -262,6 +248,10 @@ class Vault extends Domain.Aggregate("Vault", {
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
 class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
+// Vault declares no `read`, so its state is not for clients: naming it is a
+// type error, and serving it anyway dies.
+// @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
+class VaultStateApi extends Domain.Api("VaultStateApi", { model: Vaults, aggregates: ["Vault"] }) {}
 
 describe("Domain Rejection", () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
@@ -433,6 +423,21 @@ describe("Domain Api in process", () => {
           Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
         ),
       ),
+    ),
+  );
+});
+
+describe("Domain Api exposing an aggregate", () => {
+  it.live("an aggregate without a read contract is never served", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(VaultStateApi.clientInProcess);
+      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+        _tag: "DefinitionError",
+        reason: { _tag: "Unreadable", aggregate: "Vault" },
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
     ),
   );
 });

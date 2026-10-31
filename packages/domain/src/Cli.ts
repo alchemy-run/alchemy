@@ -13,7 +13,12 @@ import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
-import { DefinitionError } from "./internal.ts";
+import {
+  DefinitionError,
+  DuplicateCommand,
+  DuplicateFlag,
+  ReservedFlag,
+} from "./DefinitionError.ts";
 import { type Operation, operationsOf } from "./ReadRpcs.ts";
 
 /**
@@ -155,10 +160,12 @@ const fieldsOf = (
     const taken = flags.get(flag);
     if (RESERVED.has(flag) || taken !== undefined) {
       problems.push(
-        new DefinitionError(
-          `${where}: field \`${name}\` would be the flag --${flag}, ` +
-            (taken === undefined ? "which the CLI reserves" : `as is field \`${taken}\``),
-        ),
+        new DefinitionError({
+          reason:
+            taken === undefined
+              ? new ReservedFlag({ call: where, field: name, flag })
+              : new DuplicateFlag({ call: where, field: name, flag, taken }),
+        }),
       );
       return [];
     }
@@ -467,9 +474,14 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     const taken = names.get(name);
     if (taken !== undefined) {
       problems.push(
-        new DefinitionError(
-          `${api.apiName}: \`${taken}\` and \`${served}\` are both the command ${name}`,
-        ),
+        new DefinitionError({
+          reason: new DuplicateCommand({
+            api: api.apiName,
+            first: taken,
+            second: served,
+            command: name,
+          }),
+        }),
       );
       continue;
     }

@@ -8,8 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
+import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, settle, targetId as internalTargetId } from "./internal.ts";
+import { judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -455,7 +456,12 @@ export const predict = (
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
-        new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+        new DefinitionError({
+          reason: new UnhandledCommand({
+            aggregate: aggregate.aggregateName,
+            command: command._tag,
+          }),
+        }),
       ),
     };
   }

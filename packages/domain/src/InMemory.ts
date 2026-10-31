@@ -214,7 +214,7 @@ export const make = (
         net,
         {
           route: (target, ref, rows) =>
-            consumerRoutes.get(`${kind}:${name}`)?.(target, ref, rows) ?? [],
+            consumerRoutes.get(`${kind}:${name}`)?.(target, ref, rows) ?? Effect.succeed([]),
         },
         limits,
       );
@@ -590,9 +590,9 @@ export const make = (
             ),
           seed: (id, events) =>
             lock.withPermits(1)(
-              Effect.suspend(() => {
+              Effect.gen(function* () {
                 const current = instance(id);
-                const result = kit.seed({
+                const result = yield* kit.seed({
                   id,
                   state: current.state,
                   version: current.version,
@@ -600,23 +600,21 @@ export const make = (
                   commandId: `seed:${id}:${current.version}`,
                   now: now(),
                 });
-                return Effect.gen(function* () {
-                  if (current.version === 0) yield* register({ source: kit.name, id });
-                  const live = yield* Backfill.routeCommit(
-                    sourceRole(id),
-                    kit.targets,
-                    current.routed,
-                    current.version,
-                    result.version,
-                    result.deliveries,
-                  );
-                  current.routed = live.routed;
-                  current.state = result.state;
-                  current.version = result.version;
-                  current.events.push(...result.events);
-                  yield* announce(id);
-                  yield* enqueue(live.send, kit.deliver);
-                });
+                if (current.version === 0) yield* register({ source: kit.name, id });
+                const live = yield* Backfill.routeCommit(
+                  sourceRole(id),
+                  kit.targets,
+                  current.routed,
+                  current.version,
+                  result.version,
+                  result.deliveries,
+                );
+                current.routed = live.routed;
+                current.state = result.state;
+                current.version = result.version;
+                current.events.push(...result.events);
+                yield* announce(id);
+                yield* enqueue(live.send, kit.deliver);
               }),
             ),
         };
@@ -672,7 +670,7 @@ export const make = (
           Effect.gen(function* () {
             const current = yield* get(key);
             const before = yield* SubscriptionRef.get(current.snapshot);
-            const result = kit.apply(key, before, deliveries);
+            const result = yield* kit.apply(key, before, deliveries);
             if (!result.changed) return;
             current.inputs.push(
               ...deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq),
