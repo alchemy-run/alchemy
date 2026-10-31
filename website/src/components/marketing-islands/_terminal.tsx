@@ -8,17 +8,47 @@ export const prefersReducedMotion = () =>
 /** Pauses of at least this long are a demo holding a finished frame. */
 const HOLD_MS = 2000;
 
+/** Set by the page's "Pause motion" control (WCAG 2.2.2). */
+const isMotionPaused = () =>
+  typeof document !== "undefined" &&
+  document.documentElement.classList.contains("alc-motion-paused");
+
+/** A wait that stops while motion is paused and resumes where it left off. */
+const pausableWait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    let left = ms;
+    let since = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sync = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+        left -= performance.now() - since;
+      }
+      if (isMotionPaused()) return;
+      since = performance.now();
+      timer = setTimeout(() => {
+        removeEventListener("alc-motion-change", sync);
+        resolve();
+      }, left);
+    };
+    addEventListener("alc-motion-change", sync);
+    sync();
+  });
+
 /**
  * Timeline pause for the scripted terminal demos. With reduced motion the
  * script fast-forwards to its first finished frame and stays there: short
- * steps resolve immediately and the first hold never resolves.
+ * steps resolve immediately and the first hold never resolves, so a loop
+ * must reach a hold or stop on its own or it never yields and freezes the
+ * tab. Otherwise the wait honors the page's pause control.
  */
-export const sleep = (ms: number) =>
+export const sleep = (ms: number): Promise<void> =>
   prefersReducedMotion()
     ? ms >= HOLD_MS
       ? new Promise<void>(() => {})
       : Promise.resolve()
-    : new Promise<void>((r) => setTimeout(r, ms));
+    : pausableWait(ms);
 
 export function useSpinner(active: boolean, intervalMs = 80): string {
   const [i, setI] = useState(0);

@@ -171,7 +171,7 @@ export const FlociServiceProvider = () =>
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the
     // watch loop left the service's containers on the old revision).
-    onReconciled: ({ id, previous, attrs }) =>
+    onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (
           attrs.taskFamily === undefined ||
@@ -191,13 +191,9 @@ export const FlociServiceProvider = () =>
           serviceManaged: true,
         });
         yield* Effect.logInfo(
-          `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
         );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`[alchemy dev] ${id}: service roll failed`, cause),
-        ),
-      ),
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning(`service roll failed`, cause))),
     startWatch: (ctx) =>
       Effect.gen(function* () {
         if (taskRefOf(ctx.news) !== undefined) {
@@ -230,11 +226,7 @@ export const FlociServiceProvider = () =>
                   );
                 }),
               )
-              .pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
-                ),
-              ),
+              .pipe(Effect.catchCause((cause) => Effect.logWarning(`image swap failed`, cause))),
           ),
         );
       }),

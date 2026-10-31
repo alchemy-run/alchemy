@@ -26,6 +26,7 @@ const devServer = async (source: string): Promise<string> => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -124,11 +125,22 @@ test("stops the Worker's stream when the client hangs up", async () => {
   await stream.body!.getReader().read();
   client.abort();
 
-  // workerd stops pulling once it sees the request cancelled.
-  await sleep(500);
-  const afterHangUp = await pulls();
-  await sleep(500);
-  expect(await pulls()).toBe(afterHangUp);
+  // workerd stops pulling once it sees the request cancelled. The cancel can
+  // take a while to land on a loaded machine, so wait for the count to hold
+  // still: a live stream pulls every 50ms and never would.
+  let previous = await pulls();
+  await expect
+    .poll(
+      async () => {
+        await sleep(300);
+        const next = await pulls();
+        const stopped = next === previous;
+        previous = next;
+        return stopped;
+      },
+      { timeout: 15_000, interval: 0 },
+    )
+    .toBe(true);
 });
 
 test("keeps connections usable after the Worker answers without reading the body", async () => {

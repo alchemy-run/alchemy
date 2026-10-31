@@ -522,7 +522,8 @@ export const DockerLive = Layer.effect(
 
     // Connect to the daemon on first use. Only Workers with containers ask for
     // the engine configuration, so every other runtime never touches Docker.
-    const scope = yield* Effect.scope;
+    // It runs in the layer's scope, so it outlives the caller that started it.
+    const context = yield* Effect.context<Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>();
     const startDocker = Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
@@ -561,11 +562,7 @@ export const DockerLive = Layer.effect(
         },
       }),
       { concurrent: true },
-    ).pipe(
-      Effect.provideService(Scope.Scope, scope),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.forkIn(scope),
-    );
+    ).pipe(Effect.provide(context), Effect.forkIn(Context.get(context, Scope.Scope)));
     const docker = yield* Effect.cached(startDocker);
 
     // Docker refuses to create a container whose device is missing on the

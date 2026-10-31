@@ -20,8 +20,8 @@
  */
 import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
+import type { ApplyStatus } from "../../../Events.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import type { ApplyStatus } from "../../../Report.ts";
 import { theme } from "../../../Util/Theme.ts";
 import { formatElapsed } from "../../Format.ts";
 import { formatModeNote } from "../../ModeTag.ts";
