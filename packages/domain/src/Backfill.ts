@@ -1,6 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import {
   type ReplayInput,
@@ -389,6 +391,29 @@ const LIST_PAGE = 512;
 
 /** How long a key started with a wait pauses between pages that couldn't go further. */
 const WAIT_PAUSE_MS = 50;
+
+/**
+ * Cloudflare refuses calls when an account puts too much load on Durable
+ * Objects. A refused call is tried again later, not at once, so a wide run
+ * backs off to the load the account can take rather than collapse under its
+ * own retries.
+ */
+export const overloaded = (cause: Cause.Cause<unknown>) => {
+  const error = Cause.squash(cause);
+  return /too much load|too many concurrent|overloaded|try again later/i.test(
+    Predicate.hasProperty(error, "message") ? String(error.message) : String(error),
+  );
+};
+
+/** A wait after `failures` failures in a row: doubling from `base`, up to `max`, jittered. */
+const backoff = (failures: number, base: number, max: number) =>
+  Effect.map(Random.next, (jitter) =>
+    Math.round(Math.min(max, base * 2 ** Math.max(0, failures - 1)) * (0.5 + jitter)),
+  );
+
+/** A key's pause between pages: short while it makes progress, backing off while calls fail. */
+const pause = (failures: number) =>
+  failures === 0 ? Effect.succeed(WAIT_PAUSE_MS) : backoff(failures, 250, 5_000);
 
 /**
  * Run a job again after a refusal or a failure, waiting twice as long each time:
@@ -1149,21 +1174,23 @@ export const makeConsumer = (
     });
 
   /** The merge job for one target. */
-  const merge = (target: string): Effect.Effect<void> =>
+  /** The merge job for one target: `true` when it couldn't go on (a call failed), and waits. */
+  const merge = (target: string): Effect.Effect<boolean> =>
     Effect.gen(function* () {
       const backfill = yield* storage.get<Backfill>(backfillKey(target));
-      if (!backfill) return;
+      if (!backfill) return false;
       if (!backfill.ready) {
         // A key with history is told it is ready by the scanners that pushed it. One
         // fed only live (no history) has no one to tell it: it asks the run.
-        if (backfill.pushed) return;
+        if (backfill.pushed) return false;
         const phase = yield* net.run
           .phase(target)
           .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
-        if (phase === undefined) return yield* retry.later(jobId(target), RETRY_MS);
+        if (phase === undefined)
+          return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
         yield* trace("waiting", { key: host.key, target, phase });
         if (phase !== "ready" && phase !== "complete")
-          return yield* jobs.schedule(jobId(target), limits.pollMillis);
+          return yield* Effect.as(jobs.schedule(jobId(target), limits.pollMillis), false);
         yield* storage.exclusive(
           Effect.gen(function* () {
             const current = yield* storage.get<Backfill>(backfillKey(target));
@@ -1174,13 +1201,15 @@ export const makeConsumer = (
       const outcome = yield* applyBuffered(target);
       yield* trace("merge", { key: host.key, target, outcome });
       if (host.after) yield* host.after;
-      if (outcome === "done" || outcome === "waiting") return yield* retry.clear(jobId(target));
+      if (outcome === "done" || outcome === "waiting")
+        return yield* Effect.as(retry.clear(jobId(target)), false);
       // A remote failure never fails the job (which a durable callback would retry
       // with a growing delay, then park): it asks again after a fixed wait.
       const failed = outcome === "starved" ? yield* pullStarved(target) : false;
-      if (failed) return yield* retry.later(jobId(target), RETRY_MS);
+      if (failed) return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
       yield* retry.clear(jobId(target));
       yield* jobs.schedule(jobId(target), 0);
+      return false;
     });
 
   return {
@@ -1277,11 +1306,11 @@ export const makeConsumer = (
         // Work on it here, rather than wait for an alarm to run the job: read its
         // source's log a page at a time until it has its history, or time is up.
         const until = (yield* Clock.currentTimeMillis) + waitMillis;
-        while (true) {
-          yield* merge(target);
+        for (let failures = 0; ;) {
+          failures = (yield* merge(target)) ? failures + 1 : 0;
           if (yield* settled(target)) return "settled" as const;
           if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
-          yield* Effect.sleep(`${WAIT_PAUSE_MS} millis`);
+          yield* Effect.sleep(`${yield* pause(failures)} millis`);
         }
       }),
 
@@ -1306,11 +1335,11 @@ export const makeConsumer = (
         if (waitMillis <= 0) return told;
         // Apply it here, rather than wait for an alarm to run the job.
         const until = (yield* Clock.currentTimeMillis) + waitMillis;
-        while (true) {
-          yield* merge(target);
+        for (let failures = 0; ;) {
+          failures = (yield* merge(target)) ? failures + 1 : 0;
           if (yield* storage.get(doneKey(target))) return "settled" as const;
           if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
-          yield* Effect.sleep(`${WAIT_PAUSE_MS} millis`);
+          yield* Effect.sleep(`${yield* pause(failures)} millis`);
         }
       }),
 
@@ -1507,22 +1536,28 @@ export const makeRelay = (net: Network) => {
     what: () => string,
   ): Effect.Effect<A | undefined> =>
     Effect.gen(function* () {
+      // A pass with no time to retry (one try at everything) expects failures: it doesn't log them.
+      const quiet = until <= (yield* Clock.currentTimeMillis);
       for (let tries = 0; ; tries++) {
         const result = yield* effect.pipe(
           Effect.map((value) => ({ value })),
           Effect.catchCause((cause) => Effect.succeed({ cause })),
         );
         if ("value" in result) return result.value;
-        // A call lost in transit: try again at once, a couple of times, then wait.
-        if (tries < RELAY_RETRY_AT_ONCE) continue;
-        const wait = Math.min(
+        // A call lost in transit: try again at once, a couple of times, then wait. A
+        // call the account's load refused: wait at once, longer each time.
+        const refused = overloaded(result.cause);
+        if (!refused && tries < RELAY_RETRY_AT_ONCE) continue;
+        const wait = yield* backoff(
+          refused ? tries + 1 : tries - RELAY_RETRY_AT_ONCE + 1,
+          refused ? 1_000 : RELAY_RETRY_MS,
           RELAY_RETRY_MAX_MS,
-          RELAY_RETRY_MS * 2 ** (tries - RELAY_RETRY_AT_ONCE),
         );
         if ((yield* Clock.currentTimeMillis) + wait >= until) {
-          yield* Effect.logInfo(
-            `backfill relay-failed ${what()} ${String(Cause.squash(result.cause)).slice(0, 300)}`,
-          );
+          if (!quiet)
+            yield* Effect.logInfo(
+              `backfill relay-failed ${what()} ${String(Cause.squash(result.cause)).slice(0, 300)}`,
+            );
           return undefined;
         }
         yield* Effect.sleep(`${wait} millis`);
