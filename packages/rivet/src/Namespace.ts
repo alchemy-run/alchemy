@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClientError from "effect/http/HttpClientError";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 
 export interface NamespaceProps extends ConnectionProps {
@@ -65,10 +66,10 @@ export const NamespaceProvider = () =>
   Provider.effect(
     Namespace,
     Effect.gen(function* () {
-      const observe = (connection: ConnectionProps, name: string) =>
+      const observe = (connection: ConnectionProps, name: string, attempts?: number) =>
         Rivet.namespaces.listNamespaces({ name }).pipe(
           Effect.map((res) => res.namespaces.find((ns) => ns.name === name)),
-          withConnection(connection),
+          withConnection(connection, { attempts }),
         );
 
       const toAttrs = (connection: ConnectionProps, ns: Rivet.namespaces.Namespace) => ({

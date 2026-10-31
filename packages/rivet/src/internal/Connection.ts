@@ -28,7 +28,17 @@ export interface ConnectionProps {
  * right after its control plane starts would otherwise fail.
  */
 export const withConnection =
-  (connection: ConnectionProps) =>
+  (
+    connection: ConnectionProps,
+    options: {
+      /**
+       * Attempts before giving up on a control plane that is still starting,
+       * 5 seconds apart.
+       * @default 72 (6 minutes)
+       */
+      readonly attempts?: number;
+    } = {},
+  ) =>
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       // An address that drops packets (a load balancer with no healthy
@@ -44,7 +54,7 @@ export const withConnection =
           error._tag === "TimeoutError" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
         schedule: Schedule.spaced("5 seconds"),
-        times: 72,
+        times: options.attempts ?? 72,
       }),
       // This retry owns the whole wait: the SDK's own retry of the same
       // errors would multiply it.
