@@ -2,14 +2,17 @@ import { stripVTControlCharacters } from "node:util";
 import * as Effect from "effect/Effect";
 import { makeLineBuffer } from "./LineBuffer.ts";
 import { logChildLine } from "./LogRecord.ts";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "./Terminal.ts";
+import { terminalStyle } from "./Terminal.ts";
 import { theme } from "./Theme.ts";
 
 export type OutputChannel = "stdout" | "stderr";
 
-/** Sigil-themed resource attribution shared by every append-only log path. */
-export const formatResourceTag = (id: string, colors = colorsEnabled()): string =>
-  colors ? `${ansiFg(theme.color.info)}[${id}]${ANSI_RESET}` : `[${id}]`;
+/**
+ * Sigil-themed resource attribution shared by every append-only log path.
+ * Without `colors`, the color level is detected for stdout.
+ */
+export const formatResourceTag = (id: string, colors?: boolean): string =>
+  terminalStyle(colors === undefined ? {} : { colors }).hex(theme.color.info)(`[${id}]`);
 
 const EFFECT_LOG_PREFIX =
   /^\[\d{2}:\d{2}:\d{2}\.\d{3}\] (?:ALL|TRACE|DEBUG|INFO|WARN|ERROR|FATAL|NONE) \(#\d+\)(?: [^:]+)?: /;

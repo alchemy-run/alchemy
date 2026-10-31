@@ -253,7 +253,8 @@ export const makeRuntime = (
 
   interface Mounted {
     readonly sigil: ReturnType<typeof render>;
-    readonly alternate: boolean;
+    /** Whether the instance is currently on the alternate screen. */
+    alternate: boolean;
     /** Settles when the instance exits; render crashes are routed out, never rethrown. */
     exit: Promise<void>;
     /**
@@ -593,12 +594,11 @@ export const makeRuntime = (
           Effect.promise(async () => {
             sessionMounted = true;
             store.clear();
-            // Sigil cannot change `alternateScreen` on a live instance: if
-            // an inline renderer (say an earlier progress row) is still
-            // mounted with the wrong presentation, remount with the
-            // requested one instead of silently ignoring it.
+            // A renderer already mounted for an earlier progress row switches
+            // presentation in place; Sigil keeps its Static output.
             if (mounted !== undefined && mounted.alternate !== alternate) {
-              await unmount(true);
+              mounted.sigil.setAlternateScreen(alternate);
+              mounted.alternate = alternate;
             }
             await mount(alternate);
           }),
@@ -613,6 +613,12 @@ export const makeRuntime = (
               const current = mounted;
               if (current !== undefined) {
                 await current.sigil.waitUntilRenderFlush();
+                // Back to the main screen first: the renderer may stay
+                // mounted afterwards for live views that outlive the session.
+                if (current.alternate) {
+                  current.sigil.setAlternateScreen(false);
+                  current.alternate = false;
+                }
                 current.sigil.clear();
               }
               await unmount();

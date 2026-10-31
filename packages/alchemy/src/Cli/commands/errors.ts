@@ -6,13 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Runtime from "effect/Runtime";
 import * as Schema from "effect/Schema";
 import { isUserFacing, UserFacingError } from "../../UserFacingError.ts";
-import {
-  ANSI_DIM,
-  ANSI_RESET,
-  ansiFg,
-  colorsEnabled,
-  unicodeEnabled,
-} from "../../Util/Terminal.ts";
+import { colorsEnabled, terminalStyle, unicodeEnabled } from "../../Util/Terminal.ts";
 import { glyphsFor, theme } from "../../Util/Theme.ts";
 
 const isTerminalCancelled = Schema.is(
@@ -61,9 +55,7 @@ export const installShutdownFeedback = Effect.sync(() => {
     if (scheduled || interruptMessagesSuppressed) return;
     scheduled = true;
     const timer = setTimeout(() => {
-      process.stderr.write(
-        colorsEnabled() ? `\n${ANSI_DIM}Shutting down${ANSI_RESET}\n` : "\nShutting down\n",
-      );
+      process.stderr.write(`\n${terminalStyle({ stream: process.stderr }).dim("Shutting down")}\n`);
     }, SHUTDOWN_FEEDBACK_DELAY_MS);
     timer.unref();
   };
@@ -80,15 +72,15 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
         return false;
       });
       return cancelled
-        ? Console.log(
-            colorsEnabled() ? `\n${ANSI_DIM}Cancelled.${ANSI_RESET}` : "\nCancelled.",
-          ).pipe(Effect.andThen(setExitCode(EXIT_CANCELLED)))
+        ? Console.log(`\n${terminalStyle().dim("Cancelled.")}`).pipe(
+            Effect.andThen(setExitCode(EXIT_CANCELLED)),
+          )
         : (Effect.failCause(cause) as Effect.Effect<never, E, never>);
     }),
     Effect.onInterrupt(() =>
       interruptMessagesSuppressed
         ? Effect.void
-        : Console.log(colorsEnabled() ? `\n${ANSI_DIM}Exited.${ANSI_RESET}` : "\nExited."),
+        : Console.log(`\n${terminalStyle().dim("Exited.")}`),
     ),
   );
 
@@ -128,7 +120,7 @@ export const handleUserErrors = <A, E, R>(self: Effect.Effect<A, E, R>) =>
         if (isUserFacingError(error)) {
           const glyphs = glyphsFor(unicodeEnabled());
           return Console.error(
-            `${colorsEnabled() ? `${ansiFg(theme.color.danger)}${glyphs.error} error:${ANSI_RESET}` : "error:"} ${error.message}`,
+            `${colorsEnabled(process.stderr) ? terminalStyle({ stream: process.stderr }).hex(theme.color.danger)(`${glyphs.error} error:`) : "error:"} ${error.message}`,
           ).pipe(Effect.flatMap(() => Effect.fail(new ReportedCliError(cause)))) as Effect.Effect<
             never,
             E | ReportedCliError,
