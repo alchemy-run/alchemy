@@ -162,6 +162,82 @@ test.provider(
   },
 );
 
+test.provider(
+  "flushes a streamed body's spans after the body settles without delaying its end",
+  (stack) =>
+    Effect.gen(function* () {
+      // Hold the export that carries the body's span: the body must still end.
+      const collector = yield* startOtlpCollector({
+        holdResponse: (body) => body.includes('"name":"otel-event-flush.stream-tail"'),
+      });
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client
+        .get(`${deployment.url}/stream`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(response.status).toBe(200);
+      expect(yield* response.text).toBe("head\ntail\n");
+
+      // One flush, after the body settled: the tail span ends after the
+      // handler returned, yet it ships in the same batch as the request's
+      // root span and the handler's span. The stream runs outside the
+      // request's span, so the tail span carries its own trace.
+      const batches = yield* own.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (batches) => batches.length > 0,
+          times: 50,
+        }),
+      );
+      expect(batches).toHaveLength(1);
+      const [{ batch, spans }] = batches;
+      expect([...spans].sort()).toEqual(["GET", "otel-event-flush.worker"]);
+      expect(batch.body).toContain('"name":"otel-event-flush.stream-tail"');
+      // The body ended while its export was still held.
+      expect(batch.completed).toBe(false);
+      yield* Effect.sync(collector.releaseResponses);
+      yield* Effect.sync(() => batch.completed).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (completed) => completed,
+          times: 30,
+        }),
+      );
+      expect(yield* own).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
 for (const scenario of [
   { name: "bound default", shutdownTimeout: 0, delivered: true },
   { name: "custom 3 seconds", shutdownTimeout: 3_000, delivered: false },

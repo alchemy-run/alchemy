@@ -230,6 +230,18 @@ describe(
           );
           expect(rpcCallers.length).toBeGreaterThan(0);
           expect(rpcCallers.every((name) => name === "otel-event-flush.worker")).toBe(true);
+
+          // A streamed body's span ends after the handler returned; it still
+          // reaches the collector because the body owns the event's
+          // telemetry scope until it settles.
+          yield* expectUrlContains(`${flushUrl}/stream`, "tail", {
+            timeout: "120 seconds",
+            label: "event-flush worker streamed body",
+          });
+          yield* expectUrlContains(collected, "otel-event-flush.stream-tail", {
+            timeout: "120 seconds",
+            label: "deployed streamed body batch",
+          });
         }),
       { timeout: 600_000 },
     );

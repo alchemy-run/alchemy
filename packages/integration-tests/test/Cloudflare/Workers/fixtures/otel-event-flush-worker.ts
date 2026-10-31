@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
+import * as Stream from "effect/Stream";
 
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
@@ -46,6 +47,24 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/stream")) {
+          // The tail chunk's span ends after the handler has returned, so it
+          // only reaches the exporter if the streamed body owns the event's
+          // telemetry scope until it settles.
+          return HttpServerResponse.stream(
+            Stream.make("head\n").pipe(
+              Stream.concat(
+                Stream.fromEffect(
+                  Effect.sleep("300 millis").pipe(
+                    Effect.as("tail\n"),
+                    Effect.withSpan("otel-event-flush.stream-tail"),
+                  ),
+                ),
+              ),
+              Stream.encodeText,
+            ),
+          );
+        }
         if (request.url.startsWith("/rpc")) {
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
