@@ -1,5 +1,5 @@
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -283,7 +283,7 @@ export const AgentsToolProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
@@ -301,7 +301,7 @@ export const AgentsToolProvider = () =>
       const attrs = toAttrs(existing, env.project, agent);
       const named = yield* ownedByAlchemy(id, existing.displayName);
       const described = yield* ownedByAlchemy(id, existing.description);
-      return named || described ? attrs : Unowned(attrs);
+      return named || described ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

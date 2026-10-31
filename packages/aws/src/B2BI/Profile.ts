@@ -1,6 +1,6 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -141,7 +141,7 @@ export const ProfileProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const found = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
@@ -150,7 +150,9 @@ export const ProfileProvider = () =>
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* readB2biTags(attrs.profileArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "profileId");
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

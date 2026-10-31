@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -210,7 +210,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.dataStore
         ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
@@ -223,7 +223,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, uri);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {

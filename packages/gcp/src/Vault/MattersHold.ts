@@ -1,5 +1,5 @@
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -222,7 +222,7 @@ export const MattersHoldProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const matterId = olds?.matterId ?? output?.matterId ?? "";
       const holdId = olds?.holdId ?? output?.holdId ?? "";
@@ -249,7 +249,7 @@ export const MattersHoldProvider = () =>
       const resolvedMatter = parentId.length > 0 ? parentId : attrs.matterId;
       return (yield* ownedByAlchemy(id, existing.name))
         ? { ...attrs, matterId: resolvedMatter }
-        : Unowned({ ...attrs, matterId: resolvedMatter });
+        : unownedUnlessPrevious({ ...attrs, matterId: resolvedMatter }, previous, "holdId");
     }),
 
     list: () =>

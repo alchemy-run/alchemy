@@ -1,5 +1,5 @@
 import * as iam from "@distilled.cloud/gcp/iam_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -240,7 +240,7 @@ export const PolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const attachmentPoint = attachmentPointOf(
         env.project,
@@ -251,7 +251,9 @@ export const PolicyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.annotations)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.annotations))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

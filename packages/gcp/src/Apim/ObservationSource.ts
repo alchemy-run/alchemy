@@ -1,5 +1,5 @@
 import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -191,7 +191,7 @@ export const ObservationSourceProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const observationSourceId = yield* toPhysicalId(
         id,
@@ -210,7 +210,7 @@ export const ObservationSourceProvider = () =>
       if (output !== undefined || hasAlchemyId(attrs.observationSourceId)) {
         return attrs;
       }
-      return Unowned(attrs);
+      return unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

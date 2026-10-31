@@ -1,5 +1,5 @@
 import * as gmailpostmastertools from "@distilled.cloud/gcp/gmailpostmastertools_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -154,14 +154,16 @@ export const DomainsUserProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent ?? output?.parent ?? "";
       const userId = olds?.userId ?? output?.userId ?? "";
       const existing = yield* findUser(parent, userId, output?.name ?? toUserName(parent, userId));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, parent, env.project);
-      return output !== undefined || isAlchemyEmail(attrs.userId) ? attrs : Unowned(attrs);
+      return output !== undefined || isAlchemyEmail(attrs.userId)
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

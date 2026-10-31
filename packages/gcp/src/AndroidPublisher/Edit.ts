@@ -1,5 +1,5 @@
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -100,14 +100,14 @@ export const EditProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const packageName = olds?.packageName ?? output?.packageName ?? "";
       const editId = olds?.editId ?? output?.editId ?? "";
       const existing = yield* getEdit(packageName, editId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, packageName, env.project);
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "editId");
     }),
 
     list: () =>

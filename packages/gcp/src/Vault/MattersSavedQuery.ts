@@ -1,5 +1,5 @@
 import * as vault from "@distilled.cloud/gcp/vault_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -159,7 +159,7 @@ export const MattersSavedQueryProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const matterId = olds?.matterId ?? output?.matterId ?? "";
       const savedQueryId = olds?.savedQueryId ?? output?.savedQueryId ?? "";
@@ -178,7 +178,9 @@ export const MattersSavedQueryProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "savedQueryId");
     }),
 
     list: () =>

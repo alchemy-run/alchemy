@@ -1,5 +1,5 @@
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -303,7 +303,7 @@ export const MerchantReviewProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const account = olds?.account ?? output?.account ?? "";
       const merchantReviewId = yield* toResourceId(
         id,
@@ -322,7 +322,7 @@ export const MerchantReviewProvider = () =>
         content: existing.merchantReviewAttributes?.content,
       }))
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

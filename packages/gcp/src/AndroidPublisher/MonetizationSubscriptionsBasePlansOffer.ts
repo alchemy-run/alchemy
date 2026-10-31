@@ -1,5 +1,5 @@
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -277,7 +277,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const packageName = olds?.packageName ?? output?.packageName ?? "";
       const productId = olds?.productId ?? output?.productId ?? "";
@@ -287,7 +287,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state the offer may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "offerId");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -164,7 +164,7 @@ export const ProjectVPCEndpointProvider = () =>
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (
         !output &&
         (!olds?.project?.projectId ||
@@ -178,12 +178,16 @@ export const ProjectVPCEndpointProvider = () =>
       if (output) return { ...output, label: observed?.label ?? null };
       if (!observed) return;
       yield* validateCloudScope(scope);
-      return Unowned({
-        ...scope,
-        label: observed.label,
-        initialLabel: observed.label,
-        managedLabel: observed.label,
-      });
+      return unownedUnlessPrevious(
+        {
+          ...scope,
+          label: observed.label,
+          initialLabel: observed.label,
+          managedLabel: observed.label,
+        },
+        previous,
+        "vpcEndpointId",
+      );
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateProjectVPCEndpoint(news);

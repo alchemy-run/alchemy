@@ -1,5 +1,5 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -192,7 +192,7 @@ export const ContactListProvider = () =>
             );
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.contactListName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getList(name);
@@ -202,7 +202,9 @@ export const ContactListProvider = () =>
             contactListArn: contactListArnOf(region, accountId, name),
           };
           const tags = toTagRecord(found.Tags);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "contactListName");
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {

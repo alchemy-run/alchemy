@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -128,7 +128,7 @@ export const OrganizationVPCEndpointProvider = () =>
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const scope = output ?? olds;
       if (!scope?.orgId || !scope.regionId || !scope.vpcEndpointId) return;
       const observed = yield* observe(scope);
@@ -139,15 +139,19 @@ export const OrganizationVPCEndpointProvider = () =>
           state: observed?.state ?? null,
         };
       if (!observed) return;
-      return Unowned({
-        orgId: scope.orgId,
-        regionId: scope.regionId,
-        vpcEndpointId: scope.vpcEndpointId,
-        label: observed.label,
-        initialLabel: observed.label,
-        managedLabel: observed.label,
-        state: observed.state,
-      });
+      return unownedUnlessPrevious(
+        {
+          orgId: scope.orgId,
+          regionId: scope.regionId,
+          vpcEndpointId: scope.vpcEndpointId,
+          label: observed.label,
+          initialLabel: observed.label,
+          managedLabel: observed.label,
+          state: observed.state,
+        },
+        previous,
+        "vpcEndpointId",
+      );
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateOrganizationVPCEndpoint(news);

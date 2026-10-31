@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -256,7 +256,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
         olds?.organization ?? output?.organizationId,
@@ -277,7 +277,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       const attrs = toAttrs(existing, organizationId, environmentId, api, revision);
       return output !== undefined || isAlchemySessionId(attrs.debugsessionId)
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
