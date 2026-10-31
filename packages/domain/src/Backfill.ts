@@ -227,8 +227,11 @@ export interface RelayRun {
    * `ready`: tell each source's keys that every source's history is in.
    */
   readonly phase: "discover" | "ready";
-  /** How long a relay keeps at its items before it answers `false` (not all done): 0 for one pass. */
-  readonly waitMillis: number;
+  /**
+   * When the pass answers (epoch ms): each relay keeps at its items until then,
+   * and answers `false` if not all of them are done. Now, for one try at everything.
+   */
+  readonly deadline: number;
 }
 
 export interface RelayRpc {
@@ -443,9 +446,12 @@ const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
 };
 type Retry = ReturnType<typeof makeRetry>;
 
+/** A call that counts as lost if it hasn't answered in time: a hung call would stall its caller. */
+const bounded = <A, E>(call: Effect.Effect<A, E>) => call.pipe(Effect.timeout("20 seconds"));
+
 /** Where `ref`'s live routing to `target` stopped; 0 (read it all) if it can't say (older code). */
 const cursorOf = (net: Network, ref: SourceRef, target: string) =>
-  net.source.cursor(ref, target).pipe(Effect.catchCause(() => Effect.succeed(0)));
+  bounded(net.source.cursor(ref, target)).pipe(Effect.catchCause(() => Effect.succeed(0)));
 
 /** A target's generation: `view:Name#2` is 2. */
 const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
@@ -714,7 +720,9 @@ export const makeScanner = (
       const found = yield* getState(target);
       if (found === undefined || found.live) return { pushed: true, next: "never" } as const;
       const state = found.started ? found : yield* start(target, found);
-      const rows = yield* net.source.log(state.ref, state.through, limits.page);
+      const rows = yield* bounded(net.source.log(state.ref, state.through, limits.page)).pipe(
+        Effect.orDie,
+      );
       if (rows.length > 0) {
         const routed = host.route(target, state.ref, rows);
         const through = routed.length > 0 ? routed[routed.length - 1]!.seq : state.through;
@@ -727,7 +735,8 @@ export const makeScanner = (
           }
         yield* Effect.forEach(
           byKey,
-          ([key, deliveries]) => net.consumer.push(target, key, deliveries),
+          ([key, deliveries]) =>
+            bounded(net.consumer.push(target, key, deliveries)).pipe(Effect.orDie),
           { concurrency: limits.concurrency, discard: true },
         );
         const recorded = yield* storage.exclusive(
@@ -743,17 +752,18 @@ export const makeScanner = (
         // Past the barrier, no pass tells these keys: tell them here. (`ready` marks the
         // state before it lists keys, so a key is told by one or the other.)
         if (recorded !== undefined && (yield* pastBarrier(target, recorded)))
-          yield* Effect.forEach(byKey.keys(), (key) => net.consumer.ready(target, key, 0), {
-            concurrency: limits.concurrency,
-            discard: true,
-          });
+          yield* Effect.forEach(
+            byKey.keys(),
+            (key) => bounded(net.consumer.ready(target, key, 0)).pipe(Effect.orDie),
+            { concurrency: limits.concurrency, discard: true },
+          );
         if (rows.length >= limits.page) return { pushed: state.scanned, next: "now" } as const;
       }
       // The end of the log: ask the source to deliver live from here.
       const after = (yield* getState(target))!;
-      const handoff = yield* net.source
-        .handoff(after.ref, target, "", after.through)
-        .pipe(Effect.catchCause(() => Effect.succeed("stale" as Handoff)));
+      const handoff = yield* bounded(net.source.handoff(after.ref, target, "", after.through)).pipe(
+        Effect.catchCause(() => Effect.succeed("stale" as Handoff)),
+      );
       if (handoff === "more") return { pushed: after.scanned, next: "now" } as const;
       yield* storage.exclusive(
         Effect.gen(function* () {
@@ -820,11 +830,10 @@ export const makeScanner = (
                 const key = decodeURIComponent(row.slice(keysPrefix(target).length));
                 while (true) {
                   const left = until - (yield* Clock.currentTimeMillis);
-                  const result = yield* net.consumer.ready(
-                    target,
-                    key,
-                    Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left)),
-                  );
+                  const wait = Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left));
+                  const result = yield* net.consumer
+                    .ready(target, key, wait)
+                    .pipe(Effect.timeout(`${wait + CALL_TIMEOUT_MS} millis`), Effect.orDie);
                   if (result === "settled") return true;
                   if ((yield* Clock.currentTimeMillis) >= until) return false;
                 }
@@ -999,7 +1008,7 @@ export const makeConsumer = (
     Effect.gen(function* () {
       // At first, start where the source's live routing stopped: this key has the rest.
       const cursor = from === 0 ? yield* cursorOf(net, ref, target) : from;
-      const rows = yield* net.source.log(ref, cursor, limits.page);
+      const rows = yield* bounded(net.source.log(ref, cursor, limits.page));
       const routed = host.history!(ref, rows);
       const through = routed.length > 0 ? routed[routed.length - 1]!.seq : cursor;
       const deliveries = routed
@@ -1009,9 +1018,9 @@ export const makeConsumer = (
         return { deliveries, live: false, through, caughtUp: false } satisfies Pulled & {
           readonly caughtUp: boolean;
         };
-      const handoff = yield* net.source
-        .handoff(ref, target, host.key, through)
-        .pipe(Effect.catchCause(() => Effect.succeed("stale" as Handoff)));
+      const handoff = yield* bounded(net.source.handoff(ref, target, host.key, through)).pipe(
+        Effect.catchCause(() => Effect.succeed("stale" as Handoff)),
+      );
       return {
         deliveries,
         live: handoff === "live",
@@ -1495,6 +1504,9 @@ export const RELAY_FANOUT = 6;
 /** How long a key works on its history before it answers a relay that is waiting for it. */
 const RELAY_KEY_WAIT_MS = 10_000;
 
+/** How long a call may take, beyond the work it was asked to wait for, before it counts as lost. */
+const CALL_TIMEOUT_MS = 20_000;
+
 /**
  * How long a relay waits before it calls again after a failure, doubling each
  * time up to {@link RELAY_RETRY_MAX_MS}: an object still on older code moves to
@@ -1534,12 +1546,17 @@ export const makeRelay = (net: Network) => {
     effect: Effect.Effect<A>,
     until: number,
     what: () => string,
+    /** How long one attempt may take before it counts as lost: a hung call would stall its subtree. */
+    attempt: () => Effect.Effect<number> = () => Effect.succeed(CALL_TIMEOUT_MS),
   ): Effect.Effect<A | undefined> =>
     Effect.gen(function* () {
       // A pass with no time to retry (one try at everything) expects failures: it doesn't log them.
       const quiet = until <= (yield* Clock.currentTimeMillis);
       for (let tries = 0; ; tries++) {
-        const result = yield* effect.pipe(
+        const limit = yield* attempt();
+        const result = yield* (
+          quiet ? effect : effect.pipe(Effect.timeout(`${limit} millis`))
+        ).pipe(
           Effect.map((value) => ({ value })),
           Effect.catchCause((cause) => Effect.succeed({ cause })),
         );
@@ -1595,16 +1612,19 @@ export const makeRelay = (net: Network) => {
           : run.phase === "discover"
             ? net.scanner.scan(run.target, ref, wait)
             : net.scanner.ready(run.target, ref, wait);
+      const quiet = until <= (yield* Clock.currentTimeMillis);
       while (true) {
         const left = until - (yield* Clock.currentTimeMillis);
+        const wait = Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left));
         const done = yield* persist(
-          call(Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left))),
+          call(wait),
           until,
           () => `${run.phase} ${ref.source}/${ref.id}`,
+          () => Effect.succeed(wait + CALL_TIMEOUT_MS),
         );
         if (done === true) return true;
         if ((yield* Clock.currentTimeMillis) >= until) {
-          if (done === false && run.waitMillis > 0)
+          if (done === false && !quiet)
             yield* Effect.logInfo(
               `backfill relay-pending ${run.target} ${run.phase} ${ref.source}/${ref.id}`,
             );
@@ -1619,13 +1639,15 @@ export const makeRelay = (net: Network) => {
     items: ReadonlyArray<RelayItem>,
   ): Effect.Effect<boolean> =>
     Effect.gen(function* () {
-      const until = (yield* Clock.currentTimeMillis) + relayRun.waitMillis;
+      const until = relayRun.deadline;
       const child = (suffix: string, chunk: ReadonlyArray<RelayItem>) =>
         Effect.map(
           persist(
             net.relay.run(`${name}${suffix}`, relayRun, chunk),
             until,
             () => `relay ${name}${suffix}`,
+            // A child answers by the pass's deadline: allow it that, and a little more.
+            () => Effect.map(Clock.currentTimeMillis, (now) => until - now + CALL_TIMEOUT_MS),
           ),
           (done) => done === true,
         );
@@ -1703,7 +1725,12 @@ export const makeRun = (
       // Each pass its own relays: new objects, in case one was left on older code.
       const done = yield* relay.run(
         `${state.phase}-${state.misses ?? 0}`,
-        { target, plan: state.plan, phase: state.phase, waitMillis: options.waitMillis },
+        {
+          target,
+          plan: state.plan,
+          phase: state.phase,
+          deadline: started + options.waitMillis,
+        },
         [{ path: "" }],
       );
       yield* Effect.logInfo(
