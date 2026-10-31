@@ -1,4 +1,4 @@
-import { makeRun } from "alchemy/Workflows";
+import { makeRun, StorageName } from "alchemy/Workflows";
 import * as EffectCause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -392,6 +392,11 @@ export const engineFor = (
     if (found === undefined) {
       found = Object.create(workflow, {
         _tag: { value: `${prefix}${workflow._tag}`, enumerable: true },
+        // Storage named after the model too: `Billing.OpenAccount`.
+        annotations: {
+          value: Context.add(workflow.annotations, StorageName, `${modelName}.${workflow._tag}`),
+          enumerable: true,
+        },
       }) as Workflow.Any;
       renamed.set(workflow, found);
     }

@@ -8,6 +8,7 @@ import {
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
+  type HostedModel,
   hostedModels,
   Platform,
   type Json,
@@ -28,7 +29,9 @@ import {
 } from "@alchemy.run/domain/Platform";
 import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -39,15 +42,16 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { WorkflowEngine } from "effect/workflow";
+import { WorkflowEngine } from "effect/workflow";
 import {
   DurableObject as CloudflareDurableObject,
   type DurableObjectJurisdiction,
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
-import type { Worker } from "../Workers/Worker.ts";
+import { Worker } from "../Workers/Worker.ts";
 import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { DeployVersion } from "./Version.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -841,12 +845,29 @@ const pollAfter = <A>(
     });
   });
 
-/** A Durable Object class name segment for a model name. */
-const classSegment = (modelName: string) => modelName.replace(/[^A-Za-z0-9_]/g, "_");
+/** A model's Durable Object class name, like `Billing.AccountAggregate`. */
+const className = (modelName: string, name: string) =>
+  `${modelName}.${name}`.replace(/[^A-Za-z0-9_.]/g, "_");
+
+/**
+ * Tell the Worker deploy about a class a model hosts and the name it had
+ * before Domain version 0, so the deploy carries its data over. See
+ * `Version.ts`.
+ */
+const record = (modelName: string, legacyName: string, legacyData: boolean, name = legacyName) =>
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    const current = className(modelName, name);
+    yield* worker.bind`${current}.DomainVersion`({
+      domainClasses: [{ model: modelName, className: current, legacyName, legacyData }],
+    });
+  });
 
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
 const durableObjectPlatform = (
   jurisdiction: DurableObjectJurisdiction | undefined,
+  version: number | undefined,
+  legacySagas: Map<string, string>,
 ): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
     Platform,
@@ -864,11 +885,16 @@ const durableObjectPlatform = (
         );
 
       const claim = hostedModels();
-      const hostFor = (modelName: string): ModelHost => {
+      const hostFor = ({ modelName, legacyData }: HostedModel): ModelHost => {
         // Every object of the model is declared through here, named after
         // the model, so models that share a definition never share its data.
         const object = (name: string, impl: ObjectImpl) =>
-          declareIn(`${classSegment(modelName)}${name}`, impl);
+          version === undefined
+            ? declareIn(name, impl)
+            : Effect.andThen(
+                record(modelName, name, legacyData),
+                declareIn(className(modelName, name), impl),
+              );
         return {
           aggregate: (aggregate, kit) =>
             inInit(
@@ -1042,7 +1068,24 @@ const durableObjectPlatform = (
         };
       };
       return Platform.of({
-        model: ({ modelName }) => Effect.as(claim(modelName), hostFor(modelName)),
+        model: (model) =>
+          Effect.gen(function* () {
+            yield* claim(model.modelName);
+            // Each saga's runs live on a Durable Object class of the workflow
+            // engine, named after the model too.
+            for (const saga of model.sagas)
+              if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
+              else
+                yield* inInit(
+                  record(
+                    model.modelName,
+                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                    model.legacyData,
+                    `${saga}Workflow`,
+                  ),
+                );
+            return hostFor(model);
+          }),
       });
     }),
   );
@@ -1126,16 +1169,55 @@ export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
   let platform = platforms.get(jurisdiction);
-  if (platform === undefined)
-    platforms.set(
-      jurisdiction,
-      (platform = Layer.merge(
-        durableObjectPlatform(jurisdiction),
-        layerDurableObjectEngine({ jurisdiction }),
-      )),
+  if (platform === undefined) {
+    platform = Layer.unwrap(
+      Effect.gen(function* () {
+        const version = yield* DeployVersion;
+        const engine = layerDurableObjectEngine({ jurisdiction });
+        const legacySagas = new Map<string, string>();
+        return Layer.merge(
+          durableObjectPlatform(jurisdiction, version, legacySagas),
+          version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
+        );
+      }),
     );
+    platforms.set(jurisdiction, platform);
+  }
   return platform;
 }
+
+/**
+ * Before Domain version 0, a saga's runs lived on a class named after the
+ * saga alone. Store each under that name, given by `legacySagas`.
+ */
+const legacyEngine = (
+  legacySagas: ReadonlyMap<string, string>,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, WorkflowEngine.WorkflowEngine> =>
+  Layer.effect(
+    WorkflowEngine.WorkflowEngine,
+    Effect.gen(function* () {
+      const engine = yield* WorkflowEngine.WorkflowEngine;
+      const legacy: WorkflowEngine.WorkflowEngine["Service"] = {
+        ...engine,
+        register: (workflow, execute) => {
+          const storageName = Context.getOrUndefined(workflow.annotations, StorageName);
+          const legacyName = storageName === undefined ? undefined : legacySagas.get(storageName);
+          return engine.register(
+            legacyName === undefined
+              ? workflow
+              : Object.create(workflow, {
+                  annotations: {
+                    value: Context.add(workflow.annotations, StorageName, legacyName),
+                    enumerable: true,
+                  },
+                }),
+            execute,
+          );
+        },
+      };
+      return legacy;
+    }),
+  );
 
 /** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions {

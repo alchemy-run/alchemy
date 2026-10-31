@@ -127,6 +127,16 @@ type ProvidedBy<
 export interface LayerOptions {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
+  /**
+   * Before Domain version 0, models in one Worker that listed the same
+   * aggregate, view or saga shared its Durable Object class, and so its data.
+   * Each model now has classes of its own, and the first deploy moves the
+   * shared class to one of them. Set this on the model that keeps that data;
+   * the others start empty. The deploy fails until exactly one model sets it.
+   *
+   * @default false
+   */
+  readonly legacyData?: boolean;
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -196,6 +206,7 @@ export const make = <
           handlers,
           members.sagas ?? [],
           Telemetry.resolve(options?.telemetry),
+          options?.legacyData ?? false,
         ),
       );
     }
@@ -278,10 +289,15 @@ const build = <A, E, R>(
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
+  legacyData: boolean,
 ) =>
   Effect.gen(function* () {
     // The model's own storage: models sharing a definition never share its data.
-    const platform = yield* (yield* Platform).model({ modelName });
+    const platform = yield* (yield* Platform).model({
+      modelName,
+      sagas: sagas.map((saga) => saga.workflow._tag),
+      legacyData,
+    });
     const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();

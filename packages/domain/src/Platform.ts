@@ -536,6 +536,15 @@ export interface ModelHost {
   readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
 }
 
+/** What a platform is told about a model it hosts. */
+export interface HostedModel {
+  readonly modelName: string;
+  /** The names of the model's sagas, which run on the workflow engine. */
+  readonly sagas: ReadonlyArray<string>;
+  /** Whether this model keeps data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
+  readonly legacyData: boolean;
+}
+
 /**
  * How a Domain is hosted. `model` is called once per model while its Layer is
  * built, and gives that model storage of its own: two models that use the
@@ -548,7 +557,7 @@ export interface ModelHost {
 export class Platform extends Context.Service<
   Platform,
   {
-    readonly model: (model: { readonly modelName: string }) => Effect.Effect<ModelHost>;
+    readonly model: (model: HostedModel) => Effect.Effect<ModelHost>;
   }
 >()("alchemy/Domain/Platform") {}
 
