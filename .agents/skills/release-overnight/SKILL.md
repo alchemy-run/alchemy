@@ -1,6 +1,6 @@
 ---
 name: release-overnight
-description: Prepare an alchemy release unattended overnight, in series — after one go-ahead, nuke the testing account, then walk every provider's live suite one at a time (core unit → core integration → small providers → Fly → GCP → Cloudflare → AWS), fixing each until its whole suite passes in one run AND the account census is clean, then run `pnpm test:examples`, and finish with one alchemy PR plus at most one distilled PR and one floci PR, all linked, that merge into a release passing every test. Use for "prepare the release overnight", "/release-overnight", "run the release suite in series while I sleep"; for the parallel, interactive version use prepare-release.
+description: Prepare an alchemy release unattended overnight, in series — after one go-ahead, nuke the testing account, then walk every provider's live suite one at a time (Cloudflare → core unit → core integration → small providers → Fly → GCP → AWS), fixing each until its whole suite passes in one run AND the account census is clean, then run `pnpm test:examples`, and finish with one alchemy PR plus at most one distilled PR and one floci PR, all linked, that merge into a release passing every test. Use for "prepare the release overnight", "/release-overnight", "run the release suite in series while I sleep"; for the parallel, interactive version use prepare-release.
 metadata:
   internal: true
 ---
@@ -49,8 +49,8 @@ PRs: alchemy #— · distilled #— · floci #—
 
 | # | Step | Command | Status | Passed at | Notes |
 | - | ---- | ------- | ------ | --------- | ----- |
-| 1 | core unit | pnpm test | done | a1b2c3d | |
-| 2 | Docker | pnpm test:integration test/Docker | fixing (iter 2) | | Volume delete race |
+| 1 | Cloudflare | pnpm test:integration test/Cloudflare | done | a1b2c3d | |
+| 2 | core unit | pnpm test | fixing (iter 2) | | Plan diff regression |
 
 Gated: <test → typed tag + exact error>
 Blocked (account, not code): <step → exact error>
@@ -61,24 +61,27 @@ step that isn't `done`. Don't restart the night.
 
 ## 2. The steps, in order
 
-Cheap and narrow first, so a broken shared layer shows up in minutes, not
-after AWS. Paths are relative to `packages/integration-tests`:
+Cloudflare goes first. State and most other suites deploy through
+`packages/cloudflare`, so getting it green first keeps its failures out of
+every later step. After that, cheap and narrow first, so a broken shared
+layer shows up in minutes, not after AWS. Paths are relative to
+`packages/integration-tests`:
 
 | # | Step | Paths | `--concurrency` |
 | - | ---- | ----- | --------------- |
-| 1 | core unit | `pnpm test` (packages/alchemy) | default |
-| 2 | core integration | `test/*.test.ts test/Bundle test/Cli test/Local test/Runtime test/Util test/Website` | 8 |
-| 3 | building blocks | `test/Docker test/Redis test/Kubernetes test/SQL test/Drizzle test/Domain test/Auth test/DNS test/ACME` | 8 |
-| 4 | Git, GitHub, Axiom, Stripe | one step each | 8 |
-| 5 | Turso, Neon, Planetscale, Prisma | one step each | 8 |
-| 6 | Hetzner, Railway, Fly | one step each | 8 |
-| 7 | GCP | `test/GCP` | 16 |
-| 8 | Cloudflare | `test/Cloudflare` | 16 |
+| 1 | Cloudflare | `test/Cloudflare` | 16 |
+| 2 | core unit | `pnpm test` (packages/alchemy) | default |
+| 3 | core integration | `test/*.test.ts test/Bundle test/Cli test/Local test/Runtime test/Util test/Website` | 8 |
+| 4 | building blocks | `test/Docker test/Redis test/Kubernetes test/SQL test/Drizzle test/Domain test/Auth test/DNS test/ACME` | 8 |
+| 5 | Git, GitHub, Axiom, Stripe | one step each | 8 |
+| 6 | Turso, Neon, Planetscale, Prisma | one step each | 8 |
+| 7 | Hetzner, Railway, Fly | one step each | 8 |
+| 8 | GCP | `test/GCP` | 16 |
 | 9 | AWS | `test/AWS` | 32 |
 | 10 | examples | `pnpm test:examples --profile testing` | — |
 
 Every new top-level directory under `packages/integration-tests/test` gets a
-step. If one is missing from this table, add it to step 4–6 by size, and fix
+step. If one is missing from this table, add it to steps 5–7 by size, and fix
 this skill in the release PR. Never pass `--concurrency unbounded` or go
 over 32. Never run a sequential monster file unfiltered in a fix iteration
 (e.g. `Fly/BlueGreen.test.ts`). Its confirming run is the step's run.
@@ -173,7 +176,7 @@ turn with the report:
 
 | Step | Tests | Result | Passed at |
 | ---- | ----- | ------ | --------- |
-| core unit | 3089 | ✅ | a1b2c3d |
+| Cloudflare | 1577 | ✅ | a1b2c3d |
 | AWS | 3361 | ✅ 3349 · 12 gated | f00ba47 |
 | examples | 38 | ✅ | f00ba47 |
 
@@ -201,6 +204,6 @@ applies here. In addition:
   back to it.
 - **Never overlap nuke with a run**, and never start a step's run before its
   nuke has finished.
-- **Steps share one account.** A leak from step 3 shows up in step 4's census
-  unless step 3's confirming census was clean. Don't move on with a dirty
+- **Steps share one account.** A leak from step 4 shows up in step 5's census
+  unless step 4's confirming census was clean. Don't move on with a dirty
   census.
