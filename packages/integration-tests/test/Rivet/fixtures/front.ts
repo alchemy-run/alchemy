@@ -20,7 +20,7 @@ export default class Front extends Docker.Service<Front>()(
       main: import.meta.url,
       port: 3000,
       ports: [{ external: FRONT_PORT, internal: 3000 }],
-      networks: cluster.network === undefined ? [] : [{ name: cluster.network.name }],
+      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
       // Only the nodes load RivetKit; the front reaches actors over HTTP.
       build: { input: { external: ["rivetkit", /^rivetkit\//, /^@rivetkit\//] } },
     };

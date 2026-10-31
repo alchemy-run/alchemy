@@ -22,8 +22,10 @@ export interface ConnectionProps {
  * Provide the Rivet SDK credentials for one control plane, and wait out a
  * control plane that is still starting: it refuses connections for a few
  * seconds, then reports healthy about a minute before its storage accepts
- * commands (`StorageOverloaded`). A resource reconciled right after its
- * control plane starts would otherwise fail.
+ * commands (`StorageOverloaded`). Behind a load balancer the same window
+ * shows up as 502/503/504 until its instances boot and pass health checks,
+ * which takes a few minutes on fresh EC2 instances. A resource reconciled
+ * right after its control plane starts would otherwise fail.
  */
 export const withConnection =
   (connection: ConnectionProps) =>
@@ -32,9 +34,12 @@ export const withConnection =
       Effect.retry({
         while: (error) =>
           error._tag === "StorageOverloaded" ||
+          error._tag === "BadGateway" ||
+          error._tag === "ServiceUnavailable" ||
+          error._tag === "GatewayTimeout" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
-        schedule: Schedule.spaced("2 seconds"),
-        times: 45,
+        schedule: Schedule.spaced("5 seconds"),
+        times: 72,
       }),
       Effect.provide(Rivet.credentials({ token: connection.token, endpoint: connection.endpoint })),
     );

@@ -10840,6 +10840,9 @@ importers:
         specifier: 3.0.0-preview.4
         version: 3.0.0-preview.4(d493a3e012606eb87f0fa69fe77abd6c)
     devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker

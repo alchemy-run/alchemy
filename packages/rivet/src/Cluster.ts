@@ -11,11 +11,21 @@ import { Namespace } from "./Namespace.ts";
  * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}.
  * A host Layer matches on `kind` and refuses a network it cannot join.
  */
-export type ClusterNetwork = {
-  /** A Docker network; the node's container joins it by name. */
-  readonly kind: "docker";
-  readonly name: Input<string>;
-};
+export type ClusterNetwork =
+  | {
+      /** A Docker network; the node's container joins it by name. */
+      readonly kind: "docker";
+      readonly name: Input<string>;
+    }
+  | {
+      /** An AWS VPC; nodes run in its subnets with its node security group. */
+      readonly kind: "aws";
+      readonly vpcId: Input<string>;
+      /** Subnets with a route to the internet, for nodes that need no NAT. */
+      readonly subnetIds: ReadonlyArray<Input<string>>;
+      /** The security group nodes run with. */
+      readonly securityGroupId: Input<string>;
+    };
 
 /** What pools and clients need to reach a Rivet control plane. */
 export interface ClusterShape {
@@ -66,7 +76,7 @@ export interface ControlPlaneProps {
  * ```typescript
  * export const Cluster = Rivet.ControlPlane("Rivet", {
  *   endpoint: "https://rivet.example.com",
- *   token: Config.redacted("RIVET_TOKEN"),
+ *   token: Config.Redacted("RIVET_TOKEN"),
  * });
  * ```
  *
