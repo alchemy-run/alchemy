@@ -1130,8 +1130,10 @@ const durableObjectPlatform = (
  *
  * ### Hosting several models in one Worker
  * Each model gets its own Durable Object classes, named after the model
- * (`BillingAccountAggregate`), so models that list the same aggregate never
- * share its data.
+ * (`Billing.AccountAggregate`), so models that list the same aggregate never
+ * share its data. A deploy moves data a Worker deployed with an earlier Domain
+ * layout to the current one; see `legacyData` on a model's `layer` for models
+ * that shared a class before Domain versions existed.
  *
  * **Example:** Two models that both list `Account`
  * ```typescript
