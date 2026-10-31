@@ -31,6 +31,9 @@ export const withConnection =
   (connection: ConnectionProps) =>
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
+      // An address that drops packets (a load balancer with no healthy
+      // backend) never refuses the connection: bound each attempt.
+      Effect.timeout("20 seconds"),
       Effect.retry({
         while: (error) =>
           error._tag === "StorageOverloaded" ||
@@ -38,6 +41,7 @@ export const withConnection =
           error._tag === "BadGateway" ||
           error._tag === "ServiceUnavailable" ||
           error._tag === "GatewayTimeout" ||
+          error._tag === "TimeoutError" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
         schedule: Schedule.spaced("5 seconds"),
         times: 72,
