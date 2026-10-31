@@ -1,19 +1,20 @@
 name: Publish blogpost
 
 # Publishes blog posts from main to production without shipping unreleased
-# docs: checks out the latest release tag, overlays the blog folders from
-# main, and deploys the website to alchemy.run.
+# docs: builds the website from the latest release tag with the blog folders
+# from main, then deploys that build with this ref's CLI. The CLI must be
+# current: an older one would downgrade the shared Cloudflare state store.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to deploy (defaults to the latest v* tag reachable from main)"
+        description: "Release tag to build (defaults to the latest v* tag reachable from main)"
         type: string
         required: false
       paths:
         description: "Space-separated folders copied from main onto the release"
         type: string
-        default: "website/src/content/docs/blog website/public/blog"
+        default: "website/src/content/docs/blog website/src/components/blog website/public/blog"
 
 # Same group as production deploys in website.yml, so the two never race.
 concurrency:
@@ -30,7 +31,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
           fetch-depth: 0
 
       - name: Resolve release tag
@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           tag="${TAG:-$(git describe --tags --abbrev=0 --match 'v*' origin/main)}"
           sha="$(git rev-parse "$tag^{commit}")"
-          echo "Deploying $tag ($sha) with blog content from main $(git rev-parse --short origin/main)"
+          echo "Building $tag ($sha) with blog content from main $(git rev-parse --short origin/main)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
@@ -57,9 +57,7 @@ jobs:
           read -ra paths <<< "$PATHS"
           git restore --source=origin/main --staged --worktree -- "${paths[@]}"
           git status --short
-
-      - name: Checkout distilled
-        run: git submodule update --init --depth=1 --checkout -- submodules/distilled
+          git submodule update --init --depth=1 --checkout -- submodules/distilled
 
       - name: Setup pnpm, Node.js, Bun and install dependencies
         uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
@@ -68,10 +66,29 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Build release website
+        working-directory: website
+        run: |
+          set -euo pipefail
+          bun run build
+          mv dist "$RUNNER_TEMP/website-dist"
+
+      # The gitignored `website/src/generated/` survives the checkout, so the
+      # Worker bundles the release's reference redirects.
+      - name: Check out deploy CLI
+        run: |
+          set -euo pipefail
+          git checkout --force --detach "$GITHUB_SHA"
+          git submodule update --init --depth=1 --checkout -- submodules/distilled
+          pnpm install --frozen-lockfile
+          rm -rf website/dist
+          mv "$RUNNER_TEMP/website-dist" website/dist
+
       - name: Deploy
         working-directory: website
         run: bun alchemy deploy --stage prod --yes
         env:
+          WEBSITE_BUILD_COMMAND: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.PROD_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PROD_CLOUDFLARE_ACCOUNT_ID }}
           BUILD_SHA: ${{ steps.release.outputs.sha }}
