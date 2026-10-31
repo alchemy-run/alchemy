@@ -1,7 +1,6 @@
 import type { TestServices } from "alchemy/Contributions";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
-import * as Floci from "./Floci.ts";
 import { flociServices } from "./FlociServices.ts";
 
 /**
@@ -41,10 +40,4 @@ const rewriteVirtualHostToFloci = (
 export const testServices = (): TestServices => ({
   layer: flociServices(),
   mapRequest: rewriteVirtualHostToFloci,
-  // Local workerd trusts no self-signed certs and ignores
-  // NODE_TLS_REJECT_UNAUTHORIZED (it's C++, not Node). Its runtime DOES fold
-  // `NODE_EXTRA_CA_CERTS` into workerd's outbound `trustedCertificates` (see
-  // cloudflare-runtime Internet.ts), so point it at the emulator CA bundle
-  // that `ensureFloci` refreshes on every health check.
-  env: { NODE_EXTRA_CA_CERTS: Floci.FLOCI_CA_PATH },
 });

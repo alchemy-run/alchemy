@@ -35,8 +35,8 @@ export default Contributions.make({
     () => import("./Local/TestServices.ts"),
     (module) => module.testServices(),
   ),
-  devEnv: Contributions.lazy(
-    () => import("./Local/DevEnv.ts"),
-    (module) => module.devEnv,
+  devTrust: Contributions.lazy(
+    () => import("./Local/DevTrust.ts"),
+    (module) => module.devTrust,
   ),
 });

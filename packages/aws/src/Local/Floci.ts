@@ -92,9 +92,9 @@ export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
  * {@link ensureFloci} on every successful health check (the CA is minted
  * inside the container, so it changes whenever the container is recreated).
  * Home-anchored (not cwd-relative) so every process in a dev session — test
- * runner, RPC sidecars, workerd children — resolves the same file; consumers
- * point TLS trust at it (e.g. `NODE_EXTRA_CA_CERTS`, which the local workerd
- * runtime folds into its outbound `trustedCertificates`).
+ * runner, RPC sidecars, workerd children — resolves the same file. The AWS
+ * provider contributes it to `alchemy dev` as a trusted CA (`devTrust`), so
+ * local Workers and `Command.Dev` processes trust the emulator.
  */
 export const FLOCI_CA_PATH = path.join(os.homedir(), ".floci", "ca.pem");
 
@@ -121,15 +121,15 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
       const pem = await res.text();
       if (!pem.includes("BEGIN CERTIFICATE")) return;
       await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
-      await fs.writeFile(FLOCI_CA_PATH, pem);
-      // Point local workerd (and any other child process spawned after this)
-      // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
-      // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
-      // so setting it here (before local workers spawn during the apply) only
-      // affects children, which is exactly the target. Never clobber a value
-      // the caller set deliberately.
-      if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
-        process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
+      // Replaced whole: other processes (workerd's config builds, bundles for
+      // Node children) read this file while every health check rewrites it.
+      const temporary = `${FLOCI_CA_PATH}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+      try {
+        await fs.writeFile(temporary, pem);
+        await fs.rename(temporary, FLOCI_CA_PATH);
+      } catch (error) {
+        await fs.rm(temporary, { force: true });
+        throw error;
       }
     },
     catch: (cause) => new FlociError({ message: "ca sync failed", cause }),

@@ -31,6 +31,7 @@
   "exports": {
     "./ignore": "./src/ignore.ts",
     "./register-oxc": "./src/loader/register.ts",
+    "./trust": "./src/trust.ts",
     "./watch-import": "./src/watch/import-watcher.ts",
     "./watch-import-bun": "./src/watch/bun-import-tracker.ts"
   },
@@ -45,6 +46,11 @@
         "types": "./lib/loader/register.d.ts",
         "bun": "./src/loader/register.ts",
         "default": "./lib/loader/register.js"
+      },
+      "./trust": {
+        "types": "./lib/trust.d.ts",
+        "bun": "./src/trust.ts",
+        "default": "./lib/trust.js"
       },
       "./watch-import": {
         "types": "./lib/watch/import-watcher.d.ts",

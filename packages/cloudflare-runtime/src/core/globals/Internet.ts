@@ -1,5 +1,5 @@
-import * as NodeFs from "node:fs";
 import * as NodeTls from "node:tls";
+import { trustedCertificates } from "@alchemy.run/node-utils/trust";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import type * as Config from "../workerd/Config.ts";
@@ -7,32 +7,6 @@ import type * as Config from "../workerd/Config.ts";
 export class Internet extends Context.Service<Internet, Config.Service>()(
   "cloudflare-runtime/Internet",
 ) {}
-
-/**
- * Extra trusted CAs from `NODE_EXTRA_CA_CERTS`, read FRESH on each call.
- *
- * This deliberately does NOT match Node's read-once-at-startup semantics:
- * this layer is built once per long-lived sidecar process, but the file the
- * env var points at may not exist yet when the sidecar starts — `alchemy
- * dev` points it at the local emulator's self-signed CA
- * (`~/.floci/ca.pem`), which is minted while the FIRST apply is already
- * deploying workers in parallel. Reading at every workerd config build
- * means the first worker (re)start after the CA lands trusts it, instead
- * of the whole sidecar being stuck with an empty store for its lifetime.
- */
-const extraTrustedCertificates = (): string[] => {
-  const bundlePath = process.env.NODE_EXTRA_CA_CERTS;
-  if (bundlePath === undefined) return [];
-  let pem: string;
-  try {
-    pem = NodeFs.readFileSync(bundlePath, "utf8");
-  } catch {
-    return [];
-  }
-  // Split the bundle into individual certificates and add each individually:
-  // https://github.com/cloudflare/miniflare/pull/587/files#r1271579671
-  return pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
-};
 
 export const InternetLive = Layer.sync(Internet, () => {
   // `workerd`'s `trustBrowserCas` should probably be named `trustSystemCas`.
@@ -52,7 +26,12 @@ export const InternetLive = Layer.sync(Internet, () => {
         deny: [],
         tlsOptions: {
           trustBrowserCas: true,
-          trustedCertificates: [...baseCertificates, ...extraTrustedCertificates()],
+          // Read here, not when the layer is built: this getter runs each time
+          // workerd's config is built, once per spawn. A provider's CA can be
+          // created while the first apply is already deploying Workers, so
+          // the first Worker to (re)start after it lands trusts it, instead of
+          // the whole sidecar keeping the store it started with.
+          trustedCertificates: [...baseCertificates, ...trustedCertificates()],
         },
       };
     },

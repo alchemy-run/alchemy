@@ -148,6 +148,32 @@ the reference:
 and
 [`Cloudflare/Alchemist/StateStore.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/cloudflare/src/Alchemist/StateStore.ts).
 
+## Trust a local CA
+
+A provider whose local emulator serves TLS with its own certificate
+authority lists the CA's PEM file as `devTrust`:
+
+```diff lang="typescript"
++  devTrust: Contributions.lazy(
++    () => import("./DevTrust.ts"),
++    (module) => module.devTrust,
++  ),
+```
+
+```typescript
+// src/DevTrust.ts
+import * as Effect from "effect/Effect";
+import { EMULATOR_CA_PATH } from "./Emulator.ts";
+
+export const devTrust = Effect.succeed([EMULATOR_CA_PATH]);
+```
+
+During `alchemy dev`, local Workers and `Command.Dev` processes trust the
+files of every provider together with the caller's `NODE_EXTRA_CA_CERTS`.
+The file may not exist yet, so the emulator can create it during the first
+apply. It is read each time a Worker starts or `Command.Dev` spawns a
+process.
+
 ## What contributed code can use
 
 Every host of contributed code provides the same services:
