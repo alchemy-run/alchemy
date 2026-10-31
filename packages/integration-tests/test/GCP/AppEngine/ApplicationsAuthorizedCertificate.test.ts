@@ -6,6 +6,7 @@ import * as appengine from "@distilled.cloud/gcp/appengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { isServiceEnabled } from "../ServiceState.ts";
 import { CERT_A, CERT_B, KEY_A, KEY_B } from "./fixtures/cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -48,6 +49,10 @@ test.provider(
   "getProjectsLocationsApplicationsAuthorizedCertificates on a missing certificate fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      // With the API enabled, this project (no App Engine app / no Firebase
+      // setup) answers an untyped INTERNAL / INVALID_ARGUMENT: the probe only
+      // holds while the API is disabled.
+      if (yield* isServiceEnabled("appengine.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
@@ -70,6 +75,10 @@ test.provider.skipIf(runLifecycle)(
   "createProjectsLocationsApplicationsAuthorizedCertificates without an App Engine app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      // With the API enabled, this project (no App Engine app / no Firebase
+      // setup) answers an untyped INTERNAL / INVALID_ARGUMENT: the probe only
+      // holds while the API is disabled.
+      if (yield* isServiceEnabled("appengine.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
