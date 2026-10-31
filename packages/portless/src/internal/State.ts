@@ -111,7 +111,9 @@ export const mismatches = (state: ProxyState, port: number) => {
     );
   }
   if (!state.unprivileged) {
-    found.push("it was started with elevated rights, this stack needs an unprivileged proxy");
+    found.push(
+      "it wasn't started with --unprivileged, which this stack needs to never ask for root",
+    );
   }
   if (state.lan) found.push("it runs in LAN mode, which serves .local names");
   // Without TLS there is no CA to speak of; the line above already says so.

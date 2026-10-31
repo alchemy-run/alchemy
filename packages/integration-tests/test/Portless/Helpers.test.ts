@@ -70,7 +70,7 @@ describe("a running proxy's settings", () => {
       "it serves .localhost, .test, this stack needs .localhost only",
     ]);
     expect(mismatches({ ...compatible, unprivileged: false }, 443)).toEqual([
-      "it was started with elevated rights, this stack needs an unprivileged proxy",
+      "it wasn't started with --unprivileged, which this stack needs to never ask for root",
     ]);
     expect(mismatches({ ...compatible, lan: true }, 443)).toEqual([
       "it runs in LAN mode, which serves .local names",
