@@ -119,6 +119,9 @@ ECS_CONFIG
             ),
           ),
         });
+        // ECS hands the engine its task role's credentials ahead of the
+        // instance's, so the task role needs the bucket too.
+        yield* service.bind`Storage`({ policyStatements: context.storagePolicy });
         return service.serviceArn;
       }),
   });

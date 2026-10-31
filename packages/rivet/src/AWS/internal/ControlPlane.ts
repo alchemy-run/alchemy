@@ -10,6 +10,7 @@ import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
@@ -135,6 +136,8 @@ export interface EngineContext {
   readonly token: Output.Output<Redacted.Redacted<string>>;
   readonly bucket: Output.Output<string>;
   readonly region: Output.Output<string>;
+  /** Grants on the bucket, for an engine that runs under a role of its own. */
+  readonly storagePolicy: Input<IAM.PolicyStatement>[];
 }
 
 /** Build an AWS control plane on the given host. */
@@ -164,6 +167,14 @@ export const makeControlPlane = <Req>(
       const zones = network.availabilityZones.length;
       const bucket = yield* S3.Bucket(`${id}Data`, { forceDestroy: true });
 
+      const storagePolicy: Input<IAM.PolicyStatement>[] = [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [bucket.bucketArn] },
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+          Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+        },
+      ];
       const role = yield* IAM.Role(`${id}InstanceRole`, {
         assumeRolePolicyDocument: {
           Version: "2012-10-17",
@@ -176,23 +187,7 @@ export const makeControlPlane = <Req>(
           ],
         },
         managedPolicyArns: host.managedPolicyArns,
-        inlinePolicies: {
-          Storage: {
-            Version: "2012-10-17",
-            Statement: [
-              {
-                Effect: "Allow",
-                Action: ["s3:ListBucket"],
-                Resource: [bucket.bucketArn],
-              },
-              {
-                Effect: "Allow",
-                Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-                Resource: [Output.interpolate`${bucket.bucketArn}/*`],
-              },
-            ],
-          },
-        },
+        inlinePolicies: { Storage: { Version: "2012-10-17", Statement: storagePolicy } },
       });
       const profile = yield* IAM.InstanceProfile(`${id}InstanceProfile`, {
         roleName: role.roleName,
@@ -262,6 +257,7 @@ export const makeControlPlane = <Req>(
         token: token.text,
         bucket: bucket.bucketName,
         region: bucket.region,
+        storagePolicy,
       };
       // Everything the namespace waits for, so that everything using the
       // control plane (pools, through the namespace) is deleted before any of
