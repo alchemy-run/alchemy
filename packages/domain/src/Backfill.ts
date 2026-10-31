@@ -19,26 +19,23 @@ import type { Delivery } from "./Platform.ts";
  * (or rebuilt by bumping its version) receives their history, in timestamp
  * order, without a central coordinator.
  *
- * Three roles, each a durable object that owns its own storage:
+ * Roles, each a durable object that owns its own storage:
  *
- * - **Directory nodes** form a tree (fan-out 16) that lists every source
- *   instance. A sweep for a consumer (a "target") runs down the tree and
- *   reports back up, in three phases: discover, ready, complete.
- * - **Sources** (aggregate instances, and view keys other consumers read) scan
- *   their history once through the target's routing, index which events go to
- *   which consumer key, and tell each key it has them as a source. Keys pull
- *   from them, and when a key has pulled everything, the source switches it to
- *   live delivery in the same step.
- * - A consumer keyed by its source (a view per account) skips all of that: its
- *   leaf tells each key to start, and the key reads its source's raw log,
- *   routes it with its own code and applies it. A source serves its log on any
- *   code, so the backfill never waits for an existing instance to run the
- *   deployed code; only the switch to live delivery does, and the key's
- *   history is complete before it.
+ * - **Directory nodes** form a tree (fan-out 16, one subtree per source) that
+ *   lists every source instance. It is only an index: a run reads it.
+ * - **A run** per consumer generation: its root lists the directory into
+ *   subtrees and paces them through **relays**, each fanning out six ways,
+ *   backing off when the account's load is refused. A consumer keyed by its
+ *   source needs one pass; any other needs two, with a barrier between.
+ * - **Sources** (aggregate instances, and view keys other consumers read)
+ *   serve their stored rows on any code, and switch a consumer to live
+ *   delivery once a reader has read all of them.
+ * - **Scanners**, one per source instance and consumer generation, read its
+ *   rows, route them with the consumer's code and push each key its part.
  * - **Consumer keys** (view keys, projection keys) buffer what they receive
- *   ordered by `(at, stream, seq)` and apply the earliest event whenever every
- *   source still being pulled has an event buffered. That is a k-way merge of
- *   their own sources: a total order by timestamp, local to each key.
+ *   ordered by `(at, stream, seq)` and, told that every source's history is
+ *   in, apply it in that order. A key keyed by its source reads its source's
+ *   rows itself and applies them as it reads.
  *
  * Every step does a bounded amount of work, records its progress before it
  * answers, and is idempotent, so a crash, a retry or a redeploy at any point
@@ -87,12 +84,11 @@ export interface SourceRef {
 }
 
 /**
- * What a node needs to know of a consumer to sweep for it. The deploy that adds
- * the consumer sends it with the announcement and every sweep carries it, so a
- * node still on the code before that deploy sweeps the same way.
+ * What a run needs to know of a consumer. The deploy that adds the consumer
+ * passes it to the run, so the run never depends on what an object's code knows.
  */
 export interface Plan {
-  /** The sources (aggregates and views, by name) the consumer reads: the subtrees to sweep (all if absent). */
+  /** The sources (aggregates and views, by name) the consumer reads: the subtrees a run lists (all if absent). */
   readonly sources?: ReadonlyArray<string>;
   /** Each key reads one instance, the one with its own id: the leaf starts the keys itself. */
   readonly singleSource: boolean;
@@ -314,7 +310,7 @@ export interface Limits {
   readonly pollMillis: number;
   /**
    * Instances a directory node lists before it splits into 16 children, so every
-   * node's share of a sweep stays bounded and the tree grows as log16 of the instances.
+   * node's share of a listing stays bounded and the tree grows as log16 of the instances.
    */
   readonly leafSize: number;
   /** The depth instances list themselves at, before any split. */
@@ -324,7 +320,7 @@ export interface Limits {
 /**
  * The depth instances list themselves at: 256 leaves, each splitting once it
  * fills. Wide enough that first commits spread over many objects, few enough
- * that a small Domain's directory stays small (every node costs a sweep).
+ * that a small Domain's directory stays small (every node costs a listing).
  */
 export const DEPTH = 2;
 
@@ -351,7 +347,7 @@ const trace = (step: string, fields: Record<string, unknown>) =>
   Effect.logDebug(`backfill ${step} ${JSON.stringify(fields)}`);
 
 /**
- * The directory has one subtree per source (`Account:`, `Deposits:`), so a sweep
+ * The directory has one subtree per source (`Account:`, `Deposits:`), so a run
  * for a consumer walks only the sources it reads. Within a subtree a node's path
  * is the source, a colon and a prefix of the instance's hash: `Account:a3`.
  */

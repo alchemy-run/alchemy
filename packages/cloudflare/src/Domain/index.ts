@@ -1931,10 +1931,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * pushed on every commit; the object hibernates in between.
  *
  * A view or projection added in a later deploy receives the history recorded
- * before it. Every instance lists itself in a directory of Durable Objects,
- * and the first Domain call in each isolate after the deploy starts a backfill
- * that runs over the directory in alarms. Each key of the new consumer pulls
- * from the instances that feed it and applies their events in timestamp order.
+ * before it, and the deploy waits until it has. Every instance lists itself in
+ * a directory of Durable Objects; a run of new objects reads it, fans out six
+ * ways, and gives each key of the new consumer its sources' events, which the
+ * key applies in timestamp order.
  *
  * ### Hosting on Cloudflare
  * **Example:** A Worker serving an Api
