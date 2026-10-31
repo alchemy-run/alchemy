@@ -11,6 +11,11 @@ export interface CertificateValidationProps {
    * validation.
    */
   certificateArn: string;
+  /**
+   * DNS validation record names. This dependency marker causes validation to
+   * wait for DNS records and to re-run when their inputs change.
+   */
+  validationRecordFqdns?: readonly string[];
 }
 
 export interface CertificateValidation extends Resource<
@@ -57,6 +62,13 @@ export interface CertificateValidation extends Resource<
  * });
  * const issued = yield* AWS.ACM.CertificateValidation("CertIssued", {
  *   certificateArn: cert.certificateArn,
+ *   validationRecordFqdns: cert.domainValidationOptions.pipe(
+ *     Output.map((options) =>
+ *       AWS.ACM.validationRecordsOf(options)
+ *         .map((record) => record.name.replace(/\.$/, "").toLowerCase())
+ *         .sort(),
+ *     ),
+ *   ),
  * });
  * // issued.certificateArn is safe to attach to a distribution or listener.
  * ```
@@ -74,6 +86,11 @@ export const CertificateValidationProvider = () =>
       if (!isResolved(news)) return undefined;
       if (olds.certificateArn !== news.certificateArn) {
         return { action: "replace" } as const;
+      }
+      if (
+        JSON.stringify(olds.validationRecordFqdns) !== JSON.stringify(news.validationRecordFqdns)
+      ) {
+        return { action: "update" } as const;
       }
     }),
     read: Effect.fn(function* ({ output }) {
