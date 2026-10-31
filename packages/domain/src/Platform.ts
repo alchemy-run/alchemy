@@ -5,6 +5,8 @@ import * as Schema from "effect/Schema";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
+import type { Plan } from "./Backfill.ts";
+import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import { DefinitionError } from "./internal.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
@@ -63,7 +65,12 @@ export interface StoredEvent {
  * `(source, target)`.
  */
 export interface Delivery {
-  readonly target: { readonly kind: "view" | "policy" | "projection"; readonly name: string };
+  readonly target: {
+    readonly kind: "view" | "policy" | "projection";
+    readonly name: string;
+    /** The consumer's generation (see `Kernel.generationOf`), when it has been rebuilt. */
+    readonly generation?: number;
+  };
   /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
   /** Named routes (from `keyOf`) the event takes into this key; absent for the default route. */
@@ -79,7 +86,10 @@ export interface Delivery {
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
   readonly state?: Json;
-  /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
+  /**
+   * History: seeded (story `given`) or replayed to a consumer added after the
+   * event (see `CatchUp`). Views and projections apply it, policies ignore it.
+   */
   readonly history?: boolean;
 }
 
@@ -188,6 +198,12 @@ export interface AggregateKit {
   readonly seed: (input: SeedInput) => SeedResult;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
+  /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<StoredEvent>) => ReplayResult;
   /**
    * What a subscriber of instance `id` receives, given its current state and
    * the events committed since (at least those after the subscription's cursor).
@@ -284,6 +300,11 @@ export interface AggregateStore {
   readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
+/** How much history has reached a consumer: see `View.History`. */
+export interface HistoryJson {
+  readonly complete: boolean;
+}
+
 /**
  * The stored state of one view key.
  */
@@ -296,6 +317,8 @@ export interface ViewSnapshot {
   readonly checkpoints: Readonly<Record<string, number>>;
   /** Number of events the key has emitted. */
   readonly seq: number;
+  /** The view's generation the key was built by: an earlier one is stale and starts over. */
+  readonly generation?: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
@@ -334,6 +357,30 @@ export interface ViewKit {
   };
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** The views and projections that consume this view, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
+  /**
+   * This view's generation. A stored key built by an earlier one is reset
+   * (state, entries, input log and cursors) before it is read or applied to.
+   */
+  readonly generation: number;
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
+  /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,
@@ -414,6 +461,24 @@ export interface ProjectionOptions {
 export interface ProjectionKit {
   readonly name: string;
   readonly options: ProjectionOptions;
+  /**
+   * This projection's generation. A key's log from an earlier one is reset;
+   * deliveries for an earlier one are dropped.
+   */
+  readonly generation: number;
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
   /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records
@@ -534,6 +599,22 @@ export interface ModelHost {
     kit: ProjectionKit,
   ) => Effect.Effect<ProjectionStore>;
   readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+  /**
+   * Called once every store is built. A platform that keeps events across
+   * deploys starts catching up the views and projections in `targets` (every
+   * consumer in the model, by `CatchUp.targetId`) that are new to it.
+   */
+  readonly start?: (
+    targets: ReadonlyArray<string>,
+    /** What a backfill needs to know of each consumer: the sources it reads, and its keys' shape. */
+    planOf: (target: string) => Plan | undefined,
+  ) => Effect.Effect<void>;
+  /**
+   * How much of the history recorded before a consumer (by
+   * `CatchUp.targetId`) has reached it. A platform without it keeps nothing
+   * across deploys, so there is no history to wait for.
+   */
+  readonly history?: (target: string) => Effect.Effect<HistoryJson>;
 }
 
 /** What a platform is told about a model it hosts. */
@@ -559,28 +640,39 @@ export interface HostedModel {
 export class Platform extends Context.Service<
   Platform,
   {
-    readonly model: (model: HostedModel) => Effect.Effect<ModelHost>;
+    readonly model: (model: HostedModel) => Effect.Effect<ModelHost, never, Scope>;
   }
 >()("alchemy/Domain/Platform") {}
 
 /**
- * Track the models a platform hosts: `claim` fails when a model with the same
- * name is already hosted, since both would address the same storage.
+ * Track the models a platform hosts: `claim` fails while a different model
+ * with the same name is hosted, since both would address the same storage.
+ * The same model may be built again, during or after an earlier build.
  *
  * @internal
  */
 export const hostedModels = () => {
-  const hosted = new Map<string, object | undefined>();
-  return (modelName: string, id?: object): Effect.Effect<void> =>
-    Effect.suspend(() => {
-      if (hosted.has(modelName) && (id === undefined || hosted.get(modelName) !== id)) {
-        return Effect.die(
-          new DefinitionError(
-            `Model ${modelName} is hosted twice on one platform: give each model its own name`,
-          ),
-        );
-      }
-      hosted.set(modelName, id);
-      return Effect.void;
-    });
+  const hosted = new Map<string, { readonly id: object; builds: number }>();
+  return (modelName: string, id: object): Effect.Effect<void, never, Scope> =>
+    Effect.acquireRelease(
+      Effect.suspend(() => {
+        const held = hosted.get(modelName);
+        if (held !== undefined && held.id !== id) {
+          return Effect.die(
+            new DefinitionError(
+              `Model ${modelName} is hosted twice on one platform: give each model its own name`,
+            ),
+          );
+        }
+        if (held === undefined) hosted.set(modelName, { id, builds: 1 });
+        else held.builds++;
+        return Effect.void;
+      }),
+      // Built again after this build closes (a redeploy), the name is free.
+      () =>
+        Effect.sync(() => {
+          const held = hosted.get(modelName);
+          if (held !== undefined && --held.builds === 0) hosted.delete(modelName);
+        }),
+    );
 };

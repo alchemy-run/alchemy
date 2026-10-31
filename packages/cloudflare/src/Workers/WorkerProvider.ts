@@ -16,6 +16,7 @@ import { cachedFunction } from "alchemy/Util/cached-function";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
@@ -845,6 +846,39 @@ const findWorkerId = (accountId: string, scriptName: string) =>
       schedule: Schedule.max([Schedule.spaced(2000), Schedule.recurs(3)]),
     }),
   );
+
+export class WorkerCodeUpdateStrategyError extends Data.TaggedError(
+  "WorkerCodeUpdateStrategyError",
+)<{
+  message: string;
+}> {}
+
+/**
+ * Lower `codeUpdateStrategy` to its wire shape: `max_delay` is seconds with
+ * millisecond precision, between 0 and 24 hours, and only `deferred` accepts
+ * it (Cloudflare rejects `max_delay` alongside `immediate`).
+ */
+const resolveCodeUpdateStrategy = Effect.fn(function* (
+  strategy: WorkerProps["codeUpdateStrategy"],
+) {
+  if (strategy === undefined) return undefined;
+  if (strategy.mode === "immediate") {
+    return { mode: "immediate" } satisfies workers.CodeUpdateStrategy;
+  }
+  if (strategy.maxDelay === undefined) {
+    return { mode: "deferred" } satisfies workers.CodeUpdateStrategy;
+  }
+  const maxDelay = Duration.fromInput(strategy.maxDelay).pipe(
+    Option.map((d) => Math.round(Duration.toMillis(d)) / 1000),
+    Option.filter((seconds) => seconds >= 0 && seconds <= 86_400),
+  );
+  if (Option.isNone(maxDelay)) {
+    return yield* new WorkerCodeUpdateStrategyError({
+      message: `codeUpdateStrategy.maxDelay must be a duration between 0 and 24 hours, got ${JSON.stringify(strategy.maxDelay)}.`,
+    });
+  }
+  return { mode: "deferred", maxDelay: maxDelay.value } satisfies workers.CodeUpdateStrategy;
+});
 
 export const putWorkerScript = (params: {
   accountId: string;
@@ -2446,6 +2480,7 @@ export const LiveWorkerProvider = () =>
         versionId: string;
         traffic: number;
         message: string | undefined;
+        codeUpdateStrategy: workers.CodeUpdateStrategy | undefined;
       }) {
         const { accountId, scriptName, versionId, traffic } = params;
         const resolveSplit = Effect.gen(function* () {
@@ -2474,6 +2509,7 @@ export const LiveWorkerProvider = () =>
           strategy: "percentage",
           versions: split,
           annotations: params.message ? { workersMessage: params.message } : undefined,
+          codeUpdateStrategy: params.codeUpdateStrategy,
         });
         return deployment.id;
       });
@@ -2783,6 +2819,7 @@ export const LiveWorkerProvider = () =>
             versionId,
             traffic,
             message: version.message,
+            codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
           });
         }
         // Version-affinity transform rules (`version.affinity`): a canary
@@ -3787,6 +3824,7 @@ export const LiveWorkerProvider = () =>
           tailConsumers,
           streamingTailConsumers,
           usageModel: undefined,
+          codeUpdateStrategy: yield* resolveCodeUpdateStrategy(news.codeUpdateStrategy),
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
@@ -3889,6 +3927,7 @@ export const LiveWorkerProvider = () =>
               versionId,
               traffic: rolloutTraffic,
               message: news.version?.message,
+              codeUpdateStrategy: metadata.codeUpdateStrategy,
             });
           }
           worker = { id: name, logpush: existingSettings.logpush };
@@ -4723,7 +4762,10 @@ export const LiveWorkerProvider = () =>
           // perpetual updates (#745).
           if (Array.isArray(newBindings)) {
             const normalizeComparedProps = (props: WorkerProps) => {
-              const { env: _env, ...rest } = props;
+              // `codeUpdateStrategy` applies to a deploy, not to stored
+              // state: changing it alone must not redeploy (and so reset)
+              // the Worker's Durable Objects.
+              const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),

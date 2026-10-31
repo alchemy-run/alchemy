@@ -92,6 +92,8 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 
 `atLeast` makes `get` wait until the summary has applied that version of the account's stream. If it hasn't within 10 seconds, the read fails with `ConsistencyTimeout`.
 
+A view added to a model that already has events receives them first, so a new screen starts from the whole history (see [Consumers added later receive the history](/domain/model#consumers-added-later-receive-the-history)).
+
 ## Emit events of your own
 
 A view can record events as it folds, which is how you build lists like a statement. Instead of `evolve`, `Statement` has `emit`: for each deposit or withdrawal, it records one `StatementLine`.

@@ -753,6 +753,7 @@ const SECTIONS: Section[] = [
         "domain/unique-values",
         "domain/deadlines",
         "domain/cloudflare",
+        "domain/backfill",
         "domain/in-memory",
         "domain/http-api",
         "domain/cli",
