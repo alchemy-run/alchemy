@@ -16,6 +16,7 @@ import BenchV2Short from "./fixtures/bench/v2-short.ts";
 import BenchV2 from "./fixtures/bench/v2.ts";
 import BenchV3 from "./fixtures/bench/v3.ts";
 import LedgerV1 from "./fixtures/catch-up/v1.ts";
+import LedgerV2Hooks from "./fixtures/catch-up/v2-hooks.ts";
 import LedgerV2Mirror from "./fixtures/catch-up/v2-mirror.ts";
 import LedgerV2WideBumped from "./fixtures/catch-up/v2-wide-bumped.ts";
 import LedgerV2Wide from "./fixtures/catch-up/v2-wide.ts";
@@ -317,6 +318,39 @@ describe.sequential("a deploy and its backfill", () => {
           Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
         );
         expect(after).toEqual(["past 10", "past 20", "new 30"]);
+        yield* stack.destroy();
+      }),
+    { timeout: 900_000 },
+  );
+
+  test.provider(
+    "a projection's start runs before its first input, and complete before the deploy returns",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1 | typeof LedgerV2Hooks) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* call(url, "POST", "/deposit/a-1/20");
+        yield* call(url, "POST", "/deposit/a-2/5");
+
+        yield* ledger(LedgerV2Hooks);
+        yield* serving(url, "v2-hooks");
+        const { notes } = JSON.parse(yield* call(url, "GET", "/hooks")) as {
+          notes: Array<string>;
+        };
+        expect(notes[0]).toBe("start g0 after none");
+        expect(notes.slice(1, 4).sort()).toEqual(["g0 a-1:10", "g0 a-1:20", "g0 a-2:5"]);
+        expect(notes.indexOf("g0 a-1:10")).toBeLessThan(notes.indexOf("g0 a-1:20"));
+        expect(notes[4]).toBe("complete g0 after none");
+        expect(notes).toHaveLength(5);
         yield* stack.destroy();
       }),
     { timeout: 900_000 },

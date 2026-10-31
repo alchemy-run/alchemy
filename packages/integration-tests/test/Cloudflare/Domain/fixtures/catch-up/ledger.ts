@@ -104,3 +104,16 @@ export class Mirrored extends Domain.Model("Ledger", {
   aggregates: [Account, Journal],
   policies: [Mirror],
 }) {}
+
+/** Each account's deposits, written to a journal: a projection with lifecycle hooks. */
+export class Ledger extends Domain.Projection("Ledger", {
+  from: [Account],
+  key: Account,
+  on: [Deposited],
+}) {}
+
+/** A deploy that adds the projection. */
+export class Hooked extends Domain.Model("Ledger", {
+  aggregates: [Account, Journal],
+  projections: [Ledger],
+}) {}
