@@ -155,7 +155,7 @@ export const ComputeControlPlane = (id: string, props: ComputeControlPlaneProps 
         forceDestroy: true,
         uniformBucketLevelAccess: true,
       });
-      const account = yield* IAM.ServiceAccount(`${id}Engines`, {
+      const account = yield* IAM.ServiceAccount(`${id}EngineAccount`, {
         displayName: "Rivet control plane",
       });
       const grant = yield* IAM.Member(`${id}StorageGrant`, {
