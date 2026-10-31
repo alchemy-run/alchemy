@@ -91,7 +91,14 @@ export const NamespaceProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* namespaceName(id, olds?.name));
-          const ns = yield* observe(olds, name);
+          const ns = yield* observe(olds, name).pipe(
+            // A control plane that never came up has no namespace to find,
+            // and deleting one is a no-op: let it be destroyed with its stack.
+            Effect.catchTag(
+              ["BadGateway", "ServiceUnavailable", "GatewayTimeout"],
+              () => Effect.undefined,
+            ),
+          );
           if (ns === undefined) return undefined;
           const attrs = toAttrs(olds, ns);
           // Namespaces carry no tags: one found under a user-chosen name with
