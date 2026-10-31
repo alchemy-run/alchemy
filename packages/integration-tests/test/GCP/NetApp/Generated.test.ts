@@ -298,14 +298,6 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Volume", { concurrent: true }, () => {
       test.provider(
-        "EstablishVolumePeering (netapp.projects.locations.volumes.establishPeering)",
-        () => probe("EstablishVolumePeering", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "GetVolume (netapp.projects.locations.volumes.get)",
         () => probe("GetVolume", true),
         {
@@ -417,6 +409,14 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:netapp", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "netapp.projects.locations.volumes.establishPeering: checks netapp.volumes.establishPeering, which no predefined role grants (roles/netapp.admin is denied it)",
+        () => Effect.void,
       );
     });
   },

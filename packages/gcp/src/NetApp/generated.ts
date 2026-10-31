@@ -3,8 +3,6 @@ export * from "./EncryptKmsConfig.ts";
 export * from "./EncryptKmsConfigHttp.ts";
 export * from "./EstablishReplicationPeering.ts";
 export * from "./EstablishReplicationPeeringHttp.ts";
-export * from "./EstablishVolumePeering.ts";
-export * from "./EstablishVolumePeeringHttp.ts";
 export * from "./ExecuteOntapDelete.ts";
 export * from "./ExecuteOntapDeleteHttp.ts";
 export * from "./ExecuteOntapGet.ts";

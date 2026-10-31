@@ -28,83 +28,81 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.NetApp.EncryptKmsConfig(ProbeKmsConfig);
-    const p1 = yield* GCP.NetApp.EstablishVolumePeering(ProbeVolume);
-    const p2 = yield* GCP.NetApp.ExecuteOntapDelete(ProbeStoragePool);
-    const p3 = yield* GCP.NetApp.ExecuteOntapGet(ProbeStoragePool);
-    const p4 = yield* GCP.NetApp.ExecuteOntapPatch(ProbeStoragePool);
-    const p5 = yield* GCP.NetApp.ExecuteOntapPost(ProbeStoragePool);
-    const p6 = yield* GCP.NetApp.GetActiveDirectory(ProbeActiveDirectory);
-    const p7 = yield* GCP.NetApp.GetBackup(ProbeVolumeBackup);
-    const p8 = yield* GCP.NetApp.GetBackupPolicy(ProbeBackupPolicy);
-    const p9 = yield* GCP.NetApp.GetBackupVault(ProbeBackupVault);
-    const p10 = yield* GCP.NetApp.GetHostGroup(ProbeHostGroup);
-    const p11 = yield* GCP.NetApp.GetKmsConfig(ProbeKmsConfig);
-    const p12 = yield* GCP.NetApp.GetQuotaRule(ProbeQuotaRule);
-    const p13 = yield* GCP.NetApp.GetSnapshot(ProbeSnapshot);
-    const p14 = yield* GCP.NetApp.GetStoragePool(ProbeStoragePool);
-    const p15 = yield* GCP.NetApp.GetVolume(ProbeVolume);
-    const p16 = yield* GCP.NetApp.GetVolumeSplitStatus(ProbeVolume);
-    const p17 = yield* GCP.NetApp.ListActiveDirectories();
-    const p18 = yield* GCP.NetApp.ListBackupPolicies();
-    const p19 = yield* GCP.NetApp.ListBackupVaultBackups(ProbeBackupVault);
-    const p20 = yield* GCP.NetApp.ListBackupVaults();
-    const p21 = yield* GCP.NetApp.ListHostGroups();
-    const p22 = yield* GCP.NetApp.ListKmsConfigs();
-    const p23 = yield* GCP.NetApp.ListStoragePools();
-    const p24 = yield* GCP.NetApp.ListVolumeQuotaRules(ProbeVolume);
-    const p25 = yield* GCP.NetApp.ListVolumeReplications(ProbeVolume);
-    const p26 = yield* GCP.NetApp.ListVolumes();
-    const p27 = yield* GCP.NetApp.ListVolumeSnapshots(ProbeVolume);
-    const p28 = yield* GCP.NetApp.RestoreStoragePoolVolume(ProbeStoragePool);
-    const p29 = yield* GCP.NetApp.RestoreVolume(ProbeVolume);
-    const p30 = yield* GCP.NetApp.RevertVolume(ProbeVolume);
-    const p31 = yield* GCP.NetApp.StartVolumeSplit(ProbeVolume);
-    const p32 = yield* GCP.NetApp.SwitchStoragePool(ProbeStoragePool);
-    const p33 = yield* GCP.NetApp.UpdateStoragePoolBackupConfig(ProbeStoragePool);
-    const p34 = yield* GCP.NetApp.ValidateStoragePoolDirectoryService(ProbeStoragePool);
-    const p35 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
+    const p1 = yield* GCP.NetApp.ExecuteOntapDelete(ProbeStoragePool);
+    const p2 = yield* GCP.NetApp.ExecuteOntapGet(ProbeStoragePool);
+    const p3 = yield* GCP.NetApp.ExecuteOntapPatch(ProbeStoragePool);
+    const p4 = yield* GCP.NetApp.ExecuteOntapPost(ProbeStoragePool);
+    const p5 = yield* GCP.NetApp.GetActiveDirectory(ProbeActiveDirectory);
+    const p6 = yield* GCP.NetApp.GetBackup(ProbeVolumeBackup);
+    const p7 = yield* GCP.NetApp.GetBackupPolicy(ProbeBackupPolicy);
+    const p8 = yield* GCP.NetApp.GetBackupVault(ProbeBackupVault);
+    const p9 = yield* GCP.NetApp.GetHostGroup(ProbeHostGroup);
+    const p10 = yield* GCP.NetApp.GetKmsConfig(ProbeKmsConfig);
+    const p11 = yield* GCP.NetApp.GetQuotaRule(ProbeQuotaRule);
+    const p12 = yield* GCP.NetApp.GetSnapshot(ProbeSnapshot);
+    const p13 = yield* GCP.NetApp.GetStoragePool(ProbeStoragePool);
+    const p14 = yield* GCP.NetApp.GetVolume(ProbeVolume);
+    const p15 = yield* GCP.NetApp.GetVolumeSplitStatus(ProbeVolume);
+    const p16 = yield* GCP.NetApp.ListActiveDirectories();
+    const p17 = yield* GCP.NetApp.ListBackupPolicies();
+    const p18 = yield* GCP.NetApp.ListBackupVaultBackups(ProbeBackupVault);
+    const p19 = yield* GCP.NetApp.ListBackupVaults();
+    const p20 = yield* GCP.NetApp.ListHostGroups();
+    const p21 = yield* GCP.NetApp.ListKmsConfigs();
+    const p22 = yield* GCP.NetApp.ListStoragePools();
+    const p23 = yield* GCP.NetApp.ListVolumeQuotaRules(ProbeVolume);
+    const p24 = yield* GCP.NetApp.ListVolumeReplications(ProbeVolume);
+    const p25 = yield* GCP.NetApp.ListVolumes();
+    const p26 = yield* GCP.NetApp.ListVolumeSnapshots(ProbeVolume);
+    const p27 = yield* GCP.NetApp.RestoreStoragePoolVolume(ProbeStoragePool);
+    const p28 = yield* GCP.NetApp.RestoreVolume(ProbeVolume);
+    const p29 = yield* GCP.NetApp.RevertVolume(ProbeVolume);
+    const p30 = yield* GCP.NetApp.StartVolumeSplit(ProbeVolume);
+    const p31 = yield* GCP.NetApp.SwitchStoragePool(ProbeStoragePool);
+    const p32 = yield* GCP.NetApp.UpdateStoragePoolBackupConfig(ProbeStoragePool);
+    const p33 = yield* GCP.NetApp.ValidateStoragePoolDirectoryService(ProbeStoragePool);
+    const p34 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
     return {
       fetch: serveProbes({
         EncryptKmsConfig: probeOutcome(Retry.none(p0({} as never))),
-        EstablishVolumePeering: probeOutcome(Retry.none(p1({} as never))),
-        ExecuteOntapDelete: probeOutcome(Retry.none(p2({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapGet: probeOutcome(Retry.none(p3({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPatch: probeOutcome(Retry.none(p4({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPost: probeOutcome(Retry.none(p5({ ontap: "alchemy-missing" } as never))),
-        GetActiveDirectory: probeOutcome(Retry.none(p6({} as never))),
-        GetBackup: probeOutcome(Retry.none(p7({} as never))),
-        GetBackupPolicy: probeOutcome(Retry.none(p8({} as never))),
-        GetBackupVault: probeOutcome(Retry.none(p9({} as never))),
-        GetHostGroup: probeOutcome(Retry.none(p10({} as never))),
-        GetKmsConfig: probeOutcome(Retry.none(p11({} as never))),
-        GetQuotaRule: probeOutcome(Retry.none(p12({} as never))),
-        GetSnapshot: probeOutcome(Retry.none(p13({} as never))),
-        GetStoragePool: probeOutcome(Retry.none(p14({} as never))),
-        GetVolume: probeOutcome(Retry.none(p15({} as never))),
-        GetVolumeSplitStatus: probeOutcome(Retry.none(p16({} as never))),
-        ListActiveDirectories: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListBackupPolicies: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListBackupVaultBackups: probeOutcome(Retry.none(p19({} as never))),
-        ListBackupVaults: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListHostGroups: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListKmsConfigs: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListStoragePools: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListVolumeQuotaRules: probeOutcome(Retry.none(p24({} as never))),
-        ListVolumeReplications: probeOutcome(Retry.none(p25({} as never))),
-        ListVolumes: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListVolumeSnapshots: probeOutcome(Retry.none(p27({} as never))),
+        ExecuteOntapDelete: probeOutcome(Retry.none(p1({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapGet: probeOutcome(Retry.none(p2({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapPatch: probeOutcome(Retry.none(p3({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapPost: probeOutcome(Retry.none(p4({ ontap: "alchemy-missing" } as never))),
+        GetActiveDirectory: probeOutcome(Retry.none(p5({} as never))),
+        GetBackup: probeOutcome(Retry.none(p6({} as never))),
+        GetBackupPolicy: probeOutcome(Retry.none(p7({} as never))),
+        GetBackupVault: probeOutcome(Retry.none(p8({} as never))),
+        GetHostGroup: probeOutcome(Retry.none(p9({} as never))),
+        GetKmsConfig: probeOutcome(Retry.none(p10({} as never))),
+        GetQuotaRule: probeOutcome(Retry.none(p11({} as never))),
+        GetSnapshot: probeOutcome(Retry.none(p12({} as never))),
+        GetStoragePool: probeOutcome(Retry.none(p13({} as never))),
+        GetVolume: probeOutcome(Retry.none(p14({} as never))),
+        GetVolumeSplitStatus: probeOutcome(Retry.none(p15({} as never))),
+        ListActiveDirectories: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListBackupPolicies: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListBackupVaultBackups: probeOutcome(Retry.none(p18({} as never))),
+        ListBackupVaults: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListHostGroups: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListKmsConfigs: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
+        ListStoragePools: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListVolumeQuotaRules: probeOutcome(Retry.none(p23({} as never))),
+        ListVolumeReplications: probeOutcome(Retry.none(p24({} as never))),
+        ListVolumes: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
+        ListVolumeSnapshots: probeOutcome(Retry.none(p26({} as never))),
         RestoreStoragePoolVolume: probeOutcome(
-          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p27({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         RestoreVolume: probeOutcome(
-          Retry.none(p29({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p28({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RevertVolume: probeOutcome(Retry.none(p30({} as never))),
-        StartVolumeSplit: probeOutcome(Retry.none(p31({} as never))),
-        SwitchStoragePool: probeOutcome(Retry.none(p32({} as never))),
-        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p33({} as never))),
-        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p34({} as never))),
-        VerifyKmsConfig: probeOutcome(Retry.none(p35({} as never))),
+        RevertVolume: probeOutcome(Retry.none(p29({} as never))),
+        StartVolumeSplit: probeOutcome(Retry.none(p30({} as never))),
+        SwitchStoragePool: probeOutcome(Retry.none(p31({} as never))),
+        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p32({} as never))),
+        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p33({} as never))),
+        VerifyKmsConfig: probeOutcome(Retry.none(p34({} as never))),
       }),
     };
   }).pipe(
@@ -112,7 +110,6 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.NetApp.EncryptKmsConfigHttp,
-          GCP.NetApp.EstablishVolumePeeringHttp,
           GCP.NetApp.ExecuteOntapDeleteHttp,
           GCP.NetApp.ExecuteOntapGetHttp,
           GCP.NetApp.ExecuteOntapPatchHttp,
