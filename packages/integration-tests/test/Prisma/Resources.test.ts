@@ -1063,7 +1063,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               { project: Output.asOutput("project-1"), name: "main", region: "us-west-2" },
             ),
           ),
-        ).toEqual({ action: "replace" });
+        ).toEqual({ action: "replace", deleteFirst: true });
         expect(
           yield* databaseProvider.diff!(
             diffInput(
@@ -1076,7 +1076,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               },
             ),
           ),
-        ).toEqual({ action: "replace" });
+        ).toEqual({ action: "replace", deleteFirst: true });
 
         expect(
           yield* connectionProvider.diff!(
