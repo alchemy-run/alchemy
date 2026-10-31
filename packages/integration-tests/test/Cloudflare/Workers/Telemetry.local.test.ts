@@ -194,44 +194,41 @@ test.provider(
         return yield* Effect.die("OTLP event flush test Worker URL unavailable");
       }
 
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
       const client = yield* HttpClient.HttpClient;
-      const response = yield* client.get(`${deployment.url}/stream`);
+      const response = yield* client
+        .get(`${deployment.url}/stream`)
+        .pipe(Effect.withParentSpan(trace));
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("head\ntail\n");
 
       // One flush, after the body settled: the tail span ends after the
       // handler returned, yet it ships in the same batch as the request's
-      // root span and the handler's span.
-      const batch = yield* Effect.sync(() =>
-        collector.requests.find((batch) =>
-          batch.body.includes('"name":"otel-event-flush.stream-tail"'),
-        ),
-      ).pipe(
+      // root span and the handler's span. The stream runs outside the
+      // request's span, so the tail span carries its own trace.
+      const batches = yield* own.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("100 millis"),
-          until: (batch) => batch !== undefined,
+          until: (batches) => batches.length > 0,
           times: 50,
         }),
       );
-      expect(batch).toBeDefined();
-      expect(traceSpanNames(batch!.body).sort()).toEqual([
-        "GET",
-        "otel-event-flush.stream-tail",
-        "otel-event-flush.worker",
-      ]);
+      expect(batches).toHaveLength(1);
+      const [{ batch, spans }] = batches;
+      expect([...spans].sort()).toEqual(["GET", "otel-event-flush.worker"]);
+      expect(batch.body).toContain('"name":"otel-event-flush.stream-tail"');
       // The body ended while its export was still held.
-      expect(batch!.completed).toBe(false);
+      expect(batch.completed).toBe(false);
       yield* Effect.sync(collector.releaseResponses);
-      yield* Effect.sync(() => collector.completedRequests.value).pipe(
+      yield* Effect.sync(() => batch.completed).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("100 millis"),
-          until: (completed) => completed >= 1,
+          until: (completed) => completed,
           times: 30,
         }),
       );
-      expect(
-        collector.requests.filter((batch) => batch.body.includes('"name":"GET"')),
-      ).toHaveLength(1);
+      expect(yield* own).toHaveLength(1);
 
       yield* stack.destroy();
     }),
