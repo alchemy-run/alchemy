@@ -3760,13 +3760,11 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        const alchemyTags = [
-          ...createAlchemyWorkerTags(id),
-          ...alchemyDoTags,
-          ...(domainClasses.length > 0
-            ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)]
-            : []),
-        ];
+        // The Domain version goes up with every upload that can change the
+        // classes, in the same request, so the tag and the classes never disagree.
+        const domainTags =
+          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -3954,6 +3952,7 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
+                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
