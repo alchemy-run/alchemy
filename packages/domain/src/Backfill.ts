@@ -1619,8 +1619,11 @@ export const RELAY_FANOUT = 6;
 /** How long a key works on its history before it answers a relay that is waiting for it. */
 const RELAY_KEY_WAIT_MS = 10_000;
 
-/** How many subtrees a run's root lists the directory into, at least: subtrees grow with the keyspace, so a window of them holds enough keys at any width (see `makeRelay`). */
-const FRONTIER_SIZE = 256;
+/**
+ * How many subtrees a run's root lists the directory into, at least: small
+ * steps for its window, a few hundred keys each at a million instances.
+ */
+const FRONTIER_SIZE = 512;
 
 /** A relay's count of the calls the account's load refused. */
 interface Tally {
@@ -1872,9 +1875,8 @@ interface RunState {
   readonly window?: number;
 }
 
-/** Subtrees a run's root starts with at once, and the most it grows to. */
+/** Subtrees a run's root starts with at once: it grows to all of them while the account takes the load. */
 const RUN_WINDOW = 16;
-const RUN_WINDOW_MAX = 256;
 
 /**
  * The root of a consumer's run: it drives passes of a relay tree from its own
@@ -1971,7 +1973,7 @@ export const makeRun = (
             window = Math.max(1, Math.floor(window / 2));
             cutAt = yield* Clock.currentTimeMillis;
           }
-        } else window = Math.min(RUN_WINDOW_MAX, growing ? window + 1 : window + 1 / window);
+        } else window = Math.min(todo.length, growing ? window + 1 : window + 1 / window);
       }
       window = Math.max(1, Math.round(window));
       if (next < todo.length) done = false;
