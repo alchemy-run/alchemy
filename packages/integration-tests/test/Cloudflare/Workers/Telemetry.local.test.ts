@@ -162,6 +162,88 @@ test.provider(
   },
 );
 
+test.provider(
+  "exports spans recorded in waitUntil work, after the event's own",
+  (stack) =>
+    Effect.gen(function* () {
+      const collector = yield* startOtlpCollector();
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const exported = (name: string) =>
+        own.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (batches) => batches.some(({ spans }) => spans.includes(name)),
+            times: 10,
+          }),
+        );
+      const client = yield* HttpClient.HttpClient;
+
+      // Worker: `Cloudflare.waitUntil`, and background work that starts more.
+      const response = yield* client
+        .get(`${deployment.url}/wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(response.status).toBe(202);
+      const workerBatches = yield* exported("otel-event-flush.background.nested");
+      const workerSpans = workerBatches.flatMap(({ records }) => records);
+      const parentOf = (name: string) => {
+        const span = workerSpans.find((record) => record.name === name);
+        return workerSpans.find((record) => record.spanId === span?.parentSpanId)?.name;
+      };
+      expect(parentOf("otel-event-flush.background")).toBe("otel-event-flush.worker");
+      expect(parentOf("otel-event-flush.background.nested")).toBe("otel-event-flush.background");
+      // The request's own spans went out without waiting for its background work.
+      expect(
+        workerBatches.find(({ spans }) => spans.includes("otel-event-flush.worker"))?.spans,
+      ).not.toContain("otel-event-flush.background");
+
+      // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
+      const rpcResponse = yield* client
+        .get(`${deployment.url}/rpc-wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(rpcResponse.status).toBe(200);
+      expect(yield* rpcResponse.text).toBe("worker-saw:durable-object-rpc-ok");
+      const rpcBatches = yield* exported("otel-event-flush.rpc.background");
+      const rpcSpans = rpcBatches.flatMap(({ records }) => records);
+      const background = rpcSpans.find((span) => span.name === "otel-event-flush.rpc.background");
+      expect(rpcSpans.find((span) => span.spanId === background?.parentSpanId)?.name).toBe(
+        "otel-event-flush.rpc.later",
+      );
+      expect(
+        rpcBatches.find(({ spans }) => spans.includes("otel-event-flush.rpc.later"))?.spans,
+      ).not.toContain("otel-event-flush.rpc.background");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
 for (const scenario of [
   { name: "bound default", shutdownTimeout: 0, delivered: true },
   { name: "custom 3 seconds", shutdownTimeout: 3_000, delivered: false },

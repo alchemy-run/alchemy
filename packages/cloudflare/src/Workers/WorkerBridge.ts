@@ -27,6 +27,7 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
+import { BackgroundWork, makeBackgroundWork } from "./internal/BackgroundWork.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -76,6 +77,14 @@ export const makeWorkerBridge = (
     onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    // The exporters outlive the request scope until the event's `waitUntil`
+    // work has settled (see `makeBackgroundWork`).
+    const telemetryScope = Scope.makeUnsafe();
+    const background = makeBackgroundWork({
+      scope,
+      telemetryScope,
+      waitUntil: (promise) => ctx.waitUntil(promise),
+    });
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
@@ -91,15 +100,17 @@ export const makeWorkerBridge = (
               Layer.mergeAll(
                 Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
                 Layer.succeed(Scope.Scope, scope),
+                Layer.succeed(BackgroundWork, background.track),
                 Layer.succeed(RuntimeContext, built.runtimeContext),
-                // The configured telemetry exporters. Constructed as part
-                // of this per-event layer, but `buildEventTelemetry`
-                // attaches their batching fibers and flush finalizers to
-                // the request `scope` (not this build's transient scope),
-                // so buffered telemetry flushes when the scope closes into
-                // `ctx.waitUntil` below — never on workerd's ephemeral
-                // isolate scope.
-                Layer.effectContext(buildEventTelemetry(built.context, scope, built.telemetry())),
+                // The configured telemetry exporters, on their own scope:
+                // flushed into `ctx.waitUntil` once the request scope has
+                // closed, and shut down once the event's background work has
+                // settled — never on workerd's ephemeral isolate scope.
+                Layer.effectContext(
+                  buildEventTelemetry(built.context, telemetryScope, built.telemetry()).pipe(
+                    Effect.tap(background.setTelemetry),
+                  ),
+                ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(built.context)),

@@ -17,12 +17,9 @@ import {
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
-import {
-  BackgroundWork,
-  DurableObjectState,
-  fromDurableObjectState,
-} from "./DurableObjectState.ts";
+import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
+import { BackgroundWork, makeBackgroundWork } from "./internal/BackgroundWork.ts";
 import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
@@ -156,32 +153,14 @@ export const makeDurableObjectBridge =
         onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
-        // Work this call hands to `waitUntil` runs after it returns, in its
-        // context, so it records into this call's telemetry. The exporters get
-        // a scope of their own, flushed once that work (and any it starts)
-        // settles; the call's scope closes as soon as the call does.
+        // The exporters outlive the call's scope until the call's `waitUntil`
+        // work has settled (see `makeBackgroundWork`).
         const telemetryScope = Scope.makeUnsafe();
-        const background: Array<Promise<unknown>> = [];
-        const settled = async () => {
-          for (let seen = 0; seen < background.length;) {
-            const batch = background.slice(seen);
-            seen = background.length;
-            await Promise.allSettled(batch);
-          }
-        };
-        // However the call's scope closes (here, or later by whoever ejected
-        // it), flush telemetry once the background work has settled, without
-        // holding up the close.
-        Effect.runSync(
-          Scope.addFinalizer(
-            scope,
-            Effect.sync(() =>
-              this.ctx.waitUntil(
-                settled().then(() => Effect.runPromise(Scope.close(telemetryScope, Exit.void))),
-              ),
-            ),
-          ),
-        );
+        const background = makeBackgroundWork({
+          scope,
+          telemetryScope,
+          waitUntil: (promise) => this.ctx.waitUntil(promise),
+        });
 
         const { instance, services, context, telemetry } = await this.#instance;
 
@@ -190,13 +169,17 @@ export const makeDurableObjectBridge =
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(DurableObjectState, fromDurableObjectState(this.#state)),
-                Layer.succeed(BackgroundWork, (promise) => void background.push(promise)),
+                Layer.succeed(BackgroundWork, background.track),
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters, on their own scope:
-                // flushed into `waitUntil` once the call's scope has closed and
-                // its background work has settled (the isolate scope never
-                // finalizes on workerd).
-                Layer.effectContext(buildEventTelemetry(context, telemetryScope, telemetry())),
+                // flushed into `waitUntil` once the call's scope has closed,
+                // and shut down once its background work has settled (the
+                // isolate scope never finalizes on workerd).
+                Layer.effectContext(
+                  buildEventTelemetry(context, telemetryScope, telemetry()).pipe(
+                    Effect.tap(background.setTelemetry),
+                  ),
+                ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),

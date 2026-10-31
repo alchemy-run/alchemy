@@ -18,12 +18,24 @@ import * as OtlpTracer from "effect/observability/OtlpTracer";
 export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlushTarget>()(
   "OtelEventFlushTarget",
   Effect.succeed(
-    Effect.succeed({
-      fetch: Effect.succeed(HttpServerResponse.text("durable-object-ok")).pipe(
-        Effect.withSpan("otel-event-flush.child"),
-      ),
-      ping: () =>
-        Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+    Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      return {
+        fetch: Effect.succeed(HttpServerResponse.text("durable-object-ok")).pipe(
+          Effect.withSpan("otel-event-flush.child"),
+        ),
+        ping: () =>
+          Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+        pingLater: () =>
+          state
+            .waitUntil(
+              Effect.sleep("300 millis").pipe(Effect.withSpan("otel-event-flush.rpc.background")),
+            )
+            .pipe(
+              Effect.as("durable-object-rpc-ok"),
+              Effect.withSpan("otel-event-flush.rpc.later"),
+            ),
+      };
     }),
   ),
 ) {}
@@ -46,9 +58,31 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/rpc-wait-until")) {
+          const pong = yield* targetNamespace.getByName("target").pingLater();
+          return HttpServerResponse.text(`worker-saw:${pong}`);
+        }
         if (request.url.startsWith("/rpc")) {
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
+        }
+        if (request.url.startsWith("/wait-until")) {
+          // Background work that starts more background work. The sleeps
+          // outlast the request scope's close, so the test can tell the
+          // request's own export apart from the background one.
+          yield* Cloudflare.waitUntil(
+            Effect.sleep("300 millis").pipe(
+              Effect.andThen(
+                Cloudflare.waitUntil(
+                  Effect.sleep("300 millis").pipe(
+                    Effect.withSpan("otel-event-flush.background.nested"),
+                  ),
+                ),
+              ),
+              Effect.withSpan("otel-event-flush.background"),
+            ),
+          );
+          return HttpServerResponse.text("accepted", { status: 202 });
         }
         const targetClient = Cloudflare.toHttpClient(targetNamespace.getByName("target"));
         const response = yield* targetClient.execute(

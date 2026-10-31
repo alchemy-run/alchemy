@@ -348,7 +348,7 @@ const makeExporterLayer = (options?: {
  * bound, so no exporters are built until a destination is configured.
  *
  * The periodic export intervals are effectively disabled: the exporter is
- * built per event and the request-scope flush delivers everything. An
+ * built per event and the event's flush delivers everything. An
  * interval export firing mid-event would race the scope close — the close
  * interrupts the exporter's in-flight batch (already spliced out of the
  * buffer), silently dropping it. Lambda invocations regularly outlive the
@@ -384,16 +384,17 @@ export const Telemetry = Context.Reference<TelemetryLayer>("alchemy/Telemetry", 
 const reference = Telemetry;
 
 /**
- * Build the configured {@link Telemetry} Layer into an event's request
- * scope, returning the Context of telemetry services to provide to the
- * event's handler effect.
+ * Build the configured {@link Telemetry} Layer into a scope the bridge owns
+ * for one event, returning the Context of telemetry services to provide to
+ * the event's handler effect.
  *
  * Called by the runtime bridges (Worker, Durable Object, Workflow, Lambda)
- * once per event. Building into the *request* scope — not the
+ * once per event. Building into a per-event scope — not the
  * never-finalized isolate scope — is what makes export work on workerd:
  * the batching fiber lives inside the event's I/O context and the final
  * flush runs from the scope's finalizer, which the bridges register with
- * `ctx.waitUntil`.
+ * `ctx.waitUntil`. The Worker and Durable Object bridges close that scope
+ * once the event's `waitUntil` work has settled, not with the request.
  *
  * A failed build (bad user Layer, config error) degrades to an empty
  * Context with a warning instead of failing the event.
