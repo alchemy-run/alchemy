@@ -103,6 +103,8 @@ export interface ModelClass<
   /** The model's streams, in order. */
   readonly streams: Parts["streams"];
   readonly definitions: Kernel.Definitions;
+  /** The sagas the model runs. */
+  readonly sagas: ReadonlyArray<Saga.Any>;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
@@ -122,6 +124,7 @@ export interface Any extends Servable {
   readonly kind: "Model";
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
+  readonly sagas?: ReadonlyArray<Saga.Any>;
 }
 
 /**

@@ -20,6 +20,7 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as DescribeModule from "./Describe.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import type * as KeyModule from "./Key.ts";
@@ -67,11 +68,21 @@ export declare namespace Rejection {
 }
 /** A typed reason a command or read was refused. See {@link RejectionModule.make}. */
 export const Rejection = RejectionModule.make;
+/** The host refused a command outside the phases its aggregate's `when` allows. */
+export const WrongPhase = RejectionModule.WrongPhase;
+export type WrongPhase = RejectionModule.WrongPhase;
 
 export declare namespace Aggregate {
   /** Any Aggregate class. */
   export type Any = AggregateModule.Any;
   export type IdOf<A extends AggregateModule.Any> = AggregateModule.IdOf<A>;
+  /** The phases of an aggregate; `never` when it declares none. */
+  export type PhaseOf<A extends AggregateModule.Any> = AggregateModule.PhaseOf<A>;
+  /** One phase of an aggregate's life, and the moves its events make. */
+  export type Phase<P extends string = string, Tag extends string = string> = AggregateModule.Phase<
+    P,
+    Tag
+  >;
   export type StateOf<A extends AggregateModule.Any> = AggregateModule.StateOf<A>;
   export type EventOf<A extends AggregateModule.Any> = AggregateModule.EventOf<A>;
   export type CommandOf<A extends AggregateModule.Any> = AggregateModule.CommandOf<A>;
@@ -258,6 +269,11 @@ export const Model = ModelModule.make;
 export const verify = ModelModule.verify;
 /** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
 export { DefinitionError } from "./Kernel.ts";
+
+/** A Model as plain JSON data, with a stable hash. See {@link DescribeModule.describe}. */
+export const describe = DescribeModule.describe;
+/** What {@link describe} returns, and each of its parts. */
+export type * as Description from "./Describe.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;

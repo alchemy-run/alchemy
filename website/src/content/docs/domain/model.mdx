@@ -211,7 +211,7 @@ export const BankHandlers = MainAccountProvisioningLive;
 
 ## Check the declaration
 
-Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a [phase](/domain/aggregate#declare-its-phases) nothing can reach. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
 
 ```typescript
 // packages/domain/test/Bank.model.test.ts
@@ -225,6 +225,27 @@ it("the model is well defined", () => {
 ```
 
 Each problem is a `Domain.DefinitionError` with a message that names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+
+## Describe it as data
+
+`Domain.describe` gives the whole model as plain JSON data: its aggregates with their commands, events, rejections and [phases](/domain/aggregate#declare-its-phases), its views, policies, projections, streams and sagas, and the Apis you pass. A model doesn't know the Apis over it, so name them.
+
+```typescript
+import * as Domain from "@alchemy.run/domain";
+import { Bank } from "./Bank.model.ts";
+import { CustomerApi } from "./CustomerApi.api.ts";
+
+const description = Domain.describe(Bank, { apis: [CustomerApi] });
+
+description.aggregates[0].commands[0]; // { tag, input, events, rejects, middleware, when, ... }
+description.hash; // "59d5ef0dca30f651"
+```
+
+Each schema is the JSON Schema of its JSON form. Every list is sorted by name, so two versions of a model diff well: write the description to a file and let your review tool compare them.
+
+`hash` covers everything in the description. A change to a schema, a tag, a phase or a link changes it, and the order of a declaration doesn't. Use it to name a version of the model, for example to find out which version wrote a report.
+
+A description holds what's declared. Code isn't data: `decide`, `evolve` and the handlers of policies and sagas aren't in it, so a change to them keeps the hash. What a policy sends isn't listed either. It's a change detector, not a signature: don't use `hash` to prove anything. Schemas are hashed as the JSON Schema Effect derives, so an Effect upgrade can change it too.
 
 ## Run it
 

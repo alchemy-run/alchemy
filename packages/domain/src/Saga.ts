@@ -146,6 +146,12 @@ export interface Client<Key, Input, A, E> {
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Saga";
   readonly sagaName: string;
+  readonly definition: Definition<
+    KeySchema,
+    Fields,
+    Fields | undefined,
+    ReadonlyArray<Rejection.Any>
+  >;
   readonly workflow: Workflow.Workflow<string, any, any, any>;
   readonly Implementation: Context.Key<unknown, true>;
 }
