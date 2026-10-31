@@ -132,3 +132,32 @@ test.provider(
     ),
   { tags: ["unit", "local"], timeout: 60_000 },
 );
+
+// The default topology of `alchemy dev`: the Server provider runs in a sidecar
+// process, which resolves the adapter from the package that contributes it
+// (`@alchemy.run/test` contributes the forwarder, see `IngressContributions.ts`)
+// and keeps the routes in its own process. The test sees only what a user would:
+// the site's `url` and `localUrl`, and what answers there.
+const { test: sidecarTest } = Test.make({ providers: ServerProvider(), dev: true });
+
+sidecarTest.provider(
+  "a site routes through an adapter the sidecar resolves from a contributing package",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const routed = yield* stack.deploy(server("Web", forwarderConfig()));
+      const origin = routed.url!;
+      expect(origin).toMatch(/^http:\/\/[a-z0-9-]+\.web\.[a-z0-9-]+\.localhost:\d+$/);
+      expect(routed.localUrl).toMatch(RAW_URL);
+      expect((yield* getRouted(origin, "/page")).body).toBe(`/page ${new URL(origin).host}`);
+
+      // Removing `ingress` restores the listener and drops the sidecar's route.
+      const plain = yield* stack.deploy(server("Web", undefined));
+      expect(plain.url).toMatch(RAW_URL);
+      expect((yield* getRouted(origin)).status).toBe(502);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 60_000 },
+);
