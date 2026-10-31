@@ -210,6 +210,7 @@ export interface PolicyKey<Name extends string> {
  * **Example:** Open the missing accounts of customers registered before the policy
  * ```typescript
  * export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+ *   { replay: true },
  *   Effect.gen(function* () {
  *     const accounts = yield* Account;
  *     const mail = yield* Mailer;
@@ -221,7 +222,6 @@ export interface PolicyKey<Name extends string> {
  *       if (!history) yield* mail.welcome(source.id);
  *     });
  *   }),
- *   { replay: true },
  * );
  * ```
  *
@@ -245,9 +245,13 @@ export const make = <
     static readonly definition = definition;
     static toLayer<Self extends Any, E, R>(
       this: Self,
-      build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
-      options: Options = {},
+      first: Options | undefined | Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
+      second?: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
     ): Layer.Layer<Identifier<Self>, E, R> {
+      // `toLayer(build)`, or `toLayer(options, build)`.
+      const [options, build] = Effect.isEffect(first)
+        ? [{} as Options, first]
+        : [first ?? {}, second!];
       const retry = options.retry;
       return Layer.effect(
         this as unknown as Context.Key<Identifier<Self>, Implementation<TriggerOf<Self>>>,
@@ -296,11 +300,16 @@ export interface PolicyClass<
   /**
    * Implement the policy. The construction Effect runs once, resolving every
    * service the handler uses (aggregate clients, views, Ports); the handler
-   * itself requires nothing. `options` tune how it runs, such as retries.
+   * itself requires nothing.
    */
   toLayer<Self extends Any, E, R>(
     this: Self,
     build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
-    options?: Options,
+  ): Layer.Layer<Identifier<Self>, E, R>;
+  /** Implement the policy, with `options` that tune how it runs, such as retries and replay. */
+  toLayer<Self extends Any, E, R>(
+    this: Self,
+    options: Options | undefined,
+    build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,
   ): Layer.Layer<Identifier<Self>, E, R>;
 }

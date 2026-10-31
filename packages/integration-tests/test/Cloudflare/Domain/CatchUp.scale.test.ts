@@ -101,7 +101,7 @@ export default class DomainBenchWorker extends Cloudflare.Worker<DomainBenchWork
   "DomainBenchWorker",
   { main: import.meta.url },
   benchWorker("v2", { kind: "deposits", view: Deposits }).pipe(
-    Effect.provide(hosted(After.layer(Layer.empty, { versions: { Deposits: ${at} } }))),
+    Effect.provide(hosted(After.layer({ versions: { Deposits: ${at} } }, Layer.empty))),
   ),
 ) {}
 `,

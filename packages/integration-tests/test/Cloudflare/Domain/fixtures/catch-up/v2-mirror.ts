@@ -7,6 +7,7 @@ import { hosted } from "./worker.ts";
 
 /** The policy notes each deposit, marking the ones it replayed from the history. */
 const MirrorLive = Mirror.toLayer(
+  { replay: true },
   Effect.gen(function* () {
     const journals = yield* Journal;
     return Effect.fn(function* ({ source, event, history }) {
@@ -15,7 +16,6 @@ const MirrorLive = Mirror.toLayer(
         .pipe(Effect.orDie);
     });
   }),
-  { replay: true },
 );
 
 /**

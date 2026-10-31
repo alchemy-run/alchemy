@@ -72,6 +72,7 @@ The handler lives in a Layer, built once with everything it needs. It always rec
 
 ```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export const LedgerLive = Ledger.toLayer(
+  { batch: { size: 100, wait: "1 second" } },
   Effect.gen(function* () {
     const store = yield* LedgerStore;
     return Effect.fn(function* (batch) {
@@ -87,7 +88,6 @@ export const LedgerLive = Ledger.toLayer(
       );
     });
   }),
-  { batch: { size: 100, wait: "1 second" } },
 );
 ```
 
@@ -176,6 +176,7 @@ Rather than replay over the table readers are using, a projection can build each
 
 ```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export const LedgerLive = Ledger.toLayer(
+  { version: 1 },
   Effect.gen(function* () {
     const store = yield* LedgerStore;
     return {
@@ -190,7 +191,6 @@ export const LedgerLive = Ledger.toLayer(
         }),
     };
   }),
-  { version: 1 },
 );
 ```
 

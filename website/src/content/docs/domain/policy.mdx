@@ -171,12 +171,12 @@ What a policy means lives on its declaration. How it runs lives on its Layer. `t
 
 ```typescript title="src/Welcome.policy.ts"
 export const WelcomeLive = Welcome.toLayer(
+  { retry: Schedule.exponential("1 second").pipe(Schedule.upTo({ duration: "1 minute" })) },
   Effect.succeed(
     Effect.fn(function* ({ key, event }) {
       yield* Effect.log(`welcome ${key.id}: ${event._tag}`);
     }),
   ),
-  { retry: Schedule.exponential("1 second").pipe(Schedule.upTo({ duration: "1 minute" })) },
 );
 ```
 
@@ -186,6 +186,7 @@ A policy acts on events that happen after it's deployed. That's almost always ri
 
 ```typescript title="src/MainAccountProvisioning.policy.ts"
 export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+  { replay: true },
   Effect.gen(function* () {
     const accounts = yield* Account;
     const mail = yield* Mailer;
@@ -196,7 +197,6 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
       if (!history) yield* mail.welcome(source.id);
     });
   }),
-  { replay: true },
 );
 ```
 

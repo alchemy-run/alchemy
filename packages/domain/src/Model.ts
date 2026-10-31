@@ -109,11 +109,17 @@ export interface ModelClass<
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
    * streams exist, so a handler can resolve them while it is constructed.
-   * `options` tune how it's hosted, such as what it records in traces.
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptions<Parts["views"][number]["viewName"]>,
+  ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
+  /**
+   * Host every entity, with `options` that tune how it's hosted: views'
+   * versions, and what it records in traces.
+   */
+  layer<E = never, R = never>(
+    options: LayerOptions<Parts["views"][number]["viewName"]> | undefined,
+    handlers: Layer.Layer<Policies, E, R>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
@@ -243,7 +249,14 @@ export const make = <
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
+    static layer<E, R>(
+      first: LayerOptions | undefined | Layer.Layer<HandledBy<P, J, G>, E, R>,
+      second?: Layer.Layer<HandledBy<P, J, G>, E, R>,
+    ) {
+      // `layer(handlers)`, or `layer(options, handlers)`.
+      const layered = Layer.isLayer(first);
+      const options = layered ? undefined : (first as LayerOptions | undefined);
+      const handlers = layered ? (first as Layer.Layer<HandledBy<P, J, G>, E, R>) : second!;
       return Layer.effectContext(
         build(
           definitions,

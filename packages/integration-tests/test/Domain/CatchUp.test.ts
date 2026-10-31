@@ -70,6 +70,7 @@ const OnDepositLive = OnDeposit.toLayer(
 class Mirror extends Domain.Policy("Mirror", { from: [Account], on: [Deposited] }) {}
 const mirrorLayer = (version?: number) =>
   Mirror.toLayer(
+    { replay: true, ...(version === undefined ? {} : { version }) },
     Effect.gen(function* () {
       const journals = yield* Journal;
       const reactions = yield* Reactions;
@@ -80,7 +81,6 @@ const mirrorLayer = (version?: number) =>
           .pipe(Effect.orDie);
       });
     }),
-    { replay: true, ...(version === undefined ? {} : { version }) },
   );
 
 /** A store outside the model: what one projection key received, in order. */
@@ -93,6 +93,7 @@ class Timeline extends Domain.Projection("Timeline", {
 }) {}
 const timelineLayer = (options?: Domain.Projection.Options) =>
   Timeline.toLayer(
+    options,
     Effect.gen(function* () {
       const feed = yield* Feed;
       return Effect.fn(function* (batch) {
@@ -104,7 +105,6 @@ const timelineLayer = (options?: Domain.Projection.Options) =>
         ]);
       });
     }),
-    options,
   );
 const TimelineLive = timelineLayer();
 
@@ -120,6 +120,7 @@ class Ledger extends Domain.Projection("Ledger", {
 }) {}
 const ledgerLayer = (options?: Domain.Projection.Options, failures = 0) =>
   Ledger.toLayer(
+    options,
     Effect.gen(function* () {
       const feed = yield* Feed;
       const record = (line: string) => Ref.update(feed, (all) => [...all, line]);
@@ -137,7 +138,6 @@ const ledgerLayer = (options?: Domain.Projection.Options, failures = 0) =>
           record(`complete g${generation} after ${previous ?? "none"}`),
       };
     }),
-    options,
   );
 
 /** The same view, redefined: it now records each deposit doubled. */
@@ -234,14 +234,14 @@ const platform = () => {
     settle,
     services,
     deploy: <A, E, R, P, PE, PR>(
-      model: { readonly layer: (policies: any, options?: any) => Layer.Layer<any, any, any> },
+      model: { readonly layer: (options: any, policies: any) => Layer.Layer<any, any, any> },
       policies: Layer.Layer<P, PE, PR>,
       effect: Effect.Effect<A, E, R>,
       options?: Domain.Model.LayerOptions,
     ) =>
       effect.pipe(
         Effect.tap(() => settle),
-        Effect.provide(model.layer(policies, options).pipe(Layer.provide(hosted.layer))),
+        Effect.provide(model.layer(options, policies).pipe(Layer.provide(hosted.layer))),
       ),
   };
 };

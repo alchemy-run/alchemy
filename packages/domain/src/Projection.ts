@@ -226,6 +226,7 @@ export interface Definition<
  * }) {}
  *
  * export const LedgerLive = Ledger.toLayer(
+ *   { batch: { size: 500, wait: "2 seconds" } },
  *   Effect.gen(function* () {
  *     const store = yield* LedgerStore;
  *     return Effect.fn(function* (batch) {
@@ -238,7 +239,6 @@ export interface Definition<
  *       );
  *     });
  *   }),
- *   { batch: { size: 500, wait: "2 seconds" } },
  * );
  * ```
  *
@@ -246,6 +246,7 @@ export interface Definition<
  * **Example:** A table per generation, swapped in once it has the history
  * ```typescript
  * export const LedgerLive = Ledger.toLayer(
+ *   { version: 1 },
  *   Effect.gen(function* () {
  *     const store = yield* LedgerStore;
  *     return {
@@ -260,7 +261,6 @@ export interface Definition<
  *         }),
  *     };
  *   }),
- *   { version: 1 },
  * );
  * ```
  *
@@ -305,9 +305,13 @@ export const make = <
       });
     }
     static toLayer<E, R>(
-      build: Effect.Effect<Handler<I> | Hosted<I>, E, R>,
-      options: Options = {},
+      first: Options | undefined | Effect.Effect<Handler<I> | Hosted<I>, E, R>,
+      second?: Effect.Effect<Handler<I> | Hosted<I>, E, R>,
     ) {
+      // `toLayer(build)`, or `toLayer(options, build)`.
+      const [options, build] = Effect.isEffect(first)
+        ? [{} as Options, first]
+        : [first ?? {}, second!];
       return Layer.effect(
         Tag,
         Effect.map(build, (built): Implementation<I> =>
@@ -348,7 +352,6 @@ export interface ProjectionClass<
    * Implement the projection. The construction Effect runs once, resolving
    * your store and the streams it writes, and returns the handler, or the
    * handler with the hooks of its {@link Lifecycle}; neither requires anything.
-   * `options` tune how it runs, such as batching.
    */
   toLayer<E, R>(
     build: Effect.Effect<
@@ -357,7 +360,16 @@ export interface ProjectionClass<
       E,
       R
     >,
-    options?: Options,
+  ): Layer.Layer<ProjectionKey<Name>, E, R>;
+  /** Implement the projection, with `options` that tune how it runs, such as batching and its version. */
+  toLayer<E, R>(
+    options: Options | undefined,
+    build: Effect.Effect<
+      | Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
+      | Hosted<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      E,
+      R
+    >,
   ): Layer.Layer<ProjectionKey<Name>, E, R>;
 }
 

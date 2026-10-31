@@ -108,6 +108,7 @@ class WalletLedger extends Domain.Projection("WalletLedger", {
 
 const walletLedgerLayer = (options?: Domain.Projection.Options) =>
   WalletLedger.toLayer(
+    options,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
       return Effect.fn(function* (batch) {
@@ -121,7 +122,6 @@ const walletLedgerLayer = (options?: Domain.Projection.Options) =>
         );
       });
     }),
-    options,
   );
 
 // ---------------------------------------------------------------- a stream the frontend reads
@@ -205,6 +205,7 @@ class LargeMovements extends Domain.Policy("LargeMovements", {
   on: [Deposited, Sent],
 }) {}
 const LargeMovementsLive = LargeMovements.toLayer(
+  { retry: Schedule.recurs(2) },
   Effect.gen(function* () {
     const reviews = yield* Review;
     return Effect.fn(function* ({ key, route, event }) {
@@ -212,7 +213,6 @@ const LargeMovementsLive = LargeMovements.toLayer(
       yield* reviews.send(key.id, new Flag({ reason: `${event._tag}${route ? `:${route}` : ""}` }));
     });
   }),
-  { retry: Schedule.recurs(2) },
 );
 
 class Wallets extends Domain.Model("Wallets", {

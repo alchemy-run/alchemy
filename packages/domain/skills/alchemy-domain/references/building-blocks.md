@@ -288,6 +288,7 @@ export class Ledger extends Domain.Projection("Ledger", {
 }) {}
 
 export const LedgerLive = Ledger.toLayer(
+  { batch: { size: 100, wait: "1 second" } },   // tuning lives on the Layer
   Effect.gen(function* () {
     const store = yield* LedgerStore;
     return Effect.fn(function* (batch) {
@@ -297,7 +298,6 @@ export const LedgerLive = Ledger.toLayer(
       })));
     });
   }),
-  { batch: { size: 100, wait: "1 second" } },   // tuning lives on the Layer
 );
 ```
 
