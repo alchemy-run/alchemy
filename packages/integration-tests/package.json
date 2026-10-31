@@ -25,6 +25,7 @@
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",
+    "@alchemy.run/portless": "workspace:*",
     "@alchemy.run/prisma": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
     "@alchemy.run/redis": "workspace:*",

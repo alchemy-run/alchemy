@@ -107,6 +107,7 @@
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },
     { "path": "../stripe/tsconfig.json" },
-    { "path": "../cloudflare/tsconfig.json" }
+    { "path": "../cloudflare/tsconfig.json" },
+    { "path": "../portless/tsconfig.json" }
   ]
 }

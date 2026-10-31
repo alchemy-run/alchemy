@@ -136,6 +136,11 @@ const sourceRoots: SourceRoot[] = [
     providerPrefix: "Docker",
     sourceDisplayPrefix: "packages/docker/src",
   },
+  {
+    srcRoot: "packages/portless/src",
+    providerPrefix: "Portless",
+    sourceDisplayPrefix: "packages/portless/src",
+  },
   { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
 ];
 
