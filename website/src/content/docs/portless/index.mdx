@@ -135,7 +135,9 @@ can reach the host reaches the routes, so use it on a network you trust. A
 running proxy of the other kind is rejected, not restarted.
 
 A container reaches a service by mapping its name to the host, where the proxy
-listens, and trusting the Portless CA:
+listens, and trusting the Portless CA. On Linux, `host-gateway` is the Docker
+bridge address, so a default-deny firewall has to let the bridge subnet reach
+the host (see Host Access in `Docker.Container`):
 
 ```typescript
 const api = yield* Portless.Dev("Api", { proxy, command: "node --watch server.ts" });
