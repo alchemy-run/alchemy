@@ -215,9 +215,9 @@ interface NodeDns {
  */
 const waitForAuthoritativeCname = (hostname: string) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const dns = yield* Effect.tryPromise((): Promise<NodeDns> => import("node:dns/promises")).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     if (dns === undefined || typeof dns.Resolver !== "function") return;
     const labels = hostname.split(".");
     let servers: string[] = [];
