@@ -41,7 +41,7 @@ const refund = (args: unknown) =>
 const defectOf = <A, E>(exit: Exit.Exit<A, E>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-describe("Domain ExternalSystem", () => {
+describe("Domain ExternalSystem", { tags: ["unit", "local"] }, () => {
   it.effect("passes valid arguments to the adapter and returns its answer", () =>
     Effect.gen(function* () {
       const { seen, layer } = adapter(({ settlementId }) =>

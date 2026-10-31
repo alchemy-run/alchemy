@@ -78,7 +78,7 @@ class CloseApi extends Domain.Api("CloseApi", {
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
   api.commands.map((command) => command.tag);
 
-describe("Domain Api", () => {
+describe("Domain Api", { tags: ["unit", "local"] }, () => {
   it.effect("a concrete Api is an Api.Any", () =>
     Effect.sync(() => {
       const any: Domain.Api.Any = BankApi;
@@ -232,7 +232,7 @@ class Vault extends Domain.Aggregate("Vault", {
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
 class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
 
-describe("Domain Rejection", () => {
+describe("Domain Rejection", { tags: ["unit", "local"] }, () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
     Effect.gen(function* () {
       const vaults = yield* VaultApi.clientInProcess;
@@ -335,7 +335,7 @@ class NotesApi extends Domain.Api("NotesApi", {
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
-describe("Domain Api in process", () => {
+describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.clientInProcess;

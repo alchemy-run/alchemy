@@ -114,7 +114,7 @@ const Wire = Domain.protocolHttp("").pipe(
   Layer.provideMerge(Hosted),
 );
 
-describe("Domain Api over the wire", () => {
+describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
   it.live("an input may name its fields target and commandId", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;

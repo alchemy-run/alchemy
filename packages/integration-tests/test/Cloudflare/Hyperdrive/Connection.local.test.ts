@@ -369,7 +369,12 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: ["provider:cloudflare", "provider:cloudflare:hyperdrive", "provider:cloudflare:worker"],
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "local",
+    ],
     timeout: 120_000,
   },
 );

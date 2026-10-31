@@ -33,5 +33,5 @@ test.provider(
       yield* roundTrip(worker.url!);
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"] },
 );
