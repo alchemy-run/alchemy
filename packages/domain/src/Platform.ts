@@ -7,6 +7,7 @@ import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
+import { ModelHostedTwice } from "./DefinitionError.ts";
 import { DefinitionError } from "./internal.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
@@ -195,7 +196,7 @@ export interface AggregateKit {
    * Fold already-decided events into state and route them, without running
    * `decide`. Used to seed history (story `given`).
    */
-  readonly seed: (input: SeedInput) => SeedResult;
+  readonly seed: (input: SeedInput) => Effect.Effect<SeedResult>;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
@@ -203,7 +204,7 @@ export interface AggregateKit {
   /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
-  readonly replay: (input: ReplayInput<StoredEvent>) => ReplayResult;
+  readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
   /**
    * What a subscriber of instance `id` receives, given its current state and
    * the events committed since (at least those after the subscription's cursor).
@@ -348,13 +349,13 @@ export interface ViewKit {
     key: string,
     snapshot: ViewSnapshot,
     deliveries: ReadonlyArray<Delivery>,
-  ) => {
+  ) => Effect.Effect<{
     readonly snapshot: ViewSnapshot;
     /** `false` when every delivery was a duplicate. */
     readonly changed: boolean;
     readonly entries: ReadonlyArray<ViewEntry>;
     readonly downstream: ReadonlyArray<Delivery>;
-  };
+  }>;
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this view, by `CatchUp.targetId`. */
@@ -378,9 +379,11 @@ export interface ViewKit {
     source: string,
     id: string,
     rows: ReadonlyArray<unknown>,
-  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
-  readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
+  readonly replay: (input: ReplayInput<ViewEntry>) => Effect.Effect<ReplayResult>;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,
@@ -478,7 +481,9 @@ export interface ProjectionKit {
     source: string,
     id: string,
     rows: ReadonlyArray<unknown>,
-  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
   /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records
@@ -668,9 +673,7 @@ export const hostedModels = ({
         const held = hosted.get(modelName);
         if (held !== undefined && held.id !== id) {
           return Effect.die(
-            new DefinitionError(
-              `Model ${modelName} is hosted twice on one platform: give each model its own name`,
-            ),
+            new DefinitionError({ reason: new ModelHostedTwice({ model: modelName }) }),
           );
         }
         if (held === undefined) hosted.set(modelName, { id, builds: 1 });

@@ -757,7 +757,9 @@ export interface ScannerHost {
     target: string,
     ref: SourceRef,
     rows: ReadonlyArray<unknown>,
-  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
 }
 
 /** A scanner's progress through one source instance, for one target. */
@@ -866,7 +868,7 @@ export const makeScanner = (
         Effect.orDie,
       );
       if (rows.length > 0) {
-        const routed = host.route(target, state.ref, rows);
+        const routed = yield* host.route(target, state.ref, rows);
         const through = routed.length > 0 ? routed[routed.length - 1]!.seq : state.through;
         const byKey = new Map<string, Array<Delivery>>();
         for (const row of routed)
@@ -1040,7 +1042,9 @@ export interface ConsumerHost {
   readonly history?: (
     ref: SourceRef,
     rows: ReadonlyArray<unknown>,
-  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
   /** The sources this consumer reads (`Account`, `Deposits`): where it asks about discovery. */
   readonly sources?: () => ReadonlyArray<string>;
   /**
@@ -1173,7 +1177,7 @@ export const makeConsumer = (
       // At first, start where the source's live routing stopped: this key has the rest.
       const read = yield* readAt(net, ref, target, host.key, from, limits.page);
       const rows = read.rows;
-      const routed = host.history!(ref, rows);
+      const routed = yield* host.history!(ref, rows);
       const through = routed.length > 0 ? routed[routed.length - 1]!.seq : read.from;
       const deliveries = routed
         .flatMap((row) => row.deliveries)
@@ -2199,23 +2203,25 @@ export const routeCommit = (
 
 /** Route stored rows to one target only, as history: each row's seq and its deliveries. */
 export const routeRows = <Row>(
-  replay: (input: ReplayInput<Row>) => ReplayResult,
+  replay: (input: ReplayInput<Row>) => Effect.Effect<ReplayResult>,
   id: string,
   targets: ReadonlyArray<string>,
   target: string,
   rows: ReadonlyArray<Row>,
   seqOf: (row: Row) => number,
 ) =>
-  rows.map((row) => ({
-    seq: seqOf(row),
-    deliveries: replay({
-      id,
-      routed: Object.fromEntries(
-        targets.map((t) => [t, t === target ? seqOf(row) - 1 : Number.MAX_SAFE_INTEGER]),
-      ),
-      rows: [row],
-    }).deliveries,
-  }));
+  Effect.forEach(rows, (row) =>
+    Effect.map(
+      replay({
+        id,
+        routed: Object.fromEntries(
+          targets.map((t) => [t, t === target ? seqOf(row) - 1 : Number.MAX_SAFE_INTEGER]),
+        ),
+        rows: [row],
+      }),
+      ({ deliveries }) => ({ seq: seqOf(row), deliveries }),
+    ),
+  );
 
 /** A consumer's kind and name from its target id: `view:Name#2` is the view `Name`. */
 export const consumerOf = (target: string) => {
