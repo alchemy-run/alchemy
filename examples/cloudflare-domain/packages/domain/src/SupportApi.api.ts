@@ -9,5 +9,6 @@ import { ApproveTransfer } from "./Transfer/ApproveTransfer.command.ts";
 /** What the support console reaches, over the same Bank. */
 export class SupportApi extends Domain.Api("SupportApi", {
   model: Bank,
-  serves: [FreezeAccount, ChangeOwner, ApproveTransfer, AccountSummary, AccountActivity],
+  commands: [FreezeAccount, ChangeOwner, ApproveTransfer],
+  views: [AccountSummary, AccountActivity],
 }) {}

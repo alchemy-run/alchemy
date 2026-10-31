@@ -398,11 +398,12 @@ import { WithdrawMoney } from "./WithdrawMoney.command.ts";
 
 export class BankApi extends Domain.Api("BankApi", {
   model: Bank,
-  serves: [RegisterCustomer, DepositMoney, WithdrawMoney, AccountSummary],
+  commands: [RegisterCustomer, DepositMoney, WithdrawMoney],
+  views: [AccountSummary],
 }) {}
 ```
 
-An Api names its model and `serves` what a client may reach. Nothing in it needs a handler: the account decides the commands, and the model hosts the view.
+An Api names its model and lists the commands and views a client may reach. Nothing in it needs a handler: the account decides the commands, and the model hosts the view.
 
 ## Test the Api
 

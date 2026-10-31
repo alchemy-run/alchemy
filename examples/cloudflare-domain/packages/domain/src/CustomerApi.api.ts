@@ -20,18 +20,8 @@ import { TransferStatus } from "./Transfer/TransferStatus.view.ts";
  */
 export class CustomerApi extends Domain.Api("CustomerApi", {
   model: Bank,
-  serves: [
-    RegisterCustomer,
-    DepositMoney,
-    WithdrawMoney,
-    CloseAccount,
-    RequestTransfer,
-    Account,
-    CustomerDashboard,
-    AccountSummary,
-    AccountCard,
-    Statement,
-    AccountTransfers,
-    TransferStatus,
-  ],
+  commands: [RegisterCustomer, DepositMoney, WithdrawMoney, CloseAccount, RequestTransfer],
+  views: [CustomerDashboard, AccountSummary, Statement, AccountTransfers, TransferStatus],
+  streams: [AccountCard],
+  aggregates: [Account],
 }) {}

@@ -204,8 +204,11 @@ export declare namespace Api {
   /** What `Domain.Api` takes: the model, and what of it the Api serves. */
   export type Options<
     M extends ModelModule.Any,
-    Serves extends ReadonlyArray<ApiModule.Servable>,
-  > = ApiModule.Options<M, Serves>;
+    C extends ReadonlyArray<CommandModule.Any>,
+    V extends ReadonlyArray<ViewModule.Any>,
+    S extends ReadonlyArray<StreamModule.Any>,
+    A extends ReadonlyArray<AggregateModule.Any>,
+  > = ApiModule.Options<M, C, V, S, A>;
   /** The typed client of an Api. */
   export type Client<E extends ApiModule.Servable> = ApiModule.ApiClient<E>;
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */

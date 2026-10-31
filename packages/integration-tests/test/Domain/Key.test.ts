@@ -252,7 +252,8 @@ describe("Domain keyed by a schema", () => {
     Effect.gen(function* () {
       class TourApi extends Domain.Api("TourApi", {
         model: Tours,
-        serves: [OrgSchedule, OrgFeed],
+        views: [OrgSchedule],
+        streams: [OrgFeed],
       }) {}
       const client = yield* TourApi.clientInProcess;
       const tours = yield* Tour;

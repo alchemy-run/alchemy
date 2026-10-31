@@ -71,23 +71,50 @@ type CheckInModel<InModel, S> = [S] extends [InModel]
   ? S
   : `${NameOf<S>} is not part of this Api's model`;
 
-/**
- * Everything an Api serves must be part of its model. Something that is not
- * is a type error on its place in `serves`.
- */
-export type ServesInModel<M extends Model.Any, Serves extends ReadonlyArray<Servable>> = {
-  readonly serves: { readonly [K in keyof Serves]: CheckInModel<Model.ServableOf<M>, Serves[K]> };
+/** Each of a list, checked against what the model holds of its kind. */
+type Checked<InModel, Xs extends ReadonlyArray<unknown>> = {
+  readonly [K in keyof Xs]: CheckInModel<InModel, Xs[K]>;
 };
 
-/** What {@link make} takes: the model, and what of it the Api serves. */
-export interface Options<M extends Model.Any, Serves extends ReadonlyArray<Servable>> {
+/**
+ * Everything an Api serves must be part of its model. Something that is not
+ * is a type error on its place in the list.
+ */
+export interface ServesInModel<
+  M extends Model.Any,
+  C extends ReadonlyArray<Command.Any>,
+  V extends ReadonlyArray<View.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+  A extends ReadonlyArray<Aggregate.Any>,
+> {
+  readonly commands?: Checked<M["commands"][number], C>;
+  readonly views?: Checked<M["views"][number], V>;
+  readonly streams?: Checked<M["streams"][number], S>;
+  readonly aggregates?: Checked<M["aggregates"][number], A>;
+}
+
+/**
+ * What {@link make} takes: the model, and what of it the Api serves. What it
+ * does not list has no route; to serve every one of a kind, pass the model's
+ * own list (`commands: Bank.commands`).
+ */
+export interface Options<
+  M extends Model.Any,
+  C extends ReadonlyArray<Command.Any>,
+  V extends ReadonlyArray<View.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+  A extends ReadonlyArray<Aggregate.Any>,
+> {
   /** The model the Api is over. */
   readonly model: M;
-  /**
-   * The commands it may send, and the views, streams and aggregates (with a
-   * `read` contract) it may read. What it does not list has no route.
-   */
-  readonly serves: Serves;
+  /** The commands a client may send. */
+  readonly commands?: C;
+  /** The views a client may read. */
+  readonly views?: V;
+  /** The streams a client may read. */
+  readonly streams?: S;
+  /** The aggregates a client may read directly, through their `read` contract. */
+  readonly aggregates?: A;
 }
 
 type Commands<E extends Servable> = Extract<E, Command.Any>;
@@ -1108,10 +1135,12 @@ const build = (
  * import { AccountSummary } from "./AccountSummary.ts";
  * import { Bank } from "./Bank.ts";
  *
- * // Serving something Bank does not hold is a type error.
+ * // Serving something Bank does not hold is a type error; nothing unlisted is served.
  * export class CustomerApi extends Domain.Api("CustomerApi", {
  *   model: Bank,
- *   serves: [DepositMoney, WithdrawMoney, Account, AccountSummary],
+ *   commands: [DepositMoney, WithdrawMoney],
+ *   views: [AccountSummary],
+ *   aggregates: [Account],
  * }) {}
  * ```
  *
@@ -1175,17 +1204,27 @@ const build = (
 export const make = <
   const Name extends string,
   M extends Model.Any,
-  const Serves extends ReadonlyArray<Servable>,
+  const C extends ReadonlyArray<Command.Any> = readonly [],
+  const V extends ReadonlyArray<View.Any> = readonly [],
+  const S extends ReadonlyArray<DomainStream.Any> = readonly [],
+  const A extends ReadonlyArray<Aggregate.Any> = readonly [],
 >(
   name: Name,
-  options: Options<M, Serves> & ServesInModel<M, Serves>,
-): ApiClass<Name, Serves> =>
-  build(
+  options: Options<M, C, V, S, A> & ServesInModel<M, C, V, S, A>,
+): ApiClass<Name, ReadonlyArray<C[number] | V[number] | S[number] | A[number]>> => {
+  const serves: ReadonlyArray<Servable> = [
+    ...(options.commands ?? []),
+    ...(options.views ?? []),
+    ...(options.streams ?? []),
+    ...(options.aggregates ?? []),
+  ];
+  return build(
     name,
     options.model,
-    options.serves,
-    RpcGroup.make(...options.serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
-  ) as ApiClass<Name, Serves>;
+    serves,
+    RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
+  ) as ApiClass<Name, ReadonlyArray<C[number] | V[number] | S[number] | A[number]>>;
+};
 
 /**
  * The HTTP protocol for an Api client (NDJSON, so streams work). Live reads

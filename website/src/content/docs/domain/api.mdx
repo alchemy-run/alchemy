@@ -117,11 +117,12 @@ The tutorial's bank exposes registration, deposits, withdrawals and the account 
 ```typescript title="src/BankApi.api.ts"
 export class BankApi extends Domain.Api("BankApi", {
   model: Bank,
-  serves: [RegisterCustomer, DepositMoney, WithdrawMoney, AccountSummary],
+  commands: [RegisterCustomer, DepositMoney, WithdrawMoney],
+  views: [AccountSummary],
 }) {}
 ```
 
-`model` is the model the Api is over, and `serves` is what of it a client may reach. Serving something the model doesn't hold is a type error.
+`model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` list what of it a client may reach, and an Api serves nothing you don't list. Serving something the model doesn't hold is a type error. To serve every one of a kind, pass the model's own list, such as `commands: Bank.commands`.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
 
@@ -132,7 +133,8 @@ Different clients need different surfaces. In the example bank, customers and su
 ```typescript title="packages/domain/src/SupportApi.api.ts"
 export class SupportApi extends Domain.Api("SupportApi", {
   model: Bank,
-  serves: [FreezeAccount, ChangeOwner, ApproveTransfer, AccountSummary, AccountActivity],
+  commands: [FreezeAccount, ChangeOwner, ApproveTransfer],
+  views: [AccountSummary, AccountActivity],
 }) {}
 ```
 

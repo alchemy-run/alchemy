@@ -455,7 +455,8 @@ it("reserves Message for command results", () => {
   }) {}
   class CollisionApi extends Domain.Api("CollisionApi", {
     model: Collision,
-    serves: [Increment, MessageView],
+    commands: [Increment],
+    views: [MessageView],
   }) {}
   // @ts-expect-error Message is reserved for command results
   const collision = Foldkit.make(CollisionApi);

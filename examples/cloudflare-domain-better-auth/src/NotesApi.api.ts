@@ -6,5 +6,6 @@ import { WriteNote } from "./WriteNote.command.ts";
 /** What the browser reaches. */
 export class NotesApi extends Domain.Api("NotesApi", {
   model: NotesModel,
-  serves: [WriteNote, Notes],
+  commands: [WriteNote],
+  views: [Notes],
 }) {}

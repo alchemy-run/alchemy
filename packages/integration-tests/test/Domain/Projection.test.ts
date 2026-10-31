@@ -224,7 +224,8 @@ class Wallets extends Domain.Model("Wallets", {
 
 class WalletApi extends Domain.Api("WalletApi", {
   model: Wallets,
-  serves: [Deposit, WalletCard],
+  commands: [Deposit],
+  streams: [WalletCard],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
