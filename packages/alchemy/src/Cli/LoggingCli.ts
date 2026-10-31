@@ -18,6 +18,7 @@ import {
   isTerminalStatus as isTerminal,
 } from "./components/view/statusStyle.ts";
 import { formatElapsed } from "./Format.ts";
+import { currentConsoleSettings } from "./GlobalLog.ts";
 import { formatModeNote } from "./ModeTag.ts";
 import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
 import { present } from "./Present.ts";
@@ -230,8 +231,10 @@ export const LoggingCli = Layer.effect(
         }),
       approvePlan: (plan, options) =>
         Effect.gen(function* () {
+          const { format } = yield* currentConsoleSettings;
           for (const line of formatPlanLines(plan, options)) yield* present(line);
-          if (canPromptOnStdin()) {
+          // A JSON console carries log records only: no prompt between them.
+          if (format !== "json" && canPromptOnStdin()) {
             return yield* confirm(
               plan.destroy === true
                 ? { message: "Destroy these resources?", initial: false }

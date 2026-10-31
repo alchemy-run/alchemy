@@ -23,6 +23,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import type * as LogLevel from "effect/LogLevel";
 import * as Option from "effect/Option";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
@@ -386,7 +387,21 @@ export interface TerminalOptions {
   readonly captureConsole?: boolean;
 }
 
-export type NonInteractiveOptions = Pick<TerminalOptions, "stdout" | "colors" | "unicode">;
+export type NonInteractiveOptions = Pick<TerminalOptions, "stdout" | "colors" | "unicode"> & {
+  /**
+   * `--log-format json`: messages become log records (so the console's JSON
+   * sink prints them in the run log's envelope) and views print nothing, so
+   * the console carries JSON lines only.
+   */
+  readonly json?: boolean;
+};
+
+const jsonLevel: Record<StatusVariant, LogLevel.Severity> = {
+  info: "Info",
+  success: "Info",
+  warning: "Warn",
+  error: "Error",
+};
 
 const nonInteractiveFailure = (operation: string) =>
   new NonInteractiveTerminal({
@@ -420,23 +435,28 @@ export const makeNonInteractive = (options: NonInteractiveOptions = {}): Interac
     return `${glyph} ${body}${detail === undefined ? "" : ` ${muted(`· ${detail}`)}`}`;
   };
 
-  const log = (variant: StatusVariant) => (message: string | MessageOptions) =>
-    Effect.sync(() => {
-      const { message: text, detail } = typeof message === "string" ? { message } : message;
-      stdout.write(`${statusText(variant, text, detail)}\n`);
-    });
+  const log = (variant: StatusVariant) => (message: string | MessageOptions) => {
+    const { message: text, detail } = typeof message === "string" ? { message } : message;
+    return options.json
+      ? Effect.logWithLevel(jsonLevel[variant])(text).pipe(
+          Effect.annotateLogs(detail === undefined ? {} : { detail }),
+        )
+      : Effect.sync(() => void stdout.write(`${statusText(variant, text, detail)}\n`));
+  };
 
   // Views are React layouts: load the static formatter only when one is
   // actually printed, so headless processes never pull in the renderer.
   const print = (view: View) =>
-    Effect.promise(loadFormat).pipe(
-      Effect.map(({ formatView }) =>
-        formatView(view, { ...terminal, columns: stdout.columns ?? terminal.columns }),
-      ),
-      Effect.flatMap((text) =>
-        text === "" ? Effect.void : Effect.sync(() => void stdout.write(`${text}\n`)),
-      ),
-    );
+    options.json
+      ? Effect.void
+      : Effect.promise(loadFormat).pipe(
+          Effect.map(({ formatView }) =>
+            formatView(view, { ...terminal, columns: stdout.columns ?? terminal.columns }),
+          ),
+          Effect.flatMap((text) =>
+            text === "" ? Effect.void : Effect.sync(() => void stdout.write(`${text}\n`)),
+          ),
+        );
 
   const unavailable = (operation: string) => Effect.fail(nonInteractiveFailure(operation));
 
