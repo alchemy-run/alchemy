@@ -5,7 +5,7 @@ import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
 import type { ResourceLike } from "alchemy/Resource";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
-import { Server, type ServerDevProps } from "alchemy/Website/Server";
+import { Server, type ServerDevProps, withSiteRoute } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
@@ -211,7 +211,7 @@ export const deployWebsite = Effect.fn(function* (
 
 /** Compose a real framework build/dev server with a traced Prisma artifact. */
 export const makeFrameworkSite = Effect.fn(function* (
-  _id: string,
+  id: string,
   props: FrameworkSiteProps,
   config: FrameworkSiteConfig,
 ) {
@@ -230,7 +230,7 @@ export const makeFrameworkSite = Effect.fn(function* (
     env: websiteBuildEnv(props.env),
     options: { ...config.options, ...targetConfig, targetConfig },
     memo: props.memo,
-    dev: props.dev,
+    dev: withSiteRoute(id, props.dev),
   });
   if (context.dev && remote !== true) {
     return {

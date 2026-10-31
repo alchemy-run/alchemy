@@ -4,7 +4,7 @@ import type { MemoOptions } from "alchemy/Command/Memo";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
-import { Server, type ServerDevProps } from "alchemy/Website/Server";
+import { Server, type ServerDevProps, withSiteRoute } from "alchemy/Website/Server";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -301,7 +301,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     env: props.env,
     options: onWebFunction ? { ...config.options, ...config.webOptions } : config.options,
     memo: props.memo,
-    dev,
+    dev: withSiteRoute(id, dev),
   });
 
   if (isLocal) {

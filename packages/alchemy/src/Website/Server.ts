@@ -6,7 +6,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../Diff.ts";
-import { parseFqn } from "../FQN.ts";
 import * as Ingress from "../Local/Ingress.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
@@ -106,9 +105,10 @@ export type ServerDevProps =
        * Under `alchemy dev`, `url` becomes the adapter's origin and
        * {@link Server.localUrl} keeps the framework server's own address, which
        * everything inside the dev session (a Router's dev origin, for one)
-       * dials. The route is named after the site: the id of the composite
-       * that builds this server, or this server's own id outside one. Changing
-       * `ingress` restarts the dev server.
+       * dials. The route is called the config's `name`, else this server's id;
+       * a site composite that builds its server as `"Build"` sets `name` to the
+       * site's id when you give an `ingress` without one. Changing `ingress`
+       * restarts the dev server.
        *
        * `alchemy dev` fails to start the server when the adapter can't be
        * resolved or can't route, instead of advertising a URL that isn't
@@ -260,6 +260,26 @@ export interface Server extends Resource<
 export const Server = Resource<Server>("Website.Server", {
   aliases: ["AWS.Website.Server", "AWS.Website.FrameworkBuild"],
 });
+
+/**
+ * The `dev` props a site composite passes to the `"Build"` server it declares
+ * inside its own namespace, with the dev ingress route called after the site
+ * (`id`) rather than the server. A route name must be distinct across a stack,
+ * and every composite's server is `"Build"`.
+ *
+ * Only a site whose user gave an `ingress` without a `name` changes; every
+ * other `dev` comes back as it is, so a deployed site sees no props change.
+ */
+export const withSiteRoute = (
+  id: string,
+  dev: ServerDevProps | undefined,
+): ServerDevProps | undefined =>
+  dev === undefined ||
+  dev.mode === "external" ||
+  dev.ingress === undefined ||
+  dev.ingress.name !== undefined
+    ? dev
+    : { ...dev, ingress: { ...dev.ingress, name: id } };
 
 const importFrameworkModule = (specifier: string) =>
   Effect.tryPromise({
@@ -503,16 +523,6 @@ const normalizeAdvertisedUrl = (url: string) =>
   url.replace(/^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+(?::0+){7}\])(?=[:/]|$)/, "$1localhost");
 
 /**
- * What a route to this server is called. A composite builds its server as
- * `"Build"` inside the namespace named after the site (`Web/Build`), so the
- * route takes the site's id; a server outside a namespace keeps its own.
- */
-const siteLabel = (fqn: string) => {
-  const { path, logicalId } = parseFqn(fqn);
-  return path.at(-1) ?? logicalId;
-};
-
-/**
  * The `alchemy dev` variant: runs the framework's own dev server (native
  * HMR through the framework's kit — nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
@@ -601,7 +611,7 @@ export const ServerProviderLocal = () =>
                     id,
                     fqn,
                     type: Server.Type,
-                    label: siteLabel(fqn),
+                    config: dev.ingress,
                   }),
                   new URL(localUrl),
                 );

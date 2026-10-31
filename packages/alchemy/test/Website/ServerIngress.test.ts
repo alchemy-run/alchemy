@@ -1,4 +1,4 @@
-import { assert, expect } from "@alchemy.run/test";
+import { assert, describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { forwarderConfig, getRouted, makeForwarder } from "@alchemy.run/test/IngressForwarder";
 import * as Cause from "effect/Cause";
@@ -8,7 +8,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as pathe from "pathe";
 import type { IngressConfig } from "@/Local/Ingress.ts";
 import * as Namespace from "@/Namespace.ts";
-import { Server, ServerProvider } from "@/Website/Server.ts";
+import { Server, ServerProvider, withSiteRoute } from "@/Website/Server.ts";
 
 // In-process (`sidecar: false`): the test provides `Ingress.Adapters` around
 // `stack.deploy`, which a sidecar process would never see.
@@ -18,14 +18,28 @@ const framework = pathe.resolve(import.meta.dirname, "fixtures/ingress-framework
 
 const RAW_URL = /^http:\/\/127\.0\.0\.1:\d+$/;
 
-/** A `Website.Server`, in a `site` namespace the way a composite declares it. */
-const server = (site: string | undefined, ingress: IngressConfig | undefined) => {
-  const build = Server("Build", {
+/**
+ * A site composite's server: `"Build"` in the site's namespace, with the route
+ * named after the site, as every composite declares it.
+ */
+const site = (id: string, ingress: IngressConfig | undefined) =>
+  Namespace.push(
+    id,
+    Server("Build", {
+      framework,
+      target: "unused",
+      dev: withSiteRoute(id, ingress === undefined ? {} : { ingress }),
+    }),
+  );
+
+/** A `Website.Server` a user declares, optionally inside a namespace. */
+const userServer = (id: string, ingress: IngressConfig | undefined, namespace?: string) => {
+  const server = Server(id, {
     framework,
     target: "unused",
     dev: ingress === undefined ? {} : { ingress },
   });
-  return site === undefined ? build : Namespace.push(site, build);
+  return namespace === undefined ? server : Namespace.push(namespace, server);
 };
 
 const getRaw = (url: string) =>
@@ -36,20 +50,20 @@ const getRaw = (url: string) =>
   );
 
 test.provider(
-  "a site's url is its routed origin and localUrl is the framework's listener",
+  "a site composite's route is called the site's id, and localUrl is the framework's listener",
   (stack) =>
     Effect.scoped(
       Effect.gen(function* () {
         yield* stack.destroy();
         const forwarder = yield* makeForwarder;
         const deploy = (ingress: IngressConfig | undefined) =>
-          stack.deploy(server("Web", ingress)).pipe(Effect.provide(forwarder.adapters));
+          stack.deploy(site("Web", ingress)).pipe(Effect.provide(forwarder.adapters));
 
         // ── with ingress
         const routed = yield* deploy(forwarderConfig());
         const [fqn, route] = [...forwarder.routes()][0]!;
         expect(fqn).toBe("Web/Build");
-        // The route is named after the site, not the server inside it.
+        // The route is called the site, not the server inside it.
         expect(route.host).toContain(".web.");
         expect(route.host).not.toContain(".build.");
         const origin = routed.url!;
@@ -85,7 +99,7 @@ test.provider(
 );
 
 test.provider(
-  "a server outside a namespace names its route after itself",
+  "a Server a user declares is called its own id, wherever it sits",
   (stack) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -93,12 +107,13 @@ test.provider(
         const forwarder = yield* makeForwarder;
 
         const routed = yield* stack
-          .deploy(server(undefined, forwarderConfig()))
+          .deploy(userServer("Api", forwarderConfig(), "Backend"))
           .pipe(Effect.provide(forwarder.adapters));
 
         const [fqn, route] = [...forwarder.routes()][0]!;
-        expect(fqn).toBe("Build");
-        expect(route.host).toContain(".build.");
+        expect(fqn).toBe("Backend/Api");
+        expect(route.host).toContain(".api.");
+        expect(route.host).not.toContain(".backend.");
         expect(routed.url).toBe(`http://${route.host}:${forwarder.port}`);
 
         yield* stack.destroy();
@@ -110,6 +125,93 @@ test.provider(
 );
 
 test.provider(
+  "two Servers in one namespace get distinct routes",
+  (stack) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const forwarder = yield* makeForwarder;
+
+        const routed = yield* stack
+          .deploy(
+            Namespace.push(
+              "Backend",
+              Effect.all({
+                api: userServer("Api", forwarderConfig()),
+                admin: userServer("Admin", forwarderConfig()),
+              }),
+            ),
+          )
+          .pipe(Effect.provide(forwarder.adapters));
+
+        const routes = forwarder.routes();
+        expect([...routes.keys()].sort()).toEqual(["Backend/Admin", "Backend/Api"]);
+        expect(routes.get("Backend/Api")!.host).toContain(".api.");
+        expect(routes.get("Backend/Admin")!.host).toContain(".admin.");
+        expect(routed.api.url).not.toBe(routed.admin.url);
+        expect((yield* getRouted(routed.api.url!)).status).toBe(200);
+        expect((yield* getRouted(routed.admin.url!)).status).toBe(200);
+
+        yield* stack.destroy();
+        expect(forwarder.routes().size).toBe(0);
+      }),
+    ),
+  { tags: ["unit", "local"], timeout: 60_000 },
+);
+
+test.provider(
+  "a name in the ingress config wins, on a site and on a Server alike",
+  (stack) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const forwarder = yield* makeForwarder;
+
+        const routed = yield* stack
+          .deploy(
+            Effect.all({
+              site: site("Web", { ...forwarderConfig(), name: "storefront" }),
+              server: userServer("Api", { ...forwarderConfig(), name: "orders" }),
+            }),
+          )
+          .pipe(Effect.provide(forwarder.adapters));
+
+        const routes = forwarder.routes();
+        expect(routes.get("Web/Build")!.host).toContain(".storefront.");
+        expect(routes.get("Web/Build")!.host).not.toContain(".web.");
+        expect(routes.get("Api")!.host).toContain(".orders.");
+        expect(routed.site.url).toMatch(/\.storefront\./);
+        expect(routed.server.url).toMatch(/\.orders\./);
+
+        yield* stack.destroy();
+      }),
+    ),
+  { tags: ["unit", "local"], timeout: 60_000 },
+);
+
+describe("withSiteRoute", { tags: ["unit", "local"] }, () => {
+  it("calls an unnamed ingress route after the site", () => {
+    const dev = { port: 3000, ingress: { type: "forwarder" } };
+    expect(withSiteRoute("Web", dev)).toEqual({
+      port: 3000,
+      ingress: { type: "forwarder", name: "Web" },
+    });
+    // The user's props are not mutated.
+    expect(dev.ingress).toEqual({ type: "forwarder" });
+  });
+
+  it("leaves every other dev as it is, so a site without ingress sees no props change", () => {
+    const named = { ingress: { type: "forwarder", name: "storefront" } };
+    const noIngress = { port: 3000 };
+    const external = { mode: "external", url: "http://localhost:1" } as const;
+    expect(withSiteRoute("Web", undefined)).toBeUndefined();
+    expect(withSiteRoute("Web", named)).toBe(named);
+    expect(withSiteRoute("Web", noIngress)).toBe(noIngress);
+    expect(withSiteRoute("Web", external)).toBe(external);
+  });
+});
+
+test.provider(
   "an ingress adapter that can't be resolved fails the server instead of advertising a URL",
   (stack) =>
     Effect.scoped(
@@ -118,7 +220,7 @@ test.provider(
         const forwarder = yield* makeForwarder;
 
         const exit = yield* Effect.exit(
-          stack.deploy(server("Web", { type: "nope" })).pipe(Effect.provide(forwarder.adapters)),
+          stack.deploy(site("Web", { type: "nope" })).pipe(Effect.provide(forwarder.adapters)),
         );
 
         assert(Exit.isFailure(exit));
@@ -146,14 +248,14 @@ sidecarTest.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const routed = yield* stack.deploy(server("Web", forwarderConfig()));
+      const routed = yield* stack.deploy(site("Web", forwarderConfig()));
       const origin = routed.url!;
       expect(origin).toMatch(/^http:\/\/[a-z0-9-]+\.web\.[a-z0-9-]+\.localhost:\d+$/);
       expect(routed.localUrl).toMatch(RAW_URL);
       expect((yield* getRouted(origin, "/page")).body).toBe(`/page ${new URL(origin).host}`);
 
       // Removing `ingress` restores the listener and drops the sidecar's route.
-      const plain = yield* stack.deploy(server("Web", undefined));
+      const plain = yield* stack.deploy(site("Web", undefined));
       expect(plain.url).toMatch(RAW_URL);
       expect((yield* getRouted(origin)).status).toBe(502);
 

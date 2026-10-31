@@ -4,7 +4,7 @@ import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
-import { Server, type ServerDevProps } from "alchemy/Website/Server";
+import { Server, type ServerDevProps, withSiteRoute } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Branch } from "../Branch.ts";
@@ -156,7 +156,7 @@ export const deployWebsite = Effect.fn(function* (
 
 /** Compose native development or a production Fetch build with a traced artifact. */
 export const makeFrameworkSite = Effect.fn(function* (
-  _id: string,
+  id: string,
   props: FrameworkSiteProps,
   config: FrameworkSiteConfig,
 ) {
@@ -178,7 +178,7 @@ export const makeFrameworkSite = Effect.fn(function* (
     env: websiteBuildEnv(props.env),
     options: { ...config.options, ...targetConfig, targetConfig },
     memo: props.memo,
-    dev: props.dev,
+    dev: withSiteRoute(id, props.dev),
   });
   if (context.dev && remote !== true) {
     return {
