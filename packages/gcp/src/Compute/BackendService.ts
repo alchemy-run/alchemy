@@ -628,6 +628,13 @@ export const BackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
+          // Compute rejects the delete while another operation is still in
+          // flight on the backend service (a just-applied update).
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotReady",
+            times: 20,
+            schedule: Schedule.spaced("10 seconds"),
+          }),
           Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
           Effect.catchTag("NotFound", () => Effect.void),
         );
