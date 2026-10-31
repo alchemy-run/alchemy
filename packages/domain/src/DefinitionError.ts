@@ -335,6 +335,15 @@ export class NewerGeneration extends Data.TaggedError("NewerGeneration")<{
   }
 }
 
+/** Two different models with the same name are hosted on one platform, so they would share storage. */
+export class ModelHostedTwice extends Data.TaggedError("ModelHostedTwice")<{
+  readonly model: string;
+}> {
+  override get message() {
+    return `Model ${this.model} is hosted twice on one platform: give each model its own name`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -368,7 +377,8 @@ export type Reason =
   | DuplicateFlag
   | DuplicateCommand
   | MissingGroup
-  | NewerGeneration;
+  | NewerGeneration
+  | ModelHostedTwice;
 
 /**
  * A domain definition error, found while the kernel is built or when a

@@ -19,6 +19,7 @@ import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type ModelHost,
   Platform,
   type PolicyStore,
   type ProjectionStore,
@@ -169,6 +170,16 @@ export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
   /**
+   * Before Domain version 0, models in one Worker that listed the same
+   * aggregate, view or saga shared its Durable Object class, and so its data.
+   * Each model now has classes of its own, and the first deploy moves the
+   * shared class to one of them. Set this on the model that keeps that data;
+   * the others start empty. The deploy fails until exactly one model sets it.
+   *
+   * @default false
+   */
+  readonly legacyData?: boolean;
+  /**
    * Each view's version, by name (0 when omitted). Bump a view's version to
    * rebuild it from the history: after its state was lost, or once its
    * `evolve` or routing changed what it should hold. Every view and
@@ -246,10 +257,12 @@ export const make = <
     static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
         build(
+          name,
           definitions,
           handlers,
           members.sagas ?? [],
           Telemetry.resolve(options?.telemetry),
+          options?.legacyData ?? false,
           options?.versions ?? {},
         ),
       );
@@ -333,14 +346,22 @@ const observeProjection =
   };
 
 const build = <A, E, R>(
+  modelName: string,
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
+  legacyData: boolean,
   versions: { readonly [view: string]: number | undefined },
 ) =>
   Effect.gen(function* () {
-    const platform = yield* Platform;
+    // The model's own storage: models sharing a definition never share its data.
+    const platform = yield* (yield* Platform).model({
+      modelName,
+      id: definitions,
+      sagas: sagas.map((saga) => saga.workflow._tag),
+      legacyData,
+    });
     const kernel = yield* Kernel.make(definitions, telemetry);
     for (const [view, version] of Object.entries(versions)) {
       if (version) kernel.setVersion(`view:${view}`, version);
@@ -457,7 +478,10 @@ const build = <A, E, R>(
           }),
         );
       }
-      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+      // The model's own runs: its sagas register and start under `<model>/<saga>`.
+      const modelEngine = Saga.engineFor(engine.value, modelName);
+      hosts = Context.add(hosts, WorkflowEngine.WorkflowEngine, modelEngine);
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.
@@ -899,10 +923,7 @@ const streamHost = (
 };
 
 /** How much history has reached a consumer, as the platform reports it. */
-const history = (
-  platform: Platform["Service"],
-  target: () => string,
-): Effect.Effect<View.History> =>
+const history = (platform: ModelHost, target: () => string): Effect.Effect<View.History> =>
   Effect.suspend(() =>
     platform.history
       ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))

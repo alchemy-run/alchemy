@@ -30,6 +30,7 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
+import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -3410,6 +3411,38 @@ export const LiveWorkerProvider = () =>
         // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
+
+        // Domain models named their classes differently in earlier Domain
+        // versions. Map each old class to the logical id of its new name, so
+        // the rename below carries its data over instead of deleting it.
+        const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
+        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
+        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
+        if (domainClasses.length > 0) {
+          const renamed = yield* DomainVersion.migrate({
+            scriptName: name,
+            deployed: deployedDomainVersion,
+            classes: domainClasses,
+            deployedClasses: new Set([
+              ...Object.values(oldDoClassNameByLogicalId),
+              ...oldBindings.flatMap((old) =>
+                old.type === "durable_object_namespace" &&
+                "className" in old &&
+                old.className &&
+                (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+                  ? [old.className]
+                  : [],
+              ),
+            ]),
+          });
+          for (const { from, to } of renamed) {
+            for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+              if (className === from) delete oldDoClassNameByLogicalId[logicalId];
+            }
+            // A Domain class's logical id is its class name.
+            oldDoClassNameByLogicalId[to] = from;
+          }
+        }
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
         );
@@ -3727,7 +3760,11 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
+        // The Domain version goes up with every upload that can change the
+        // classes, in the same request, so the tag and the classes never disagree.
+        const domainTags =
+          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -3915,6 +3952,7 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
+                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
@@ -5882,7 +5920,7 @@ class AlchemyPlaceholderDurableObject extends DurableObject {
   alarm() { this.ctx.abort(alchemyResetReason); }
 }
 
-${worker}${doClasses.map((className) => `export class ${className} extends AlchemyPlaceholderDurableObject {}`).join("\n")}
+${worker}${doClasses.map((className, i) => `const Placeholder${i} = class extends AlchemyPlaceholderDurableObject {};\nexport { Placeholder${i} as ${JSON.stringify(className)} };`).join("\n")}
 `;
 };
 

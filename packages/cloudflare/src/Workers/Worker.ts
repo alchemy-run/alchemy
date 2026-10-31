@@ -34,6 +34,7 @@ import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
+import type { DomainClass } from "../Domain/Version.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
@@ -1491,6 +1492,12 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /**
+     * Durable Object classes a Domain model hosts, with the names they had in
+     * earlier Domain versions, so a deploy carries their data over to this
+     * version's names. See `Domain/Version.ts`.
+     */
+    domainClasses?: DomainClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
