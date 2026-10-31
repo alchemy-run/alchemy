@@ -601,6 +601,34 @@ test.provider(
 );
 
 test.provider(
+  "update recreates a bucket deleted out of band",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const definition = (revision: string) =>
+        Bucket("RecreatedBucket", { versioning: "Enabled", tags: { revision } });
+      const bucket = yield* stack.deploy(definition("1"));
+
+      // State still records the bucket; the cloud no longer has it.
+      yield* S3.deleteBucket({ Bucket: bucket.bucketName });
+      yield* assertBucketDeleted(bucket.bucketName);
+
+      const recreated = yield* stack.deploy(definition("2"));
+      expect(recreated.bucketName).toBe(bucket.bucketName);
+      yield* S3.headBucket({ Bucket: bucket.bucketName });
+      const versioning = yield* S3.getBucketVersioning({ Bucket: bucket.bucketName });
+      expect(versioning.Status).toBe("Enabled");
+      const tagging = yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+      expect(tagging.TagSet).toContainEqual({ Key: "revision", Value: "2" });
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "live"] },
+);
+
+test.provider(
   "create bucket with custom name",
   (stack) =>
     Effect.gen(function* () {

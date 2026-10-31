@@ -154,6 +154,8 @@ const isProviderService = (value: unknown): value is ProviderService<any> =>
 export const provideProviderContext = <ROut, E, RIn, ServicesE>(
   providerLayer: Layer.Layer<ROut, E, RIn>,
   services: Layer.Layer<any, ServicesE, never>,
+  /** Applied to every wrapped provider service (e.g. {@link recreateMissing}). */
+  wrap: (provider: ProviderService<any>) => ProviderService<any> = (provider) => provider,
 ): Layer.Layer<ROut, E | ServicesE, RIn> =>
   Layer.fromBuildMemo((memoMap, scope) =>
     Effect.gen(function* () {
@@ -175,9 +177,79 @@ export const provideProviderContext = <ROut, E, RIn, ServicesE>(
       for (const [key, value] of built.mapUnsafe) {
         wrapped.set(
           key,
-          isProviderService(value) ? withProviderContext(value, servicesLayer) : value,
+          isProviderService(value) ? wrap(withProviderContext(value, servicesLayer)) : value,
         );
       }
       return Context.makeUnsafe(wrapped) as Context.Context<ROut>;
     }),
   ) as Layer.Layer<ROut, E | ServicesE, RIn>;
+
+/**
+ * Wraps a local (emulator-backed) {@link ProviderService} so a resource the
+ * emulator no longer has is recreated instead of updated. The managed floci
+ * container keeps its data in memory: a Docker restart, or a recreation for
+ * an image bump, empties it while local state still records every resource
+ * (#2724). Without this, a resource whose `diff` doesn't look at the cloud
+ * plans "no change", and one whose `reconcile` trusts the cached `output`
+ * fails on its first update call (`NoSuchBucket`).
+ *
+ * - `diff` asks `read` whether the resource still exists. When it doesn't,
+ *   it plans an update with no stable attributes, so dependents re-resolve
+ *   the recreated resource's attributes (a new KMS key id, a new ARN).
+ * - `reconcile` asks again and, when the resource is gone, runs as a
+ *   greenfield create (`output` and `olds` undefined) under the same
+ *   instance id, so engine-generated physical names are unchanged.
+ *
+ * A failing `read` is treated as "exists": the check only ever adds work for
+ * a resource `read` positively reports missing. Providers without `read`
+ * are returned unchanged.
+ */
+export const recreateMissing = <R extends ResourceLike>(
+  provider: ProviderService<R>,
+): ProviderService<R> => {
+  const read = provider.read?.bind(provider);
+  if (read === undefined) return provider;
+  const isMissing = (input: {
+    id: string;
+    fqn: string;
+    instanceId: string;
+    olds: any;
+    output: R["Attributes"] | undefined;
+  }) =>
+    input.output === undefined || input.olds === undefined
+      ? Effect.succeed(false)
+      : read({
+          id: input.id,
+          fqn: input.fqn,
+          instanceId: input.instanceId,
+          olds: input.olds,
+          output: input.output,
+        }).pipe(
+          Effect.map((observed) => observed === undefined),
+          Effect.orElseSucceed(() => false),
+        );
+  return new Proxy(provider, {
+    get: (target, prop) => {
+      if (prop === "diff") {
+        return (input: Parameters<NonNullable<ProviderService<R>["diff"]>>[0]) =>
+          Effect.gen(function* () {
+            if (yield* isMissing(input)) {
+              return { action: "update", stables: [] } as const;
+            }
+            return yield* target.diff?.(input) ?? Effect.undefined;
+          });
+      }
+      if (prop === "reconcile") {
+        return (input: Parameters<ProviderService<R>["reconcile"]>[0]) =>
+          Effect.gen(function* () {
+            if (yield* isMissing(input)) {
+              yield* input.session.note(`${input.id} is missing from the emulator; recreating it`);
+              return yield* target.reconcile({ ...input, output: undefined, olds: undefined });
+            }
+            return yield* target.reconcile(input);
+          });
+      }
+      return (target as any)[prop];
+    },
+  });
+};

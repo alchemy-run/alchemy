@@ -25,7 +25,10 @@ import * as path from "node:path";
  * The container is started detached with a stable name — the DOCKER DAEMON
  * is the supervisor, not alchemy: it outlives `alchemy dev` sessions, so
  * queues/tables/functions stay warm between runs and the next session
- * reattaches via the health probe in milliseconds.
+ * reattaches via the health probe in milliseconds. Its storage is in memory
+ * unless {@link FlociConfig.storageDir} is set, so a Docker restart empties
+ * it; the next deploy recreates the resources it lost (`recreateMissing` in
+ * ./ProviderContext.ts).
  */
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
