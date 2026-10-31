@@ -1,0 +1,46 @@
+{
+  "discovery": "monitoring-v3",
+  "module": "monitoring_v3",
+  "resources": {
+    "AlertPolicy": {
+      "pattern": "projects/*/alertPolicies/*"
+    },
+    "Group": {
+      "pattern": "projects/*/groups/*"
+    },
+    "MetricDescriptor": {
+      "pattern": "projects/*/metricDescriptors/*"
+    },
+    "NotificationChannel": {
+      "pattern": "projects/*/notificationChannels/*"
+    },
+    "Service": {
+      "pattern": "*/*/services/*"
+    },
+    "ServicesServiceLevelObjective": {
+      "pattern": "*/*/services/*/serviceLevelObjectives/*"
+    },
+    "UptimeCheckConfig": {
+      "pattern": "projects/*/uptimeCheckConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Group": "ProbeGroup",
+      "MetricDescriptor": "ProbeMetricDescriptor",
+      "NotificationChannel": "ProbeNotificationChannel",
+      "Service": "ProbeService",
+      "UptimeCheckConfig": "ProbeUptimeCheckConfig",
+      "AlertPolicy": "ProbeAlertPolicy",
+      "ServicesServiceLevelObjective": "ProbeSlo"
+    },
+    "untestable": {},
+    "args": {
+      "ListTimeSeries": "{ filter: 'metric.type = \"compute.googleapis.com/instance/cpu/utilization\"', \"interval.startTime\": \"2026-01-01T00:00:00Z\", \"interval.endTime\": \"2026-01-01T01:00:00Z\" }"
+    }
+  },
+  "permissions": {
+    "monitoring.projects.timeSeries.query": "monitoring.timeSeries.list",
+    "monitoring.projects.timeSeries.createService": "monitoring.timeSeries.create"
+  }
+}

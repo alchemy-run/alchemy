@@ -20,3 +20,4 @@ export * from "./QaScorecard.ts";
 export * from "./QaScorecardsRevision.ts";
 export * from "./QaScorecardsRevisionsQaQuestion.ts";
 export * from "./View.ts";
+export * from "./generated.ts";

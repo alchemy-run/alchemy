@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Backup } from "./Backup.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { ClustersUser } from "./ClustersUser.ts";
@@ -21,7 +21,7 @@ export const makeAlloyDbClusterHttpBinding = <I extends { name?: string }, A, E>
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${cluster})`({
-          iam: [grantFor(options.iam, cluster.name)],
+          iam: grantsFor(options.iam, cluster.name),
         });
       }
       const name = yield* cluster.name;
@@ -47,7 +47,7 @@ export const makeAlloyDbInstanceHttpBinding = <I extends { name?: string }, A, E
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${instance})`({
-          iam: [grantFor(options.iam, instance.name)],
+          iam: grantsFor(options.iam, instance.name),
         });
       }
       const name = yield* instance.name;
@@ -73,7 +73,7 @@ export const makeAlloyDbBackupHttpBinding = <I extends { name?: string }, A, E>(
     return Effect.fn(function* (backup: Backup) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${backup})`({
-          iam: [grantFor(options.iam, backup.name)],
+          iam: grantsFor(options.iam, backup.name),
         });
       }
       const name = yield* backup.name;
@@ -99,7 +99,7 @@ export const makeAlloyDbUserHttpBinding = <I extends { name?: string }, A, E>(op
     return Effect.fn(function* (user: ClustersUser) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${user})`({
-          iam: [grantFor(options.iam, user.name)],
+          iam: grantsFor(options.iam, user.name),
         });
       }
       const name = yield* user.name;
@@ -123,7 +123,7 @@ export const makeAlloyDbConnectionInfoHttpBinding = <I extends { parent?: string
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${instance})`({
-          iam: [grantFor(options.iam, instance.name)],
+          iam: grantsFor(options.iam, instance.name),
         });
       }
       const name = yield* instance.name;

@@ -5,3 +5,4 @@ export * from "./NotificationChannel.ts";
 export * from "./Service.ts";
 export * from "./ServicesServiceLevelObjective.ts";
 export * from "./UptimeCheckConfig.ts";
+export * from "./generated.ts";

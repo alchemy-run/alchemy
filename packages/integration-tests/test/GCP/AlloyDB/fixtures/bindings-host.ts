@@ -1,10 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import { serveProbes } from "../../bindingHost.ts";
+import { CAPACITY_REGION } from "../../zones.ts";
 
 /** PSC-enabled cluster (no VPC network slot needed). */
 export const Db = GCP.AlloyDB.Cluster("Db", {
-  location: "us-central1",
+  location: CAPACITY_REGION,
   pscConfig: { pscEnabled: true },
   initialUser: { user: "postgres", password: "AlchemyTest1" },
   automatedBackupPolicy: { enabled: false },

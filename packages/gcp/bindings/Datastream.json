@@ -1,0 +1,27 @@
+{
+  "discovery": "datastream-v1",
+  "module": "datastream_v1",
+  "resources": {
+    "ConnectionProfile": {
+      "pattern": "projects/*/locations/*/connectionProfiles/*"
+    },
+    "PrivateConnection": {
+      "pattern": "projects/*/locations/*/privateConnections/*"
+    },
+    "PrivateConnectionsRoute": {
+      "pattern": "projects/*/locations/*/privateConnections/*/routes/*"
+    },
+    "Stream": {
+      "pattern": "projects/*/locations/*/streams/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ConnectionProfile": "ProbeProfile",
+      "Stream": "ProbeStream",
+      "PrivateConnection": "ProbePrivateConnection",
+      "PrivateConnectionsRoute": "ProbeRoute"
+    },
+    "untestable": {}
+  }
+}

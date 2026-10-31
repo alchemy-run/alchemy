@@ -14,7 +14,7 @@ export const GetWorkstationClusterHttp = Layer.effect(
   makeClusterHttpBinding({
     tag: "GCP.Workstations.GetWorkstationCluster",
     // Clusters have no IAM policy of their own: read-only on the project.
-    iam: { role: "roles/workstations.viewer" },
+    iam: { role: "roles/workstations.workstationCreator" },
     operation: workstations.getProjectsLocationsWorkstationClusters,
   }),
 );

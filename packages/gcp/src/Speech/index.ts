@@ -6,3 +6,4 @@ export * from "./GetPhraseSetHttp.ts";
 export * from "./PhraseSet.ts";
 export * from "./Recognize.ts";
 export * from "./RecognizeHttp.ts";
+export * from "./generated.ts";

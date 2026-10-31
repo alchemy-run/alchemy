@@ -1,0 +1,14 @@
+{
+  "discovery": "pubsub-v1",
+  "module": "pubsub_v1",
+  "resources": {
+    "Subscription": {
+      "pattern": "*",
+      "_flat": true,
+      "iamKind": "pubsub.subscription"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

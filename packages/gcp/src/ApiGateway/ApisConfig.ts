@@ -214,10 +214,14 @@ export const ApisConfigProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
+      // An omitted account leaves Google's default in `output`: that isn't a
+      // change. Compare against the previous props, and against the observed
+      // account only when the user names one.
       const accountChanged =
-        (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount) !== undefined &&
-        (news.gatewayServiceAccount ?? "") !==
-          (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount ?? "");
+        news.gatewayServiceAccount !== undefined
+          ? news.gatewayServiceAccount !==
+            (olds?.gatewayServiceAccount ?? output?.gatewayServiceAccount)
+          : olds?.gatewayServiceAccount !== undefined;
       return replaceOnIdentity({
         previousId: olds?.apiConfigId ?? output?.apiConfigId,
         nextId: news.apiConfigId ?? olds?.apiConfigId ?? output?.apiConfigId,

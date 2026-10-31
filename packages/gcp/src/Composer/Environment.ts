@@ -948,9 +948,12 @@ export const EnvironmentProvider = () =>
         .pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            // Conflict: another operation holds the environment.
+            // EnvironmentNotReady: an update (a web server restart, a
+            // snapshot) is still running; it takes a few minutes.
+            while: (error) => error._tag === "Conflict" || error._tag === "EnvironmentNotReady",
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {

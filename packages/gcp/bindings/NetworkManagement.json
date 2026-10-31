@@ -1,0 +1,40 @@
+{
+  "discovery": "networkmanagement-v1",
+  "module": "networkmanagement_v1",
+  "resources": {
+    "ConnectivityTest": {
+      "pattern": "projects/*/locations/global/connectivityTests/*"
+    },
+    "NetworkMonitoringProvider": {
+      "pattern": "projects/*/locations/*/networkMonitoringProviders/*"
+    },
+    "OrganizationsVpcFlowLogsConfig": {
+      "pattern": "organizations/*/locations/*/vpcFlowLogsConfigs/*"
+    },
+    "VpcFlowLogsConfig": {
+      "pattern": "projects/*/locations/*/vpcFlowLogsConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ConnectivityTest": "ProbeConnectivityTest",
+      "VpcFlowLogsConfig": "ProbeFlowLogs"
+    },
+    "untestable": {
+      "NetworkMonitoringProvider": "Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
+      "OrganizationsVpcFlowLogsConfig": "Organization flow-log configs need Network Management admin on the org; the (GOOGLE_ORGANIZATION_ID)"
+    },
+    "locations": {
+      "ListVpcFlowLogsConfigs": "global",
+      "ListConnectivityTests": "global"
+    }
+  },
+  "permissions": {
+    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig": "networkmanagement.monitoringpoints.downloadConfig",
+    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript": "networkmanagement.monitoringpoints.downloadConfig",
+    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript": "networkmanagement.monitoringpoints.downloadConfig"
+  },
+  "names": {
+    "ListGlobalConnectivityTests": "ListConnectivityTests"
+  }
+}

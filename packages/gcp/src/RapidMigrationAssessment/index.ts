@@ -5,3 +5,4 @@ export * from "./RegisterCollector.ts";
 export * from "./RegisterCollectorHttp.ts";
 export * from "./ResumeCollector.ts";
 export * from "./ResumeCollectorHttp.ts";
+export * from "./generated.ts";

@@ -1,0 +1,36 @@
+{
+  "discovery": "datamigration-v1",
+  "module": "datamigration_v1",
+  "resources": {
+    "ConnectionProfile": {
+      "pattern": "projects/*/locations/*/connectionProfiles/*"
+    },
+    "ConversionWorkspace": {
+      "pattern": "projects/*/locations/*/conversionWorkspaces/*"
+    },
+    "ConversionWorkspacesMappingRule": {
+      "pattern": "projects/*/locations/*/conversionWorkspaces/*/mappingRules/*"
+    },
+    "MigrationJob": {
+      "pattern": "projects/*/locations/*/migrationJobs/*"
+    },
+    "PrivateConnection": {
+      "pattern": "projects/*/locations/*/privateConnections/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ConnectionProfile": "ProbeConnectionProfile",
+      "ConversionWorkspace": "ProbeConversionWorkspace",
+      "PrivateConnection": "ProbePrivateConnection",
+      "ConversionWorkspacesMappingRule": "ProbeMappingRule"
+    },
+    "untestable": {
+      "MigrationJob": "a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it"
+    }
+  },
+  "permissionCollections": {
+    "conversionWorkspaces": "conversionworkspaces",
+    "mappingRules": "conversionworkspaces"
+  }
+}

@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { Collector } from "./Collector.ts";
 
 /**
@@ -29,7 +29,7 @@ export const makeCollectorHttpBinding = <I extends { name?: string }, A, E>(opti
     return Effect.fn(function* (collector: Collector) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${collector})`({
-          iam: [grantFor(options.iam, collector.name)],
+          iam: grantsFor(options.iam, collector.name),
         });
       }
       const name = yield* collector.name;

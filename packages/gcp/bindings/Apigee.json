@@ -1,0 +1,192 @@
+{
+  "discovery": "apigee-v1",
+  "module": "apigee_v1",
+  "resources": {
+    "AnalyticsDatastore": {
+      "pattern": "organizations/*/analytics/datastores/*"
+    },
+    "Api": {
+      "pattern": "organizations/*/apis/*"
+    },
+    "ApimServiceExtension": {
+      "pattern": "organizations/*/apimServiceExtensions/*"
+    },
+    "Apiproduct": {
+      "pattern": "organizations/*/apiproducts/*"
+    },
+    "ApiproductsRateplan": {
+      "pattern": "organizations/*/apiproducts/*/rateplans/*"
+    },
+    "ApisKeyvaluemap": {
+      "pattern": "organizations/*/apis/*/keyvaluemaps/*"
+    },
+    "ApisKeyvaluemapsEntry": {
+      "pattern": "organizations/*/apis/*/keyvaluemaps/*/entries/*"
+    },
+    "Appgroup": {
+      "pattern": "organizations/*/appgroups/*"
+    },
+    "AppgroupsApp": {
+      "pattern": "organizations/*/appgroups/*/apps/*"
+    },
+    "AppgroupsAppsKey": {
+      "pattern": "organizations/*/appgroups/*/apps/*/keys/*"
+    },
+    "Datacollector": {
+      "pattern": "organizations/*/datacollectors/*"
+    },
+    "Developer": {
+      "pattern": "organizations/*/developers/*"
+    },
+    "DevelopersApp": {
+      "pattern": "organizations/*/developers/*/apps/*"
+    },
+    "DevelopersAppsKey": {
+      "pattern": "organizations/*/developers/*/apps/*/keys/*"
+    },
+    "DnsZone": {
+      "pattern": "organizations/*/dnsZones/*"
+    },
+    "EndpointAttachment": {
+      "pattern": "organizations/*/endpointAttachments/*"
+    },
+    "Envgroup": {
+      "pattern": "organizations/*/envgroups/*"
+    },
+    "EnvgroupsAttachment": {
+      "pattern": "organizations/*/envgroups/*/attachments/*"
+    },
+    "Environment": {
+      "pattern": "organizations/*/environments/*"
+    },
+    "EnvironmentsApisRevisionsDebugsession": {
+      "pattern": "organizations/*/environments/*/apis/*/revisions/*/debugsessions/*"
+    },
+    "EnvironmentsArchiveDeployment": {
+      "pattern": "organizations/*/environments/*/archiveDeployments/*"
+    },
+    "EnvironmentsKeystore": {
+      "pattern": "organizations/*/environments/*/keystores/*"
+    },
+    "EnvironmentsKeystoresAlias": {
+      "pattern": "organizations/*/environments/*/keystores/*/aliases/*"
+    },
+    "EnvironmentsKeyvaluemap": {
+      "pattern": "organizations/*/environments/*/keyvaluemaps/*"
+    },
+    "EnvironmentsKeyvaluemapsEntry": {
+      "pattern": "organizations/*/environments/*/keyvaluemaps/*/entries/*"
+    },
+    "EnvironmentsReference": {
+      "pattern": "organizations/*/environments/*/references/*"
+    },
+    "EnvironmentsResourcefile": {
+      "pattern": "*/resourcefiles/*/*",
+      "_flat": true
+    },
+    "EnvironmentsSecurityAction": {
+      "pattern": "organizations/*/environments/*/securityActions/*"
+    },
+    "EnvironmentsTargetserver": {
+      "pattern": "organizations/*/environments/*/targetservers/*"
+    },
+    "EnvironmentsTraceConfigOverride": {
+      "pattern": "organizations/*/environments/*/traceConfig/overrides/*"
+    },
+    "Instance": {
+      "pattern": "organizations/*/instances/*"
+    },
+    "InstancesAttachment": {
+      "pattern": "organizations/*/instances/*/attachments/*"
+    },
+    "InstancesNatAddress": {
+      "pattern": "organizations/*/instances/*/natAddresses/*"
+    },
+    "Keyvaluemap": {
+      "pattern": "organizations/*/keyvaluemaps/*"
+    },
+    "KeyvaluemapsEntry": {
+      "pattern": "organizations/*/keyvaluemaps/*/entries/*"
+    },
+    "Organization": {
+      "pattern": "organizations/*"
+    },
+    "Report": {
+      "pattern": "organizations/*/reports/*"
+    },
+    "SecurityFeedback": {
+      "pattern": "organizations/*/securityFeedback/*"
+    },
+    "SecurityMonitoringCondition": {
+      "pattern": "organizations/*/securityMonitoringConditions/*"
+    },
+    "SecurityProfile": {
+      "pattern": "organizations/*/securityProfiles/*"
+    },
+    "SecurityProfilesV2": {
+      "pattern": "organizations/*/securityProfilesV2/*"
+    },
+    "Sharedflow": {
+      "pattern": "organizations/*/sharedflows/*"
+    },
+    "SitesApicategory": {
+      "pattern": "organizations/*/sites/*/apicategories/*"
+    },
+    "SitesApidoc": {
+      "pattern": "organizations/*/sites/*/apidocs/*"
+    },
+    "Space": {
+      "pattern": "organizations/*/spaces/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "AnalyticsDatastore": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Api": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "ApimServiceExtension": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Apiproduct": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "ApiproductsRateplan": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "ApisKeyvaluemap": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "ApisKeyvaluemapsEntry": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Appgroup": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "AppgroupsApp": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "AppgroupsAppsKey": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Datacollector": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Developer": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "DevelopersApp": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "DevelopersAppsKey": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "DnsZone": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EndpointAttachment": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Envgroup": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvgroupsAttachment": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Environment": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsApisRevisionsDebugsession": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsArchiveDeployment": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsKeystore": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsKeystoresAlias": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsKeyvaluemap": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsKeyvaluemapsEntry": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsReference": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsResourcefile": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsSecurityAction": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsTargetserver": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "EnvironmentsTraceConfigOverride": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Instance": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "InstancesAttachment": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "InstancesNatAddress": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Keyvaluemap": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "KeyvaluemapsEntry": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Organization": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Report": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "SecurityFeedback": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "SecurityMonitoringCondition": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "SecurityProfile": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "SecurityProfilesV2": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "Sharedflow": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)",
+      "SitesApicategory": "needs GCP_TEST_APIGEE_SITE (an external prerequisite the testing project lacks)",
+      "SitesApidoc": "needs GCP_TEST_APIGEE_SITE (an external prerequisite the testing project lacks)",
+      "Space": "Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 \"Permission denied on resource \\\"organizations/{project}\\\" (or\u2026 (GCP_TEST_APIGEE_ORG)"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "discovery": "biglake-v1",
+  "module": "biglake_v1",
+  "resources": {
+    "Catalog": {
+      "pattern": "projects/*/locations/*/catalogs/*"
+    },
+    "CatalogsDatabase": {
+      "pattern": "projects/*/locations/*/catalogs/*/databases/*"
+    },
+    "CatalogsDatabasesTable": {
+      "pattern": "projects/*/locations/*/catalogs/*/databases/*/tables/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Catalog": "ProbeCatalog",
+      "CatalogsDatabase": "ProbeDatabase",
+      "CatalogsDatabasesTable": "ProbeTable"
+    },
+    "untestable": {},
+    "ambiguousTags": {
+      "BigLakeResourceNotFound": "BigLake answers a missing resource and a denied permission with the same 403"
+    }
+  }
+}

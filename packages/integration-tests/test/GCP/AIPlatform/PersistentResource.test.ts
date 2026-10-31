@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Persistent training clusters take 5-15 minutes to provision and tear down.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsPersistentResources({ name }).pipe(

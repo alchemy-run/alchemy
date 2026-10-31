@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { WasmArtifacts, pluginImageUri, uploadPluginWasm } from "./fixtures/wasm.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -44,21 +45,26 @@ test.provider(
   },
 );
 
-// Edge extensions need a WasmPlugin with a main version; the fixture's
-// bare plugin makes create fail with BadRequest "MAIN_VERSION_ID_EMPTY: Main
-// version ID must not be empty." Set GCP_TEST_LB_EDGE_EXTENSION=1 once the
-// fixture publishes a plugin version.
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_EDGE_EXTENSION)(
+// Edge extensions need a WasmPlugin with a main version (a bare plugin fails
+// with BadRequest "MAIN_VERSION_ID_EMPTY"), so the lifecycle uploads a plugin
+// binary first.
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an lb edge extension",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const artifacts = yield* stack.deploy(WasmArtifacts);
+      yield* uploadPluginWasm(artifacts.name);
+
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const repository = yield* WasmArtifacts;
           const plugin = yield* GCP.NetworkServices.WasmPlugin("EdgePlugin", {
             location: "global",
             description: "edge wasm",
+            mainVersionId: "v1",
+            versions: { v1: { imageUri: pluginImageUri(repository) } },
           });
           const map = yield* GCP.Compute.UrlMap("EdgeMap", {
             defaultUrlRedirect: {
@@ -117,9 +123,12 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_EDGE_EXTENSI
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const repository = yield* WasmArtifacts;
           const plugin = yield* GCP.NetworkServices.WasmPlugin("EdgePlugin", {
             location: "global",
             description: "edge wasm",
+            mainVersionId: "v1",
+            versions: { v1: { imageUri: pluginImageUri(repository) } },
           });
           const map = yield* GCP.Compute.UrlMap("EdgeMap", {
             defaultUrlRedirect: {
@@ -178,6 +187,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_EDGE_EXTENSI
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
-    timeout: 120_000,
+    timeout: 1_800_000,
   },
 );

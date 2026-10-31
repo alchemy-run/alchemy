@@ -10,3 +10,4 @@ export * from "./GetSynonymSet.ts";
 export * from "./GetSynonymSetHttp.ts";
 export * from "./RuleSet.ts";
 export * from "./SynonymSet.ts";
+export * from "./generated.ts";

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { TestInstance } from "./fixtures/test-instance.ts";
 
 const { test } = Test.make({
   providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
@@ -15,10 +16,8 @@ const { test } = Test.make({
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Runs against an existing Cloud SQL instance (creating one takes well over
-// 5 minutes); set GCP_SQL_INSTANCE to its name.
-const sqlInstance = process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
-const runLifecycle = !!sqlInstance && !process.env.FAST;
+// The lifecycle creates its own instance (5-10 minutes), so `--fast` skips it.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (instance: string, sha1Fingerprint: string) =>
   GcpEnvironment.current.pipe(
@@ -31,7 +30,11 @@ const waitUntilGone = (instance: string, sha1Fingerprint: string) =>
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // Destroy also removes the test's instance; Cloud SQL hides a missing
+          // instance behind SqlInstanceNotAuthorized.
+          Effect.catchTag(["NotFound", "SqlInstanceNotAuthorized"], () =>
+            Effect.succeed("gone" as const),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (status) => status === "gone",
@@ -90,12 +93,14 @@ test.provider.skipIf(!runLifecycle)(
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const instance = sqlInstance!;
+      const { instanceName: instance } = yield* stack.deploy(TestInstance);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.SslCert("Client", {
-            instance,
+            instance: db.instanceName,
           });
         }),
       );
@@ -120,8 +125,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const unchanged = yield* stack.deploy(
         Effect.gen(function* () {
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.SslCert("Client", {
-            instance,
+            instance: db.instanceName,
             commonName: created.commonName,
           });
         }),
@@ -137,8 +144,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.SslCert("Client", {
-            instance,
+            instance: db.instanceName,
             commonName: nextName,
           });
         }),
@@ -163,5 +172,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(replaced.instance, replaced.sha1Fingerprint);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 1_800_000 },
 );

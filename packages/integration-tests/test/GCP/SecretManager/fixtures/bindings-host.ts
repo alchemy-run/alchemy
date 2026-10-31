@@ -1,7 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { serveProbes } from "../../bindingHost.ts";
+import { recordAuditLogs } from "../../auditLogs.ts";
+import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /** Secret the per-operation AddSecretVersion / AccessSecretVersion bind. */
 export const OpsSecret = GCP.SecretManager.Secret("OpsSecret", {});
@@ -20,6 +22,12 @@ export const WriteOnlySecret = GCP.SecretManager.Secret("WriteOnlySecret", {});
 /** Secret only {@link GCP.SecretManager.ReadWriteSecret} binds. */
 export const ReadWriteOnlySecret = GCP.SecretManager.Secret("ReadWriteOnlySecret", {});
 
+/** Secrets the generated bindings bind (versions seeded by the test). */
+export const GenSecret = GCP.SecretManager.Secret("GenSecret", {});
+export const GenRegionalSecret = GCP.SecretManager.LocationsSecret("GenRegionalSecret", {
+  location: "us-central1",
+});
+
 /** Payload the test seeds into {@link ReadOnlySecret}. */
 export const SEEDED = "seeded-value";
 
@@ -27,10 +35,28 @@ export const SEEDED = "seeded-value";
  * Effect-native Cloud Run service exercising every Secret Manager binding as
  * its own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class SecretManagerBindingsHost extends GCP.Function<SecretManagerBindingsHost>()(
   "SecretManagerBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.SecretManager.consumeSecretAuditLogs(
+      GenSecret,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("secret", putMarker),
+    );
+    yield* GCP.SecretManager.consumeLocationsSecretAuditLogs(
+      GenRegionalSecret,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("locationsSecret", putMarker),
+    );
     const addVersion = yield* GCP.SecretManager.AddSecretVersion(OpsSecret);
     const access = yield* GCP.SecretManager.AccessSecretVersion(OpsSecret);
     const addRegional = yield* GCP.SecretManager.AddSecretVersion(RegionalSecret);
@@ -38,6 +64,15 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     const reader = yield* GCP.SecretManager.ReadSecret(ReadOnlySecret);
     const writer = yield* GCP.SecretManager.WriteSecret(WriteOnlySecret);
     const both = yield* GCP.SecretManager.ReadWriteSecret(ReadWriteOnlySecret);
+    const getSecret = yield* GCP.SecretManager.GetSecret(GenSecret);
+    const getRegional = yield* GCP.SecretManager.GetSecret(GenRegionalSecret);
+    const listVersions = yield* GCP.SecretManager.ListSecretVersions(GenSecret);
+    const listRegionalVersions = yield* GCP.SecretManager.ListSecretVersions(GenRegionalSecret);
+    const getVersion = yield* GCP.SecretManager.GetSecretVersion(GenSecret);
+    const enableVersion = yield* GCP.SecretManager.EnableSecretVersion(GenSecret);
+    const rotate = yield* GCP.SecretManager.RotateSecret(GenSecret);
+    const enableRotation = yield* GCP.SecretManager.EnableSecretManagedRotation(GenSecret);
+    const listSecrets = yield* GCP.SecretManager.ListSecrets();
 
     const roundTrip = (add: typeof addVersion, read: typeof access, value: string) =>
       Effect.gen(function* () {
@@ -56,8 +91,29 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
 
     return {
       fetch: serveProbes({
+        listSecrets: Effect.gen(function* () {
+          const global = yield* listSecrets({ pageSize: 25000 });
+          const regional = yield* listSecrets({ location: "us-central1", pageSize: 25000 });
+          return {
+            global: (global.secrets ?? []).map((secret) => secret.name),
+            regional: (regional.secrets ?? []).map((secret) => secret.name),
+          };
+        }),
         ops: roundTrip(addVersion, access, "per-op-global"),
         opsRegional: roundTrip(addRegional, accessRegional, "per-op-regional"),
+        getSecret: Effect.all({ global: getSecret(), regional: getRegional() }),
+        listSecretVersions: Effect.all({
+          global: listVersions(),
+          regional: listRegionalVersions(),
+        }),
+        getSecretVersion: getVersion({ version: "1" }),
+        enableSecretVersion: enableVersion({ version: "1" }),
+        // Managed rotation needs a Cloud SQL secret; on a plain secret the
+        // call is authorized and rejected as a bad request.
+        managedRotation: Effect.all({
+          rotate: outcome(rotate()),
+          enable: outcome(enableRotation()),
+        }),
         read: Effect.gen(function* () {
           const latest = yield* reader.access();
           const bytes = yield* reader.accessBytes("latest");
@@ -102,5 +158,18 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     Effect.provide(GCP.SecretManager.ReadSecretHttp),
     Effect.provide(GCP.SecretManager.WriteSecretHttp),
     Effect.provide(GCP.SecretManager.ReadWriteSecretHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
+        GCP.SecretManager.GetSecretHttp,
+        GCP.SecretManager.ListSecretVersionsHttp,
+        GCP.SecretManager.GetSecretVersionHttp,
+        GCP.SecretManager.EnableSecretVersionHttp,
+        GCP.SecretManager.RotateSecretHttp,
+        GCP.SecretManager.EnableSecretManagedRotationHttp,
+        GCP.SecretManager.ListSecretsHttp,
+      ),
+    ),
   ),
 ) {}

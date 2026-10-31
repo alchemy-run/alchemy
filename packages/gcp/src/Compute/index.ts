@@ -108,3 +108,4 @@ export * from "./RolloutPlan.ts";
 export * from "./StoragePool.ts";
 export * from "./WireGroup.ts";
 export * from "./ZoneVmExtensionPolicy.ts";
+export * from "./generated.ts";

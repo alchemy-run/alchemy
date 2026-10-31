@@ -1,0 +1,235 @@
+{
+  "discovery": "aiplatform-v1",
+  "module": "aiplatform_v1",
+  "resources": {
+    "Agent": {
+      "pattern": "projects/*/locations/*/agents/*"
+    },
+    "BatchPredictionJob": {
+      "pattern": "projects/*/locations/*/batchPredictionJobs/*"
+    },
+    "CachedContent": {
+      "pattern": "projects/*/locations/*/cachedContents/*"
+    },
+    "CustomJob": {
+      "pattern": "projects/*/locations/*/customJobs/*"
+    },
+    "DataLabelingJob": {
+      "pattern": "projects/*/locations/*/dataLabelingJobs/*"
+    },
+    "Dataset": {
+      "pattern": "datasets/*"
+    },
+    "DatasetsDatasetVersion": {
+      "pattern": "datasets/*/datasetVersions/*"
+    },
+    "DeploymentResourcePool": {
+      "pattern": "projects/*/locations/*/deploymentResourcePools/*"
+    },
+    "Endpoint": {
+      "pattern": "projects/*/locations/*/endpoints/*"
+    },
+    "EvaluationItem": {
+      "pattern": "projects/*/locations/*/evaluationItems/*"
+    },
+    "EvaluationRun": {
+      "pattern": "projects/*/locations/*/evaluationRuns/*"
+    },
+    "EvaluationSet": {
+      "pattern": "projects/*/locations/*/evaluationSets/*"
+    },
+    "FeatureGroup": {
+      "pattern": "projects/*/locations/*/featureGroups/*"
+    },
+    "FeatureGroupsFeature": {
+      "pattern": "projects/*/locations/*/featureGroups/*/features/*"
+    },
+    "FeatureOnlineStore": {
+      "pattern": "projects/*/locations/*/featureOnlineStores/*"
+    },
+    "FeatureOnlineStoresFeatureView": {
+      "pattern": "projects/*/locations/*/featureOnlineStores/*/featureViews/*"
+    },
+    "Featurestore": {
+      "pattern": "projects/*/locations/*/featurestores/*"
+    },
+    "FeaturestoresEntityType": {
+      "pattern": "projects/*/locations/*/featurestores/*/entityTypes/*"
+    },
+    "FeaturestoresEntityTypesFeature": {
+      "pattern": "projects/*/locations/*/featurestores/*/entityTypes/*/features/*"
+    },
+    "HyperparameterTuningJob": {
+      "pattern": "projects/*/locations/*/hyperparameterTuningJobs/*"
+    },
+    "Index": {
+      "pattern": "projects/*/locations/*/indexes/*",
+      "file": "Indexes"
+    },
+    "IndexEndpoint": {
+      "pattern": "projects/*/locations/*/indexEndpoints/*"
+    },
+    "MetadataStore": {
+      "pattern": "projects/*/locations/*/metadataStores/*"
+    },
+    "MetadataStoresArtifact": {
+      "pattern": "projects/*/locations/*/metadataStores/*/artifacts/*"
+    },
+    "MetadataStoresContext": {
+      "pattern": "projects/*/locations/*/metadataStores/*/contexts/*"
+    },
+    "MetadataStoresExecution": {
+      "pattern": "projects/*/locations/*/metadataStores/*/executions/*"
+    },
+    "ModelDeploymentMonitoringJob": {
+      "pattern": "projects/*/locations/*/modelDeploymentMonitoringJobs/*"
+    },
+    "NasJob": {
+      "pattern": "projects/*/locations/*/nasJobs/*"
+    },
+    "NotebookExecutionJob": {
+      "pattern": "projects/*/locations/*/notebookExecutionJobs/*"
+    },
+    "NotebookRuntimeTemplate": {
+      "pattern": "projects/*/locations/*/notebookRuntimeTemplates/*"
+    },
+    "OnlineEvaluator": {
+      "pattern": "projects/*/locations/*/onlineEvaluators/*"
+    },
+    "PersistentResource": {
+      "pattern": "projects/*/locations/*/persistentResources/*"
+    },
+    "PipelineJob": {
+      "pattern": "projects/*/locations/*/pipelineJobs/*"
+    },
+    "RagCorpora": {
+      "pattern": "projects/*/locations/*/ragCorpora/*"
+    },
+    "ReasoningEngine": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*"
+    },
+    "ReasoningEnginesMemory": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/memories/*"
+    },
+    "ReasoningEnginesSandboxEnvironment": {
+      "pattern": "reasoningEngines/*/sandboxEnvironments/*"
+    },
+    "ReasoningEnginesSandboxEnvironmentTemplate": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/sandboxEnvironmentTemplates/*"
+    },
+    "ReasoningEnginesSession": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/sessions/*"
+    },
+    "Schedule": {
+      "pattern": "projects/*/locations/*/schedules/*"
+    },
+    "SemanticGovernancePolicy": {
+      "pattern": "projects/*/locations/*/semanticGovernancePolicies/*"
+    },
+    "SpecialistPool": {
+      "pattern": "projects/*/locations/*/specialistPools/*"
+    },
+    "StudiesTrial": {
+      "pattern": "projects/*/locations/*/studies/*/trials/*"
+    },
+    "Study": {
+      "pattern": "projects/*/locations/*/studies/*"
+    },
+    "Tensorboard": {
+      "pattern": "projects/*/locations/*/tensorboards/*"
+    },
+    "TensorboardsExperiment": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*"
+    },
+    "TensorboardsExperimentsRun": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*/runs/*"
+    },
+    "TensorboardsExperimentsRunsTimeSeries": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*/runs/*/timeSeries/*"
+    },
+    "TrainingPipeline": {
+      "pattern": "projects/*/locations/*/trainingPipelines/*"
+    },
+    "TuningJob": {
+      "pattern": "projects/*/locations/*/tuningJobs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ReasoningEngine": "Agent",
+      "TrainingPipeline": "Train",
+      "ReasoningEnginesSandboxEnvironment": "Code",
+      "ReasoningEnginesSandboxEnvironmentTemplate": "Browser",
+      "Dataset": "ProbeDataset",
+      "Endpoint": "ProbeEndpoint",
+      "IndexEndpoint": "ProbeIndexEndpoint",
+      "MetadataStore": "ProbeMetadataStore",
+      "MetadataStoresArtifact": "ProbeArtifact",
+      "MetadataStoresContext": "ProbeContext",
+      "MetadataStoresExecution": "ProbeExecution",
+      "Tensorboard": "ProbeTensorboard",
+      "TensorboardsExperiment": "ProbeExperiment",
+      "TensorboardsExperimentsRun": "ProbeRun",
+      "Study": "ProbeStudy",
+      "NotebookRuntimeTemplate": "ProbeNotebookTemplate",
+      "EvaluationSet": "ProbeEvaluationSet",
+      "ReasoningEnginesSession": "ProbeSession",
+      "CustomJob": "ProbeCustomJob",
+      "DeploymentResourcePool": "ProbeDeploymentResourcePool",
+      "EvaluationItem": "ProbeEvaluationItem",
+      "FeatureOnlineStore": "ProbeFeatureOnlineStore",
+      "Featurestore": "ProbeFeaturestore",
+      "FeaturestoresEntityType": "ProbeEntityType",
+      "FeaturestoresEntityTypesFeature": "ProbeEntityFeature",
+      "StudiesTrial": "ProbeTrial",
+      "TensorboardsExperimentsRunsTimeSeries": "ProbeTimeSeries",
+      "ReasoningEnginesMemory": "ProbeMemory",
+      "Index": "ProbeIndex",
+      "CachedContent": "ProbeCachedContent",
+      "FeatureGroup": "ProbeFeatureGroup",
+      "FeatureGroupsFeature": "ProbeGroupFeature",
+      "FeatureOnlineStoresFeatureView": "ProbeFeatureView",
+      "Schedule": "ProbeSchedule",
+      "HyperparameterTuningJob": "ProbeHyperparameterTuningJob",
+      "NasJob": "ProbeNasJob",
+      "PipelineJob": "ProbePipelineJob",
+      "BatchPredictionJob": "ProbeBatchPredictionJob",
+      "EvaluationRun": "ProbeEvaluationRun",
+      "RagCorpora": "ProbeRagCorpora",
+      "PersistentResource": "ProbePersistentResource"
+    },
+    "untestable": {
+      "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
+      "DataLabelingJob": "Vertex AI data labeling is shut down for new projects",
+      "DatasetsDatasetVersion": "needs GCP_TEST_AIPLATFORM_DATASET_VERSION (an external prerequisite the testing project lacks)",
+      "ModelDeploymentMonitoringJob": "monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
+      "OnlineEvaluator": "an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
+      "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")",
+      "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)",
+      "NotebookExecutionJob": "a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)",
+      "SemanticGovernancePolicy": "a policy governs an Agent Registry agent with a runtime identity (a deployed Agent Engine agent); a registered service answers \"is not configured with a valid RuntimeIdentity\""
+    },
+    "skip": {
+      "ListNasJobNasTrialDetails": "trial details exist only once a NAS job runs trials; the probe job is cancelled before it starts any (running one bills accelerator hours)",
+      "ListSpecialistPools": "specialist pools belong to data labeling, which answers 'Data labeling service is shutdown' to projects without access"
+    },
+    "allowedOutcomes": {
+      "DataLabelingJobDeprecated": "data labeling is closed to new projects that haven't opted in to Labelbox human labelers"
+    },
+    "enable": ["vectorsearch.googleapis.com"]
+  },
+  "permissions": {
+    "aiplatform.projects.getCacheConfig": "aiplatform.cacheConfigs.get",
+    "aiplatform.projects.updateCacheConfig": "aiplatform.cacheConfigs.update",
+    "aiplatform.projects.locations.pipelineJobs.batchCancel": "aiplatform.pipelineJobs.cancel",
+    "aiplatform.projects.locations.pipelineJobs.batchDelete": "aiplatform.pipelineJobs.delete",
+    "aiplatform.projects.locations.memoryBanks.ingestEvents": "aiplatform.memories.create",
+    "aiplatform.projects.locations.tuningJobs.rebaseTunedModel": "aiplatform.tuningJobs.create",
+    "aiplatform.projects.locations.migratableResources.batchMigrate": "aiplatform.migratableResources.migrate"
+  },
+  "skip": {
+    "aiplatform.projects.locations.reasoningEngines.get": "the hand-written binding of the same name reaches the same resource",
+    "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get": "the hand-written binding of the same name reaches the same resource",
+    "aiplatform.projects.locations.reasoningEngines.query": "the hand-written binding of the same name reaches the same resource"
+  }
+}

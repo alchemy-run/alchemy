@@ -6,3 +6,4 @@ export * from "./GetFunctionHttp.ts";
 export { TopicEventSource } from "../Run/TopicEventSource.ts";
 export { ScheduleEventSource } from "../Run/ScheduleEventSource.ts";
 export { EventarcEventSource } from "../Run/EventarcEventSource.ts";
+export * from "./generated.ts";

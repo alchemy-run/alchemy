@@ -1,0 +1,22 @@
+{
+  "discovery": "apigateway-v1",
+  "module": "apigateway_v1",
+  "resources": {
+    "Api": {
+      "pattern": "projects/*/locations/*/apis/*"
+    },
+    "ApisConfig": {
+      "pattern": "projects/*/locations/*/apis/*/configs/*"
+    },
+    "Gateway": {
+      "pattern": "projects/*/locations/*/gateways/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Api": "ProbeApi",
+      "ApisConfig": "ProbeConfig",
+      "Gateway": "ProbeGateway"
+    }
+  }
+}

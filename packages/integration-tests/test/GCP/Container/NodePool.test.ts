@@ -15,7 +15,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // GKE cluster create and delete each take 5-10 minutes.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 // Pools stay empty: every GKE node holds an external IP and the project
 // allows only 8 IN_USE_ADDRESSES per region, shared by every capacity test.

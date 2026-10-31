@@ -1,0 +1,19 @@
+{
+  "discovery": "config-v1",
+  "module": "config_v1",
+  "resources": {
+    "DeploymentGroup": {
+      "pattern": "projects/*/locations/*/deploymentGroups/*"
+    },
+    "Preview": {
+      "pattern": "projects/*/locations/*/previews/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "DeploymentGroup": "ProbeDeploymentGroup",
+      "Preview": "ProbePreview"
+    },
+    "untestable": {}
+  }
+}

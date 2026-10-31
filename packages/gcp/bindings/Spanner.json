@@ -1,0 +1,65 @@
+{
+  "discovery": "spanner-v1",
+  "module": "spanner_v1",
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/instances/*",
+      "iamKind": "spanner.instance"
+    },
+    "Database": {
+      "pattern": "projects/*/instances/*/databases/*",
+      "iamKind": "spanner.database"
+    },
+    "InstancesBackup": {
+      "pattern": "projects/*/instances/*/backups/*",
+      "iamKind": "spanner.backup"
+    },
+    "InstancesDatabasesBackupSchedule": {
+      "pattern": "projects/*/instances/*/databases/*/backupSchedules/*",
+      "lifecycleOnly": true
+    },
+    "InstancesInstancePartition": {
+      "pattern": "projects/*/instances/*/instancePartitions/*",
+      "lifecycleOnly": true
+    }
+  },
+  "permissions": {
+    "spanner.projects.instances.databases.sessions.read": "spanner.databases.read",
+    "spanner.projects.instances.databases.sessions.commit": "spanner.databases.write",
+    "spanner.projects.instances.databases.sessions.executeBatchDml": "spanner.databases.write",
+    "spanner.projects.instances.databases.sessions.beginTransaction": "spanner.databases.beginOrRollbackReadWriteTransaction",
+    "spanner.projects.instances.databases.sessions.rollback": "spanner.databases.beginOrRollbackReadWriteTransaction",
+    "spanner.projects.instances.databases.sessions.partitionQuery": "spanner.databases.partitionQuery",
+    "spanner.projects.instances.databases.sessions.partitionRead": "spanner.databases.partitionRead",
+    "spanner.projects.instances.databases.sessions.batchCreate": "spanner.sessions.create",
+    "spanner.projects.instances.databases.restore": "spanner.backups.restoreDatabase",
+    "spanner.projects.instances.move": "spanner.instances.update",
+    "spanner.projects.instances.databases.changequorum": "spanner.databases.changequorum"
+  },
+  "names": {
+    "BatchSessionCreate": "BatchCreateSessions",
+    "BeginSessionTransaction": "BeginTransaction",
+    "CommitDatabaseSession": "Commit",
+    "ExecuteSessionBatchDml": "ExecuteBatchDml",
+    "PartitionSessionQuery": "PartitionQuery",
+    "PartitionSessionRead": "PartitionRead",
+    "ReadDatabaseSession": "Read",
+    "RollbackDatabaseSession": "Rollback",
+    "ChangequorumDatabase": "ChangeDatabaseQuorum",
+    "GetBackup": "GetInstanceBackup"
+  },
+  "skip": {
+    "spanner.projects.instances.databases.sessions.executeStreamingSql": "a streaming RPC (chunked JSON); the request/response client can't consume it",
+    "spanner.projects.instances.databases.sessions.streamingRead": "a streaming RPC (chunked JSON); the request/response client can't consume it",
+    "spanner.projects.instances.databases.sessions.batchWrite": "a streaming RPC (chunked JSON); the request/response client can't consume it",
+    "spanner.projects.instances.databases.sessions.adapter": "the Cassandra adapter's wire protocol, not a REST call",
+    "spanner.projects.instances.databases.sessions.adaptMessage": "the Cassandra adapter's wire protocol, not a REST call",
+    "spanner.projects.instances.databases.dropDatabase": "drops the database, which its provider owns",
+    "spanner.projects.instances.databases.getScans": "Key Visualizer scans; no predefined role grants the permission it checks",
+    "spanner.projects.instanceConfigs.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

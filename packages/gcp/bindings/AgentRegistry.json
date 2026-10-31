@@ -1,0 +1,16 @@
+{
+  "discovery": "agentregistry-v1",
+  "module": "agentregistry_v1",
+  "resources": {
+    "Binding": {
+      "pattern": "projects/*/locations/*/bindings/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Binding": "binds two agents the registry discovered (sourceIdentifier/targetIdentifier); the testing project runs no registered agents"
+    },
+    "enable": ["agentregistry.googleapis.com"]
+  }
+}

@@ -14,3 +14,4 @@ export * from "./GetTopicHttp.ts";
 export * from "./SchemaRegistriesContextsSubjectsVersion.ts";
 export * from "./SchemaRegistriesSubjectsVersion.ts";
 export * from "./SchemaRegistry.ts";
+export * from "./generated.ts";

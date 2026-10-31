@@ -36,7 +36,9 @@ export type HiveMetastoreConfig = {
    */
   version?: string;
   /**
-   * hive-site.xml overrides applied to the primary service.
+   * hive-site.xml overrides applied to the primary service. Create needs
+   * `hive.metastore.warehouse.dir` (a `gs://` path) — without it the API
+   * answers "Must specify config override hive.metastore.warehouse.dir".
    */
   configOverrides?: Record<string, string>;
   /**
@@ -207,8 +209,14 @@ export type Service = Resource<
  * ### Creating a Service
  * **Example:** Developer tier
  * ```typescript
+ * const warehouse = yield* GCP.Storage.Bucket("Warehouse", {});
  * const service = yield* GCP.Metastore.Service("Hive", {
- *   hiveMetastoreConfig: { version: "3.1.2" },
+ *   hiveMetastoreConfig: {
+ *     version: "3.1.2",
+ *     configOverrides: {
+ *       "hive.metastore.warehouse.dir": Output.interpolate`gs://${warehouse.bucketName}/hive`,
+ *     },
+ *   },
  *   tier: "DEVELOPER",
  *   labels: { env: "test" },
  * });

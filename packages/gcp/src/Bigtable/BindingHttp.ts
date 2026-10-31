@@ -1,7 +1,7 @@
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantFor, grantsFor } from "../HttpBinding.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Instance } from "./Instance.ts";
 import type { Table } from "./Table.ts";
@@ -21,7 +21,7 @@ export const makeBigtableInstanceHttpBinding = <I extends { name?: string }, A, 
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${instance})`({
-          iam: [grantFor(options.iam, instance.name)],
+          iam: grantsFor(options.iam, instance.name),
         });
       }
       const name = yield* instance.name;
@@ -78,7 +78,7 @@ export const makeBigtableTableHttpBinding = <I extends { name?: string }, A, E>(
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${table})`({
-          iam: [grantFor(options.iam, table.name)],
+          iam: grantsFor(options.iam, table.name),
         });
       }
       const name = yield* table.name;

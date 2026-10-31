@@ -6,19 +6,20 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withNetworkSlot } from "../networkQuota.ts";
+import { NetAppNetwork } from "./fixtures/network.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Volumes need a Private Service Access connection to
-// `netapp.servicenetworking.goog` on the `default` network (otherwise volume
-// create fails with `Please create Service Networking connection with
-// service 'netapp.servicenetworking.goog' ...`), and each file provisions its
-// own 2 TiB STANDARD pool while the default regional quota
-// (StandardStoragePoolCapacityGiBPerRegion = 2048) fits one. Set
-// GCP_TEST_NETAPP_VOLUMES=1 on a project with both.
-const runLifecycle = !!process.env.GCP_TEST_NETAPP_VOLUMES && !process.env.FAST;
+// Volumes mount through Private Service Access to `netapp.servicenetworking.goog`,
+// so the lifecycle builds its own network (see fixtures/network.ts). The 2 TiB
+// STANDARD pool fills a region's default quota
+// (StandardStoragePoolCapacityGiBPerRegion = 2048), so each suite creates its
+// pool in `us-west2`, one suite at a time. Pools take minutes to create, so
+// `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   netapp.getProjectsLocationsVolumes({ name }).pipe(
@@ -68,12 +69,14 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* GCP.NetApp.StoragePool("Pool", {
-            network: "default",
+            location: "us-west2",
+            network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           return yield* GCP.NetApp.Volume("Share", {
+            location: "us-west2",
             storagePool: pool.name,
             protocols: ["NFSV3"],
             capacityGib: 100,
@@ -97,12 +100,14 @@ test.provider.skipIf(!runLifecycle)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* GCP.NetApp.StoragePool("Pool", {
-            network: "default",
+            location: "us-west2",
+            network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           return yield* GCP.NetApp.Volume("Share", {
+            location: "us-west2",
             volumeId: created.volumeId,
             storagePool: pool.name,
             protocols: ["NFSV3"],
@@ -121,6 +126,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
+    }).pipe(withNetworkSlot, logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:netapp-pools",
+  },
 );

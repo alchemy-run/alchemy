@@ -14,7 +14,8 @@ export interface GetWorkstationConfigRequest extends Omit<
  *
  * Bind this operation to a {@link WorkstationClustersWorkstationConfig} in
  * a Function/Action init phase. Provide {@link GetWorkstationConfigHttp}.
- * Grants `roles/workstations.viewer` on the configuration only.
+ * Grants `roles/workstations.workstationCreator` on the configuration
+ * only: the smallest role a configuration accepts that reads it.
  *
  * ### Observing Configurations
  * **Example:** Read the bound configuration

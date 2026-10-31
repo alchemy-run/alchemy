@@ -1,0 +1,28 @@
+{
+  "discovery": "workstations-v1",
+  "module": "workstations_v1",
+  "resources": {
+    "WorkstationCluster": {
+      "pattern": "projects/*/locations/*/workstationClusters/*"
+    },
+    "WorkstationClustersWorkstationConfig": {
+      "pattern": "projects/*/locations/*/workstationClusters/*/workstationConfigs/*",
+      "iamKind": "workstations.workstationConfig"
+    },
+    "WorkstationClustersWorkstationConfigsWorkstation": {
+      "pattern": "projects/*/locations/*/workstationClusters/*/workstationConfigs/*/workstations/*",
+      "iamKind": "workstations.workstation"
+    }
+  },
+  "probes": {
+    "resources": {
+      "WorkstationCluster": "ProbeCluster",
+      "WorkstationClustersWorkstationConfig": "ProbeConfig",
+      "WorkstationClustersWorkstationConfigsWorkstation": "ProbeWorkstation"
+    },
+    "location": "us-west1"
+  },
+  "roles": {
+    "workstations.projects.locations.workstationClusters.workstationConfigs.workstations.listUsable": "roles/workstations.editor"
+  }
+}

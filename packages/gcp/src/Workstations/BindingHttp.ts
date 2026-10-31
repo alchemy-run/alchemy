@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { WorkstationCluster } from "./WorkstationCluster.ts";
 import type { WorkstationClustersWorkstationConfig } from "./WorkstationClustersWorkstationConfig.ts";
 import type { WorkstationClustersWorkstationConfigsWorkstation } from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
@@ -20,7 +20,7 @@ export const makeClusterHttpBinding = <I extends { name?: string }, A, E>(option
     return Effect.fn(function* (cluster: WorkstationCluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${cluster})`({
-          iam: [grantFor(options.iam, cluster.name)],
+          iam: grantsFor(options.iam, cluster.name),
         });
       }
       const name = yield* cluster.name;
@@ -46,7 +46,7 @@ export const makeConfigHttpBinding = <I extends { name?: string }, A, E>(options
     return Effect.fn(function* (config: WorkstationClustersWorkstationConfig) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${config})`({
-          iam: [grantFor(options.iam, config.name)],
+          iam: grantsFor(options.iam, config.name),
         });
       }
       const name = yield* config.name;
@@ -72,7 +72,7 @@ export const makeWorkstationHttpBinding = <I extends { name?: string }, A, E>(op
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${workstation})`({
-          iam: [grantFor(options.iam, workstation.name)],
+          iam: grantsFor(options.iam, workstation.name),
         });
       }
       const name = yield* workstation.name;
@@ -102,7 +102,7 @@ export const makeGenerateAccessTokenHttpBinding = <
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${workstation})`({
-          iam: [grantFor(options.iam, workstation.name)],
+          iam: grantsFor(options.iam, workstation.name),
         });
       }
       const name = yield* workstation.name;

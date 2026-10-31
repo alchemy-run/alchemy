@@ -9,3 +9,4 @@ export * from "./ExecuteQueryHttp.ts";
 export * from "./Service.ts";
 export * from "./ServicesConnector.ts";
 export * from "./ServicesSchema.ts";
+export * from "./generated.ts";

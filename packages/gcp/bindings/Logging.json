@@ -1,0 +1,171 @@
+{
+  "discovery": "logging-v2",
+  "module": "logging_v2",
+  "resources": {
+    "BillingBucket": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*"
+    },
+    "BillingBucketsLink": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*/links/*"
+    },
+    "BillingBucketsView": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*/views/*"
+    },
+    "BillingExclusion": {
+      "pattern": "billingAccounts/*/exclusions/*"
+    },
+    "BillingSavedQuery": {
+      "pattern": "billingAccounts/*/locations/*/savedQueries/*"
+    },
+    "BillingSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "BucketsLink": {
+      "pattern": "projects/*/locations/*/buckets/*/links/*"
+    },
+    "BucketsView": {
+      "pattern": "projects/*/locations/*/buckets/*/views/*"
+    },
+    "Exclusion": {
+      "pattern": "projects/*/exclusions/*"
+    },
+    "FolderBucket": {
+      "pattern": "folders/*/locations/*/buckets/*"
+    },
+    "FolderBucketsLink": {
+      "pattern": "folders/*/locations/*/buckets/*/links/*"
+    },
+    "FolderBucketsView": {
+      "pattern": "folders/*/locations/*/buckets/*/views/*"
+    },
+    "FolderExclusion": {
+      "pattern": "folders/*/exclusions/*"
+    },
+    "FolderLogScope": {
+      "pattern": "folders/*/locations/*/logScopes/*"
+    },
+    "FolderSavedQuery": {
+      "pattern": "folders/*/locations/*/savedQueries/*"
+    },
+    "FolderSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "LocationsBucket": {
+      "pattern": "*/*/locations/*/buckets/*"
+    },
+    "LocationsBucketsLink": {
+      "pattern": "*/*/locations/*/buckets/*/links/*"
+    },
+    "LocationsBucketsView": {
+      "pattern": "*/*/locations/*/buckets/*/views/*"
+    },
+    "LogBucket": {
+      "pattern": "projects/*/locations/*/buckets/*"
+    },
+    "LogScope": {
+      "pattern": "projects/*/locations/*/logScopes/*"
+    },
+    "Metric": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "OrganizationBucketsLink": {
+      "pattern": "organizations/*/locations/*/buckets/*/links/*"
+    },
+    "OrganizationBucketsView": {
+      "pattern": "organizations/*/locations/*/buckets/*/views/*"
+    },
+    "OrganizationExclusion": {
+      "pattern": "organizations/*/exclusions/*"
+    },
+    "OrganizationLogBucket": {
+      "pattern": "organizations/*/locations/*/buckets/*"
+    },
+    "OrganizationLogScope": {
+      "pattern": "organizations/*/locations/*/logScopes/*"
+    },
+    "OrganizationSavedQuery": {
+      "pattern": "organizations/*/locations/*/savedQueries/*"
+    },
+    "OrganizationSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "SavedQuery": {
+      "pattern": "projects/*/locations/*/savedQueries/*"
+    },
+    "Sink": {
+      "pattern": "*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {
+      "Exclusion": "ProbeExclusion",
+      "FolderBucket": "ProbeFolderBucket",
+      "FolderSavedQuery": "ProbeFolderSavedQuery",
+      "LocationsBucket": "ProbeLocationsBucket",
+      "LogBucket": "ProbeLogBucket",
+      "Metric": "ProbeMetric",
+      "SavedQuery": "ProbeSavedQuery",
+      "BucketsView": "ProbeView",
+      "LocationsBucketsView": "ProbeLocationsView",
+      "LogScope": "ProbeLogScope",
+      "FolderLogScope": "ProbeFolderLogScope",
+      "FolderBucketsView": "ProbeFolderView",
+      "BucketsLink": "ProbeLink",
+      "LocationsBucketsLink": "ProbeLocationsLink",
+      "FolderBucketsLink": "ProbeFolderLink"
+    },
+    "untestable": {
+      "BillingBucket": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingBucketsLink": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingBucketsView": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingExclusion": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingSavedQuery": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingSink": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "FolderExclusion": "needs GOOGLE_FOLDER_ID (an external prerequisite the testing project lacks)",
+      "OrganizationBucketsLink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationBucketsView": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationExclusion": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationLogBucket": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationLogScope": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationSavedQuery": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationSink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListEntries": "{ body: { resourceNames: [`projects/${yield* hostProject}`] } }"
+    },
+    "locations": {
+      "ListLogScopes": "global"
+    }
+  },
+  "permissionCollections": {
+    "savedQueries": "queries",
+    "recentQueries": "queries",
+    "entries": "logEntries",
+    "queries": "queries",
+    "metrics": "logMetrics"
+  },
+  "verbPermissions": {
+    "tail": "list",
+    "write": "create",
+    "copy": "download",
+    "getCmekSettings": "get",
+    "getSettings": "get"
+  },
+  "permissions": {
+    "logging.monitoredResourceDescriptors.list": "logging.logs.list",
+    "logging.projects.getCmekSettings": "logging.settings.get",
+    "logging.projects.getSettings": "logging.settings.get",
+    "logging.projects.locations.savedQueries.get": "logging.queries.getShared",
+    "logging.projects.locations.savedQueries.list": "logging.queries.listShared",
+    "logging.projects.locations.recentQueries.list": "logging.queries.listShared",
+    "logging.getSettings": "logging.settings.get",
+    "logging.updateSettings": "logging.settings.update",
+    "logging.getCmekSettings": "logging.settings.get",
+    "logging.updateCmekSettings": "logging.settings.update"
+  }
+}

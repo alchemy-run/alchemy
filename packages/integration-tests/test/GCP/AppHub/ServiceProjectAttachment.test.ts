@@ -11,10 +11,8 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// App Hub is not enabled in the test project; live calls fail with
-// ServiceDisabled:
-// "App Hub API has not been used in project <project>
-// before or it is disabled."
+// An attachment links a second project to this host project. Set
+// GCP_TEST_APPHUB=1 on a host project with a service project to attach.
 const runLifecycle = !process.env.FAST && process.env.GCP_TEST_APPHUB === "1";
 const location = "global";
 
@@ -29,7 +27,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(runLifecycle)(
+test.provider(
   "getProjectsLocationsServiceProjectAttachments on a missing attachment fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -41,7 +39,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/serviceProjectAttachments/alchemy-missing-spa`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

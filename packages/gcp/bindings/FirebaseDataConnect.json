@@ -1,0 +1,23 @@
+{
+  "discovery": "firebasedataconnect-v1",
+  "module": "firebasedataconnect_v1",
+  "resources": {
+    "Service": {
+      "pattern": "projects/*/locations/*/services/*"
+    },
+    "ServicesConnector": {
+      "pattern": "projects/*/locations/*/services/*/connectors/*"
+    },
+    "ServicesSchema": {
+      "pattern": "projects/*/locations/*/services/*/schemas/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Service": "App",
+      "ServicesConnector": "Queries",
+      "ServicesSchema": "Main"
+    },
+    "untestable": {}
+  }
+}

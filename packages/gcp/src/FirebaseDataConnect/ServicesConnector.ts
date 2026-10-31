@@ -362,6 +362,9 @@ export const ServicesConnectorProvider = () =>
       if (current === undefined) {
         return yield* new ResourceNotResolved({ resourceName: name });
       }
+      // A resource still being created answers a patch with Conflict
+      // ("being created and therefore can not be updated yet"): wait it out.
+      current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);

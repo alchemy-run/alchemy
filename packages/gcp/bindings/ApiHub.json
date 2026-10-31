@@ -1,0 +1,67 @@
+{
+  "discovery": "apihub-v1",
+  "module": "apihub_v1",
+  "resources": {
+    "Api": {
+      "pattern": "projects/*/locations/*/apis/*"
+    },
+    "ApiHubInstance": {
+      "pattern": "projects/*/locations/*/apiHubInstances/*"
+    },
+    "ApisVersion": {
+      "pattern": "projects/*/locations/*/apis/*/versions/*"
+    },
+    "ApisVersionsSpec": {
+      "pattern": "projects/*/locations/*/apis/*/versions/*/specs/*"
+    },
+    "Attribute": {
+      "pattern": "projects/*/locations/*/attributes/*"
+    },
+    "Curation": {
+      "pattern": "projects/*/locations/*/curations/*"
+    },
+    "Dependency": {
+      "pattern": "projects/*/locations/*/dependencies/*"
+    },
+    "Deployment": {
+      "pattern": "projects/*/locations/*/deployments/*"
+    },
+    "ExternalApi": {
+      "pattern": "projects/*/locations/*/externalApis/*"
+    },
+    "Plugin": {
+      "pattern": "projects/*/locations/*/plugins/*"
+    },
+    "PluginsInstance": {
+      "pattern": "projects/*/locations/*/plugins/*/instances/*"
+    },
+    "RuntimeProjectAttachment": {
+      "pattern": "projects/*/locations/*/runtimeProjectAttachments/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Api": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "ApiHubInstance": "API Hub needs a host project registration first; without it instance create fails with BadRequest (\"Unable to find host project registration (GCP_TEST_APIHUB_HOST_PROJECT)",
+      "ApisVersion": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "ApisVersionsSpec": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "Attribute": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "Curation": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "Dependency": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "Deployment": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "ExternalApi": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "Plugin": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "PluginsInstance": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
+      "RuntimeProjectAttachment": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)"
+    },
+    "allowedOutcomes": {
+      "ApiHubNotProvisioned": "the testing project has no provisioned API hub instance"
+    }
+  },
+  "permissions": {
+    "apihub.projects.locations.updateStyleGuide": "apihub.styleGuides.update",
+    "apihub.projects.locations.plugins.updateStyleGuide": "apihub.styleGuides.update",
+    "apihub.projects.locations.addons.manageConfig": "apihub.addons.manage"
+  }
+}

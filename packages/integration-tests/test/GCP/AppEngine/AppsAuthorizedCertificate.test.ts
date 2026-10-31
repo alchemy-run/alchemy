@@ -48,7 +48,7 @@ test.provider(
           authorizedCertificatesId: "missing",
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -74,7 +74,7 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

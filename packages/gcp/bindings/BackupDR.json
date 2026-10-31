@@ -1,0 +1,34 @@
+{
+  "discovery": "backupdr-v1",
+  "module": "backupdr_v1",
+  "resources": {
+    "BackupPlan": {
+      "pattern": "projects/*/locations/*/backupPlans/*"
+    },
+    "BackupPlanAssociation": {
+      "pattern": "projects/*/locations/*/backupPlanAssociations/*"
+    },
+    "BackupVault": {
+      "pattern": "projects/*/locations/*/backupVaults/*"
+    },
+    "ManagementServer": {
+      "pattern": "projects/*/locations/*/managementServers/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "BackupVault": "ProbeBackupVault",
+      "BackupPlan": "ProbeBackupPlan"
+    },
+    "untestable": {
+      "BackupPlanAssociation": "an association needs a VM the vault's service agent can back up, and the first scheduled backup sits under the vault's minimum enforced retention (at least a day), which blocks deleting the vault; BackupPlanAssociation.test.ts covers the typed rejections",
+      "ManagementServer": "the Management Console is being deprecated: create answers \"creation of new Management server is restricted\""
+    }
+  },
+  "permissions": {
+    "backupdr.projects.locations.dataSourceReferences.get": "backupdr.dataSourceReferences.list",
+    "backupdr.projects.locations.dataSourceReferences.fetchForResourceType": "backupdr.dataSourceReferences.list",
+    "backupdr.projects.locations.backupPlanAssociations.fetchForResourceType": "backupdr.backupPlanAssociations.list",
+    "backupdr.projects.locations.backupPlanAssociations.get": "backupdr.backupPlanAssociations.list"
+  }
+}

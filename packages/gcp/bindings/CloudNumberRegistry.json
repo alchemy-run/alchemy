@@ -1,0 +1,33 @@
+{
+  "discovery": "cloudnumberregistry-v1alpha",
+  "module": "cloudnumberregistry_v1alpha",
+  "resources": {
+    "CustomRange": {
+      "pattern": "projects/*/locations/*/customRanges/*"
+    },
+    "IpamAdminScope": {
+      "pattern": "projects/*/locations/*/ipamAdminScopes/*"
+    },
+    "Realm": {
+      "pattern": "projects/*/locations/*/realms/*"
+    },
+    "RegistryBook": {
+      "pattern": "projects/*/locations/*/registryBooks/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "IpamAdminScope": "scopes IPAM to an organization; the testing account has none",
+      "RegistryBook": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none",
+      "Realm": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none",
+      "CustomRange": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none"
+    },
+    "enable": ["cloudnumberregistry.googleapis.com"],
+    "location": "global"
+  },
+  "permissions": {
+    "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization": "cloudnumberregistry.discoveredRanges.get",
+    "cloudnumberregistry.projects.locations.discoveredRanges.findFreeIpRanges": "cloudnumberregistry.discoveredRanges.get"
+  }
+}

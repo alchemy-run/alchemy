@@ -1,0 +1,100 @@
+{
+  "discovery": "healthcare-v1",
+  "module": "healthcare_v1",
+  "resources": {
+    "Dataset": {
+      "pattern": "projects/*/locations/*/datasets/*"
+    },
+    "DatasetsConsentStore": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*"
+    },
+    "DatasetsConsentStoresAttributeDefinition": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/attributeDefinitions/*"
+    },
+    "DatasetsConsentStoresConsent": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/consents/*"
+    },
+    "DatasetsConsentStoresConsentArtifact": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/consentArtifacts/*"
+    },
+    "DatasetsConsentStoresUserDataMapping": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/userDataMappings/*"
+    },
+    "DatasetsDicomStore": {
+      "pattern": "projects/*/locations/*/datasets/*/dicomStores/*"
+    },
+    "DatasetsFhirStore": {
+      "pattern": "projects/*/locations/*/datasets/*/fhirStores/*"
+    },
+    "DatasetsHl7V2Store": {
+      "pattern": "projects/*/locations/*/datasets/*/hl7V2Stores/*"
+    },
+    "DatasetsHl7V2StoresMessage": {
+      "pattern": "projects/*/locations/*/datasets/*/hl7V2Stores/*/messages/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Dataset": "ProbeDataset",
+      "DatasetsConsentStore": "ProbeConsentStore",
+      "DatasetsDicomStore": "ProbeDicomStore",
+      "DatasetsFhirStore": "ProbeFhirStore",
+      "DatasetsHl7V2Store": "ProbeHl7V2Store",
+      "DatasetsHl7V2StoresMessage": "ProbeHl7Message",
+      "DatasetsConsentStoresAttributeDefinition": "ProbeAttribute",
+      "DatasetsConsentStoresConsentArtifact": "ProbeArtifact",
+      "DatasetsConsentStoresConsent": "ProbeConsent",
+      "DatasetsConsentStoresUserDataMapping": "ProbeMapping"
+    },
+    "args": {
+      "DeidentifyDataset": "{ body: { destinationDataset: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy probe invalid` } }",
+      "DeidentifyFhirStore": "{ body: { destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/fhirStores/alchemy-missing` } }"
+    },
+    "skip": {
+      "DeidentifyDicomStore": "a DICOM destination store that doesn't exist answers 403 like a denied call (the FHIR variant answers NotFound and passes), and a real destination would receive copied data; dicomEditor, granted alongside, carries dicomWebWrite"
+    }
+  },
+  "roles": {
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.list": "roles/healthcare.hl7V2Consumer",
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.get": "roles/healthcare.hl7V2Consumer",
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest": "roles/healthcare.hl7V2Ingest",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.search": "roles/healthcare.fhirResourceReader",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle": "roles/healthcare.fhirResourceReader",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.create": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.deidentify": [
+      "roles/healthcare.datasetAdmin",
+      "roles/healthcare.dicomEditor",
+      "roles/healthcare.fhirResourceEditor"
+    ],
+    "healthcare.projects.locations.datasets.dicomStores.deidentify": [
+      "roles/healthcare.dicomStoreAdmin",
+      "roles/healthcare.dicomEditor"
+    ],
+    "healthcare.projects.locations.datasets.fhirStores.deidentify": [
+      "roles/healthcare.fhirStoreAdmin",
+      "roles/healthcare.fhirResourceEditor"
+    ]
+  },
+  "suffix": {
+    "healthcare.projects.locations.datasets.fhirStores.fhir.read": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.update": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.patch": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.delete": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.history": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge": ["/", "resourceId"]
+  },
+  "permissions": {
+    "healthcare.projects.locations.datasets.fhirStores.fhir.read": "healthcare.fhirResources.get",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.update": "healthcare.fhirResources.update",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.patch": "healthcare.fhirResources.patch",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.delete": "healthcare.fhirResources.delete",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.history": "healthcare.fhirResources.get",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge": "healthcare.fhirResources.purge"
+  },
+  "childFields": {
+    "fhir": "resourceType"
+  }
+}

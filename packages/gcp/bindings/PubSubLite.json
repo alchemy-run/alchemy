@@ -1,0 +1,11 @@
+{
+  "discovery": "pubsublite-v1",
+  "module": "pubsublite_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Pub/Sub Lite was turned down in March 2026; only allow-listed projects can call it (PubSubLiteTurnedDown)"
+    }
+  }
+}

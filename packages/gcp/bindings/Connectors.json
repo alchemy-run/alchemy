@@ -1,0 +1,15 @@
+{
+  "discovery": "connectors-v2",
+  "module": "connectors_v2",
+  "resources": {
+    "ConnectionsEntityTypesEntity": {
+      "pattern": "projects/*/locations/*/connections/*/entityTypes/*/entities/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "ConnectionsEntityTypesEntity": "needs an existing Integration Connectors connection (GCP_TEST_CONNECTORS_PARENT)"
+    }
+  }
+}

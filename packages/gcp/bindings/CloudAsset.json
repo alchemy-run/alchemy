@@ -1,0 +1,34 @@
+{
+  "discovery": "cloudasset-v1",
+  "module": "cloudasset_v1",
+  "resources": {
+    "Feed": {
+      "pattern": "*/*/feeds/*"
+    },
+    "SavedQuery": {
+      "pattern": "*/*/savedQueries/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Feed": "ProbeFeed",
+      "SavedQuery": "ProbeSavedQuery"
+    },
+    "untestable": {}
+  },
+  "permissions": {
+    "cloudasset.analyzeIamPolicy": "cloudasset.assets.analyzeIamPolicy",
+    "cloudasset.analyzeIamPolicyLongrunning": "cloudasset.assets.analyzeIamPolicy",
+    "cloudasset.analyzeMove": "cloudasset.assets.analyzeMove",
+    "cloudasset.analyzeOrgPolicies": "cloudasset.assets.analyzeOrgPolicy",
+    "cloudasset.analyzeOrgPolicyGovernedAssets": "cloudasset.assets.analyzeOrgPolicy",
+    "cloudasset.analyzeOrgPolicyGovernedContainers": "cloudasset.assets.analyzeOrgPolicy",
+    "cloudasset.assets.list": "cloudasset.assets.listResource",
+    "cloudasset.batchGetAssetsHistory": "cloudasset.assets.exportResource",
+    "cloudasset.effectiveIamPolicies.batchGet": "cloudasset.assets.analyzeIamPolicy",
+    "cloudasset.exportAssets": "cloudasset.assets.exportResource",
+    "cloudasset.queryAssets": "cloudasset.assets.queryResource",
+    "cloudasset.searchAllIamPolicies": "cloudasset.assets.searchAllIamPolicies",
+    "cloudasset.searchAllResources": "cloudasset.assets.searchAllResources"
+  }
+}

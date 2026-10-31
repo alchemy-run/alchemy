@@ -40,3 +40,4 @@ export * from "./StartAutonomousDatabase.ts";
 export * from "./StartAutonomousDatabaseHttp.ts";
 export * from "./StopAutonomousDatabase.ts";
 export * from "./StopAutonomousDatabaseHttp.ts";
+export * from "./generated.ts";

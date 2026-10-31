@@ -45,7 +45,7 @@ test.provider(
 );
 
 // Agent gateway create + update + delete takes ~7 minutes.
-test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an agent gateway",
   (stack) =>
     Effect.gen(function* () {

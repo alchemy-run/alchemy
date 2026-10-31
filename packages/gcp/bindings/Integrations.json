@@ -1,0 +1,55 @@
+{
+  "discovery": "integrations-v1",
+  "module": "integrations_v1",
+  "resources": {
+    "AuthConfig": {
+      "pattern": "projects/*/locations/*/authConfigs/*"
+    },
+    "IntegrationsVersion": {
+      "pattern": "projects/*/locations/*/integrations/*/versions/*"
+    },
+    "IntegrationsVersionsTestCases": {
+      "pattern": "projects/*/locations/*/integrations/*/versions/*/testCases/*"
+    },
+    "ProductsAuthConfig": {
+      "pattern": "projects/*/locations/*/products/*/authConfigs/*"
+    },
+    "ProductsCertificate": {
+      "pattern": "projects/*/locations/*/products/*/certificates/*"
+    },
+    "ProductsIntegrationsVersion": {
+      "pattern": "projects/*/locations/*/products/*/integrations/*/versions/*"
+    },
+    "ProductsSfdcInstance": {
+      "pattern": "projects/*/locations/*/products/*/sfdcInstances/*"
+    },
+    "ProductsSfdcInstancesSfdcChannel": {
+      "pattern": "projects/*/locations/*/products/*/sfdcInstances/*/sfdcChannels/*"
+    },
+    "SfdcInstance": {
+      "pattern": "projects/*/locations/*/sfdcInstances/*"
+    },
+    "SfdcInstancesSfdcChannel": {
+      "pattern": "projects/*/locations/*/sfdcInstances/*/sfdcChannels/*"
+    },
+    "Template": {
+      "pattern": "projects/*/locations/*/templates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Template": "ProbeTemplate",
+      "AuthConfig": "ProbeAuthConfig",
+      "IntegrationsVersion": "ProbeIntegrationVersion",
+      "IntegrationsVersionsTestCases": "ProbeTestCase",
+      "ProductsIntegrationsVersion": "ProbeProductVersion"
+    },
+    "untestable": {
+      "ProductsAuthConfig": "Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden (\"User is not authorized to create AuthConfig with name \u2026 as they don't have membership of project {number}\"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)",
+      "ProductsSfdcInstance": "Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden (\"User is not authorized to create AuthConfig with name \u2026 as they don't have membership of project {number}\"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)",
+      "ProductsSfdcInstancesSfdcChannel": "Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden (\"User is not authorized to create AuthConfig with name \u2026 as they don't have membership of project {number}\"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)",
+      "SfdcInstance": "Updating a Salesforce instance that points at a placeholder org fails with InternalServerError (\"Unknown Error.\"); set (GCP_TEST_INTEGRATIONS_SFDC)",
+      "SfdcInstancesSfdcChannel": "Updating a Salesforce instance that points at a placeholder org fails with InternalServerError (\"Unknown Error.\"); set (GCP_TEST_INTEGRATIONS_SFDC)"
+    }
+  }
+}

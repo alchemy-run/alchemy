@@ -1,0 +1,101 @@
+{
+  "discovery": "storage-v1",
+  "module": "storage_v1",
+  "resources": {
+    "Bucket": {
+      "pattern": "b/*",
+      "attributes": ["bucketName"],
+      "nameAttribute": "bucketName",
+      "iamKind": "storage.bucket",
+      "auditName": "projects/_/buckets/{bucketName}",
+      "collection": "buckets"
+    },
+    "HmacKey": {
+      "pattern": "projects/*/hmacKeys/*",
+      "attributes": ["projectId", "accessId"],
+      "noAuditLogs": "an HMAC key only changes at deploy, through its provider"
+    },
+    "BucketAccessControl": {
+      "pattern": "b/*/acl/*",
+      "lifecycleOnly": true
+    },
+    "DefaultObjectAccessControl": {
+      "pattern": "b/*/defaultObjectAcl/*",
+      "lifecycleOnly": true
+    },
+    "ObjectAccessControl": {
+      "pattern": "b/*/o/*/acl/*",
+      "lifecycleOnly": true
+    },
+    "Notification": {
+      "pattern": "b/*/notificationConfigs/*",
+      "lifecycleOnly": true
+    },
+    "Folder": {
+      "pattern": "b/*/folders/*",
+      "lifecycleOnly": true
+    },
+    "Managed": {
+      "pattern": "b/*/managedFolders/*",
+      "lifecycleOnly": true
+    }
+  },
+  "permissions": {
+    "storage.anywhereCaches.insert": "storage.anywhereCaches.create",
+    "storage.bucketAccessControls.get": "storage.buckets.getIamPolicy",
+    "storage.bucketAccessControls.list": "storage.buckets.getIamPolicy",
+    "storage.defaultObjectAccessControls.get": "storage.buckets.getIamPolicy",
+    "storage.defaultObjectAccessControls.list": "storage.buckets.getIamPolicy",
+    "storage.objectAccessControls.get": "storage.objects.getIamPolicy",
+    "storage.objectAccessControls.list": "storage.objects.getIamPolicy",
+    "storage.buckets.getStorageLayout": "storage.objects.list",
+    "storage.buckets.lockRetentionPolicy": "storage.buckets.update",
+    "storage.folders.deleteRecursive": "storage.folders.delete",
+    "storage.objects.compose": "storage.objects.create",
+    "storage.objects.insert": "storage.objects.create",
+    "storage.objects.copy": "storage.objects.create",
+    "storage.objects.rewrite": "storage.objects.create",
+    "storage.objects.patch": "storage.objects.update",
+    "storage.objects.bulkRestore": "storage.objects.restore",
+    "storage.notifications.get": "storage.buckets.get",
+    "storage.notifications.list": "storage.buckets.get",
+    "storage.objects.viewFullContext": "storage.objects.get"
+  },
+  "roles": {
+    "storage.objects.update": "roles/storage.objectUser",
+    "storage.objects.restore": "roles/storage.objectUser",
+    "storage.objects.move": "roles/storage.objectUser",
+    "storage.objects.get": "roles/storage.objectViewer",
+    "storage.objects.list": "roles/storage.objectViewer",
+    "storage.objects.copy": "roles/storage.objectUser",
+    "storage.objects.rewrite": "roles/storage.objectUser",
+    "storage.objects.compose": "roles/storage.objectUser",
+    "storage.buckets.restore": "roles/storage.admin"
+  },
+  "skip": {
+    "storage.buckets.relocate": "moves the bucket to another location: infrastructure, set by GCP.Storage.Bucket's location",
+    "storage.anywhereCaches.insert": "creates a cache: infrastructure",
+    "storage.rapidCaches.insert": "creates a cache: infrastructure",
+    "storage.rapidCaches.update": "rapid caches are not generally available",
+    "storage.rapidCaches.get": "rapid caches are not generally available",
+    "storage.rapidCaches.list": "rapid caches are not generally available",
+    "storage.rapidCaches.disable": "rapid caches are not generally available",
+    "storage.projects.hmacKeys.create": "lifecycle of GCP.Storage.HmacKey",
+    "storage.projects.serviceAccount.get": "returns Cloud Storage's service agent for the project: setup information, not a runtime call",
+    "storage.channels.stop": "object change notification channels are deprecated; use GCP.Storage.BucketEventSource",
+    "storage.objects.watchAll": "object change notification channels are deprecated; use GCP.Storage.BucketEventSource",
+    "storage.buckets.lockRetentionPolicy": "permanently locks the bucket's retention policy: irreversible infrastructure, not a runtime call",
+    "storage.bucketAccessControls.insert": "lifecycle of GCP.Storage.BucketAccessControl",
+    "storage.defaultObjectAccessControls.insert": "lifecycle of GCP.Storage.DefaultObjectAccessControl",
+    "storage.objectAccessControls.insert": "lifecycle of GCP.Storage.ObjectAccessControl",
+    "storage.notifications.insert": "lifecycle of GCP.Storage.Notification",
+    "storage.objects.insert": "uploads go to the media upload endpoint: use GCP.Storage.PutObject"
+  },
+  "projectGrant": {
+    "storage.buckets.restore": "a soft-deleted bucket has no IAM policy: restore is authorized on the project"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

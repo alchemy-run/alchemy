@@ -1,0 +1,107 @@
+{
+  "discovery": "dlp-v2",
+  "module": "dlp_v2",
+  "resources": {
+    "ContentPolicy": {
+      "pattern": "projects/*/locations/*/contentPolicies/*"
+    },
+    "DeidentifyTemplate": {
+      "pattern": "projects/*/deidentifyTemplates/*"
+    },
+    "DiscoveryConfig": {
+      "pattern": "projects/*/locations/*/discoveryConfigs/*"
+    },
+    "DlpJob": {
+      "pattern": "projects/*/dlpJobs/*"
+    },
+    "InspectTemplate": {
+      "pattern": "projects/*/inspectTemplates/*"
+    },
+    "JobTrigger": {
+      "pattern": "projects/*/jobTriggers/*"
+    },
+    "LocationsDeidentifyTemplate": {
+      "pattern": "projects/*/locations/*/deidentifyTemplates/*"
+    },
+    "LocationsDlpJob": {
+      "pattern": "projects/*/locations/*/dlpJobs/*"
+    },
+    "LocationsInspectTemplate": {
+      "pattern": "projects/*/locations/*/inspectTemplates/*"
+    },
+    "LocationsJobTrigger": {
+      "pattern": "projects/*/locations/*/jobTriggers/*"
+    },
+    "LocationsStoredInfoType": {
+      "pattern": "projects/*/locations/*/storedInfoTypes/*"
+    },
+    "OrganizationStoredInfoType": {
+      "pattern": "organizations/*/storedInfoTypes/*"
+    },
+    "OrganizationsDeidentifyTemplate": {
+      "pattern": "organizations/*/deidentifyTemplates/*"
+    },
+    "OrganizationsInspectTemplate": {
+      "pattern": "organizations/*/inspectTemplates/*"
+    },
+    "OrganizationsLocationsConnection": {
+      "pattern": "organizations/*/locations/*/connections/*"
+    },
+    "OrganizationsLocationsDeidentifyTemplate": {
+      "pattern": "organizations/*/locations/*/deidentifyTemplates/*"
+    },
+    "OrganizationsLocationsDiscoveryConfig": {
+      "pattern": "organizations/*/locations/*/discoveryConfigs/*"
+    },
+    "OrganizationsLocationsInspectTemplate": {
+      "pattern": "organizations/*/locations/*/inspectTemplates/*"
+    },
+    "OrganizationsLocationsJobTrigger": {
+      "pattern": "organizations/*/locations/*/jobTriggers/*"
+    },
+    "OrganizationsLocationsStoredInfoType": {
+      "pattern": "organizations/*/locations/*/storedInfoTypes/*"
+    },
+    "StoredInfoType": {
+      "pattern": "projects/*/storedInfoTypes/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ContentPolicy": "ProbeContentPolicy",
+      "DlpJob": "ProbeDlpJob",
+      "LocationsStoredInfoType": "ProbeLocationsStoredInfoType",
+      "StoredInfoType": "ProbeStoredInfoType",
+      "DeidentifyTemplate": "ProbeDeidentify",
+      "InspectTemplate": "ProbeInspect",
+      "JobTrigger": "ProbeTrigger",
+      "LocationsDeidentifyTemplate": "ProbeLocDeidentify",
+      "LocationsInspectTemplate": "ProbeLocInspect",
+      "LocationsJobTrigger": "ProbeLocTrigger",
+      "LocationsDlpJob": "ProbeLocDlpJob",
+      "DiscoveryConfig": "ProbeDiscoveryConfig"
+    },
+    "untestable": {
+      "OrganizationStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsDeidentifyTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsInspectTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsConnection": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsDeidentifyTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsDiscoveryConfig": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsInspectTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsJobTrigger": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListColumnDataProfiles": "{ location: \"us-central1\", filter: `project_id = ${yield* hostProject} AND dataset_id = alchemy_probe AND table_id = missing` }"
+    }
+  },
+  "permissionCollections": {
+    "dlpJobs": "jobs",
+    "fileStoreDataProfiles": "fileStoreProfiles"
+  },
+  "verbPermissions": {
+    "finish": "cancel"
+  },
+  "defaultPermission": "serviceusage.services.use"
+}

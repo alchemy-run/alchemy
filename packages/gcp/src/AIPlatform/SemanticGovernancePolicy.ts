@@ -274,7 +274,15 @@ export const SemanticGovernancePolicyProvider = () =>
               mcpTools,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+          .pipe(
+            // A just-created agent takes a few seconds to become visible.
+            Effect.retry({
+              while: (error) => error._tag === "GovernedAgentNotFound",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 12,
+            }),
+            Effect.catchTag("Conflict", () => Effect.undefined),
+          );
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,

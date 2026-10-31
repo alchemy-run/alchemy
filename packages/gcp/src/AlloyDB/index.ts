@@ -12,3 +12,4 @@ export * from "./GetInstanceHttp.ts";
 export * from "./GetUser.ts";
 export * from "./GetUserHttp.ts";
 export * from "./Instance.ts";
+export * from "./generated.ts";

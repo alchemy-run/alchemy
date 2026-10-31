@@ -1,0 +1,34 @@
+{
+  "discovery": "storagetransfer-v1",
+  "module": "storagetransfer_v1",
+  "resources": {
+    "AgentPool": {
+      "pattern": "projects/*/agentPools/*"
+    },
+    "TransferJob": {
+      "pattern": "transferJobs/*",
+      "fields": {
+        "projectId": "project"
+      }
+    }
+  },
+  "permissionCollections": {
+    "transferJobs": "jobs",
+    "transferOperations": "operations"
+  },
+  "skip": {
+    "storagetransfer.transferOperations.list": "transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+    "storagetransfer.transferOperations.pause": "transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+    "storagetransfer.transferOperations.resume": "transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+    "storagetransfer.transferOperations.cancel": "transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+    "storagetransfer.transferOperations.get": "transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+    "storagetransfer.transferJobs.list": "filters by a JSON expression naming the project, not a path",
+    "storagetransfer.transferJobs.create": "lifecycle of GCP.StorageTransfer.TransferJob"
+  },
+  "probes": {
+    "resources": {
+      "TransferJob": "Copy",
+      "AgentPool": "ProbePool"
+    }
+  }
+}

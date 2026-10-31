@@ -675,12 +675,17 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
+/**
+ * Retry while another operation holds the node pool (`Conflict`) or the
+ * cluster (`ClusterOperationInProgress`: a resize, upgrade or repair that
+ * takes minutes).
+ */
 const retryConflict = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 8,
-      schedule: Schedule.spaced("5 seconds"),
+      while: (error) => error._tag === "Conflict" || error._tag === "ClusterOperationInProgress",
+      times: 40,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -1078,11 +1083,7 @@ export const NodePoolProvider = () =>
         .deleteProjectsLocationsClustersNodePools({ name: output.name })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
+          retryConflict,
         );
       if (operation !== undefined) {
         yield* waitForOperation(env.project, location, operation, {

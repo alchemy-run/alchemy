@@ -14,7 +14,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "DataprocBindings");
 
 // Cluster create + delete takes ~8 minutes (observed 475s).
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;

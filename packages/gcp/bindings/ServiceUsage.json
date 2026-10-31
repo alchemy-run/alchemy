@@ -1,0 +1,18 @@
+{
+  "discovery": "serviceusage-v1",
+  "module": "serviceusage_v1",
+  "resources": {
+    "ProjectService": {
+      "pattern": "*/*/services/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ProjectService": "ProbeProjectService"
+    },
+    "untestable": {}
+  },
+  "permissions": {
+    "serviceusage.services.batchEnable": "serviceusage.services.enable"
+  }
+}

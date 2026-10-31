@@ -8,8 +8,8 @@ import {
   location,
   logLevel,
   currentProject,
-  entitled,
-  runLifecycle,
+  CloudNumberRegistryApi,
+  orgRegistry,
   waitUntilGone,
 } from "./common.ts";
 
@@ -27,13 +27,14 @@ const organizationScope = () => {
   );
 };
 
-test.provider.skipIf(!entitled)(
+test.provider(
   "getProjectsLocationsIpamAdminScopes on a missing scope fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const error = yield* Effect.flip(
         cnr.getProjectsLocationsIpamAdminScopes({
@@ -50,13 +51,14 @@ test.provider.skipIf(!entitled)(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!orgRegistry)(
   "create, update, and delete an ipam admin scope",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const org = yield* organizationScope();
       if (org === undefined) {
@@ -69,6 +71,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           return yield* GCP.CloudNumberRegistry.IpamAdminScope("Org", {
             location,
             scopes: [org],
@@ -96,6 +99,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           return yield* GCP.CloudNumberRegistry.IpamAdminScope("Org", {
             ipamAdminScopeId: created.ipamAdminScopeId,
             location,

@@ -15,7 +15,8 @@ export interface GetWorkstationRequest extends Omit<
  * Bind this operation to a
  * {@link WorkstationClustersWorkstationConfigsWorkstation} in a
  * Function/Action init phase. Provide {@link GetWorkstationHttp}.
- * Grants `roles/workstations.viewer` on the workstation only.
+ * Grants `roles/workstations.user` on the workstation only: the smallest
+ * role a workstation accepts that reads it.
  *
  * ### Observing Workstations
  * **Example:** Read the bound workstation

@@ -64,8 +64,11 @@ export type FederationProps = {
   version?: string;
   /**
    * Ranked backends used to resolve database names at query time. Keys
-   * are ranks (`0`, `1`, …); lower ranks are evaluated first. When
-   * omitted, a BigQuery backend for the current project is used.
+   * are ranks (`0`, `1`, …); lower ranks are evaluated first. At least one
+   * must be a Dataproc Metastore service, ACTIVE and serving gRPC
+   * (`hiveMetastoreConfig.endpointProtocol: "GRPC"`); BigQuery can join it.
+   * When omitted, only a BigQuery backend for the current project is
+   * sent, which the API rejects.
    */
   backendMetastores?: Record<string, BackendMetastore>;
   /**
@@ -117,15 +120,13 @@ export type Federation = Resource<
  * federation. Labels and `backendMetastores` update in place.
  *
  * ### Creating a Federation
- * **Example:** BigQuery backend
+ * **Example:** A Dataproc Metastore service and BigQuery
  * ```typescript
  * const federation = yield* GCP.Metastore.Federation("Lakehouse", {
  *   version: "3.1.2",
  *   backendMetastores: {
- *     "1": {
- *       name: "projects/my-project",
- *       metastoreType: "BIGQUERY",
- *     },
+ *     "1": { name: hive.name, metastoreType: "DATAPROC_METASTORE" },
+ *     "2": { name: "projects/my-project", metastoreType: "BIGQUERY" },
  *   },
  *   labels: { env: "prod" },
  * });

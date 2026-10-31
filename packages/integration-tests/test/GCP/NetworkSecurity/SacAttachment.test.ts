@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // run the lifecycle. The NCC gateway spoke it needs takes well over 5
 // minutes to provision.
 const partnerRealm = process.env.GCP_TEST_SAC_PARTNER_REALM;
-const runLifecycle = !!partnerRealm && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !!partnerRealm && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsSacAttachments({ name }).pipe(
@@ -54,7 +54,7 @@ test.provider(
 
 // GCP validates the gateway before the realm, so proving the typed
 // unpaired-realm rejection needs a real NCC gateway spoke (slow).
-test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "createProjectsLocationsSacAttachments on an unpaired realm fails with SacRealmNotPaired",
   (stack) =>
     Effect.gen(function* () {

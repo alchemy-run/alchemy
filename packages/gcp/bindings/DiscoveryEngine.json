@@ -1,0 +1,118 @@
+{
+  "discovery": "discoveryengine-v1",
+  "module": "discoveryengine_v1",
+  "resources": {
+    "CollectionsDataStore": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*"
+    },
+    "CollectionsDataStoresBranchesDocument": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/branches/*/documents/*"
+    },
+    "CollectionsDataStoresControl": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/controls/*"
+    },
+    "CollectionsDataStoresConversation": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/conversations/*"
+    },
+    "CollectionsDataStoresSchema": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/schemas/*"
+    },
+    "CollectionsDataStoresServingConfig": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/servingConfigs/*"
+    },
+    "CollectionsDataStoresSession": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/sessions/*"
+    },
+    "CollectionsDataStoresSiteSearchEngineTargetSite": {
+      "pattern": "projects/*/locations/*/collections/*/dataStores/*/siteSearchEngine/targetSites/*"
+    },
+    "CollectionsEngine": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*"
+    },
+    "CollectionsEnginesAssistant": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*/assistants/*"
+    },
+    "CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig": {
+      "pattern": "tasks/*/pushNotificationConfigs/*"
+    },
+    "CollectionsEnginesControl": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*/controls/*"
+    },
+    "CollectionsEnginesConversation": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*/conversations/*"
+    },
+    "CollectionsEnginesServingConfig": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*/servingConfigs/*"
+    },
+    "CollectionsEnginesSession": {
+      "pattern": "projects/*/locations/*/collections/*/engines/*/sessions/*"
+    },
+    "DataStore": {
+      "pattern": "projects/*/locations/*/dataStores/*"
+    },
+    "DataStoresBranchesDocument": {
+      "pattern": "projects/*/locations/*/dataStores/*/branches/*/documents/*"
+    },
+    "DataStoresControl": {
+      "pattern": "projects/*/locations/*/dataStores/*/controls/*"
+    },
+    "DataStoresConversation": {
+      "pattern": "projects/*/locations/*/dataStores/*/conversations/*"
+    },
+    "DataStoresSchema": {
+      "pattern": "projects/*/locations/*/dataStores/*/schemas/*"
+    },
+    "DataStoresServingConfig": {
+      "pattern": "projects/*/locations/*/dataStores/*/servingConfigs/*"
+    },
+    "DataStoresSession": {
+      "pattern": "projects/*/locations/*/dataStores/*/sessions/*"
+    },
+    "DataStoresSiteSearchEngineTargetSite": {
+      "pattern": "projects/*/locations/*/dataStores/*/siteSearchEngine/targetSites/*"
+    },
+    "IdentityMappingStore": {
+      "pattern": "projects/*/locations/*/identityMappingStores/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "CollectionsDataStore": "ProbeCollectionsDataStore",
+      "DataStore": "ProbeDataStore",
+      "CollectionsDataStoresSchema": "ProbeSchema",
+      "CollectionsDataStoresBranchesDocument": "ProbeDocument",
+      "CollectionsDataStoresSession": "ProbeSession",
+      "CollectionsDataStoresSiteSearchEngineTargetSite": "ProbeTargetSite",
+      "CollectionsEngine": "ProbeEngine",
+      "CollectionsDataStoresControl": "ProbeStoreControl",
+      "CollectionsDataStoresServingConfig": "ProbeStoreServing",
+      "CollectionsEnginesControl": "ProbeEngineControl",
+      "CollectionsEnginesServingConfig": "ProbeEngineServing",
+      "CollectionsEnginesSession": "ProbeEngineSession",
+      "DataStoresSchema": "ProbeLocSchema",
+      "DataStoresBranchesDocument": "ProbeLocDocument",
+      "DataStoresSession": "ProbeLocSession",
+      "DataStoresSiteSearchEngineTargetSite": "ProbeLocTargetSite",
+      "DataStoresControl": "ProbeLocControl",
+      "DataStoresServingConfig": "ProbeLocServing"
+    },
+    "untestable": {
+      "CollectionsDataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "CollectionsEnginesAssistant": "createAssistants is rejected on a plain search engine with BadRequest \"Only default_assistant is allowed.\" even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)",
+      "CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig": "createAssistants is rejected on a plain search engine with BadRequest \"Only default_assistant is allowed.\" even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)",
+      "CollectionsEnginesConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "DataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "IdentityMappingStore": "Identity mapping stores need a workforce identity provider configured for the project (BadRequest \"IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)"
+    },
+    "location": "global",
+    "skip": {
+      "ListEngineConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
+      "ListDataStoreConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')"
+    }
+  },
+  "permissions": {
+    "discoveryengine.projects.locations.userEvents.write": "discoveryengine.userEvents.create",
+    "discoveryengine.projects.locations.userEvents.collect": "discoveryengine.userEvents.create",
+    "discoveryengine.projects.locations.collections.updateDataConnector": "discoveryengine.dataConnectors.update"
+  }
+}

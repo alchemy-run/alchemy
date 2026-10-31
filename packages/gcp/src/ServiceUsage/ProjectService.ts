@@ -32,6 +32,8 @@ export type ProjectService = Resource<
   "GCP.ServiceUsage.ProjectService",
   ProjectServiceProps,
   {
+    /** Full resource name, `projects/{project}/services/{service}`. */
+    name: string;
     /** Project the API is enabled in. */
     project: string;
     /** Service identifier, such as `compute.googleapis.com`. */
@@ -108,6 +110,7 @@ const toAttrs = (
   state: serviceusage.GoogleApiServiceusageV1ServiceStateEnum,
   disableOnDestroy: boolean,
 ): ProjectService["Attributes"] => ({
+  name: serviceName(project, service),
   project,
   service: normalizeService(service),
   state,
@@ -116,7 +119,7 @@ const toAttrs = (
 
 export const ProjectServiceProvider = () =>
   Provider.succeed(ProjectService, {
-    stables: ["project", "service"],
+    stables: ["name", "project", "service"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;

@@ -7,8 +7,8 @@ import {
   location,
   logLevel,
   currentProject,
-  entitled,
-  runLifecycle,
+  CloudNumberRegistryApi,
+  orgRegistry,
   waitUntilGone,
 } from "./common.ts";
 
@@ -16,13 +16,14 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const CIDR = "10.250.0.0/22";
 
-test.provider.skipIf(!entitled)(
+test.provider(
   "getProjectsLocationsCustomRanges on a missing range fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const error = yield* Effect.flip(
         cnr.getProjectsLocationsCustomRanges({
@@ -39,16 +40,18 @@ test.provider.skipIf(!entitled)(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!orgRegistry)(
   "create, update, and delete a custom range",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             location,
             labels: { env: "test" },
@@ -92,6 +95,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             registryBookId: created.book.registryBookId,
             location,

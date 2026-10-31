@@ -1,0 +1,64 @@
+{
+  "discovery": "netapp-v1",
+  "module": "netapp_v1",
+  "resources": {
+    "ActiveDirectory": {
+      "pattern": "projects/*/locations/*/activeDirectories/*"
+    },
+    "BackupPolicy": {
+      "pattern": "projects/*/locations/*/backupPolicies/*"
+    },
+    "BackupVault": {
+      "pattern": "projects/*/locations/*/backupVaults/*"
+    },
+    "BackupVaultsBackup": {
+      "pattern": "projects/*/locations/*/backupVaults/*/backups/*"
+    },
+    "HostGroup": {
+      "pattern": "projects/*/locations/*/hostGroups/*"
+    },
+    "KmsConfig": {
+      "pattern": "projects/*/locations/*/kmsConfigs/*"
+    },
+    "StoragePool": {
+      "pattern": "projects/*/locations/*/storagePools/*"
+    },
+    "Volume": {
+      "pattern": "projects/*/locations/*/volumes/*"
+    },
+    "VolumesQuotaRule": {
+      "pattern": "projects/*/locations/*/volumes/*/quotaRules/*"
+    },
+    "VolumesReplication": {
+      "pattern": "projects/*/locations/*/volumes/*/replications/*"
+    },
+    "VolumesSnapshot": {
+      "pattern": "projects/*/locations/*/volumes/*/snapshots/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ActiveDirectory": "ProbeActiveDirectory",
+      "BackupPolicy": "ProbeBackupPolicy",
+      "BackupVault": "ProbeBackupVault",
+      "HostGroup": "ProbeHostGroup",
+      "StoragePool": "ProbeStoragePool",
+      "KmsConfig": "ProbeKmsConfig",
+      "Volume": "ProbeVolume",
+      "VolumesQuotaRule": "ProbeQuotaRule",
+      "VolumesSnapshot": "ProbeSnapshot",
+      "BackupVaultsBackup": "ProbeVolumeBackup"
+    },
+    "untestable": {
+      "VolumesReplication": "a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it"
+    },
+    "skip": {
+      "ListStoragePoolBackupConfigs": "backup configs exist only on ONTAP-mode storage pools (\"ListBackupConfigs is only supported for ONTAP mode storage pools\"); the probe pool is a standard pool"
+    },
+    "networks": 1,
+    "deployMinutes": 60
+  },
+  "skip": {
+    "netapp.projects.locations.volumes.establishPeering": "checks netapp.volumes.establishPeering, which no predefined role grants (roles/netapp.admin is denied it)"
+  }
+}

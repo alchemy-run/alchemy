@@ -6,17 +6,16 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { defaultNetworkSelfLink } from "../networkQuota.ts";
+import { InternalAlb } from "../internalAlb.ts";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// The fixture's INTERNAL_MANAGED address currently fails with BadRequest
-// "Invalid value for field 'resource.network': ... The field cannot be
-// specified with subnetwork address." — it needs a subnetwork plus a
-// proxy-only subnet. Set GCP_TEST_LB_TRAFFIC_EXTENSION=1 once reworked.
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_LB_TRAFFIC_EXTENSION;
+// The extension sits on an internal Application Load Balancer, which takes
+// minutes to build, so `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   networkservices.getProjectsLocationsLbTrafficExtensions({ name }).pipe(
@@ -55,56 +54,17 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an lb traffic extension",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const healthCheck = yield* GCP.Compute.HealthCheck("Hc", {
-            type: "HTTP",
-            httpHealthCheck: { port: 80, requestPath: "/" },
-          });
-          const backend = yield* GCP.Compute.RegionBackendService("Backend", {
-            region: "us-central1",
-            loadBalancingScheme: "INTERNAL_MANAGED",
-            protocol: "HTTP",
-            healthChecks: [healthCheck.selfLink.as<string>()],
-          });
-          const urlMap = yield* GCP.Compute.RegionUrlMap("Map", {
-            region: "us-central1",
-            defaultService: backend.selfLink.as<string>(),
-          });
-          const proxy = yield* GCP.Compute.RegionTargetHttpProxy("Proxy", {
-            region: "us-central1",
-            urlMap: urlMap.selfLink.as<string>(),
-          });
-          const address = yield* GCP.Compute.Address("Ip", {
-            region: "us-central1",
-            addressType: "INTERNAL",
-            purpose: "SHARED_LOADBALANCER_VIP",
-            network: defaultNetworkSelfLink(project),
-          });
-          const rule = yield* GCP.Compute.ForwardingRule("Rule", {
-            region: "us-central1",
-            loadBalancingScheme: "INTERNAL_MANAGED",
-            ipProtocol: "TCP",
-            portRange: "80",
-            target: proxy.selfLink.as<string>(),
-            ipAddress: address.selfLink.as<string>(),
-            network: defaultNetworkSelfLink(project),
-          });
-          const callout = yield* GCP.Compute.RegionBackendService("Callout", {
-            region: "us-central1",
-            loadBalancingScheme: "INTERNAL_MANAGED",
-            protocol: "HTTP2",
-            healthChecks: [healthCheck.selfLink.as<string>()],
-          });
+          const alb = yield* InternalAlb;
           const extension = yield* GCP.NetworkServices.LbTrafficExtension("Inspect", {
             location: "us-central1",
             description: "traffic ext a",
             labels: { env: "test" },
             loadBalancingScheme: "INTERNAL_MANAGED",
-            forwardingRules: [rule.selfLink.as<string>()],
+            forwardingRules: [alb.rule],
             extensionChains: [
               {
                 name: "all-traffic",
@@ -112,7 +72,7 @@ test.provider.skipIf(!runLifecycle)(
                 extensions: [
                   {
                     name: "header-rewriter",
-                    service: callout.selfLink.as<string>(),
+                    service: alb.callout,
                     authority: "ext.example.com",
                     timeout: "0.1s",
                     failOpen: true,
@@ -147,7 +107,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.extension.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(withNetworkSlot, logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
     timeout: 900_000,

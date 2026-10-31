@@ -8,3 +8,4 @@ export * from "./GetPlatformsPolicyHttp.ts";
 export * from "./PlatformsPolicy.ts";
 export * from "./ValidateAttestation.ts";
 export * from "./ValidateAttestationHttp.ts";
+export * from "./generated.ts";

@@ -7,3 +7,4 @@ export * from "./GetInstancesSnapshot.ts";
 export * from "./GetInstancesSnapshotHttp.ts";
 export * from "./Instance.ts";
 export * from "./InstancesSnapshot.ts";
+export * from "./generated.ts";

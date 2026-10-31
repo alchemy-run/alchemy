@@ -1,0 +1,26 @@
+{
+  "discovery": "sasportal-v1alpha1",
+  "module": "sasportal_v1alpha1",
+  "resources": {
+    "CustomersDeployment": {
+      "pattern": "customers/*/deployments/*"
+    },
+    "CustomersDevice": {
+      "pattern": "customers/*/devices/*"
+    },
+    "CustomersNode": {
+      "pattern": "customers/*/nodes/*"
+    },
+    "NodesDevice": {
+      "pattern": "nodes/*/devices/*"
+    },
+    "NodesNode": {
+      "pattern": "nodes/*/nodes/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {},
+    "enable": ["sasportal.googleapis.com"]
+  }
+}

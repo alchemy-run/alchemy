@@ -6,6 +6,7 @@ import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
+import { releaseNetworkSlot, takeNetworkSlot } from "../networkQuota.ts";
 import MemcacheBindingsHost, { Cache, memcacheEnabled } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -25,6 +26,7 @@ describe.skipIf(!memcacheEnabled)(
   () => {
     beforeAll(
       Effect.gen(function* () {
+        yield* takeNetworkSlot;
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
@@ -46,7 +48,9 @@ describe.skipIf(!memcacheEnabled)(
       { timeout: 1_800_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_200_000 });
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlot)), {
+      timeout: 1_200_000,
+    });
 
     describe("GetInstance", () => {
       test.provider(

@@ -11,8 +11,11 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Management servers take well over 5 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+// The Management Console is being deprecated: create fails with BadRequest
+// "Management Console is on path for deprecation and creation of new
+// Management server is restricted." Set GCP_TEST_BACKUPDR_MANAGEMENT_SERVER=1
+// on a project that may still create one.
+const runLifecycle = !!process.env.GCP_TEST_BACKUPDR_MANAGEMENT_SERVER && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   backupdr.getProjectsLocationsManagementServers({ name }).pipe(

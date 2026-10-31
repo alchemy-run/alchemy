@@ -17,3 +17,4 @@ export * from "./WriteTopic.ts";
 export * from "./WriteTopicHttp.ts";
 export * from "./ReadSubscription.ts";
 export * from "./ReadSubscriptionHttp.ts";
+export * from "./generated.ts";

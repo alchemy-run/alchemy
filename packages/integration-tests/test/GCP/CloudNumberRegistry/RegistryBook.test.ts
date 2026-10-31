@@ -7,20 +7,21 @@ import {
   location,
   logLevel,
   currentProject,
-  entitled,
-  runLifecycle,
+  CloudNumberRegistryApi,
+  orgRegistry,
   waitUntilGone,
 } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!entitled)(
+test.provider(
   "getProjectsLocationsRegistryBooks on a missing book fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const error = yield* Effect.flip(
         cnr.getProjectsLocationsRegistryBooks({
@@ -37,16 +38,18 @@ test.provider.skipIf(!entitled)(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!orgRegistry)(
   "create, update, and delete a registry book",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           return yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             location,
             labels: { env: "test" },
@@ -72,6 +75,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           return yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             registryBookId: created.registryBookId,
             location,

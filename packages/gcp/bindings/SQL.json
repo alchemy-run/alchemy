@@ -1,0 +1,62 @@
+{
+  "discovery": "sqladmin-v1",
+  "module": "sqladmin_v1",
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/instances/*",
+      "attributes": ["project", "instanceName"]
+    },
+    "Database": {
+      "pattern": "projects/*/instances/*/databases/*",
+      "attributes": ["project", "instance", "databaseName"]
+    },
+    "User": {
+      "pattern": "projects/*/instances/*/users/*",
+      "attributes": ["project", "instance", "userName"],
+      "fields": {
+        "host": "host"
+      }
+    },
+    "SslCert": {
+      "pattern": "projects/*/instances/*/sslCerts/*",
+      "lifecycleOnly": true
+    },
+    "BackupRun": {
+      "pattern": "projects/*/instances/*/backupRuns/*",
+      "attributes": ["project", "instance", "backupRunId"]
+    },
+    "Backup": {
+      "pattern": "projects/*/backups/*"
+    }
+  },
+  "permissionService": "cloudsql",
+  "permissions": {
+    "sql.connect.get": "cloudsql.instances.connect",
+    "sql.connect.generateEphemeral": "cloudsql.instances.connect",
+    "sql.sslCerts.createEphemeral": "cloudsql.instances.connect",
+    "sql.Backups.GetBackup": "cloudsql.backupRuns.get",
+    "sql.Backups.ListBackups": "cloudsql.backupRuns.list",
+    "sql.Backups.CreateBackup": "cloudsql.backupRuns.create",
+    "sql.Backups.UpdateBackup": "cloudsql.backupRuns.update",
+    "sql.Backups.DeleteBackup": "cloudsql.backupRuns.delete"
+  },
+  "skip": {
+    "sql.tiers.list": "lists machine tiers: catalog data, no project resource",
+    "sql.flags.list": "lists database flags: catalog data, no project resource",
+    "sql.connect.resolve": "resolves a DNS name to an instance: no project in its path"
+  },
+  "probes": {
+    "resources": {
+      "Instance": "ProbeInstance",
+      "Database": "ProbeDatabase",
+      "User": "ProbeUser"
+    },
+    "untestable": {
+      "Backup": "a Cloud SQL backup needs an instance with backups enabled; the probe instance runs with them off to stay cheap",
+      "BackupRun": "backup runs need an instance with backups enabled"
+    },
+    "skip": {
+      "ListWorkloadCaptures": "workload capture needs a newer maintenance version than a fresh instance gets (\"the maintenance version does not support this feature\"), and moving an instance to it is a maintenance operation"
+    }
+  }
+}

@@ -13,9 +13,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Backups require a provisioned Managed AD domain (20-60 minutes).
 // Create against a missing parent returns `NotFound` (`parent resource
-// not found for .../domains/missing.alch.test/backups/...`). Set
-// GCP_TEST_MANAGEDIDENTITIES=1 to run the full lifecycle.
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
+// not found for .../domains/missing.alch.test/backups/...`). `--fast` skips
+// the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   managedidentities.getProjectsLocationsGlobalDomainsBackups({ name }).pipe(
@@ -149,6 +149,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:managedidentities", "live"],
-    timeout: 240_000,
+    timeout: 6_600_000,
   },
 );

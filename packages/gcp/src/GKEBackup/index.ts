@@ -4,3 +4,4 @@ export * from "./BackupPlansBackup.ts";
 export * from "./RestoreChannel.ts";
 export * from "./RestorePlan.ts";
 export * from "./RestorePlansRestore.ts";
+export * from "./generated.ts";

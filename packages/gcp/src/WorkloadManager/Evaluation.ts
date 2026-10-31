@@ -22,6 +22,7 @@ import {
   sameStringList,
   sameText,
   stringMap,
+  ensureWorkloadManagerServiceIdentity,
   toPhysicalId,
   userLabels,
   waitForOperation,
@@ -222,6 +223,9 @@ export type Evaluation = Resource<
  */
 export const Evaluation = Resource<Evaluation>("GCP.WorkloadManager.Evaluation");
 
+/** Evaluation ids: a letter first, 3–36 characters. */
+const MAX_EVALUATION_ID_LENGTH = 36;
+
 const resourceName = (project: string, location: string, evaluationId: string) =>
   `projects/${project}/locations/${location}/evaluations/${evaluationId}`;
 
@@ -335,6 +339,7 @@ export const EvaluationProvider = () =>
         olds?.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, evaluationId);
@@ -358,6 +363,7 @@ export const EvaluationProvider = () =>
         news.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, evaluationId);
@@ -382,21 +388,34 @@ export const EvaluationProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* workloadmanager
+        yield* ensureWorkloadManagerServiceIdentity(env.project);
+        yield* workloadmanager
           .createProjectsLocationsEvaluations({
             parent: parentOf(env.project, location),
             evaluationId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-        if (created !== undefined) {
-          // ALREADY_EXISTS (6): a concurrent create won the race.
-          yield* waitForOperation(created).pipe(
-            Effect.catchTag("GCP.OperationFailed", (error) =>
-              error.code === 6 ? Effect.void : Effect.fail(error),
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            Effect.flatMap((created) =>
+              created === undefined
+                ? Effect.void
+                : waitForOperation(created).pipe(
+                    // ALREADY_EXISTS (6): a concurrent create won the race.
+                    Effect.catchTag("GCP.OperationFailed", (error) =>
+                      error.code === 6 ? Effect.void : Effect.fail(error),
+                    ),
+                  ),
             ),
+            // A just-created service agent takes a minute or two to be ready.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.OperationFailed" &&
+                error.message.includes("service agent is not ready"),
+              schedule: Schedule.spaced("15 seconds"),
+              times: 12,
+            }),
           );
-        }
         current = yield* waitUntilExists(getByName(name), name);
       }
 

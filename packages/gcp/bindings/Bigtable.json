@@ -1,0 +1,60 @@
+{
+  "discovery": "bigtableadmin-v2",
+  "module": "bigtableadmin_v2",
+  "permissionService": "bigtable",
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/instances/*",
+      "iamKind": "bigtable.instance"
+    },
+    "Table": {
+      "pattern": "projects/*/instances/*/tables/*",
+      "iamKind": "bigtable.table"
+    },
+    "Cluster": {
+      "pattern": "projects/*/instances/*/clusters/*",
+      "lifecycleOnly": true
+    },
+    "AppProfile": {
+      "pattern": "projects/*/instances/*/appProfiles/*",
+      "lifecycleOnly": true
+    },
+    "InstancesClustersBackup": {
+      "pattern": "projects/*/instances/*/clusters/*/backups/*",
+      "lifecycleOnly": true
+    },
+    "InstancesLogicalView": {
+      "pattern": "projects/*/instances/*/logicalViews/*",
+      "lifecycleOnly": true
+    },
+    "InstancesMaterializedView": {
+      "pattern": "projects/*/instances/*/materializedViews/*",
+      "lifecycleOnly": true
+    },
+    "InstancesTablesAuthorizedView": {
+      "pattern": "projects/*/instances/*/tables/*/authorizedViews/*",
+      "lifecycleOnly": true
+    },
+    "InstancesTablesSchemaBundle": {
+      "pattern": "projects/*/instances/*/tables/*/schemaBundles/*",
+      "lifecycleOnly": true
+    }
+  },
+  "permissions": {
+    "bigtableadmin.projects.instances.tables.restore": "bigtable.backups.restore",
+    "bigtableadmin.projects.instances.tables.modifyColumnFamilies": "bigtable.tables.update",
+    "bigtableadmin.projects.instances.tables.dropRowRange": "bigtable.tables.mutateRows",
+    "bigtableadmin.projects.instances.clusters.backups.copy": "bigtable.backups.create"
+  },
+  "skip": {
+    "bigtableadmin.projects.instances.partialUpdateInstance": "updates the instance, which its provider owns",
+    "bigtableadmin.projects.instances.clusters.partialUpdateCluster": "updates the cluster, which its provider owns",
+    "bigtableadmin.projects.instances.clusters.getMemoryLayer": "the cluster's memory layer (preview); no Alchemy resource models it yet",
+    "bigtableadmin.projects.instances.clusters.updateMemoryLayer": "the cluster's memory layer (preview); no Alchemy resource models it yet"
+  },
+  "auditServices": ["bigtableadmin.googleapis.com", "bigtable.googleapis.com"],
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

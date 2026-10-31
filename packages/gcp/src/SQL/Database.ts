@@ -487,8 +487,10 @@ export const DatabaseProvider = () =>
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              // An instance runs one operation at a time; an export, backup or
+              // restart holds it for minutes.
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         current = yield* waitUntilExists(env.project, instance, databaseName);
@@ -557,8 +559,10 @@ export const DatabaseProvider = () =>
           recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            // An instance runs one operation at a time; an export, backup or
+            // restart holds it for minutes.
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       yield* waitUntilGone(project, instance, databaseName);

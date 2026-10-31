@@ -1,0 +1,24 @@
+{
+  "discovery": "retail-v2",
+  "module": "retail_v2",
+  "resources": {
+    "CatalogsBranchesProduct": {
+      "pattern": "projects/*/locations/*/catalogs/*/branches/*/products/*"
+    },
+    "CatalogsControl": {
+      "pattern": "projects/*/locations/*/catalogs/*/controls/*"
+    },
+    "CatalogsModel": {
+      "pattern": "projects/*/locations/*/catalogs/*/models/*"
+    },
+    "CatalogsServingConfig": {
+      "pattern": "projects/*/locations/*/catalogs/*/servingConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Retail serves only projects that accepted its data use terms (RetailDataUseTermsNotAccepted)"
+    }
+  }
+}

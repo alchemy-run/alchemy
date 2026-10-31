@@ -1,0 +1,32 @@
+{
+  "discovery": "recaptchaenterprise-v1",
+  "module": "recaptchaenterprise_v1",
+  "resources": {
+    "Firewallpolicy": {
+      "pattern": "projects/*/firewallpolicies/*"
+    },
+    "Key": {
+      "pattern": "projects/*/keys/*"
+    }
+  },
+  "permissions": {
+    "recaptchaenterprise.projects.relatedaccountgroups.memberships.list": "recaptchaenterprise.relatedaccountgroupmemberships.list",
+    "recaptchaenterprise.projects.relatedaccountgroupmemberships.search": "recaptchaenterprise.relatedaccountgroupmemberships.list"
+  },
+  "probes": {
+    "resources": {
+      "Key": "Signup"
+    },
+    "untestable": {
+      "Firewallpolicy": "The firewall policy API is allow-listed per project. Set (GCP_TEST_RECAPTCHA_FIREWALL)"
+    },
+    "allowedOutcomes": {
+      "FirewallPolicyApiUnavailable": "the firewall policy API isn't offered to the testing project (\"not provided by this environment\")"
+    },
+    "skip": {
+      "ListRelatedaccountgroups": "needs a reCAPTCHA Enterprise subscription, which only Google sales enables (\"requires an Enterprise subscription\")",
+      "ListRelatedaccountgroupMemberships": "needs a reCAPTCHA Enterprise subscription, which only Google sales enables (\"requires an Enterprise subscription\")",
+      "MigrateKey": "must be called by the Google account that owns the key (\"same Google account which owns the reCAPTCHA Site Key\"); the deployer owns it, not the host"
+    }
+  }
+}

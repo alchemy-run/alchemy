@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { Resource, type ResourceBinding } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
@@ -118,9 +118,25 @@ export type Queue = Resource<
     /** Last purge time, if the queue has ever been purged. */
     purgeTime: string | undefined;
   },
-  never,
+  QueueBinding,
   Providers
 >;
+
+/**
+ * What an event source binds onto a queue: a queue-level HTTP target that
+ * routes every task to the consuming host. It takes precedence over
+ * `httpTarget`.
+ */
+export type QueueBinding = {
+  httpTarget?: QueueHttpTarget;
+};
+
+/** Delivery paths of `GCP.CloudTasks.QueueEventSource` targets start with this. */
+export const QUEUE_EVENT_PATH_PREFIX = "/__alchemy/cloudtasks/";
+
+/** Whether a queue-level target is one a `QueueEventSource` bound. */
+const isBoundTarget = (target: QueueHttpTarget | undefined) =>
+  target?.uriOverride?.pathOverride?.path?.startsWith(QUEUE_EVENT_PATH_PREFIX) === true;
 
 /**
  * A Google Cloud Tasks queue.
@@ -351,13 +367,16 @@ export const QueueProvider = () =>
       return attrs.queueId === generated ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, news.queueId, output?.queueId);
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, queueId);
       const parent = locationParent(env.project, location);
-      const desiredHttpTarget = news.httpTarget;
+      const boundHttpTarget = (bindings as ResourceBinding<QueueBinding>[])
+        .map((binding) => binding.data?.httpTarget)
+        .find((target) => target !== undefined);
+      const desiredHttpTarget = boundHttpTarget ?? news.httpTarget;
       const desiredState = news.state ?? DEFAULT_STATE;
 
       let current = yield* getByName(name);
@@ -431,6 +450,10 @@ export const QueueProvider = () =>
         !sameHttpTarget(desiredHttpTarget, current.httpTarget)
       ) {
         patchBody.httpTarget = desiredHttpTarget;
+        mask.push("httpTarget");
+      } else if (desiredHttpTarget === undefined && isBoundTarget(current.httpTarget)) {
+        // The event source that routed tasks to its host is gone.
+        patchBody.httpTarget = {};
         mask.push("httpTarget");
       }
 

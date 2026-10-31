@@ -1,0 +1,34 @@
+{
+  "discovery": "beyondcorp-v1",
+  "module": "beyondcorp_v1",
+  "resources": {
+    "AppConnection": {
+      "pattern": "projects/*/locations/*/appConnections/*"
+    },
+    "AppConnector": {
+      "pattern": "projects/*/locations/*/appConnectors/*"
+    },
+    "AppGateway": {
+      "pattern": "projects/*/locations/*/appGateways/*"
+    },
+    "SecurityGateway": {
+      "pattern": "projects/*/locations/*/securityGateways/*"
+    },
+    "SecurityGatewaysApplication": {
+      "pattern": "projects/*/locations/*/securityGateways/*/applications/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "AppConnection": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "AppConnector": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "AppGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "SecurityGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "SecurityGatewaysApplication": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)"
+    },
+    "locations": {
+      "ListSecurityGateways": "global"
+    }
+  }
+}

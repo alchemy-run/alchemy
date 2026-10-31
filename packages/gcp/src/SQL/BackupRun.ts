@@ -122,6 +122,9 @@ export type BackupRun = Resource<
  * @resource
  * @category SQL
  */
+/** Cloud SQL rejects backup descriptions over 140 characters. */
+const MAX_BACKUP_DESCRIPTION_LENGTH = 140;
+
 export const BackupRun = Resource<BackupRun>("GCP.SQL.BackupRun");
 
 export class BackupRunNotResolved extends Data.TaggedError("GCP.SQL.BackupRunNotResolved")<{
@@ -346,7 +349,11 @@ export const BackupRunProvider = () =>
       const instance = instanceIdOf(news.instance);
       const ownership = yield* createInternalLabels(id);
       const userDescription = yield* toUserDescription(id, news.description, output?.description);
-      const desiredDescription = encodeDescription(ownership, userDescription);
+      const desiredDescription = encodeDescription(
+        ownership,
+        userDescription,
+        MAX_BACKUP_DESCRIPTION_LENGTH,
+      );
 
       let current = yield* observe(
         env.project,
@@ -374,8 +381,10 @@ export const BackupRunProvider = () =>
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              // An instance runs one operation at a time; an export, backup or
+              // restart holds it for minutes.
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
 
@@ -439,8 +448,10 @@ export const BackupRunProvider = () =>
           recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            // An instance runs one operation at a time; an export, backup or
+            // restart holds it for minutes.
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       yield* waitUntilGone(project, instance, backupRunId);

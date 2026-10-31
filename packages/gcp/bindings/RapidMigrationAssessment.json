@@ -1,0 +1,14 @@
+{
+  "discovery": "rapidmigrationassessment-v1",
+  "module": "rapidmigrationassessment_v1",
+  "resources": {
+    "Collector": {
+      "pattern": "projects/*/locations/*/collectors/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {},
+    "enable": ["rapidmigrationassessment.googleapis.com"]
+  }
+}

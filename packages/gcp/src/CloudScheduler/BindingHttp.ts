@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam } from "../HttpBinding.ts";
 import type { Job } from "./Job.ts";
 
 /**
@@ -28,7 +28,7 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (job: Job) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
+        yield* bind`${options.tag}(${job})`({ iam: grantsFor(options.iam, job.name) });
       }
       const name = yield* job.name;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "name">) {

@@ -11,11 +11,26 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Agent Registry is not enabled in the test project (ServiceDisabled, see
-// the probe below). Set GCP_TEST_AGENT_REGISTRY=1 in a project that has it.
-const runLifecycle = !!process.env.GCP_TEST_AGENT_REGISTRY && !process.env.FAST;
+// The testing project doesn't enable agentregistry.googleapis.com by default: every test
+// deploys it first.
+const AgentRegistryApi = GCP.ServiceUsage.ProjectService("AgentRegistryApi", {
+  service: "agentregistry.googleapis.com",
+});
 
 const location = "us-central1";
+
+// A binding delegates through an auth provider (the API answers BadRequest
+// "auth_provider is required" without one).
+const AgentIdentityApi = GCP.ServiceUsage.ProjectService("AgentIdentityApi", {
+  service: "agentidentity.googleapis.com",
+});
+const Keys = Effect.gen(function* () {
+  yield* AgentIdentityApi;
+  return yield* GCP.AgentIdentity.AuthProvider("Keys", {
+    location,
+    authProviderTypeParams: { apiKey: { apiKey: "alchemy-test-api-key" } },
+  });
+});
 const currentParent = GcpEnvironment.current.pipe(
   Effect.map(({ project }) => `projects/${project}/locations/${location}`),
 );
@@ -159,34 +174,15 @@ const ensureFixtures = () =>
     };
   });
 
-test.provider.skipIf(runLifecycle)(
-  "getProjectsLocationsBindings without Agent Registry enabled fails with ServiceDisabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const parent = yield* currentParent;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        registry.getProjectsLocationsBindings({
-          name: `${parent}/bindings/alchemy-missing-binding`,
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a binding",
   (stack) =>
     Effect.gen(function* () {
       const parent = yield* currentParent;
       yield* stack.destroy();
+      // Enable both APIs before anything uses them: nothing orders the auth
+      // provider's create after an API enable in the same deploy.
+      yield* stack.deploy(Effect.all([AgentRegistryApi, AgentIdentityApi]));
 
       const { sourceService, targetService, sourceIdentifier, targetIdentifier } =
         yield* ensureFixtures();
@@ -195,7 +191,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentRegistryApi;
+          const keys = yield* Keys;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
+            authProviderBinding: { authProvider: keys.name },
             location,
             displayName: "orchestrator tools",
             description: "routes the orchestrator",
@@ -224,7 +223,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentRegistryApi;
+          const keys = yield* Keys;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
+            authProviderBinding: { authProvider: keys.name },
             location,
             displayName: "orchestrator tools v2",
             description: "updated routing",

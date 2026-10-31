@@ -56,10 +56,6 @@ export type FirewallEndpointProps = {
    */
   billingProjectId?: string;
   /**
-   * Human-readable description (max 2048 characters).
-   */
-  description?: string;
-  /**
    * Enable jumbo frames on the endpoint. Immutable — changing it
    * replaces the endpoint.
    * @default false
@@ -85,8 +81,6 @@ export type FirewallEndpoint = Resource<
     location: string;
     /** Project billed for the endpoint, if set. */
     billingProjectId: string | undefined;
-    /** User-provided description. */
-    description: string | undefined;
     /** Whether jumbo frames are enabled. */
     jumboFramesEnabled: boolean;
     /** User labels (Alchemy ownership labels stripped). */
@@ -131,7 +125,6 @@ export type FirewallEndpoint = Resource<
  * const endpoint = yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
  *   firewallEndpointId: "app-ngfw",
  *   location: "us-central1-a",
- *   description: "prod inspection",
  *   labels: { env: "prod" },
  * });
  * ```
@@ -153,7 +146,6 @@ const toAttrs = (endpoint: networksecurity.FirewallEndpoint, project: string) =>
     project: parsed.project || project,
     location: parsed.location || DEFAULT_ZONE,
     billingProjectId: endpoint.billingProjectId,
-    description: endpoint.description,
     jumboFramesEnabled: endpoint.endpointSettings?.jumboFramesEnabled === true,
     labels: userLabels(endpoint.labels),
     state: endpoint.state,
@@ -266,7 +258,6 @@ export const FirewallEndpointProvider = () =>
             firewallEndpointId,
             body: {
               billingProjectId: news.billingProjectId,
-              description: news.description,
               labels: desiredLabels,
               endpointSettings: { jumboFramesEnabled },
             },
@@ -288,11 +279,8 @@ export const FirewallEndpointProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
-      const updateMask = changedFields([
-        ["labels", labelsChanged],
-        ["description", descriptionChanged],
-      ]);
+      // Labels are the only field that updates in place.
+      const updateMask = changedFields([["labels", labelsChanged]]);
 
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsFirewallEndpoints({
@@ -301,7 +289,6 @@ export const FirewallEndpointProvider = () =>
           body: {
             name: current.name ?? name,
             labels: desiredLabels,
-            description: news.description,
           },
         });
         yield* waitForOperation(operation);

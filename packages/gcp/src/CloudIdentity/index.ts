@@ -4,3 +4,4 @@ export * from "./GroupsMembership.ts";
 export * from "./InboundOidcSsoProfile.ts";
 export * from "./InboundSamlSsoProfile.ts";
 export * from "./InboundSsoAssignment.ts";
+export * from "./generated.ts";

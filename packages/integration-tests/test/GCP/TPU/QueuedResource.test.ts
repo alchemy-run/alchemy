@@ -11,11 +11,13 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Cloud TPU is disabled on the testing project (ServiceDisabled "Cloud TPU API
-// has not been used in project ...") and TPU VMs bill by the hour (dollars
-// per run) and need TPU quota; set
-// GCP_TEST_TPU=1 to opt in.
-const runLifecycle = !!process.env.GCP_TEST_TPU && !process.env.FAST;
+// The testing project doesn't enable Cloud TPU by default: every test deploys
+// it first. TPU VMs take several minutes to provision, so `--fast` skips the
+// lifecycle.
+const TpuApi = GCP.ServiceUsage.ProjectService("TpuApi", {
+  service: "tpu.googleapis.com",
+});
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   tpu.getProjectsLocationsQueuedResources({ name }).pipe(
@@ -34,13 +36,14 @@ test.provider(
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(TpuApi);
 
       const error = yield* Effect.flip(
         tpu.getProjectsLocationsQueuedResources({
           name: `projects/${project}/locations/us-central1-c/queuedResources/alchemy-tpu-qr-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -52,30 +55,31 @@ test.provider.skipIf(!runLifecycle)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* stack.deploy(TpuApi);
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.TPU.QueuedResource("Trainer", {
-            location: "us-central1-c",
-            nodeSpec: [
-              {
-                node: {
-                  acceleratorType: "v2-8",
-                  runtimeVersion: "tpu-ubuntu2204-base",
-                  description: "alchemy-test-qr",
-                  labels: { env: "test" },
-                },
+      const trainer = Effect.gen(function* () {
+        yield* TpuApi;
+        return yield* GCP.TPU.QueuedResource("Trainer", {
+          location: "us-central1-a",
+          nodeSpec: [
+            {
+              node: {
+                acceleratorType: "v5litepod-1",
+                runtimeVersion: "v2-alpha-tpuv5-lite",
+                description: "alchemy-test-qr",
+                labels: { env: "test" },
               },
-            ],
-          });
-        }),
-      );
+            },
+          ],
+        });
+      });
+      const created = yield* stack.deploy(trainer);
 
       expect(created.name).toContain("/queuedResources/");
       expect(created.queuedResourceId).toEqual(expect.any(String));
-      expect(created.location).toEqual("us-central1-c");
+      expect(created.location).toEqual("us-central1-a");
       expect(created.nodeSpec.length).toBeGreaterThan(0);
-      expect(created.nodeSpec[0]?.node?.acceleratorType).toEqual("v2-8");
+      expect(created.nodeSpec[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(created.nodeSpec[0]?.node?.description).toEqual("alchemy-test-qr");
       expect(created.nodeSpec[0]?.node?.labels).toMatchObject({ env: "test" });
 
@@ -83,8 +87,14 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.tpu?.nodeSpec?.[0]?.node?.acceleratorType).toEqual("v2-8");
+      expect(fetched.tpu?.nodeSpec?.[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(fetched.tpu?.nodeSpec?.[0]?.node?.labels?.env).toEqual("test");
+      // The provider named the node after the queued resource.
+      expect(fetched.tpu?.nodeSpec?.[0]?.nodeId).toEqual(created.queuedResourceId);
+
+      // That default node id must not read as a change on the next deploy.
+      const plan = yield* stack.plan(trainer);
+      expect(plan.resources.Trainer?.action).toEqual("noop");
 
       yield* stack.destroy();
 

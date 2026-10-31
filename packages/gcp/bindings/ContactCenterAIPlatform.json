@@ -1,0 +1,16 @@
+{
+  "discovery": "contactcenteraiplatform-v1alpha1",
+  "module": "contactcenteraiplatform_v1alpha1",
+  "resources": {
+    "ContactCenter": {
+      "pattern": "projects/*/locations/*/contactCenters/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "ContactCenter": "a contact center instance is a paid subscription that takes 30\u201345 minutes to provision"
+    },
+    "enable": ["contactcenteraiplatform.googleapis.com"]
+  }
+}

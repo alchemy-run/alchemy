@@ -11,3 +11,4 @@ export * from "./FetchCaCerts.ts";
 export * from "./FetchCaCertsHttp.ts";
 export * from "./GetCertificateAuthority.ts";
 export * from "./GetCertificateAuthorityHttp.ts";
+export * from "./generated.ts";

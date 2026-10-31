@@ -1,0 +1,28 @@
+{
+  "discovery": "developerconnect-v1",
+  "module": "developerconnect_v1",
+  "resources": {
+    "AccountConnector": {
+      "pattern": "projects/*/locations/*/accountConnectors/*"
+    },
+    "Connection": {
+      "pattern": "projects/*/locations/*/connections/*"
+    },
+    "ConnectionsGitRepositoryLink": {
+      "pattern": "projects/*/locations/*/connections/*/gitRepositoryLinks/*"
+    },
+    "InsightsConfig": {
+      "pattern": "projects/*/locations/*/insightsConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Connection": "ProbeConnection",
+      "AccountConnector": "ProbeAccountConnector",
+      "InsightsConfig": "ProbeInsights"
+    },
+    "untestable": {
+      "ConnectionsGitRepositoryLink": "a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)"
+    }
+  }
+}

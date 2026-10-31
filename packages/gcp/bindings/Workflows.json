@@ -1,0 +1,32 @@
+{
+  "apis": [
+    {
+      "discovery": "workflows-v1",
+      "module": "workflows_v1"
+    },
+    {
+      "discovery": "workflowexecutions-v1",
+      "module": "workflowexecutions_v1",
+      "permissionService": "workflows"
+    }
+  ],
+  "resources": {
+    "Workflow": {
+      "pattern": "projects/*/locations/*/workflows/*"
+    }
+  },
+  "permissions": {
+    "workflowexecutions.projects.locations.workflows.triggerPubsubExecution": "workflows.executions.create",
+    "workflowexecutions.projects.locations.workflows.executions.deleteExecutionHistory": "workflows.executions.delete",
+    "workflows.projects.locations.workflows.listRevisions": "workflows.workflows.listRevision"
+  },
+  "skip": {
+    "workflowexecutions.projects.locations.workflows.executions.deleteExecutionHistory": "checks workflows.executions.delete, which no predefined role grants",
+    "workflowexecutions.projects.locations.workflows.executions.exportData": "rejects execution names with the project id, and the project number only works for the basic Owner/Editor roles",
+    "workflowexecutions.projects.locations.workflows.executions.callbacks.list": "rejects execution names with the project id, and the project number only works for the basic Owner/Editor roles"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

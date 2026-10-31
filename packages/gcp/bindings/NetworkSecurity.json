@@ -1,0 +1,149 @@
+{
+  "discovery": "networksecurity-v1",
+  "module": "networksecurity_v1",
+  "resources": {
+    "AddressGroup": {
+      "pattern": "projects/*/locations/*/addressGroups/*"
+    },
+    "AuthorizationPolicy": {
+      "pattern": "projects/*/locations/*/authorizationPolicies/*"
+    },
+    "AuthzPolicy": {
+      "pattern": "projects/*/locations/*/authzPolicies/*"
+    },
+    "BackendAuthenticationConfig": {
+      "pattern": "projects/*/locations/*/backendAuthenticationConfigs/*"
+    },
+    "ClientTlsPolicy": {
+      "pattern": "projects/*/locations/*/clientTlsPolicies/*"
+    },
+    "DnsThreatDetector": {
+      "pattern": "projects/*/locations/*/dnsThreatDetectors/*"
+    },
+    "FirewallEndpoint": {
+      "pattern": "projects/*/locations/*/firewallEndpoints/*"
+    },
+    "FirewallEndpointAssociation": {
+      "pattern": "projects/*/locations/*/firewallEndpointAssociations/*"
+    },
+    "GatewaySecurityPoliciesRule": {
+      "pattern": "projects/*/locations/*/gatewaySecurityPolicies/*/rules/*"
+    },
+    "GatewaySecurityPolicy": {
+      "pattern": "projects/*/locations/*/gatewaySecurityPolicies/*"
+    },
+    "InterceptDeployment": {
+      "pattern": "projects/*/locations/*/interceptDeployments/*"
+    },
+    "InterceptDeploymentGroup": {
+      "pattern": "projects/*/locations/*/interceptDeploymentGroups/*"
+    },
+    "InterceptEndpointGroup": {
+      "pattern": "projects/*/locations/*/interceptEndpointGroups/*"
+    },
+    "InterceptEndpointGroupAssociation": {
+      "pattern": "projects/*/locations/*/interceptEndpointGroupAssociations/*"
+    },
+    "MirroringDeployment": {
+      "pattern": "projects/*/locations/*/mirroringDeployments/*"
+    },
+    "MirroringDeploymentGroup": {
+      "pattern": "projects/*/locations/*/mirroringDeploymentGroups/*"
+    },
+    "MirroringEndpointGroup": {
+      "pattern": "projects/*/locations/*/mirroringEndpointGroups/*"
+    },
+    "MirroringEndpointGroupAssociation": {
+      "pattern": "projects/*/locations/*/mirroringEndpointGroupAssociations/*"
+    },
+    "OrganizationsAddressGroup": {
+      "pattern": "organizations/*/locations/*/addressGroups/*"
+    },
+    "OrganizationsFirewallEndpoint": {
+      "pattern": "organizations/*/locations/*/firewallEndpoints/*"
+    },
+    "OrganizationsSecurityProfile": {
+      "pattern": "organizations/*/locations/*/securityProfiles/*"
+    },
+    "OrganizationsSecurityProfileGroup": {
+      "pattern": "organizations/*/locations/*/securityProfileGroups/*"
+    },
+    "SacAttachment": {
+      "pattern": "projects/*/locations/*/sacAttachments/*"
+    },
+    "SacRealm": {
+      "pattern": "projects/*/locations/*/sacRealms/*"
+    },
+    "SecurityProfile": {
+      "pattern": "projects/*/locations/*/securityProfiles/*"
+    },
+    "SecurityProfileGroup": {
+      "pattern": "projects/*/locations/*/securityProfileGroups/*"
+    },
+    "ServerTlsPolicy": {
+      "pattern": "projects/*/locations/*/serverTlsPolicies/*"
+    },
+    "TlsInspectionPolicy": {
+      "pattern": "projects/*/locations/*/tlsInspectionPolicies/*"
+    },
+    "UrlList": {
+      "pattern": "projects/*/locations/*/urlLists/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "AddressGroup": "ProbeAddressGroup",
+      "AuthorizationPolicy": "ProbeAuthorizationPolicy",
+      "BackendAuthenticationConfig": "ProbeBackendAuthenticationConfig",
+      "ClientTlsPolicy": "ProbeClientTlsPolicy",
+      "DnsThreatDetector": "ProbeDnsThreatDetector",
+      "GatewaySecurityPolicy": "ProbeGatewaySecurityPolicy",
+      "SacRealm": "ProbeSacRealm",
+      "SecurityProfile": "ProbeSecurityProfile",
+      "ServerTlsPolicy": "ProbeServerTlsPolicy",
+      "UrlList": "ProbeUrlList",
+      "GatewaySecurityPoliciesRule": "ProbeGatewayRule",
+      "InterceptDeploymentGroup": "ProbeInterceptGroup",
+      "InterceptEndpointGroup": "ProbeInterceptEndpoints",
+      "MirroringDeploymentGroup": "ProbeMirroringGroup",
+      "MirroringEndpointGroup": "ProbeMirroringEndpoints",
+      "SecurityProfileGroup": "ProbeProfileGroup",
+      "InterceptDeployment": "ProbeInterceptDeployment",
+      "MirroringDeployment": "ProbeMirroringDeployment",
+      "InterceptEndpointGroupAssociation": "ProbeInterceptAssociation",
+      "MirroringEndpointGroupAssociation": "ProbeMirroringAssociation",
+      "TlsInspectionPolicy": "ProbeTlsInspectionPolicy",
+      "FirewallEndpoint": "ProbeFirewallEndpoint",
+      "FirewallEndpointAssociation": "ProbeFirewallAssociation",
+      "AuthzPolicy": "ProbeAuthzPolicy"
+    },
+    "untestable": {
+      "OrganizationsAddressGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsFirewallEndpoint": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsSecurityProfile": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsSecurityProfileGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "SacAttachment": "An attachment needs a SAC realm already paired with its SSE partner (Palo Alto Prisma Access / Symantec), which happens outside GCP. Set (GCP_TEST_SAC_PARTNER_REALM)"
+    },
+    "locations": {
+      "ListMirroringEndpointGroups": "global",
+      "ListMirroringEndpointGroupAssociations": "global",
+      "ListInterceptEndpointGroups": "global",
+      "ListInterceptEndpointGroupAssociations": "global",
+      "ListInterceptDeploymentGroups": "global",
+      "ListMirroringDeploymentGroups": "global",
+      "ListDnsThreatDetectors": "global",
+      "ListSecurityProfileGroups": "global",
+      "ListSecurityProfiles": "global",
+      "ListSacRealms": "global",
+      "ListFirewallEndpoints": "us-central1-a",
+      "ListFirewallEndpointAssociations": "us-central1-a",
+      "ListInterceptDeployments": "us-central1-a",
+      "ListMirroringDeployments": "us-central1-a"
+    },
+    "networks": 2,
+    "deployMinutes": 60,
+    "skip": {
+      "ListFirewallEndpointWildfireVerdictChangeRequests": "a plain read needs WildFire enabled on the endpoint (Cloud NGFW threat-prevention add-on); the probe endpoint answers \"WildFire is disabled for endpoint\""
+    }
+  }
+}

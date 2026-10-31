@@ -50,7 +50,7 @@ test.provider(
           name: `${parent}/customModules/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),

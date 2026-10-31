@@ -10,3 +10,6 @@ export * from "./WriteSecret.ts";
 export * from "./WriteSecretHttp.ts";
 export * from "./ReadWriteSecret.ts";
 export * from "./ReadWriteSecretHttp.ts";
+export * from "./generated.ts";
+export * from "./SecretEventSource.ts";
+export * from "./SecretEventSourceLive.ts";

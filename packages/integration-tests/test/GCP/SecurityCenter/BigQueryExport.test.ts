@@ -40,7 +40,7 @@ test.provider(
           name: `projects/${project}/bigQueryExports/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),

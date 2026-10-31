@@ -8,3 +8,4 @@ export * from "./FetchReadTokenHttp.ts";
 export * from "./FetchReadWriteToken.ts";
 export * from "./FetchReadWriteTokenHttp.ts";
 export * from "./InsightsConfig.ts";
+export * from "./generated.ts";

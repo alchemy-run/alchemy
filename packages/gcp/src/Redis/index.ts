@@ -12,3 +12,4 @@ export * from "./ReadWriteRedis.ts";
 export * from "./ReadWriteRedisHttp.ts";
 export * from "./WriteRedis.ts";
 export * from "./WriteRedisHttp.ts";
+export * from "./generated.ts";

@@ -1,0 +1,30 @@
+{
+  "discovery": "speech-v1",
+  "module": "speech_v1",
+  "resources": {
+    "CustomClass": {
+      "pattern": "projects/*/locations/*/customClasses/*"
+    },
+    "PhraseSet": {
+      "pattern": "projects/*/locations/*/phraseSets/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "CustomClass": "Ships",
+      "PhraseSet": "Hints"
+    },
+    "locations": {
+      "ListCustomClasses": "global",
+      "ListPhraseSets": "global"
+    },
+    "args": {
+      "LongrunningrecognizeSpeech": "{ body: { config: { languageCode: \"en-US\" }, audio: { uri: \"gs://alchemy-missing-bucket/missing.flac\" } } }"
+    }
+  },
+  "defaultPermission": "serviceusage.services.use",
+  "roles": {
+    "speech.speech.longrunningrecognize": "roles/speech.client",
+    "speech.speech.recognize": "roles/speech.client"
+  }
+}

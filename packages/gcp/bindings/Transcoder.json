@@ -1,0 +1,14 @@
+{
+  "discovery": "transcoder-v1",
+  "module": "transcoder_v1",
+  "resources": {
+    "JobTemplate": {
+      "pattern": "projects/*/locations/*/jobTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "JobTemplate": "Template"
+    }
+  }
+}

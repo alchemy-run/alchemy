@@ -1,0 +1,31 @@
+{
+  "discovery": "containeranalysis-v1",
+  "module": "containeranalysis_v1",
+  "resources": {
+    "LocationsNote": {
+      "pattern": "projects/*/locations/*/notes/*"
+    },
+    "LocationsOccurrence": {
+      "pattern": "projects/*/locations/*/occurrences/*"
+    },
+    "Note": {
+      "pattern": "projects/*/notes/*",
+      "iamKind": "containeranalysis.note"
+    },
+    "Occurrence": {
+      "pattern": "projects/*/occurrences/*"
+    }
+  },
+  "permissions": {
+    "containeranalysis.projects.notes.occurrences.list": "containeranalysis.notes.listOccurrences",
+    "containeranalysis.projects.locations.notes.occurrences.list": "containeranalysis.notes.listOccurrences"
+  },
+  "probes": {
+    "resources": {
+      "Note": "Authority",
+      "Occurrence": "Signed",
+      "LocationsNote": "RegionalNote",
+      "LocationsOccurrence": "RegionalOccurrence"
+    }
+  }
+}

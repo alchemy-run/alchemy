@@ -1,0 +1,47 @@
+{
+  "discovery": "migrationcenter-v1",
+  "module": "migrationcenter_v1",
+  "resources": {
+    "AssetsExportJob": {
+      "pattern": "projects/*/locations/*/assetsExportJobs/*"
+    },
+    "DiscoveryClient": {
+      "pattern": "projects/*/locations/*/discoveryClients/*"
+    },
+    "Group": {
+      "pattern": "projects/*/locations/*/groups/*"
+    },
+    "ImportJob": {
+      "pattern": "projects/*/locations/*/importJobs/*"
+    },
+    "ImportJobsImportDataFile": {
+      "pattern": "projects/*/locations/*/importJobs/*/importDataFiles/*"
+    },
+    "PreferenceSet": {
+      "pattern": "projects/*/locations/*/preferenceSets/*"
+    },
+    "ReportConfig": {
+      "pattern": "projects/*/locations/*/reportConfigs/*"
+    },
+    "ReportConfigsReport": {
+      "pattern": "projects/*/locations/*/reportConfigs/*/reports/*"
+    },
+    "Source": {
+      "pattern": "projects/*/locations/*/sources/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "AssetsExportJob": "ProbeAssetsExportJob",
+      "Group": "ProbeGroup",
+      "PreferenceSet": "ProbePreferenceSet",
+      "Source": "ProbeSource",
+      "ImportJob": "ProbeImportJob",
+      "ReportConfig": "ProbeReportConfig",
+      "ImportJobsImportDataFile": "ProbeImportFile",
+      "ReportConfigsReport": "ProbeReport",
+      "DiscoveryClient": "ProbeDiscoveryClient"
+    },
+    "untestable": {}
+  }
+}

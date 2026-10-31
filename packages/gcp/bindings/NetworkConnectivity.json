@@ -1,0 +1,71 @@
+{
+  "discovery": "networkconnectivity-v1",
+  "module": "networkconnectivity_v1",
+  "resources": {
+    "AutomatedDnsRecord": {
+      "pattern": "projects/*/locations/*/automatedDnsRecords/*"
+    },
+    "Hub": {
+      "pattern": "projects/*/locations/global/hubs/*"
+    },
+    "InternalRange": {
+      "pattern": "projects/*/locations/*/internalRanges/*"
+    },
+    "MulticloudDataTransferConfig": {
+      "pattern": "projects/*/locations/*/multicloudDataTransferConfigs/*"
+    },
+    "MulticloudDataTransferConfigsDestination": {
+      "pattern": "projects/*/locations/*/multicloudDataTransferConfigs/*/destinations/*"
+    },
+    "PolicyBasedRoute": {
+      "pattern": "projects/*/locations/global/policyBasedRoutes/*"
+    },
+    "RegionalEndpoint": {
+      "pattern": "projects/*/locations/*/regionalEndpoints/*"
+    },
+    "ServiceConnectionMap": {
+      "pattern": "projects/*/locations/*/serviceConnectionMaps/*"
+    },
+    "ServiceConnectionPolicy": {
+      "pattern": "projects/*/locations/*/serviceConnectionPolicies/*"
+    },
+    "ServiceConnectionToken": {
+      "pattern": "projects/*/locations/*/serviceConnectionTokens/*"
+    },
+    "Spoke": {
+      "pattern": "projects/*/locations/*/spokes/*"
+    },
+    "SpokesGatewayAdvertisedRoute": {
+      "pattern": "projects/*/locations/*/spokes/*/gatewayAdvertisedRoutes/*"
+    },
+    "Transport": {
+      "pattern": "projects/*/locations/*/transports/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Hub": "ProbeHub",
+      "MulticloudDataTransferConfig": "ProbeMulticloudDataTransferConfig",
+      "InternalRange": "ProbeInternalRange",
+      "PolicyBasedRoute": "ProbePolicyRoute",
+      "Spoke": "ProbeSpoke",
+      "ServiceConnectionPolicy": "ProbeConnectionPolicy",
+      "MulticloudDataTransferConfigsDestination": "ProbeTransferDestination"
+    },
+    "untestable": {
+      "AutomatedDnsRecord": "Consumer-created DNS records need `networkconnectivity.serviceClasses.use` on the Google producer's service class, which the testing project lacks (Forbidden \"Permission 'networkconnectivity.serviceClasses.use'\u2026 (GCP_TEST_NCC_AUTOMATED_DNS_RECORD)",
+      "RegionalEndpoint": "Creating a regional endpoint fails on the testing project with an LRO error `{ code: 13, message: \"an internal error has occurred\" }` for every target (storage.us-central1.p.rep / storage.us-central1.rep) and access\u2026 (GCP_TEST_REGIONAL_ENDPOINTS)",
+      "ServiceConnectionMap": "A service connection map publishes a producer service class, which must be registered for the project first (BadRequest \"serviceClass gcp-cloud-sql (GCP_TEST_SERVICE_CONNECTION_MAP)",
+      "Transport": "Transports are Cross-Cloud Interconnect to a partner cloud: they need an allowlisted remote profile and a real peer account (the probe asserts the (GCP_TEST_TRANSPORT)",
+      "SpokesGatewayAdvertisedRoute": "a gateway spoke provisions managed routers and takes well over 5 minutes (slow-gated in SpokesGatewayAdvertisedRoute.test.ts)"
+    },
+    "locations": {
+      "ListHubs": "global",
+      "ListPolicyBasedRoutes": "global"
+    }
+  },
+  "names": {
+    "ListGlobalHubs": "ListHubs",
+    "ListGlobalPolicyBasedRoutes": "ListPolicyBasedRoutes"
+  }
+}

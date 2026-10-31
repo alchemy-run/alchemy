@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { updateIamMembership } from "../IamPolicy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
@@ -97,9 +98,9 @@ export type TransferJobProps = {
    */
   status?: TransferJobStatus;
   /**
-   * User-managed service account that receives bucket permissions
-   * instead of the Transfer Service agent. Email or unique id. Immutable
-   * after create — changing it replaces the job.
+   * User-managed service account that runs the transfer instead of the
+   * Transfer Service agent. Email or unique id. Immutable after create —
+   * changing it replaces the job.
    */
   serviceAccount?: string;
 };
@@ -289,6 +290,40 @@ const toCreateBody = (
   status: statusOf(news.status),
 });
 
+/** Roles the transfer's identity needs on a Cloud Storage source and sink. */
+const SOURCE_ROLES = ["roles/storage.legacyBucketReader", "roles/storage.objectViewer"];
+const SINK_ROLES = ["roles/storage.legacyBucketReader", "roles/storage.objectAdmin"];
+
+/**
+ * Grant the account that runs the transfer (the `serviceAccount` prop, or
+ * the project's Storage Transfer service agent) read on a Cloud Storage
+ * source and write on a Cloud Storage sink, before the API validates them.
+ * Grants are additive and kept on delete: the agent is shared by every
+ * job in the project.
+ */
+const ensureBucketAccess = Effect.fn(function* (project: string, news: TransferJobProps) {
+  const source = news.transferSpec?.gcsDataSource?.bucketName;
+  const sink = news.transferSpec?.gcsDataSink?.bucketName;
+  if (source === undefined && sink === undefined) return;
+  const account =
+    news.serviceAccount ??
+    (yield* retryApiDisabled(storagetransfer.getGoogleServiceAccounts({ projectId: project })))
+      .accountEmail;
+  if (account === undefined) return;
+  for (const [bucket, roles] of [
+    [source, SOURCE_ROLES],
+    [sink, SINK_ROLES],
+  ] as const) {
+    if (bucket === undefined) continue;
+    yield* updateIamMembership({
+      kind: "storage.bucket",
+      name: bucket,
+      member: account,
+      add: roles,
+    });
+  }
+});
+
 export const TransferJobProvider = () =>
   Provider.succeed(TransferJob, {
     stables: ["name", "jobId", "project", "creationTime"],
@@ -324,6 +359,7 @@ export const TransferJobProvider = () =>
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
       const desiredStatus = statusOf(news.status);
+      yield* ensureBucketAccess(env.project, news);
 
       let current = yield* getTransferJob(output?.name ?? name, env.project);
 

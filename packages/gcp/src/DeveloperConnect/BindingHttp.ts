@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { ConnectionsGitRepositoryLink } from "./ConnectionsGitRepositoryLink.ts";
 
 /**
@@ -32,7 +32,7 @@ export const makeGitRepositoryLinkHttpBinding = <
     return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(link: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${link})`({
-          iam: [grantFor(options.iam, link.name)],
+          iam: grantsFor(options.iam, link.name),
         });
       }
       const name = yield* link.name;

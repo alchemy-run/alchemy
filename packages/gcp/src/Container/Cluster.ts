@@ -1042,9 +1042,10 @@ export const ClusterProvider = () =>
           const operation = yield* container.deleteProjectsLocationsClusters({ name }).pipe(
             Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.retry({
-              while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              while: (error) =>
+                error._tag === "Conflict" || error._tag === "ClusterOperationInProgress",
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
           if (operation !== undefined) {
@@ -1274,11 +1275,12 @@ export const ClusterProvider = () =>
         .pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
+            // ClusterOperationInProgress: a node-pool resize or upgrade
+            // still running; GKE operations take minutes.
             while: (error) =>
-              error._tag === "Conflict" ||
-              (error._tag === "BadRequest" && /incompatible operation/i.test(error.message)),
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+              error._tag === "Conflict" || error._tag === "ClusterOperationInProgress",
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {

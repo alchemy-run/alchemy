@@ -12,9 +12,8 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5
-// minutes to provision; set GCP_TEST_NGFW=1 together with GCP_TEST_SLOW to run.
-const runLifecycle =
-  !!process.env.GCP_TEST_NGFW && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+// minutes to provision, so `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsFirewallEndpoints({ name }).pipe(
@@ -59,7 +58,6 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
             location: "us-central1-a",
-            description: "firewall endpoint a",
             labels: { env: "test" },
           });
         }),
@@ -68,7 +66,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/firewallEndpoints/");
       expect(created.firewallEndpointId).toEqual(expect.any(String));
       expect(created.location).toEqual("us-central1-a");
-      expect(created.description).toEqual("firewall endpoint a");
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.createTime).toEqual(expect.any(String));
 
@@ -76,33 +73,36 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.description).toEqual("firewall endpoint a");
       expect(fetched.labels?.env).toEqual("test");
       expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
         true,
       );
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
-            firewallEndpointId: created.firewallEndpointId,
-            location: "us-central1-a",
-            description: "firewall endpoint b",
-            labels: { env: "prod", role: "ngfw" },
-          });
-        }),
-      );
+      const endpoint = (jumboFramesEnabled: boolean) =>
+        GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
+          firewallEndpointId: created.firewallEndpointId,
+          location: "us-central1-a",
+          jumboFramesEnabled,
+          labels: { env: "prod", role: "ngfw" },
+        });
 
+      // Labels update in place.
+      const updated = yield* stack.deploy(endpoint(false));
       expect(updated.name).toEqual(created.name);
-      expect(updated.description).toEqual("firewall endpoint b");
       expect(updated.labels).toMatchObject({ env: "prod", role: "ngfw" });
 
       const refetched = yield* networksecurity.getProjectsLocationsFirewallEndpoints({
         name: created.name,
       });
-      expect(refetched.description).toEqual("firewall endpoint b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ngfw");
+
+      const unchanged = yield* stack.plan(endpoint(false));
+      expect(unchanged.resources.Ngfw?.action).toEqual("noop");
+
+      // Jumbo frames are fixed at create: changing them replaces the endpoint.
+      const jumbo = yield* stack.plan(endpoint(true));
+      expect(jumbo.resources.Ngfw?.action).toEqual("replace");
 
       yield* stack.destroy();
 
@@ -111,6 +111,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-    timeout: 90_000,
+    timeout: 3_600_000,
   },
 );

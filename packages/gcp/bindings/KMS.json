@@ -1,0 +1,56 @@
+{
+  "discovery": "cloudkms-v1",
+  "module": "cloudkms_v1",
+  "resources": {
+    "KeyRing": {
+      "pattern": "projects/*/locations/*/keyRings/*",
+      "iamKind": "kms.keyRing"
+    },
+    "CryptoKey": {
+      "pattern": "projects/*/locations/*/keyRings/*/cryptoKeys/*",
+      "iamKind": "kms.cryptoKey"
+    },
+    "ImportJob": {
+      "pattern": "projects/*/locations/*/keyRings/*/importJobs/*",
+      "iamKind": "kms.importJob"
+    }
+  },
+  "permissions": {
+    "cloudkms.projects.locations.keyRings.cryptoKeys.updatePrimaryVersion": "cloudkms.cryptoKeys.update",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.rawDecrypt": "cloudkms.cryptoKeyVersions.useToDecrypt",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricDecrypt": "cloudkms.cryptoKeyVersions.useToDecrypt",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.rawEncrypt": "cloudkms.cryptoKeyVersions.useToEncrypt",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.getPublicKey": "cloudkms.cryptoKeyVersions.viewPublicKey",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macSign": "cloudkms.cryptoKeyVersions.useToSign",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricSign": "cloudkms.cryptoKeyVersions.useToSign",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macVerify": "cloudkms.cryptoKeyVersions.useToVerify",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.decapsulate": "cloudkms.cryptoKeyVersions.useToDecapsulate",
+    "cloudkms.projects.updateAutokeyConfig": "cloudkms.autokeyConfigs.update",
+    "cloudkms.projects.getAutokeyConfig": "cloudkms.autokeyConfigs.get"
+  },
+  "skip": {
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import": "imports wrapped key material through an ImportJob; a deploy-time concern, not a runtime call",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.importTrustedKeyWrappedCryptoKeyVersion": "single-tenant HSM key transfer",
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.exportTrustedKeyWrappedCryptoKeyVersion": "single-tenant HSM key transfer",
+    "cloudkms.projects.locations.ekmConnections.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call",
+    "cloudkms.projects.locations.singleTenantHsmInstances.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call (a dedicated HSM, billed per month)",
+    "cloudkms.projects.locations.keyHandles.create": "needs Autokey enabled on a folder (an organization-level setup)",
+    "cloudkms.projects.showEffectiveKeyAccessJustificationsPolicyConfig": "organization-level Key Access Justifications configuration",
+    "cloudkms.projects.showEffectiveKeyAccessJustificationsEnrollmentConfig": "organization-level Key Access Justifications configuration",
+    "cloudkms.projects.showEffectiveAutokeyConfig": "organization-level Autokey configuration"
+  },
+  "names": {
+    "AsymmetricCryptoKeyVersionDecrypt": "AsymmetricDecrypt",
+    "AsymmetricCryptoKeyVersionSign": "AsymmetricSign",
+    "MacCryptoKeyVersionSign": "MacSign",
+    "MacCryptoKeyVersionVerify": "MacVerify",
+    "RawCryptoKeyVersionDecrypt": "RawDecrypt",
+    "RawCryptoKeyVersionEncrypt": "RawEncrypt",
+    "DecapsulateCryptoKeyVersion": "Decapsulate",
+    "GetCryptoKeyVersionPublicKey": "GetPublicKey"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

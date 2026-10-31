@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
 
@@ -20,7 +20,7 @@ export const makeTopicHttpBinding = <I extends { topic: string }, A, E>(options:
       const name = yield* topic.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${topic})`({
-          iam: [grantFor(options.iam, topic.name)],
+          iam: grantsFor(options.iam, topic.name),
         });
       }
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (request: Omit<I, "topic">) {
@@ -44,7 +44,7 @@ export const makeSubscriptionHttpBinding = <I extends { subscription: string }, 
       const name = yield* subscription.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${subscription})`({
-          iam: [grantFor(options.iam, subscription.name)],
+          iam: grantsFor(options.iam, subscription.name),
         });
       }
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (

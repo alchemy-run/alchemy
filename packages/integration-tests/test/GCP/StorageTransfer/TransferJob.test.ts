@@ -27,48 +27,6 @@ const waitUntilGone = (jobName: string) =>
     );
   });
 
-const grantBucketRole = (bucket: string, member: string, role: string) =>
-  Effect.gen(function* () {
-    const policy = yield* storage.getIamPolicyBuckets({
-      bucket,
-      optionsRequestedPolicyVersion: 3,
-    });
-    const bindings = [...(policy.bindings ?? [])];
-    const existing = bindings.find((binding) => binding.role === role);
-    if (existing?.members?.includes(member)) return;
-    if (existing) {
-      existing.members = [...(existing.members ?? []), member];
-    } else {
-      bindings.push({ role, members: [member] });
-    }
-    yield* storage.setIamPolicyBuckets({
-      bucket,
-      body: {
-        ...policy,
-        bindings,
-      },
-    });
-  }).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 4,
-      schedule: Schedule.spaced("500 millis"),
-    }),
-  );
-
-const grantTransferAccess = (sourceBucket: string, sinkBucket: string, email: string) => {
-  const member = `serviceAccount:${email}`;
-  return Effect.all(
-    [
-      grantBucketRole(sourceBucket, member, "roles/storage.legacyBucketReader"),
-      grantBucketRole(sourceBucket, member, "roles/storage.objectViewer"),
-      grantBucketRole(sinkBucket, member, "roles/storage.legacyBucketReader"),
-      grantBucketRole(sinkBucket, member, "roles/storage.objectAdmin"),
-    ],
-    { concurrency: 1 },
-  );
-};
-
 test.provider(
   "create, update, and delete a transfer job",
   (stack) =>
@@ -93,13 +51,6 @@ test.provider(
           };
         }),
       );
-
-      const account = yield* storagetransfer.getGoogleServiceAccounts({
-        projectId: project,
-      });
-      if (account.accountEmail) {
-        yield* grantTransferAccess(buckets.sourceBucket, buckets.sinkBucket, account.accountEmail);
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -128,6 +79,24 @@ test.provider(
       expect(created.name).toEqual(`transferJobs/${created.jobId}`);
       expect(created.project).toEqual(project);
       expect(created.description).toEqual("copy uploads");
+
+      // The provider granted the transfer agent read on the source and
+      // write on the sink before the API validated them.
+      const agent = yield* storagetransfer.getGoogleServiceAccounts({ projectId: project });
+      const membersOf = (bucket: string, role: string) =>
+        storage
+          .getIamPolicyBuckets({ bucket })
+          .pipe(
+            Effect.map(
+              (policy) => policy.bindings?.find((binding) => binding.role === role)?.members ?? [],
+            ),
+          );
+      expect(yield* membersOf(buckets.sourceBucket, "roles/storage.objectViewer")).toContain(
+        `serviceAccount:${agent.accountEmail}`,
+      );
+      expect(yield* membersOf(buckets.sinkBucket, "roles/storage.objectAdmin")).toContain(
+        `serviceAccount:${agent.accountEmail}`,
+      );
       expect(created.status).toEqual("DISABLED");
       expect(created.transferSpec?.gcsDataSource?.bucketName).toEqual(buckets.sourceBucket);
       expect(created.transferSpec?.gcsDataSink?.bucketName).toEqual(buckets.sinkBucket);

@@ -14,7 +14,7 @@ export const GetWorkstationConfigHttp = Layer.effect(
   makeConfigHttpBinding({
     tag: "GCP.Workstations.GetWorkstationConfig",
     iam: {
-      role: "roles/workstations.viewer",
+      role: "roles/workstations.workstationCreator",
       on: "workstations.workstationConfig",
     },
     operation: workstations.getProjectsLocationsWorkstationClustersWorkstationConfigs,

@@ -19,7 +19,7 @@ const { test } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud SQL instances take well over 5 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (project: string, instance: string) =>
   sqladmin.getInstances({ project, instance }).pipe(

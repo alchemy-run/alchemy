@@ -1,0 +1,28 @@
+{
+  "discovery": "cloudsupport-v2",
+  "module": "cloudsupport_v2",
+  "resources": {
+    "SupportEventSubscription": {
+      "pattern": "organizations/*/supportEventSubscriptions/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  },
+  "permissions": {
+    "cloudsupport.cases.attachments.get": "cloudsupport.techCases.get",
+    "cloudsupport.cases.attachments.list": "cloudsupport.techCases.get",
+    "cloudsupport.cases.close": "cloudsupport.techCases.update",
+    "cloudsupport.cases.comments.create": "cloudsupport.techCases.update",
+    "cloudsupport.cases.comments.get": "cloudsupport.techCases.get",
+    "cloudsupport.cases.comments.list": "cloudsupport.techCases.get",
+    "cloudsupport.cases.create": "cloudsupport.techCases.create",
+    "cloudsupport.cases.escalate": "cloudsupport.techCases.escalate",
+    "cloudsupport.cases.get": "cloudsupport.techCases.get",
+    "cloudsupport.cases.list": "cloudsupport.techCases.list",
+    "cloudsupport.cases.patch": "cloudsupport.techCases.update",
+    "cloudsupport.cases.search": "cloudsupport.techCases.list",
+    "cloudsupport.media.download": "cloudsupport.techCases.get",
+    "cloudsupport.media.upload": "cloudsupport.techCases.update"
+  }
+}

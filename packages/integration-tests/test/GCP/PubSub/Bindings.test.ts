@@ -7,9 +7,17 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { callProbe, expectProbe } from "../bindingHost.ts";
 import PubSubBindingsHost, {
+  AuditMarkers,
+  COMMITTED_DEFINITION,
+  DetachInbox,
   EventSchema,
+  GenInbox,
+  GenSchema,
+  GenSnapshot,
+  GenTopic,
   PUBLISH_PAYLOAD,
   PublishTap,
   PublishTopic,
@@ -40,6 +48,12 @@ let names: {
   readTopic: string;
   readInbox: string;
   schema: string;
+  genTopic: string;
+  genInbox: string;
+  detachInbox: string;
+  genSnapshot: string;
+  genSchema: string;
+  auditMarkers: string;
 };
 
 const decode = (data: string | undefined) => Buffer.from(data ?? "", "base64").toString("utf8");
@@ -122,6 +136,12 @@ describe(
               readTopic: (yield* ReadTopic).name,
               readInbox: (yield* ReadInbox).name,
               schema: (yield* EventSchema).name,
+              genTopic: (yield* GenTopic).name,
+              genInbox: (yield* GenInbox).name,
+              detachInbox: (yield* DetachInbox).name,
+              genSnapshot: (yield* GenSnapshot).name,
+              genSchema: (yield* GenSchema).name,
+              auditMarkers: (yield* AuditMarkers).bucketName,
             };
           }),
         );
@@ -283,16 +303,251 @@ describe(
             });
             // schemas.validateMessage is authorized on the parent project
             // (a viewer grant on the schema alone answers 403).
+            // (DeleteSchemaRevision adds its own project-level editor grant.)
             expect(
               (policy.bindings ?? [])
                 .filter((binding) => (binding.members ?? []).includes(member))
                 .map((binding) => [binding.role, binding.condition]),
-            ).toEqual([["roles/pubsub.viewer", undefined]]);
+            ).toContainEqual(["roles/pubsub.viewer", undefined]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
           timeout: 600_000,
         },
+      );
+    });
+    const live = { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 };
+    const topicRoles = (resource: string) =>
+      pubsub.getIamPolicyProjectsTopics({ resource }).pipe(Effect.map((p) => rolesOf(p, member)));
+    const subscriptionRoles = (resource: string) =>
+      pubsub
+        .getIamPolicyProjectsSubscriptions({ resource })
+        .pipe(Effect.map((p) => rolesOf(p, member)));
+
+    describe("GetTopic / ListTopicSubscriptions / ListTopicSnapshots", () => {
+      test.provider(
+        "read the topic and what hangs off it, granted viewer on the topic only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const topic = yield* expectProbe<{ name?: string }>(baseUrl, "getTopic");
+            expect(topic.name).toEqual(names.genTopic);
+            const subscriptions = yield* expectProbe<{ subscriptions?: string[] }>(
+              baseUrl,
+              "listTopicSubscriptions",
+            );
+            expect(subscriptions.subscriptions).toContain(names.genInbox);
+            const snapshots = yield* expectProbe<{ snapshots?: string[] }>(
+              baseUrl,
+              "listTopicSnapshots",
+            );
+            expect(snapshots.snapshots).toContain(names.genSnapshot);
+            // Viewer for these reads; editor for DetachSubscription, which is
+            // authorized on the subscription's topic.
+            expect(yield* topicRoles(names.genTopic)).toEqual([
+              "roles/pubsub.editor",
+              "roles/pubsub.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("GetSubscription / SeekSubscription / ModifySubscriptionPushConfig", () => {
+      test.provider(
+        "read, seek and reconfigure the subscription, granted on the subscription only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const subscription = yield* expectProbe<{ name?: string; topic?: string }>(
+              baseUrl,
+              "getSubscription",
+            );
+            expect(subscription).toMatchObject({ name: names.genInbox, topic: names.genTopic });
+            yield* expectProbe(baseUrl, "seekSubscription");
+            yield* expectProbe(baseUrl, "modifySubscriptionPushConfig");
+            const live = yield* pubsub.getProjectsSubscriptions({ subscription: names.genInbox });
+            expect(live.pushConfig?.pushEndpoint).toBeUndefined();
+            expect(yield* subscriptionRoles(names.genInbox)).toEqual([
+              "roles/pubsub.editor",
+              "roles/pubsub.subscriber",
+              "roles/pubsub.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("DetachSubscription", () => {
+      test.provider(
+        "detaches the subscription, granted editor on its topic",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "detachSubscription");
+            const live = yield* pubsub.getProjectsSubscriptions({
+              subscription: names.detachInbox,
+            });
+            expect(live.detached).toBe(true);
+            expect(yield* subscriptionRoles(names.detachInbox)).toEqual([]);
+          }),
+        live,
+      );
+    });
+
+    describe("GetSnapshot", () => {
+      test.provider(
+        "reads the snapshot, granted viewer on the snapshot only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const snapshot = yield* expectProbe<{ name?: string; topic?: string }>(
+              baseUrl,
+              "getSnapshot",
+            );
+            expect(snapshot).toMatchObject({ name: names.genSnapshot, topic: names.genTopic });
+            const policy = yield* pubsub.getIamPolicyProjectsSnapshots({
+              resource: names.genSnapshot,
+            });
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.viewer"]);
+          }),
+        live,
+      );
+    });
+
+    describe("CommitSchema / ListSchemaRevisions / RollbackSchema / DeleteSchemaRevision", () => {
+      test.provider(
+        "commit, roll back and delete a revision, granted on the schema only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const step = <A>(route: string) =>
+              expectProbe<A>(baseUrl, route).pipe(Effect.timeout("90 seconds"));
+            const { original, committed } = yield* step<{ original: string; committed: string }>(
+              "schemaCommit",
+            );
+            expect(committed).not.toEqual(original);
+            const rolledBack = yield* step<{ definition?: string }>(
+              `schemaRollback?revision=${original}`,
+            );
+            expect(rolledBack.definition).not.toEqual(COMMITTED_DEFINITION);
+            const deleted = yield* step<{ revisionId?: string }>(
+              `schemaDeleteRevision?revision=${committed}`,
+            );
+            expect(deleted.revisionId).toEqual(committed);
+            const listed = yield* step<{ schemas?: { revisionId?: string }[] }>(
+              "schemaListRevisions",
+            );
+            const remaining = (listed.schemas ?? []).map((schema) => schema.revisionId);
+            expect(remaining).not.toContain(committed);
+            expect(remaining).toContain(original);
+
+            // A revision isn't covered by the schema's IAM policy, so
+            // DeleteSchemaRevision is granted editor on the project.
+            const { project } = yield* GcpEnvironment.current;
+            const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+              resource: `projects/${project}`,
+              body: { options: { requestedPolicyVersion: 3 } },
+            });
+            expect(rolesOf(projectPolicy, member)).toContain("roles/pubsub.editor");
+            const policy = yield* pubsub.getIamPolicyProjectsSchemas({
+              resource: names.genSchema,
+            });
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.editor", "roles/pubsub.viewer"]);
+          }),
+        live,
+      );
+    });
+
+    describe("consumeTopicAuditLogs / consumeSubscriptionAuditLogs / consumeSchemaAuditLogs / consumeSnapshotAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Re-setting a resource's own policy is an Admin Activity call that changes nothing.
+            const cases = [
+              {
+                key: "topic",
+                name: names.genTopic,
+                trigger: pubsub.getIamPolicyProjectsTopics({ resource: names.genTopic }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsTopics({
+                      resource: names.genTopic,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "subscription",
+                name: names.genInbox,
+                trigger: pubsub
+                  .getIamPolicyProjectsSubscriptions({ resource: names.genInbox })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      pubsub.setIamPolicyProjectsSubscriptions({
+                        resource: names.genInbox,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "schema",
+                name: names.genSchema,
+                trigger: pubsub.getIamPolicyProjectsSchemas({ resource: names.genSchema }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsSchemas({
+                      resource: names.genSchema,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "snapshot",
+                name: names.genSnapshot,
+                trigger: pubsub.getIamPolicyProjectsSnapshots({ resource: names.genSnapshot }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsSnapshots({
+                      resource: names.genSnapshot,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+            ];
+            for (const { key, name, trigger } of cases) {
+              const entry = yield* expectAuditEntry({
+                bucket: names.auditMarkers,
+                key,
+                method: "SetIamPolicy",
+                trigger,
+              });
+              expect(entry.serviceName).toEqual("pubsub.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toEqual(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 900_000 },
+      );
+    });
+
+    describe("project bindings", () => {
+      test.provider(
+        "lists topics, subscriptions, snapshots and schemas and validates a schema, granted viewer on the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              topics: string[];
+              subscriptions: string[];
+              snapshots: string[];
+              schemas: string[];
+              validated: object;
+            }>(baseUrl, "project");
+            expect(out.topics).toContain(names.genTopic);
+            expect(out.subscriptions).toContain(names.genInbox);
+            expect(out.snapshots).toContain(names.genSnapshot);
+            expect(out.schemas).toContain(names.genSchema);
+            expect(out.validated).toEqual({});
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 },
       );
     });
   },

@@ -1,3 +1,4 @@
+import { bindingProject } from "@alchemy.run/gcp/HttpBinding";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -67,6 +68,47 @@ export const serveProbes = (routes: Record<string, Probe>) =>
     return yield* HttpServerResponse.json(outcome);
   });
 
+/**
+ * A probe step whose typed failure is the expected outcome, as a value:
+ * its tag, or `"succeeded"`. `Forbidden`/`PermissionDenied` still fail, so
+ * {@link callProbe} retries them while a fresh IAM grant propagates.
+ */
+export const outcome = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.map(() => "succeeded" as string),
+    Effect.catchIf(
+      (error) => error._tag !== "Forbidden" && error._tag !== "PermissionDenied",
+      (error) => Effect.succeed(error._tag as string),
+    ),
+  );
+
+/**
+ * {@link outcome} for the generated probe suites: a failure reads
+ * `Tag: message`, so a failed assertion shows what the API answered.
+ * Compare on {@link outcomeTag}.
+ */
+export const probeOutcome = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.map(() => "succeeded" as string),
+    Effect.catchIf(
+      (error) => error._tag !== "Forbidden" && error._tag !== "PermissionDenied",
+      (error) => Effect.succeed(error.message ? `${error._tag}: ${error.message}` : error._tag),
+    ),
+  );
+
+/** The tag of a {@link probeOutcome}. */
+export const outcomeTag = (outcome: string) => outcome.split(":")[0]!;
+
+/** A probe's query parameter: `/probe/runTask?task=a` → `probeParam("task")` is `"a"`. */
+export const probeParam = Effect.fn(function* (key: string) {
+  const request = yield* HttpServerRequest;
+  return new URL(request.url, "http://host").searchParams.get(key) ?? "";
+});
+
 class ProbeNotReady extends Data.TaggedError("ProbeNotReady")<{
   readonly reason: string;
 }> {
@@ -91,7 +133,11 @@ export const callProbe = <A = unknown>(baseUrl: string, name: string) =>
     Effect.flatMap((outcome) =>
       !outcome.ok &&
       (outcome.error._tag === "Forbidden" || outcome.error._tag === "PermissionDenied")
-        ? Effect.fail(new ProbeNotReady({ reason: `IAM: ${outcome.error._tag}` }))
+        ? Effect.fail(
+            new ProbeNotReady({
+              reason: `IAM: ${outcome.error._tag} ${outcome.error.message ?? ""}`,
+            }),
+          )
         : Effect.succeed(outcome),
     ),
     Effect.mapError((error) =>
@@ -102,6 +148,7 @@ export const callProbe = <A = unknown>(baseUrl: string, name: string) =>
       schedule: Schedule.spaced("10 seconds"),
       times: 42,
     }),
+    Effect.mapError((error) => new ProbeNotReady({ reason: `probe ${name}: ${error.reason}` })),
   );
 
 /** {@link callProbe}, failing the test unless the probe succeeded. */
@@ -115,3 +162,11 @@ export const expectProbe = <A = unknown>(baseUrl: string, name: string) =>
           ),
     ),
   );
+
+/**
+ * The deployed host's project, for a probe request that must name it (a
+ * Logging `entries.list` reads `resourceNames`). Read at the host's runtime.
+ */
+export const hostProject = bindingProject.pipe(
+  Effect.map((project) => project ?? "alchemy-missing"),
+);

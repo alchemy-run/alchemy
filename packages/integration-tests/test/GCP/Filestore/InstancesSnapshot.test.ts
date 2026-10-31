@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // 0), so the lifecycle is entitlement-gated; the probe below pins the typed
 // rejection. Instances also take 5–20 minutes to provision.
 const hasEnterpriseQuota = !!process.env.GCP_TEST_FILESTORE_ENTERPRISE;
-const runLifecycle = hasEnterpriseQuota && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = hasEnterpriseQuota && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   file.getProjectsLocationsInstancesSnapshots({ name }).pipe(

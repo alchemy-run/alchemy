@@ -15,7 +15,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ComputeBindings");
 
 // Stop→TERMINATED→RUNNING on e2-micro takes several minutes end to end.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;

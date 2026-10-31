@@ -10,3 +10,4 @@ export * from "./InstanceConfig.ts";
 export * from "./InstancesBackup.ts";
 export * from "./InstancesDatabasesBackupSchedule.ts";
 export * from "./InstancesInstancePartition.ts";
+export * from "./generated.ts";

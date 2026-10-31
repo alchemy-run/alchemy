@@ -15,7 +15,7 @@ export const runLifecycle = !process.env.FAST;
 
 // Private connections peer a dedicated VPC and take 5-10 minutes to create
 // and delete.
-export const runSlowLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const runSlowLifecycle = !process.env.FAST;
 
 export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 

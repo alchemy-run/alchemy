@@ -35,6 +35,10 @@ import {
   Binding as AgentregistryBinding,
   BindingProvider as AgentregistryBindingProvider,
 } from "./AgentRegistry/Binding.ts";
+import {
+  Service as AgentregistryService,
+  ServiceProvider as AgentregistryServiceProvider,
+} from "./AgentRegistry/Service.ts";
 import { Agent, AgentProvider } from "./AIPlatform/Agent.ts";
 import { BatchPredictionJob, BatchPredictionJobProvider } from "./AIPlatform/BatchPredictionJob.ts";
 import { CachedContent, CachedContentProvider } from "./AIPlatform/CachedContent.ts";
@@ -125,6 +129,7 @@ import { PersistentResource, PersistentResourceProvider } from "./AIPlatform/Per
 import { PipelineJob, PipelineJobProvider } from "./AIPlatform/PipelineJob.ts";
 import { QueryReasoningEngineHttp } from "./AIPlatform/QueryReasoningEngineHttp.ts";
 import { RagCorpora, RagCorporaProvider } from "./AIPlatform/RagCorpora.ts";
+import { RagEngineConfig, RagEngineConfigProvider } from "./AIPlatform/RagEngineConfig.ts";
 import { ReasoningEngine, ReasoningEngineProvider } from "./AIPlatform/ReasoningEngine.ts";
 import {
   ReasoningEnginesMemory,
@@ -228,7 +233,12 @@ import {
   MonetizationSubscriptionsBasePlansOffer,
   MonetizationSubscriptionsBasePlansOfferProvider,
 } from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
+import { Api, ApiProvider } from "./ApiGateway/Api.ts";
 import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
+import {
+  Gateway as ApiGatewayGateway,
+  GatewayProvider as ApiGatewayGatewayProvider,
+} from "./ApiGateway/Gateway.ts";
 import { AnalyticsDatastore, AnalyticsDatastoreProvider } from "./Apigee/AnalyticsDatastore.ts";
 import {
   ApimServiceExtension,
@@ -1158,6 +1168,10 @@ import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./Develope
 import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./DeveloperConnect/FetchReadTokenHttp.ts";
 import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./DeveloperConnect/FetchReadWriteTokenHttp.ts";
 import { InsightsConfig, InsightsConfigProvider } from "./DeveloperConnect/InsightsConfig.ts";
+import {
+  Agent as DialogflowAgent,
+  AgentProvider as DialogflowAgentProvider,
+} from "./Dialogflow/Agent.ts";
 import { AgentsEntityType, AgentsEntityTypeProvider } from "./Dialogflow/AgentsEntityType.ts";
 import { AgentsEnvironment, AgentsEnvironmentProvider } from "./Dialogflow/AgentsEnvironment.ts";
 import {
@@ -1468,6 +1482,10 @@ import {
   RestorePlansRestore,
   RestorePlansRestoreProvider,
 } from "./GKEBackup/RestorePlansRestore.ts";
+import {
+  Membership as GkeHubMembership,
+  MembershipProvider as GkeHubMembershipProvider,
+} from "./GKEHub/Membership.ts";
 import { MembershipsFeature, MembershipsFeatureProvider } from "./GKEHub/MembershipsFeature.ts";
 import { BareMetalCluster, BareMetalClusterProvider } from "./GKEOnPrem/BareMetalCluster.ts";
 import {
@@ -2458,6 +2476,10 @@ import {
   GlossariesGlossaryEntryProvider,
 } from "./Translate/GlossariesGlossaryEntry.ts";
 import {
+  Glossary as TranslateGlossary,
+  GlossaryProvider as TranslateGlossaryProvider,
+} from "./Translate/Glossary.ts";
+import {
   Model as TranslateModel,
   ModelProvider as TranslateModelProvider,
 } from "./Translate/Model.ts";
@@ -2951,6 +2973,7 @@ const makeProviders = () =>
           ResourceManagerProject,
           Key,
           AgentregistryBinding,
+          AgentregistryService,
           RecaptchaenterpriseKey,
           RecaptchaenterpriseFirewallpolicy,
           Policy,
@@ -3166,6 +3189,7 @@ const makeProviders = () =>
           AgentsToolsVersion,
           AgentsTransitionRouteGroup,
           AgentsWebhook,
+          DialogflowAgent,
           SecuritySetting,
           OrganizationStoredInfoType,
           DeidentifyTemplate,
@@ -3302,6 +3326,8 @@ const makeProviders = () =>
           ObservationJob,
           ObservationSource,
           ApisConfig,
+          Api,
+          ApiGatewayGateway,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       Object.assign(
@@ -3426,6 +3452,7 @@ const makeProviders = () =>
           RestorePlan,
           RestorePlansRestore,
           MembershipsFeature,
+          GkeHubMembership,
           InstancesBackup,
           BareMetalCluster,
           BareMetalClustersBareMetalNodePool,
@@ -3493,6 +3520,7 @@ const makeProviders = () =>
           ProjectsLocationsGlobalPolicyOrchestrator,
           AdaptiveMtDataset,
           GlossariesGlossaryEntry,
+          TranslateGlossary,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -3536,6 +3564,7 @@ const makeProviders = () =>
           PersistentResource,
           PipelineJob,
           RagCorpora,
+          RagEngineConfig,
           ReasoningEnginesMemory,
           AnalyticsDatastore,
           ApimServiceExtension,
@@ -4172,6 +4201,7 @@ const makeProviders = () =>
             Layer.mergeAll(
               AgentsTransitionRouteGroupProvider(),
               AgentsWebhookProvider(),
+              DialogflowAgentProvider(),
               SecuritySettingProvider(),
             ),
           ),
@@ -4305,7 +4335,7 @@ const makeProviders = () =>
             RestorePlanProvider(),
             RestorePlansRestoreProvider(),
           ),
-          Layer.mergeAll(MembershipsFeatureProvider()),
+          Layer.mergeAll(MembershipsFeatureProvider(), GkeHubMembershipProvider()),
           Layer.mergeAll(InstancesBackupProvider(), JobTemplateProvider()),
           Layer.mergeAll(
             BareMetalClusterProvider(),
@@ -4459,6 +4489,8 @@ const makeProviders = () =>
                 ObservationJobProvider(),
                 ObservationSourceProvider(),
                 ApisConfigProvider(),
+                ApiProvider(),
+                ApiGatewayGatewayProvider(),
               ),
               Layer.mergeAll(
                 MerchantReviewProvider(),
@@ -4605,6 +4637,7 @@ const makeProviders = () =>
                 ProjectsLocationsGlobalPolicyOrchestratorProvider(),
                 AdaptiveMtDatasetProvider(),
                 GlossariesGlossaryEntryProvider(),
+                TranslateGlossaryProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(
@@ -4619,6 +4652,7 @@ const makeProviders = () =>
                 WorkstationClustersWorkstationConfigProvider(),
                 WorkstationClustersWorkstationConfigsWorkstationProvider(),
                 AgentregistryBindingProvider(),
+                AgentregistryServiceProvider(),
                 RecaptchaenterpriseKeyProvider(),
                 RecaptchaenterpriseFirewallpolicyProvider(),
                 AgentidentityAuthProviderProvider(),
@@ -4659,6 +4693,7 @@ const makeProviders = () =>
                 PersistentResourceProvider(),
                 PipelineJobProvider(),
                 RagCorporaProvider(),
+                RagEngineConfigProvider(),
                 ReasoningEnginesMemoryProvider(),
                 AnalyticsDatastoreProvider(),
                 ApimServiceExtensionProvider(),

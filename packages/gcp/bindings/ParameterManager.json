@@ -1,0 +1,24 @@
+{
+  "discovery": "parametermanager-v1",
+  "module": "parametermanager_v1",
+  "resources": {
+    "Parameter": {
+      "pattern": "projects/*/locations/*/parameters/*"
+    },
+    "ParametersVersion": {
+      "pattern": "projects/*/locations/*/parameters/*/versions/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Parameter": "AppConfig",
+      "ParametersVersion": "V1"
+    },
+    "skip": {
+      "RenderTemplateVersion": "rendering a missing template answers 403 like a denied call, and templates aren't an Alchemy resource, so there's no real one to render (the other template calls pass)"
+    }
+  },
+  "roles": {
+    "parametermanager.projects.locations.templates.versions.render": "roles/parametermanager.templateAccessor"
+  }
+}

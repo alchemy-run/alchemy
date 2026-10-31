@@ -1,0 +1,21 @@
+{
+  "discovery": "baremetalsolution-v2",
+  "module": "baremetalsolution_v2",
+  "resources": {
+    "NfsShare": {
+      "pattern": "projects/*/locations/*/nfsShares/*"
+    },
+    "VolumesSnapshot": {
+      "pattern": "projects/*/locations/*/volumes/*/snapshots/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order"
+    }
+  },
+  "permissions": {
+    "baremetalsolution.projects.locations.osImages.get": "baremetalsolution.osimages.list"
+  }
+}

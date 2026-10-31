@@ -196,7 +196,7 @@ export const DomainsBackupProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* managedidentities
+        yield* managedidentities
           .createProjectsLocationsGlobalDomainsBackups({
             parent: domain,
             backupId,
@@ -204,10 +204,23 @@ export const DomainsBackupProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-        if (created !== undefined) {
-          yield* waitForOperation(created);
-        }
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            Effect.flatMap((created) =>
+              created === undefined ? Effect.void : waitForOperation(created),
+            ),
+            // Just after a domain becomes READY, its backup operation can
+            // fail on an internal snapshot that isn't ready yet. Google cuts
+            // the message short ("... is not rea"), so match its prefix.
+            // Each failed attempt takes ~8 minutes.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.OperationFailed" &&
+                error.message.includes("createResourcesForValidation failed"),
+              schedule: Schedule.spaced("2 minutes"),
+              times: 4,
+            }),
+          );
         current = yield* waitUntilExists(getByName(name), name);
       }
 

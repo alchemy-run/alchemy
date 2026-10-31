@@ -11,10 +11,19 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Policies govern an existing Vertex AI Agent
-// (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create.
-// Set GCP_TEST_AGENT to that agent's resource name to run the lifecycle.
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AGENT;
+// A policy governs an agent in Agent Registry; the lifecycle registers one.
+const Governed = Effect.gen(function* () {
+  yield* GCP.ServiceUsage.ProjectService("AgentRegistryApi", {
+    service: "agentregistry.googleapis.com",
+  });
+  return yield* GCP.AgentRegistry.Service("Governed", {
+    location: "us-central1",
+    agentSpec: { type: "NO_SPEC" },
+    interfaces: [
+      { url: "https://example.com/alchemy/governed-agent", protocolBinding: "HTTP_JSON" },
+    ],
+  });
+});
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsSemanticGovernancePolicies({ name }).pipe(
@@ -49,23 +58,24 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+// The governed agent needs a runtime identity: an agent deployed on Agent
+// Engine, not just a registered service. Against a registered service create
+// answers BadRequest "Agent ... is not configured with a valid
+// RuntimeIdentity." Set GCP_TEST_AGENT_RUNTIME_IDENTITY=1 where one exists.
+test.provider.skipIf(!process.env.GCP_TEST_AGENT_RUNTIME_IDENTITY || !!process.env.FAST)(
   "create, update, and delete a semantic governance policy",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const agent =
-        process.env.GCP_TEST_AGENT ??
-        `projects/${project}/locations/us-central1/reasoningEngines/missing-agent`;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
             location: "us-central1",
             displayName: "safety",
             description: "no pii",
-            agent,
+            agent: governed.registryResource.as<string>(),
             naturalLanguageConstraint: "Never share customer PII.",
           });
         }),
@@ -73,6 +83,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.name).toContain("/semanticGovernancePolicies/");
       expect(created.naturalLanguageConstraint).toEqual("Never share customer PII.");
+      expect(created.agent).toContain("/agents/");
 
       const fetched = yield* aiplatform.getProjectsLocationsSemanticGovernancePolicies({
         name: created.name,
@@ -82,12 +93,13 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
             location: "us-central1",
             semanticGovernancePolicyId: created.semanticGovernancePolicyId,
             displayName: "safety-v2",
             description: "no pii v2",
-            agent,
+            agent: governed.registryResource.as<string>(),
             naturalLanguageConstraint: "Never share secrets or PII.",
           });
         }),
