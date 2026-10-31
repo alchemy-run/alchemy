@@ -1,3 +1,4 @@
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { tagRecord } from "alchemy/Tags";
@@ -379,3 +380,22 @@ export const listPages = <Page, A, E, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
+
+/**
+ * Create Workload Manager's service agent. A project that just enabled the
+ * API has none yet, and evaluation create fails with "Workload Manager
+ * service agent is not ready".
+ */
+export const ensureWorkloadManagerServiceIdentity = (project: string) =>
+  Effect.gen(function* () {
+    const operation = yield* serviceusage
+      .generateServiceIdentityServices({
+        parent: `projects/${project}/services/workloadmanager.googleapis.com`,
+      })
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+    if (operation === undefined) return;
+    yield* waitForGcpOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
+  });

@@ -81,27 +81,28 @@ test.provider.skipIf(!runLifecycle)(
         true,
       );
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
-            firewallEndpointId: created.firewallEndpointId,
-            location: "us-central1-a",
-            description: "firewall endpoint b",
-            labels: { env: "prod", role: "ngfw" },
-          });
-        }),
-      );
+      const endpoint = (description: string) =>
+        GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
+          firewallEndpointId: created.firewallEndpointId,
+          location: "us-central1-a",
+          description,
+          labels: { env: "prod", role: "ngfw" },
+        });
 
+      // Labels update in place.
+      const updated = yield* stack.deploy(endpoint("firewall endpoint a"));
       expect(updated.name).toEqual(created.name);
-      expect(updated.description).toEqual("firewall endpoint b");
       expect(updated.labels).toMatchObject({ env: "prod", role: "ngfw" });
 
       const refetched = yield* networksecurity.getProjectsLocationsFirewallEndpoints({
         name: created.name,
       });
-      expect(refetched.description).toEqual("firewall endpoint b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ngfw");
+
+      // The description is immutable: changing it replaces the endpoint.
+      const redescribe = yield* stack.plan(endpoint("firewall endpoint b"));
+      expect(redescribe.resources.Ngfw?.action).toEqual("replace");
 
       yield* stack.destroy();
 

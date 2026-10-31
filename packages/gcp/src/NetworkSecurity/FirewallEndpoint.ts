@@ -56,7 +56,8 @@ export type FirewallEndpointProps = {
    */
   billingProjectId?: string;
   /**
-   * Human-readable description (max 2048 characters).
+   * Human-readable description (max 2048 characters). Immutable — changing
+   * it replaces the endpoint (the API rejects it in an update mask).
    */
   description?: string;
   /**
@@ -199,11 +200,13 @@ export const FirewallEndpointProvider = () =>
       const nextBilling = news.billingProjectId ?? previousBilling;
       const previousJumbo = olds?.jumboFramesEnabled ?? output?.jumboFramesEnabled ?? false;
       const nextJumbo = news.jumboFramesEnabled ?? previousJumbo;
+      const previousDescription = olds?.description ?? output?.description ?? "";
       if (
         (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousBilling !== nextBilling ||
-        previousJumbo !== nextJumbo
+        previousJumbo !== nextJumbo ||
+        (olds !== undefined && (news.description ?? "") !== previousDescription)
       ) {
         return { action: "replace" as const };
       }
@@ -288,11 +291,9 @@ export const FirewallEndpointProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
-      const updateMask = changedFields([
-        ["labels", labelsChanged],
-        ["description", descriptionChanged],
-      ]);
+      // The description is immutable (a change replaces the endpoint), so
+      // only labels update in place.
+      const updateMask = changedFields([["labels", labelsChanged]]);
 
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsFirewallEndpoints({
@@ -301,7 +302,6 @@ export const FirewallEndpointProvider = () =>
           body: {
             name: current.name ?? name,
             labels: desiredLabels,
-            description: news.description,
           },
         });
         yield* waitForOperation(operation);

@@ -14,8 +14,12 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Conversations need the engine's Large Language Model add-on (without it,
 // BadRequest "This feature is only available when Large Language Model add-on
-// is enabled."), which needs the Enterprise tier. Both bill per query.
-const runLifecycle = !process.env.FAST;
+// is enabled."), which needs the Enterprise tier. With both, create still
+// answers BadRequest "Engine ... must be associated with a data store for
+// ConversationalSearchService" although the engine lists its data store. Set
+// GCP_TEST_DISCOVERYENGINE_LLM=1 on a project where conversational search
+// works.
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
 
 const waitUntilGone = (name: string) =>
   discoveryengine.getProjectsLocationsCollectionsEnginesConversations({ name }).pipe(

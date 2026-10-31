@@ -21,10 +21,11 @@ const location = "us-central1";
 
 // A binding delegates through an auth provider (the API answers BadRequest
 // "auth_provider is required" without one).
+const AgentIdentityApi = GCP.ServiceUsage.ProjectService("AgentIdentityApi", {
+  service: "agentidentity.googleapis.com",
+});
 const Keys = Effect.gen(function* () {
-  yield* GCP.ServiceUsage.ProjectService("AgentIdentityApi", {
-    service: "agentidentity.googleapis.com",
-  });
+  yield* AgentIdentityApi;
   return yield* GCP.AgentIdentity.AuthProvider("Keys", {
     location,
     authProviderTypeParams: { apiKey: { apiKey: "alchemy-test-api-key" } },
@@ -179,7 +180,9 @@ test.provider(
     Effect.gen(function* () {
       const parent = yield* currentParent;
       yield* stack.destroy();
-      yield* stack.deploy(AgentRegistryApi);
+      // Enable both APIs before anything uses them: nothing orders the auth
+      // provider's create after an API enable in the same deploy.
+      yield* stack.deploy(Effect.all([AgentRegistryApi, AgentIdentityApi]));
 
       const { sourceService, targetService, sourceIdentifier, targetIdentifier } =
         yield* ensureFixtures();

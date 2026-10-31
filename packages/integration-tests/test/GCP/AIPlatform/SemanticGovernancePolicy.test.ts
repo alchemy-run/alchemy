@@ -58,7 +58,11 @@ test.provider(
   },
 );
 
-test.provider(
+// The governed agent needs a runtime identity: an agent deployed on Agent
+// Engine, not just a registered service. Against a registered service create
+// answers BadRequest "Agent ... is not configured with a valid
+// RuntimeIdentity." Set GCP_TEST_AGENT_RUNTIME_IDENTITY=1 where one exists.
+test.provider.skipIf(!process.env.GCP_TEST_AGENT_RUNTIME_IDENTITY || !!process.env.FAST)(
   "create, update, and delete a semantic governance policy",
   (stack) =>
     Effect.gen(function* () {

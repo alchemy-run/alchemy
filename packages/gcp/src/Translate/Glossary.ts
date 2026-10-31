@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -250,8 +251,24 @@ export const GlossaryProvider = () =>
               body: { name, displayName: news.displayName, inputConfig },
             }),
           );
-          yield* waitForOperation(operation);
-          current = yield* getByName(name);
+          // Translate can drop a patch's operation record before a poll
+          // reaches it (NotFound): wait on the glossary itself instead.
+          yield* waitForOperation(operation, { notFoundOk: true });
+          current = yield* getByName(name).pipe(
+            Effect.filterOrFail(
+              (glossary) =>
+                glossary !== undefined &&
+                sameText(glossary.inputConfig?.gcsSource?.inputUri, news.source) &&
+                (news.displayName === undefined ||
+                  sameText(glossary.displayName, news.displayName)),
+              () => new ResourceNotResolved({ resourceName: name }),
+            ),
+            Effect.retry({
+              while: (error) => error._tag === "GCP.Translate.ResourceNotResolved",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 36,
+            }),
+          );
         }
       }
 
