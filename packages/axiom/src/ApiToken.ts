@@ -130,7 +130,7 @@ export const ApiTokenProvider = () =>
           }
           return {
             ...result,
-            token: Redacted.make(result.token),
+            token: Redacted.isRedacted(result.token) ? result.token : Redacted.make(result.token),
           };
         }),
         delete: Effect.fn(function* ({ output }) {
