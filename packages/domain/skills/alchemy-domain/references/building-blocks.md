@@ -101,6 +101,28 @@ export class Account extends Domain.Aggregate("Account", {
 
 More: [Aggregate](https://alchemy.run/domain/aggregate).
 
+### Phases
+
+When the lifecycle is the rule, declare it as data. The three fields are optional and go together:
+
+```ts
+  phases: {
+    draft: { on: { OrderSubmitted: "submitted" } }, // the moves events make; no entry = stays
+    submitted: { on: { OrderApproved: "approved" } },
+    approved: {},
+  },
+  phaseOf: (s) => s.status,                         // read from state, nothing new is stored
+  when: { Submit: ["draft"], Approve: ["submitted"], AddNote: "*" },  // every command, or verify fails
+```
+
+- The host checks `when` before `decide`. A command that may be refused declares `Domain.WrongPhase` in `rejects`.
+- A command with no rejections records nothing outside its phases. Use that for scheduled commands.
+- An undeclared move is a defect and nothing commits. `seed` / story `given` skips that check.
+- `Domain.verify` finds an unreachable phase, a command with no phase, and a move no command in that phase can record.
+- `Order.nextCommands(state)` and `Order.phase(state)` are pure: use them in a client, with no second copy of the rule. `predict` applies `when` too.
+
+More: [Aggregate: Declare its phases](https://alchemy.run/domain/aggregate#declare-its-phases).
+
 ### Patterns for decide, evolve and reply
 
 - **decide answers one of three ways.** Events when the command changes something; `[]` when the state already is what it asks for (freezing a frozen account); a declared rejection when it can't be done.
