@@ -133,6 +133,23 @@ const declare = CloudflareDurableObject as unknown as (
 ) => Effect.Effect<Namespace, never, Worker>;
 
 /**
+ * The object that holds a view or projection key for one generation: a rebuilt
+ * consumer's keys are new objects, so they run the deployed code at once and
+ * the previous generation's are left as they were (a shadow rebuild).
+ */
+const objectName = (key: string, generation: number | undefined) =>
+  generation === undefined || generation === 0 ? key : `${key}#${generation}`;
+
+/** The same namespace, with each key in its object for `generation`. */
+const atGeneration = (namespace: Namespace, generation: number): Namespace =>
+  generation === 0
+    ? namespace
+    : { getByName: (key: string) => namespace.getByName(objectName(key, generation)) };
+
+/** A consumer's generation from its target id: `view:Name#2` is 2. */
+const generationOfTarget = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
+
+/**
  * Run `effect` with every other event on this instance held back. Durable
  * Objects run each event in its own I/O context, so cross-event in-memory
  * coordination (semaphores, refs, deferreds) is unsafe; the platform's gate
@@ -560,17 +577,19 @@ const directoryObject = (net: Backfill.Network, planOf: PlanOf) =>
   });
 
 /**
- * How long the root of a relay run works before it answers the Workflow: it
- * answers `false` if keys are still reading history, and is called again.
+ * How long the root of a relay run works in one alarm before it starts another
+ * (an alarm may run for 15 minutes): keys still reading history are called again.
  */
 const RELAY_ROOT_WAIT_MS = 5 * 60_000;
 
-/** The relay at the root of a run for `target`: it records when the run is done. */
+/** The relay at the root of a run for `target`: it drives the run, and records when it is done. */
 const relayRoot = (target: string) => `run:${target}`;
 
 /**
  * A relay: one node of a run's tree, each its own object (see `Backfill.makeRelay`).
- * New objects, so they run the deployed code. The root records that the run is done.
+ * New objects, so they run the deployed code. The root drives the run from its
+ * alarm, so whoever starts it (the deploy's Workflow, or the first call after a
+ * local redeploy) only asks whether it is done.
  */
 const relayObject = (net: Backfill.Network) =>
   Effect.gen(function* () {
@@ -578,26 +597,43 @@ const relayObject = (net: Backfill.Network) =>
     return Effect.gen(function* () {
       const relay = Backfill.makeRelay(net);
       const doneKey = (target: string) => `done:${target}`;
+      const planKey = (target: string) => `plan:${target}`;
+      const isDone = (target: string) =>
+        Effect.map(state.storage.get<boolean>(doneKey(target)), (done) => done === true);
+      const drive = (
+        target: string,
+      ): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
+        Effect.gen(function* () {
+          if (yield* isDone(target)) return;
+          const plan = yield* state.storage.get<Backfill.Plan>(planKey(target));
+          if (plan === undefined) return;
+          const done = yield* relay.run(
+            relayRoot(target),
+            { target, plan, waitMillis: RELAY_ROOT_WAIT_MS },
+            [{ path: "" }],
+          );
+          if (done) yield* state.storage.put(doneKey(target), true);
+          else yield* runtime.jobs.schedule(`drive:${target}`, 0);
+        }).pipe(Effect.orDie);
+      const runtime = yield* backfillRuntime((id) =>
+        id.startsWith("drive:") ? drive(id.slice("drive:".length)) : Effect.void,
+      );
       return {
         run: (name: string, run: Backfill.RelayRun, items: ReadonlyArray<Backfill.RelayItem>) =>
           reportDefects(relay.run(name, run, items)),
-        drive: (target: string, plan: Backfill.Plan) =>
+        /** Start the run for `target`, once: `true` if it is done already. */
+        begin: (target: string, plan: Backfill.Plan) =>
           reportDefects(
             Effect.gen(function* () {
-              if (yield* state.storage.get<boolean>(doneKey(target))) return true;
-              const done = yield* relay.run(
-                relayRoot(target),
-                { target, plan, waitMillis: RELAY_ROOT_WAIT_MS },
-                [{ path: "" }],
-              );
-              if (done) yield* state.storage.put(doneKey(target), true);
-              return done;
+              if (yield* isDone(target)) return true;
+              if ((yield* state.storage.get(planKey(target))) === undefined) {
+                yield* state.storage.put(planKey(target), plan);
+                yield* runtime.jobs.schedule(`drive:${target}`, 0);
+              }
+              return false;
             }),
           ),
-        done: (target: string) =>
-          reportDefects(
-            Effect.map(state.storage.get<boolean>(doneKey(target)), (done) => done === true),
-          ),
+        done: (target: string) => reportDefects(isDone(target)),
       };
     });
   });
@@ -993,7 +1029,11 @@ const viewObject = (
         }));
       const sourceFor = (key: string): Backfill.Source =>
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
-          ref: { source: kit.name, id: key },
+          ref: {
+            source: kit.name,
+            id: key,
+            ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+          },
           targets: () => kit.targets,
           singleSource: (target) => planOf(target)?.singleSource === true,
           model,
@@ -1482,14 +1522,21 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         ? { getByName: (name: string) => makeRpcStub(namespace.getByName(name)) }
         : undefined;
     };
+    /** The generation of each view in this code, as a source: its keys' objects. */
+    const viewGenerations = new Map<string, number>();
     const sourceNamespace = (source: string) =>
       sources.get(source) ?? bound(`${source}Aggregate`) ?? bound(`${source}View`);
+    /** The object that holds a source instance: a rebuilt view's key is named for its generation. */
+    const sourceObject = (namespace: Namespace, ref: Backfill.SourceRef) =>
+      namespace.getByName(
+        objectName(ref.id, ref.generation ?? viewGenerations.get(ref.source) ?? 0),
+      );
     const consumerStub = (target: string, key: string) => {
       const { kind, name } = Backfill.consumerOf(target);
       return (
         consumers.get(`${kind}:${name}`) ??
         bound(`${name}${kind === "view" ? "View" : "Projection"}`)
-      )?.getByName(key);
+      )?.getByName(objectName(key, generationOfTarget(target)));
     };
     const consumerOf = (target: string, key: string) => {
       const stub = consumerStub(target, key);
@@ -1516,31 +1563,31 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         scan: (ref, target) => {
           const namespace = sourceNamespace(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target))
+            ? unwrapDefects(sourceObject(namespace, ref).bfScan(ref.id, target))
             : Effect.succeed("discovered" as const);
         },
         ready: (ref, target, reportTo) => {
           const namespace = sourceNamespace(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target, reportTo))
+            ? unwrapDefects(sourceObject(namespace, ref).bfReady(ref.id, target, reportTo))
             : Effect.succeed("settled" as const);
         },
         pull: (ref, target, key, after) => {
           const namespace = sourceNamespace(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfPull(ref.id, target, key, after))
+            ? unwrapDefects(sourceObject(namespace, ref).bfPull(ref.id, target, key, after))
             : Effect.succeed({ deliveries: [], live: true });
         },
         log: (ref, after, limit) => {
           const namespace = sourceNamespace(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfLog(ref.id, after, limit))
+            ? unwrapDefects(sourceObject(namespace, ref).bfLog(ref.id, after, limit))
             : Effect.succeed([]);
         },
         handoff: (ref, target, key, through) => {
           const namespace = sourceNamespace(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfHandoff(ref.id, target, key, through))
+            ? unwrapDefects(sourceObject(namespace, ref).bfHandoff(ref.id, target, key, through))
             : Effect.succeed("live" as const);
         },
       },
@@ -1582,23 +1629,26 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
               // Keyed by its source: a relay run starts every key and waits for each.
               const relayed = params.targets.filter((target) => plans[target]?.singleSource);
               const swept = params.targets.filter((target) => !relayed.includes(target));
-              yield* Effect.forEach(
-                relayed,
-                (target) =>
-                  Effect.gen(function* () {
-                    for (let attempt = 0; ; attempt++) {
-                      const done = yield* task(
-                        `relay-${target}-${attempt}`,
-                        unwrapDefects<boolean>(
-                          relayStub(relayRoot(target)).drive(target, plans[target]!),
-                        ),
-                        { timeout: "15 minutes" },
-                      );
-                      if (done) return;
-                    }
-                  }),
-                { concurrency: "unbounded", discard: true },
-              );
+              for (const target of relayed)
+                yield* task(
+                  `relay-begin-${target}`,
+                  unwrapDefects<boolean>(
+                    relayStub(relayRoot(target)).begin(target, plans[target]!),
+                  ),
+                );
+              for (let check = 0; relayed.length > 0; check++) {
+                const done = yield* task(
+                  `relay-check-${check}`,
+                  Effect.forEach(relayed, (target) =>
+                    unwrapDefects<boolean>(relayStub(relayRoot(target)).done(target)),
+                  ),
+                );
+                if (done.every(Boolean)) break;
+                yield* sleep(
+                  `relay-wait-${check}`,
+                  `${Math.min(5_000, Math.round(500 * 1.25 ** check))} millis`,
+                );
+              }
               if (swept.length === 0) return { complete: true };
               yield* task("announce", net.node.news("", swept, plans));
               for (let check = 0; ; check++) {
@@ -1713,12 +1763,15 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(
+            const declared = yield* declare(
               `${view.viewName}View`,
               viewObject(kit, net, current, consumerPlans),
             );
-            sources.set(view.viewName, namespace);
-            consumers.set(`view:${view.viewName}`, namespace);
+            // Its keys for this generation; the backfill names them by the generation it asks for.
+            const namespace = atGeneration(declared, kit.generation);
+            sources.set(view.viewName, declared);
+            viewGenerations.set(view.viewName, kit.generation);
+            consumers.set(`view:${view.viewName}`, declared);
             const read = (key: string) =>
               announce.pipe(
                 Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
@@ -1759,11 +1812,12 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       projection: (projection, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(
+            const declared = yield* declare(
               `${projection.projectionName}Projection`,
               projectionObject(kit, net, consumerPlans),
             );
-            consumers.set(`projection:${projection.projectionName}`, namespace);
+            const namespace = atGeneration(declared, kit.generation);
+            consumers.set(`projection:${projection.projectionName}`, declared);
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
@@ -1844,7 +1898,23 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                 const path = Math.floor(Math.random() * 256)
                   .toString(16)
                   .padStart(2, "0");
-                return net.node.news(path, targets, plansOf(targets, planOf));
+                const plans = plansOf(targets, planOf);
+                // Locally no Workflow runs: the first call starts each relay run (once).
+                const relayed = targets.filter((target) => plans[target]?.singleSource);
+                return net.node
+                  .news(path, targets, plans)
+                  .pipe(
+                    Effect.andThen(
+                      Effect.forEach(
+                        relayed,
+                        (target) =>
+                          unwrapDefects<boolean>(
+                            relayStub(relayRoot(target)).begin(target, plans[target]!),
+                          ),
+                        { discard: true },
+                      ),
+                    ),
+                  );
               });
             }),
           ),

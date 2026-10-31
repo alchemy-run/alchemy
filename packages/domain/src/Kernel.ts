@@ -714,7 +714,19 @@ const build = (
 
   const planOf = (target: string): Plan | undefined => {
     const sources = sourcesOf(target);
-    return sources === undefined ? undefined : { sources, singleSource: singleSource(target) };
+    if (sources === undefined) return undefined;
+    // Rebuilt views among its sources: their keys are the objects named for their generation.
+    const generations: Record<string, number> = {};
+    for (const source of sources) {
+      if (!definitions.views.some((view) => view.viewName === source)) continue;
+      const generation = generationOf("view", source);
+      if (generation > 0) generations[source] = generation;
+    }
+    return {
+      sources,
+      singleSource: singleSource(target),
+      ...(Object.keys(generations).length > 0 ? { generations } : {}),
+    };
   };
 
   /** Each source's replay, built once: what routes its stored rows as history. */

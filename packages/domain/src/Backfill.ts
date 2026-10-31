@@ -75,6 +75,11 @@ export interface Jobs {
 export interface SourceRef {
   readonly source: string;
   readonly id: string;
+  /**
+   * A view key's generation, once its view has been rebuilt: each generation's
+   * keys are their own objects, so this names the one that holds its entries.
+   */
+  readonly generation?: number;
 }
 
 /** How far a sweep for a target has got, as a node knows it. */
@@ -90,7 +95,15 @@ export interface Plan {
   readonly sources?: ReadonlyArray<string>;
   /** Each key reads one instance, the one with its own id: the leaf starts the keys itself. */
   readonly singleSource: boolean;
+  /** The generation of each source that is a rebuilt view (see {@link SourceRef.generation}). */
+  readonly generations?: Readonly<Record<string, number>>;
 }
+
+/** `ref` with its source's generation, by the plan. */
+export const withGeneration = (ref: SourceRef, plan: Plan | undefined): SourceRef => {
+  const generation = plan?.generations?.[ref.source];
+  return generation === undefined || generation === 0 ? ref : { ...ref, generation };
+};
 
 export interface NodeRpc {
   readonly register: (path: string, ref: SourceRef) => Effect.Effect<void>;
@@ -1578,7 +1591,9 @@ export const makeNode = (
         limit: limits.nodePage,
       });
       let stale = false;
-      for (const [row, ref] of rows) {
+      const plan = yield* planFor(target);
+      for (const [row, listed] of rows) {
+        const ref = withGeneration(listed, plan);
         const scanned = yield* net.source
           .scan(ref, target)
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
@@ -1781,10 +1796,10 @@ export const makeNode = (
       );
       const call = (ref: SourceRef): Effect.Effect<"done" | "more" | "stale" | "pending"> =>
         sweep.phase === "discover"
-          ? Effect.map(net.source.scan(ref, target), (result) =>
+          ? Effect.map(net.source.scan(withGeneration(ref, plan), target), (result) =>
               result === "discovered" ? "done" : result,
             )
-          : Effect.map(net.source.ready(ref, target, path), (result) =>
+          : Effect.map(net.source.ready(withGeneration(ref, plan), target, path), (result) =>
               result === "settled" ? "done" : result,
             );
       const results = yield* Effect.forEach(
@@ -2079,7 +2094,7 @@ export const makeRelay = (net: Network) => {
       while (true) {
         const page = yield* persist(net.node.list(path, after), until);
         if (page === undefined) return undefined;
-        for (const ref of page.rows) items.push({ ref });
+        for (const ref of page.rows) items.push({ ref: withGeneration(ref, run.plan) });
         // The root lists one subtree per source: only those the consumer reads.
         const sources = path === "" ? run.plan.sources : undefined;
         for (const child of page.children)
