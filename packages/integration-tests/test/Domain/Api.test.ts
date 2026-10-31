@@ -145,14 +145,45 @@ describe("Domain Api", () => {
     ),
   );
 
-  it.effect("an Api serves every command, view and stream it does not list", () =>
+  it.effect("an Api serves everything of a kind it does not list", () =>
     Effect.sync(() => {
       class Everything extends Domain.Api("Everything", { model: Bank }) {}
       expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
       expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
-      // Aggregates are read directly only when listed.
-      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close, Account]);
     }),
+  );
+
+  it.effect("by default an Api serves only the aggregates that declare read", () =>
+    Effect.sync(() => {
+      // Vault declares no `read`, so the Api serves its commands and not its state.
+      class VaultsApi extends Domain.Api("VaultsApi", { model: Vaults }) {}
+      expect(VaultsApi.serves).toEqual([Store]);
+    }),
+  );
+
+  it.effect("naming an aggregate without read is a type error", () =>
+    Effect.sync(() => {
+      // @ts-expect-error Vault declares no `read`, so it is not a name `aggregates` takes.
+      Domain.Api("VaultReads", { model: Vaults, aggregates: ["Vault"] });
+      // Account declares one.
+      Domain.Api("AccountReads", { model: Bank, aggregates: ["Account"] });
+    }),
+  );
+
+  it.live("naming an aggregate without read dies with a DefinitionError", () =>
+    Effect.gen(function* () {
+      // Typed as any model, so only serving it can tell.
+      const model: Domain.Model.Any = Vaults;
+      class LooseReads extends Domain.Api("LooseReads", { model, aggregates: ["Vault"] }) {}
+      const exit = yield* LooseReads.clientInProcess.pipe(Effect.scoped, Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag !== "Failure") return;
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Vault has no `read` contract, so an Api cannot serve it",
+      });
+    }).pipe(Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
   );
 
   it.effect("an Api serves none of a kind it lists as empty", () =>

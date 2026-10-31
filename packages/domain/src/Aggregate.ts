@@ -687,11 +687,14 @@ export const make = <
   const C extends ReadonlyArray<Command.Any>,
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+  // The declared `read`, inferred apart from `Definition` so the type records it.
+  // Its constraint carries no members, so it never narrows how `read` is typed.
+  const R extends object | undefined = object | undefined,
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
   // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
@@ -701,10 +704,10 @@ export const make = <
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects> = {
+    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects>;
+    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -718,7 +721,7 @@ export const make = <
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>;
 };
 
 /**
@@ -742,14 +745,30 @@ export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.An
   readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
-/** A definition with its events collected from its commands. */
+/**
+ * The `read` an aggregate declared, or `undefined`. With none declared, `R`
+ * is left at its default, which includes `undefined`; a declared contract
+ * never does.
+ */
+type ReadOf<R> = undefined extends R ? undefined : R;
+
+/**
+ * A definition with its events collected from its commands. `R` is the
+ * `read` it declared, or `undefined`: an aggregate that declares one has a
+ * required `read` in its type, so an Api can tell which aggregates it may
+ * serve.
+ */
 export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> = Definition<Id, S, C, Ms, Rejects> & { readonly events: ReadonlyArray<EventsOf<C>> };
+  R extends Read.AnyContract | undefined = Read.AnyContract | undefined,
+> = Definition<Id, S, C, Ms, Rejects> & {
+  readonly events: ReadonlyArray<EventsOf<C>>;
+  readonly read: R;
+};
 
 /**
  * The class type returned by {@link make}.
