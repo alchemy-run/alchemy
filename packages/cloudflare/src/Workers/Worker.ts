@@ -26,6 +26,7 @@ import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
 import type { ConfigError } from "effect/Config";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -103,6 +104,32 @@ export interface WorkerEntrypointSettings {
 }
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
+
+/**
+ * How a deploy rolls new code out to the Worker's running Durable Objects.
+ *
+ * - `{ mode: "deferred" }` — an active object keeps running its current code
+ *   while it waits to hibernate, for up to `maxDelay`, so in-flight work can
+ *   finish. Hibernation API WebSockets stay connected when the object picks
+ *   up the new code after hibernating.
+ * - `{ mode: "immediate" }` — every object resets onto the new code as soon
+ *   as the deploy lands.
+ *
+ * Deferral is best effort: an object can still reset before `maxDelay`
+ * elapses, e.g. during a Cloudflare runtime update.
+ */
+export type WorkerCodeUpdateStrategy =
+  | { mode: "immediate" }
+  | {
+      mode: "deferred";
+      /**
+       * The longest an active Durable Object may keep running old code before
+       * it is forced onto the new code — e.g. `"1 minute"`, `"30 seconds"`, or
+       * a `Duration`. Between 0 and 24 hours, millisecond precision.
+       * @default "5 minutes"
+       */
+      maxDelay?: Duration.Input;
+    };
 
 export type WorkerServices =
   | Worker
@@ -791,6 +818,21 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
+  /**
+   * How each deploy rolls new code out to this Worker's running Durable
+   * Objects. Cloudflare defers updates by default: an active object keeps
+   * running its current code for up to 5 minutes while it waits to
+   * hibernate. Use `{ mode: "immediate" }` when an object must run the new
+   * code right after the deploy (during an incident, or when a test drives
+   * it straight away), or set a different `maxDelay`.
+   *
+   * Applies per deploy, not as a stored setting: changing only this prop
+   * does not redeploy the Worker; the next deploy uses it. See
+   * {@link WorkerCodeUpdateStrategy}.
+   *
+   * @default { mode: "deferred", maxDelay: "5 minutes" }
+   */
+  codeUpdateStrategy?: WorkerCodeUpdateStrategy;
   /**
    * Tracks Durable Object and Workflow exports and captured SQL migrations
    * for Effect-native Workers only.
@@ -2728,6 +2770,26 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  *     return HttpServerResponse.text(String(value));
  *   }),
  * };
+ * ```
+ *
+ * By default a deploy lets an active Durable Object keep running its
+ * current code for up to 5 minutes while it waits to hibernate.
+ * `codeUpdateStrategy` changes how long, or applies the new code at once.
+ *
+ * **Example:** Shorter deferral for Durable Object code updates
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "deferred", maxDelay: "1 minute" },
+ * }
+ * ```
+ *
+ * **Example:** Apply Durable Object code updates immediately
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "immediate" },
+ * }
  * ```
  *
  * ### Containers
