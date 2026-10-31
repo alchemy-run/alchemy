@@ -56,8 +56,9 @@ const verify = (sim: Sim) =>
         ).toBe(source.events.length);
       }
       expect(
+        // A source keeps where its reader started (`bf:from:`), for a reader that asks again.
         [...source.object.data.keys()].filter(
-          (key) => key.startsWith("bf:") && !key.startsWith("bf:q-"),
+          (key) => key.startsWith("bf:") && !key.startsWith("bf:q-") && !key.startsWith("bf:from:"),
         ),
       ).toEqual([]);
     }

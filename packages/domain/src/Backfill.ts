@@ -126,6 +126,18 @@ export interface Listing {
 
 export interface SourceRpc {
   /**
+   * `cursor`, `log` and, at the end of the log, `handoff`, in one call: what a
+   * reader of a short history needs. Older code doesn't have it: a reader falls
+   * back to the three calls.
+   */
+  readonly read: (
+    ref: SourceRef,
+    target: string,
+    key: string,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<Read>;
+  /**
    * The last seq it routed live to `target`: a reader reads after it, since the
    * rows up to it reached their keys live. An instance with no cursors predates
    * catch-up: everything is live, up to its version.
@@ -155,6 +167,15 @@ export interface SourceRpc {
 
 /** What a source answers to `handoff`. */
 export type Handoff = "live" | "more" | "stale";
+
+/** What a reader gets from one `read`: rows after `from`, and at the end of the log, the handoff. */
+export interface Read {
+  /** Where it read from: after `after`, or where live routing stopped (for `after` 0). */
+  readonly from: number;
+  readonly rows: ReadonlyArray<unknown>;
+  /** Fewer rows than asked for: the end of the log, and whether it switched the target to live there. */
+  readonly handoff?: Handoff;
+}
 
 /** A page a key read from its source. */
 export interface Pulled {
@@ -460,6 +481,32 @@ const bounded = <A, E>(call: Effect.Effect<A, E>) => call.pipe(Effect.timeout("2
 const cursorOf = (net: Network, ref: SourceRef, target: string) =>
   bounded(net.source.cursor(ref, target)).pipe(Effect.catchCause(() => Effect.succeed(0)));
 
+/**
+ * Read a page of `ref`'s log for `target` in one call (see `SourceRpc.read`).
+ * A source on older code has no `read`: fall back to `cursor` and `log`, and
+ * the caller asks for the handoff itself. A call the account's load refused
+ * fails, for the caller to back off.
+ */
+const readAt = (
+  net: Network,
+  ref: SourceRef,
+  target: string,
+  key: string,
+  after: number,
+  limit: number,
+): Effect.Effect<Read, unknown> =>
+  bounded(net.source.read(ref, target, key, after, limit)).pipe(
+    Effect.catchCause((cause) =>
+      overloaded(cause)
+        ? Effect.failCause(cause)
+        : Effect.gen(function* () {
+            const from = after > 0 ? after : yield* cursorOf(net, ref, target);
+            const rows = yield* bounded(net.source.log(ref, from, limit));
+            return { from, rows } satisfies Read;
+          }),
+    ),
+  );
+
 /** A target's generation: `view:Name#2` is 2. */
 const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
 
@@ -564,6 +611,43 @@ export const makeSource = (
   const retry = makeRetry(storage, jobs, limits);
   const queue = outbox(storage, jobs, net, retry);
   const kickedKey = (target: string) => `bf:kick:${enc(target)}`;
+
+  const fromKey = (target: string) => `bf:from:${enc(target)}`;
+
+  /**
+   * Where live routing to `target` stopped (see `SourceRpc.cursor`), as it was
+   * when its reader first asked: kept, so a reader that asks again (its answer
+   * lost after the source went live) starts at the same row, not past it.
+   */
+  const cursor = (target: string) =>
+    storage.exclusive(
+      Effect.gen(function* () {
+        const kept = yield* storage.get<number>(fromKey(target));
+        if (kept !== undefined) return kept;
+        const routed = yield* host.routed;
+        const from = routed === undefined ? yield* host.version : (routed[target] ?? 0);
+        yield* storage.put({ [fromKey(target)]: from });
+        return from;
+      }),
+    );
+
+  const handoff = (target: string, key: string, through: number) =>
+    Effect.gen(function* () {
+      if (!host.model().includes(target)) return "stale" as Handoff;
+      const result = yield* storage.exclusive(
+        Effect.gen(function* () {
+          // Rows were added after the reader read up to `through`: it reads them first.
+          if ((yield* host.version) > through) return "more" as const;
+          const routed = yield* host.routed;
+          if (routed !== undefined && (routed[target] ?? 0) < through) yield* host.markLive(target);
+          yield* storage.delete([kickedKey(target)]);
+          return "live" as const;
+        }),
+      );
+      yield* trace("handoff", { source: host.ref, target, key, through, result });
+      return result as Handoff;
+    });
+
   return {
     /**
      * A commit withheld `target`'s deliveries: it is behind here. Ask for a
@@ -582,29 +666,22 @@ export const makeSource = (
 
     log: (after: number, limit: number) => host.log(after, limit),
 
-    cursor: (target: string) =>
+    cursor: (target: string) => cursor(target),
+
+    read: (target: string, key: string, after: number, limit: number) =>
       Effect.gen(function* () {
-        const routed = yield* host.routed;
-        return routed === undefined ? yield* host.version : (routed[target] ?? 0);
+        const from = after > 0 ? after : yield* cursor(target);
+        const rows = yield* host.log(from, limit);
+        if (rows.length >= limit) return { from, rows } satisfies Read;
+        // Rows are numbered without gaps: these end at `from + rows.length`.
+        return {
+          from,
+          rows,
+          handoff: yield* handoff(target, key, from + rows.length),
+        } satisfies Read;
       }),
 
-    handoff: (target: string, key: string, through: number) =>
-      Effect.gen(function* () {
-        if (!host.model().includes(target)) return "stale" as Handoff;
-        const result = yield* storage.exclusive(
-          Effect.gen(function* () {
-            // Rows were added after the reader read up to `through`: it reads them first.
-            if ((yield* host.version) > through) return "more" as const;
-            const routed = yield* host.routed;
-            if (routed !== undefined && (routed[target] ?? 0) < through)
-              yield* host.markLive(target);
-            yield* storage.delete([kickedKey(target)]);
-            return "live" as const;
-          }),
-        );
-        yield* trace("handoff", { source: host.ref, target, key, through, result });
-        return result as Handoff;
-      }),
+    handoff: (target: string, key: string, through: number) => handoff(target, key, through),
 
     /** The backstop job: send what is staged. */
     flush: Effect.asVoid(queue.flush),
@@ -746,24 +823,29 @@ export const makeScanner = (
             bounded(net.consumer.push(target, key, deliveries)).pipe(Effect.orDie),
           { concurrency: limits.concurrency, discard: true },
         );
-        const recorded = yield* storage.exclusive(
-          Effect.gen(function* () {
-            const current = yield* getState(target);
-            if (current === undefined || current.through !== state.through) return undefined;
-            const keys: Record<string, true> = {};
-            for (const key of byKey.keys()) keys[`${keysPrefix(target)}${enc(key)}`] = true;
-            yield* storage.put({ ...keys, [stateKey(target)]: { ...current, through } });
-            return current;
-          }),
-        );
-        // Past the barrier, no pass tells these keys: tell them here. (`ready` marks the
+        // The keys first, so a `ready` pass lists them; then, past the barrier (which no
+        // pass will tell them of), tell them here; only then move past these rows, so a
+        // step that fails telling them reads and tells them again. (`ready` marks the
         // state before it lists keys, so a key is told by one or the other.)
-        if (recorded !== undefined && (yield* pastBarrier(target, recorded)))
+        const keys: Record<string, true> = {};
+        for (const key of byKey.keys()) keys[`${keysPrefix(target)}${enc(key)}`] = true;
+        yield* storage.exclusive(storage.put(keys));
+        const current = yield* getState(target);
+        if (current === undefined || current.through !== state.through)
+          return { pushed: state.scanned, next: "now" } as const;
+        if (yield* pastBarrier(target, current))
           yield* Effect.forEach(
             byKey.keys(),
             (key) => bounded(net.consumer.ready(target, key, 0)).pipe(Effect.orDie),
             { concurrency: limits.concurrency, discard: true },
           );
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const latest = yield* getState(target);
+            if (latest !== undefined && latest.through === state.through)
+              yield* storage.put({ [stateKey(target)]: { ...latest, through } });
+          }),
+        );
         if (rows.length >= limits.page) return { pushed: state.scanned, next: "now" } as const;
       }
       // The end of the log: ask the source to deliver live from here.
@@ -935,6 +1017,8 @@ export const makeConsumer = (
   const pullingKey = (target: string, stream: string) => `bf:p:${T(target)}:${enc(stream)}`;
   const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
   const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
+  /** A buffered delivery held, not counted: see `buffer`. */
+  const heldKey = (row: string) => `bf:h:${row.slice("bf:b:".length)}`;
   const jobId = (target: string) => `bf-merge:${target}`;
   /** Keyed by its source: it has read its source's log to the end (its history is here). */
   const caughtKey = (target: string) => `bf:caught:${T(target)}`;
@@ -991,8 +1075,6 @@ export const makeConsumer = (
       const feeds = new Map<string, Feed>();
       for (const delivery of deliveries) {
         const key = orderKey(target, delivery);
-        if ((yield* storage.get(key)) !== undefined) continue;
-        yield* storage.put({ [key]: delivery });
         const feed = feeds.get(delivery.source) ??
           (yield* storage.get<Feed>(feedKey(target, delivery.source))) ?? {
             ref: null,
@@ -1001,6 +1083,23 @@ export const makeConsumer = (
             live,
             buffered: 0,
           };
+        if ((yield* storage.get(key)) !== undefined) {
+          // Held live, now read from the log too: it counts.
+          if (!live && (yield* storage.get(heldKey(key))) !== undefined) {
+            yield* storage.delete([heldKey(key)]);
+            feeds.set(delivery.source, { ...feed, buffered: feed.buffered + 1 });
+          }
+          continue;
+        }
+        yield* storage.put({ [key]: delivery });
+        if (live && feed.ref !== null && !feed.live) {
+          // Live from a source this key is still reading: the source went live before
+          // the key had the rows before this one (the answer that said so was lost). Held,
+          // not counted, so the merge waits for those rows before it applies this.
+          yield* storage.put({ [heldKey(key)]: true });
+          feeds.set(delivery.source, feed);
+          continue;
+        }
         feeds.set(delivery.source, { ...feed, buffered: feed.buffered + 1 });
       }
       for (const [stream, feed] of feeds) yield* putFeed(target, stream, feed);
@@ -1014,10 +1113,10 @@ export const makeConsumer = (
   const readLog = (target: string, ref: SourceRef, from: number) =>
     Effect.gen(function* () {
       // At first, start where the source's live routing stopped: this key has the rest.
-      const cursor = from === 0 ? yield* cursorOf(net, ref, target) : from;
-      const rows = yield* bounded(net.source.log(ref, cursor, limits.page));
+      const read = yield* readAt(net, ref, target, host.key, from, limits.page);
+      const rows = read.rows;
       const routed = host.history!(ref, rows);
-      const through = routed.length > 0 ? routed[routed.length - 1]!.seq : cursor;
+      const through = routed.length > 0 ? routed[routed.length - 1]!.seq : read.from;
       const deliveries = routed
         .flatMap((row) => row.deliveries)
         .filter((delivery) => delivery.key === host.key);
@@ -1025,9 +1124,11 @@ export const makeConsumer = (
         return { deliveries, live: false, through, caughtUp: false } satisfies Pulled & {
           readonly caughtUp: boolean;
         };
-      const handoff = yield* bounded(net.source.handoff(ref, target, host.key, through)).pipe(
-        Effect.catchCause(() => Effect.succeed("stale" as Handoff)),
-      );
+      const handoff =
+        read.handoff ??
+        (yield* bounded(net.source.handoff(ref, target, host.key, through)).pipe(
+          Effect.catchCause(() => Effect.succeed("stale" as Handoff)),
+        ));
       return {
         deliveries,
         live: handoff === "live",
@@ -1130,7 +1231,11 @@ export const makeConsumer = (
           const feed =
             feeds.get(delivery.source) ??
             (yield* storage.get<Feed>(feedKey(target, delivery.source)))!;
-          const next = { ...feed, buffered: feed.buffered - 1 };
+          // A held delivery wasn't counted (see `buffer`).
+          const row = orderKey(target, delivery);
+          const held = (yield* storage.get(heldKey(row))) !== undefined;
+          if (held) yield* storage.delete([heldKey(row)]);
+          const next = held ? feed : { ...feed, buffered: feed.buffered - 1 };
           feeds.set(delivery.source, next);
           yield* host.apply([delivery]);
           applied.push(delivery);

@@ -498,6 +498,12 @@ export class Sim {
         ),
     },
     source: {
+      read: (ref, target, key, after, limit) =>
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.read(target, key, after, limit),
+          "read",
+        ),
       cursor: (ref, target) =>
         this.call(
           this.source(ref).object,

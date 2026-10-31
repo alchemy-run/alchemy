@@ -843,6 +843,8 @@ const aggregateObject = (
         bfLog: (id: string, after: number, limit: number) =>
           reportDefects(sourceFor(id).log(after, limit)),
         bfCursor: (id: string, target: string) => reportDefects(sourceFor(id).cursor(target)),
+        bfRead: (id: string, target: string, key: string, after: number, limit: number) =>
+          reportDefects(sourceFor(id).read(target, key, after, limit)),
         bfHandoff: (id: string, target: string, key: string, through: number) =>
           reportDefects(sourceFor(id).handoff(target, key, through)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
@@ -1042,6 +1044,8 @@ const viewObject = (
         bfLog: (key: string, after: number, limit: number) =>
           reportDefects(sourceFor(key).log(after, limit)),
         bfCursor: (key: string, target: string) => reportDefects(sourceFor(key).cursor(target)),
+        bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
+          reportDefects(sourceFor(key).read(target, reader, after, limit)),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
           reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
         bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
@@ -1509,6 +1513,14 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       },
       source: {
         // A source no longer in the model has nothing to give.
+        read: (ref, target, key, after, limit) => {
+          const namespace = sourceNamespace(ref);
+          return namespace
+            ? callOnce<Backfill.Read>(
+                sourceObject(namespace, ref).bfRead(ref.id, target, key, after, limit),
+              )
+            : Effect.succeed({ from: after, rows: [], handoff: "live" as const });
+        },
         cursor: (ref, target) => {
           const namespace = sourceNamespace(ref);
           return namespace

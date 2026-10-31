@@ -251,6 +251,12 @@ export const make = (
         Effect.suspend(
           () => sourceRoles.get(ref.source)?.(ref.id).cursor(target) ?? Effect.succeed(0),
         ),
+      read: (ref, target, key, after, limit) =>
+        Effect.suspend(
+          () =>
+            sourceRoles.get(ref.source)?.(ref.id).read(target, key, after, limit) ??
+            Effect.succeed({ from: after, rows: [], handoff: "live" as const }),
+        ),
       log: (ref, after, limit) =>
         Effect.suspend(
           () => sourceRoles.get(ref.source)?.(ref.id).log(after, limit) ?? Effect.succeed([]),
