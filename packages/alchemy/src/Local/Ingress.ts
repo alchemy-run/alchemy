@@ -21,13 +21,17 @@
  * (a routes file, a proxy handle) lives outside the adapter value.
  */
 import * as Context from "effect/Context";
+import type * as Digest from "effect/crypto/Digest";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
+import type { Path } from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import * as Contributions from "../Contributions.ts";
 import { UserFacingError } from "../UserFacingError.ts";
-import type { PlatformServices } from "../Util/PlatformServices.ts";
 
 /**
  * Which ingress adapter routes a resource's dev URL. The value of
@@ -122,10 +126,19 @@ export interface IngressFactory {
 }
 
 /**
- * The services an adapter runs under: the host's platform services and HTTP
- * client, which the dev sidecar provides to every local provider.
+ * The services an adapter runs under: the platform services a provider layer
+ * may depend on in any host, plus the HTTP client. The dev sidecar provides
+ * them to every local provider. A narrower set than the sidecar has, because a
+ * local provider that calls {@link route} adds these to its layer's
+ * requirements, which must stay within what a stack provides.
  */
-export type IngressServices = PlatformServices | HttpClient;
+export type IngressServices =
+  | ChildProcessSpawner
+  | Digest.Digest
+  | SecureRandom.SecureRandom
+  | FileSystem
+  | Path
+  | HttpClient;
 
 /**
  * Adapter factories by {@link IngressConfig.type}, resolved before the
