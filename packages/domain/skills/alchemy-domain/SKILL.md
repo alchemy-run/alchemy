@@ -17,7 +17,7 @@ Work in this order. Each step has a reference file with templates.
 2. **Lay out the monorepo**: a domain package, a server package, a web package, with one kind-suffixed file per block. See [references/layout.md](references/layout.md).
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
 4. **Specify behavior with stories** before and while you implement it. See [references/testing.md](references/testing.md).
-5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
+5. **Host the model** on Cloudflare (or on Effect Cluster with a SQL database) from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
 
 More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).

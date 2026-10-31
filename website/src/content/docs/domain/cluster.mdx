@@ -1,0 +1,172 @@
+---
+title: Effect Cluster and SQL
+description: Host a domain model on effect/cluster with its data in SQLite, Postgres, MySQL or MariaDB, in one process or on several runners.
+---
+
+`Domain.Cluster` runs your model on `effect/cluster` and keeps its data in a SQL database: SQLite, Postgres, MySQL or MariaDB. Every aggregate instance, view key and policy key is a cluster entity. Swap it for `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()` and nothing else changes.
+
+## Host the model in one process
+
+Provide `Domain.Cluster.layerSingleRunner()` as the platform, and give it any `effect/sql` client. The cluster keeps its messages in the same database.
+
+```typescript
+// packages/server/src/main.ts
+import * as Domain from "@alchemy.run/domain";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { MysqlClient } from "@effect/sql-mysql2";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(Domain.Cluster.layerSingleRunner()),
+  Layer.provide(MysqlClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+```
+
+The runner locks its shards in the database. A second process on the same database waits until the first one stops, then serves every command.
+
+For tests, use SQLite in memory and keep the shard locks in memory. Each test that provides the layer gets a fresh, empty database:
+
+```typescript
+// packages/server/test/bankOnSqlite.ts
+import * as Domain from "@alchemy.run/domain";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { SqliteClient } from "@effect/sql-sqlite-bun";
+import * as Layer from "effect/Layer";
+
+export const BankOnSqlite = Bank.layer(BankHandlers).pipe(
+  Layer.provide(Domain.Cluster.layerSingleRunner({ runnerStorage: "memory" })),
+  Layer.provide(SqliteClient.layer({ filename: ":memory:" })),
+);
+```
+
+## Create the tables in a deploy step
+
+By default, the layer creates its tables when it builds. With several runners, create them once, in a deploy step, with a connection that owns the schema. Then give the runners `migrations: false` and a connection that can only read and write rows.
+
+```typescript
+// packages/server/deploy/migrate.ts
+import * as Cluster from "@alchemy.run/domain/Cluster";
+import { SqlMessageStorage, SqlRunnerStorage } from "effect/cluster";
+import * as Layer from "effect/Layer";
+
+export const Migrate = Layer.mergeAll(
+  Cluster.layerMigrations(),
+  SqlMessageStorage.layerMigrations({}),
+  SqlRunnerStorage.layerMigrations({}),
+);
+```
+
+:::caution
+On MySQL and MariaDB the deploy step is required. Two runners that start on an empty database race to create the cluster's tables, and one of them stops.
+:::
+
+The host's tables start with `domain_` (`domain_aggregates`, `domain_events`, `domain_receipts`, …). Set `tablePrefix` to host two models in one database. To run every schema from one `Migrator`, use `Cluster.migrations()` as its loader.
+
+## Run several runners
+
+Give `Domain.Cluster.layer()` the cluster of your choice, for example `BunClusterSocket` or `NodeClusterSocket`. All runners use one database.
+
+```typescript
+// packages/server/src/main.ts
+import * as Cluster from "@alchemy.run/domain/Cluster";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { BunClusterSocket } from "@effect/platform-bun";
+import { PgClient } from "@effect/sql-pg";
+import { ShardingConfig, SqlMessageStorage, SqlRunnerStorage } from "effect/cluster";
+import * as Config from "effect/Config";
+import { Digest } from "effect/crypto";
+import * as Layer from "effect/Layer";
+
+// One configuration for the runner and for its storage (`HOST`, `PORT`, … from the environment).
+const shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]> = {};
+
+// `byo`: the tables come from the deploy step, not from each runner.
+const ClusterLive = BunClusterSocket.layer({ storage: "byo", shardingConfig }).pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(SqlMessageStorage.layerStorage({}), SqlRunnerStorage.layerStorage({})),
+  ),
+  Layer.provide(
+    Layer.mergeAll(ShardingConfig.layerFromEnv(shardingConfig), Digest.layerWebCrypto),
+  ),
+);
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(Cluster.layer({ migrations: false })),
+  Layer.provide(ClusterLive),
+  Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+```
+
+With `byo`, the socket layer neither makes nor exports the storage: merge it in with `provideMerge`, since `Cluster.layer` needs `MessageStorage` too. The storage layers need `ShardingConfig` and `Digest` of their own: `BunClusterSocket` keeps the ones it makes inside.
+
+A command to an instance that another runner owns goes to that runner. When a runner stops, the others take its shards and continue its work.
+
+## Know what runs where
+
+| Your model | On the cluster |
+| --- | --- |
+| An aggregate instance, like account `a-1` | One entity `Domain.Aggregate/Account`, with id `a-1` |
+| A view key, like the summary of `a-1` | One entity per view and key |
+| A policy | One entity per policy and key (by default, per source instance) |
+| A projection | One entity per projection and key, with the key's input log in `domain_projection_inputs` |
+| A stream key, like the card of `a-1` | Rows in `domain_streams`, written by the projection that writes the stream |
+| A saga run, like transfer `t-1` | One `Workflow/<name>` entity per run, on `ClusterWorkflowEngine` |
+
+Reads (`get`, `list`, `state`) are plain SQL, so any runner answers them.
+
+## Count on these guarantees
+
+Commands to one aggregate instance run one at a time. Its events, new state, receipt and outgoing deliveries commit in one SQL transaction, or not at all.
+
+A command sent again with the same command id returns the stored receipt. A rejected command stores no receipt, so a command sent again after a rejection is decided again, as on every host.
+
+Every event reaches the views, projections and policies that consume it, at least once and in order for each source. Deliveries are persisted cluster messages, so they survive a restart. A view key and a projection key drop a delivery they already applied. A projection that writes through the same `SqlClient` commits its writes and its progress together, so it runs once per input.
+
+Scheduled commands are persisted messages with a due time, and fire even after a restart. How late a command fires:
+
+| Case | Late by |
+| --- | --- |
+| The timer's message is stored and a live runner owns its shard | On time when the owner armed it and it is due within a minute. Otherwise up to one storage poll (`entityMessagePollInterval`, 1 second with `layerSingleRunner`) |
+| A process stopped after it stored the timer and before it sent the timer's message | Up to `sweep.afterMillis` plus one `sweep.intervalMillis` (40 seconds by default) on a runner that stays up. The sweep runs on one runner; when it starts there (the first runner, or a new owner), it sends every pending timer again, so a stored timer fires on time. |
+| The runner that owns the shard stopped or died | Until another runner takes the shard: a few seconds after a clean stop; up to `shardLockExpiration` (35 seconds) when the runner is killed or freezes, as its shard locks must expire first |
+
+If a process stops after a commit and before its deliveries leave, the next process sends them when it starts. A sweep also sends late deliveries and timers again every 10 seconds (`sweep`).
+
+## Watch live reads
+
+`watch` and `events` read the database again every 250 ms (`watchMillis`) to see commits of other runners. Commits on the same runner are seen at once.
+
+## Keep the tables small
+
+A view key keeps its newest 50 entries (`viewEntries`). `list` and `events` from an older cursor start at the oldest entry it keeps. Set `viewEntries: "all"` to keep every entry.
+
+The host keeps no input log for views: an aggregate's events are the record.
+
+## Databases
+
+| Database | Use |
+| --- | --- |
+| SQLite (`@effect/sql-sqlite-bun`, `@effect/sql-sqlite-node`) | One process, tests. Use `runnerStorage: "memory"`. |
+| Postgres (`@effect/sql-pg`) | One or several runners. |
+| MySQL, MariaDB (`@effect/sql-mysql2`) | One or several runners. Create the tables in a deploy step. |
+
+The host has statements for MSSQL too, but no tests run on it.
+
+:::note
+The host never writes a cluster message or reply inside its own transaction, and uses no `WithTransaction` requests. On MySQL and MariaDB, `effect/cluster` can store the reply of a `WithTransaction` request after a deadlock rolled back the handler's writes ([Effect-TS/effect#10162](https://github.com/Effect-TS/effect/issues/10162)). Your own cluster entities on the same database are open to it until that issue is fixed.
+:::
+
+:::note
+MariaDB 11.8 and later turn on `innodb_snapshot_isolation`. The cluster's message reader then gets `ER_CHECKREAD` (1020) errors and retries them, so it runs slower. Results stay correct. To remove the retries, turn it off for the runners' user on the server, for example `SET GLOBAL init_connect = 'SET SESSION innodb_snapshot_isolation=OFF, TRANSACTION ISOLATION LEVEL READ COMMITTED'`, or the same two settings in `my.cnf`.
+:::
+
+## Avoid these pitfalls
+
+- The cluster reads its configuration from the environment (`ShardingConfig.layerFromEnv`): `HOST`, `PORT`, `SHARDS_PER_GROUP` and other names. A `PORT` that is not an integer stops the layer. Set `shardingConfig` to override a value.
+- Aggregate ids and view, policy and projection keys can have up to 255 characters, the length of a cluster entity id.
+- `runnerStorage: "memory"` is for one process. Two processes with memory shard locks on one database both write.
+
+:::note
+The same model runs [in memory](/domain/in-memory) for tests and on [Cloudflare Durable Objects](/domain/cloudflare).
+:::

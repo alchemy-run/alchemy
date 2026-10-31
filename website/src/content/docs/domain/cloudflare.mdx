@@ -200,5 +200,5 @@ With `Domain.protocolWebSocket`, each `watch` or `events` read is a WebSocket to
 During a deploy, some Durable Objects still run the previous version for a moment. Calls between them are retried for about a minute until the new version answers, and a client's live read reconnects and carries on from its last change.
 
 :::note
-The same model runs [in memory](/domain/in-memory) for tests. The full Worker, with Stripe and a support Api, is in the [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain).
+The same model runs [in memory](/domain/in-memory) for tests, and on [Effect Cluster with a SQL database](/domain/cluster) outside Cloudflare. The full Worker, with Stripe and a support Api, is in the [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain).
 :::

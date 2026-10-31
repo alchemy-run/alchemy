@@ -86,7 +86,7 @@ import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 
 ## Host it from a server package
 
-The server package hosts the model on Durable Objects and implements what the domain only declares: middleware, external systems, stores, and where its telemetry goes. Swapping one implementation never touches the model:
+The server package hosts the model on Durable Objects (or on [Effect Cluster with a SQL database](/domain/cluster)) and implements what the domain only declares: middleware, external systems, stores, and where its telemetry goes. Swapping one implementation never touches the model:
 
 ```typescript title="packages/server/src/BankWorker.ts"
 const BankLive = Layer.mergeAll(

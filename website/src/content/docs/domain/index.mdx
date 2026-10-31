@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 `@alchemy.run/domain` models your business in its own terms. Commands ask for changes, aggregates decide them, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
 
-The same model runs in memory for tests and on Cloudflare Durable Objects in production, with one ordered partition per key.
+The same model runs in memory for tests and on Cloudflare Durable Objects or [Effect Cluster with a SQL database](/domain/cluster) in production, with one ordered partition per key.
 
 <DAG
   nodes={[
