@@ -11,8 +11,9 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// AgentService serves only v1beta1: these calls go through aiplatform_v1beta1.
-const runLifecycle = !process.env.FAST;
+// AgentService serves only v1beta1. The lifecycle test creates a real agent;
+// set GCP_TEST_AIPLATFORM_AGENTS=1 to run it.
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_AGENTS;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsAgents({ name }).pipe(
@@ -26,7 +27,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsLocationsAgents on a missing agent fails with a typed tag",
+  "getProjectsLocationsAgents on a missing agent fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -57,7 +58,6 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Agent("Support", {
-            location: "global",
             systemInstruction: "Answer briefly.",
             metadata: { env: "test" },
           });
@@ -77,7 +77,6 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Agent("Support", {
             agentId: created.agentId,
-            location: "global",
             systemInstruction: "Answer in one sentence.",
             metadata: { env: "prod" },
           });
