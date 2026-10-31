@@ -2,8 +2,8 @@ import type { DnsConfig } from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { AWSEnvironment } from "../Environment.ts";
 import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { BasePathMapping } from "./BasePathMapping.ts";
 import { DomainName } from "./DomainName.ts";
 import type { RestApi } from "./RestApi.ts";
@@ -83,66 +83,68 @@ export interface CustomDomain {
  *
  * @resource
  */
-export const CustomDomain = Effect.fn("AWS.ApiGateway.CustomDomain")(
-  function* (id: string, props: CustomDomainProps) {
-    if (props.dns === false && props.cert === undefined) {
-      return yield* Effect.die(
-        "ApiGateway.CustomDomain with `dns: false` requires an existing `cert`.",
-      );
-    }
+export const CustomDomain = Effect.fn("AWS.ApiGateway.CustomDomain")(function* (
+  id: string,
+  props: CustomDomainProps,
+) {
+  if (props.dns === false && props.cert === undefined) {
+    return yield* Effect.die(
+      "ApiGateway.CustomDomain with `dns: false` requires an existing `cert`.",
+    );
+  }
 
-    const { region } = yield* AWSEnvironment.current;
-    const basePath = props.basePath?.replace(/^\/+|\/+$/g, "") || undefined;
-    const certificate =
-      props.cert === undefined
-        ? yield* domainCertificate(
-            `${id}Certificate`,
-            {
-              domainName: props.name,
-              ...(props.hostedZoneId === undefined ? {} : { hostedZoneId: props.hostedZoneId }),
-              region,
-              tags: props.tags,
-            },
-            props.dns,
-          )
-        : { certificateArn: props.cert };
-
-    const domain = yield* DomainName(`${id}Domain`, {
-      domainName: props.name,
-      regionalCertificateArn: certificate.certificateArn,
-      endpointConfiguration: { types: ["REGIONAL"] },
-      securityPolicy: "TLS_1_2",
-      tags: props.tags,
-    });
-
-    const mapping = yield* BasePathMapping(`${id}Mapping`, {
-      domainName: domain.domainName,
-      restApiId: props.api.restApiId,
-      stage: props.stage.stageName,
-      basePath,
-    });
-
-    if (props.dns !== false) {
-      const dns = yield* resolveDomainDns(props.dns, props.hostedZoneId);
-      yield* dns.alias(`${id}Record`, {
-        name: props.name,
-        target: {
-          hostname: Output.map(domain.regionalDomainName, (target) => target!),
-          route53Alias: {
-            hostedZoneId: Output.map(domain.regionalHostedZoneId, (zoneId) => zoneId!),
+  const { region } = yield* AWSEnvironment.current;
+  const basePath = props.basePath?.replace(/^\/+|\/+$/g, "") || undefined;
+  const certificate =
+    props.cert === undefined
+      ? yield* domainCertificate(
+          `${id}Certificate`,
+          {
+            domainName: props.name,
+            ...(props.hostedZoneId === undefined ? {} : { hostedZoneId: props.hostedZoneId }),
+            region,
+            tags: props.tags,
           },
-        },
-      });
-    }
+          props.dns,
+        )
+      : { certificateArn: props.cert };
 
-    return {
-      domain,
-      mapping,
-      target: Output.map(domain.regionalDomainName, (target) => target!),
-      url: Output.map(Output.asOutput(basePath), (basePath) =>
-        `https://${props.name}${basePath ? `/${basePath.replace(/^\/+/, "")}` : ""}`,
-      ),
-      certificateArn: certificate.certificateArn,
-    };
-  },
-);
+  const domain = yield* DomainName(`${id}Domain`, {
+    domainName: props.name,
+    regionalCertificateArn: certificate.certificateArn,
+    endpointConfiguration: { types: ["REGIONAL"] },
+    securityPolicy: "TLS_1_2",
+    tags: props.tags,
+  });
+
+  const mapping = yield* BasePathMapping(`${id}Mapping`, {
+    domainName: domain.domainName,
+    restApiId: props.api.restApiId,
+    stage: props.stage.stageName,
+    basePath,
+  });
+
+  if (props.dns !== false) {
+    const dns = yield* resolveDomainDns(props.dns, props.hostedZoneId);
+    yield* dns.alias(`${id}Record`, {
+      name: props.name,
+      target: {
+        hostname: Output.map(domain.regionalDomainName, (target) => target!),
+        route53Alias: {
+          hostedZoneId: Output.map(domain.regionalHostedZoneId, (zoneId) => zoneId!),
+        },
+      },
+    });
+  }
+
+  return {
+    domain,
+    mapping,
+    target: Output.map(domain.regionalDomainName, (target) => target!),
+    url: Output.map(
+      Output.asOutput(basePath),
+      (basePath) => `https://${props.name}${basePath ? `/${basePath.replace(/^\/+/, "")}` : ""}`,
+    ),
+    certificateArn: certificate.certificateArn,
+  };
+});

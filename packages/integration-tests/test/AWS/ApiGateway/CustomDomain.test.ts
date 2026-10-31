@@ -1,21 +1,23 @@
 import * as AWS from "@alchemy.run/aws";
+import { Certificate, CertificateValidation, type CertificateProps } from "@alchemy.run/aws/ACM";
 import {
-  Certificate,
-  CertificateValidation,
-  type CertificateProps,
-} from "@alchemy.run/aws/ACM";
-import { Record as Route53Record, type RecordProps as Route53RecordProps } from "@alchemy.run/aws/Route53/Record";
+  Record as Route53Record,
+  type RecordProps as Route53RecordProps,
+} from "@alchemy.run/aws/Route53/Record";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   RecordList as CloudflareRecordList,
   type RecordListProps as CloudflareRecordListProps,
 } from "@alchemy.run/cloudflare/DNS/RecordList";
-import { Records as CloudflareRecords, type RecordsProps } from "@alchemy.run/cloudflare/DNS/Records";
+import {
+  Records as CloudflareRecords,
+  type RecordsProps,
+} from "@alchemy.run/cloudflare/DNS/Records";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as Provider from "alchemy/Provider";
-import * as Output from "alchemy/Output";
 import { isResolved } from "alchemy/Diff";
+import * as Output from "alchemy/Output";
+import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -105,8 +107,7 @@ const fakeProviders = () =>
           validationMethod: news.validationMethod,
           keyAlgorithm: news.keyAlgorithm,
           hostedZoneId: news.hostedZoneId,
-          certificateTransparencyLoggingPreference:
-            news.certificateTransparencyLoggingPreference,
+          certificateTransparencyLoggingPreference: news.certificateTransparencyLoggingPreference,
           export: news.export,
           tags: news.tags ?? {},
           issuedAt: undefined,
@@ -222,44 +223,45 @@ const fakeProviders = () =>
 
 const { test } = Test.make({ providers: fakeProviders(), state: inMemoryState() });
 
-const stackProgram = (basePath = "/v1/") => Effect.gen(function* () {
-  const api = yield* AWS.ApiGateway.RestApi("Api", {
-    endpointConfiguration: { types: ["REGIONAL"] },
-  });
-  const deployment = yield* AWS.ApiGateway.Deployment("Deployment", { restApi: api });
-  const stage = yield* AWS.ApiGateway.Stage("Stage", {
-    restApi: api,
-    stageName: "prod",
-    deploymentId: deployment.deploymentId,
-  });
+const stackProgram = (basePath = "/v1/") =>
+  Effect.gen(function* () {
+    const api = yield* AWS.ApiGateway.RestApi("Api", {
+      endpointConfiguration: { types: ["REGIONAL"] },
+    });
+    const deployment = yield* AWS.ApiGateway.Deployment("Deployment", { restApi: api });
+    const stage = yield* AWS.ApiGateway.Stage("Stage", {
+      restApi: api,
+      stageName: "prod",
+      deploymentId: deployment.deploymentId,
+    });
 
-  const managed = yield* AWS.ApiGateway.CustomDomain("Cloudflare", {
-    api,
-    stage,
-    name: "api.example.com",
-    dns: Cloudflare.DNS.Adapter({ zone: "cf-zone" }),
-    basePath,
-  });
-  const manual = yield* AWS.ApiGateway.CustomDomain("Manual", {
-    api,
-    stage,
-    name: "manual.example.com",
-    cert: Output.map(
-      api.restApiId,
-      () => "arn:aws:acm:us-west-2:123456789012:certificate/existing",
-    ),
-    dns: false,
-  });
-  const route53 = yield* AWS.ApiGateway.CustomDomain("Route53", {
-    api,
-    stage,
-    name: "route53.example.com",
-    cert: "arn:aws:acm:us-west-2:123456789012:certificate/existing",
-    hostedZoneId: "Z1234567890",
-  });
+    const managed = yield* AWS.ApiGateway.CustomDomain("Cloudflare", {
+      api,
+      stage,
+      name: "api.example.com",
+      dns: Cloudflare.DNS.Adapter({ zone: "cf-zone" }),
+      basePath,
+    });
+    const manual = yield* AWS.ApiGateway.CustomDomain("Manual", {
+      api,
+      stage,
+      name: "manual.example.com",
+      cert: Output.map(
+        api.restApiId,
+        () => "arn:aws:acm:us-west-2:123456789012:certificate/existing",
+      ),
+      dns: false,
+    });
+    const route53 = yield* AWS.ApiGateway.CustomDomain("Route53", {
+      api,
+      stage,
+      name: "route53.example.com",
+      cert: "arn:aws:acm:us-west-2:123456789012:certificate/existing",
+      hostedZoneId: "Z1234567890",
+    });
 
-  return { managed, manual, route53 };
-});
+    return { managed, manual, route53 };
+  });
 
 test.provider(
   "executes the REST custom-domain graph with fake cloud providers",
