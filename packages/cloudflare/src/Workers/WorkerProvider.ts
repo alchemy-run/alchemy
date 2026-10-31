@@ -1647,20 +1647,7 @@ export const LiveWorkerProvider = () =>
           // Fields are compared one by one because the read fills unset
           // fields with `null`.
           const existingFromValue = (rule: (typeof existingRules)[number]) =>
-            "actionParameters" in rule
-              ? (
-                  rule.actionParameters as
-                    | {
-                        fromValue?: {
-                          statusCode?: unknown;
-                          preserveQueryString?: unknown;
-                          targetUrl?: { expression?: unknown } | null;
-                        } | null;
-                      }
-                    | null
-                    | undefined
-                )?.fromValue
-              : undefined;
+            rule.action === "redirect" ? rule.actionParameters?.fromValue : undefined;
           const converged =
             ourExisting.length === ourDesired.length &&
             ourDesired.every((rule) =>
