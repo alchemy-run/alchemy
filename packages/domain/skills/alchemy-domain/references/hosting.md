@@ -177,6 +177,38 @@ const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provi
 
 More: [MCP](https://alchemy.run/domain/mcp).
 
+## CLI
+
+`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
+
+```ts
+// packages/cli/src/bank.ts
+const bank = toCli(CustomerApi, {
+  name: "bank",
+  headers: Config.redacted("BANK_TOKEN").pipe(
+    Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
+  ),
+});
+Command.run(bank, { version: "1.0.0" }).pipe(
+  Effect.provide(
+    Layer.mergeAll(
+      Domain.protocolHttp(url).pipe(Layer.provide(FetchHttpClient.layer)),
+      BunServices.layer,
+    ),
+  ),
+  BunRuntime.runMain,
+);
+```
+
+Fields are flags, and the result is JSON on stdout; a rejection is its wire JSON on stderr with exit code 1:
+
+```sh
+$ bank deposit-money --target a-1 --amount 1000
+$ bank account-summary get --key a-1
+```
+
+More: [CLI](https://alchemy.run/domain/cli).
+
 ## Deploying
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
