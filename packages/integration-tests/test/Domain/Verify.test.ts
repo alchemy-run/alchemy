@@ -2,10 +2,13 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
@@ -212,4 +215,102 @@ describe("Domain verify", () => {
       expect(Account.aggregateName).toBe("Account");
     });
   });
+});
+
+class Blob {
+  constructor(readonly bytes: number) {}
+}
+const NoJson = Schema.instanceOf(Blob);
+class Tagged extends Domain.Rejection("Tagged", { blob: NoJson }) {}
+class Stored extends Domain.Event("Stored", { blob: NoJson }) {}
+class Store extends Domain.Command("Store", {
+  target: Schema.String,
+  input: { blobs: Schema.Array(NoJson) },
+  events: [Stored],
+  rejects: [Tagged],
+  reply: { blob: NoJson },
+}) {}
+const blobModel = (state: Schema.Top, initial: unknown) => {
+  const Shelf = Domain.Aggregate("Shelf", {
+    id: Schema.String,
+    state: state as typeof NoJson,
+    initial: initial as Blob,
+    commands: [Store],
+    decide: { Store: () => [] },
+    evolve: { Stored: (s) => s },
+    reply: { Store: (s) => ({ blob: s }) },
+  });
+  return class extends Domain.Model("Shelves", { aggregates: [Shelf] }) {};
+};
+
+describe("Domain.verify on JSON", () => {
+  const fine = Schema.Struct({ at: Schema.DateTimeUtc, tags: Schema.Array(Schema.String) });
+  const when = { at: DateTime.makeUnsafe(0), tags: [] };
+
+  it("reports each schema with no JSON form, by path", () => {
+    expect(Domain.verify(blobModel(fine, when)).map((problem) => problem.message)).toEqual([
+      "Command Store.blobs[] has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+      "Command Store.reply.blob has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+      "Rejection Tagged.blob has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+      "Event Stored.blob has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+    ]);
+  });
+
+  it("reports state, nested in an Option and a Record", () => {
+    const state = Schema.Struct({
+      slot: Schema.Option(NoJson),
+      bySku: Schema.Record(Schema.String, NoJson),
+    });
+    const messages = Domain.verify(blobModel(state, { slot: Option.none(), bySku: {} })).map(
+      (problem) => problem.message,
+    );
+    expect(messages).toContain(
+      "Shelf.state.slot has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+    );
+    expect(messages).toContain(
+      "Shelf.state.bySku[key] has no JSON form: use a Schema with one, or annotate it with toCodecJson",
+    );
+  });
+
+  it("reports an initial state that does not survive JSON", () => {
+    const messages = Domain.verify(
+      blobModel(Schema.Struct({ blob: Schema.Any }), { blob: () => 1 }),
+    ).map((problem) => problem.message);
+    expect(
+      messages.some((message) => message.startsWith("Shelf.initial does not survive JSON")),
+    ).toBe(true);
+  });
+
+  it("passes Unknown, Date, BigInt and a class with a toCodecJson annotation", () => {
+    const annotated = Schema.instanceOf(Blob, {
+      toCodecJson: () =>
+        Schema.link<Blob>()(Schema.Number, {
+          decode: SchemaGetter.transform((bytes: number) => new Blob(bytes)),
+          encode: SchemaGetter.transform((blob: Blob) => blob.bytes),
+        }),
+    });
+    const Fine = Domain.Aggregate("Fine", {
+      id: Schema.String,
+      state: Schema.Struct({
+        anything: Schema.Unknown,
+        at: Schema.Date,
+        big: Schema.BigInt,
+        blob: annotated,
+      }),
+      initial: { anything: { a: 1 }, at: new Date(0), big: 1n, blob: new Blob(1) },
+      commands: [],
+      decide: {},
+      evolve: {},
+    });
+    expect(
+      Domain.verify(class extends Domain.Model("FineModel", { aggregates: [Fine] }) {}),
+    ).toEqual([]);
+  });
+
+  it("does not stop a model from hosting", () =>
+    Effect.gen(function* () {
+      yield* Effect.scoped(
+        Layer.build(blobModel(fine, when).layer(Layer.empty).pipe(Layer.provide(InMemory))),
+      );
+    }).pipe(Effect.runPromise));
 });

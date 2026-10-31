@@ -224,6 +224,8 @@ it("the model is well defined", () => {
 });
 ```
 
+`Domain.verify` also finds what hosting can't see. A host stores and sends every value as JSON, so `verify` reports each schema in a state, command, event, reply or rejection that has no JSON form, such as `Schema.instanceOf(Date)`, by path, and each `initial` that doesn't survive a trip through JSON. Such a model builds and hosts, and fails on its first value, so these problems don't fail the Layer. `Schema.Unknown` and `Schema.Any` pass, because only a value can tell. To store a class of your own, annotate its schema with `toCodecJson`.
+
 Each problem is a `Domain.DefinitionError` with a message that names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
 ## Run it

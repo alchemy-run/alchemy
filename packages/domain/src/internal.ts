@@ -38,6 +38,53 @@ export const rejectionTag = (rejection: Schema.Top): string => {
   return value;
 };
 
+/** `name` as it reads in a path. */
+const member = (path: string, name: PropertyKey) =>
+  typeof name === "string" && /^[A-Za-z_$][\w$]*$/.test(name)
+    ? `${path}.${name}`
+    : `${path}[${JSON.stringify(String(name))}]`;
+
+/**
+ * Where a schema has no JSON form: the paths under `path` of each declaration
+ * (such as `Schema.instanceOf`) with no `toCodecJson` annotation. Its values
+ * can't be stored or sent: they fail when they are encoded, in production.
+ * `Schema.Unknown` and `Schema.Any` pass, because a value decides those.
+ *
+ * @internal
+ */
+export const pathsWithoutJson = (
+  ast: SchemaAST.AST,
+  path: string,
+  seen: Set<SchemaAST.AST> = new Set(),
+): ReadonlyArray<string> => {
+  const encoding = ast.encoding?.at(-1)?.to;
+  if (encoding) return pathsWithoutJson(encoding, path, seen);
+  const within = (child: SchemaAST.AST, at = path) => pathsWithoutJson(child, at, seen);
+  switch (ast._tag) {
+    case "Declaration": {
+      const { toCodecJson, toCodec } = ast.annotations ?? {};
+      return toCodecJson || toCodec ? ast.typeParameters.flatMap((tp) => within(tp)) : [path];
+    }
+    case "Objects":
+      return [
+        ...ast.propertySignatures.flatMap((p) => within(p.type, member(path, p.name))),
+        ...ast.indexSignatures.flatMap((signature) => within(signature.type, `${path}[key]`)),
+      ];
+    case "Arrays":
+      return [...ast.elements, ...ast.rest].flatMap((element) => within(element, `${path}[]`));
+    case "Union":
+      return ast.types.flatMap((type) => within(type));
+    case "Suspend": {
+      // A recursive schema: one pass over it finds what is there.
+      if (seen.has(ast)) return [];
+      seen.add(ast);
+      return within(ast.thunk());
+    }
+    default:
+      return [];
+  }
+};
+
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
   | { readonly _tag: "Decided"; readonly decision: unknown }
