@@ -158,7 +158,7 @@ export class UnroutedCommand extends Data.TaggedError("UnroutedCommand")<{
   readonly command: string;
 }> {
   override get message() {
-    return `No aggregate in the Domain handles ${this.command}`;
+    return `${this.command} is served, but no hosted aggregate handles it`;
   }
 }
 
@@ -249,6 +249,81 @@ export class ForeignAppend extends Data.TaggedError("ForeignAppend")<{
   }
 }
 
+/** An Api names something its model does not hold. */
+export class NotInModel extends Data.TaggedError("NotInModel")<{
+  readonly entity: string;
+  readonly model: string;
+}> {
+  override get message() {
+    return `${this.entity} is not part of the ${this.model} model`;
+  }
+}
+
+/** An Api call makes a tool name longer than model providers accept. */
+export class ToolNameTooLong extends Data.TaggedError("ToolNameTooLong")<{
+  readonly tool: string;
+  readonly max: number;
+}> {
+  override get message() {
+    return `The tool name ${this.tool} is longer than ${this.max} characters`;
+  }
+}
+
+/** Two calls of an Api make the same tool name. */
+export class DuplicateTool extends Data.TaggedError("DuplicateTool")<{
+  readonly api: string;
+  readonly tool: string;
+}> {
+  override get message() {
+    return `Two calls of ${this.api} make the tool ${this.tool}`;
+  }
+}
+
+/** A payload field would be a flag the CLI reserves. */
+export class ReservedFlag extends Data.TaggedError("ReservedFlag")<{
+  readonly call: string;
+  readonly field: string;
+  readonly flag: string;
+}> {
+  override get message() {
+    return `${this.call}: field \`${this.field}\` would be the flag --${this.flag}, which the CLI reserves`;
+  }
+}
+
+/** Two payload fields would be the same CLI flag. */
+export class DuplicateFlag extends Data.TaggedError("DuplicateFlag")<{
+  readonly call: string;
+  readonly field: string;
+  readonly flag: string;
+  readonly taken: string;
+}> {
+  override get message() {
+    return `${this.call}: field \`${this.field}\` would be the flag --${this.flag}, as is field \`${this.taken}\``;
+  }
+}
+
+/** Two calls of an Api would be the same CLI command. */
+export class DuplicateCommand extends Data.TaggedError("DuplicateCommand")<{
+  readonly api: string;
+  readonly first: string;
+  readonly second: string;
+  readonly command: string;
+}> {
+  override get message() {
+    return `${this.api}: \`${this.first}\` and \`${this.second}\` are both the command ${this.command}`;
+  }
+}
+
+/** An Api's HttpApi group is served from an HttpApi that does not hold it. */
+export class MissingGroup extends Data.TaggedError("MissingGroup")<{
+  readonly httpApi: string;
+  readonly group: string;
+}> {
+  override get message() {
+    return `${this.httpApi} does not hold the ${this.group} group: add it first`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -274,7 +349,14 @@ export type Reason =
   | Unreadable
   | ReservedOperation
   | MissingWorkflowEngine
-  | ForeignAppend;
+  | ForeignAppend
+  | NotInModel
+  | ToolNameTooLong
+  | DuplicateTool
+  | ReservedFlag
+  | DuplicateFlag
+  | DuplicateCommand
+  | MissingGroup;
 
 /**
  * A domain definition error, found while the kernel is built or when a

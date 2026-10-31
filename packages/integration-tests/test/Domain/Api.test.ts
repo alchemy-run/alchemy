@@ -64,8 +64,16 @@ class Account extends Domain.Aggregate("Account", {
 
 class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Account, Withdraw) {}
-class CloseApi extends Domain.Api("CloseApi", Close, Account) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Deposit", "Withdraw"],
+  aggregates: ["Account"],
+}) {}
+class CloseApi extends Domain.Api("CloseApi", {
+  model: Bank,
+  commands: ["Close"],
+  aggregates: ["Account"],
+}) {}
 
 /** A helper written once for every Api: the tags of its commands. */
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
@@ -137,6 +145,54 @@ describe("Domain Api", () => {
       ),
     ),
   );
+
+  it.effect("an Api serves every command, view and stream it does not list", () =>
+    Effect.sync(() => {
+      class Everything extends Domain.Api("Everything", { model: Bank }) {}
+      expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
+      expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
+      // Aggregates are read directly only when listed.
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
+    }),
+  );
+
+  it.effect("an Api serves none of a kind it lists as empty", () =>
+    Effect.sync(() => {
+      class Reads extends Domain.Api("Reads", {
+        model: Bank,
+        commands: [],
+        aggregates: ["Account"],
+      }) {}
+      expect(Reads.commands).toEqual([]);
+      expect(Reads.serves).toEqual([Account]);
+    }),
+  );
+
+  it.effect("naming something its model does not hold is a type error", () =>
+    Effect.sync(() => {
+      class Vaulted extends Domain.Model("Vaulted", { aggregates: [Vault] }) {}
+      // @ts-expect-error Deposit is not a command of the Vaulted model
+      const api = Domain.Api("Wrong", { model: Vaulted, commands: ["Deposit"] });
+      expect(api.serves).toEqual([]);
+      // @ts-expect-error Account is an aggregate, not a command
+      Domain.Api("Mixed", { model: Bank, commands: ["Account"] });
+    }),
+  );
+
+  it.live("naming something its model does not hold dies with a DefinitionError", () =>
+    Effect.gen(function* () {
+      // Typed as any model, so only serving it can tell.
+      const model: Domain.Model.Any = Vaults;
+      class LooseApi extends Domain.Api("LooseApi", { model, commands: ["Deposit"] }) {}
+      const exit = yield* LooseApi.clientInProcess.pipe(Effect.scoped, Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag !== "Failure") return;
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Deposit is not part of the Vaults model",
+      });
+    }).pipe(Effect.provide(Bank.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
+  );
 });
 
 // ---------------------------------------------------------------- rejections
@@ -175,9 +231,9 @@ class Vault extends Domain.Aggregate("Vault", {
   evolve: { Stored: (s, e) => ({ items: [...s.items, e.item] }) },
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
-class VaultApi extends Domain.Api("VaultApi", Store) {}
+class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
 // Vault declares no `read`, so its state is not for clients.
-class VaultStateApi extends Domain.Api("VaultStateApi", Vault) {}
+class VaultStateApi extends Domain.Api("VaultStateApi", { model: Vaults, aggregates: ["Vault"] }) {}
 
 describe("Domain Rejection", () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
@@ -274,7 +330,11 @@ class Note extends Domain.Aggregate("Note", {
 }) {}
 
 class Notes extends Domain.Model("Notes", { aggregates: [Note] }) {}
-class NotesApi extends Domain.Api("NotesApi", Write, Note) {}
+class NotesApi extends Domain.Api("NotesApi", {
+  model: Notes,
+  commands: ["Write"],
+  aggregates: ["Note"],
+}) {}
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
