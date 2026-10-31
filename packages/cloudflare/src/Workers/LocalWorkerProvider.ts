@@ -284,7 +284,12 @@ export const LocalWorkerProvider = () =>
           yield* Scope.close(current.scope, Exit.void);
         }
         if (ingress === undefined) return;
-        const target = Ingress.createTarget({ stack, ...identity, type: Worker.Type });
+        const target = Ingress.createTarget({
+          stack,
+          ...identity,
+          type: Worker.Type,
+          config: ingress,
+        });
         const scope = yield* Scope.fork(entry.scope);
         const origin = yield* Ingress.route(ingress, target, listener).pipe(
           Scope.provide(scope),

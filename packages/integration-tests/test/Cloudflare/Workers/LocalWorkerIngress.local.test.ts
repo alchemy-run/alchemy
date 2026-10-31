@@ -68,12 +68,12 @@ const getRawReady = (url: string) =>
 const RAW_URL = /^http:\/\/localhost:(\d+)$/;
 
 /** A Worker, optionally routed, and a caller that reaches it over a service binding. */
-const program = (ingress: boolean, options?: Record<string, unknown>) =>
+const program = (ingress: boolean, options?: Record<string, unknown>, name?: string) =>
   Effect.gen(function* () {
     const target = yield* Cloudflare.Worker("IngressTarget", {
       main: workerMain,
       env: { SELF_URL: Cloudflare.Worker.URL },
-      dev: ingress ? { ingress: forwarderConfig(options) } : {},
+      dev: ingress ? { ingress: { ...forwarderConfig(options), name } } : {},
     });
     const caller = yield* Cloudflare.Worker("IngressCaller", {
       main: callerMain,
@@ -131,6 +131,15 @@ test.provider(
         expect((yield* getRoutedReady(edited.target.url!)).status).toBe(200);
         // The previous origin has no route any more.
         expect((yield* getRouted(origin)).status).toBe(502);
+
+        // ── a name in the config says what the route is called
+        const named = yield* stack
+          .deploy(program(true, undefined, "named"))
+          .pipe(Effect.provide(forwarder.adapters));
+        const [namedFqn] =
+          [...forwarder.routes()].find(([, r]) => r.host.includes(".named.")) ?? [];
+        expect(namedFqn).toBe("IngressTarget");
+        expect(named.target.url).toMatch(/^http:\/\/[a-z0-9-]+\.named\.[a-z0-9-]+\.localhost:\d+$/);
 
         // ── without ingress
         const plain = yield* deploy(false);

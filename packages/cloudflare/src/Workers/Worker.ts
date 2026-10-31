@@ -1100,6 +1100,9 @@ export interface WorkerProps<
          * local edge and the R2 S3 credentials endpoint keep using the local
          * listener. Changing `ingress` restarts the Worker but keeps its port.
          *
+         * The route is called the config's `name`, else the Worker's logical id;
+         * set `name` when two Workers in one stack would otherwise share a name.
+         *
          * `alchemy dev` fails to start the Worker when the adapter can't be
          * resolved or can't route, instead of advertising a URL that isn't
          * routed. Inert on deploy.
