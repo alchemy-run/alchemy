@@ -91,6 +91,13 @@ export type RagCorpora = Resource<
     description: string | undefined;
     /** Corpus status (`INITIALIZED`, `ACTIVE`, `ERROR`). */
     corpusState: string | undefined;
+    /**
+     * Whether the corpus is on RAG Engine's serverless backend (Vertex Vector
+     * Search). Such a corpus can't be updated in place: every update answers
+     * "The vector db type is immutable", so a changed display name or
+     * description replaces it.
+     */
+    serverless: boolean;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
@@ -107,7 +114,9 @@ export type RagCorpora = Resource<
  * RagCorpus has no labels, so Alchemy stamps ownership into the
  * description. Changing `location`, `encryptionSpec`,
  * `vertexAiSearchConfig`, or `vectorDbConfig` replaces the corpus.
- * Display name and description update in place.
+ * Display name and description update in place, except on RAG Engine's
+ * serverless backend, which accepts no updates: there a change replaces the
+ * corpus.
  *
  * ### Creating a Corpus
  * **Example:** Managed-DB corpus
@@ -141,6 +150,13 @@ const toAttrs = (corpus: aiplatform.GoogleCloudAiplatformV1RagCorpus, project: s
     displayName: corpus.displayName,
     description: description.description,
     corpusState: corpus.corpusStatus?.state,
+    // The v1 API omits the serverless backend from `vectorDbConfig`: a corpus
+    // that names no other backend is serverless.
+    serverless:
+      corpus.vertexAiSearchConfig === undefined &&
+      corpus.vectorDbConfig?.ragManagedDb === undefined &&
+      corpus.vectorDbConfig?.pinecone === undefined &&
+      corpus.vectorDbConfig?.vertexVectorSearch === undefined,
     createTime: corpus.createTime,
     updateTime: corpus.updateTime,
   };
@@ -208,8 +224,15 @@ export const RagCorporaProvider = () =>
         (news.encryptionSpec?.kmsKeyName ?? "") !== (olds?.encryptionSpec?.kmsKeyName ?? "");
       const searchChanged = !jsonEqual(news.vertexAiSearchConfig, olds?.vertexAiSearchConfig);
       const vectorChanged = !jsonEqual(news.vectorDbConfig, olds?.vectorDbConfig);
+      // A serverless corpus takes no updates at all.
+      const serverlessChanged =
+        output?.serverless === true &&
+        olds !== undefined &&
+        ((news.displayName ?? "") !== (olds.displayName ?? "") ||
+          (news.description ?? "") !== (olds.description ?? ""));
       const replace =
         previousLocation !== nextLocation ||
+        serverlessChanged ||
         (olds !== undefined && (encryptionChanged || searchChanged || vectorChanged));
       if (!replace) return undefined;
       return {
@@ -294,7 +317,8 @@ export const RagCorporaProvider = () =>
           name: observedName,
           // The patch replaces the whole corpus: echo its (immutable) vector
           // store, or the API reads the default as a change ("The vector db
-          // type is immutable").
+          // type is immutable"). Serverless corpora never get here: a change
+          // to them replaces the corpus.
           body: {
             name: observedName,
             displayName,

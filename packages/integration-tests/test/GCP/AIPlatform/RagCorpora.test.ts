@@ -98,28 +98,39 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
 
-      const updated = yield* stack.deploy(
+      expect(created.serverless).toEqual(true);
+
+      const corpus = (displayName: string, description: string) =>
         Effect.gen(function* () {
           const rag = yield* Rag;
           return yield* GCP.AIPlatform.RagCorpora("Docs", {
             location: rag.location,
-            displayName: "product-docs-v2",
-            description: "product manuals v2",
+            displayName,
+            description,
           });
-        }),
-      );
+        });
 
-      expect(updated.name).toEqual(created.name);
+      // Redeploying the same props changes nothing.
+      const same = yield* stack.plan(corpus("product-docs", "product manuals"));
+      expect(same.resources.Docs?.action).toEqual("noop");
+
+      // A serverless corpus takes no updates ("The vector db type is
+      // immutable"), so a new name replaces it.
+      const renamed = yield* stack.plan(corpus("product-docs-v2", "product manuals v2"));
+      expect(renamed.resources.Docs?.action).toEqual("replace");
+      const updated = yield* stack.deploy(corpus("product-docs-v2", "product manuals v2"));
+      expect(updated.name).not.toEqual(created.name);
       expect(updated.displayName).toEqual("product-docs-v2");
       expect(updated.description).toEqual("product manuals v2");
+      expect(yield* waitUntilGone(created.name)).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(created.name);
+      const gone = yield* waitUntilGone(updated.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );
