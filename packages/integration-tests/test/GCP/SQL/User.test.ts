@@ -104,9 +104,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.User("AppUser", {
-            instance,
+            instance: db.instanceName,
             host,
             password: "Alchemy-test-pass-1",
           });
@@ -132,9 +133,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.User("AppUser", {
-            instance,
+            instance: db.instanceName,
             userName: created.userName,
             host: created.host,
             password: "Alchemy-test-pass-2",

@@ -102,9 +102,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.Database("App", {
-            instance,
+            instance: db.instanceName,
           });
         }),
       );
@@ -130,9 +131,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.Database("App", {
-            instance,
+            instance: db.instanceName,
             databaseName: created.databaseName,
             charset: isMysql ? "utf8mb4" : created.charset,
             collation: isMysql ? "utf8mb4_unicode_ci" : created.collation,

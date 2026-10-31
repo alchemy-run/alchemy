@@ -98,9 +98,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.BackupRun("Nightly", {
-            instance,
+            instance: db.instanceName,
             description: "alchemy-on-demand",
           });
         }),
@@ -123,9 +124,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* TestInstance;
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.BackupRun("Nightly", {
-            instance,
+            instance: db.instanceName,
             description: "alchemy-on-demand",
           });
         }),
