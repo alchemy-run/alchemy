@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
@@ -10,7 +9,6 @@ import { collectAttributes, isTelemetryDisabled } from "./Attributes.ts";
 
 const TRACES_URL = "https://otel.alchemy.run/v1/traces";
 const METRICS_URL = "https://otel.alchemy.run/v1/metrics";
-const LOGS_URL = "https://otel.alchemy.run/v1/logs";
 
 const SERVICE_NAME = "alchemy-cli";
 
@@ -33,23 +31,7 @@ const buildOtlpLayer = (attrs: Record<string, unknown>): Layer.Layer<never, neve
     resource,
     exportInterval: "1 second",
   });
-  // Stack on top of whatever loggers are already installed. Entrypoints
-  // provide this layer *over* their terminal/file logger layer
-  // (`Layer.provideMerge(TelemetryLive, ConsoleLogLive)`), so the terminal
-  // logger has already replaced Effect's default stdout logger by the time
-  // this runs and the OTLP logger is simply added alongside it.
-  //
-  // `mergeWithExisting: false` here would make telemetry *replace* the
-  // terminal logger whenever this layer happened to be merged after it —
-  // exactly what silenced `alchemy dev`'s console output in the exec child.
-  const logger = OtlpLogger.layer({
-    url: LOGS_URL,
-    resource,
-    exportInterval: "1 second",
-    mergeWithExisting: true,
-  });
-
-  return Layer.mergeAll(tracer, metrics, logger).pipe(
+  return Layer.mergeAll(tracer, metrics).pipe(
     Layer.provide(OtlpSerialization.layerJson),
     Layer.provide(FetchHttpClient.layer),
   );
@@ -61,11 +43,8 @@ const buildOtlpLayer = (attrs: Record<string, unknown>): Layer.Layer<never, neve
  * {@link collectAttributes} as resource-level attributes so every signal
  * carries user/project/runtime context.
  *
- * The OTLP logger merges with the loggers already installed, so provide this
- * layer on top of the entrypoint's terminal/file logger layer — e.g.
- * `Layer.provideMerge(TelemetryLive, ConsoleLogLive)` — never as a sibling in
- * a `Layer.mergeAll` (the last `CurrentLoggers` in a merge wins, silently
- * dropping either the terminal output or the telemetry).
+ * Logs are never exported: they stay in the run log on disk, which users
+ * can attach to a support request.
  *
  * If the user has opted out (via `DO_NOT_TRACK`, `NO_TRACK`,
  * `ALCHEMY_TELEMETRY_DISABLED`, or `~/.alchemy/telemetry-disabled`), this

@@ -32,7 +32,7 @@ const context = {
   oldBindings: [],
   newBindings: [],
   bindings: [],
-  session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+  session: { note: () => Effect.void },
 };
 
 test.provider(

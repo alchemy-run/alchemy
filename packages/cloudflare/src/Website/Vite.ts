@@ -13,7 +13,7 @@ import {
 } from "../Workers/Worker.ts";
 
 export interface ViteProps<Bindings extends WorkerBindingProps = {}>
-  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "rules">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.

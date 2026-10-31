@@ -6,19 +6,64 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import { startDelayedOtlpCollector, startOtlpCollector } from "../Utils/OtlpCollector.ts";
+import * as Schema from "effect/Schema";
+import {
+  startDelayedOtlpCollector,
+  startOtlpCollector,
+  type OtlpCollector,
+} from "../Utils/OtlpCollector.ts";
 import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const traceSpanNames = (body: string) => {
-  const payload = JSON.parse(body) as {
-    resourceSpans: { scopeSpans: { spans: { name: string }[] }[] }[];
-  };
-  return payload.resourceSpans.flatMap((resource) =>
-    resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
+/** The spans an OTLP/JSON trace export carries; other fields are stripped. */
+const TraceExport = Schema.fromJsonString(
+  Schema.Struct({
+    resourceSpans: Schema.Array(
+      Schema.Struct({
+        scopeSpans: Schema.Array(
+          Schema.Struct({
+            spans: Schema.Array(Schema.Struct({ traceId: Schema.String, name: Schema.String })),
+          }),
+        ),
+      }),
+    ),
+  }),
+);
+
+/**
+ * The batches carrying the test's own spans, with those spans' names. Local
+ * tools probe every port they see listening (T3 Code sends `GET /` to the
+ * Worker), and the Worker exports those requests too. The test's spans are
+ * its client trace plus the DO RPC events, which start their own trace and
+ * only the test's `/rpc` route triggers; anything else is a probe's.
+ */
+const ownBatches = (batches: OtlpCollector["requests"], traceId: string) =>
+  Effect.forEach(batches, (batch) =>
+    Schema.decodeUnknownEffect(TraceExport)(batch.body).pipe(
+      Effect.map(({ resourceSpans }) => ({
+        batch,
+        spans: resourceSpans.flatMap((resource) =>
+          resource.scopeSpans.flatMap((scope) => scope.spans),
+        ),
+      })),
+    ),
+  ).pipe(
+    Effect.map((decoded) => {
+      const traces = new Set([
+        traceId,
+        ...decoded.flatMap(({ spans }) =>
+          spans.filter((span) => span.name === "otel-event-flush.rpc").map((span) => span.traceId),
+        ),
+      ]);
+      return decoded
+        .map(({ batch, spans }) => ({
+          batch,
+          spans: spans.filter((span) => traces.has(span.traceId)).map((span) => span.name),
+        }))
+        .filter(({ spans }) => spans.length > 0);
+    }),
   );
-};
 
 test.provider(
   "delivers Worker and Durable Object OTLP batches without delaying the Worker response",
@@ -52,58 +97,64 @@ test.provider(
       if (deployment.url === undefined) {
         return yield* Effect.die("OTLP event flush test Worker URL unavailable");
       }
+      // The test's requests share one fresh trace, told apart from probes.
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const completed = own.pipe(
+        Effect.map((batches) => batches.filter(({ batch }) => batch.completed).length),
+      );
       const client = yield* HttpClient.HttpClient;
-      const response = yield* client.get(deployment.url);
+      const response = yield* client.get(deployment.url).pipe(Effect.withParentSpan(trace));
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("worker-saw:durable-object-ok");
 
       // Release only after the response, not on a timer that can outlive
       // the exporter's shutdown deadline under runner load.
-      expect(collector.completedRequests.value).toBeLessThanOrEqual(1);
+      expect(yield* completed).toBeLessThanOrEqual(1);
       yield* Effect.sync(collector.releaseResponses);
 
       // Both batches must be acknowledged before the next event.
-      yield* Effect.sync(() => collector.completedRequests.value).pipe(
+      yield* completed.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("100 millis"),
-          until: (completed) => completed >= 2,
+          until: (count) => count >= 2,
           times: 30,
         }),
       );
-      expect(collector.completedRequests.value).toBe(2);
+      expect(yield* completed).toBe(2);
 
       // Same contract for the Durable Object RPC event path: the Worker's
       // own batch (the 4th) must not be complete at response time.
       yield* Effect.sync(collector.holdResponses);
-      const rpcResponse = yield* client.get(`${deployment.url}/rpc`);
+      const rpcResponse = yield* client
+        .get(`${deployment.url}/rpc`)
+        .pipe(Effect.withParentSpan(trace));
       expect(rpcResponse.status).toBe(200);
       expect(yield* rpcResponse.text).toBe("worker-saw:durable-object-rpc-ok");
-      expect(collector.completedRequests.value).toBeLessThanOrEqual(3);
+      expect(yield* completed).toBeLessThanOrEqual(3);
       yield* Effect.sync(collector.releaseResponses);
 
-      yield* Effect.sync(() => collector.completedRequests.value).pipe(
+      yield* completed.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("100 millis"),
-          until: (completed) => completed >= 4,
+          until: (count) => count >= 4,
           times: 30,
         }),
       );
-      expect(collector.completedRequests.value).toBe(4);
-      expect(collector.requests).toHaveLength(4);
-      expect(collector.requests.every((batch) => batch.completed && !batch.aborted)).toBe(true);
+      const batches = yield* own;
+      expect(batches).toHaveLength(4);
+      expect(batches.every(({ batch }) => batch.completed && !batch.aborted)).toBe(true);
       for (const [name, count] of [
         ["otel-event-flush.worker", 2],
         ["otel-event-flush.child", 1],
         ["otel-event-flush.rpc", 1],
         ["GET", 3],
       ] as const) {
-        expect(
-          collector.requests.filter((batch) => batch.body.includes(`"name":"${name}"`)),
-        ).toHaveLength(count);
+        expect(batches.filter(({ spans }) => spans.includes(name))).toHaveLength(count);
       }
 
       yield* stack.destroy();
-      expect(collector.completedRequests.value).toBe(4);
+      expect(yield* completed).toBe(4);
     }),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
@@ -224,6 +275,8 @@ for (const scenario of [
         if (deployment.url === undefined) {
           return yield* Effect.fail(new Error("OTLP deadline Worker URL unavailable"));
         }
+        const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+        const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
         const client = yield* HttpClient.HttpClient;
         const startedAt = yield* Effect.sync(() => Date.now());
         const responseFiber = yield* Effect.gen(function* () {
@@ -231,13 +284,12 @@ for (const scenario of [
           const body = yield* response.text;
           const receivedAt = yield* Effect.sync(() => Date.now());
           return { status: response.status, body, receivedAt };
-        }).pipe(Effect.forkChild());
+        }).pipe(Effect.withParentSpan(trace), Effect.forkChild());
 
-        const rpcBatch = yield* Effect.sync(() =>
-          collector.requests.find((batch) =>
-            traceSpanNames(batch.body).includes("otel-event-flush.rpc"),
+        const rpcBatch = yield* own.pipe(
+          Effect.map(
+            (batches) => batches.find(({ spans }) => spans.includes("otel-event-flush.rpc"))?.batch,
           ),
-        ).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("500 millis"),
             until: (batch) => batch !== undefined,
@@ -256,25 +308,26 @@ for (const scenario of [
         const response = yield* Fiber.join(responseFiber).pipe(Effect.timeout("10 seconds"));
         expect(response.status).toBe(200);
         expect(response.body).toBe("worker-saw:durable-object-rpc-ok");
-        yield* Effect.sync(
-          () =>
-            collector.requests.length === 2 &&
-            collector.requests.every((batch) => batch.closedAt !== undefined),
-        ).pipe(
+        yield* own.pipe(
+          Effect.map(
+            (batches) =>
+              batches.length === 2 && batches.every(({ batch }) => batch.closedAt !== undefined),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (settled) => settled,
             times: 10,
           }),
         );
+        const batches = yield* own;
         yield* Effect.log("Native DO RPC exporter deadline", {
           scenario: scenario.name,
           workerResponseMillis: response.receivedAt - startedAt,
           workerResponseAfterRpcReceiptMillis: response.receivedAt - rpcBatch.receivedAt,
           rpcSocketLifetimeMillis:
             rpcBatch.closedAt === undefined ? undefined : rpcBatch.closedAt - rpcBatch.receivedAt,
-          batches: collector.requests.map((batch) => ({
-            spans: traceSpanNames(batch.body),
+          batches: batches.map(({ batch, spans }) => ({
+            spans,
             receivedAt: batch.receivedAt,
             responseStartedAt: batch.responseStartedAt,
             closedAt: batch.closedAt,
@@ -282,16 +335,16 @@ for (const scenario of [
             aborted: batch.aborted,
           })),
         });
-        expect(collector.requests).toHaveLength(2);
-        const names = yield* Effect.sync(() =>
-          collector.requests.flatMap((batch) => traceSpanNames(batch.body)).sort(),
-        );
+        expect(batches).toHaveLength(2);
+        const names = batches.flatMap(({ spans }) => spans).sort();
         expect(names).toEqual(["GET", "otel-event-flush.rpc", "otel-event-flush.worker"]);
         expect(rpcBatch.closedAt).toBeTypeOf("number");
         expect(response.receivedAt).toBeLessThan(rpcBatch.closedAt!);
         expect(rpcBatch.completed).toBe(scenario.delivered);
         expect(rpcBatch.aborted).toBe(!scenario.delivered);
-        expect(collector.completedRequests.value).toBe(scenario.delivered ? 2 : 1);
+        expect(batches.filter(({ batch }) => batch.completed)).toHaveLength(
+          scenario.delivered ? 2 : 1,
+        );
         const socketLifetime = rpcBatch.closedAt! - rpcBatch.receivedAt;
         if (scenario.delivered) {
           expect(rpcBatch.responseStartedAt).toBeTypeOf("number");
@@ -303,7 +356,7 @@ for (const scenario of [
           expect(socketLifetime).toBeGreaterThanOrEqual(2_500);
           expect(socketLifetime).toBeLessThan(4_000);
         }
-        const workerBatch = collector.requests.find((batch) => batch !== rpcBatch)!;
+        const workerBatch = batches.find(({ batch }) => batch !== rpcBatch)!.batch;
         expect(workerBatch.completed).toBe(true);
         expect(workerBatch.aborted).toBe(false);
         yield* stack.destroy();

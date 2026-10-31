@@ -3,12 +3,18 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../Auth/Resolve.ts";
-import * as Contributions from "../../Contributions.ts";
-import * as State from "../../State/index.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { open, StackEntrypointError, type Target } from "../Session.ts";
+import { AuthProvidersLive } from "../Auth/Registry.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
+import * as Contributions from "../Contributions.ts";
+import * as State from "../State/index.ts";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import {
+  DEFAULT_ENTRYPOINT,
+  importStack,
+  StackEntrypointError,
+  type Target,
+} from "./Entrypoint.ts";
+import { buildWithoutProgram, PLACEHOLDER_STAGE } from "./Operations.ts";
 
 /**
  * Build a provider's layers from scratch: the process may already have built
@@ -21,19 +27,23 @@ const isolated = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 /** Which store a state request addresses. */
 export type StateSource =
   /** `.alchemy/` on this machine, ignoring whatever the project configures. */
-  | { readonly _tag: "Local" }
+  | { readonly type: "local" }
   /** Whatever the project's entrypoint configures. */
-  | ({ readonly _tag: "Configured" } & Target)
+  | ({
+      readonly type: "configured";
+      /** Stage the store is opened for. @default "placeholder" */
+      readonly stage?: string;
+    } & Target)
   /** A provider's state store, without loading a project entrypoint. */
   | ({
-      readonly _tag: "Provider";
+      readonly type: "provider";
       readonly backend: string;
       /** A store other than the account's default. */
       readonly name?: string;
     } & Pick<Target, "profile" | "envFile">);
 
 /** What lifecycle operations act on. */
-export type ProviderSource = Extract<StateSource, { readonly _tag: "Provider" }>;
+export type ProviderSource = Extract<StateSource, { readonly type: "provider" }>;
 
 /** A provider's state store by `--backend` name. */
 const findBackend = Effect.fn(function* (backend: string) {
@@ -68,10 +78,7 @@ export const providerContext = Effect.fn(function* (
   const auth = provider.auth
     ? yield* Contributions.resolve(provider, "auth", provider.auth)
     : Layer.empty;
-  return auth.pipe(
-    Layer.provideMerge(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
-    Layer.provideMerge(config),
-  );
+  return auth.pipe(Layer.provideMerge(AuthProvidersLive), Layer.provideMerge(config));
 });
 
 /**
@@ -82,20 +89,20 @@ export const providerContext = Effect.fn(function* (
  * them against the chosen store:
  *
  * ```ts
- * const state = yield* Alchemist.State.store({ _tag: "Local" });
+ * const state = yield* Alchemist.State.store({ type: "local" });
  * const items = yield* State.listState({ path }).pipe(
  *   Effect.provideService(State.State, Effect.succeed(state)),
  * );
  * ```
  */
 export const store = Effect.fn("Alchemist.state.store")(function* (source: StateSource) {
-  switch (source._tag) {
-    case "Local":
+  switch (source.type) {
+    case "local":
       return yield* Effect.provide(
         Effect.flatten(State.State),
         yield* Layer.build(State.localState()),
       );
-    case "Provider": {
+    case "provider": {
       const { provider, store } = yield* findBackend(source.backend);
       const { layer } = yield* store.load;
       const context = yield* Layer.build(
@@ -103,10 +110,17 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
       ).pipe(isolated);
       return yield* Effect.provide(Effect.flatten(State.State), context);
     }
-    case "Configured": {
+    case "configured": {
       // The configured store lives in the stack entrypoint; this is the one
       // command that can also work without one.
-      const session = yield* open(source).pipe(
+      const built = yield* importStack(source.entrypoint ?? DEFAULT_ENTRYPOINT).pipe(
+        Effect.flatMap((stack) =>
+          buildWithoutProgram(stack, {
+            stage: source.stage ?? PLACEHOLDER_STAGE,
+            profile: source.profile,
+            envFile: source.envFile,
+          }),
+        ),
         Effect.catchIf(
           (error): error is StackEntrypointError => error instanceof StackEntrypointError,
           (error) =>
@@ -117,7 +131,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
             ),
         ),
       );
-      return yield* Effect.provide(Effect.flatten(State.State), session.context);
+      return yield* Effect.provide(Effect.flatten(State.State), built.context);
     }
   }
 });
@@ -165,10 +179,19 @@ export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
  * every option it sets, such as a custom name, a pinned account or a domain.
  */
 export const bootstrapConfigured = Effect.fn("Alchemist.state.bootstrapConfigured")(function* (
-  source: Extract<StateSource, { readonly _tag: "Configured" }>,
+  source: Extract<StateSource, { readonly type: "configured" }>,
 ) {
-  const session = yield* open(source, { updateStateStore: true });
-  const store = yield* Effect.provide(Effect.flatten(State.State), session.context);
+  const built = yield* importStack(source.entrypoint ?? DEFAULT_ENTRYPOINT).pipe(
+    Effect.flatMap((stack) =>
+      buildWithoutProgram(stack, {
+        stage: source.stage ?? PLACEHOLDER_STAGE,
+        profile: source.profile,
+        envFile: source.envFile,
+        updateStateStore: true,
+      }),
+    ),
+  );
+  const store = yield* Effect.provide(Effect.flatten(State.State), built.context);
   return { version: yield* store.getVersion() };
 });
 
@@ -192,7 +215,7 @@ export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
       const resolved = yield* store(source);
       if (resolved.migrate === undefined) {
         return yield* new State.StateStoreError({
-          message: `The ${source._tag === "Provider" ? `'${source.backend}'` : "configured"} state store does not replace another store, so it has nothing to migrate`,
+          message: `The ${source.type === "provider" ? `'${source.backend}'` : "configured"} state store does not replace another store, so it has nothing to migrate`,
         });
       }
       return { stages: yield* resolved.migrate(request) };
