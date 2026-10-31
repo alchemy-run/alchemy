@@ -272,7 +272,7 @@ export const PoolProvider = () =>
                 }),
               ),
             ),
-            withConnection(olds, { wait: "1 minute" }),
+            withConnection(olds, { unreachableWait: "1 minute" }),
             // A pool lives on its control plane: one that no longer answers
             // (destroyed before this pool, e.g. by an interrupted destroy)
             // took the pool with it.

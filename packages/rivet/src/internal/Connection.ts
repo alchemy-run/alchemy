@@ -34,11 +34,18 @@ export const withConnection =
     connection: ConnectionProps,
     options: {
       /**
-       * How long to wait out a control plane that is still starting. Each
-       * attempt is bounded at 20 seconds, 5 seconds apart.
+       * How long to wait out a control plane that answers but is still
+       * forming (`StorageOverloaded`, 429).
        * @default "10 minutes"
        */
       readonly wait?: Duration.Input;
+      /**
+       * How long to wait for a control plane that doesn't answer at all
+       * (timeouts, refused connections, 502/503/504 from its load balancer).
+       * Each attempt is bounded at 20 seconds, 5 seconds apart.
+       * @default the same as {@link wait}
+       */
+      readonly unreachableWait?: Duration.Input;
     } = {},
   ) =>
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
@@ -48,13 +55,18 @@ export const withConnection =
       Effect.timeout("20 seconds"),
       Effect.retry({
         while: (error) =>
-          error._tag === "StorageOverloaded" ||
-          error._tag === "TooManyRequests" ||
           error._tag === "BadGateway" ||
           error._tag === "ServiceUnavailable" ||
           error._tag === "GatewayTimeout" ||
           error._tag === "TimeoutError" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
+        schedule: Schedule.spaced("5 seconds").pipe(
+          Schedule.upTo({ duration: options.unreachableWait ?? options.wait ?? "10 minutes" }),
+        ),
+      }),
+      // Answering but still forming: always worth the whole wait.
+      Effect.retry({
+        while: (error) => error._tag === "StorageOverloaded" || error._tag === "TooManyRequests",
         schedule: Schedule.spaced("5 seconds").pipe(
           Schedule.upTo({ duration: options.wait ?? "10 minutes" }),
         ),

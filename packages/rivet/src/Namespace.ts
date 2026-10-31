@@ -70,7 +70,7 @@ export const NamespaceProvider = () =>
       const observe = (connection: ConnectionProps, name: string, wait?: Duration.Input) =>
         Rivet.namespaces.listNamespaces({ name }).pipe(
           Effect.map((res) => res.namespaces.find((ns) => ns.name === name)),
-          withConnection(connection, wait === undefined ? {} : { wait }),
+          withConnection(connection, wait === undefined ? {} : { unreachableWait: wait }),
         );
 
       const toAttrs = (connection: ConnectionProps, ns: Rivet.namespaces.Namespace) => ({
