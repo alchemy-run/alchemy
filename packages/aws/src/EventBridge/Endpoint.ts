@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -228,8 +228,10 @@ export const Endpoint = Resource<Endpoint>("AWS.EventBridge.Endpoint");
 type EndpointAttrs = Endpoint["Attributes"];
 
 /** The ARN EventBridge expects for a Route 53 health check, from its ID or ARN. */
-const toHealthCheckArn = (healthCheck: string) =>
-  healthCheck.startsWith("arn:") ? healthCheck : `arn:aws:route53:::healthcheck/${healthCheck}`;
+const toHealthCheckArn = (partition: Partition, healthCheck: string) =>
+  healthCheck.startsWith("arn:")
+    ? healthCheck
+    : `arn:${partition}:route53:::healthcheck/${healthCheck}`;
 
 const toAttrs = (endpoint: eventbridge.DescribeEndpointResponse): EndpointAttrs => ({
   endpointName: endpoint.Name!,
@@ -382,12 +384,13 @@ export const EndpointProvider = () =>
             return attrs;
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const { partition } = yield* AWSEnvironment.current;
           const name = output?.endpointName ?? (yield* createEndpointName(id, news));
           const desired = {
             Description: news.description,
             RoutingConfig: {
               FailoverConfig: {
-                Primary: { HealthCheck: toHealthCheckArn(news.failover.healthCheck) },
+                Primary: { HealthCheck: toHealthCheckArn(partition, news.failover.healthCheck) },
                 Secondary: { Route: news.failover.secondaryRegion },
               },
             },

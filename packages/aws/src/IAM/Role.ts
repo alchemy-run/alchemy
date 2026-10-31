@@ -621,9 +621,10 @@ export const RoleProvider = () =>
 
           // Re-read for fresh attributes after all mutations.
           const liveRole = yield* iam.getRole({ RoleName: roleName });
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const roleArn = (liveRole.Role?.Arn ??
             observedRole.Role?.Arn ??
-            `arn:aws:iam::${(yield* AWSEnvironment.current).accountId}:role/${roleName}`) as RoleArn;
+            `arn:${partition}:iam::${accountId}:role/${roleName}`) as RoleArn;
 
           yield* session.note(roleArn);
           return {

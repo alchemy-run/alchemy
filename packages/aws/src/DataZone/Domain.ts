@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
-import { partitionOf } from "../Partition.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import { syncDataZoneTags, toTagRecord, unredact } from "./internal.ts";
 
 /**
@@ -166,8 +166,7 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
-const DOMAIN_EXECUTION_MANAGED_POLICY =
-  "arn:aws:iam::aws:policy/service-role/AmazonDataZoneDomainExecutionRolePolicy";
+const DOMAIN_EXECUTION_MANAGED_POLICY = "service-role/AmazonDataZoneDomainExecutionRolePolicy";
 
 export const DomainProvider = () =>
   Provider.effect(
@@ -267,10 +266,11 @@ export const DomainProvider = () =>
             ),
           );
 
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: DOMAIN_EXECUTION_MANAGED_POLICY,
+            PolicyArn: managedPolicyArn(partition, DOMAIN_EXECUTION_MANAGED_POLICY),
           })
           .pipe(
             // attaching an already-attached managed policy is a no-op, but
@@ -458,10 +458,11 @@ export const DomainProvider = () =>
           // partially or fully removed role.
           if (output.roleName !== undefined) {
             const roleName = output.roleName;
+            const { partition } = yield* AWSEnvironment.current;
             yield* iam
               .detachRolePolicy({
                 RoleName: roleName,
-                PolicyArn: DOMAIN_EXECUTION_MANAGED_POLICY,
+                PolicyArn: managedPolicyArn(partition, DOMAIN_EXECUTION_MANAGED_POLICY),
               })
               .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam

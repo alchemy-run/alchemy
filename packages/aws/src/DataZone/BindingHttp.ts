@@ -1,6 +1,8 @@
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Domain } from "./Domain.ts";
 import type { Environment } from "./Environment.ts";
 
@@ -85,12 +87,17 @@ export const makeDataZoneEnvironmentHttpBinding = <
       const DomainId = yield* environment.domainId;
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { partition } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          partition: Partition;
+        }>;
         yield* bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: [Output.interpolate`arn:aws:datazone:*:*:domain/${environment.domainId}`],
+              Resource: [
+                Output.interpolate`arn:${partition}:datazone:*:*:domain/${environment.domainId}`,
+              ],
             },
           ],
         });

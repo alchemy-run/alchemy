@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -18,7 +19,7 @@ import type { Cluster } from "./Cluster.ts";
  * every snapshot-addressed operation, so snapshot-scoped grants use this
  * wildcard.
  */
-export const SNAPSHOT_ARN_WILDCARD = "arn:aws:memorydb:*:*:snapshot/*";
+export const SNAPSHOT_ARN_WILDCARD = AWSBindings.partitionArn("memorydb:*:*:snapshot/*");
 
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
@@ -37,7 +38,7 @@ export const makeMemoryDBAccountHttpBinding = <I, A, E, R>(options: {
    * IAM resources the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -80,7 +81,7 @@ export const makeMemoryDBClusterHttpBinding = <
   /** IAM actions granted on the cluster ARN. */
   actions: readonly string[];
   /** Static IAM resources granted in addition to the cluster ARN. */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

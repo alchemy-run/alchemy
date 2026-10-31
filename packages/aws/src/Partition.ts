@@ -35,3 +35,10 @@ export const partitionOf = (region: string): Partition => partitionFor(region).i
  * `dnsSuffixOf("eusc-de-east-1")` is `"amazonaws.eu"`.
  */
 export const dnsSuffixOf = (region: string): string => partitionFor(region).dnsSuffix;
+
+/**
+ * The ARN of an AWS managed IAM policy in `partition`, e.g.
+ * `managedPolicyArn("aws-eusc", "service-role/AWSLambdaBasicExecutionRole")`.
+ */
+export const managedPolicyArn = (partition: Partition, name: string) =>
+  `arn:${partition}:iam::aws:policy/${name}`;

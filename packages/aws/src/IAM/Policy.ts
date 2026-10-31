@@ -215,9 +215,10 @@ export const PolicyProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       const toPolicyArn = Effect.fn(function* (id: string, props: PolicyProps) {
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, partition } = yield* AWSEnvironment.current;
         const policyName = yield* toPolicyName(id, props);
         return policyArnFromParts({
+          partition,
           accountId,
           path: props.path,
           policyName,

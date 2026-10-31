@@ -2,11 +2,13 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import type { Region } from "@distilled.cloud/aws/Region";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import type { Input } from "alchemy/Input";
 import { Platform } from "alchemy/Platform";
 import type { Main } from "alchemy/Platform";
 import type { Resource } from "alchemy/Resource";
 import type { ProcessContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
 import type { Providers } from "../Providers.ts";
@@ -17,16 +19,16 @@ import { makeMicrovmRuntimeContext, MicrovmImageTypeId } from "./MicrovmRuntimeC
  * Assets bucket(s) and write build logs to CloudWatch. Used to auto-grant a
  * {@link Role} passed as `buildRole`.
  */
-const buildRolePolicyStatements: PolicyStatement[] = [
+const buildRolePolicyStatements: Input<PolicyStatement>[] = [
   {
     Effect: "Allow",
     Action: ["s3:GetObject"],
-    Resource: ["arn:aws:s3:::alchemy-assets-*-an/*"],
+    Resource: [AWSBindings.partitionArn("s3:::alchemy-assets-*-an/*")],
   },
   {
     Effect: "Allow",
     Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-    Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
+    Resource: [AWSBindings.partitionArn("logs:*:*:log-group:/aws/lambda/microvms/*")],
   },
 ];
 

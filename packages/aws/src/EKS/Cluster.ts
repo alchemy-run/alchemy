@@ -17,8 +17,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { AccountID } from "../Environment.ts";
-import { type Partition } from "../Partition.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
@@ -290,17 +290,17 @@ const getDesiredKubernetesObjects = (
     )
     .map((binding) => binding.data.object);
 
-const autoClusterManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+const autoClusterManagedPolicies = [
+  "AmazonEKSClusterPolicy",
+  "AmazonEKSComputePolicy",
+  "AmazonEKSBlockStoragePolicy",
+  "AmazonEKSLoadBalancingPolicy",
+  "AmazonEKSNetworkingPolicy",
 ];
 
-const autoNodeManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
-  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+const autoNodeManagedPolicies = [
+  "AmazonEKSWorkerNodeMinimalPolicy",
+  "AmazonEC2ContainerRegistryPullOnly",
 ];
 
 /**
@@ -881,6 +881,7 @@ export const ClusterProvider = () =>
           // cluster. Physical names are cached in the output so re-runs and
           // updates converge on the same roles.
           const auto = news.compute === "auto";
+          const { partition } = yield* AWSEnvironment.current;
           let managedClusterRoleName = output?.managedClusterRoleName;
           let managedNodeRoleName = output?.managedNodeRoleName;
           let roleArn = news.roleArn;
@@ -894,7 +895,9 @@ export const ClusterProvider = () =>
               roleName: managedClusterRoleName,
               service: "eks.amazonaws.com",
               actions: ["sts:AssumeRole", "sts:TagSession"],
-              managedPolicyArns: autoClusterManagedPolicyArns,
+              managedPolicyArns: autoClusterManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (roleArn) {
@@ -911,7 +914,9 @@ export const ClusterProvider = () =>
               roleName: managedNodeRoleName,
               service: "ec2.amazonaws.com",
               actions: ["sts:AssumeRole"],
-              managedPolicyArns: autoNodeManagedPolicyArns,
+              managedPolicyArns: autoNodeManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (nodeRoleArn) {

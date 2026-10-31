@@ -37,7 +37,7 @@ export const bedrockModelArns = (region: string, accountId: string, modelId: str
   if (geoPrefix && INFERENCE_PROFILE_GEO_PREFIXES.has(geoPrefix)) {
     return [
       `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:inference-profile/${modelId}`,
-      `arn:aws:bedrock:*::foundation-model/${modelId.slice(geoPrefix.length + 1)}`,
+      `arn:${partitionOf(region)}:bedrock:*::foundation-model/${modelId.slice(geoPrefix.length + 1)}`,
     ];
   }
   return [`arn:${partitionOf(region)}:bedrock:${region}::foundation-model/${modelId}`];

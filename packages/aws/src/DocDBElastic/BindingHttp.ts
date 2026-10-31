@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -16,7 +17,9 @@ import type { Cluster } from "./Cluster.ts";
  * Elastic-cluster snapshot ARNs embed a server-generated UUID that is only
  * known at runtime, so snapshot-scoped grants use this wildcard.
  */
-export const SNAPSHOT_ARN_WILDCARD = "arn:aws:docdb-elastic:*:*:cluster-snapshot/*";
+export const SNAPSHOT_ARN_WILDCARD = AWSBindings.partitionArn(
+  "docdb-elastic:*:*:cluster-snapshot/*",
+);
 
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
@@ -35,7 +38,7 @@ export const makeDocDBElasticAccountHttpBinding = <I, A, E, R>(options: {
    * IAM resources the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -77,7 +80,7 @@ export const makeDocDBElasticClusterHttpBinding = <
   /** IAM actions granted on the cluster ARN. */
   actions: readonly string[];
   /** Static IAM resources granted in addition to the cluster ARN. */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

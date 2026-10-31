@@ -34,7 +34,7 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { type Partition } from "../Partition.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -1044,7 +1044,7 @@ await bootstrap(entrypoint);
             return Array.from(latest.values()).map((d) => toAttributes(d, observedTagsOf(d)));
           }),
         reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
-          const { region } = yield* AWSEnvironment.current;
+          const { region, partition } = yield* AWSEnvironment.current;
           const name = output?.jobDefinitionName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1093,7 +1093,7 @@ await bootstrap(entrypoint);
               id,
               roleName: executionRoleName,
               managedPolicyArns: [
-                "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+                managedPolicyArn(partition, "service-role/AmazonECSTaskExecutionRolePolicy"),
               ],
             });
 

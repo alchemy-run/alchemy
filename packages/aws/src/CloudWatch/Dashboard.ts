@@ -221,7 +221,7 @@ export const DashboardProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
+              `arn:${env.partition}:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
           ),
         );
 

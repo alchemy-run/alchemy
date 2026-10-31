@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -18,19 +19,19 @@ import type { Graph } from "./Graph.ts";
  * Graph snapshot ARNs embed a server-generated id that is only known at
  * runtime, so snapshot-scoped grants use this wildcard.
  */
-export const SNAPSHOT_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:graph-snapshot/*";
+export const SNAPSHOT_ARN_WILDCARD = AWSBindings.partitionArn("neptune-graph:*:*:graph-snapshot/*");
 
 /**
  * Import-task ARNs embed a server-generated task id that is only known at
  * runtime, so import-task-scoped grants use this wildcard.
  */
-export const IMPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:import-task/*";
+export const IMPORT_TASK_ARN_WILDCARD = AWSBindings.partitionArn("neptune-graph:*:*:import-task/*");
 
 /**
  * Export-task ARNs embed a server-generated task id that is only known at
  * runtime, so export-task-scoped grants use this wildcard.
  */
-export const EXPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:export-task/*";
+export const EXPORT_TASK_ARN_WILDCARD = AWSBindings.partitionArn("neptune-graph:*:*:export-task/*");
 
 /**
  * `iam:PassRole` restricted to Neptune Analytics — required by the
@@ -67,7 +68,7 @@ export const makeNeptuneGraphGraphHttpBinding = <
   /** IAM actions granted on the graph ARN. */
   actions: readonly string[];
   /** Static IAM resources granted in addition to the graph ARN. */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
   /**
    * Grant `iam:PassRole` (conditioned to `neptune-graph.amazonaws.com`) so
    * the function can hand Neptune Analytics the role it assumes to read or
@@ -121,7 +122,7 @@ export const makeNeptuneGraphAccountHttpBinding = <I, A, E, R>(options: {
    * IAM resources the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -18,7 +19,9 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * data for every snapshot-addressed operation, so snapshot-scoped grants use
  * this wildcard.
  */
-export const SERVERLESS_SNAPSHOT_ARN_WILDCARD = "arn:aws:elasticache:*:*:serverlesscachesnapshot:*";
+export const SERVERLESS_SNAPSHOT_ARN_WILDCARD = AWSBindings.partitionArn(
+  "elasticache:*:*:serverlesscachesnapshot:*",
+);
 
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
@@ -37,7 +40,7 @@ export const makeElastiCacheAccountHttpBinding = <I, A, E, R>(options: {
    * IAM resources the actions are granted on.
    * @default ["*"]
    */
-  resources?: readonly string[];
+  resources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -80,7 +83,7 @@ export const makeElastiCacheCacheHttpBinding = <
   /** IAM actions granted on the cache ARN. */
   actions: readonly string[];
   /** Static IAM resources granted in addition to the cache ARN. */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

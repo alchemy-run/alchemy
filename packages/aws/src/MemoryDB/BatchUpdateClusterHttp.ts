@@ -1,5 +1,6 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchUpdateCluster } from "./BatchUpdateCluster.ts";
 import { makeMemoryDBAccountHttpBinding } from "./BindingHttp.ts";
 
@@ -11,6 +12,6 @@ export const BatchUpdateClusterHttp = Layer.effect(
     // Clusters are addressed by a runtime name list — grant on the cluster
     // ARN wildcard.
     actions: ["memorydb:BatchUpdateCluster"],
-    resources: ["arn:aws:memorydb:*:*:cluster/*"],
+    resources: [AWSBindings.partitionArn("memorydb:*:*:cluster/*")],
   }),
 );

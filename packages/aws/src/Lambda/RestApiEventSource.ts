@@ -123,7 +123,7 @@ export const RestApiEventSource = Layer.effect(
                 uri: Output.map(
                   Lambda.qualifiedArnOf(host),
                   (arn: string) =>
-                    `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+                    `arn:${arn.split(":")[1]}:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
                 ),
               },
             });

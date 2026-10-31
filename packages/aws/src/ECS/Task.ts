@@ -33,7 +33,7 @@ import {
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
-import { partitionOf } from "../Partition.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class TaskConflict extends Data.TaggedError("TaskConflict")<{
@@ -538,8 +538,9 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
   managedPolicyArns?: string[];
 }) {
   const roleArn = yield* createTaskRoleIfNotExists({ id, roleName });
+  const { partition } = yield* AWSEnvironment.current;
   const policies = [
-    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    managedPolicyArn(partition, "service-role/AmazonECSTaskExecutionRolePolicy"),
     ...(managedPolicyArns ?? []),
   ];
   for (const policyArn of policies) {

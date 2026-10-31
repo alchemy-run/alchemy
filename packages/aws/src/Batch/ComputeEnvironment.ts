@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
-import { type Partition, partitionOf } from "../Partition.ts";
+import { managedPolicyArn, type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
@@ -341,9 +341,10 @@ export const ComputeEnvironmentProvider = () =>
             // Concurrent delete of a replaced instance may restore it first.
             Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
           );
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.attachRolePolicy({
           RoleName: roleName,
-          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+          PolicyArn: managedPolicyArn(partition, "service-role/AWSBatchServiceRole"),
         });
         // IAM propagation before Batch tries to assume the role.
         yield* Effect.sleep("10 seconds");
@@ -352,10 +353,11 @@ export const ComputeEnvironmentProvider = () =>
 
       /** Drop a role restored by {@link restoreServiceRoleIfMissing}. */
       const dropRestoredServiceRole = Effect.fn(function* (roleName: string) {
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .detachRolePolicy({
             RoleName: roleName,
-            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
+            PolicyArn: managedPolicyArn(partition, "service-role/AWSBatchServiceRole"),
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam

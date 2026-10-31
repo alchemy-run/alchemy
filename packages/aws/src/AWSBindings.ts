@@ -71,6 +71,18 @@ export interface HostBinding {
   readonly env?: Record<string, unknown>;
 }
 
+/**
+ * `arn:<partition>:<rest>` in the partition of the environment the stack
+ * deploys to, resolved at deploy. Use it for a binding ARN with no region to
+ * derive the partition from, e.g. `partitionArn("ec2:*::snapshot/*")`.
+ */
+export const partitionArn = (rest: string): Output.Output<string> =>
+  Output.fromEffect(
+    Effect.suspend(() =>
+      Effect.map(AWSEnvironment.current, ({ partition }) => `arn:${partition}:${rest}`),
+    ),
+  ) as Output.Output<string>;
+
 /** The VPC a host must attach to, e.g. to reach a VPC-only database. */
 export interface HostVpc {
   readonly subnetIds: Input<string[]>;
@@ -290,9 +302,10 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         yield* runtime.set(
           WEB_IDENTITY_ROLE_ENV,
           Output.fromEffect(
-            AWSEnvironment.use((env) =>
-              Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
-            ).pipe(Effect.orDie),
+            Effect.map(
+              AWSEnvironment.current,
+              ({ accountId, partition }) => `arn:${partition}:iam::${accountId}:role/${roleName}`,
+            ),
           ) as Output.Output<string>,
         );
         yield* runtime.set(

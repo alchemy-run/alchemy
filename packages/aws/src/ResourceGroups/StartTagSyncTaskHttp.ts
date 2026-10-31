@@ -33,7 +33,7 @@ export const StartTagSyncTaskHttp = Layer.effect(
             {
               Effect: "Allow",
               Action: ["resource-groups:CreateGroup"],
-              Resource: ["arn:aws:resource-groups:*:*:group/*"],
+              Resource: [AWSBindings.partitionArn("resource-groups:*:*:group/*")],
             },
             // CRITICAL: without iam:PassRole on the sync role,
             // StartTagSyncTask fails only at runtime with AccessDenied.

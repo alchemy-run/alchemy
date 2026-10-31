@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
-import { partitionOf } from "../Partition.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ReplicationSubnetGroupUnexpectedResponse extends Data.TaggedError(
@@ -105,7 +105,7 @@ const sameStringSet = (
 };
 
 const DMS_VPC_ROLE_NAME = "dms-vpc-role";
-const DMS_VPC_POLICY_ARN = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole";
+const DMS_VPC_POLICY = "service-role/AmazonDMSVPCManagementRole";
 const DMS_VPC_ROLE_OWNER_TAG = {
   Key: "alchemy::managed-by",
   Value: "AWS.DMS.ReplicationSubnetGroup",
@@ -160,9 +160,10 @@ export const ReplicationSubnetGroupProvider = () =>
           })
           .pipe(Effect.catchTag("EntityAlreadyExistsException", () => Effect.void));
         // Idempotent — attaching an already-attached managed policy is a no-op.
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.attachRolePolicy({
           RoleName: DMS_VPC_ROLE_NAME,
-          PolicyArn: DMS_VPC_POLICY_ARN,
+          PolicyArn: managedPolicyArn(partition, DMS_VPC_POLICY),
         });
       }).pipe(
         // A concurrent last-subnet-group delete can remove the shared helper
@@ -197,10 +198,11 @@ export const ReplicationSubnetGroupProvider = () =>
           if (!owned) return;
 
           const deleted = yield* Effect.gen(function* () {
+            const { partition } = yield* AWSEnvironment.current;
             yield* iam
               .detachRolePolicy({
                 RoleName: DMS_VPC_ROLE_NAME,
-                PolicyArn: DMS_VPC_POLICY_ARN,
+                PolicyArn: managedPolicyArn(partition, DMS_VPC_POLICY),
               })
               .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam

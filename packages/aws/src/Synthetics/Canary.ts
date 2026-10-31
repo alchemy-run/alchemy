@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
-import { partitionOf } from "../Partition.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CanaryProps {
@@ -250,8 +250,7 @@ export const Canary = Resource<Canary>("AWS.Synthetics.Canary");
 const DEFAULT_RUNTIME_VERSION = "syn-nodejs-puppeteer-16.1";
 const DEFAULT_SCHEDULE_EXPRESSION = "rate(5 minutes)";
 const ROLE_POLICY_NAME = "AlchemyCanaryPolicy";
-const VPC_ACCESS_POLICY_ARN =
-  "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
+const VPC_ACCESS_POLICY = "service-role/AWSLambdaVPCAccessExecutionRole";
 
 /**
  * Canary create/update/start/stop are asynchronous; the canary reports a
@@ -628,12 +627,12 @@ export const CanaryProvider = () =>
               {
                 Effect: "Allow",
                 Action: ["s3:PutObject", "s3:GetObject"],
-                Resource: [`arn:aws:s3:::${artifactBucket}/*`],
+                Resource: [`arn:${partitionOf(region)}:s3:::${artifactBucket}/*`],
               },
               {
                 Effect: "Allow",
                 Action: ["s3:GetBucketLocation"],
-                Resource: [`arn:aws:s3:::${artifactBucket}`],
+                Resource: [`arn:${partitionOf(region)}:s3:::${artifactBucket}`],
               },
               {
                 Effect: "Allow",
@@ -668,7 +667,7 @@ export const CanaryProvider = () =>
         if (vpc) {
           yield* iam.attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: VPC_ACCESS_POLICY_ARN,
+            PolicyArn: managedPolicyArn(partitionOf(region), VPC_ACCESS_POLICY),
           });
         }
         if (created) {
@@ -678,7 +677,7 @@ export const CanaryProvider = () =>
           // propagate; the CREATE_FAILED recreate loop below covers stragglers.
           yield* Effect.sleep("10 seconds");
         }
-        return `arn:aws:iam::${accountId}:role/${roleName}`;
+        return `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`;
       });
 
       // Tear down the auto-created execution role. Idempotent: every step
@@ -690,10 +689,11 @@ export const CanaryProvider = () =>
             PolicyName: ROLE_POLICY_NAME,
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .detachRolePolicy({
             RoleName: roleName,
-            PolicyArn: VPC_ACCESS_POLICY_ARN,
+            PolicyArn: managedPolicyArn(partition, VPC_ACCESS_POLICY),
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam.deleteRole({ RoleName: roleName }).pipe(
