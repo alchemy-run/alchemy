@@ -79,11 +79,9 @@ export const makeArtifactsNamespaceClient = (
   const raw = Effect.sync(() => (env as Record<string, Artifacts>)[namespace.name]!);
   const use = <T>(fn: (raw: Artifacts) => Promise<T>): Effect.Effect<T, ArtifactsError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
-  // The pinned workers-types still models the repo as a metadata object; the
-  // runtime hands back the RPC capability `RepoHandle` describes. The platform
-  // throws `NOT_FOUND` for a missing repo; a `null` is mapped the same way.
-  const getRepo = (raw: Artifacts, name: string) =>
-    raw.get(name) as Promise<unknown> as Promise<RepoHandle | null>;
+  // The platform throws `NOT_FOUND` for a missing repo; a `null` is mapped the
+  // same way.
+  const getRepo = (raw: Artifacts, name: string): Promise<RepoHandle | null> => raw.get(name);
   return {
     raw,
     create: (name, opts) => use((raw) => raw.create(name, opts)),

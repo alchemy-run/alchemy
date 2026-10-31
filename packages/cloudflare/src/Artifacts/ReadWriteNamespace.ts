@@ -78,20 +78,7 @@ export const ReadWriteNamespace = Binding.Service<ReadWriteNamespace>(
  * Error codes the Artifacts binding attaches to a thrown error as `.code`.
  * See the {@link https://developers.cloudflare.com/artifacts/api/errors/ | Artifacts errors reference}.
  */
-export type ArtifactsErrorCode =
-  | "ALREADY_EXISTS"
-  | "NOT_FOUND"
-  | "CREATE_IN_PROGRESS"
-  | "IMPORT_IN_PROGRESS"
-  | "FORK_IN_PROGRESS"
-  | "INVALID_INPUT"
-  | "INVALID_REPO_NAME"
-  | "INVALID_TTL"
-  | "INVALID_URL"
-  | "REMOTE_AUTH_REQUIRED"
-  | "UPSTREAM_UNAVAILABLE"
-  | "MEMORY_LIMIT"
-  | "INTERNAL_ERROR";
+export type ArtifactsErrorCode = globalThis.ArtifactsErrorCode;
 
 /**
  * Failure of an Artifacts binding call. `code` and `numericCode` carry the
@@ -162,70 +149,27 @@ export type ReadFileOptions = {
   path: string;
 };
 
-// The repo read surface (`info`, `log`, `read*`) postdates the pinned
-// `@cloudflare/workers-types`, so its shapes are typed locally here, matching
-// `ArtifactsTreeEntry` / `ArtifactsCommitMetadata` / `ArtifactsRepo` in
-// workers-types 5.20260930.2 and later.
-
 /**
  * Classification of a Git tree entry, derived from its mode: `tree` is a
  * directory, `blob` a regular file, `symlink` a symbolic link, `gitlink` a
  * submodule reference, and `exec` an executable file.
  */
-export type TreeEntryType = "tree" | "blob" | "symlink" | "gitlink" | "exec";
+export type TreeEntryType = ArtifactsTreeEntryType;
 
 /** An immediate child of a Git tree, as returned by `readTree`. */
-export interface TreeEntry {
-  /** Name relative to the tree being read. */
-  name: string;
-  /** Canonical Git mode, such as `100644` for a file or `40000` for a tree. */
-  mode: string;
-  /** Lowercase, 40-character SHA-1 object ID. */
-  hash: string;
-  /** Classification derived from `mode`. */
-  type: TreeEntryType;
-}
+export type TreeEntry = ArtifactsTreeEntry;
 
 /** An author or committer identity on a commit. */
-export interface CommitIdentity {
-  name: string;
-  email: string;
-}
+export type CommitIdentity = ArtifactsCommitMetadata["author"];
 
 /** Decoded commit metadata, as returned by `log` and `readCommit`. */
-export interface CommitMetadata {
-  /** Lowercase, 40-character SHA-1 commit ID. */
-  hash: string;
-  /** Lowercase, 40-character SHA-1 ID of the commit's root tree. */
-  treeHash: string;
-  /** Commit message with one trailing newline removed, if present. */
-  message: string;
-  author: CommitIdentity;
-  committer: CommitIdentity;
-  /** Parent commit IDs in Git order; empty for a root commit. */
-  parents: string[];
-  /** Author timestamp in Unix seconds. */
-  authoredAt: number;
-  /** Committer timestamp in Unix seconds. */
-  committedAt: number;
-}
+export type CommitMetadata = ArtifactsCommitMetadata;
 
 /**
  * The runtime repo capability returned by the binding's `get(name)`: an RPC
  * stub whose metadata comes from `info()` rather than from properties.
  */
-export interface RepoHandle {
-  info(): Promise<ArtifactsRepoInfo>;
-  createToken(scope?: Scope, ttl?: number): Promise<ArtifactsCreateTokenResult>;
-  listTokens(): Promise<ArtifactsTokenListResult>;
-  revokeToken(tokenOrId: string): Promise<boolean>;
-  fork(name: string, opts?: ForkOptions): Promise<ArtifactsCreateRepoResult>;
-  log(opts?: LogOptions): Promise<CommitMetadata[]>;
-  readCommit(hash: string): Promise<CommitMetadata | null>;
-  readTree(hash: string): Promise<TreeEntry[] | null>;
-  readBlob(hash: string): Promise<Blob | null>;
-  readFile(args: ReadFileOptions): Promise<Blob | null>;
-}
+export type RepoHandle = ArtifactsRepo;
 
 /**
  * Read surface of a single Artifacts repo: metadata, token listing, commit
