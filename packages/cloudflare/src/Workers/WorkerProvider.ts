@@ -3422,10 +3422,12 @@ export const LiveWorkerProvider = () =>
         // versions. Map each old class to the logical id of its new name, so
         // the rename below carries its data over instead of deleting it.
         const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
+        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
+        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
         if (domainClasses.length > 0) {
           const renamed = yield* DomainVersion.migrate({
             scriptName: name,
-            deployed: DomainVersion.deployedVersion(oldTags),
+            deployed: deployedDomainVersion,
             classes: domainClasses,
             deployedClasses: new Set([
               ...Object.values(oldDoClassNameByLogicalId),

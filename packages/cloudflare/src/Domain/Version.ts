@@ -72,6 +72,22 @@ export class DomainVersionTooNew extends Data.TaggedError("DomainVersionTooNew")
   }
 }
 
+/**
+ * Fail when a newer Alchemy deployed the Worker. Checked on every deploy of a
+ * Worker, whether or not it still hosts a model: older code would move the
+ * newer layout's data back, or delete its classes.
+ */
+export const refuseDowngrade = ({
+  scriptName,
+  deployed,
+}: {
+  readonly scriptName: string;
+  readonly deployed: number | undefined;
+}) =>
+  deployed !== undefined && deployed > DOMAIN_VERSION
+    ? Effect.fail(new DomainVersionTooNew({ scriptName, deployed, current: DOMAIN_VERSION }))
+    : Effect.void;
+
 /** The tag that records the Domain version a Worker was deployed with. */
 export const versionTag = (version: number) => `alchemy:domain:v${version}`;
 
@@ -100,9 +116,6 @@ export const migrate = Effect.fn(function* ({
   readonly classes: ReadonlyArray<DomainClass>;
   readonly deployedClasses: ReadonlySet<string>;
 }) {
-  if (deployed !== undefined && deployed > DOMAIN_VERSION) {
-    return yield* new DomainVersionTooNew({ scriptName, deployed, current: DOMAIN_VERSION });
-  }
   const renamed: Array<{ readonly from: string; readonly to: string }> = [];
   if (deployed === undefined) {
     // none -> 0: classes were named after the definition (`AccountAggregate`),

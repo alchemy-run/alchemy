@@ -20,6 +20,7 @@ import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
 import SharedWorker from "./fixtures/shared-worker.ts";
 import UpgradeNextWorker from "./fixtures/upgrade-next-worker.ts";
 import UpgradeNoneWorker from "./fixtures/upgrade-none-worker.ts";
+import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 
 const { test } = Test.make({
@@ -207,6 +208,18 @@ test.provider(
       expect(String(downgrade)).toContain("DomainVersionTooNew");
       expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
+
+      // Nor are its classes deleted by older code that hosts no model at all.
+      const removed = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return { worker: yield* UpgradePlainWorker };
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(removed)).toBe(true);
+      expect(String(removed)).toContain("DomainVersionTooNew");
+      expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
 
       yield* stack.destroy();
     }).pipe(logLevel),
