@@ -150,7 +150,7 @@ export const DiscoveryConfig = Resource<DiscoveryConfig>("GCP.DLP.DiscoveryConfi
 export class DiscoveryConfigNotResolved extends Data.TaggedError(
   "GCP.DLP.DiscoveryConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_STATUS: DiscoveryConfigStatus = "PAUSED";
@@ -180,10 +180,10 @@ const toAttrs = (config: dlp.GooglePrivacyDlpV2DiscoveryConfig, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDiscoveryConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DiscoveryConfigProvider = () =>
   Provider.succeed(DiscoveryConfig, {
@@ -272,7 +272,7 @@ export const DiscoveryConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DiscoveryConfigNotResolved({ name });
+        return yield* new DiscoveryConfigNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

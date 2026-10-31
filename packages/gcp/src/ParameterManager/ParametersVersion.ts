@@ -289,7 +289,7 @@ export const ParametersVersionProvider = () =>
       yield* getParameter(parameter).pipe(
         Effect.flatMap((parent) =>
           parent === undefined
-            ? Effect.fail(new ParameterNotResolved({ name: parameter }))
+            ? Effect.fail(new ParameterNotResolved({ resourceName: parameter }))
             : Effect.succeed(parent),
         ),
         Effect.retry({
@@ -317,7 +317,7 @@ export const ParametersVersionProvider = () =>
 
       if (current === undefined) {
         if (desiredPayload === undefined) {
-          return yield* new ParameterVersionPayloadRequired({ name });
+          return yield* new ParameterVersionPayloadRequired({ resourceName: name });
         }
         const created = yield* parametermanager
           .createProjectsLocationsParametersVersions({
@@ -338,7 +338,7 @@ export const ParametersVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ParameterVersionNotResolved({ name });
+        return yield* new ParameterVersionNotResolved({ resourceName: name });
       }
 
       if ((current.disabled === true) !== desiredDisabled) {

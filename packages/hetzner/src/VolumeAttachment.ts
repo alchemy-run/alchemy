@@ -169,7 +169,7 @@ const serverIdOf = (value: unknown): number | undefined => {
 const getById = (id: number) =>
   Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toAttrs = (
@@ -190,7 +190,7 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
     Effect.flatMap((volume) => {
       if (volume === undefined) {
         return serverId === null
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : Effect.fail(
               new AttachmentPending({
                 volumeId,

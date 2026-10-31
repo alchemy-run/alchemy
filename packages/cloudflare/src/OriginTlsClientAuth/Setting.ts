@@ -115,7 +115,7 @@ export const SettingProvider = () =>
               return { zoneId, enabled, initialEnabled: enabled };
             }),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

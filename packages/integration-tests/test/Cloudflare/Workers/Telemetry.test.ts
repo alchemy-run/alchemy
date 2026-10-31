@@ -1,10 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe } from "@alchemy.run/test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
@@ -32,6 +35,34 @@ const collectorWorker = () =>
     domain: collectorHost,
     compatibility: { date: "2024-09-23" },
   });
+
+/** The trace spans in the collector's `/collected` dump; other fields are stripped. */
+const Collected = Schema.Struct({
+  items: Schema.Array(
+    Schema.Struct({
+      payload: Schema.Struct({
+        resourceSpans: Schema.optional(
+          Schema.Array(
+            Schema.Struct({
+              scopeSpans: Schema.Array(
+                Schema.Struct({
+                  spans: Schema.Array(
+                    Schema.Struct({
+                      traceId: Schema.String,
+                      spanId: Schema.String,
+                      parentSpanId: Schema.optional(Schema.String),
+                      name: Schema.String,
+                    }),
+                  ),
+                }),
+              ),
+            }),
+          ),
+        ),
+      }),
+    }),
+  ),
+});
 
 describe(
   "Cloudflare Worker Telemetry",
@@ -164,6 +195,41 @@ describe(
             timeout: "120 seconds",
             label: "deployed DO rpc event batch",
           });
+          // The DO RPC event continues the caller's trace, parented on the
+          // Worker span that made the call, as the DO fetch event does. The
+          // Worker's own batch can land after the DO's, so poll for it.
+          const client = yield* HttpClient.HttpClient;
+          const spans = client.get(collected).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.flatMap(Schema.decodeUnknownEffect(Collected)),
+            Effect.map(({ items }) =>
+              items.flatMap(({ payload }) =>
+                (payload.resourceSpans ?? []).flatMap((resource) =>
+                  resource.scopeSpans.flatMap((scope) => scope.spans),
+                ),
+              ),
+            ),
+          );
+          const rpcCallers = yield* spans.pipe(
+            Effect.map((all) =>
+              all
+                .filter((span) => span.name === "otel-event-flush.rpc")
+                .map(
+                  (span) =>
+                    all.find(
+                      (caller) =>
+                        caller.traceId === span.traceId && caller.spanId === span.parentSpanId,
+                    )?.name,
+                ),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (callers) => callers.length > 0 && callers.every((name) => name !== undefined),
+              times: 30,
+            }),
+          );
+          expect(rpcCallers.length).toBeGreaterThan(0);
+          expect(rpcCallers.every((name) => name === "otel-event-flush.worker")).toBe(true);
         }),
       { timeout: 600_000 },
     );

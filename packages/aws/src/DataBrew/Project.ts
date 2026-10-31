@@ -118,7 +118,7 @@ export const ProjectProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeProject({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Project.Provider.of({
@@ -206,7 +206,7 @@ export const ProjectProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // ConflictException while an interactive session is winding down.
           yield* retryWhileConflict(databrew.deleteProject({ Name: output.projectName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

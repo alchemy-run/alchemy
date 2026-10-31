@@ -1,16 +1,16 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -36,7 +36,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.sync(ArtifactStore, createArtifactStore),
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {

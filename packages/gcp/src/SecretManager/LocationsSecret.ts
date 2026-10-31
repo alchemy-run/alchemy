@@ -158,7 +158,7 @@ export const LocationsSecret = Resource<LocationsSecret>("GCP.SecretManager.Loca
 export class LocationsSecretNotResolved extends Data.TaggedError(
   "GCP.SecretManager.LocationsSecretNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -278,7 +278,7 @@ const toAttrs = (secret: secretmanager.Secret, project: string, region: string) 
 const getByName = (name: string) =>
   secretmanager
     .getProjectsLocationsSecrets({ name })
-    .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound"], () => Effect.undefined));
 
 const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
@@ -389,7 +389,7 @@ export const LocationsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsSecretNotResolved({ name });
+        return yield* new LocationsSecretNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

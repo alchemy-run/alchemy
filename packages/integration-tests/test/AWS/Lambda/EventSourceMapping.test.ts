@@ -1,12 +1,14 @@
+import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { EventSourceMapping } from "@alchemy.run/aws/Lambda";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as DynamoDBStreams from "@distilled.cloud/aws/dynamodb-streams";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, driftOf, repairDrift, waitForDrift } from "../drift.ts";
 import EventSourceMappingFunctionLive, {
   EventSourceMappingFunction,
 } from "./fixtures/event-source-mapping-handler.ts";
@@ -22,6 +24,8 @@ import {
 } from "./fixtures/event-source-mapping-table-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // minimal Lambda Function + SQS Queue + EventSourceMapping (wired via the
@@ -275,5 +279,86 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:dynamodb", "live"],
     timeout: 240_000,
+  },
+);
+
+// #2688: EventSourceMapping and Permission had no `read`, so drift skipped
+// them: a consumer disabled or reconfigured out of band, or a removed invoke
+// permission, went unnoticed.
+test.provider(
+  "drift detects and repairs a disabled mapping and a removed permission",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { fn, mapping } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* AWS.SQS.Queue("DriftMappingQueue", {});
+          const fn = yield* AWS.Lambda.Function("DriftMappingFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+          });
+          yield* fn.bind("AllowQueuePoll", {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                Resource: [queue.queueArn],
+              },
+            ],
+          });
+          const mapping = yield* EventSourceMapping("DriftMapping", {
+            functionName: fn.functionName,
+            eventSourceArn: queue.queueArn,
+            batchSize: 5,
+          });
+          yield* AWS.Lambda.Permission("DriftPermission", {
+            action: "lambda:InvokeFunction",
+            functionName: fn.functionName,
+            principal: "events.amazonaws.com",
+          });
+          return { fn, mapping };
+        }),
+      );
+      const actions = yield* driftActions(stack);
+      expect(Object.values(actions).every((action) => action === "unchanged")).toBe(true);
+
+      yield* Lambda.updateEventSourceMapping({
+        UUID: mapping.uuid,
+        Enabled: false,
+        BatchSize: 9,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceInUseException",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      const permission = yield* driftOf(stack, "DriftPermission");
+      yield* Lambda.removePermission({
+        FunctionName: fn.functionName,
+        StatementId: permission!.attr!.statementId,
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftMapping", "drifted");
+      expect(drifted?.attr?.configuration).toMatchObject({ enabled: false, batchSize: 9 });
+      expect((yield* waitForDrift(stack, "DriftPermission", "missing"))?.action).toBe("missing");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftMapping?.action).toBe("repaired");
+      expect(repaired.resources.DriftPermission?.action).toBe("recreated");
+      const after = yield* driftActions(stack);
+      expect(Object.values(after).every((action) => action === "unchanged")).toBe(true);
+      const restored = yield* Lambda.getEventSourceMapping({ UUID: mapping.uuid });
+      expect(restored.State).toBe("Enabled");
+      expect(restored.BatchSize).toBe(5);
+
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 300_000,
   },
 );

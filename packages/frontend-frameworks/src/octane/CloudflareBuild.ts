@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 /*!
- * Client metadata collection adapted from @octanejs/vite-plugin 0.1.22.
+ * Client metadata collection adapted from @octanejs/vite-plugin 0.5.0.
  * MIT License
  * Copyright (c) 2026 Dominic Gannaway
  *
@@ -25,7 +25,7 @@ import { createRequire } from "node:module";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { InlineConfig, Plugin, PluginOption } from "vite";
+import type { InlineConfig, Plugin, PluginOption, ResolvedConfig } from "vite";
 import {
   FrameworkError,
   loadProjectModule,
@@ -187,16 +187,19 @@ export const buildCloudflare = (rootDirectory: string) =>
         return yield* fail("Set rootDir to the Octane app root instead of overriding Vite root");
       }
       let clientDir = path.resolve(root, config.build.outDir, "client");
+      let islandsEntry: string | null = null;
+      let resolvedConfig: ResolvedConfig | undefined;
       const rpcModules = new Set<string>();
       const entryFiles: Record<string, string> = {};
       const collect: Plugin = {
         name: "alchemy:octane-client-metadata",
         configResolved(config) {
           clientDir = path.resolve(config.root, config.build.outDir);
+          resolvedConfig = config;
         },
         transform(code, id, options) {
           const file = id.split("?")[0]!;
-          if (options?.ssr || !/\.(tsrx|tsx)$/.test(file) || !code.includes("_$__serverRpc("))
+          if (options?.ssr || !/\.(tsrx|tsx)$/.test(file) || !code.includes("_$__serverRpc"))
             return;
           const relative = path.relative(root, file);
           rpcModules.add(
@@ -208,6 +211,9 @@ export const buildCloudflare = (rootDirectory: string) =>
         generateBundle(_options, bundle) {
           for (const output of Object.values(bundle)) {
             if (output.type !== "chunk") continue;
+            if (output.facadeModuleId === "\0virtual:octane-islands") {
+              islandsEntry = hydrationEntryUrl(output.fileName, resolvedConfig!);
+            }
             for (const entry of entries) {
               const id = path
                 .resolve(root, entry.startsWith("/") ? `.${entry}` : entry)
@@ -241,6 +247,22 @@ export const buildCloudflare = (rootDirectory: string) =>
           }),
         ),
       );
+      const readJson = (file: string) =>
+        fs.readFileString(path.join(clientDir, file)).pipe(
+          Effect.flatMap((source) =>
+            Effect.try({
+              try: () => JSON.parse(source) as unknown,
+              catch: (cause) => fail(`Invalid Octane client build file ${file}`, cause),
+            }),
+          ),
+        );
+      const clientBuild = yield* readJson("octane-client-build.json");
+      const independentHydrationFile = "octane-independent-hydration.json";
+      const independentHydrationManifest = (yield* fs.exists(
+        path.join(clientDir, independentHydrationFile),
+      ))
+        ? yield* readJson(independentHydrationFile)
+        : null;
       const clientAssets = yield* Effect.sync(() =>
         assetHelper.createClientAssetMap(manifest, entries, entryFiles),
       );
@@ -260,10 +282,11 @@ export const buildCloudflare = (rootDirectory: string) =>
             octaneConfigPath: octane.getOctaneConfigPath(root),
             rpcModulePaths: [...rpcModules],
             clientAssetMap: clientAssets,
+            clientBuild,
+            independentHydrationManifest,
+            islandsEntry,
             mode: "manifest",
             configModuleId: resolveModule("@octanejs/app-core/config"),
-            serverRuntimeModuleId: resolveModule("octane/server"),
-            staticRuntimeModuleId: resolveModule("octane/static"),
             generatedBy: "@alchemy.run/frontend-frameworks",
           }),
         catch: (cause) => fail("Failed to generate the Octane server manifest", cause),
@@ -318,6 +341,8 @@ export const buildCloudflare = (rootDirectory: string) =>
       });
       yield* fs.remove(path.join(clientDir, "index.html"));
       yield* fs.remove(path.join(clientDir, ".vite"), { recursive: true });
+      yield* fs.remove(path.join(clientDir, "octane-client-build.json"));
+      yield* fs.remove(path.join(clientDir, independentHydrationFile), { force: true });
       return yield* readOctaneOutput({
         dir: path.resolve(root, config.build.outDir),
         clientDir,
@@ -332,3 +357,24 @@ export const buildCloudflare = (rootDirectory: string) =>
       ),
     ),
   );
+
+/**
+ * Mirrors `@octanejs/vite-plugin`'s `hydrationEntryUrl`: the islands bootstrap
+ * URL honors `base` and `experimental.renderBuiltUrl` like Vite's HTML assets.
+ */
+const hydrationEntryUrl = (filename: string, config: ResolvedConfig): string => {
+  let relative = config.base === "" || config.base === "./";
+  const rendered = config.experimental.renderBuiltUrl?.(filename, {
+    hostId: "index.html",
+    hostType: "html",
+    type: "asset",
+    ssr: false,
+  });
+  if (typeof rendered === "string") return rendered;
+  if (rendered?.runtime) {
+    throw new Error("[@octanejs/vite-plugin] Runtime asset URLs are not supported in HTML.");
+  }
+  if (typeof rendered?.relative === "boolean") relative = rendered.relative;
+  if (relative) return `./${filename}`;
+  return `${decodeURI(config.base).replace(/\/$/, "")}/${filename}`;
+};

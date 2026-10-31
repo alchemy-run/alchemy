@@ -430,38 +430,28 @@ export const walkNodes = () =>
   });
 
 const catchMissing = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  effect.pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 export const getCustomerDeployment = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getCustomersDeployments({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getCustomersDeployments({ name }));
 
 export const getCustomerDevice = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getCustomersDevices({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getCustomersDevices({ name }));
 
 export const getCustomerNode = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getCustomersNodes({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getCustomersNodes({ name }));
 
 export const getNodeDevice = (name: string) =>
-  name.length === 0 ? Effect.succeed(undefined) : catchMissing(sasportal.getNodesDevices({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getNodesDevices({ name }));
 
 export const getNodeNode = (name: string) =>
-  name.length === 0 ? Effect.succeed(undefined) : catchMissing(sasportal.getNodesNodes({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getNodesNodes({ name }));
 
 export const getDeploymentDevice = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getDeploymentsDevices({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getDeploymentsDevices({ name }));
 
 export const getNodeDeployment = (name: string) =>
-  name.length === 0
-    ? Effect.succeed(undefined)
-    : catchMissing(sasportal.getNodesDeployments({ name }));
+  name.length === 0 ? Effect.undefined : catchMissing(sasportal.getNodesDeployments({ name }));
 
 export const findOwned = <A>(
   id: string,

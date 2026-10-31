@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import * as vite from "vite";
 import { expect, onTestFinished, test, vi } from "vitest";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
@@ -39,6 +40,7 @@ test.each([
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -105,6 +107,7 @@ test("a Worker reads HTML and binary files in Vite's publicDir through ASSETS", 
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -133,6 +136,116 @@ test("a Worker reads HTML and binary files in Vite's publicDir through ASSETS", 
   expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
 });
 
+// https://github.com/alchemy-run/alchemy/issues/2250
+test("a Worker reads every byte of a publicDir file through ASSETS with SPA fallback", async () => {
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "local-test-unused");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "00000000000000000000000000000000");
+  const tmpRoot = path.resolve(import.meta.dirname, "../.cache/test-roots");
+  await fs.mkdir(tmpRoot, { recursive: true });
+  const root = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-binary-"));
+  onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+  const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+  await fs.writeFile(path.join(root, "index.html"), "<html><body>SPA shell</body></html>");
+  await fs.mkdir(path.join(root, "public"));
+  await fs.writeFile(path.join(root, "public", "sample.bin"), bytes);
+  const entry = path.join(root, "worker.js");
+  await fs.writeFile(
+    entry,
+    `
+    export default {
+      fetch(request, env) {
+        return env.ASSETS.fetch(new Request(new URL("/sample.bin", request.url), request));
+      },
+    };
+  `,
+  );
+  const server = await vite.createServer({
+    root,
+    configFile: false,
+    cacheDir: path.join(root, ".vite"),
+    logLevel: "silent",
+    server: { host: "127.0.0.1", port: 0 },
+    plugins: [
+      cloudflareVitePlugin({
+        main: entry,
+        worker: {
+          name: "vite-dev-assets-binary-test",
+          bindings: [Assets.local("ASSETS")],
+          assets: { runWorkerFirst: true, notFoundHandling: "single-page-application" },
+        },
+      }),
+    ],
+  });
+  onTestFinished(() => server.close());
+  await server.listen();
+  const url = server.resolvedUrls!.local[0];
+
+  const response = await fetch(new URL("/dashboard", url), { signal: AbortSignal.timeout(5_000) });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("application/octet-stream");
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+});
+
+// Vite resolves a disabled `publicDir` to `""`, which must not turn a
+// requested pathname into an absolute path on the host's filesystem.
+test("a Worker cannot read files outside the root through ASSETS when publicDir is disabled", async () => {
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "local-test-unused");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "00000000000000000000000000000000");
+  const tmpRoot = path.resolve(import.meta.dirname, "../.cache/test-roots");
+  await fs.mkdir(tmpRoot, { recursive: true });
+  const root = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-no-public-"));
+  const outside = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-outside-"));
+  onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+  onTestFinished(() => fs.rm(outside, { recursive: true, force: true }));
+  const secret = path.join(outside, "secret.bin");
+  await fs.writeFile(secret, "outside the root");
+  const entry = path.join(root, "worker.js");
+  await fs.writeFile(
+    entry,
+    `
+    export default {
+      fetch(request, env) {
+        const { pathname } = new URL(request.url);
+        return env.ASSETS.fetch(new URL(pathname.slice("/read".length), request.url));
+      },
+    };
+  `,
+  );
+  const server = await vite.createServer({
+    root,
+    configFile: false,
+    cacheDir: path.join(root, ".vite"),
+    publicDir: false,
+    logLevel: "silent",
+    server: { host: "127.0.0.1", port: 0 },
+    plugins: [
+      cloudflareVitePlugin({
+        main: entry,
+        worker: {
+          name: "vite-dev-assets-no-public-test",
+          bindings: [Assets.local("ASSETS")],
+          assets: { runWorkerFirst: ["/read/*"] },
+        },
+      }),
+    ],
+  });
+  onTestFinished(() => server.close());
+  await server.listen();
+  const url = server.resolvedUrls!.local[0];
+
+  const response = await fetch(new URL(`/read${pathToFileURL(secret).pathname}`, url), {
+    signal: AbortSignal.timeout(5_000),
+  });
+  expect(response.status).toBe(404);
+  expect(await response.text()).not.toContain("outside the root");
+});
+
 // `@cloudflare/vite-plugin` serves HTML through `transformIndexHtml` (`public/`
 // HTML as is) and applies `server.headers` to asset responses.
 test("serves HTML through Vite with the dev server's headers", async () => {
@@ -159,6 +272,7 @@ test("serves HTML through Vite with the dev server's headers", async () => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0, headers: { "x-dev-header": "from-vite" } },
     plugins: [
@@ -204,6 +318,7 @@ test("restarts the dev server when an additional module changes", async () => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [

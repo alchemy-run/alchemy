@@ -61,7 +61,7 @@ const observeConfig = (functionName: string, qualifier: string | undefined) =>
   Lambda.getFunctionEventInvokeConfig({
     FunctionName: functionName,
     Qualifier: qualifier,
-  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 /**
  * Converge the async invocation config of a function or alias to the desired
@@ -130,3 +130,24 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
     }),
   );
 });
+
+/**
+ * The async invocation config of a function or alias, normalized, as
+ * observed (`undefined` when none is set). Function and Alias report it so
+ * `alchemy drift` detects out-of-band changes.
+ */
+export const observeEventInvokeConfig = Effect.fn(function* (
+  functionName: string,
+  qualifier: string | undefined,
+) {
+  const observed = yield* observeConfig(functionName, qualifier);
+  if (observed === undefined) return undefined;
+  return {
+    maximumRetryAttempts: observed.MaximumRetryAttempts ?? DEFAULT_MAXIMUM_RETRY_ATTEMPTS,
+    maximumEventAgeSeconds: observed.MaximumEventAgeInSeconds ?? DEFAULT_MAXIMUM_EVENT_AGE_SECONDS,
+    destinationConfig: normalizeDestinationConfig(observed.DestinationConfig),
+  };
+});
+
+/** The normalized async invocation config {@link observeEventInvokeConfig} reports. */
+export type ObservedEventInvokeConfig = Effect.Success<ReturnType<typeof observeEventInvokeConfig>>;

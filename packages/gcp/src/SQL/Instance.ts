@@ -1,3 +1,4 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -43,6 +44,64 @@ export type DatabaseFlag = {
    * no value.
    */
   value?: string;
+};
+
+export type IpConfiguration = {
+  /**
+   * Assign a public IPv4 address. Set `false` together with
+   * `privateNetwork` for a private-IP-only instance.
+   * @default true
+   */
+  ipv4Enabled?: boolean;
+  /**
+   * VPC network the instance gets a private IP on. Accepts a name
+   * (`main`), a resource path (`projects/{project}/global/networks/{network}`),
+   * or a Compute self-link. The network needs private services access: an
+   * `INTERNAL` / `VPC_PEERING` `GCP.Compute.GlobalAddress` range and a
+   * `GCP.ServiceNetworking.Connection` to it. Cloud SQL can move an instance
+   * to another network but cannot remove private IP once set, so dropping
+   * this prop leaves the observed network in place.
+   */
+  privateNetwork?: string;
+  /**
+   * Name of the allocated `VPC_PEERING` range to take the private IP from
+   * (`google-managed-services-default`, or a `GlobalAddress`'s
+   * `addressName`). When omitted, Cloud SQL picks any range reserved for
+   * the connection.
+   */
+  allocatedIpRange?: string;
+  /**
+   * How SSL/TLS is enforced on database connections:
+   * `ALLOW_UNENCRYPTED_AND_ENCRYPTED`, `ENCRYPTED_ONLY`, or
+   * `TRUSTED_CLIENT_CERTIFICATE_REQUIRED` (client certificates from
+   * `GCP.SQL.SslCert`). The legacy `requireSsl` flag is set to match.
+   * @default Cloud SQL's default, `ALLOW_UNENCRYPTED_AND_ENCRYPTED`
+   */
+  sslMode?: sqladmin.IpConfigurationSslModeEnum | (string & {});
+};
+
+export type BackupSettings = {
+  /**
+   * Enable automated daily backups. MySQL also enables binary logs and
+   * PostgreSQL point-in-time recovery when true.
+   * @default false
+   */
+  enabled?: boolean;
+  /**
+   * Number of automated backups to retain (1–365).
+   * @default 7
+   */
+  retainedBackups?: number;
+  /**
+   * Days of transaction logs kept for point-in-time restore (1–7 on
+   * `ENTERPRISE`, up to 35 on `ENTERPRISE_PLUS`).
+   * @default 7
+   */
+  transactionLogRetentionDays?: number;
+  /**
+   * Start of the daily backup window, UTC `HH:MM` (`03:00`).
+   */
+  startTime?: string;
 };
 
 export type InstanceProps = {
@@ -112,15 +171,21 @@ export type InstanceProps = {
    */
   dataDiskType?: sqladmin.SettingsDataDiskTypeEnum | (string & {});
   /**
-   * Assign a public IPv4 address.
-   * @default true
+   * Public IP, private IP, and SSL settings. Fields left unset keep their
+   * observed values.
    */
-  ipv4Enabled?: boolean;
+  ipConfiguration?: IpConfiguration;
   /**
-   * Enable automated backups. MySQL also enables binary logs when true.
+   * Automated backup settings. Fields left unset keep their observed
+   * values.
+   */
+  backup?: BackupSettings;
+  /**
+   * Grow the data disk automatically when it nears capacity. A grown disk
+   * cannot shrink back.
    * @default false
    */
-  backupEnabled?: boolean;
+  storageAutoResize?: boolean;
   /**
    * Protect against accidental instance deletion. While enabled, destroy
    * and replacement fail with `InstanceDeletionProtected`; set it to
@@ -172,8 +237,14 @@ export type Instance = Resource<
     gceZone: string | undefined;
     /** Public IPv4, if any. */
     ipAddress: string | undefined;
+    /** Private IP on `privateNetwork`, if any. */
+    privateIpAddress: string | undefined;
     /** Whether public IPv4 is enabled. */
     ipv4Enabled: boolean;
+    /** VPC network path of the private IP, if any. */
+    privateNetwork: string | undefined;
+    /** SSL/TLS enforcement mode. */
+    sslMode: string | undefined;
     /** Whether deletion protection is enabled. */
     deletionProtectionEnabled: boolean;
     /** Activation policy (`ALWAYS`, `NEVER`, …). */
@@ -184,6 +255,12 @@ export type Instance = Resource<
     dataDiskSizeGb: number | undefined;
     /** Whether automated backups are enabled. */
     backupEnabled: boolean;
+    /** Number of automated backups retained. */
+    retainedBackups: number | undefined;
+    /** Days of transaction logs retained for point-in-time restore. */
+    transactionLogRetentionDays: number | undefined;
+    /** Whether the data disk grows automatically. */
+    storageAutoResize: boolean;
     /** Service account email used by the instance. */
     serviceAccountEmailAddress: string | undefined;
     /** SQL Admin self-link. */
@@ -216,7 +293,7 @@ export type Instance = Resource<
  *   databaseVersion: "MYSQL_8_0",
  *   tier: "db-f1-micro",
  *   labels: { env: "prod" },
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  *   deletionProtectionEnabled: false,
  * });
  * ```
@@ -228,6 +305,49 @@ export type Instance = Resource<
  *   databaseVersion: "POSTGRES_15",
  *   rootPassword: "change-me",
  *   tier: "db-f1-micro",
+ * });
+ * ```
+ *
+ * ### Private IP and SSL
+ * **Example:** Private-IP-only Postgres over private services access
+ * ```typescript
+ * const network = yield* GCP.Compute.Network("Vpc", {
+ *   autoCreateSubnetworks: false,
+ * });
+ * const range = yield* GCP.Compute.GlobalAddress("PsaRange", {
+ *   addressType: "INTERNAL",
+ *   purpose: "VPC_PEERING",
+ *   network: network.selfLink,
+ *   prefixLength: 20,
+ * });
+ * const psa = yield* GCP.ServiceNetworking.Connection("Psa", {
+ *   network: network.networkName,
+ *   reservedPeeringRanges: [range.addressName],
+ * });
+ * const db = yield* GCP.SQL.Instance("Control", {
+ *   databaseVersion: "POSTGRES_17",
+ *   tier: "db-custom-2-8192",
+ *   ipConfiguration: {
+ *     ipv4Enabled: false,
+ *     privateNetwork: psa.network,
+ *     sslMode: "ENCRYPTED_ONLY",
+ *   },
+ * });
+ * // db.privateIpAddress is reachable from inside the VPC
+ * ```
+ *
+ * ### Backups and Storage
+ * **Example:** Retained backups, PITR log retention, and disk auto-resize
+ * ```typescript
+ * const db = yield* GCP.SQL.Instance("AppDb", {
+ *   databaseVersion: "POSTGRES_17",
+ *   backup: {
+ *     enabled: true,
+ *     retainedBackups: 14,
+ *     transactionLogRetentionDays: 7,
+ *     startTime: "03:00",
+ *   },
+ *   storageAutoResize: true,
  * });
  * ```
  *
@@ -335,8 +455,31 @@ const diskSizeOf = (value: string | number | undefined) => {
 };
 
 const primaryIp = (instance: sqladmin.DatabaseInstance) =>
-  instance.ipAddresses?.find((item) => item.type === "PRIMARY")?.ipAddress ??
-  instance.ipAddresses?.[0]?.ipAddress;
+  instance.ipAddresses?.find((item) => item.type === "PRIMARY")?.ipAddress;
+
+const privateIp = (instance: sqladmin.DatabaseInstance) =>
+  instance.ipAddresses?.find((item) => item.type === "PRIVATE")?.ipAddress;
+
+/**
+ * Normalize a network name, path, or self-link to
+ * `projects/{projectId}/global/networks/{network}`. Cloud SQL rejects a
+ * project number, which Service Networking paths carry, so a numeric
+ * project is resolved to its id.
+ */
+const resolveNetworkPath = Effect.fn(function* (value: string | undefined, project: string) {
+  if (value === undefined || value.length === 0) return undefined;
+  const match = /projects\/([^/]+)\/global\/networks\/([^/]+)/.exec(value);
+  if (!match) return `projects/${project}/global/networks/${lastSegment(value)}`;
+  const [, owner, network] = match;
+  if (!/^\d+$/.test(owner)) return `projects/${owner}/global/networks/${network}`;
+  const resolved = yield* resourcemanager.getProjects({ name: `projects/${owner}` });
+  return `projects/${resolved.projectId ?? project}/global/networks/${network}`;
+});
+
+/** `requireSsl` must pair with `sslMode` (only certificate-required, or SQL Server encrypted-only, is true). */
+const requireSslOf = (sslMode: string, version: string) =>
+  sslMode === "TRUSTED_CLIENT_CERTIFICATE_REQUIRED" ||
+  (sslMode === "ENCRYPTED_ONLY" && version.toUpperCase().startsWith("SQLSERVER_"));
 
 const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRegion: string) => {
   const settings = instance.settings;
@@ -353,12 +496,18 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
     connectionName: instance.connectionName,
     gceZone: instance.gceZone ?? settings?.locationPreference?.zone,
     ipAddress: primaryIp(instance),
+    privateIpAddress: privateIp(instance),
     ipv4Enabled: settings?.ipConfiguration?.ipv4Enabled !== false,
+    privateNetwork: settings?.ipConfiguration?.privateNetwork,
+    sslMode: settings?.ipConfiguration?.sslMode,
     deletionProtectionEnabled: settings?.deletionProtectionEnabled === true,
     activationPolicy: settings?.activationPolicy,
     availabilityType: settings?.availabilityType,
     dataDiskSizeGb: diskSizeOf(settings?.dataDiskSizeGb),
     backupEnabled: settings?.backupConfiguration?.enabled === true,
+    retainedBackups: settings?.backupConfiguration?.backupRetentionSettings?.retainedBackups,
+    transactionLogRetentionDays: settings?.backupConfiguration?.transactionLogRetentionDays,
+    storageAutoResize: settings?.storageAutoResize === true,
     serviceAccountEmailAddress: instance.serviceAccountEmailAddress,
     selfLink: instance.selfLink,
     createTime: instance.createTime,
@@ -368,7 +517,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
 const getByName = (project: string, instance: string) =>
   sqladmin
     .getInstances({ project, instance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Instance create, patch, and delete operations routinely run 5–15
@@ -379,11 +528,7 @@ const LONG_OPERATION_POLL = {
   schedule: Schedule.spaced("10 seconds"),
 };
 
-const waitForOperation = (
-  project: string,
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (project: string, operation: sqladmin.Operation) =>
   waitForSqlOperation(project, operation, {
     budget: "30 minutes",
     notFoundOk: true,
@@ -439,10 +584,32 @@ const waitUntilGone = (project: string, instanceName: string) =>
     }),
   );
 
-const backupConfiguration = (enabled: boolean, version: string): sqladmin.BackupConfiguration => ({
+const backupConfiguration = (
+  enabled: boolean,
+  version: string,
+  backup: BackupSettings | undefined,
+): sqladmin.BackupConfiguration => ({
   enabled,
   binaryLogEnabled: enabled && isMysql(version),
   pointInTimeRecoveryEnabled: enabled && isPostgres(version),
+  backupRetentionSettings:
+    backup?.retainedBackups !== undefined
+      ? { retentionUnit: "COUNT", retainedBackups: backup.retainedBackups }
+      : undefined,
+  transactionLogRetentionDays: backup?.transactionLogRetentionDays,
+  startTime: backup?.startTime,
+});
+
+const ipConfigurationOf = (
+  ip: IpConfiguration | undefined,
+  privateNetwork: string | undefined,
+  version: string,
+): sqladmin.IpConfiguration => ({
+  ipv4Enabled: ip?.ipv4Enabled !== false,
+  privateNetwork,
+  allocatedIpRange: ip?.allocatedIpRange,
+  sslMode: ip?.sslMode,
+  requireSsl: ip?.sslMode !== undefined ? requireSslOf(ip.sslMode, version) : undefined,
 });
 
 const dataApiAccessOf = (enabled: boolean | undefined) => {
@@ -453,12 +620,13 @@ const dataApiAccessOf = (enabled: boolean | undefined) => {
 
 const insertBody = (
   news: InstanceProps,
+  privateNetwork: string | undefined,
   instanceName: string,
   region: string,
   version: string,
   desiredLabels: Record<string, string>,
 ): sqladmin.DatabaseInstance => {
-  const backupEnabled = news.backupEnabled === true;
+  const backupEnabled = news.backup?.enabled === true;
   return {
     name: instanceName,
     region,
@@ -473,11 +641,9 @@ const insertBody = (
       dataDiskType: normalizeDiskType(news.dataDiskType),
       deletionProtectionEnabled: news.deletionProtectionEnabled === true,
       userLabels: desiredLabels,
-      storageAutoResize: false,
-      ipConfiguration: {
-        ipv4Enabled: news.ipv4Enabled !== false,
-      },
-      backupConfiguration: backupConfiguration(backupEnabled, version),
+      storageAutoResize: news.storageAutoResize === true,
+      ipConfiguration: ipConfigurationOf(news.ipConfiguration, privateNetwork, version),
+      backupConfiguration: backupConfiguration(backupEnabled, version, news.backup),
       locationPreference: news.zone ? { zone: news.zone } : undefined,
       databaseFlags: news.databaseFlags,
       dataApiAccess: dataApiAccessOf(news.dataApiAccess),
@@ -593,15 +759,27 @@ export const InstanceProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
 
+      const desiredPrivateNetwork = yield* resolveNetworkPath(
+        news.ipConfiguration?.privateNetwork,
+        env.project,
+      );
+
       let current = yield* getByName(env.project, output?.instanceName ?? instanceName);
 
       if (current === undefined) {
         const created = yield* sqladmin
           .insertInstances({
             project: env.project,
-            body: insertBody(news, instanceName, region, version, desiredLabels),
+            body: insertBody(
+              news,
+              desiredPrivateNetwork,
+              instanceName,
+              region,
+              version,
+              desiredLabels,
+            ),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(env.project, created);
         }
@@ -662,15 +840,44 @@ export const InstanceProvider = () =>
       const protectionChanged =
         (settings?.deletionProtectionEnabled === true) !== desiredProtection;
 
-      const desiredIpv4 = news.ipv4Enabled !== false;
-      const ipv4Changed =
-        news.ipv4Enabled !== undefined &&
-        (settings?.ipConfiguration?.ipv4Enabled !== false) !== desiredIpv4;
+      const ip = news.ipConfiguration;
+      const observedIp = settings?.ipConfiguration;
+      const desiredSslMode = ip?.sslMode?.toUpperCase();
+      const ipConfiguration: sqladmin.IpConfiguration = {
+        ipv4Enabled:
+          ip?.ipv4Enabled !== undefined && (observedIp?.ipv4Enabled !== false) !== ip.ipv4Enabled
+            ? ip.ipv4Enabled
+            : undefined,
+        privateNetwork:
+          desiredPrivateNetwork !== undefined &&
+          /projects\/[^/]+\/global\/networks\/[^/]+/.exec(observedIp?.privateNetwork ?? "")?.[0] !==
+            desiredPrivateNetwork
+            ? desiredPrivateNetwork
+            : undefined,
+        allocatedIpRange:
+          ip?.allocatedIpRange !== undefined && observedIp?.allocatedIpRange !== ip.allocatedIpRange
+            ? ip.allocatedIpRange
+            : undefined,
+        ...(desiredSslMode !== undefined && observedIp?.sslMode !== desiredSslMode
+          ? { sslMode: desiredSslMode, requireSsl: requireSslOf(desiredSslMode, version) }
+          : {}),
+      };
+      const ipChanged = Object.values(ipConfiguration).some((value) => value !== undefined);
 
-      const desiredBackup = news.backupEnabled === true;
+      const backup = news.backup;
+      const observedBackup = settings?.backupConfiguration;
+      const desiredBackup = backup?.enabled ?? observedBackup?.enabled === true;
       const backupChanged =
-        news.backupEnabled !== undefined &&
-        (settings?.backupConfiguration?.enabled === true) !== desiredBackup;
+        (backup?.enabled !== undefined && (observedBackup?.enabled === true) !== desiredBackup) ||
+        (backup?.retainedBackups !== undefined &&
+          observedBackup?.backupRetentionSettings?.retainedBackups !== backup.retainedBackups) ||
+        (backup?.transactionLogRetentionDays !== undefined &&
+          observedBackup?.transactionLogRetentionDays !== backup.transactionLogRetentionDays) ||
+        (backup?.startTime !== undefined && observedBackup?.startTime !== backup.startTime);
+
+      const autoResizeChanged =
+        news.storageAutoResize !== undefined &&
+        (settings?.storageAutoResize === true) !== news.storageAutoResize;
 
       const desiredDisk = news.dataDiskSizeGb;
       const currentDisk = diskSizeOf(settings?.dataDiskSizeGb);
@@ -698,8 +905,9 @@ export const InstanceProvider = () =>
         activationChanged ||
         availabilityChanged ||
         protectionChanged ||
-        ipv4Changed ||
+        ipChanged ||
         backupChanged ||
+        autoResizeChanged ||
         diskChanged ||
         zoneChanged ||
         flagsChanged ||
@@ -721,10 +929,11 @@ export const InstanceProvider = () =>
             availabilityType: news.availabilityType !== undefined ? desiredAvailability : undefined,
             deletionProtectionEnabled: desiredProtection,
             dataDiskSizeGb: diskChanged ? String(desiredDisk) : undefined,
-            ipConfiguration: ipv4Changed ? { ipv4Enabled: desiredIpv4 } : undefined,
+            ipConfiguration: ipChanged ? ipConfiguration : undefined,
             backupConfiguration: backupChanged
-              ? backupConfiguration(desiredBackup, version)
+              ? backupConfiguration(desiredBackup, version, backup)
               : undefined,
+            storageAutoResize: autoResizeChanged ? news.storageAutoResize : undefined,
             locationPreference: zoneChanged ? { zone: desiredZone } : undefined,
             databaseFlags: news.databaseFlags !== undefined ? news.databaseFlags : undefined,
             dataApiAccess: desiredDataApi,
@@ -752,9 +961,9 @@ export const InstanceProvider = () =>
             settingsVersion: existing.settings.settingsVersion,
             deletionProtectionEnabled: false,
           },
-        }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
-          yield* waitForOperation(env.project, patched, { notFoundOk: true });
+          yield* waitForOperation(env.project, patched);
         }
       }
 
@@ -764,7 +973,7 @@ export const InstanceProvider = () =>
           instance: instanceName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,
@@ -772,7 +981,7 @@ export const InstanceProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(env.project, operation, { notFoundOk: true });
+        yield* waitForOperation(env.project, operation);
       }
       yield* waitUntilGone(env.project, instanceName);
     }),

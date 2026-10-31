@@ -257,7 +257,7 @@ export const UsagePlanProvider = () =>
           if (!output?.id) return undefined;
           const p = yield* ag
             .getUsagePlan({ usagePlanId: output.id })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!p?.id) return undefined;
           return {
             id: p.id,
@@ -304,7 +304,7 @@ export const UsagePlanProvider = () =>
           let observed = output?.id
             ? yield* ag
                 .getUsagePlan({ usagePlanId: output.id })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create the usage plan if missing.

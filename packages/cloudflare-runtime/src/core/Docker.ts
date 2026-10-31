@@ -13,7 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
   CONTAINER_LOOPBACK_ALIAS,
@@ -64,6 +64,8 @@ export declare namespace ContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /** BuildKit secrets by id, handed to `docker build` through its environment. */
+    readonly buildSecrets?: Record<string, string>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -203,6 +205,9 @@ export const DockerLive = Layer.effect(
     // Native containers can start from images nobody prepared (snapshots,
     // managed `cloudflare/*` images), so per-image cleanup cannot find them.
     const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
+    // Set once workerd asks the proxy to create a container. A runtime that
+    // never did has nothing to remove and must not wait on the daemon.
+    let createdContainers = false;
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -219,7 +224,7 @@ export const DockerLive = Layer.effect(
         stderr: "pipe",
         detached: false,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           child.stdout.pipe(
             Stream.decodeText,
@@ -278,6 +283,7 @@ export const DockerLive = Layer.effect(
         Effect.gen(function* () {
           const isCreateRequest =
             req.method === "POST" && req.url?.startsWith("/containers/create");
+          if (isCreateRequest) createdContainers = true;
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
             const original = yield* readJson<{
               Image: string;
@@ -360,14 +366,19 @@ export const DockerLive = Layer.effect(
       });
     };
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
+    const run = (
+      args: Array<string>,
+      stdin: ChildProcess.CommandInput = "ignore",
+      env?: Record<string, string>,
+    ) =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
         stderr: "pipe",
         detached: false,
+        ...(env === undefined ? {} : { env, extendEnv: true }),
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           Effect.all(
             {
@@ -489,26 +500,31 @@ export const DockerLive = Layer.effect(
         ),
       );
 
+    const removeRuntimeContainers = run([
+      "ps",
+      "--all",
+      "--quiet",
+      "--filter",
+      `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
+    ]).pipe(
+      Effect.flatMap(({ stdout }) => {
+        const ids = stdout.split("\n").filter((id) => id.trim() !== "");
+        return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
+      }),
+      Effect.timeout("30 seconds"),
+      Effect.withLogSpan("docker: remove runtime containers"),
+      Effect.ignore,
+    );
     // Runs after the runtime (and its workerd) has shut down.
     yield* Effect.addFinalizer(() =>
-      run([
-        "ps",
-        "--all",
-        "--quiet",
-        "--filter",
-        `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
-      ]).pipe(
-        Effect.flatMap(({ stdout }) => {
-          const ids = stdout.split("\n").filter((id) => id.trim() !== "");
-          return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
-        }),
-        Effect.timeout("30 seconds"),
-        Effect.withLogSpan("docker: remove runtime containers"),
-        Effect.ignore,
-      ),
+      Effect.suspend(() => (createdContainers ? removeRuntimeContainers : Effect.void)),
     );
 
-    const docker = yield* Effect.zipWith(
+    // Connect to the daemon on first use. Only Workers with containers ask for
+    // the engine configuration, so every other runtime never touches Docker.
+    // It runs in the layer's scope, so it outlives the caller that started it.
+    const context = yield* Effect.context<Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>();
+    const startDocker = Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
         Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
@@ -546,7 +562,8 @@ export const DockerLive = Layer.effect(
         },
       }),
       { concurrent: true },
-    ).pipe(Effect.forkScoped({ startImmediately: false }));
+    ).pipe(Effect.provide(context), Effect.forkIn(Context.get(context, Scope.Scope)));
+    const docker = yield* Effect.cached(startDocker);
 
     // Docker refuses to create a container whose device is missing on the
     // host, so a Linux host without /dev/fuse gets the capability alone.
@@ -562,7 +579,7 @@ export const DockerLive = Layer.effect(
     );
 
     return Docker.of({
-      getWorkerdDockerConfiguration: Fiber.join(docker),
+      getWorkerdDockerConfiguration: Effect.flatMap(docker, Fiber.join),
       getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
@@ -577,6 +594,13 @@ export const DockerLive = Layer.effect(
       generateImageTag,
       build: (tag, image) =>
         Effect.suspend(() => {
+          // Values ride in generated variables: a secret id is the
+          // Dockerfile's choice and may shadow one Docker reads itself.
+          const secrets = Object.entries(image.buildSecrets ?? {}).map(([id, value], index) => ({
+            id,
+            variable: `ALCHEMY_BUILD_SECRET_${index}`,
+            value,
+          }));
           const args = [
             "build",
             "--load",
@@ -585,9 +609,11 @@ export const DockerLive = Layer.effect(
             "--platform",
             "linux/amd64",
             "--provenance=false",
-            ...Object.entries(image.buildArgs ?? {}).map(
-              ([name, value]) => `--build-arg ${name}=${value}`,
-            ),
+            ...Object.entries(image.buildArgs ?? {}).flatMap(([name, value]) => [
+              "--build-arg",
+              `${name}=${value}`,
+            ]),
+            ...secrets.flatMap(({ id, variable }) => ["--secret", `id=${id},env=${variable}`]),
             "-f",
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
@@ -599,6 +625,9 @@ export const DockerLive = Layer.effect(
                 ? path.resolve(image.context, image.dockerfile)
                 : path.resolve(image.dockerfile),
             ),
+            secrets.length === 0
+              ? undefined
+              : Object.fromEntries(secrets.map(({ variable, value }) => [variable, value])),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
             Effect.mapError((cause) =>

@@ -264,7 +264,7 @@ const toAttrs = (entry: dataplex.GoogleCloudDataplexV1Entry, project: string) =>
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryGroupsEntries({ name, view: "ALL" })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listEntriesUnder = (parent: string, project: string) =>
@@ -406,7 +406,7 @@ export const EntryGroupsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.entrySource?.labels);

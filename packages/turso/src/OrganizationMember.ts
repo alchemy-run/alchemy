@@ -64,7 +64,7 @@ export const OrganizationMemberProvider = () =>
       const observe = (org: string, username: string) =>
         turso.getOrganizationMember({ organizationSlug: org, username }).pipe(
           Effect.map(({ member }) => member),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       return {

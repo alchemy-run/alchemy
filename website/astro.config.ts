@@ -445,6 +445,7 @@ export default defineConfig({
                   label: "Local development",
                   link: "/environments/local-development",
                 },
+                { label: "Worktrees", link: "/environments/worktrees" },
                 { label: "CI", link: "/environments/ci" },
               ],
             },
@@ -498,6 +499,7 @@ export default defineConfig({
           label: "CLI",
           items: [
             { label: "Overview", link: "/cli" },
+            { label: "Programmatic API", link: "/cli/api" },
             {
               label: "Deploy",
               items: [
@@ -912,7 +914,10 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Observability",
@@ -948,6 +953,7 @@ export default defineConfig({
                   link: "/gcp/compute/choosing-a-runtime",
                 },
                 { label: "Cloud Run", link: "/gcp/compute/cloud-run" },
+                { label: "Cloud Run sidecars", link: "/gcp/compute/sidecars" },
                 { label: "Cloud Run jobs", link: "/gcp/compute/jobs" },
                 { label: "Worker pools", link: "/gcp/compute/worker-pools" },
                 { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },
@@ -1011,6 +1017,7 @@ export default defineConfig({
               items: [
                 { label: "IAM & bindings", link: "/gcp/security/iam" },
                 { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
               ],
             },
             {
@@ -1602,12 +1609,13 @@ export default defineConfig({
             },
             {
               label: "Agents",
-              items: [{ label: "Agents and MCP", link: "/domain/agents" }],
+              items: [{ label: "MCP", link: "/domain/mcp" }],
             },
             {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Sign in with better-auth", link: "/domain/better-auth" },
                 { label: "Views as security boundaries", link: "/domain/view-security" },
               ],
             },
@@ -1624,6 +1632,7 @@ export default defineConfig({
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "In memory", link: "/domain/in-memory" },
                 { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },

@@ -39,7 +39,7 @@ const readEnvironment = Effect.gen(function* () {
   const apiKey = yield* getEnvRedacted("TURSO_API_KEY");
   const token = apiToken ?? apiKey;
   if (token === undefined || Redacted.value(token).trim().length === 0) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: "Turso CI credentials not found. Set TURSO_API_TOKEN or TURSO_API_KEY.",
     });
   }

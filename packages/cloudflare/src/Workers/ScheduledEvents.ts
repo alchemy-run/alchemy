@@ -145,20 +145,24 @@ export const processScheduledEvents: Effect.Effect<
   // The native transaction holds the snapshot stable while these statements
   // run. Cross the SQL/Effect boundary once per category, rather than per row.
   if (rows.some((row) => row.repeat_ms === null)) {
-    yield* ctx.storage.sql.exec(
-      `DELETE FROM alchemy_scheduled_events WHERE run_at <= ? AND repeat_ms IS NULL`,
-      now,
+    yield* Effect.asVoid(
+      ctx.storage.sql.exec(
+        `DELETE FROM alchemy_scheduled_events WHERE run_at <= ? AND repeat_ms IS NULL`,
+        now,
+      ),
     );
   }
   if (rows.some((row) => row.repeat_ms !== null)) {
-    yield* ctx.storage.sql.exec(
-      // Force binary64 addition, matching the former JavaScript now + repeat_ms
-      // even when an integral result is beyond Number.MAX_SAFE_INTEGER.
-      `UPDATE alchemy_scheduled_events
+    yield* Effect.asVoid(
+      ctx.storage.sql.exec(
+        // Force binary64 addition, matching the former JavaScript now + repeat_ms
+        // even when an integral result is beyond Number.MAX_SAFE_INTEGER.
+        `UPDATE alchemy_scheduled_events
        SET run_at = CAST(? AS REAL) + CAST(repeat_ms AS REAL)
        WHERE run_at <= ? AND repeat_ms IS NOT NULL`,
-      now,
-      now,
+        now,
+        now,
+      ),
     );
   }
   // Parse before reconciling the alarm: malformed payloads still roll back all

@@ -52,7 +52,7 @@ export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Cl
 
       const urlFromResource = yield* redis.url;
       const missing = new RedisUrlMissing({
-        name: asPlain(redis.name) ?? redis.LogicalId,
+        resourceName: asPlain(redis.name) ?? redis.LogicalId,
       });
       const url: Url = Effect.gen(function* () {
         const fromOutput = asPlain(yield* urlFromResource);

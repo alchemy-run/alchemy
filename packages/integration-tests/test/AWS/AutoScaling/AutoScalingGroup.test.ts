@@ -3,10 +3,10 @@ import { AutoScalingGroup, LaunchTemplate } from "@alchemy.run/aws/AutoScaling";
 import { amazonLinux2023, Subnet, Vpc } from "@alchemy.run/aws/EC2";
 import { InstanceProfile, Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
@@ -260,6 +260,113 @@ test.provider(
       "provider:aws:iam",
       "live",
     ],
+    timeout: 300_000,
+  },
+);
+
+// `instanceRequirements` moves the launch template into a mixed instances
+// policy with one attribute-based override; dropping it switches the group
+// back to the plain launch template, and adding it again switches back.
+// `availabilityZoneDistribution` is diffed against the live group and resets
+// to the AWS default when removed. The group stays at zero capacity, so no
+// instance launches.
+test.provider(
+  "switches between instance requirements and a plain launch template",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const subnetId = yield* getAutoScalingTestSubnetId;
+
+      const instanceRequirements = {
+        VCpuCount: { Min: 1, Max: 2 },
+        MemoryMiB: { Min: 512, Max: 4096 },
+        BurstablePerformance: "required",
+      } as const;
+
+      const program = (mixed: boolean) =>
+        Effect.gen(function* () {
+          const template = yield* LaunchTemplate("RequirementsTemplate", {
+            imageId: amazonLinux2023(),
+            instanceType: "t3.micro",
+          });
+          return yield* AutoScalingGroup("RequirementsGroup", {
+            launchTemplate: template,
+            subnetIds: [subnetId],
+            minSize: 0,
+            maxSize: 1,
+            desiredCapacity: 0,
+            ...(mixed
+              ? {
+                  instanceRequirements,
+                  availabilityZoneDistribution: {
+                    CapacityDistributionStrategy: "balanced-only",
+                  },
+                }
+              : {}),
+          });
+        });
+
+      const describe = (name: string) =>
+        autoscaling
+          .describeAutoScalingGroups({ AutoScalingGroupNames: [name] })
+          .pipe(Effect.map((r) => r.AutoScalingGroups?.[0]));
+
+      const expectMixed = Effect.fn(function* (group: AutoScalingGroup["Attributes"]) {
+        expect(group.instanceRequirements?.VCpuCount).toEqual({ Min: 1, Max: 2 });
+        expect(group.instanceRequirements?.BurstablePerformance).toEqual("required");
+        expect(group.availabilityZoneDistribution?.CapacityDistributionStrategy).toEqual(
+          "balanced-only",
+        );
+        expect(group.launchTemplateId).toMatch(/^lt-/);
+
+        const live = yield* describe(group.autoScalingGroupName);
+        expect(live?.LaunchTemplate).toBeUndefined();
+        const mixedTemplate = live?.MixedInstancesPolicy?.LaunchTemplate;
+        expect(mixedTemplate?.LaunchTemplateSpecification?.LaunchTemplateId).toEqual(
+          group.launchTemplateId,
+        );
+        expect(mixedTemplate?.Overrides?.[0]?.InstanceRequirements?.VCpuCount).toEqual({
+          Min: 1,
+          Max: 2,
+        });
+        expect(mixedTemplate?.Overrides?.[0]?.InstanceRequirements?.MemoryMiB).toEqual({
+          Min: 512,
+          Max: 4096,
+        });
+        expect(live?.AvailabilityZoneDistribution?.CapacityDistributionStrategy).toEqual(
+          "balanced-only",
+        );
+      });
+
+      const created = yield* stack.deploy(program(true));
+      yield* expectMixed(created);
+
+      // An unchanged redeploy plans no update.
+      const unchanged = yield* stack.plan(program(true));
+      expect(unchanged.resources.RequirementsGroup?.action).toBe("noop");
+
+      // Drop the requirements: back to the plain launch template, default
+      // zone distribution.
+      const plain = yield* stack.deploy(program(false));
+      expect(plain.instanceRequirements).toBeUndefined();
+      expect(plain.launchTemplateId).toEqual(created.launchTemplateId);
+      const livePlain = yield* describe(plain.autoScalingGroupName);
+      expect(livePlain?.MixedInstancesPolicy).toBeUndefined();
+      expect(livePlain?.LaunchTemplate?.LaunchTemplateId).toEqual(created.launchTemplateId);
+      expect(
+        livePlain?.AvailabilityZoneDistribution?.CapacityDistributionStrategy ??
+          "balanced-best-effort",
+      ).toEqual("balanced-best-effort");
+
+      // And back to the mixed instances policy.
+      const again = yield* stack.deploy(program(true));
+      yield* expectMixed(again);
+
+      yield* stack.destroy();
+      yield* assertGroupGone(again.autoScalingGroupName);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"],
     timeout: 300_000,
   },
 );

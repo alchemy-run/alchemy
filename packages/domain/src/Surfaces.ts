@@ -27,9 +27,9 @@ import * as Stream from "effect/Stream";
 import * as Terminal from "effect/Terminal";
 import * as DomainAi from "./Ai.ts";
 import { type ApiServer, protocolHttp } from "./Api.ts";
-import { describe, failures, type Operation } from "./ApiCatalog.ts";
 import * as DomainCli from "./Cli.ts";
 import * as DomainHttp from "./Http.ts";
+import { failureSchemaOf, isJsonObject, type Operation, operationsOf } from "./ReadRpcs.ts";
 
 /**
  * A parity check for an Api's surfaces: run one scenario through the Api's
@@ -58,11 +58,11 @@ export type Outcome =
   | { readonly _tag: "Failure"; readonly error: unknown }
   | { readonly _tag: "Invalid" };
 
-/** The names of an entry's request/response calls: a command's tag, or `<entry>.<operation>`. */
+/** The names of the request/response calls of what an Api serves: a command's tag, or `<name>.<operation>`. */
 type CallsOf<E> = E extends { readonly kind: "Command"; readonly tag: infer N extends string }
   ? N
   : E extends { readonly kind: "View"; readonly viewName: infer N extends string }
-    ? `${N}.get` | `${N}.list`
+    ? `${N}.get` | `${N}.list` | `${N}.snapshot`
     : E extends { readonly kind: "Stream"; readonly streamName: infer N extends string }
       ? `${N}.peek` | `${N}.list`
       : E extends { readonly kind: "Aggregate"; readonly aggregateName: infer N extends string }
@@ -74,17 +74,17 @@ export interface Checkable
   extends Effect.Effect<ApiServer, never, any>, DomainAi.Toolable, DomainCli.Cliable {}
 
 /** The request/response calls of an Api, by name. */
-export type CallName<A extends Checkable> = CallsOf<A["entries"][number]>;
+export type CallName<A extends Checkable> = CallsOf<A["serves"][number]>;
 
 /** The services the surfaces need: the hosted model, and the Layers of its middleware. */
 export type Requirements<A extends Checkable> = Exclude<
-  Effect.Services<A["testClient"]> | Effect.Services<A["client"]> | Effect.Services<A>,
+  Effect.Services<A["clientInProcess"]> | Effect.Services<A["client"]> | Effect.Services<A>,
   Scope.Scope | RpcClient.Protocol
 >;
 
 /** One call of a scenario. */
 export interface Call<Name extends string = string> {
-  /** The call: a command's tag (`Deposit`), or `<entry>.<operation>` (`Balance.get`). */
+  /** The call: a command's tag (`Deposit`), or `<name>.<operation>` (`Balance.get`). */
   readonly call: Name;
   /** Its input as wire JSON, as a non-Effect caller sends it: a command's `target` and input, a read's `key` and options. */
   readonly input: unknown;
@@ -137,7 +137,7 @@ const show = (outcome: Outcome): string =>
       ? `Failure ${canonical(outcome.error)}`
       : "Invalid";
 
-/** One call, resolved against the Api's catalog. */
+/** One call, resolved against what the Api serves. */
 interface Resolved {
   readonly op: Operation;
   readonly rpc: Rpc.AnyWithProps;
@@ -154,17 +154,6 @@ interface Resolved {
 /** Run one call through a surface. */
 type Runner = (call: Resolved) => Effect.Effect<Outcome>;
 
-/** Whether values of the schema are JSON objects (as MCP requires of a tool's output). */
-const isObject = (schema: Schema.Top): boolean => {
-  const document = Schema.toJsonSchemaDocument(schema);
-  const ref = document.schema.$ref;
-  const root =
-    typeof ref === "string"
-      ? (document.definitions[ref.slice(ref.lastIndexOf("/") + 1)] ?? document.schema)
-      : document.schema;
-  return root.type === "object";
-};
-
 const unwrap = (call: Resolved, value: unknown): unknown =>
   call.wrapped ? (value as { readonly value: unknown }).value : value;
 
@@ -174,7 +163,7 @@ const failureOf = (surface: Surface, call: Resolved, json: unknown): Effect.Effe
     ? Effect.succeed({ _tag: "Failure", error: json })
     : Effect.die(
         new Error(
-          `${surface}: ${call.op.rpc} answered with an untyped failure: ${canonical(json)}`,
+          `${surface}: ${call.op.rpc._tag} answered with an untyped failure: ${canonical(json)}`,
         ),
       );
 
@@ -193,12 +182,21 @@ type Client = Record<string, unknown>;
 /** Send one call through a typed client: a command takes its payload, a read its key and options. */
 const invoke = (client: Client, call: Resolved, payload: unknown) => {
   const { op, headers } = call;
-  if (op.kind === "Command") {
-    const send = client[op.entry] as (p: unknown, o: object) => Effect.Effect<unknown, unknown>;
-    return send(payload, { headers });
+  if (op.operation === "send") {
+    const send = client[op.name] as (
+      target: unknown,
+      input: unknown,
+      options: object,
+    ) => Effect.Effect<unknown, unknown>;
+    const { target, input, commandId } = payload as {
+      readonly target: unknown;
+      readonly input: unknown;
+      readonly commandId?: string;
+    };
+    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
   const { key, ...options } = payload as { readonly key: unknown };
-  const reads = client[op.entry] as Record<
+  const reads = client[op.name] as Record<
     string,
     (k: unknown, o: object) => Effect.Effect<unknown, unknown>
   >;
@@ -214,13 +212,16 @@ const CurrentHeaders = Context.Reference<Headers.Input>("alchemy/Domain/Surfaces
 
 type World = Context.Context<never>;
 
-/** The Api's own in-process client, `testClient`: the reference. */
+/** The Api's own in-process client, `clientInProcess`: the reference. */
 const clientSurface = (api: Checkable, _world: World) =>
   Effect.gen(function* () {
-    const client = (yield* api.testClient) as Client;
+    const client = (yield* api.clientInProcess) as Client;
     const run: Runner = (call) =>
-      Schema.decodeUnknownEffect(
-        Schema.toCodecJson(call.rpc.payloadSchema) as unknown as Schema.Codec<unknown, unknown>,
+      Schema.decodeEffect(
+        call.rpc.payloadSchema.pipe(Schema.toCodecJson) as unknown as Schema.Codec<
+          unknown,
+          unknown
+        >,
       )(call.input).pipe(
         Effect.matchEffect({
           onFailure: () => Effect.succeed<Outcome>({ _tag: "Invalid" }),
@@ -254,7 +255,10 @@ const toolkitSurface = (api: Checkable, world: World) =>
     const toolkit = yield* tools.toolkit.pipe(Effect.provide(handlers));
     const run: Runner = (call) =>
       Effect.gen(function* () {
-        const results = yield* toolkit.handle(DomainAi.toolName(call.op), call.input as never);
+        const results = yield* toolkit.handle(
+          DomainAi.toolName({ api: api.apiName, name: call.op.name, operation: call.op.operation }),
+          call.input as never,
+        );
         const last = yield* Stream.runLast(results).pipe(Effect.flatMap(Effect.fromOption));
         if (!last.isFailure) {
           return { _tag: "Success", value: unwrap(call, last.encodedResult) } satisfies Outcome;
@@ -350,7 +354,14 @@ const mcpSurface = (api: Checkable, world: World) =>
             jsonrpc: "2.0",
             id: ++id,
             method: "tools/call",
-            params: { name: DomainAi.toolName(call.op), arguments: call.input },
+            params: {
+              name: DomainAi.toolName({
+                api: api.apiName,
+                name: call.op.name,
+                operation: call.op.operation,
+              }),
+              arguments: call.input,
+            },
           },
           plainHeaders(call.headers),
         );
@@ -384,7 +395,7 @@ const HttpPlatformInProcess = Layer.mergeAll(HttpPlatform.layer, Etag.layer, Pat
 );
 
 /** The query of a read's options, as `toHttpApi` takes them. */
-const queryOf = (call: Resolved): string => {
+const queryOf = (call: Resolved): Effect.Effect<string> => {
   const {
     key: _key,
     atLeast,
@@ -401,25 +412,41 @@ const queryOf = (call: Resolved): string => {
   for (const [name, value] of Object.entries(options)) {
     if (value === undefined) continue;
     if (call.op.operation !== "list" || !["order", "take", "after"].includes(name)) {
-      throw new Error(`http: ${call.op.rpc} does not publish the option ${name}`);
+      return Effect.die(new Error(`http: ${call.op.rpc._tag} does not publish the option ${name}`));
     }
-    query.set(name, String(value));
+    query.set(name, typeof value === "string" ? value : JSON.stringify(value));
   }
   const text = query.toString();
-  return text === "" ? "" : `?${text}`;
+  return Effect.succeed(text === "" ? "" : `?${text}`);
 };
+
+/** GET a read from the HTTP API: the key in the path, the options in the query. */
+const readRequest = Effect.fn(function* (
+  handler: (request: Request) => Promise<Response>,
+  call: Resolved,
+  headers: Record<string, string>,
+) {
+  const { op } = call;
+  const { key } = call.input as { readonly key?: unknown };
+  // The path carries the key, so a request cannot leave it out.
+  if (typeof key !== "string") {
+    return yield* Effect.die(
+      new Error(`http: ${op.rpc._tag} takes its key in the path, as a string`),
+    );
+  }
+  const path =
+    encodeURIComponent(key) +
+    (op.operation === "get" || op.operation === "peek" ? "" : `/${op.operation}`);
+  const query = yield* queryOf(call);
+  return yield* Effect.promise(() =>
+    handler(new Request(`http://surface.test/${op.name}/${path}${query}`, { headers })),
+  );
+});
 
 /** The HTTP API, `toHttpApi`, with every request/response call published. */
 const httpSurface = (api: Checkable, world: World) =>
   Effect.gen(function* () {
-    const include = [
-      ...new Set(
-        describe(api)
-          .operations.filter((op) => !op.stream)
-          .map((op) => op.entry),
-      ),
-    ];
-    const surface = DomainHttp.toHttpApi(api as never, { include: include as never });
+    const surface = DomainHttp.toHttpApi(api);
     const handler = yield* HttpApiBuilder.layer(surface.api).pipe(
       Layer.provide(surface.layer),
       Layer.provide(Layer.succeedContext(world)),
@@ -432,20 +459,8 @@ const httpSurface = (api: Checkable, world: World) =>
         const headers = plainHeaders(call.headers);
         const response =
           op.operation === "send"
-            ? yield* post(handler, `http://surface.test/${op.entry}`, call.input, headers)
-            : yield* Effect.promise(() => {
-                const { key } = call.input as { readonly key?: unknown };
-                // The path carries the key, so a request cannot leave it out.
-                if (typeof key !== "string") {
-                  throw new Error(`http: ${op.rpc} takes its key in the path, as a string`);
-                }
-                const path = encodeURIComponent(key) + (op.operation === "list" ? "/list" : "");
-                return handler(
-                  new Request(`http://surface.test/${op.entry}/${path}${queryOf(call)}`, {
-                    headers,
-                  }),
-                );
-              });
+            ? yield* post(handler, `http://surface.test/${op.name}`, call.input, headers)
+            : yield* readRequest(handler, call, headers);
         const text = yield* Effect.promise(() => response.text());
         const json = parseJson(text);
         if (response.ok) return { _tag: "Success", value: json } satisfies Outcome;
@@ -467,6 +482,7 @@ const CliEnvironment = Layer.mergeAll(
     Terminal.make({
       columns: Effect.succeed(120),
       rows: Effect.succeed(24),
+      size: Effect.die("no terminal"),
       readInput: Effect.die("no terminal"),
       readLine: Effect.die("no terminal"),
       display: () => Effect.void,
@@ -497,19 +513,24 @@ const cliSurface = (api: Checkable, world: World) =>
         };
         const { op } = call;
         const args = [
-          DomainCli.kebab(op.entry),
-          ...(op.kind === "Command" ? [] : [op.operation]),
+          DomainCli.kebab(op.name),
+          ...(op.operation === "send" ? [] : [op.operation]),
           "--json",
           JSON.stringify(call.input),
         ];
         const exit = yield* Command.runWith(cli, { version: "0.0.0" })(args).pipe(
-          Effect.provide(protocolHttp("http://surface.test/")),
-          Effect.provide(FetchHttpClient.layer),
-          Effect.provideService(FetchHttpClient.Fetch, fetch),
-          Effect.provide(CliEnvironment),
-          Effect.provide(world),
-          Effect.provideService(Console.Console, console),
-          Effect.provideService(CurrentHeaders, call.headers),
+          Effect.provide(
+            Layer.mergeAll(
+              protocolHttp("http://surface.test/").pipe(
+                Layer.provide(FetchHttpClient.layer),
+                Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch)),
+              ),
+              CliEnvironment,
+              Layer.succeedContext(world),
+              Layer.succeed(Console.Console, console),
+              Layer.succeed(CurrentHeaders, call.headers),
+            ),
+          ),
           Effect.scoped,
           Effect.exit,
         );
@@ -520,7 +541,9 @@ const cliSurface = (api: Checkable, world: World) =>
         }
         const rejected = Exit.isFailure(exit)
           ? exit.cause.reasons.some(
-              (reason) => reason._tag === "Fail" && reason.error instanceof DomainCli.CallRejected,
+              (reason) =>
+                reason._tag === "Fail" &&
+                (reason.error as { readonly _tag?: unknown })._tag === "CallRejected",
             )
           : false;
         // The CLI refused its input (`CliError.UserError`) before it called the Api.
@@ -546,9 +569,8 @@ const SURFACES: Record<
 /**
  * A parity check for an Api's surfaces. The function it returns runs a
  * scenario, one call after another, through each surface: the Api's own
- * client (`testClient`), the Effect AI toolkit (`toToolkit`), the MCP server
- * (`toMcp`, over its HTTP transport), the HTTP API (`toHttpApi`, with every
- * request/response call published) and the CLI (`toCli`, against the Api's
+ * client (`clientInProcess`), the Effect AI toolkit (`toToolkit`), the MCP server
+ * (`toMcp`, over its HTTP transport), the HTTP API (`toHttpApi`) and the CLI (`toCli`, against the Api's
  * HTTP protocol). Each surface gets a fresh build of `options.layer`, and
  * runs the whole scenario in it.
  *
@@ -573,8 +595,8 @@ const SURFACES: Record<
  *   Effect.gen(function* () {
  *     const sam = { authorization: "Bearer customer:c-1" };
  *     const [deposited, refused, anonymous] = yield* parity(
- *       { call: "DepositMoney", input: { target: "a-1", amount: 100 }, headers: sam },
- *       { call: "WithdrawMoney", input: { target: "a-1", amount: 500 }, headers: sam },
+ *       { call: "DepositMoney", input: { target: "a-1", input: { amount: 100 } }, headers: sam },
+ *       { call: "WithdrawMoney", input: { target: "a-1", input: { amount: 500 } }, headers: sam },
  *       { call: "AccountSummary.get", input: { key: "a-1" } },
  *     );
  *     expect(refused).toEqual({
@@ -592,47 +614,47 @@ export const make = <A extends Checkable, E = never, R = never>(
 ): ((
   ...calls: ReadonlyArray<Call<CallName<A>>>
 ) => Effect.Effect<ReadonlyArray<Outcome>, SurfacesDiffer | E, R>) => {
-  const catalog = describe(api);
+  const operations = operationsOf(api.serves);
   const surfaces = options.surfaces ?? all;
-  if (surfaces.length === 0) throw new Error(`${api.apiName}: give make at least one surface`);
-  const resolve = (call: Call): Resolved => {
-    const op = catalog.operations.find((op) => op.rpc === call.call);
+  const resolve = (call: Call): Effect.Effect<Resolved> => {
+    const op = operations.find((op) => op.rpc._tag === call.call);
     if (op === undefined || op.stream) {
-      throw new Error(
-        op === undefined
-          ? `${api.apiName} has no request/response call named ${call.call}`
-          : `${api.apiName} cannot check ${call.call}: ${call.call} is a stream`,
+      return Effect.die(
+        new Error(
+          op === undefined
+            ? `${api.apiName} has no request/response call named ${call.call}`
+            : `${api.apiName} cannot check ${call.call}: ${call.call} is a stream`,
+        ),
       );
     }
-    const rpc = api.group.requests.get(op.rpc) as Rpc.AnyWithProps;
-    const failure = Schema.toCodecJson(
-      failures([rpc.errorSchema, ...[...rpc.middlewares].map((middleware) => middleware.error)]),
-    ) as unknown as Schema.Codec<unknown, unknown>;
+    const { rpc } = op;
+    const failure = failureSchemaOf(rpc).pipe(Schema.toCodecJson) as unknown as Schema.Codec<
+      unknown,
+      unknown
+    >;
     const success = Schema.toCodecJson(rpc.successSchema) as unknown as Schema.Codec<
       unknown,
       unknown
     >;
     const decodesAsFailure = Schema.decodeUnknownExit(failure);
-    return {
+    return Effect.succeed({
       op,
       rpc,
       input: call.input as Record<string, unknown>,
       headers: call.headers ?? {},
-      wrapped: !isObject(rpc.successSchema),
+      wrapped: !isJsonObject(rpc.successSchema),
       isFailure: (json) =>
         json !== null && typeof json === "object" && Exit.isSuccess(decodesAsFailure(json)),
       encodeSuccess: (value) => Effect.orDie(Schema.encodeUnknownEffect(success)(value)),
       encodeFailure: (error) => Effect.orDie(Schema.encodeUnknownEffect(failure)(error)),
-    };
+    });
   };
   return (...calls) => {
-    // Unknown names throw here, when the scenario is built.
-    const resolved = calls.map(resolve);
     const select = (call: Call, outcome: Outcome): Outcome =>
       call.select && outcome._tag === "Success"
         ? { _tag: "Success", value: call.select(outcome.value) }
         : outcome;
-    const runOn = (surface: Surface) =>
+    const runOn = (surface: Surface, resolved: ReadonlyArray<Resolved>) =>
       Effect.gen(function* () {
         const world = yield* Layer.build(options.layer);
         // The world serves what the surface builds now (the Api's server and clients).
@@ -643,7 +665,7 @@ export const make = <A extends Checkable, E = never, R = never>(
             // Name the surface and the step of a call that died.
             Effect.catchCause((cause) =>
               Effect.die(
-                new Error(`${surface}: step ${index + 1} (${call.op.rpc}) died`, {
+                new Error(`${surface}: step ${index + 1} (${call.op.rpc._tag}) died`, {
                   cause: Cause.squash(cause),
                 }),
               ),
@@ -654,8 +676,13 @@ export const make = <A extends Checkable, E = never, R = never>(
         return outcomes;
       }).pipe(Effect.scoped);
     return Effect.gen(function* () {
+      if (surfaces.length === 0) {
+        return yield* Effect.die(new Error(`${api.apiName}: give make at least one surface`));
+      }
+      // An unknown name dies before any surface runs.
+      const resolved = yield* Effect.forEach(calls, resolve);
       const answers: Array<readonly [Surface, ReadonlyArray<Outcome>]> = [];
-      for (const surface of surfaces) answers.push([surface, yield* runOn(surface)]);
+      for (const surface of surfaces) answers.push([surface, yield* runOn(surface, resolved)]);
       const [, reference] = answers[0]!;
       for (const [index, call] of calls.entries()) {
         const expected = canonical(reference[index]);

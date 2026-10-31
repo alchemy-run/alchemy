@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -7,12 +8,11 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "@/AdoptPolicy";
 import * as Drift from "@/Drift";
+import { onEvent, type ApplyEvent, type Event } from "@/Events.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { Progress, type ApplyEvent, type ProgressEvent } from "@/Report.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   Bucket,
   DriftResource,
@@ -46,13 +46,22 @@ const seed = Effect.fn(function* (rows: Record<string, any>) {
   }
 });
 
-const runDrift = (options: Drift.DriftOptions & { readonly dryRun?: boolean } = {}) =>
+/** Run drift; `events` collects the apply events a repair emits. */
+const runDrift = (options: { readonly dryRun?: boolean; readonly events?: ApplyEvent[] } = {}) =>
   Effect.gen(function* () {
     const stk = yield* Stack;
     const identity = { name: stk.name, stage: stk.stage };
     return yield* options.dryRun
       ? Drift.detect(identity)
-      : Drift.repair(identity, { session: options.session });
+      : Drift.repair(identity).pipe(
+          onEvent((event) =>
+            Effect.sync(() => {
+              if (event.type === "apply.resource.status" || event.type === "apply.resource.note") {
+                options.events?.push(event);
+              }
+            }),
+          ),
+        );
   });
 
 const withCloud =
@@ -71,21 +80,7 @@ const reconcileTrace = (cloud: TestCloudService) =>
     .map((c) => `${c.id}[${(c.bindings ?? []).join(",")}]`);
 
 const statusesOf = (events: ApplyEvent[], fqn: string) =>
-  events.flatMap((e) => (e._tag === "apply.resource.status" && e.fqn === fqn ? [e.status] : []));
-
-const recordingSession = () => {
-  const events: ApplyEvent[] = [];
-  return {
-    events,
-    session: {
-      emit: (event: ApplyEvent) =>
-        Effect.sync(() => {
-          events.push(event);
-        }),
-      done: () => Effect.void,
-    },
-  };
-};
+  events.flatMap((e) => (e.type === "apply.resource.status" && e.fqn === fqn ? [e.status] : []));
 
 const readCalls = (cloud: TestCloudService) =>
   cloud.calls.filter((c) => c.op === "read").map((c) => c.id);
@@ -143,6 +138,31 @@ describe("drift detection and repair", { tags: ["unit", "local"] }, () => {
         attr: { value: "a" },
         props: { value: "a" },
       });
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a scoped repair leaves resources outside its scope alone", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* DriftResource("A", { value: "a" });
+          yield* DriftResource("B", { value: "b" });
+        }),
+      );
+
+      // A drifted before the scan was approved; B drifts afterwards.
+      cloud.resources.get("A")!.value = "hijacked";
+      cloud.resources.get("B")!.value = "hijacked";
+
+      cloud.calls.length = 0;
+      const stk = yield* Stack;
+      const result = yield* Drift.repair({ name: stk.name, stage: stk.stage }, { only: ["A"] });
+
+      expect(Object.keys(result.resources)).toEqual(["A"]);
+      expect(reconcileCalls(cloud)).toEqual(["A"]);
+      expect(cloud.resources.get("A")).toMatchObject({ value: "a" });
+      expect(cloud.resources.get("B")).toMatchObject({ value: "hijacked" });
     }).pipe(withCloud(cloud));
   });
 
@@ -653,7 +673,7 @@ describe("plan", { tags: ["unit", "local"] }, () => {
     }).pipe(withCloud(cloud));
   });
 
-  test.provider("reports each observed resource through the ambient Progress reporter", (stack) => {
+  test.provider("reports each observed resource as events", (stack) => {
     const cloud = makeTestCloud();
     return Effect.gen(function* () {
       yield* stack.deploy(
@@ -664,10 +684,10 @@ describe("plan", { tags: ["unit", "local"] }, () => {
       );
       cloud.resources.get("Drifted")!.value = "hijacked";
 
-      const events: Array<ProgressEvent> = [];
+      const events: Array<Event> = [];
       const stk = yield* Stack;
       yield* Drift.plan({ name: stk.name, stage: stk.stage }).pipe(
-        Effect.provideService(Progress, (event) =>
+        onEvent((event) =>
           Effect.sync(() => {
             events.push(event);
           }),
@@ -676,17 +696,17 @@ describe("plan", { tags: ["unit", "local"] }, () => {
 
       // Phase markers bracket the observation fan-out.
       expect(
-        events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase),
+        events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase),
       ).toEqual(["loading-state", "computing-plan"]);
       // Every read emits a start (so renderers can show in-flight rows)
       // paired with a completion.
       expect(
         events
-          .filter((event) => event._tag === "plan.resource.started")
+          .filter((event) => event.type === "plan.resource.started")
           .map(({ logicalId }) => logicalId)
           .sort(),
       ).toEqual(["Clean", "Drifted"]);
-      const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+      const nodes = events.filter((event) => event.type === "plan.resource.completed");
       expect(nodes).toHaveLength(2);
       expect(nodes.map(({ completed }) => completed).sort()).toEqual([1, 2]);
       expect(Object.fromEntries(nodes.map((event) => [event.logicalId, event.action]))).toEqual({
@@ -694,7 +714,7 @@ describe("plan", { tags: ["unit", "local"] }, () => {
         Drifted: "update",
       });
       for (const event of nodes) {
-        expect(event).toMatchObject({ _tag: "plan.resource.completed", total: 2 });
+        expect(event).toMatchObject({ type: "plan.resource.completed", total: 2 });
       }
     }).pipe(withCloud(cloud));
   });
@@ -742,17 +762,10 @@ describe("plan", { tags: ["unit", "local"] }, () => {
   });
 });
 
-describe("session events", { tags: ["unit", "local"] }, () => {
-  test.provider("repair reports progress through the provided session", (stack) => {
+describe("repair events", { tags: ["unit", "local"] }, () => {
+  test.provider("repair reports progress as events", (stack) => {
     const cloud = makeTestCloud();
     const events: ApplyEvent[] = [];
-    const session = {
-      emit: (event: ApplyEvent) =>
-        Effect.sync(() => {
-          events.push(event);
-        }),
-      done: () => Effect.void,
-    };
     return Effect.gen(function* () {
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -765,50 +778,50 @@ describe("session events", { tags: ["unit", "local"] }, () => {
       cloud.resources.get("Drifted")!.value = "hijacked";
       cloud.resources.delete("Missing");
 
-      yield* runDrift({ session });
+      yield* runDrift({ events });
 
       // drift repair reports the update lifecycle
       expect(events).toContainEqual({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "Drifted",
         id: "Drifted",
-        type: "Test.DriftResource",
+        resourceType: "Test.DriftResource",
         status: "updating",
       });
       expect(events).toContainEqual({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "Drifted",
         id: "Drifted",
-        type: "Test.DriftResource",
+        resourceType: "Test.DriftResource",
         status: "updated",
       });
       // recreation reports the create lifecycle
       expect(events).toContainEqual({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "Missing",
         id: "Missing",
-        type: "Test.DriftResource",
+        resourceType: "Test.DriftResource",
         status: "creating",
       });
       expect(events).toContainEqual({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "Missing",
         id: "Missing",
-        type: "Test.DriftResource",
+        resourceType: "Test.DriftResource",
         status: "created",
       });
       // skipped resources settle with a terminal status and a reason note
       expect(events).toContainEqual({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "MyBucket",
         id: "MyBucket",
-        type: "Test.Bucket",
+        resourceType: "Test.Bucket",
         status: "skipped",
       });
       expect(
         events.some(
           (e) =>
-            e._tag === "apply.resource.note" && e.id === "MyBucket" && e.message.includes("read"),
+            e.type === "apply.resource.note" && e.id === "MyBucket" && e.message.includes("read"),
         ),
       ).toBe(true);
     }).pipe(withCloud(cloud));
@@ -1048,8 +1061,8 @@ describe("bindings of recreated resources", { tags: ["unit", "local"] }, () => {
       cloud.resources.delete("A");
 
       cloud.calls.length = 0;
-      const { events, session } = recordingSession();
-      const result = yield* runDrift({ session });
+      const events: ApplyEvent[] = [];
+      const result = yield* runDrift({ events });
 
       expect(result.resources.A).toMatchObject({
         action: "recreated",
@@ -1257,8 +1270,8 @@ describe("dependency failures", { tags: ["unit", "local"] }, () => {
       for (const id of ["Topic", "Subscription", "Other"]) cloud.resources.delete(id);
 
       cloud.calls.length = 0;
-      const { events, session } = recordingSession();
-      const exit = yield* runDrift({ session }).pipe(
+      const events: ApplyEvent[] = [];
+      const exit = yield* runDrift({ events }).pipe(
         Effect.provide(Layer.succeed(TestResourceHooks, failOn("Topic", "create"))),
         Effect.exit,
       );
@@ -1272,7 +1285,7 @@ describe("dependency failures", { tags: ["unit", "local"] }, () => {
       expect(statusesOf(events, "Subscription")).toEqual(["skipped"]);
       expect(events).toContainEqual(
         expect.objectContaining({
-          _tag: "apply.resource.note",
+          type: "apply.resource.note",
           id: "Subscription",
           message: "not repaired: upstream 'Topic' failed",
         }),
@@ -1351,8 +1364,8 @@ describe("dependency failures", { tags: ["unit", "local"] }, () => {
       for (const id of ["A", "B", "C"]) cloud.resources.delete(id);
 
       cloud.calls.length = 0;
-      const { events, session } = recordingSession();
-      const exit = yield* runDrift({ session }).pipe(
+      const events: ApplyEvent[] = [];
+      const exit = yield* runDrift({ events }).pipe(
         Effect.provide(Layer.succeed(TestResourceHooks, failOn("A", "create"))),
         Effect.exit,
       );
@@ -1798,16 +1811,16 @@ describe("repair progress", { tags: ["unit", "local"] }, () => {
       cloud.resources.get("Drifted")!.value = "hijacked";
       cloud.resources.delete("Missing");
 
-      const events: Array<ProgressEvent> = [];
+      const events: Array<Event> = [];
       yield* runDrift().pipe(
-        Effect.provideService(Progress, (event) =>
+        onEvent((event) =>
           Effect.sync(() => {
             events.push(event);
           }),
         ),
       );
 
-      const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+      const nodes = events.filter((event) => event.type === "plan.resource.completed");
       expect(Object.fromEntries(nodes.map((event) => [event.logicalId, event.action]))).toEqual({
         Clean: "noop",
         Drifted: "update",
@@ -1828,8 +1841,8 @@ describe("repair progress", { tags: ["unit", "local"] }, () => {
       );
       cloud.resources.delete("A");
 
-      const { events, session } = recordingSession();
-      yield* runDrift({ session }).pipe(
+      const events: ApplyEvent[] = [];
+      yield* runDrift({ events }).pipe(
         Effect.provide(Layer.succeed(TestResourceHooks, failOn("A", "update"))),
         Effect.exit,
       );
@@ -1844,8 +1857,8 @@ describe("repair progress", { tags: ["unit", "local"] }, () => {
       yield* stack.deploy(DriftResource("A", { value: "a" }));
       cloud.resources.get("A")!.value = "hijacked";
 
-      const { events, session } = recordingSession();
-      yield* runDrift({ session }).pipe(
+      const events: ApplyEvent[] = [];
+      yield* runDrift({ events }).pipe(
         Effect.provide(Layer.succeed(TestResourceHooks, failOn("A", "update"))),
         Effect.exit,
       );

@@ -95,7 +95,7 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.Healthcare.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.Healthcare.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
@@ -117,10 +117,10 @@ const toAttrs = (dataset: healthcare.Dataset, project: string, region: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetProvider = () =>
   Provider.succeed(Dataset, {
@@ -182,7 +182,7 @@ export const DatasetProvider = () =>
               timeZone: news.timeZone,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -190,7 +190,7 @@ export const DatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetNotResolved({ name });
+        return yield* new DatasetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

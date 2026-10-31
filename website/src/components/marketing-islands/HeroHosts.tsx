@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RollTemplate } from "./_roll";
-import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
+import { Line, prefersReducedMotion, sleep, TermChrome, useSpinner } from "./_terminal";
 import {
   compactValues,
   HOST_TEMPLATE,
@@ -108,6 +108,8 @@ export default function HeroHosts() {
       while (!aborted()) {
         await deploy(i);
         if (aborted()) return;
+        // Reduced motion: show the finished deploy and stop cycling hosts.
+        if (prefersReducedMotion()) return;
         await sleep(1300);
         if (aborted()) return;
         i = (i + 1) % HOSTS.length;
@@ -118,7 +120,6 @@ export default function HeroHosts() {
     return () => {
       signal.aborted = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
   // On phones the reel is one scrolling line: keep the current host in view.

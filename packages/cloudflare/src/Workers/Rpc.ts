@@ -14,6 +14,7 @@ import { RpcClient, RpcSerialization, type Rpc, type RpcGroup } from "effect/rpc
 import type * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schedule from "effect/Schedule";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import { withRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { isPlaceholderReset } from "./Placeholder.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
@@ -35,7 +36,7 @@ export * from "alchemy/Rpc";
  * its methods are called at exec, even though it's *defined* at init).
  */
 export const makeRpcStub = <Shape>(
-  stubSource: unknown | Effect.Effect<unknown, never, never>,
+  stubSource: unknown,
   options?: {
     /**
      * Declared error classes (see {@link RpcErrorClass}): failed method
@@ -43,6 +44,12 @@ export const makeRpcStub = <Shape>(
      * instances instead of the plain objects RPC serialization produces.
      */
     readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
+    /**
+     * Append the caller's trace context to every call's arguments. Only for
+     * a callee known to strip it again — a Durable Object class bridged by
+     * the same bundle; anything else would get an extra argument.
+     */
+    readonly traceContext?: boolean | undefined;
   },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
@@ -61,8 +68,11 @@ export const makeRpcStub = <Shape>(
           Effect.gen(function* () {
             // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped lazy stub source
             const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
+            // The callee parents its spans on the caller's, like `traceparent`
+            // does for a `fetch` into the object.
+            const callArgs = options?.traceContext ? yield* withRpcTraceContext(args) : args;
             return yield* Effect.tryPromise({
-              try: () => (stub as any)[prop](...args),
+              try: () => (stub as any)[prop](...callArgs),
               catch: (cause) => new RpcCallError({ method: String(prop), cause }),
             }).pipe(
               // Right after a deploy, an object can still start on the

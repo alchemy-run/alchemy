@@ -1,4 +1,5 @@
 import { expect, it } from "@alchemy.run/test";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -7,7 +8,6 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
 import { Stack, type StackSpec } from "@/Stack";
-import * as Core from "@/Test/Core.ts";
 import type { EchoClient } from "./fixtures/rpc-echo.ts";
 
 const options = { providers: Layer.empty, dev: true, sidecar: true };

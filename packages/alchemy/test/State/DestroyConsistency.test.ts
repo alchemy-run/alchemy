@@ -1,4 +1,5 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -31,7 +32,6 @@ import { Stack } from "@/Stack";
 import { Stage } from "@/Stage.ts";
 import * as State from "@/State/index";
 import { makeLocalState } from "@/State/LocalState.ts";
-import * as Test from "@/Test/Alchemy";
 import { TestLayers, TestResourceHooks } from "../test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });

@@ -2,8 +2,8 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -1190,7 +1190,9 @@ if (el) {
           expect(assetPath).toBeDefined();
           const bundle = yield* fetchTextReady(`${site.url!}${assetPath}`);
           expect(bundle.length).toBeGreaterThan(0);
-          expect(bundle).not.toContain("<html");
+          // Not the HTML page served in its place. (React Router's bundled
+          // source mentions `<html>` in its doc comments.)
+          expect(bundle.trimStart()).not.toMatch(/^<(!doctype|html)/i);
 
           const render = yield* fetchJsonReady<{ ok: boolean; html: string }>(
             `${site.url!}/worker-render`,

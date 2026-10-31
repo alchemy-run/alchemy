@@ -204,7 +204,7 @@ export interface Firewall extends Resource<
 export const Firewall = Resource<Firewall>("Hetzner.Firewall");
 
 export class FirewallNotCreated extends Data.TaggedError("Hetzner.FirewallNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type FirewallAttributes = Firewall["Attributes"];
@@ -360,7 +360,7 @@ const toAttrs = (firewall: ObservedFirewall): FirewallAttributes => ({
 const getById = (id: number) =>
   Hetzner.firewalls.getFirewall({ id }).pipe(
     Effect.map(({ firewall }) => firewall),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -575,7 +575,7 @@ export const FirewallProvider = () =>
         current = yield* observe({ id, name, output });
       }
       if (current === undefined) {
-        return yield* new FirewallNotCreated({ name });
+        return yield* new FirewallNotCreated({ resourceName: name });
       }
 
       // Sync each mutable aspect against observed cloud state.

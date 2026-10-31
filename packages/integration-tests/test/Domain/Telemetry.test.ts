@@ -89,7 +89,9 @@ const AuditDebitsLive = AuditDebits.toLayer(
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
       yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
+      yield* ledgers
+        .schedule("main", new Remind(), { after: "1 hour" })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
     });
   }),
 );
@@ -105,7 +107,12 @@ class Balance extends Domain.View("Balance", {
   },
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Balance) {}
+// The model a browser client reads the balance from.
+class Balances extends Domain.Model("TelemetryBalances", {
+  aggregates: [Wallet],
+  views: [Balance],
+}) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Balances, views: ["Balance"] }) {}
 
 class Bank extends Domain.Model("TelemetryBank", {
   aggregates: [Wallet, Ledger],
@@ -277,6 +284,7 @@ describe("Domain telemetry", () => {
         Story.clock("2026-01-01T00:00:00Z"),
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.clock("2026-01-01T01:00:00Z"),
         Story.then(ledger, new Reminded()),
@@ -299,6 +307,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.9 }),
         Story.then(ledger, new Audited({ wallet: "alice" })),
@@ -333,6 +342,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.1 }),
       ).pipe(Effect.withTracer(tracer));

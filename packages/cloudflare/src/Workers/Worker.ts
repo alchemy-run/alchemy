@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
@@ -45,7 +44,7 @@ import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
@@ -951,14 +950,44 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting which files in the directory containing
-   * {@link main} are uploaded as additional modules when {@link bundle}
-   * is `false`. Each rule's globs are matched against POSIX-style paths
-   * relative to that directory, mirroring Wrangler's `rules`
-   * configuration. When provided, these rules replace
-   * {@link defaultModuleRules}.
+   * Module rules selecting files uploaded as their own Worker modules,
+   * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
+   * the directory containing {@link main}, and `**\/` matches any depth.
+   * Each rule's `type` decides how a file is imported: `Text` as a `string`,
+   * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
+   * Without one, the extension decides (`.wasm` CompiledWasm,
+   * `.txt`/`.html`/`.sql` Text), and other files are Data. When rules
+   * overlap, the first match decides.
    *
-   * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
+   * When Alchemy bundles {@link main}, rules add to the built-in ones
+   * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
+   * imported file that matches is uploaded as a module instead of bundled.
+   * JavaScript, TypeScript and JSON are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. For files outside the entry's
+   * directory, globs may start with `../` or be absolute. `!` globs exclude
+   * across your rules; an excluded `.txt` or `.wasm` still matches the
+   * built-in rules.
+   *
+   * When {@link bundle} is `false`, every file in the entry's directory that
+   * matches is uploaded, and the rules replace {@link defaultModuleRules}.
+   *
+   * Rules don't apply to an inline {@link script}, a {@link source}
+   * provider or a Python {@link main}.
+   *
+   * ```ts
+   * // worker.ts
+   * import font from "./font.ttf"; // ArrayBuffer
+   * import readme from "./README.md"; // string
+   *
+   * // alchemy.run.ts
+   * rules: [{ globs: ["**\/*.ttf"] }, { type: "Text", globs: ["**\/*.md"] }]
+   *
+   * // modules.d.ts, so TypeScript knows the imports
+   * declare module "*.ttf" { const data: ArrayBuffer; export default data; }
+   * declare module "*.md" { const text: string; export default text; }
+   * ```
+   *
+   * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
   rules?: ModuleRule[];
   /**
@@ -1032,6 +1061,27 @@ export interface WorkerProps<
            * e.g. `{ email: "dev@example.com" }`.
            */
           identity?: WorkerAccessIdentity;
+        };
+        /**
+         * Overrides for the `workerd` process that runs this Worker
+         * locally. Inert on deploy.
+         */
+        workerd?: {
+          /**
+           * Path to the workerd binary to run instead of the one from the
+           * `workerd` npm package. Use it where the npm binary can't
+           * start, e.g. NixOS. Set `ALCHEMY_WORKERD_PATH` instead to
+           * change the binary for every workerd process alchemy starts.
+           */
+          path?: string;
+          /**
+           * Extra V8 flags, e.g. `["--max-old-space-size=4096"]` to raise
+           * the heap limit. Applied after `ALCHEMY_WORKERD_V8_FLAGS`, so
+           * they win when both set the same flag.
+           */
+          v8Flags?: string[];
+          /** Extra environment variables for the workerd process. */
+          env?: Record<string, string>;
         };
       }
     | {
@@ -1330,6 +1380,14 @@ export type Worker<Bindings = any> = Resource<
      * rules are deployed.
      */
     affinityZoneIds?: string[] | undefined;
+    /**
+     * The sorted names of the `secret_text` and `secret_key` bindings this
+     * Worker's deploys uploaded and have not yet deleted. Cloudflare keeps a
+     * secret binding that a later upload omits, so a full deploy deletes the
+     * names listed here that it no longer uploads. Secrets set outside
+     * Alchemy are never listed, and never deleted.
+     */
+    secretNames?: string[] | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -1530,6 +1588,39 @@ export const isSelf = (value: unknown): value is Self =>
   value !== null &&
   "~alchemy/Kind" in value &&
   (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
+
+/** Options for {@link WorkerRef}. */
+export interface WorkerRefOptions {
+  /** Stage of the referenced Worker. Defaults to the current stage. */
+  stage?: string;
+  /** Stack of the referenced Worker. Defaults to the current stack. */
+  stack?: string;
+}
+
+/**
+ * `Cloudflare.Worker.ref` — by logical id, or by the Worker's declaration so
+ * the reference keeps the declaration's type (`Worker & Rpc<...>`).
+ */
+export interface WorkerRef {
+  <W extends Worker>(
+    worker: Effect.Effect<W, any, any> & PlatformIdentity,
+    options?: WorkerRefOptions,
+  ): Effect.Effect<W>;
+  (id: string, options?: WorkerRefOptions): Effect.Effect<Worker>;
+}
+
+/**
+ * Let `ref` take a declaration in place of its logical id. Only the
+ * declaration's `LogicalId` is read: it is never yielded, so the reference
+ * adds no dependency on (and does not deploy) the referenced Worker.
+ */
+const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platform: P): P => {
+  const ref = platform.ref;
+  return Object.assign(platform, {
+    ref: (worker: string | PlatformIdentity, options?: WorkerRefOptions) =>
+      ref(typeof worker === "string" ? worker : worker.LogicalId, options),
+  });
+};
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -1961,6 +2052,25 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./.open-next/worker.js",
  *   bundle: false,
  *   assets: "./.open-next/assets",
+ * }
+ * ```
+ *
+ * **Example:** Running a custom workerd binary in dev
+ * `dev.workerd` configures the local `workerd` process: `path` swaps
+ * the binary from the `workerd` npm package (e.g. on NixOS, where it
+ * can't start), `v8Flags` adds V8 flags and `env` adds environment
+ * variables. `ALCHEMY_WORKERD_PATH` sets the binary for every workerd
+ * process instead, including ones shared across Workers.
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   dev: {
+ *     workerd: {
+ *       path: "workerd",
+ *       v8Flags: ["--max-old-space-size=4096"],
+ *       env: { TZ: "UTC" },
+ *     },
+ *   },
  * }
  * ```
  *
@@ -2514,6 +2624,26 @@ export const isSelf = (value: unknown): value is Self =>
  * ) {}
  * ```
  *
+ * ### Cross-Stack References
+ * `Cloudflare.Worker.ref` references a Worker that another stack or stage
+ * deploys. Pass the Worker's declaration instead of its logical id to keep
+ * its type, so a service binding to it stays typed. Only the declaration's
+ * logical id is read; the referencing stack does not deploy it.
+ *
+ * **Example:** Bind a Worker owned by another stack
+ * ```typescript
+ * // Construction
+ * const greeter = yield* Cloudflare.Workers.bindWorker(
+ *   Cloudflare.Worker.ref(Greeter, { stack: "Greeter" }),
+ * );
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     return HttpServerResponse.text(yield* greeter.greet("world"));
+ *   }),
+ * };
+ * ```
+ *
  * ### R2 Bucket
  * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
@@ -2666,9 +2796,15 @@ export const isSelf = (value: unknown): value is Self =>
  * @product Workers
  * @category Workers & Compute
  */
-export const Worker: ResourceClassLike<Worker> &
-  Pick<ResourceClass<Worker>, "ref"> &
-  Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
+export const Worker: ResourceClassLike<Worker> & {
+  /**
+   * Reference a deployed Worker — in the current stack/stage by default, or
+   * in another via `options`. Pass the Worker's declaration instead of its
+   * logical id to keep its type, including its RPC methods, for service
+   * bindings from another stack.
+   */
+  ref: WorkerRef;
+} & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
         id: Id,
@@ -2795,25 +2931,27 @@ export const Worker: ResourceClassLike<Worker> &
      * accessor. See {@link URLEffect}.
      */
     readonly URL: URLEffect;
-  } = Platform(
-  WorkerTypeId,
-  {
-    // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
-    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-    // Normalize `main` relative to the cwd, then let `domain.dns` naming a
-    // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
-    // records and rewrite `domain` into routes.
-    transformProps: (id, props) =>
-      transformWorkerDomainProps(
-        id,
-        globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
-          ? props
-          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
-      ),
-  },
-  { URL },
+  } = withDeclarationRef(
+  Platform(
+    WorkerTypeId,
+    {
+      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+      // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+      // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
+      // records and rewrite `domain` into routes.
+      transformProps: (id, props) =>
+        transformWorkerDomainProps(
+          id,
+          globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
+            ? props
+            : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+        ),
+    },
+    { URL },
+  ),
 );
 
 /**

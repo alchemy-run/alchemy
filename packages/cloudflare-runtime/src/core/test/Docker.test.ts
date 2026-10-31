@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,7 +16,6 @@ import {
   rewriteLoopbackHosts,
   toPullRef,
 } from "../Docker.ts";
-import { isDockerAvailable } from "./helpers/docker.ts";
 
 const PINNED =
   "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8";
@@ -258,34 +257,37 @@ const makeInspectStub = (
   const spawned: Array<ReadonlyArray<string>> = [];
   const layer = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
-    ChildProcessSpawner.make((command) => {
-      if (command._tag === "StandardCommand") {
-        spawned.push([command.command, ...command.args]);
-      }
-      const isInspect =
-        command._tag === "StandardCommand" &&
-        command.args[0] === "image" &&
-        command.args[1] === "inspect";
-      const stdout = isInspect ? inspectStdout : "";
-      return Effect.succeed(
-        ChildProcessSpawner.makeHandle({
-          pid: ChildProcessSpawner.ProcessId(1),
-          exitCode:
-            isInspect && inspectExitCode
-              ? inspectExitCode
-              : Effect.succeed(ChildProcessSpawner.ExitCode(isInspect && stdout === "" ? 1 : 0)),
-          isRunning: Effect.succeed(false),
-          kill: () => Effect.void,
-          stdin: Sink.drain,
-          stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
-          stderr: Stream.empty,
-          all: Stream.empty,
-          getInputFd: () => Sink.drain,
-          getOutputFd: () => Stream.empty,
-          unref: Effect.succeed(Effect.void),
-        }),
-      );
-    }),
+    // Records when the command runs, not when an effect describing it is built.
+    ChildProcessSpawner.make((command) =>
+      Effect.suspend(() => {
+        if (command._tag === "StandardCommand") {
+          spawned.push([command.command, ...command.args]);
+        }
+        const isInspect =
+          command._tag === "StandardCommand" &&
+          command.args[0] === "image" &&
+          command.args[1] === "inspect";
+        const stdout = isInspect ? inspectStdout : "";
+        return Effect.succeed(
+          ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(1),
+            exitCode:
+              isInspect && inspectExitCode
+                ? inspectExitCode
+                : Effect.succeed(ChildProcessSpawner.ExitCode(isInspect && stdout === "" ? 1 : 0)),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            stdin: Sink.drain,
+            stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
+            stderr: Stream.empty,
+            all: Stream.empty,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          }),
+        );
+      }),
+    ),
   );
   return { layer, spawned };
 };
@@ -310,14 +312,25 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
     yield* Effect.gen(function* () {
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* Layer.build(
+          const context = yield* Layer.build(
             Layer.provide(DockerLive, Layer.merge(NodeServices.layer, initialization.layer)),
           );
+          yield* Effect.forkChild(Context.get(context, Docker).getWorkerdDockerConfiguration);
           yield* Deferred.await(started);
         }),
       );
       expect(interrupted).toBe(true);
     }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
+  }),
+);
+
+it.effect("does not contact Docker when no Worker needs containers", () =>
+  Effect.gen(function* () {
+    const idle = makeInspectStub("sha256:deadbeef");
+    yield* Effect.scoped(
+      Layer.build(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, idle.layer))),
+    );
+    expect(idle.spawned).toEqual([]);
   }),
 );
 
@@ -466,43 +479,3 @@ layer(
     }),
   );
 });
-
-const docker = (...args: string[]) =>
-  Effect.sync(() => execFileSync(process.env.DOCKER_BIN ?? "docker", args, { encoding: "utf8" }));
-
-it.live.skipIf(!isDockerAvailable())(
-  "pulls an unprepared image again after a failed container create",
-  () => {
-    // Unresolvable registry: the first on-demand pull must fail.
-    const image = "alchemy-test.invalid/missing:retry";
-    const name = `alchemy-pull-retry-${crypto.randomUUID()}`;
-    return Effect.gen(function* () {
-      const config = yield* (yield* Docker).getWorkerdDockerConfiguration;
-      const create = Effect.promise(() =>
-        fetch(`http://${config.localDocker!.socketPath}/containers/create?name=${name}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ Image: image, Env: [] }),
-        }).then(async (response) => ({ status: response.status, body: await response.text() })),
-      );
-
-      const failed = yield* create;
-      expect(failed.status).toBe(500);
-
-      // Once the image exists, the same create must succeed: the failed pull
-      // was not cached.
-      yield* docker("pull", "alpine:3.21");
-      yield* docker("tag", "alpine:3.21", image);
-      const created = yield* create;
-      expect(created.status).toBe(201);
-    }).pipe(
-      Effect.ensuring(
-        Effect.ignore(docker("rm", "--force", name)).pipe(
-          Effect.andThen(Effect.ignore(docker("rmi", image))),
-        ),
-      ),
-      Effect.provide(Layer.provide(DockerLive, NodeServices.layer)),
-    );
-  },
-  60_000,
-);

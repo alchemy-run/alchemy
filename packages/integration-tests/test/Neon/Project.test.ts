@@ -7,6 +7,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createProject,
   deleteProject,
@@ -16,7 +17,6 @@ import {
 } from "@distilled.cloud/neon";
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -162,7 +162,7 @@ test.provider(
         fqn: "ObservedProject",
         instanceId: "observed-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const news = {
         name: initial.projectName,
@@ -247,7 +247,7 @@ test.provider(
           olds: undefined,
           output: undefined,
           bindings: [],
-          session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+          session: { note: () => Effect.void },
         })
         .pipe(Effect.result);
       expect(Result.isFailure(recovery)).toBe(true);
@@ -308,7 +308,7 @@ test.provider(
         fqn: "LateProject",
         instanceId: "late-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const late = yield* provider
         .reconcile({ ...context, news: { name }, olds: undefined, output: undefined })

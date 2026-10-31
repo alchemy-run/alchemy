@@ -2,13 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import RuleTargetWorker from "./fixtures/rule-target-worker.ts";
-import { emailRoutingScoped } from "./scope.ts";
+import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -105,7 +105,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 180_000 },
+      { timeout: 180_000, exclusive: EMAIL_ROUTING_ZONE },
     );
 
     // The catch-all rule takes a `worker` action through a different endpoint
@@ -137,7 +137,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 180_000 },
+      { timeout: 180_000, exclusive: EMAIL_ROUTING_ZONE },
     );
   },
 );

@@ -14,6 +14,7 @@ import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
 import type { Container } from "../Containers/Container.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
@@ -90,6 +91,10 @@ export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape>
    * A view of this namespace whose objects are created and stored only inside
    * the given jurisdiction (e.g. `"eu"`). The same name addresses a different
    * object than it does in the unrestricted namespace.
+   *
+   * Enforced when deployed, not emulated in `alchemy dev`: local workerd does
+   * not implement jurisdictions, so there this returns the unrestricted
+   * namespace, and the same name addresses the same object in both.
    *
    * @example
    * ```typescript
@@ -209,6 +214,30 @@ export const normalizeTransferredFrom = (
         ? (value as readonly DurableObjectTransferSource[])
         : [value as DurableObjectTransferSource]
       ).map((source) => resolveTransferSourceRef(source));
+
+/**
+ * `ns` restricted to `jurisdiction`. Local workerd (`alchemy dev`) does not
+ * implement jurisdictions and throws on `jurisdiction()`, so there the
+ * unrestricted namespace is used, the same way a D1 database, R2 bucket or
+ * Queue declared with a jurisdiction runs unrestricted on the local simulator.
+ */
+const restrictToJurisdiction = (
+  ns: cf.DurableObjectNamespace | undefined,
+  jurisdiction: DurableObjectJurisdiction,
+): cf.DurableObjectNamespace | undefined => {
+  try {
+    return ns?.jurisdiction(jurisdiction);
+  } catch (error) {
+    // workerd's message; a deployed Worker never throws it.
+    if (
+      Predicate.hasProperty(error, "message") &&
+      String(error.message).includes("Jurisdiction restrictions are not implemented")
+    ) {
+      return ns;
+    }
+    throw error;
+  }
+};
 
 export interface DurableObjectProps {
   /**
@@ -1378,7 +1407,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.flatMap(([env, phase]) => {
             if (env === undefined || phase === "plan") {
               // should be fine to return undefined here (it is only undefined at plantime)
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }
             const ns = env[namespace];
             if (!ns) {
@@ -1395,6 +1424,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         // A function because `jurisdiction` wraps the sub-namespace it returns.
         // The return annotation checks the value against the interface, so a
         // method missing here is a compile error.
+        // Without a `scriptName` the class is hosted by this Worker, so its
+        // `DurableObjectBridge` ships in this bundle and strips the trace
+        // context a stub appends. A class in another script may be plain JS
+        // or an older deploy, so its calls carry only the caller's arguments.
+        const stubOptions = { errors, traceContext: scriptName === undefined };
         const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
           // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
           // a Worker's `env` bind as the `durable_object_namespace` it is.
@@ -1408,14 +1442,14 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[namespace]),
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(ns!.getByName(name, options), { errors }),
+            makeRpcStub(ns!.getByName(name, options), stubOptions),
           newUniqueId: () => ns!.newUniqueId(),
           idFromName: (name: string) => ns!.idFromName(name),
           idFromString: (id: string) => ns!.idFromString(id),
           get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(ns!.get(id, options), { errors }),
+            makeRpcStub(ns!.get(id, options), stubOptions),
           jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
-            makeNamespace(ns?.jurisdiction(jurisdiction)),
+            makeNamespace(restrictToJurisdiction(ns, jurisdiction)),
         });
 
         return makeNamespace(binding);

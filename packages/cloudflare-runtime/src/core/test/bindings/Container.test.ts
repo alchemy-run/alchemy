@@ -1,16 +1,14 @@
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../Docker.ts";
-import { isDockerAvailable } from "../helpers/docker.ts";
+import { docker } from "../helpers/docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const FIXTURE_DIR = getFixture("container");
-const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
 
 // A Durable Object with an attached container. It starts the container and
 // proxies the incoming request to the HTTP server listening on `port`.
@@ -55,12 +53,10 @@ export default {
 layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   "Container binding",
   (it) => {
-    const test = it.effect.skipIf(!isDockerAvailable());
-
     let i = 0;
     const nextIndex = () => i++;
 
-    test(
+    it.effect(
       "recovers from interruptions",
       () =>
         Effect.gen(function* () {
@@ -81,7 +77,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "builds a container image and proxies requests to it via ctx.container",
       () =>
         testContainer({
@@ -93,7 +89,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "proxies requests to multiple containers",
       () =>
         Effect.forEach(
@@ -113,7 +109,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "injects configured environment variables into the container",
       () =>
         testContainer({
@@ -129,7 +125,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "pulls an existing image by imageUri and proxies requests to it",
       () => {
         // A public image with an HTTP server that exposes a port and serves a stable
@@ -141,7 +137,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
           port: 80,
           expected: "Welcome to nginx!",
           container: { imageUri: NGINX_IMAGE },
-        }).pipe(Effect.ensuring(Effect.sync(() => removeImage(NGINX_IMAGE))));
+        }).pipe(Effect.ensuring(removeImage(NGINX_IMAGE)));
       },
       { concurrent: true },
     );
@@ -194,7 +190,7 @@ const canPassFuseDevice = process.platform !== "linux" || existsSync("/dev/fuse"
 layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   "Container FUSE privileges",
   (it) => {
-    it.effect.skipIf(!isDockerAvailable() || !canPassFuseDevice)(
+    it.effect.skipIf(!canPassFuseDevice)(
       "gives both image shapes CAP_SYS_ADMIN and /dev/fuse",
       () => {
         const image = { dockerfile: "Dockerfile", context: getFixture("container-fuse") };
@@ -227,10 +223,10 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
         }).pipe(
           Effect.scoped,
           Effect.ensuring(
-            Effect.sync(() => {
-              removeImage("alchemy-dev/fuseimagename");
-              removeImage("alchemy-dev/fusenamedimages");
-            }),
+            Effect.andThen(
+              removeImage("alchemy-dev/fuseimagename"),
+              removeImage("alchemy-dev/fusenamedimages"),
+            ),
           ),
         );
       },
@@ -278,30 +274,25 @@ const testContainer = Effect.fn(
   (self, options) =>
     self.pipe(
       Effect.scoped,
-      Effect.ensuring(Effect.sync(() => removeImage(`alchemy-dev/mycontainer${options.index}`))),
+      Effect.ensuring(removeImage(`alchemy-dev/mycontainer${options.index}`)),
     ),
 );
 
-const removeImage = (reference: string) => {
-  try {
-    const output = execFileSync(
-      DOCKER_BIN,
-      ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
-      {
-        stdio: "pipe",
-        encoding: "utf-8",
-      },
-    );
-    const images = output
-      .split("\n")
-      .map((image) => image.trim())
-      .filter(Boolean);
-    if (images.length > 0) {
-      execFileSync(DOCKER_BIN, ["rmi", ...images], {
-        stdio: "ignore",
-      });
-    }
-  } catch {
-    // ignore errors - best effort
-  }
-};
+/** Best effort: remove every tag matching `reference`. */
+const removeImage = (reference: string) =>
+  docker(
+    "images",
+    "--format",
+    "{{.Repository}}:{{.Tag}}",
+    "--filter",
+    `reference=${reference}`,
+  ).pipe(
+    Effect.map((output) =>
+      output
+        .split("\n")
+        .map((image) => image.trim())
+        .filter(Boolean),
+    ),
+    Effect.flatMap((images) => (images.length > 0 ? docker("rmi", ...images) : Effect.void)),
+    Effect.ignore,
+  );

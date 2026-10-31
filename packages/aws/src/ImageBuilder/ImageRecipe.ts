@@ -18,6 +18,13 @@ import {
   toTagRecord,
 } from "./internal.ts";
 
+export class ImageRecipeUnexpectedResponse extends Data.TaggedError(
+  "ImageRecipeUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Image Builder image recipe versions are immutable — the deployed recipe
  * differs from the desired one but the semantic version was not bumped, so
@@ -169,15 +176,15 @@ export const ImageRecipeProvider = () =>
       const getRecipe = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImageRecipe({ imageRecipeArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imageRecipe;
       });
 
       const toAttrs = Effect.fn(function* (recipe: imagebuilder.ImageRecipe) {
         if (!recipe.arn || !recipe.name || !recipe.version) {
-          return yield* Effect.fail(
-            new Error("Image Builder image recipe is missing its ARN, name, or version"),
-          );
+          return yield* new ImageRecipeUnexpectedResponse({
+            message: "Image Builder image recipe is missing its ARN, name, or version",
+          });
         }
         return {
           imageRecipeName: recipe.name,
@@ -275,13 +282,15 @@ export const ImageRecipeProvider = () =>
               clientToken,
             });
             if (!created.imageRecipeArn) {
-              return yield* Effect.fail(new Error("CreateImageRecipe returned no imageRecipeArn"));
+              return yield* new ImageRecipeUnexpectedResponse({
+                message: "CreateImageRecipe returned no imageRecipeArn",
+              });
             }
             observed = yield* getRecipe(created.imageRecipeArn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder recipe '${name}' is not readable`),
-              );
+              return yield* new ImageRecipeUnexpectedResponse({
+                message: `created Image Builder recipe '${name}' is not readable`,
+              });
             }
           }
 
@@ -356,7 +365,7 @@ export const ImageRecipeProvider = () =>
                 (summary) =>
                   getRecipe(summary.arn).pipe(
                     Effect.flatMap((recipe) =>
-                      recipe === undefined ? Effect.succeed(undefined) : toAttrs(recipe),
+                      recipe === undefined ? Effect.undefined : toAttrs(recipe),
                     ),
                   ),
                 { concurrency: 4 },

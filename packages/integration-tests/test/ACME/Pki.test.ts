@@ -1,6 +1,6 @@
 import * as ACME from "@alchemy.run/acme";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";

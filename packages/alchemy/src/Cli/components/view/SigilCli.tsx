@@ -5,10 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import type { ApplyEvent } from "../../../Events.ts";
 import { Interaction } from "../../../Interaction.ts";
 import type { Plan } from "../../../Plan.ts";
 import { type PlanStatusSession, Cli } from "../../../Report.ts";
-import type { ApplyEvent } from "../../../Report.ts";
 import { formatElapsed } from "../../Format.ts";
 import { approvePlanScreen } from "./ApprovePlan.tsx";
 import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
@@ -90,7 +90,7 @@ const startPlanningSession = Effect.fn(function* (
   // renderer's "(1.8s)" suffix.
   const settled = (message: string | undefined) =>
     message === undefined
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : Clock.currentTimeMillis.pipe(
           Effect.map((now) => `${message} (${formatElapsed(now - startedAt)})`),
         );

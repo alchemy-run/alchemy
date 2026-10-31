@@ -754,6 +754,8 @@
         "default": "./lib/Zone/index.js"
       },
       "./Basin/internal/*": null,
+      "./R2/internal/*": null,
+      "./Workers/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -775,12 +777,14 @@
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
+    "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
   },
@@ -792,6 +796,7 @@
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:",
@@ -804,7 +809,7 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/domain": {

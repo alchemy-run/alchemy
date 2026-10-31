@@ -196,7 +196,7 @@ export const FileSystemProvider = () =>
       const findById = Effect.fn(function* (fileSystemId: string) {
         return yield* fsx.describeFileSystems({ FileSystemIds: [fileSystemId] }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 

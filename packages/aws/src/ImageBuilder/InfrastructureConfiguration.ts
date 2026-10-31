@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -16,6 +17,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class InfrastructureConfigurationUnexpectedResponse extends Data.TaggedError(
+  "InfrastructureConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InfrastructureConfigurationProps {
   /**
@@ -175,15 +183,15 @@ export const InfrastructureConfigurationProvider = () =>
           .getInfrastructureConfiguration({
             infrastructureConfigurationArn: arn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.infrastructureConfiguration;
       });
 
       const toAttrs = Effect.fn(function* (config: imagebuilder.InfrastructureConfiguration) {
         if (!config.arn || !config.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder infrastructure configuration is missing its ARN or name"),
-          );
+          return yield* new InfrastructureConfigurationUnexpectedResponse({
+            message: "Image Builder infrastructure configuration is missing its ARN or name",
+          });
         }
         return {
           infrastructureConfigurationName: config.name,
@@ -266,16 +274,12 @@ export const InfrastructureConfigurationProvider = () =>
                 tags: desiredTags,
                 clientToken,
               }),
-            ).pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-            );
+            ).pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.infrastructureConfigurationArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(
-                  `created Image Builder infrastructure configuration '${name}' is not readable`,
-                ),
-              );
+              return yield* new InfrastructureConfigurationUnexpectedResponse({
+                message: `created Image Builder infrastructure configuration '${name}' is not readable`,
+              });
             }
           }
 

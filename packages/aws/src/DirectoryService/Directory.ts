@@ -13,6 +13,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readDirectoryTags, sameStringSet } from "./internal.ts";
 
+export class DirectoryUnexpectedResponse extends Data.TaggedError("DirectoryUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /** The kind of managed directory to launch. */
 export type DirectoryFlavor = "SimpleAD" | "MicrosoftAD";
 
@@ -197,7 +202,7 @@ export const DirectoryProvider = () =>
       const getById = Effect.fn(function* (directoryId: string) {
         const response = yield* ds
           .describeDirectories({ DirectoryIds: [directoryId] })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.DirectoryDescriptions?.[0];
       });
 
@@ -269,9 +274,9 @@ export const DirectoryProvider = () =>
 
       const toAttrs = Effect.fn(function* (directory: ds.DirectoryDescription) {
         if (!directory.DirectoryId || !directory.Name) {
-          return yield* Effect.fail(
-            new Error(`directory '${directory.DirectoryId}' is missing its id or name`),
-          );
+          return yield* new DirectoryUnexpectedResponse({
+            message: `directory '${directory.DirectoryId}' is missing its id or name`,
+          });
         }
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
@@ -381,9 +386,9 @@ export const DirectoryProvider = () =>
                     Tags: tagList,
                   });
             if (created.DirectoryId === undefined) {
-              return yield* Effect.fail(
-                new Error(`Create${type} for '${props.name}' returned no DirectoryId`),
-              );
+              return yield* new DirectoryUnexpectedResponse({
+                message: `Create${type} for '${props.name}' returned no DirectoryId`,
+              });
             }
             directoryId = created.DirectoryId;
           }

@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -12,6 +13,7 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { dedupeBindings, isResolved } from "@/Diff";
+import { onEvent, type Event } from "@/Events.ts";
 import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -20,7 +22,6 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Progress, type ProgressEvent } from "@/Report.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
@@ -32,7 +33,6 @@ import {
   type ResourceState,
   type ResourceStatus,
 } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { hashInput } from "@/Util/sha256";
 import {
   AliasedWidget,
@@ -595,7 +595,7 @@ test(
 );
 
 test(
-  "reports each diffed resource and action through the ambient Progress reporter",
+  "reports each diffed resource and action as events",
   Effect.gen(function* () {
     yield* seed({
       A: {
@@ -613,7 +613,7 @@ test(
       },
     });
     const Announce = Action("Announce", (_: { table: string }) => Effect.succeed(1));
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     yield* Effect.gen(function* () {
       const target = yield* BindingTarget("A", { name: "target" });
       yield* target.bind("TestBinding", { env: { FEATURE_FLAG: "on" } });
@@ -621,7 +621,7 @@ test(
       yield* Announce({ table: "users" });
     }).pipe(
       makePlan,
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -629,40 +629,40 @@ test(
     );
 
     // Phase markers land before any node event: state loads, then diffing.
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    expect(events[0]).toMatchObject({ _tag: "plan.phase", phase: "loading-state" });
-    expect(events[1]).toMatchObject({ _tag: "plan.phase", phase: "computing-plan" });
+    expect(events[0]).toMatchObject({ type: "plan.phase", phase: "loading-state" });
+    expect(events[1]).toMatchObject({ type: "plan.phase", phase: "computing-plan" });
 
     // Each resource diff announces its start before the planned completion.
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.started")
+        .filter((event) => event.type === "plan.resource.started")
         .map(({ logicalId }) => logicalId)
         .sort(),
     ).toEqual(["A", "MyQueue"]);
 
     const nodes = events.filter(
-      (event) => event._tag === "plan.resource.completed" || event._tag === "plan.action.completed",
+      (event) => event.type === "plan.resource.completed" || event.type === "plan.action.completed",
     );
     const byId = Object.fromEntries(nodes.map((event) => [event.logicalId, event]));
     // resource rows carry their binding rows across the wire
     expect(byId.A).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "update",
       bindings: [{ sid: "TestBinding", action: "create" }],
       total: 2,
     });
     expect(byId.MyQueue).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "create",
       bindings: [],
       total: 2,
     });
     // stack actions get their own events
     expect(byId.Announce).toMatchObject({
-      _tag: "plan.action.completed",
+      type: "plan.action.completed",
       actionType: "Announce",
       action: "run",
       completed: 1,
@@ -670,7 +670,7 @@ test(
     });
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.completed")
+        .filter((event) => event.type === "plan.resource.completed")
         .map(({ completed }) => completed)
         .sort(),
     ).toEqual([1, 2]);
@@ -679,7 +679,7 @@ test(
 );
 
 test(
-  "destroy plans report deletions through the ambient Progress reporter",
+  "destroy plans report deletions as events",
   Effect.gen(function* () {
     yield* seed({
       MyBucket: {
@@ -696,10 +696,10 @@ test(
         downstream: [],
       },
     });
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     const { name, stage } = yield* resolveStackId;
     const plan = yield* Plan.destroy({ name, stage }).pipe(
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -708,13 +708,13 @@ test(
     );
 
     expect(plan.deletions.MyBucket).toMatchObject({ action: "delete" });
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+    const nodes = events.filter((event) => event.type === "plan.resource.completed");
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       fqn: "MyBucket",
       logicalId: "MyBucket",
       resourceType: "Test.Bucket",
@@ -3458,11 +3458,17 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     state: freshState,
   });
 
-  /** `Subject`'s name comes from `Name`, which is updated in the same deploy. */
+  /**
+   * `Subject`'s name comes from `Name`, which is updated in the same deploy.
+   * In a cycle, `Name` is a peer bound back to `Subject`, so the name is
+   * still unresolved when `Subject` precreates; with `outside`, or outside a
+   * cycle, `Name` is an ordinary upstream.
+   */
   const subject = (
     name: string,
     opts: {
       cycle?: boolean;
+      outside?: boolean;
       resolved?: boolean;
       unread?: boolean;
       observed?: boolean;
@@ -3470,7 +3476,10 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     } = {},
   ) =>
     Effect.gen(function* () {
-      const source = yield* TestResource("Name", { string: name });
+      const cycle = opts.cycle ?? true;
+      const peer =
+        cycle && !opts.outside ? yield* BindingTarget("Name", { string: name }) : undefined;
+      const source = peer ?? (yield* TestResource("Name", { string: name }));
       const props = { name: opts.resolved ? name : source.string };
       const scoped = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
@@ -3479,7 +3488,8 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
         : opts.observed
           ? yield* scoped(Observed("Subject", props))
           : yield* scoped(Cyclic("Subject", props));
-      if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      if (peer) yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
       return resource;
     });
 
@@ -3559,6 +3569,12 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       label: "a resolved name, admitted in apply before the delete",
       prepare: () => {},
       program: subject("fresh", { resolved: true }),
+      deleteFirst: true,
+    },
+    {
+      label: "a name from outside the cycle, admitted in apply before the delete",
+      prepare: () => {},
+      program: subject("fresh", { outside: true }),
       deleteFirst: true,
     },
     {

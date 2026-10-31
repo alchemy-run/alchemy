@@ -2,7 +2,9 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import * as Surfaces from "@alchemy.run/domain/Surfaces";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -78,7 +80,7 @@ class Wallets extends Domain.Model("SurfaceWallets", {
   aggregates: [Wallet],
   views: [Balance],
 }) {}
-class WalletApi extends Domain.Api("WalletApi", Deposit, Wallet, Balance) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Wallets, aggregates: ["Wallet"] }) {}
 
 /** The hosted model and its session middleware: each surface gets its own. */
 const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe(
@@ -97,10 +99,10 @@ describe("Domain Surfaces", () => {
   it.live("a scenario gives the same answers on every surface", () =>
     Effect.gen(function* () {
       const outcomes = yield* parity(
-        { call: "Deposit", input: { target: "w-1", amount: 30, at }, headers: sam },
-        { call: "Deposit", input: { target: "w-1", amount: 500, at }, headers: sam },
-        { call: "Deposit", input: { target: "w-1", amount: 5, at } },
-        { call: "Deposit", input: { target: "w-1", amount: "lots", at }, headers: sam },
+        { call: "Deposit", input: { target: "w-1", input: { amount: 30, at } }, headers: sam },
+        { call: "Deposit", input: { target: "w-1", input: { amount: 500, at } }, headers: sam },
+        { call: "Deposit", input: { target: "w-1", input: { amount: 5, at } } },
+        { call: "Deposit", input: { target: "w-1", input: { amount: "lots", at } }, headers: sam },
         {
           call: "Balance.get",
           input: { key: "w-1", atLeast: { stream: "Wallet/w-1", version: 1 } },
@@ -158,7 +160,7 @@ describe("Domain Surfaces", () => {
       ).pipe(Layer.provide(InMemory));
       const leaky = Surfaces.make(WalletApi, { layer: LeakyLive });
       const differ = yield* leaky(
-        { call: "Deposit", input: { target: "w-1", amount: 30, at } },
+        { call: "Deposit", input: { target: "w-1", input: { amount: 30, at } } },
         {
           call: "Balance.get",
           input: { key: "w-1", atLeast: { stream: "Wallet/w-1", version: 1 } },
@@ -188,7 +190,7 @@ describe("Domain Surfaces", () => {
       });
       const [receipt] = yield* twoSurfaces({
         call: "Deposit",
-        input: { target: "w-2", amount: 7, at, commandId: "c-1" },
+        input: { target: "w-2", commandId: "c-1", input: { amount: 7, at } },
         headers: kim,
       });
       expect(receipt).toEqual({
@@ -199,18 +201,22 @@ describe("Domain Surfaces", () => {
     }),
   );
 
-  it("names only the Api's request/response calls", () => {
-    // Type checks only: each throws when the scenario is built.
-    const _stream = () =>
+  it.live("names only the Api's request/response calls", () =>
+    Effect.gen(function* () {
+      /** The defect a scenario dies with, before any surface runs. */
+      const defectOf = (scenario: Effect.Effect<unknown, unknown>) =>
+        scenario.pipe(
+          Effect.exit,
+          Effect.map((exit) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)),
+        );
       // @ts-expect-error `watch` is a stream, on no surface but the Api's own clients.
-      parity({ call: "Balance.watch", input: { key: "w-1" } });
-    const _unknown = () =>
-      // @ts-expect-error not an entry of the Api.
-      parity({ call: "Withdraw", input: {} });
-    expect(_stream).toThrow("Balance.watch is a stream");
-    expect(_unknown).toThrow("Withdraw");
-    expect(() => parity({ call: "Wallet.list" as never, input: { key: "w-1" } })).toThrow(
-      "Wallet.list",
-    );
-  });
+      const stream = yield* defectOf(parity({ call: "Balance.watch", input: { key: "w-1" } }));
+      expect(String(stream)).toContain("Balance.watch is a stream");
+      // @ts-expect-error not a call of the Api.
+      const unknown = yield* defectOf(parity({ call: "Withdraw", input: {} }));
+      expect(String(unknown)).toContain("Withdraw");
+      const list = yield* defectOf(parity({ call: "Wallet.list" as never, input: { key: "w-1" } }));
+      expect(String(list)).toContain("Wallet.list");
+    }),
+  );
 });

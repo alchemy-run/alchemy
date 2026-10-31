@@ -237,7 +237,7 @@ export const ServicesResourcePolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? `${parent}/resourcePolicies`,
+          resourceName: output?.name ?? `${parent}/resourcePolicies`,
         });
       }
 

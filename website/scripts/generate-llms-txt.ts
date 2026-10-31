@@ -59,10 +59,11 @@ const SECTIONS: Section[] = [
   {
     heading: "CLI",
     intro:
-      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, plus the Adopting Resources and Inspecting State guides.",
+      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, the Programmatic API for running them from scripts, plus the Adopting Resources and Inspecting State guides.",
     pages: {
       slugs: [
         "cli/index",
+        "cli/api",
         "cli/deploy",
         "cli/plan",
         "cli/destroy",
@@ -141,6 +142,7 @@ const SECTIONS: Section[] = [
         "environments/doppler",
         "environments/infisical",
         "environments/local-development",
+        "environments/worktrees",
         "environments/ci",
       ],
     },
@@ -744,14 +746,16 @@ const SECTIONS: Section[] = [
         "domain/foldkit",
         "domain/optimistic-updates",
         "domain/local-first",
-        "domain/agents",
+        "domain/mcp",
         "domain/sessions",
+        "domain/better-auth",
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
         "domain/cloudflare",
         "domain/in-memory",
         "domain/http-api",
+        "domain/cli",
         "domain/observability",
       ],
     },

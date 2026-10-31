@@ -69,7 +69,7 @@ export const EntityTypeProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEntityTypes({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.entityTypes?.[0];
       });
 

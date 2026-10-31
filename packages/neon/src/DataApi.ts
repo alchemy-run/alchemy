@@ -90,7 +90,7 @@ const observe = (scope: { projectId: string; branchId: string; database: string 
   Neon.getProjectBranchDataAPI({
     ...authRequest(scope),
     database_name: scope.database,
-  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const attributes = (
   scope: { projectId: string; branchId: string; database: string },

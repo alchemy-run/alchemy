@@ -2,7 +2,7 @@
 
 ## Stories: specify the model
 
-A story is given/when/then over the real model, in memory. Policies, sagas and projections run for real. External system calls wait until the story answers them, and a clock you control stamps commands. A story fails on any rejection, external call or saga defect it doesn't account for, so a passing story has accounted for every outcome.
+A story is given/when/then over the real model, in memory. Policies, sagas and projections run for real. External system calls wait until the story answers them, and a clock you control stamps commands. A story fails on any event, rejection, external call or saga defect it doesn't account for, so a passing story has accounted for every outcome.
 
 ```ts
 // packages/domain/test/Bank.story.test.ts
@@ -46,13 +46,18 @@ The steps:
 
 - `given(ref, ...events)` records history. It reaches views, but never triggers policies.
 - `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
-- `then(ref, ...events)` asserts the events committed since the last `then` on that stream. With no events, it asserts that nothing new was committed.
+- `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end.
 - `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
-- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`.
+- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
+- `advance("1 day")` moves the clock forward by a duration (any `Duration.Input`) instead of to a time.
+
+The steps type-check against the last `when`: `rejected` takes only a rejection its command declares in `rejects`, and `replied` only its reply type. A `when` type-checks only after a `provide` for every service its command's middleware provides. A helper typed as plain `Step` turns these checks off until the next `when`, so let helpers infer their return type.
+
+More: [Testing models](https://alchemy.run/domain/testing-models), [Story](https://alchemy.run/domain/story).
 
 ### External system calls
 
@@ -70,9 +75,9 @@ Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
+An answer is checked against the operation's schemas like an adapter's, so a `succeed` or `fail` value the schema rejects fails the policy. Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
-`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks (any one of them, when the operation lists several):
 
 ```ts
 Story.call(Payments.refund, { settlementId: "st_1" }),
@@ -80,6 +85,8 @@ Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 Story.call("r-2", Payments.refund, { settlementId: "st_2" }),
 Story.die("r-2", Payments.refund, new Error("socket closed")),
 ```
+
+More: [Testing models: Answer outside systems](https://alchemy.run/domain/testing-models#answer-outside-systems).
 
 ### Real calls
 
@@ -95,6 +102,28 @@ story(
 ).pipe(Effect.provide(StripePayments));
 ```
 
+More: [Testing models: Assert real calls](https://alchemy.run/domain/testing-models#assert-real-calls).
+
+### Every adapter, same tests
+
+An adapter is a Layer for the system's service. Run one set of tests against each adapter (vendor, in-memory fake, no-op) so a fake never drifts from the vendor:
+
+```ts
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+}
+```
+
+More: [Testing models: Run the same tests against every adapter](https://alchemy.run/domain/testing-models#run-the-same-tests-against-every-adapter).
+
 ### Sagas
 
 Test what a saga does: the events its steps record on aggregates, and how the run ended. Don't test its internal steps.
@@ -108,9 +137,23 @@ Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a Durabl
 
 The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.
 
+More: [Saga: Test it](https://alchemy.run/domain/saga#test-it).
+
+### The declaration
+
+`Domain.verify(Model)` returns every definition problem that would fail the model's Layer build (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names). Keep one test that expects it to be empty:
+
+```ts
+it("the model is well defined", () => expect(Domain.verify(Bank)).toEqual([]));
+```
+
+More: [Domain Model: Check the declaration](https://alchemy.run/domain/model#check-the-declaration).
+
 ### What to cover
 
 For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
+
+More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-models#check-every-outcome).
 
 ## Api tests: the client's view
 
@@ -123,25 +166,27 @@ const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.clientInProcess.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
     const sam = yield* asCustomer("c-1");
-    const deposited = yield* sam.DepositMoney({ target: accountId, amount: 250 });
+    const deposited = yield* sam.DepositMoney(accountId, { amount: 250 });
     // deposited: { reply: { balance: 250 }, stream: "Account/...", version: 2 }
     const alex = yield* asCustomer("c-2");
-    const refused = yield* alex.WithdrawMoney({ target: accountId, amount: 10 }, mfa).pipe(Effect.flip);
+    const refused = yield* alex.WithdrawMoney(accountId, { amount: 10 }, mfa).pipe(Effect.flip);
     expect(refused._tag).toBe("NotOwner");
   }).pipe(Effect.scoped, Effect.provide(World)),
 );
 ```
 
-`testClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+`clientInProcess` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+
+More: [Testing an Api](https://alchemy.run/domain/testing-apis).
 
 ## Surface parity: every client gets the same answer
 
-When an Api is served as tools, MCP, HTTP or a CLI, check that each surface answers alike. `Surfaces.make(api, { layer })` from `@alchemy.run/domain/Surfaces` runs one scenario through `testClient`, `toToolkit`, `toMcp` (over its HTTP transport), `toHttpApi` and `toCli`, each in a fresh build of `layer`, and compares every answer as wire JSON.
+When an Api is served as tools, MCP, HTTP or a CLI, `Surfaces.make(api, { layer })` from `@alchemy.run/domain/Surfaces` runs one scenario through `clientInProcess`, `toToolkit`, `toMcp`, `toHttpApi` and `toCli`, each in a fresh build of `layer`, and compares every answer as wire JSON:
 
 ```ts
 // packages/server/test/surfaces.test.ts
@@ -150,10 +195,10 @@ const sam = { authorization: "Bearer customer:c-1" };
 
 it.live("every surface answers alike", () =>
   Effect.gen(function* () {
-    const [registered, anonymous, notOpen] = yield* parity(
-      { call: "RegisterCustomer", input: { target: "c-1", name: "sam", username: "sam" }, headers: sam },
-      { call: "RegisterCustomer", input: { target: "c-2", name: "alex", username: "alex" } },
-      { call: "DepositMoney", input: { target: "c-9-main", amount: 100 }, headers: sam },
+    const [, anonymous, notOpen] = yield* parity(
+      { call: "RegisterCustomer", input: { target: "c-1", input: { name: "sam", username: "sam" } }, headers: sam },
+      { call: "RegisterCustomer", input: { target: "c-2", input: { name: "alex", username: "alex" } } },
+      { call: "DepositMoney", input: { target: "c-9-main", input: { amount: 100 } }, headers: sam },
     );
     expect(anonymous).toEqual({ _tag: "Failure", error: { _tag: "Unauthorized" } });
     expect(notOpen).toEqual({ _tag: "Failure", error: { _tag: "NotOpen" } });
@@ -161,15 +206,15 @@ it.live("every surface answers alike", () =>
 );
 ```
 
-- `call` is a command's tag or `<entry>.<operation>` (`AccountSummary.get`, `Statement.list`); `input` is wire JSON; `headers` go to the middleware.
-- Each outcome is `{ _tag: "Success", value }`, `{ _tag: "Failure", error }` (a rejection or a middleware error, with its `_tag`) or `{ _tag: "Invalid" }` (the surface refused the input).
-- A difference fails with `SurfacesDiffer`, which lists every surface's answer.
-- Each surface has its own world: give a `commandId` in the input, and `select` the part of a success that does not depend on time (an envelope's `at`).
-- `surfaces: ["client", "http"]` compares fewer surfaces; the first is the reference.
+A read is named `<name>.<operation>` (`AccountSummary.get`). A surface that answers differently fails the scenario with `SurfacesDiffer`. Give a `commandId` and `select` the part of a success that doesn't depend on time, since each surface runs in its own world.
+
+More: [Testing an Api: Test that every surface answers alike](https://alchemy.run/domain/testing-apis#test-that-every-surface-answers-alike).
 
 ## Integration: the deployed stack
 
-At the root, deploy `alchemy.run.ts` with `alchemy/Test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
+At the root, deploy `alchemy.run.ts` with `@alchemy.run/test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
+
+More: [Testing an Api: Test a deployment](https://alchemy.run/domain/testing-apis#test-a-deployment).
 
 ## Commands
 

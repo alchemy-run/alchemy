@@ -156,7 +156,7 @@ export const UrlNormalizationProvider = () =>
             }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -182,7 +182,7 @@ export const UrlNormalizationProvider = () =>
       // (never `Unowned`). A dead zone reads as gone.
       const observed = yield* urlNormalization
         .getUrlNormalization({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return undefined;
       return toAttributes(zoneId, observed);
     }),

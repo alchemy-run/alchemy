@@ -1,4 +1,5 @@
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -10,7 +11,7 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
-import { adopt, AdoptPolicy, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
+import { adopt, AdoptPolicy, OwnedBySomeoneElse, Unowned, Unresolved } from "@/AdoptPolicy";
 import { apply, DestroyError } from "@/Apply";
 import { isResolved } from "@/Diff";
 import * as ProviderLayer from "@/Local/ProviderLayer";
@@ -34,7 +35,6 @@ import {
   State,
   StateStoreError,
 } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   AliasedWidget,
   aliasedWidgetDeletes,
@@ -97,7 +97,7 @@ const recordingCli = (events: Array<{ id: string; status: string }>) =>
         done: () => Effect.void,
         emit: (event) =>
           Effect.sync(() => {
-            if (event._tag === "apply.resource.status") {
+            if (event.type === "apply.resource.status") {
               events.push({ id: event.id, status: event.status });
             }
           }),
@@ -1737,7 +1737,7 @@ describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
               done: () => Effect.void,
               emit: (event) =>
                 Effect.sync(() => {
-                  if (event._tag === "apply.resource.status") {
+                  if (event.type === "apply.resource.status") {
                     events.push({ id: event.id, status: event.status });
                   }
                 }),
@@ -7599,7 +7599,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                     Effect.succeed({
                       done: () => Effect.void,
                       emit: (event) =>
-                        event._tag === "apply.resource.status" &&
+                        event.type === "apply.resource.status" &&
                         event.id === "Old" &&
                         event.status === "pending"
                           ? Deferred.succeed(oldCheckpointed, undefined).pipe(
@@ -7696,7 +7696,7 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
                 Effect.succeed({
                   done: () => Effect.void,
                   emit: (event) =>
-                    event._tag === "apply.resource.status" &&
+                    event.type === "apply.resource.status" &&
                     event.id === "Old" &&
                     event.status === "pending"
                       ? Deferred.succeed(oldCheckpointed, undefined).pipe(Effect.asVoid)
@@ -9394,30 +9394,7 @@ describe("noop stable readiness", { tags: ["unit", "local"] }, () => {
       const plan = yield* stack.plan(program(2));
       expect(plan.resources.Source.action).toBe("noop");
       expect(plan.actions.Compute.action).toBe("run");
-      // The policy note holds the noop until the Action reports pending.
-      // One cooperative yield lets it await readyStable before publication;
-      // Deferred completion then resumes the waiting consumer synchronously.
-      const pending = yield* Deferred.make<void>();
-      expect(
-        yield* apply(plan, {
-          session: {
-            done: () => Effect.void,
-            emit: (event) => {
-              if (
-                event._tag === "apply.resource.status" &&
-                event.id === "Compute" &&
-                event.status === "pending"
-              ) {
-                return Deferred.succeed(pending, undefined).pipe(Effect.asVoid);
-              }
-              if (event._tag === "apply.resource.note" && event.id === "Source") {
-                return Deferred.await(pending).pipe(Effect.andThen(Effect.yieldNow));
-              }
-              return Effect.void;
-            },
-          },
-        }),
-      ).toBe("ready");
+      expect(yield* apply(plan)).toBe("ready");
       expect(runs).toBe(2);
       expect(yield* stack.deploy(program(2))).toBe("ready");
       expect(runs).toBe(2);
@@ -9630,11 +9607,22 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       return resource;
     });
 
-  /** `Subject`'s name comes from a resource updated in the same deploy. */
-  const resolvesDuringApply = (name: string, cycle = false) =>
+  /**
+   * `Subject`'s name comes from a resource updated in the same deploy. In a
+   * cycle it comes from `Peer`, bound back to `Subject`, so it is still
+   * unresolved when `Subject` precreates; with `outside`, from `Name`, which
+   * resolves first.
+   */
+  const resolvesDuringApply = (name: string, cycle = false, outside = false) =>
     Effect.gen(function* () {
-      const source = yield* TestResource("Name", { string: name });
-      return yield* named({ name: source.string }, cycle);
+      if (!cycle || outside) {
+        const source = yield* TestResource("Name", { string: name });
+        return yield* named({ name: source.string }, cycle);
+      }
+      const peer = yield* BindingTarget("Peer", { string: name });
+      const resource = yield* named({ name: peer.string }, cycle);
+      yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
+      return resource;
     });
 
   /** Deploys `Subject` as "old", then plants a foreign "target" in the fake cloud. */
@@ -9833,6 +9821,55 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider("a cyclic replacement checks a name from outside its cycle first", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(resolvesDuringApply("fresh", true, true));
+      expect(cloud.events).toEqual([
+        "read fresh",
+        "precreate fresh",
+        "reconcile fresh",
+        "delete old",
+      ]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "a cyclic delete-first replacement checks a name from outside its cycle first",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        yield* stack.deploy(resolvesDuringApply("fresh", true, true));
+        // Checked before delete-first, so nothing is refused.
+        expect(cloud.events).toEqual([
+          "read fresh",
+          "delete old",
+          "precreate fresh",
+          "reconcile fresh",
+        ]);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "a cyclic delete-first replacement refuses a foreign name from outside its cycle",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        const error = yield* stack
+          .deploy(resolvesDuringApply("target", true, true))
+          .pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+        expect(cloud.events).toEqual(["read target"]);
+        expect(cloud.owners.get("old")).toBe("Subject");
+        expect(cloud.owners.get("target")).toBe("SomeoneElse");
+        yield* stack.destroy();
+      }),
+  );
+
   test.provider(
     "refuses a cyclic delete-first replacement whose name is not resolved yet",
     (stack) =>
@@ -9961,17 +9998,25 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       crash: Set<string>;
       /** Replace even when the name is unchanged, re-claiming the same identity. */
       replaceSameName: boolean;
-      /** Like an explicitly named Container application: nothing existing is provably owned. */
+      /**
+       * Like an explicitly named Container application: only the generation
+       * being replaced is provably owned.
+       */
       unprovable: boolean;
     }
   >()("CyclicPrecreateObservationCloud") {}
-  const ownership = (cloud: Cloud["Service"], id: string, name: string) => {
+  const ownership = (
+    cloud: Cloud["Service"],
+    id: string,
+    name: string,
+    previous: { name: string } | undefined,
+  ) => {
     const owner = cloud.owners.get(name);
     if (owner === undefined) return undefined;
-    return owner === id && !cloud.unprovable ? { name } : Unowned({ name });
+    const owned = owner === id && (!cloud.unprovable || previous?.name === name);
+    return owned ? { name } : Unowned({ name });
   };
   const providers = Provider.succeed(Watched, {
-    // `observe`/`read` report only `name`: partial attributes match on the stables they carry.
     stables: ["name", "tag"],
     diff: Effect.fn(function* ({ olds, news }) {
       const cloud = yield* Cloud;
@@ -9979,16 +10024,16 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       if ("name" in news && news.name === olds.name && !cloud.replaceSameName) return undefined;
       return { action: "replace" as const, deleteFirst: cloud.deleteFirst };
     }),
-    observe: Effect.fn(function* ({ id, news }) {
+    observe: Effect.fn(function* ({ id, news, previous }) {
       const cloud = yield* Cloud;
       cloud.events.push(`observe ${news.name}`);
-      return ownership(cloud, id, news.name);
+      return ownership(cloud, id, news.name, previous);
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const cloud = yield* Cloud;
       const name = output?.name ?? olds?.name;
       cloud.events.push(`read ${name}`);
-      return name === undefined ? undefined : ownership(cloud, id, name);
+      return name === undefined ? undefined : ownership(cloud, id, name, previous);
     }),
     precreate: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
@@ -10025,19 +10070,26 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
   );
   const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
 
-  /** `Subject` named `name`, in a cycle, with a `tag` from `Tag`. */
+  /**
+   * `Subject` named `name`, in a cycle, with a `tag` from `Tag`. In a cycle,
+   * `Tag` is a peer bound back to `Subject`, so the tag is still unresolved
+   * when `Subject` precreates.
+   */
   const subject = (
     name: string,
     opts: { tag?: string; resolved?: boolean; cycle?: boolean; adopt?: boolean } = {},
   ) =>
     Effect.gen(function* () {
       const tag = opts.tag ?? name;
-      const source = yield* TestResource("Tag", { string: tag });
+      const cycle = opts.cycle ?? true;
+      const peer = cycle ? yield* BindingTarget("Tag", { string: tag }) : undefined;
+      const source = peer ?? (yield* TestResource("Tag", { string: tag }));
       const declared = Watched("Subject", { name, tag: opts.resolved ? tag : source.string });
       const resource = yield* opts.adopt === undefined
         ? declared
         : declared.pipe(adopt(opts.adopt));
-      if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      if (peer) yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
       return resource;
     });
 
@@ -10236,8 +10288,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       }),
   );
 
-  // A provider that cannot prove ownership of a name reports our own previous
-  // generation as `Unowned`. Matching its stables shows it is ours.
+  // A provider that cannot prove ownership of a name by metadata recognizes our
+  // own previous generation from the `previous` attributes the engine passes.
   for (const [label, opts] of [
     ["observed in a cycle", {}],
     ["read once resolved", { resolved: true }],
@@ -10272,11 +10324,521 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
   );
 });
 
+describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
+  // A fake cloud keyed by `<scope>/<name>`; each entry records its owning
+  // logical id. Like a Workers for Platforms script, the same `name` in two
+  // scopes names two different resources.
+  interface Scoped extends Resource<
+    "Test.AdmissionScoped",
+    { name: string; scope: string; tag: string },
+    { name: string; physicalId: string },
+    { self: string }
+  > {}
+  const Scoped = Resource<Scoped>("Test.AdmissionScoped");
+  class Cloud extends Context.Service<
+    Cloud,
+    {
+      owners: Map<string, string>;
+      events: string[];
+      deleteFirst: boolean;
+      /** `observe` reports the shared `name` but not the scoped `physicalId`. */
+      partial: boolean;
+      /** A broken `observe` that reports even a resolved identity as `Unresolved`. */
+      broken: boolean;
+    }
+  >()("AdmissionScopedCloud") {}
+  const keyOf = (props: { name: string; scope: string }) => `${props.scope}/${props.name}`;
+  const providers = (withRead: boolean) =>
+    Provider.succeed(Scoped, {
+      stables: ["name", "physicalId"],
+      diff: Effect.fn(function* ({ olds, news }) {
+        const cloud = yield* Cloud;
+        // An unresolved scope is a change: the replacement may land elsewhere.
+        if ("scope" in news && (news.scope as unknown) !== olds.scope) {
+          return { action: "replace" as const, deleteFirst: cloud.deleteFirst };
+        }
+      }),
+      observe: Effect.fn(function* ({ id, news }) {
+        const cloud = yield* Cloud;
+        if (!isResolved(news.scope) || cloud.broken) {
+          cloud.events.push("observe unresolved");
+          return Unresolved;
+        }
+        const key = keyOf(news);
+        cloud.events.push(`observe ${key}`);
+        const owner = cloud.owners.get(key);
+        if (owner === undefined) return undefined;
+        const observed = cloud.partial ? { name: news.name } : { name: news.name, physicalId: key };
+        return owner === id ? observed : Unowned(observed);
+      }),
+      read: withRead
+        ? Effect.fn(function* ({ id, olds, output }) {
+            const cloud = yield* Cloud;
+            const key = output?.physicalId || keyOf(olds);
+            cloud.events.push(`read ${key}`);
+            const owner = cloud.owners.get(key);
+            if (owner === undefined) return undefined;
+            const observed = { name: olds.name, physicalId: key };
+            return owner === id ? observed : Unowned(observed);
+          })
+        : undefined,
+      precreate: Effect.fn(function* ({ id, news }) {
+        const cloud = yield* Cloud;
+        // Like a dispatch-namespace Worker: nothing to claim until the scope resolves.
+        if (!isResolved(news.scope)) {
+          cloud.events.push("precreate stub");
+          return { name: news.name, physicalId: "" };
+        }
+        const key = keyOf(news);
+        cloud.events.push(`precreate ${key}`);
+        cloud.owners.set(key, id);
+        return { name: news.name, physicalId: key };
+      }),
+      reconcile: Effect.fn(function* ({ id, news }) {
+        const cloud = yield* Cloud;
+        const key = keyOf(news);
+        cloud.events.push(`reconcile ${key}`);
+        cloud.owners.set(key, id);
+        return { name: news.name, physicalId: key };
+      }),
+      delete: Effect.fn(function* ({ output }) {
+        const cloud = yield* Cloud;
+        cloud.events.push(`delete ${output.physicalId}`);
+        cloud.owners.delete(output.physicalId);
+      }),
+    }).pipe(
+      Layer.provideMerge(
+        Layer.effect(
+          Cloud,
+          Effect.sync(() => ({
+            owners: new Map<string, string>(),
+            events: [] as string[],
+            deleteFirst: false,
+            partial: false,
+            broken: false,
+          })),
+        ),
+      ),
+    );
+  const { test } = Test.make({ providers: Layer.mergeAll(providers(true), TestLayers()) });
+  const { test: withoutRead } = Test.make({
+    providers: Layer.mergeAll(providers(false), TestLayers()),
+  });
+
+  /**
+   * `Subject` named `api` in `scope`. `late` decides which props resolve only
+   * during apply: the `scope` (its identity), just the unrelated `tag`, or
+   * nothing. `from` decides where they come from: a `Peer` in Subject's
+   * cycle, still unresolved when Subject precreates, or a `Source` outside
+   * the cycle, which resolves first. With `gate`, the peer's value comes from
+   * a `Gate` upstream, so the peer precreates only once `Gate` is created. A
+   * self-binding puts Subject in a cycle, so it is precreated.
+   */
+  const subject = (
+    scope: string,
+    opts: {
+      late?: "scope" | "tag" | "none";
+      from?: "peer" | "upstream";
+      gate?: boolean;
+      cycle?: boolean;
+      adopt?: boolean;
+    } = {},
+  ) =>
+    Effect.gen(function* () {
+      const late = opts.late ?? "scope";
+      const cycle = opts.cycle ?? true;
+      const from = opts.from ?? (cycle ? "peer" : "upstream");
+      const peer =
+        from === "peer"
+          ? yield* BindingTarget("Peer", {
+              string: opts.gate ? (yield* TestResource("Gate", { string: scope })).string : scope,
+            })
+          : undefined;
+      const source = peer ?? (yield* TestResource("Source", { string: scope }));
+      const resource = yield* Scoped("Subject", {
+        name: "api",
+        scope: late === "scope" ? source.string : scope,
+        tag: late === "tag" ? source.string : "tag",
+      }).pipe(adopt(opts.adopt ?? false));
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      if (peer) yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
+      return resource;
+    });
+
+  const reset = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    cloud.events.length = 0;
+    cloud.deleteFirst = false;
+    cloud.partial = false;
+    cloud.broken = false;
+    return cloud;
+  });
+
+  /** A fresh cloud where `tenant/api` belongs to someone else. */
+  const foreign = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* reset(stack);
+    cloud.owners.set("tenant/api", "SomeoneElse");
+    return cloud;
+  });
+
+  /** `Subject` deployed as `old/api`, with a foreign `tenant/api`. */
+  const deployed = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* foreign(stack);
+    yield* stack.deploy(subject("old", { late: "none", cycle: false }));
+    expect(cloud.owners.get("old/api")).toBe("Subject");
+    cloud.events.length = 0;
+    return cloud;
+  });
+
+  const globalAdopt = Effect.provideService(AdoptPolicy, true);
+
+  // ── #2540: an unresolved identity is not an observation ──
+
+  test.provider("control: a resolved identity is observed and refused", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      const error = yield* stack.deploy(subject("tenant", { late: "tag" })).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("control: an acyclic create reads its resolved identity and refuses", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      const error = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["read tenant/api"]);
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+    }),
+  );
+
+  for (const [label, withPolicy] of [
+    ["", Effect.map((x: any) => x)],
+    [" despite global adoption", globalAdopt],
+  ] as const) {
+    test.provider(
+      `a cyclic create with an unresolved identity is admitted once it resolves${label}`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* foreign(stack);
+          const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+          // The stub claims nothing; the resolved identity is read before reconcile.
+          expect(cloud.events).toEqual(["observe unresolved", "precreate stub", "read tenant/api"]);
+          expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+          yield* stack.destroy();
+          expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        }).pipe(withPolicy as typeof globalAdopt),
+    );
+  }
+
+  test.provider(
+    "a create interrupted after its unresolved precreate checks again on retry",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* foreign(stack);
+        // `Gate` fails, so its peer never precreates and `Subject` stops
+        // after its stub, before its identity resolves.
+        yield* stack.deploy(subject("tenant", { gate: true })).pipe(
+          Effect.provideService(TestResourceHooks, {
+            create: (id) => (id === "Gate" ? Effect.fail(new ResourceFailure()) : Effect.void),
+          }),
+          Effect.flip,
+        );
+        expect(cloud.events).toEqual(["observe unresolved", "precreate stub"]);
+        const checkpoint = yield* getState("Subject");
+        expect(checkpoint.status).toBe("creating");
+        expect(checkpoint.attr).toBeUndefined();
+        cloud.events.length = 0;
+        const error = yield* stack.deploy(subject("tenant", { gate: true })).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+        expect(cloud.events).not.toContain("reconcile tenant/api");
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("a retry of a refused create checks the identity again", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+      // The checkpoint keeps no stub: nothing was claimed.
+      const checkpoint = yield* getState("Subject");
+      expect(checkpoint.status).toBe("creating");
+      expect(checkpoint.attr).toBeUndefined();
+      cloud.events.length = 0;
+      const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).not.toContain("reconcile tenant/api");
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+    }),
+  );
+
+  test.provider("a cyclic create with an unresolved identity claims an absent target", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject("tenant"));
+      expect(cloud.events).toEqual([
+        "observe unresolved",
+        "precreate stub",
+        "read tenant/api",
+        "reconcile tenant/api",
+      ]);
+      expect(cloud.owners.get("tenant/api")).toBe("Subject");
+      yield* stack.destroy();
+      expect(cloud.owners.has("tenant/api")).toBe(false);
+    }),
+  );
+
+  test.provider("adopt(true) takes over a target whose identity was unresolved", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      yield* stack.deploy(subject("tenant", { adopt: true }));
+      expect(cloud.events).toContain("reconcile tenant/api");
+      expect(cloud.owners.get("tenant/api")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "a cyclic replacement with an unresolved identity is admitted once it resolves",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* deployed(stack);
+        const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+        expect(cloud.events).toEqual(["observe unresolved", "precreate stub", "read tenant/api"]);
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        expect(cloud.owners.get("old/api")).toBe("Subject");
+        yield* stack.destroy();
+        expect(cloud.owners.has("old/api")).toBe(false);
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      }),
+  );
+
+  test.provider("a retry of a refused replacement checks the identity again", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+      const replacing = yield* getState("Subject");
+      assert(replacing.status === "replacing");
+      expect(replacing.attr).toBeUndefined();
+      cloud.events.length = 0;
+      const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).not.toContain("reconcile tenant/api");
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      expect(cloud.owners.get("old/api")).toBe("Subject");
+      yield* stack.destroy();
+      expect(cloud.owners.has("old/api")).toBe(false);
+    }),
+  );
+
+  test.provider("a cyclic delete-first replacement refuses an unresolved identity", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      cloud.deleteFirst = true;
+      const plan = yield* stack.plan(subject("tenant"));
+      expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst: true });
+      const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnverifiableReplacement", logicalId: "Subject" });
+      // Refused before the previous generation was deleted.
+      expect(cloud.events).toEqual(["observe unresolved"]);
+      expect(cloud.owners.get("old/api")).toBe("Subject");
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+      expect(cloud.owners.has("old/api")).toBe(false);
+    }),
+  );
+
+  test.provider(
+    "adopt(true) lets a cyclic delete-first replacement resolve its identity",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* deployed(stack);
+        cloud.deleteFirst = true;
+        yield* stack.deploy(subject("tenant", { adopt: true }));
+        expect(cloud.events).toEqual([
+          "observe unresolved",
+          "delete old/api",
+          "precreate stub",
+          "read tenant/api",
+          "reconcile tenant/api",
+        ]);
+        expect(cloud.owners.get("tenant/api")).toBe("Subject");
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "converge refuses a foreign identity resolved from an updated cycle peer",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* reset(stack);
+        yield* stack.deploy(subject("old"));
+        expect(cloud.owners.get("old/api")).toBe("Subject");
+        cloud.owners.set("tenant/api", "SomeoneElse");
+        cloud.events.length = 0;
+        // `Peer` updates from `old` to `tenant`: `Subject` first resolves
+        // against its earlier output, so only converge sees `tenant/api`.
+        const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+        expect(cloud.events).toContain("read tenant/api");
+        expect(cloud.events).not.toContain("reconcile tenant/api");
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        yield* stack.destroy();
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      }),
+  );
+
+  // ── an identity from outside the cycle resolves before precreate ──
+
+  test.provider("a cyclic create observes an identity from outside its cycle", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      const error = yield* stack.deploy(subject("tenant", { from: "upstream" })).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+      // Refused before precreate: no stub was written.
+      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("a cyclic create precreates an identity from outside its cycle", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject("tenant", { from: "upstream" }));
+      expect(cloud.events).toEqual([
+        "observe tenant/api",
+        "precreate tenant/api",
+        "reconcile tenant/api",
+      ]);
+      expect(cloud.owners.get("tenant/api")).toBe("Subject");
+      yield* stack.destroy();
+      expect(cloud.owners.has("tenant/api")).toBe(false);
+    }),
+  );
+
+  test.provider(
+    "a cyclic delete-first replacement checks an identity from outside its cycle first",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* deployed(stack);
+        cloud.deleteFirst = true;
+        const error = yield* stack
+          .deploy(subject("tenant", { from: "upstream" }))
+          .pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+        // Refused before the previous generation was deleted.
+        expect(cloud.events).toEqual(["read tenant/api"]);
+        expect(cloud.owners.get("old/api")).toBe("Subject");
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        yield* stack.destroy();
+        expect(cloud.owners.has("old/api")).toBe(false);
+      }),
+  );
+
+  // ── #2541: `observe` admits without `read` ──
+
+  for (const late of ["scope", "tag", "none"] as const) {
+    withoutRead.provider(
+      `observe refuses a foreign identity without read (late=${late})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* foreign(stack);
+          const error = yield* stack.deploy(subject("tenant", { late })).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+          expect(cloud.events).not.toContain("reconcile tenant/api");
+          expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  withoutRead.provider("observe refuses a foreign identity without read outside a cycle", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* foreign(stack);
+      const error = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+    }),
+  );
+
+  withoutRead.provider("observe refuses a foreign replacement target without read", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      const error = yield* stack.deploy(subject("tenant", { late: "tag" })).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.owners.get("old/api")).toBe("Subject");
+      expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+      yield* stack.destroy();
+    }),
+  );
+
+  withoutRead.provider("observe may not report resolved props as Unresolved", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.broken = true;
+      const exit = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.exit);
+      assert(Exit.isFailure(exit));
+      expect(Cause.pretty(exit.cause)).toContain("UnresolvedObservation");
+      expect(cloud.events).toEqual(["observe unresolved"]);
+      expect(cloud.owners.has("tenant/api")).toBe(false);
+      cloud.broken = false;
+      yield* stack.destroy();
+    }),
+  );
+
+  withoutRead.provider("observe without read creates an absent identity", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject("tenant", { late: "tag" }));
+      expect(cloud.events).toEqual([
+        "observe tenant/api",
+        "precreate tenant/api",
+        "reconcile tenant/api",
+      ]);
+      yield* stack.destroy();
+      expect(cloud.owners.has("tenant/api")).toBe(false);
+    }),
+  );
+
+  // ── #2542: the engine never infers a previous generation from attributes ──
+
+  test.provider(
+    "a shared name alone does not make a foreign target the previous generation",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* deployed(stack);
+        cloud.partial = true;
+        const error = yield* stack.deploy(subject("tenant", { late: "tag" })).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+        expect(cloud.events).toEqual(["observe tenant/api"]);
+        expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
+        expect(cloud.owners.get("old/api")).toBe("Subject");
+        yield* stack.destroy();
+      }),
+  );
+});
+
 describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] }, () => {
   // A fake cloud keyed by `<namespace>/<name>`; each entry records its owning logical id.
   interface Scoped extends Resource<
     "Test.Scoped",
-    { name: string; namespace?: string; version?: number },
+    // `wiring` stands in for runtime-only Effect props (e.g. a handler).
+    { name: string; namespace?: string; version?: number; wiring?: Effect.Effect<void> },
     { key: string },
     { self: string }
   > {}
@@ -10473,6 +11035,38 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       cloud.events.length = 0;
       yield* stack.destroy();
       expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+    }),
+  );
+
+  test.provider("an Effect-valued prop does not hide a resolved create from recovery", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.crash.add("tenant/api");
+      // `Tenant` is created in the same deploy, so `Subject`'s namespace only
+      // resolves during apply; its `wiring` Effect never resolves at all.
+      yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const tenant = yield* TestResource("Tenant", { string: "tenant" });
+            return yield* Scoped("Subject", {
+              name: "api",
+              namespace: tenant.string,
+              wiring: Effect.void,
+            });
+          }),
+        )
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const checkpoint = yield* getState("Subject");
+      expect(checkpoint.status).toBe("creating");
+      expect(checkpoint.attr).toBeUndefined();
+      expect(checkpoint.props).toEqual({ name: "api", namespace: "tenant" });
+      expect(checkpoint.propsIncomplete).toBeUndefined();
+      cloud.events.length = 0;
+      yield* stack.destroy();
+      expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.has("tenant/api")).toBe(false);
       expect(cloud.owners.get("account/api")).toBe("Subject");
     }),
   );
