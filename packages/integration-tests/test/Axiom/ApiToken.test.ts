@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Axiom.providers() });
@@ -38,6 +39,10 @@ test.provider.skipIf(!hasAxiomCreds)(
           });
         }),
       );
+
+      // The bearer Axiom returns at creation is the token's value, redacted once.
+      expect(typeof Redacted.value(deployed.token)).toBe("string");
+      expect(Redacted.value(deployed.token)).not.toBe("");
 
       const provider = yield* Provider.findProvider(Axiom.ApiToken);
       const all = yield* provider.list();
