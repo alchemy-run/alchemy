@@ -59,11 +59,6 @@ test.provider(
         stateDirectory,
         requestHost: `dev-alice.api.dev-serves.localhost:${port}`,
       });
-      // The child trusts the proxy's CA through a bundle that holds it.
-      const fs = yield* FileSystem.FileSystem;
-      const bundle = yield* fs.readFileString(body.extraCaCerts);
-      const ca = yield* fs.readFileString(deployed.proxy.certificateAuthority);
-      expect(bundle.replaceAll(/\s/g, "")).toContain(ca.replaceAll(/\s/g, ""));
 
       // The route belongs to the sidecar, which outlives this process's reloads, and
       // records the command's process group the way Portless does.

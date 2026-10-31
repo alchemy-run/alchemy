@@ -6,6 +6,8 @@ import { portOf } from "@alchemy.run/portless/internal/LoopbackUrl";
 import { mismatches, readState, type ProxyState } from "@alchemy.run/portless/internal/State";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Contributions from "alchemy/Contributions";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -110,6 +112,26 @@ test(
     // The settings that do matter are still read from the same directory.
     yield* fs.writeFileString(path.join(directory, "proxy.lan"), "192.168.1.20");
     expect(mismatches(yield* readState(directory), 443)).toHaveLength(1);
+  }),
+);
+
+const withEnv = (env: Record<string, string>) =>
+  Effect.provide(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(env)));
+
+test(
+  "the package contributes the CA in its state directory to alchemy dev's trust",
+  Effect.gen(function* () {
+    // Through the same loader `alchemy dev` uses: the package.json field, the lazy import, the effect.
+    const files = yield* Contributions.devTrust().pipe(
+      withEnv({ PORTLESS_STATE_DIR: "/state/portless" }),
+    );
+    expect(files).toContain("/state/portless/ca.pem");
+
+    // Without a proxy there is no CA to trust.
+    const disabled = yield* Contributions.devTrust().pipe(
+      withEnv({ PORTLESS: "0", PORTLESS_STATE_DIR: "/state/portless" }),
+    );
+    expect(disabled).not.toContain("/state/portless/ca.pem");
   }),
 );
 

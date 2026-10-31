@@ -13,7 +13,6 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { DevPortInUse, DevPortUnavailable } from "./Errors.ts";
-import { mergedBundle } from "./internal/CaBundle.ts";
 import * as Claims from "./internal/Claims.ts";
 import * as Host from "./internal/Host.ts";
 import { hostnameOf, originOf, routedName } from "./internal/Hostname.ts";
@@ -52,8 +51,9 @@ export interface DevProps {
   /**
    * Environment variables for the command, on top of this process's and of the
    * ones Portless sets: `PORT`, `HOST`, `PORTLESS_URL` and `PORTLESS_STATE_DIR`,
-   * which win over yours, and a `NODE_EXTRA_CA_CERTS` bundle of the Portless CA
-   * and the CA file your shell already names, which yours replaces.
+   * which win over yours. During `alchemy dev` it also gets a
+   * `NODE_EXTRA_CA_CERTS` bundle of every CA `alchemy dev` trusts, the Portless
+   * CA among them; yours replaces it.
    */
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
@@ -87,7 +87,7 @@ export interface Dev extends Resource<
  * route in place. The command listens on `$PORT`; its environment also holds
  * `HOST` (`127.0.0.1`), `PORTLESS_URL` (its public origin), `PORTLESS_STATE_DIR`
  * and a `NODE_EXTRA_CA_CERTS` bundle that trusts the Portless CA together with
- * any CA your shell already trusts.
+ * the CA your shell already names and any other CA `alchemy dev` trusts.
  *
  * The route lives as long as the command: it goes when the command exits (the
  * next plan then shows an update and starts it again), when it restarts and
@@ -221,10 +221,9 @@ export const DevProviderLocal = () =>
                 fqn,
               });
 
+          // `spawn` adds the bundle of the CAs `alchemy dev` trusts, the Portless CA among
+          // them (see Contributions.ts), under whatever `news.env` sets.
           const env = {
-            ...(disabled
-              ? {}
-              : { NODE_EXTRA_CA_CERTS: yield* mergedBundle(proxy.certificateAuthority) }),
             ...news.env,
             PORT: `${port}`,
             HOST: "127.0.0.1",

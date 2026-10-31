@@ -68,5 +68,10 @@
   "peerDependencies": {
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/portless/Contributions"
+    ]
   }
 }

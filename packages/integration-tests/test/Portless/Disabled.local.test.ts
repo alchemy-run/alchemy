@@ -68,8 +68,7 @@ test.provider(
         host: "127.0.0.1",
         portlessUrl: deployed.api.origin,
       });
-      // There is no proxy, so nothing to trust and no state directory to point at.
-      expect(api.extraCaCerts).toBeUndefined();
+      // There is no proxy, so no state directory to point at.
       expect(api.stateDirectory).toBeUndefined();
 
       // Nothing started a proxy or wrote a route.

@@ -3,6 +3,7 @@ import * as Portless from "@alchemy.run/portless";
 import * as Cli from "@alchemy.run/portless/internal/Cli";
 import { run } from "@alchemy.run/portless/internal/Run";
 import * as Trust from "@alchemy.run/portless/internal/Trust";
+import * as DevTrust from "alchemy/Local/DevTrust";
 import { findAvailablePort } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -30,7 +31,21 @@ export interface TestProxy {
   readonly stop: Effect.Effect<void>;
 }
 
-export const make = (extraConfig: Record<string, string> = {}): TestProxy => {
+// `DevTrust.publish` sets ALCHEMY_DEV_TRUST on the test process, which every file shares and
+// the shared sidecar inherits when it starts. Only a file that needs its proxy's CA trusted
+// publishes it, with a sidecar of its own; the variable goes back when its proxy stops.
+let trustBefore: { readonly value: string | undefined } | undefined;
+let trustProxies = 0;
+
+export interface TestProxyOptions {
+  /** Publish the proxy's CA as `alchemy dev` does, for local runtimes and commands to trust. */
+  readonly trust?: boolean;
+}
+
+export const make = (
+  extraConfig: Record<string, string> = {},
+  options: TestProxyOptions = {},
+): TestProxy => {
   let created: Promise<{ stateDirectory: string; port: number }> | undefined;
   const entry = Effect.promise(
     () =>
@@ -44,11 +59,32 @@ export const make = (extraConfig: Record<string, string> = {}): TestProxy => {
       )),
   );
 
+  // What `PORTLESS_STATE_DIR=<dir> alchemy dev` does at startup: the CAs it trusts are published
+  // for the local runtimes and commands it starts, and the Portless CA is the one in that
+  // directory. The settings reach the contribution the way they reach the providers.
+  let published: Promise<void> | undefined;
+  const publishTrust = (settings: ConfigProvider.ConfigProvider) =>
+    options.trust !== true
+      ? Effect.void
+      : Effect.promise(
+          () =>
+            (published ??= Effect.runPromise(
+              Effect.gen(function* () {
+                trustBefore ??= { value: process.env.ALCHEMY_DEV_TRUST };
+                trustProxies += 1;
+                yield* DevTrust.publish();
+              }).pipe(
+                Effect.provideService(ConfigProvider.ConfigProvider, settings),
+                Effect.provide(PlatformServices),
+              ),
+            )),
+        );
+
   const config = Layer.effect(ConfigProvider.ConfigProvider)(
     Effect.gen(function* () {
       const current = yield* ConfigProvider.ConfigProvider;
       const { stateDirectory, port } = yield* entry;
-      return ConfigProvider.orElse(
+      const settings = ConfigProvider.orElse(
         ConfigProvider.fromUnknown({
           ...extraConfig,
           PORTLESS_STATE_DIR: stateDirectory,
@@ -56,6 +92,8 @@ export const make = (extraConfig: Record<string, string> = {}): TestProxy => {
         }),
         current,
       );
+      yield* publishTrust(settings);
+      return settings;
     }),
   );
 
@@ -71,6 +109,12 @@ export const make = (extraConfig: Record<string, string> = {}): TestProxy => {
       const fs = yield* FileSystem.FileSystem;
       yield* stopPortless(stateDirectory, port);
       yield* fs.remove(stateDirectory, { recursive: true, force: true });
+      if (published !== undefined) trustProxies -= 1;
+      if (trustProxies === 0 && trustBefore !== undefined) {
+        if (trustBefore.value === undefined) delete process.env.ALCHEMY_DEV_TRUST;
+        else process.env.ALCHEMY_DEV_TRUST = trustBefore.value;
+        trustBefore = undefined;
+      }
     }).pipe(Effect.provide(PlatformServices), Effect.ignore),
   };
 };

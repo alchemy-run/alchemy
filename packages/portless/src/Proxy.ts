@@ -91,15 +91,13 @@ export interface Proxy extends Resource<"Portless.Proxy", ProxyProps, ProxyAttri
  *
  * ### Trusting the proxy from Node
  * Browsers trust the CA after the first run. Node does not read the system
- * store, and a `Dev` command already gets a bundle that holds the CA. A process
- * you start another way needs the CA's path.
+ * store, but during `alchemy dev` local Workers and the commands `Command.Dev`
+ * and `Portless.Dev` start trust the CA with no setup. A process you start
+ * another way needs the CA's path.
  *
- * **Example:** Point another command at the CA
- * ```typescript
- * yield* Command.Dev("Worker", {
- *   command: "node worker.js",
- *   env: { NODE_EXTRA_CA_CERTS: proxy.certificateAuthority },
- * });
+ * **Example:** Point a client started outside Alchemy at the CA
+ * ```sh
+ * NODE_EXTRA_CA_CERTS=~/.portless/ca.pem node client.js
  * ```
  *
  * @resource
