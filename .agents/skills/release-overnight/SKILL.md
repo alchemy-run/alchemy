@@ -22,8 +22,8 @@ account is clean. The user merges; you never do.
 ## 0. One question, then unattended
 
 Ask once, up front, in a single question. Confirm three things: the scope
-(default: everything in §2), that you'll nuke the testing account before each
-step for the whole run, and any opt-in tags or paid add-ons to include
+(default: everything in §2), that you'll nuke the testing account and clear
+its state before each step for the whole run, and any opt-in tags or paid add-ons to include
 (default: none). **Nuking is destructive, so get an explicit yes.** After
 that, never ask again. Take every decision yourself, record it in
 `STATE.md`, and keep going. An answer you would have asked for goes in
@@ -102,8 +102,16 @@ over 32. Never run a sequential monster file unfiltered in a fix iteration
 
 ## 3. One step
 
-1. **Clean slate.** Run `pnpm nuke --yes --profile testing` and wait for it
-   to finish. Then save `pnpm nuke --dry-run --profile testing` to
+1. **Clean slate.** Before you touch a provider, nuke the account and clear
+   the state, in that order, and wait for each one to finish:
+   ```sh
+   pnpm nuke --yes --profile testing
+   pnpm clear:state --profile testing --yes --no-input
+   ```
+   Nuke deletes the cloud resources. Clear:state deletes the stack state that
+   still points at them. If you skip it, tests start from state rows for
+   resources that are gone, so a create runs as an update or a delete.
+   Then save `pnpm nuke --dry-run --profile testing` to
    `/tmp/release/census-<step>-before.txt`. What's left is residue
    (`scripts/nuke.sh` excludes). A holdout that survives two nukes is a stuck
    delete in that provider. Fix it in this step.
@@ -117,10 +125,34 @@ over 32. Never run a sequential monster file unfiltered in a fix iteration
    stream in (`grep -E "\] ✗ |failed to run|^Tests:"`). A test running far
    past its timeout is a hang. Read its log under `.alchemy/log/test/` and fix
    the cause.
-3. **Census.** Once the run has finished, save `pnpm nuke --dry-run --profile
-   testing` to `census-<step>-after.txt` and diff it against `-before`. Every
-   new line is a leak, even from a green test. Leave leaks live while you fix
-   them, since they're your evidence.
+3. **Census: the account must be empty.** Passing tests aren't enough. Each
+   test destroys its own stack, so once the run has finished the account
+   should be back to the baseline. Check with nuke:
+   ```sh
+   pnpm nuke --dry-run --profile testing > /tmp/release/census-<step>-after.txt
+   diff /tmp/release/census-<step>-before.txt /tmp/release/census-<step>-after.txt
+   ```
+   Every new line is a leak, even when every test is green. Treat a leak as
+   evidence of a bug in that resource's provider, and find the cause. Usually
+   it's one of these:
+   - `delete` returns before the cloud has finished, gives up on a
+     dependency violation, or treats an error as not-found.
+   - `reconcile` creates something it never records in its attributes, like a
+     sub-resource, a role, a log group, or a version. Then `delete` can't find
+     it.
+   - `reconcile` replaces the physical name, or creates before observing,
+     which orphans the previous one.
+   - A failed create leaves a half-made resource that state never saw.
+   - `list` (the nuke census) returns objects the provider doesn't own.
+
+   Leave the leaked resources live while you investigate, since they're your
+   evidence. Read their tags and creation time to match each one to the test
+   that made it, and read that resource's lifecycle code. Fix the provider,
+   re-run the test that leaked, and confirm with `pnpm nuke --dry-run` that
+   the leak is gone. Never fix a leak with test-side cleanup, a direct SDK
+   delete, adoption or a new `scripts/nuke.sh` exclude. A resource is residue
+   only when the platform gives it no delete API (e.g. `AWS.BackupSearch`
+   records). Then add the exclude with a comment saying why.
 4. **Fix**, using the buckets and root-cause priority in
    [prepare-release §4](../prepare-release/SKILL.md#4-triage):
    provider bug > distilled patch > test fix. Never paper over a leak or an
@@ -133,9 +165,11 @@ over 32. Never run a sequential monster file unfiltered in a fix iteration
    If the blocker is the account (billing, token permissions, a retired
    service), mark the step `blocked` with the exact error and move on. Never
    enable billing or edit shared tokens.
-6. **Confirm.** Nuke, then run the **whole step once more** and take another
-   census. The step is `done` only when that single run is green and the
-   census diff is empty. Record the HEAD sha in `Passed at`.
+6. **Confirm.** Nuke and clear state (§3.1), then run the **whole step once
+   more** and take the §3.3 census again. The step is `done` only when that
+   single run is green and the account is back to its baseline. A leak in the
+   confirming run sends you back to §3.3. Leaks have no gating escape hatch.
+   The §3.5 budget covers failing tests, not leaks. Record the HEAD sha in `Passed at`.
 7. **Gate and push.** Run `pnpm exec tsrs -b` and `pnpm docs:check-jsdoc` if
    any props changed. Commit one commit per fix, scoped (`fix(aws/ec2): …`),
    then push the alchemy branch and any distilled/floci branch (§5).
@@ -182,7 +216,7 @@ After step 10 is done and no step is stale, `git fetch origin main`. If
 `pnpm exec tsrs -b`, and apply §4 to the merged changes. Re-run every step it
 marks stale, and step 10 if any step re-ran. Repeat until a fetch finds
 nothing new. The PR must be mergeable at a head that already contains the
-latest `main`. Then nuke one last time and take a final census. It must show residue only. Then, and only then, end the
+latest `main`. Then nuke and clear state one last time and take a final census. It must show residue only. Then, and only then, end the
 turn with the report:
 
 ```md
@@ -220,8 +254,8 @@ applies here. In addition:
   setup means the token is gone. Run `aws sso login` again. If that needs a
   human, mark the step `blocked` and go on to the non-AWS steps, then come
   back to it.
-- **Never overlap nuke with a run**, and never start a step's run before its
-  nuke has finished.
+- **Never overlap nuke or clear:state with a run**, and never start a step's
+  run before both have finished.
 - **Steps share one account.** A leak from step 4 shows up in step 5's census
   unless step 4's confirming census was clean. Don't move on with a dirty
   census.
