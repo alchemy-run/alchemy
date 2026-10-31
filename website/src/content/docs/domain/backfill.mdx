@@ -86,7 +86,7 @@ A bank-wide total has the longest history of all. It's one value, like the total
 
 A backfill is billed like any Durable Object work: requests, rows written and read, and duration. Each key costs a few requests, plus a row written for each event it applies, and recording the events in the first place cost about as much. Each consumer you add or rebuild in one deploy is its own backfill: adding two views costs twice as much.
 
-Bump a version only when the view's state is really wrong: a rebuild costs a full backfill, and so does every view and projection that reads it.
+Bump a version only when the view's state is really wrong: a rebuild costs a full backfill, and so does every view and projection that reads it. When only its `evolve` changed, [recompute it in place](/domain/model#recompute-a-view-in-place) instead: each key folds the events it already holds, with no backfill.
 
 ## Run a large Domain
 

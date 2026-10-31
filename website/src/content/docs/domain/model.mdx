@@ -163,6 +163,18 @@ On the next deploy the view starts over and receives the whole history again, th
 
 Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
 
+## Recompute a view in place
+
+When only a view's `evolve` changed, its keys already hold everything they need: each key keeps every event it applied. Bump its recompute count instead of its version:
+
+```typescript title="src/Bank.live.ts"
+Bank.layer(BankHandlers, { recompute: { AccountSummary: 1 } });
+```
+
+Each key folds its own events again through the new `evolve` the first time it's read or written after the deploy. Nothing is read from the history, the view keeps its storage, and the deploy has nothing to wait for. Views and projections that read it are rebuilt from its new state.
+
+Bump the version instead when what reaches a key changed: the view reads another source, consumes an event it used to ignore, or routes events to different keys.
+
 ## Know when the history has arrived
 
 Until a new or rebuilt view has received the history, its answers cover only part of it. `history` says whether it's complete:
