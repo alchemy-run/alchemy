@@ -44,6 +44,7 @@ it.live("the saga ends", () =>
 
 tester.run("policy-no-saga-wait", policyNoSagaWait, {
   valid: [
+    { filename, code: "function f() { let run; }" },
     { filename, code: policy(`yield* executions.start(source, { amount: event.amount });`) },
     {
       filename,

@@ -97,8 +97,8 @@ export const isMember = (node: Node | undefined, object: string, property?: stri
 };
 
 /** Strip `as`, `satisfies`, `!` and parentheses. */
-export const unwrap = (node: Node | undefined): Node | undefined => {
-  let current = node;
+export const unwrap = (node: Node | null | undefined): Node | undefined => {
+  let current = node ?? undefined;
   while (
     current !== undefined &&
     (current.type === "TSAsExpression" ||
@@ -107,7 +107,7 @@ export const unwrap = (node: Node | undefined): Node | undefined => {
       current.type === "ParenthesizedExpression" ||
       current.type === "TSTypeAssertion")
   ) {
-    current = current.expression;
+    current = current.expression ?? undefined;
   }
   return current;
 };

@@ -11,6 +11,7 @@ const aggregate = (decide: string, evolve = "", extra = "") =>
 
 tester.run("pure-decide-evolve", pureDecideEvolve, {
   valid: [
+    "let cache;",
     aggregate(`OpenAccount: (s, cmd) => [new AccountOpened({ owner: cmd.owner })]`),
     aggregate(
       `WithdrawMoney: Effect.fn(function* (s, cmd, { now }) { const actor = yield* CurrentActor; return [new MoneyWithdrawn({ at: now })]; })`,
