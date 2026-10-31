@@ -81,6 +81,9 @@ describe("DockerLoopback", () => {
     "unix-socket forwards to a 127.0.0.1 listener without binding the bridge",
     async () => {
       const server = NodeNet.createServer((socket) => {
+        // Drain what the client sends: a local tool's probe left unread keeps
+        // its socket open, and `server.close` never completes.
+        socket.resume();
         socket.write("pong");
         socket.end();
       });
