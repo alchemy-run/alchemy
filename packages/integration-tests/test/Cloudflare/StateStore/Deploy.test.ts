@@ -526,7 +526,7 @@ test.provider(
       const { accountId } = environment;
       const workerName = configuredWorkerName;
       const entrypoint = fileURLToPath(new URL("./fixtures/configured-store.ts", import.meta.url));
-      const source = { _tag: "Configured", entrypoint } as const;
+      const source = { type: "configured", entrypoint } as const;
       const alchemist = Alchemist.layer();
       yield* teardownStateStore({ workerName });
 
@@ -598,6 +598,8 @@ const installOldAlchemy = Effect.gen(function* () {
         `@alchemy.run/cloudflare@${OLD_ALCHEMY}`,
         "effect@4.0.7",
         "@effect/platform-node@4.0.7",
+        // platform-node asks for `^4.0.7`, and 4.1 needs effect 4.1.
+        "@effect/platform-node-shared@4.0.7",
         "@effect/platform-bun@4.0.7",
       ],
       { cwd: oldAlchemyDir, stdout: "pipe", stderr: "pipe" },

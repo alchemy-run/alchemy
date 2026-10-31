@@ -285,6 +285,42 @@ const state = TestState.state({
 The test harness (`@alchemy.run/test/Bun` and `@alchemy.run/test/Vitest`)
 handles state setup automatically.
 
+## Use a store without a stack file
+
+A provider's store is reachable from your profile alone, so scripts, CI jobs
+and one-off tools can read and manage state with no `alchemy.run.ts`. From the
+CLI, pass `--backend` to any `state` command:
+
+```sh
+alchemy state bootstrap --backend cloudflare --profile prod   # create or upgrade it
+alchemy state list --backend cloudflare --profile prod
+alchemy state logs --backend cloudflare --name team-a --tail
+```
+
+From code, use the `provider` source of [`Alchemist.State`](/cli/api#state):
+
+```typescript
+import * as Alchemist from "alchemy/Alchemist";
+import * as Effect from "effect/Effect";
+
+const source = { type: "provider", backend: "cloudflare", profile: "prod" } as const;
+
+const program = Effect.gen(function* () {
+  yield* Alchemist.State.bootstrap(source);
+  const state = yield* Alchemist.State.store(source);
+  return yield* state.listStacks();
+}).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
+```
+
+`Alchemist.State.layer(source)` provides the same store as a `State` layer.
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass `name`
+for a [named store](#more-than-one-store-per-account).
+
+Only the profile and `name` pick the store this way. Options set in the stack
+file, such as a [pinned account](#pin-the-account) or a
+[custom domain](#serve-it-on-your-own-domain), aren't read; use the
+`configured` source (the CLI default, without `--backend`) when they matter.
+
 ## Writing your own state store
 
 A state store is just an Effect `Layer` that provides the `State`

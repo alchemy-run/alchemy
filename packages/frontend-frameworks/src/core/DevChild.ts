@@ -36,6 +36,7 @@ import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import * as SemVer from "effect/SemVer";
 import * as SemVerRange from "effect/SemVerRange";
+import { makeChildOutput } from "./ChildOutput.ts";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
@@ -227,6 +228,7 @@ export const runDevChild = (
         }),
     );
 
+    const output = yield* makeChildOutput;
     const url = yield* Effect.callback<string, FrameworkError>((resume) => {
       const { child } = handle;
       let lineBuffer = "";
@@ -237,14 +239,14 @@ export const runDevChild = (
           handle.output = handle.output.slice(-32768);
         }
       };
-      // Dev-server logs are re-emitted through the parent's own JS streams
-      // (not `stdio: "inherit"`) so in-process capture (a test runner's log
-      // buffer, the dev renderer) sees them.
+      // Dev-server output becomes log records (not `stdio: "inherit"`), so
+      // the process that renders logs shows it, JSON output carries it, and
+      // in-process capture (a test runner's log buffer) sees it.
       child.stdout?.on("data", (chunk: unknown) => {
         const text = String(chunk);
         capture(text);
         if (ready) {
-          process.stdout.write(text);
+          output.stdout.push(text);
           return;
         }
         lineBuffer += text;
@@ -256,14 +258,19 @@ export const runDevChild = (
             ready = true;
             resume(Effect.succeed(match[1]));
           } else {
-            process.stdout.write(`${line}\n`);
+            output.stdout.push(`${line}\n`);
           }
         }
       });
       child.stderr?.on("data", (chunk: unknown) => {
         const text = String(chunk);
         capture(text);
-        process.stderr.write(text);
+        output.stderr.push(text);
+      });
+      // stdio can still deliver data after `exit`; flush once it closes.
+      child.once("close", () => {
+        output.stdout.flush();
+        output.stderr.flush();
       });
       child.once("exit", (code) => {
         if (!ready) {

@@ -3,17 +3,18 @@ import { resolve } from "node:path";
 import { assert, describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
-import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
 import { rootDir } from "@/Auth/Paths.ts";
+import { recordOf } from "@/Util/LogRecord.ts";
 
 describe("sanitizeLockKey", { tags: ["unit", "local"] }, () => {
   it("leaves conventional keys untouched", () => {
@@ -400,24 +401,28 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
    * name the operation and it must stay quiet for flows that legitimately
    * block on the user.
    */
+  /** Collects warnings logged while `self` runs. */
   const captureConsole = () => {
     const messages: Array<string> = [];
     return {
       messages,
       provide: <A, E, R>(self: Effect.Effect<A, E, R>) =>
-        Console.consoleWith((base) =>
-          Effect.provideService(self, Console.Console, {
-            ...base,
-            error: (...args: ReadonlyArray<any>) => {
-              messages.push(args.join(" "));
-            },
-          }),
+        Effect.provide(
+          self,
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              const record = recordOf(options);
+              if (record.kind === "log" && record.level === "warn") {
+                messages.push(record.data.message);
+              }
+            }),
+          ]),
         ),
     };
   };
 
   it.effect(
-    "names the stalled operation on the console",
+    "names the stalled operation in a warning",
     () =>
       Effect.gen(function* () {
         const console = captureConsole();

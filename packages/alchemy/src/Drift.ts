@@ -15,15 +15,11 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { deepEqual } from "./Diff.ts";
+import { captureEmit, emit } from "./Events.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
-import {
-  noopSession,
-  Progress,
-  type PlanStatusSession,
-  type ScopedPlanStatusSession,
-} from "./Report.ts";
+import { resourceSession } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
 import { ResourceContext } from "./ResourceContext.ts";
 import {
@@ -79,11 +75,6 @@ export interface DriftResult {
   resources: Record<string, DriftResourceResult>;
 }
 
-export interface DriftOptions {
-  /** Optional progress session (the CLI passes one; tests usually don't). */
-  session?: PlanStatusSession;
-}
-
 /** A provider lifecycle failure annotated with the resource being checked. */
 export class DriftResourceError extends Data.TaggedError("DriftResourceError")<{
   readonly message: string;
@@ -134,16 +125,18 @@ export class DriftResourceError extends Data.TaggedError("DriftResourceError")<{
  */
 const runDrift = (
   stack: { name: string; stage: string },
-  options: DriftOptions & { readonly dryRun: boolean },
+  options: {
+    readonly dryRun: boolean;
+    /** Check and repair only these resources; the rest of the stage is untouched. */
+    readonly only?: ReadonlyArray<string>;
+  },
 ): Effect.Effect<DriftResult, any, State> =>
   Effect.gen(function* () {
-    // Phase markers + per-resource observation progress go through the
-    // ambient Progress reporter (a no-op by default) so renderers can show the
-    // drift check as it runs.
-    const reportPlanned = yield* Progress;
-    yield* reportPlanned({ _tag: "plan.phase", phase: "loading-state" });
+    // Phase markers and per-resource progress are emitted as events so
+    // renderers can show the drift check as it runs.
+    yield* emit({ type: "plan.phase", phase: "loading-state" });
     const state = yield* yield* State;
-    const session = options.session ?? noopSession;
+    const reportEvent = yield* captureEmit;
     const stackName = stack.name;
     const stage = stack.stage;
     const dryRun = options.dryRun;
@@ -166,24 +159,14 @@ const runDrift = (
         ...partial,
       });
 
-      const scopedSession = {
-        ...session,
-        note: (note, options?) =>
-          session.emit({
-            fqn,
-            id: logicalId,
-            _tag: "apply.resource.note",
-            message: note,
-            kind: options?.kind,
-          }),
-      } satisfies ScopedPlanStatusSession;
+      const scopedSession = resourceSession(reportEvent, fqn, logicalId);
 
       const report = (status: "updating" | "updated" | "creating" | "created" | "skipped") =>
-        session.emit({
-          _tag: "apply.resource.status",
+        reportEvent({
+          type: "apply.resource.status",
           fqn,
           id: logicalId,
-          type: resourceType,
+          resourceType,
           status,
         });
 
@@ -256,8 +239,8 @@ const runDrift = (
       // which rows' cloud reads are actually in flight (the slowest part of
       // a drift check). Emitted after the skip gates: skipped rows settle
       // instantly and never read the cloud.
-      yield* reportPlanned({
-        _tag: "plan.resource.started",
+      yield* emit({
+        type: "plan.resource.started",
         fqn,
         logicalId,
         resourceType,
@@ -375,11 +358,13 @@ const runDrift = (
       return result({ action: recreated ? "recreated" : "repaired", attr });
     });
 
-    const fqns = yield* state.list({ stack: stackName, stage });
-    yield* reportPlanned({ _tag: "plan.phase", phase: "computing-plan" });
+    const listed = yield* state.list({ stack: stackName, stage });
+    const fqns =
+      options.only === undefined ? listed : listed.filter((fqn) => options.only!.includes(fqn));
+    yield* emit({ type: "plan.phase", phase: "computing-plan" });
 
     // Per-resource observation progress: each row is reported through the
-    // ambient Progress reporter as its cloud read lands (drift checks are the
+    // events as its cloud read lands (drift checks are the
     // slowest planning path). Failed or action rows advance the count
     // without an event, so progress stays monotonic.
     const observedCount = yield* Ref.make(0);
@@ -388,8 +373,8 @@ const runDrift = (
         Effect.flatMap((completed) =>
           observed === undefined
             ? Effect.void
-            : reportPlanned({
-                _tag: "plan.resource.completed",
+            : emit({
+                type: "plan.resource.completed",
                 fqn: observed.fqn,
                 logicalId: isPendingRepair(observed) ? observed.old.logicalId : observed.logicalId,
                 resourceType: isPendingRepair(observed)
@@ -422,11 +407,11 @@ const runDrift = (
           .get({ stack: stackName, stage, fqn })
           .pipe(Effect.orElseSucceed(() => undefined));
         if (persisted && !isActionState(persisted)) {
-          yield* session.emit({
-            _tag: "apply.resource.status",
+          yield* reportEvent({
+            type: "apply.resource.status",
             fqn,
             id: persisted.logicalId,
-            type: persisted.resourceType,
+            resourceType: persisted.resourceType,
             status: "fail",
           });
         }
@@ -526,8 +511,6 @@ const runDrift = (
       ...repaired,
     ].filter((r): r is DriftResourceResult => r !== undefined);
 
-    yield* session.done(failures.length === 0 ? "success" : "failure");
-
     if (failures.length > 0) {
       return yield* Effect.failCause(failures.reduce(Cause.combine) as Cause.Cause<never>);
     }
@@ -551,9 +534,14 @@ const runDrift = (
 /** Detect drift without reconciling resources or updating state. */
 export const detect = (stack: { name: string; stage: string }) => runDrift(stack, { dryRun: true });
 
-/** Reconcile resources back to their last-deployed desired state. */
-export const repair = (stack: { name: string; stage: string }, options: DriftOptions = {}) =>
-  runDrift(stack, { ...options, dryRun: false });
+/**
+ * Reconcile resources back to their last-deployed desired state. With
+ * `only`, just those resources are re-checked and repaired.
+ */
+export const repair = (
+  stack: { name: string; stage: string },
+  options: { readonly only?: ReadonlyArray<string> } = {},
+) => runDrift(stack, { dryRun: false, only: options.only });
 
 /**
  * Same shape as Apply's lifecycle instrumentation: scoped artifacts +

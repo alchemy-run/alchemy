@@ -56,11 +56,7 @@ export const RpcServerBun = RpcServer.layerServer(
             if (ws.data.type === "session") {
               ws.data.session.dispatch.close(code, reason);
             } else if (ws.data.type === "parent") {
-              // The sidecar exits with its parent; record why the link closed.
-              console.error(
-                `[alchemy sidecar] parent connection closed (code ${code}${reason ? `, ${reason}` : ""}); shutting down`,
-              );
-              parentDisconnected();
+              parentDisconnected(`code ${code}${reason ? `, ${reason}` : ""}`);
             }
           },
         },

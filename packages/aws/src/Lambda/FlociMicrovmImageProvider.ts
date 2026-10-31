@@ -213,19 +213,17 @@ export const FlociMicrovmImageProvider = () =>
             Stream.runForEach(() =>
               Effect.gen(function* () {
                 const startedAt = Date.now();
-                yield* Effect.logInfo(
-                  `[alchemy dev] ${ctx.id}: microvm source changed — rebuilding`,
-                );
+                yield* Effect.logInfo(`microvm source changed — rebuilding`);
                 const previous = yield* ctx.currentAttrs;
                 const attrs = yield* ctx.rerunReconcile;
                 if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {
                   yield* Effect.logInfo(
-                    `[alchemy dev] ${attrs.name}: microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
+                    `microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
                   );
                 }
               }).pipe(
                 Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: microvm image rebuild failed`, cause),
+                  Effect.logWarning(`microvm image rebuild failed`, cause),
                 ),
               ),
             ),

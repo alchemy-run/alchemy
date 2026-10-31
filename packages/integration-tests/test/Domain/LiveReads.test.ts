@@ -56,7 +56,13 @@ class Counters extends Domain.Model("Counters", {
   projections: [BumpWriter],
   streams: [Bumps],
 }) {}
-class CounterApi extends Domain.Api("CounterApi", Increment, Counter, Totals, Bumps) {}
+class CounterApi extends Domain.Api("CounterApi", {
+  model: Counters,
+  commands: ["Increment"],
+  views: ["Totals"],
+  streams: ["Bumps"],
+  aggregates: ["Counter"],
+}) {}
 
 const Hosted = Counters.layer(BumpWriterLive).pipe(Layer.provideMerge(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
