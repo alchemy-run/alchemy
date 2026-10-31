@@ -122,6 +122,11 @@ export interface BundleFile {
   readonly path: string;
   readonly content: string | Uint8Array<ArrayBufferLike>;
   readonly hash: string;
+  /**
+   * The platform's module type for this file, when its extension doesn't
+   * decide it (e.g. a Cloudflare `Text` rule over `.md` files).
+   */
+  readonly type?: string;
 }
 
 export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
@@ -630,6 +635,7 @@ export function bundleOutputFromFiles(
       files.map((file) => ({
         path: file.path,
         hash: file.hash,
+        ...(file.type ? { type: file.type } : {}),
       })),
     ),
     (hash) => ({ files, hash }),
