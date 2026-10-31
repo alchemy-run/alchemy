@@ -103,11 +103,11 @@ and worktree on the machine.
   (`portless trust`: a Keychain prompt on macOS, sudo on Linux). Alchemy checks
   first and prompts only when the CA isn't trusted, then checks again. On
   Linux the CA is also added to Chromium's NSS database, which needs `certutil`.
-- A running proxy is reused only when it serves HTTPS on the same port,
-  `.localhost` only, unprivileged and with Portless's own CA. Otherwise the run
-  fails and says what differs. When port 443 belongs to something that isn't
-  Portless, the error names it, including Floci's container from an earlier
-  session and how to free the port.
+- A running proxy is reused when it serves HTTPS on the same port, `.localhost`
+  only, outside LAN mode and with Portless's own CA, however it was started.
+  Otherwise the run fails and says what differs. When port 443 belongs to
+  something that isn't Portless, the error names it, including Floci's
+  container from an earlier session and how to free the port.
 - Portless's own settings move the proxy: `PORTLESS_STATE_DIR` (default
   `~/.portless`) and `PORTLESS_PORT` (default 443).
 

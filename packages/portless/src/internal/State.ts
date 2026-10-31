@@ -41,7 +41,6 @@ export interface ProxyState {
   readonly port: number | undefined;
   readonly tls: boolean;
   readonly tlds: ReadonlyArray<string>;
-  readonly unprivileged: boolean;
   readonly lan: boolean;
   readonly customCertificate: boolean;
   readonly certificateAuthority: string;
@@ -86,7 +85,6 @@ export const readState = Effect.fn(function* (stateDirectory: string) {
     port: integer(yield* read(store.portFilePath)),
     tls: yield* marker("proxy.tls"),
     tlds: parsed.length > 0 ? parsed : ["localhost"],
-    unprivileged: yield* marker("proxy.unprivileged"),
     lan: (lan ?? "").trim() !== "",
     customCertificate: yield* marker("proxy.custom-cert"),
     certificateAuthority,
@@ -96,8 +94,10 @@ export const readState = Effect.fn(function* (stateDirectory: string) {
 
 /**
  * What differs between the running proxy and the one this stack needs: HTTPS
- * on the settings' port, the `localhost` TLD only, unprivileged, not LAN, and
- * Portless's own certificate authority.
+ * on the settings' port, the `localhost` TLD only, not LAN, and Portless's own
+ * certificate authority. How the proxy was started doesn't matter: unprivileged
+ * mode only decides how a low port was bound and that peers other than this
+ * machine are refused, and a proxy started another way serves the same routes.
  */
 export const mismatches = (state: ProxyState, port: number) => {
   const found: Array<string> = [];
@@ -108,11 +108,6 @@ export const mismatches = (state: ProxyState, port: number) => {
   if (state.tlds.length !== 1 || state.tlds[0] !== "localhost") {
     found.push(
       `it serves ${state.tlds.map((tld) => `.${tld}`).join(", ")}, this stack needs .localhost only`,
-    );
-  }
-  if (!state.unprivileged) {
-    found.push(
-      "it wasn't started with --unprivileged, which this stack needs to never ask for root",
     );
   }
   if (state.lan) found.push("it runs in LAN mode, which serves .local names");

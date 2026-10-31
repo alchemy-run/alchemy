@@ -63,10 +63,11 @@ export interface Proxy extends Resource<"Portless.Proxy", ProxyProps, ProxyAttri
  * stage or worktree finds it trusted and prompts for nothing. On Linux the CA
  * is also added to Chromium's NSS database, which needs `certutil`.
  *
- * A proxy that is already running is reused only when it serves HTTPS on the
- * same port, `.localhost` only, unprivileged and with Portless's own CA.
- * Otherwise the run fails and says what differs; Alchemy never restarts a
- * shared proxy for you. A run with `PORTLESS=0` skips the proxy altogether.
+ * A proxy that is already running is reused when it serves HTTPS on the same
+ * port, `.localhost` only, outside LAN mode and with Portless's own CA, however
+ * it was started: one that wasn't started with `--unprivileged` serves the same
+ * routes. Otherwise the run fails and says what differs; Alchemy never restarts
+ * a shared proxy for you. A run with `PORTLESS=0` skips the proxy altogether.
  *
  * A plain `alchemy deploy` never starts a proxy: the resource is a no-op
  * outside `alchemy dev`.

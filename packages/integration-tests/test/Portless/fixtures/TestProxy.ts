@@ -89,7 +89,12 @@ export const startPortless = (stateDirectory: string, port: number, flags: Reado
         node,
         [cli, "proxy", "start", ...flags, "--port", String(port), "--skip-trust"],
         {
-          env: { PORTLESS_STATE_DIR: stateDirectory, PORTLESS_PORT: String(port) },
+          env: {
+            PORTLESS_STATE_DIR: stateDirectory,
+            PORTLESS_PORT: String(port),
+            // A proxy that isn't unprivileged would otherwise try to edit the hosts file.
+            PORTLESS_SYNC_HOSTS: "0",
+          },
           extendEnv: true,
           stdin: "ignore",
         },

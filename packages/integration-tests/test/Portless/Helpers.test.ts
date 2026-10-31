@@ -3,11 +3,13 @@ import * as Claims from "@alchemy.run/portless/internal/Claims";
 import { FLOCI_CONTAINER, containerPublishing } from "@alchemy.run/portless/internal/Holder";
 import { processStartTime } from "@alchemy.run/portless/internal/Identity";
 import { portOf } from "@alchemy.run/portless/internal/LoopbackUrl";
-import { mismatches, type ProxyState } from "@alchemy.run/portless/internal/State";
+import { mismatches, readState, type ProxyState } from "@alchemy.run/portless/internal/State";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 const { test } = Test.make({ providers: Layer.empty });
 
@@ -48,14 +50,13 @@ describe("a running proxy's settings", () => {
     port: 443,
     tls: true,
     tlds: ["localhost"],
-    unprivileged: true,
     lan: false,
     customCertificate: false,
     certificateAuthority: "/state/ca.pem",
     hasCertificateAuthority: true,
   };
 
-  it("are compatible when they are HTTPS, .localhost only, unprivileged and Portless's own CA", () => {
+  it("are compatible when they are HTTPS, .localhost only, outside LAN mode and Portless's own CA", () => {
     expect(mismatches(compatible, 443)).toEqual([]);
   });
 
@@ -69,9 +70,6 @@ describe("a running proxy's settings", () => {
     expect(mismatches({ ...compatible, tlds: ["localhost", "test"] }, 443)).toEqual([
       "it serves .localhost, .test, this stack needs .localhost only",
     ]);
-    expect(mismatches({ ...compatible, unprivileged: false }, 443)).toEqual([
-      "it wasn't started with --unprivileged, which this stack needs to never ask for root",
-    ]);
     expect(mismatches({ ...compatible, lan: true }, 443)).toEqual([
       "it runs in LAN mode, which serves .local names",
     ]);
@@ -84,9 +82,36 @@ describe("a running proxy's settings", () => {
   });
 
   it("list every difference at once", () => {
-    expect(mismatches({ ...compatible, tls: false, unprivileged: false }, 443)).toHaveLength(2);
+    expect(mismatches({ ...compatible, tls: false, lan: true }, 443)).toHaveLength(2);
   });
 });
+
+test(
+  "a proxy's state is compatible whether or not it was started with --unprivileged",
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-portless-state-" });
+    // What a proxy started by hand, as a launchd service say, leaves behind.
+    for (const [name, text] of [
+      ["proxy.pid", "4242"],
+      ["proxy.port", "443"],
+      ["proxy.tls", "1"],
+      ["proxy.wildcard", "1"],
+      ["ca.pem", "-----BEGIN CERTIFICATE-----"],
+    ] as const) {
+      yield* fs.writeFileString(path.join(directory, name), text);
+    }
+    expect(mismatches(yield* readState(directory), 443)).toEqual([]);
+
+    yield* fs.writeFileString(path.join(directory, "proxy.unprivileged"), "1");
+    expect(mismatches(yield* readState(directory), 443)).toEqual([]);
+
+    // The settings that do matter are still read from the same directory.
+    yield* fs.writeFileString(path.join(directory, "proxy.lan"), "192.168.1.20");
+    expect(mismatches(yield* readState(directory), 443)).toHaveLength(1);
+  }),
+);
 
 describe("the container that holds a port", () => {
   const ps = [

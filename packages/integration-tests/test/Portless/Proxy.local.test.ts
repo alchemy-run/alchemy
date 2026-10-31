@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as pathe from "pathe";
 import { isAlive, readRoutes } from "./fixtures/Processes.ts";
 import * as TestProxy from "./fixtures/TestProxy.ts";
 
@@ -31,6 +32,8 @@ const program = (domain: string) =>
   Effect.gen(function* () {
     return yield* Portless.Proxy("Proxy", { domain });
   });
+
+const server = pathe.resolve(import.meta.dirname, "fixtures/server.mjs");
 
 // Each scenario owns a proxy of its own: a state directory and a free high port.
 const reuse = TestProxy.make();
@@ -97,9 +100,10 @@ incompatible.test.provider(
       const error = yield* Effect.flip(stack.deploy(program("proxy-incompatible")));
       expect(tagOf(error)).toBe("ProxyIncompatible");
       expect(error).toMatchObject({ stateDirectory, port });
-      const mismatches = (error as unknown as { mismatches: ReadonlyArray<string> }).mismatches;
-      expect(mismatches.join("\n")).toContain("plain HTTP");
-      expect(mismatches.join("\n")).toContain("unprivileged");
+      // Only what matters is named: this proxy wasn't started with --unprivileged either.
+      expect((error as unknown as { mismatches: ReadonlyArray<string> }).mismatches).toEqual([
+        "it serves plain HTTP, this stack needs HTTPS",
+      ]);
       // The message says how to fix it.
       expect((error as Error).message).toContain("portless proxy stop");
 
@@ -110,6 +114,55 @@ incompatible.test.provider(
       expect(yield* exists(stateDirectory, "proxy.unprivileged")).toBe(false);
       expect(yield* readRoutes(stateDirectory)).toEqual(routes);
       yield* stack.destroy();
+    }),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+const manual = TestProxy.make();
+const unflagged = Test.make({ providers: manual.providers(), dev: true, stage: "dev_alice" });
+// A proxy that someone else started without --unprivileged, the way a launchd service might.
+const unflaggedRunning = unflagged.beforeAll(
+  Effect.gen(function* () {
+    const stateDirectory = yield* manual.stateDirectory;
+    const port = yield* manual.port;
+    yield* TestProxy.startPortless(stateDirectory, port, ["--https", "--tld", "localhost"]);
+    return { pid: yield* readPid(stateDirectory) };
+  }),
+);
+unflagged.afterAll(manual.stop);
+
+unflagged.test.provider(
+  "Proxy reuses a running proxy that wasn't started with --unprivileged, and routes through it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const stateDirectory = yield* manual.stateDirectory;
+      const port = yield* manual.port;
+      const { pid } = yield* unflaggedRunning;
+      expect(yield* exists(stateDirectory, "proxy.unprivileged")).toBe(false);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const proxy = yield* Portless.Proxy("Proxy", { domain: "proxy-unflagged" });
+          const api = yield* Portless.Dev("Api", {
+            proxy,
+            command: `node ${server}`,
+            env: { SERVER_NAME: "api" },
+          });
+          return { proxy, api };
+        }),
+      );
+      expect(deployed.proxy).toMatchObject({ port, stateDirectory });
+
+      // The same proxy serves the route over verified HTTPS, and was not restarted or reconfigured.
+      const response = yield* TestProxy.serving(deployed.api.origin, deployed.proxy);
+      expect(JSON.parse(response.body)).toMatchObject({ name: "api", port: deployed.api.port });
+      expect(yield* readPid(stateDirectory)).toBe(pid);
+      expect(yield* isAlive(pid)).toBe(true);
+      expect(yield* exists(stateDirectory, "proxy.unprivileged")).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* isAlive(pid)).toBe(true);
     }),
   { tags: ["local"], timeout: 120_000 },
 );
