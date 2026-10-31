@@ -10211,6 +10211,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/rivet':
+        specifier: workspace:*
+        version: link:../rivet
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
@@ -10274,6 +10277,9 @@ importers:
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
+      '@distilled.cloud/rivet':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/rivet
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -10812,6 +10818,31 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/rivet:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/rivet':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/rivet
+    devDependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
       effect:
         specifier: 4.1.0
         version: 4.1.0
