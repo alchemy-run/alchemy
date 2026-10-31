@@ -1881,12 +1881,43 @@ const durableObjectPlatform = (
                     runClass(named(cls)),
                     yield* object(runClass(cls), viewObject(kit, net, current, consumerPlans)),
                   );
+                  const target = targetId({
+                    kind: "view",
+                    name: view.viewName,
+                    ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+                  });
+                  // A lazy view's key reads its history from its one source the first
+                  // time it is read; each isolate asks a key once.
+                  const caughtUp = new Set<string>();
+                  const ready = (key: string): Effect.Effect<void> =>
+                    Effect.suspend(() => {
+                      const lazy = kit.lazy;
+                      if (lazy === undefined || caughtUp.has(key)) return Effect.void;
+                      return net.consumer
+                        .start(target, key, { source: lazy.source, id: key }, 20_000)
+                        .pipe(
+                          Effect.repeat({ until: (started) => started === "settled", times: 5 }),
+                          Effect.tap((started) =>
+                            Effect.sync(() => {
+                              if (started === "settled") caughtUp.add(key);
+                            }),
+                          ),
+                          Effect.asVoid,
+                        );
+                    });
                   const read = (key: string) =>
                     announce.pipe(
+                      Effect.andThen(ready(key)),
                       Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
                     );
                   const after = (key: string, cursor: number) =>
-                    unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+                    ready(key).pipe(
+                      Effect.andThen(
+                        unwrapDefects<ReadonlyArray<ViewEntry>>(
+                          namespace.getByName(key).after(cursor),
+                        ),
+                      ),
+                    );
                   return {
                     receive: (key, deliveries) =>
                       unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
@@ -1897,7 +1928,8 @@ const durableObjectPlatform = (
                         Stream.changesWith((a, b) => a.version === b.version),
                       ),
                     list: (key) => after(key, 0),
-                    connect: connectTo(namespace),
+                    connect: (key, subscription) =>
+                      ready(key).pipe(Effect.andThen(connectTo(namespace)(key, subscription))),
                     tail: (key, from) =>
                       Stream.suspend(() => {
                         let first = true;
