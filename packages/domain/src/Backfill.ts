@@ -296,7 +296,7 @@ export interface Network {
 
 /** Tuning, in rows and calls per step. */
 export interface Limits {
-  /** History rows a source scans, or a key pulls, per call. */
+  /** History rows a reader (a key keyed by its source, or a scanner) reads per call. */
   readonly page: number;
   /** Source instances a directory node handles per step, and calls it makes at once. */
   readonly nodePage: number;
@@ -329,7 +329,8 @@ export interface Limits {
 export const DEPTH = 2;
 
 export const defaultLimits: Limits = {
-  page: 100,
+  // A long history arrives in few round trips: each one costs more than its rows.
+  page: 1_000,
   nodePage: 25,
   concurrency: 5,
   apply: 200,
