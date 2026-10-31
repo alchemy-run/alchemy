@@ -179,11 +179,11 @@ More: [MCP](https://alchemy.run/domain/mcp).
 
 ## CLI
 
-`toCli` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
+`toCLI` from `@alchemy.run/domain/Cli` builds an Effect CLI command that calls the deployed Api over HTTP, one kebab-case subcommand per command, view, stream or aggregate:
 
 ```ts
 // packages/cli/src/bank.ts
-const bank = toCli(CustomerApi, {
+const bank = toCLI(CustomerApi, {
   name: "bank",
   headers: Config.redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),

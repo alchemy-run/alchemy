@@ -1,5 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
-import { CallRejected, toCli } from "@alchemy.run/domain/Cli";
+import { CallRejected, toCLI } from "@alchemy.run/domain/Cli";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
@@ -132,7 +132,7 @@ const cliOver = Effect.gen(function* () {
   const fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
     handler(new Request(input, init))) as typeof globalThis.fetch;
   return (
-    cli: ReturnType<typeof toCli<typeof WalletApi>>,
+    cli: ReturnType<typeof toCLI<typeof WalletApi>>,
     args: ReadonlyArray<string>,
     transport: typeof globalThis.fetch = fetch,
   ) =>
@@ -164,7 +164,7 @@ const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe
 const hosted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(WalletsLive)) as Effect.Effect<A, E>;
 
-const asSam = toCli(WalletApi, {
+const asSam = toCLI(WalletApi, {
   name: "wallet",
   headers: { authorization: "Bearer sam" },
 });
@@ -173,7 +173,7 @@ const json = (text: string): unknown => JSON.parse(text);
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain toCli", () => {
+describe("Domain toCLI", () => {
   it.live("runs a command from flags and prints its receipt as JSON", () =>
     hosted(
       Effect.gen(function* () {
@@ -231,7 +231,7 @@ describe("Domain toCli", () => {
         expect(String(failure)).toContain("CallRejected");
 
         // The middleware's error is typed too: no bearer, no session.
-        const anonymous = yield* run(toCli(WalletApi, { name: "wallet" }), [
+        const anonymous = yield* run(toCLI(WalletApi, { name: "wallet" }), [
           "wallet",
           "get",
           "--key",
@@ -306,7 +306,7 @@ describe("Domain toCli", () => {
     hosted(
       Effect.gen(function* () {
         const run = yield* cliOver;
-        const fromEnv = toCli(WalletApi, {
+        const fromEnv = toCLI(WalletApi, {
           name: "wallet",
           headers: Effect.sync(() => ({ authorization: "Bearer kim" })),
         });
@@ -369,7 +369,7 @@ describe("Domain toCli", () => {
         class Renames extends Domain.Model("Renames", { aggregates: [Names] }) {}
         class RenameApi extends Domain.Api("RenameApi", { model: Renames }) {}
         const run = yield* cliOver;
-        const help = yield* run(toCli(RenameApi, { name: "rename" }) as typeof asSam, [
+        const help = yield* run(toCLI(RenameApi, { name: "rename" }) as typeof asSam, [
           "rename",
           "--help",
         ]);
@@ -403,7 +403,7 @@ describe("Domain toCli", () => {
         }) {}
         class Clashes extends Domain.Model("Clashes", { aggregates: [Wallet, Clashing] }) {}
         class ClashApi extends Domain.Api("ClashApi", { model: Clashes, views: [] }) {}
-        expect(yield* defectOf(toCli(ClashApi, { name: "clash" }))).toMatchObject({
+        expect(yield* defectOf(toCLI(ClashApi, { name: "clash" }))).toMatchObject({
           _tag: "DefinitionError",
           message: "ClashApi: `Deposit` and `deposit` are both the command deposit",
         });
@@ -421,7 +421,7 @@ describe("Domain toCli", () => {
         }) {}
         class Reserves extends Domain.Model("Reserves", { aggregates: [Reserving] }) {}
         class ReservedApi extends Domain.Api("ReservedApi", { model: Reserves }) {}
-        expect(yield* defectOf(toCli(ReservedApi, { name: "reserved" }))).toMatchObject({
+        expect(yield* defectOf(toCLI(ReservedApi, { name: "reserved" }))).toMatchObject({
           _tag: "DefinitionError",
           message: expect.stringContaining("--json, which the CLI reserves"),
         });
@@ -431,7 +431,7 @@ describe("Domain toCli", () => {
 
   it("is an Effect CLI command named after the binary", () => {
     expect(asSam.name).toBe("wallet");
-    expect(toCli(WalletApi).name).toBe("wallet-api");
+    expect(toCLI(WalletApi).name).toBe("wallet-api");
     expect(CallRejected).toBeDefined();
   });
 });
