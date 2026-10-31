@@ -951,14 +951,44 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting which files in the directory containing
-   * {@link main} are uploaded as additional modules when {@link bundle}
-   * is `false`. Each rule's globs are matched against POSIX-style paths
-   * relative to that directory, mirroring Wrangler's `rules`
-   * configuration. When provided, these rules replace
-   * {@link defaultModuleRules}.
+   * Module rules selecting files uploaded as their own Worker modules,
+   * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
+   * the directory containing {@link main}, and `**\/` matches any depth.
+   * Each rule's `type` decides how a file is imported: `Text` as a `string`,
+   * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
+   * Without one, the extension decides (`.wasm` CompiledWasm,
+   * `.txt`/`.html`/`.sql` Text), and other files are Data. When rules
+   * overlap, the first match decides.
    *
-   * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
+   * When Alchemy bundles {@link main}, rules add to the built-in ones
+   * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
+   * imported file that matches is uploaded as a module instead of bundled.
+   * JavaScript, TypeScript and JSON are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. For files outside the entry's
+   * directory, globs may start with `../` or be absolute. `!` globs exclude
+   * across your rules; an excluded `.txt` or `.wasm` still matches the
+   * built-in rules.
+   *
+   * When {@link bundle} is `false`, every file in the entry's directory that
+   * matches is uploaded, and the rules replace {@link defaultModuleRules}.
+   *
+   * Rules don't apply to an inline {@link script}, a {@link source}
+   * provider or a Python {@link main}.
+   *
+   * ```ts
+   * // worker.ts
+   * import font from "./font.ttf"; // ArrayBuffer
+   * import readme from "./README.md"; // string
+   *
+   * // alchemy.run.ts
+   * rules: [{ globs: ["**\/*.ttf"] }, { type: "Text", globs: ["**\/*.md"] }]
+   *
+   * // modules.d.ts, so TypeScript knows the imports
+   * declare module "*.ttf" { const data: ArrayBuffer; export default data; }
+   * declare module "*.md" { const text: string; export default text; }
+   * ```
+   *
+   * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
   rules?: ModuleRule[];
   /**
