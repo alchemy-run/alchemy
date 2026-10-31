@@ -377,19 +377,26 @@ export const BackupVaultProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* netapp
-        .deleteProjectsLocationsBackupVaults({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
-      if (operation !== undefined) {
-        yield* waitForDeleteOperation(operation);
-      }
+      yield* netapp.deleteProjectsLocationsBackupVaults({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+        Effect.flatMap((operation) =>
+          operation === undefined ? Effect.void : waitForDeleteOperation(operation),
+        ),
+        // A volume backed up into the vault stays assigned to it until the
+        // volume is deleted, which the same destroy may still be doing.
+        Effect.retry({
+          while: (error) =>
+            error._tag === "GCP.OperationFailed" &&
+            error.message.includes("still volumes assigned"),
+          schedule: Schedule.spaced("20 seconds"),
+          times: 45,
+        }),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

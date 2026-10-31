@@ -717,14 +717,19 @@ export const VolumeProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* netapp.deleteProjectsLocationsVolumes({ name: output.name }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.undefined),
-      );
+      // `force`: a volume that was snapshotted or backed up counts as having
+      // nested resources, and without it delete answers "has nested
+      // resources ... set 'force' to true".
+      const operation = yield* netapp
+        .deleteProjectsLocationsVolumes({ name: output.name, force: true })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "Conflict",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }
