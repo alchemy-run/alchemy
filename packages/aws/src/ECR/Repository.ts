@@ -26,7 +26,7 @@ export class ECRRepositoryUnexpectedResponse extends Data.TaggedError(
 export type RepositoryName = string;
 export type RepositoryArn =
   `arn:${Partition}:ecr:${RegionID}:${AccountID}:repository/${RepositoryName}`;
-export type RepositoryUri = `${AccountID}.dkr.ecr.${RegionID}.amazonaws.com/${RepositoryName}`;
+export type RepositoryUri = `${AccountID}.dkr.ecr.${RegionID}.${string}/${RepositoryName}`;
 
 export interface RepositoryProps {
   /**
