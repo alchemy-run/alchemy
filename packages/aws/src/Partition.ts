@@ -1,18 +1,58 @@
 /**
- * The AWS partitions, mirrored from the `regionRegex` and `dnsSuffix` of each
- * entry in botocore's `partitions.json`. A region belongs to the first
- * partition whose regex matches it; an unmatched region falls back to `aws`,
- * as the SDK endpoint rules do.
+ * The AWS partitions, mirrored from the `regionRegex`, `dnsSuffix` and
+ * `implicitGlobalRegion` of each entry in botocore's `partitions.json`. A
+ * region belongs to the first partition whose regex matches it; an unmatched
+ * region falls back to `aws`, as the SDK endpoint rules do.
  */
 const PARTITIONS = [
-  { id: "aws", regionRegex: /^(us|eu|ap|sa|ca|me|af|il|mx)-\w+-\d+$/, dnsSuffix: "amazonaws.com" },
-  { id: "aws-cn", regionRegex: /^cn-\w+-\d+$/, dnsSuffix: "amazonaws.com.cn" },
-  { id: "aws-us-gov", regionRegex: /^us-gov-\w+-\d+$/, dnsSuffix: "amazonaws.com" },
-  { id: "aws-iso", regionRegex: /^us-iso-\w+-\d+$/, dnsSuffix: "c2s.ic.gov" },
-  { id: "aws-iso-b", regionRegex: /^us-isob-\w+-\d+$/, dnsSuffix: "sc2s.sgov.gov" },
-  { id: "aws-iso-e", regionRegex: /^eu-isoe-\w+-\d+$/, dnsSuffix: "cloud.adc-e.uk" },
-  { id: "aws-iso-f", regionRegex: /^us-isof-\w+-\d+$/, dnsSuffix: "csp.hci.ic.gov" },
-  { id: "aws-eusc", regionRegex: /^eusc-(de)-\w+-\d+$/, dnsSuffix: "amazonaws.eu" },
+  {
+    id: "aws",
+    regionRegex: /^(us|eu|ap|sa|ca|me|af|il|mx)-\w+-\d+$/,
+    dnsSuffix: "amazonaws.com",
+    globalRegion: "us-east-1",
+  },
+  {
+    id: "aws-cn",
+    regionRegex: /^cn-\w+-\d+$/,
+    dnsSuffix: "amazonaws.com.cn",
+    globalRegion: "cn-northwest-1",
+  },
+  {
+    id: "aws-us-gov",
+    regionRegex: /^us-gov-\w+-\d+$/,
+    dnsSuffix: "amazonaws.com",
+    globalRegion: "us-gov-west-1",
+  },
+  {
+    id: "aws-iso",
+    regionRegex: /^us-iso-\w+-\d+$/,
+    dnsSuffix: "c2s.ic.gov",
+    globalRegion: "us-iso-east-1",
+  },
+  {
+    id: "aws-iso-b",
+    regionRegex: /^us-isob-\w+-\d+$/,
+    dnsSuffix: "sc2s.sgov.gov",
+    globalRegion: "us-isob-east-1",
+  },
+  {
+    id: "aws-iso-e",
+    regionRegex: /^eu-isoe-\w+-\d+$/,
+    dnsSuffix: "cloud.adc-e.uk",
+    globalRegion: "eu-isoe-west-1",
+  },
+  {
+    id: "aws-iso-f",
+    regionRegex: /^us-isof-\w+-\d+$/,
+    dnsSuffix: "csp.hci.ic.gov",
+    globalRegion: "us-isof-south-1",
+  },
+  {
+    id: "aws-eusc",
+    regionRegex: /^eusc-(de)-\w+-\d+$/,
+    dnsSuffix: "amazonaws.eu",
+    globalRegion: "eusc-de-east-1",
+  },
 ] as const;
 
 /**
@@ -35,6 +75,13 @@ export const partitionOf = (region: string): Partition => partitionFor(region).i
  * `dnsSuffixOf("eusc-de-east-1")` is `"amazonaws.eu"`.
  */
 export const dnsSuffixOf = (region: string): string => partitionFor(region).dnsSuffix;
+
+/**
+ * The region a global service is served from in a region's partition, e.g.
+ * `globalRegionOf("eu-central-1")` is `"us-east-1"` and
+ * `globalRegionOf("eusc-de-east-1")` is `"eusc-de-east-1"`.
+ */
+export const globalRegionOf = (region: string): string => partitionFor(region).globalRegion;
 
 /**
  * The ARN of an AWS managed IAM policy in `partition`, e.g.

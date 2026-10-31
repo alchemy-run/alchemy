@@ -9,18 +9,15 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
-import { partitionOf } from "../Partition.ts";
+import { globalRegionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 
 // The Cost and Usage Report API (`cur`) is a global service hosted only in
-// us-east-1 (the report's delivery bucket may live in any region — that is
-// what `s3Region` describes). Every control-plane call is pinned there
-// regardless of the ambient stack region. The distilled Region service value
-// is `Effect<RegionName>`, not a raw string, hence Effect.succeed.
-const CUR_REGION = "us-east-1";
-const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(CUR_REGION)));
+// the partition's global region, us-east-1 in `aws` (the report's delivery
+// bucket may live in any region — that is what `s3Region` describes). Every
+// control-plane call is pinned there regardless of the ambient stack region.
+const pin = withGlobalRegion;
 
 // PutReportDefinition validates that the delivery bucket's policy grants
 // billingreports.amazonaws.com access. A policy applied moments earlier (the
@@ -233,8 +230,9 @@ export const ReportDefinitionProvider = () =>
         return props.reportName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
-      const reportArn = (accountId: string, name: string) =>
-        `arn:${partitionOf(CUR_REGION)}:cur:${CUR_REGION}:${accountId}:definition/${name}`;
+      type Env = { accountId: string; region: string; partition: string };
+      const reportArn = ({ accountId, region, partition }: Env, name: string) =>
+        `arn:${partition}:cur:${globalRegionOf(region)}:${accountId}:definition/${name}`;
 
       // There is no Get operation — observe by scanning the (small,
       // account-max ~10 entries) paginated list.
@@ -288,9 +286,9 @@ export const ReportDefinitionProvider = () =>
         (desired.ReportVersioning !== undefined &&
           observed.ReportVersioning !== desired.ReportVersioning);
 
-      const toAttributes = (accountId: string, observed: cur.ReportDefinition) => ({
+      const toAttributes = (env: Env, observed: cur.ReportDefinition) => ({
         reportName: observed.ReportName,
-        reportArn: reportArn(accountId, observed.ReportName),
+        reportArn: reportArn(env, observed.ReportName),
         timeUnit: observed.TimeUnit,
         format: observed.Format,
         compression: observed.Compression,
@@ -315,20 +313,20 @@ export const ReportDefinitionProvider = () =>
         stables: ["reportName", "reportArn"],
         list: () =>
           Effect.gen(function* () {
-            const { accountId } = yield* AWSEnvironment.current;
+            const env = yield* AWSEnvironment.current;
             const pages = yield* pin(
               cur.describeReportDefinitions.pages({}).pipe(Stream.runCollect),
             );
             return Array.from(pages)
               .flatMap((page) => page.ReportDefinitions ?? [])
-              .map((r) => toAttributes(accountId, r));
+              .map((r) => toAttributes(env, r));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const env = yield* AWSEnvironment.current;
           const name = output?.reportName ?? (yield* createName(id, olds ?? {}));
           const observed = yield* findReport(name);
           if (!observed) return undefined;
-          const attrs = toAttributes(accountId, observed);
+          const attrs = toAttributes(env, observed);
           const tags = yield* readTags(name);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
@@ -342,7 +340,7 @@ export const ReportDefinitionProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const env = yield* AWSEnvironment.current;
           const name = output?.reportName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -389,7 +387,7 @@ export const ReportDefinitionProvider = () =>
 
           yield* session.note(name);
           const final = yield* findReport(name);
-          return toAttributes(accountId, final ?? desired);
+          return toAttributes(env, final ?? desired);
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: DeleteReportDefinition's error semantics for a missing

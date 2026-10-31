@@ -7,7 +7,7 @@ import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
-import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import { type BaseRuntimeContext, CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -24,6 +24,7 @@ import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
 import { User } from "./IAM/User.ts";
+import { globalRegionOf } from "./Partition.ts";
 import { CurrentRegion } from "./Region.ts";
 
 /**
@@ -396,6 +397,15 @@ const googleIdToken = Effect.gen(function* () {
 }).pipe(Effect.provide(FetchHttpClient.layer));
 
 /**
+ * The region a host calls STS in: the global region of its stack's
+ * partition, so a stack in `aws-eusc` never signs in to the `aws` partition.
+ */
+const stsRegionOf = (runtime: BaseRuntimeContext) =>
+  Effect.map(runtime.get<string>(KEY_ENV.region), (region) =>
+    globalRegionOf(region ?? "us-east-1"),
+  );
+
+/**
  * Resolve an operation on a host that runs as a Google service account: the
  * Role {@link Bind} created for it is assumed with the host's Google ID token
  * (`AssumeRoleWithWebIdentity`). Credentials are cached and re-assumed with a
@@ -410,12 +420,13 @@ const withWebIdentity = Effect.fn(function* <Op>(
   if (runtime === undefined || roleArn === undefined) {
     return yield* operation as Effect.Effect<Op>;
   }
+  const stsRegion = yield* stsRegionOf(runtime);
   const credentials = fromWebToken({
     roleArn,
     webIdentityToken: googleIdToken,
     roleSessionName: "alchemy",
-    // STS is global; operations provide their own Region.
-    region: "us-east-1",
+    // Operations provide their own Region.
+    region: stsRegion,
   });
   const callRegion =
     region !== undefined
@@ -472,6 +483,7 @@ export const withCredentials: <Op>(
     return yield* operation as Effect.Effect<Op>;
   }
 
+  const stsRegion = yield* stsRegionOf(runtime);
   // The created user's key signs `AssumeRole`; read on each refresh.
   const base = Layer.succeed(
     Credentials,
@@ -483,15 +495,15 @@ export const withCredentials: <Op>(
         accessKeyId: Redacted.make((yield* runtime.get<string>(KEY_ENV.accessKeyId)) ?? ""),
         secretAccessKey: Redacted.isRedacted(secret) ? secret : Redacted.make(secret ?? ""),
         sessionToken: undefined,
-        // STS is global; operations provide their own Region.
-        region: "us-east-1",
+        // Operations provide their own Region.
+        region: stsRegion,
       } satisfies ResolvedCredentials;
     }),
   );
   const credentials = yield* makeAssumeRoleResolver({
     roleArn: Effect.succeed(roleArn),
     base,
-    region: "us-east-1",
+    region: stsRegion,
   });
   const callRegion =
     region !== undefined

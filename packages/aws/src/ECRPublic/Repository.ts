@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 
 export class ECRPublicRepositoryUnexpectedResponse extends Data.TaggedError(
   "ECRPublicRepositoryUnexpectedResponse",
@@ -20,12 +20,10 @@ export class ECRPublicRepositoryUnexpectedResponse extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-// Amazon ECR Public is a single global registry hosted only in us-east-1. Every
-// control-plane call must target that region regardless of the ambient stack
+// Amazon ECR Public is a single global registry hosted only in the partition's
+// global region (us-east-1 in `aws`). Every control-plane call must target that region regardless of the ambient stack
 // region, so we pin it on every distilled operation.
-const US_EAST_1 = "us-east-1";
-const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
+const pin = withGlobalRegion;
 
 export type RepositoryName = string;
 export type RepositoryArn =

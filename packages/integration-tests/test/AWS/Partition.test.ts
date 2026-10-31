@@ -2,11 +2,18 @@ import { partitionArn } from "@alchemy.run/aws/AWSBindings";
 import { bedrockModelArns } from "@alchemy.run/aws/Bedrock/ModelArns";
 import { fromCredentials } from "@alchemy.run/aws/Credentials";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import { dnsSuffixOf, managedPolicyArn, partitionOf } from "@alchemy.run/aws/Partition";
+import {
+  dnsSuffixOf,
+  globalRegionOf,
+  managedPolicyArn,
+  partitionOf,
+} from "@alchemy.run/aws/Partition";
 import * as Region from "@alchemy.run/aws/Region";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as costExplorer from "@distilled.cloud/aws/cost-explorer";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lambda from "@distilled.cloud/aws/lambda";
+import * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sts from "@distilled.cloud/aws/sts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -64,20 +71,31 @@ describe("partitionOf", tags, () => {
         "../../../../submodules/distilled/packages/aws/src/rules-engine/partitions.json",
       );
       const { partitions } = JSON.parse(yield* fs.readFileString(file)) as {
-        partitions: { id: string; outputs: { dnsSuffix: string }; regions: object }[];
+        partitions: {
+          id: string;
+          outputs: { dnsSuffix: string; implicitGlobalRegion: string };
+          regions: object;
+        }[];
       };
       const regions = partitions.flatMap(({ id, outputs, regions }) =>
         Object.keys(regions)
           .filter((region) => !region.endsWith("-global"))
-          .map((region) => ({ region, id, dnsSuffix: outputs.dnsSuffix })),
+          .map((region) => ({
+            region,
+            partition: id,
+            dnsSuffix: outputs.dnsSuffix,
+            globalRegion: outputs.implicitGlobalRegion,
+          })),
       );
-      expect(regions.some(({ id }) => id === "aws-eusc")).toBe(true);
-      for (const { region, id, dnsSuffix } of regions) {
-        expect({ region, partition: partitionOf(region), dnsSuffix: dnsSuffixOf(region) }).toEqual({
+      expect(regions.some(({ partition }) => partition === "aws-eusc")).toBe(true);
+      for (const expected of regions) {
+        const { region } = expected;
+        expect({
           region,
-          partition: id,
-          dnsSuffix,
-        });
+          partition: partitionOf(region),
+          dnsSuffix: dnsSuffixOf(region),
+          globalRegion: globalRegionOf(region),
+        }).toEqual(expected);
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -140,8 +158,16 @@ describe("ARNs", tags, () => {
   });
 });
 
-/** The host each SDK call is sent to in `region`, captured before any network I/O. */
-const hostOf = (region: string, call: Effect.Effect<unknown, unknown, any>) =>
+/**
+ * The host each SDK call is sent to in `region`, captured before any network
+ * I/O. `provideRegion: false` leaves only the credentials' region, as for a
+ * stack that never provides a `Region`.
+ */
+const hostOf = (
+  region: string,
+  call: Effect.Effect<unknown, unknown, any>,
+  { provideRegion = true }: { provideRegion?: boolean } = {},
+) =>
   Effect.gen(function* () {
     let host: string | undefined;
     const http = HttpClient.make((request) =>
@@ -153,7 +179,7 @@ const hostOf = (region: string, call: Effect.Effect<unknown, unknown, any>) =>
     yield* call.pipe(
       Effect.provide(
         Layer.mergeAll(
-          Region.of(region),
+          provideRegion ? Region.of(region) : Layer.empty,
           fromCredentials(
             {
               accessKeyId: Redacted.make("AKIDEXAMPLE"),
@@ -199,6 +225,42 @@ describe("SDK endpoints", tags, () => {
           s3: yield* hostOf(region, s3.listBuckets({})),
           lambda: yield* hostOf(region, lambda.listFunctions({})),
           iam: yield* hostOf(region, iam.listRoles({})),
+        }).toEqual(hosts);
+      }),
+    );
+  }
+});
+
+describe("withGlobalRegion", tags, () => {
+  const expected = {
+    "eu-central-1": {
+      route53domains: "route53domains.us-east-1.amazonaws.com",
+      costExplorer: "ce.us-east-1.amazonaws.com",
+    },
+    "eusc-de-east-1": {
+      route53domains: "route53domains.eusc-de-east-1.amazonaws.eu",
+      costExplorer: "ce.eusc-de-east-1.api.amazonwebservices.eu",
+    },
+    "cn-north-1": {
+      route53domains: "route53domains.cn-northwest-1.amazonaws.com.cn",
+      costExplorer: "ce.cn-northwest-1.amazonaws.com.cn",
+    },
+  } as const;
+
+  for (const [region, hosts] of Object.entries(expected)) {
+    it.effect(`keeps global services in ${region}'s partition`, () =>
+      Effect.gen(function* () {
+        const calls = {
+          route53domains: Region.withGlobalRegion(route53domains.listDomains({})),
+          costExplorer: Region.withGlobalRegion(costExplorer.listCostAllocationTags({})),
+        };
+        expect({
+          route53domains: yield* hostOf(region, calls.route53domains),
+          costExplorer: yield* hostOf(region, calls.costExplorer),
+        }).toEqual(hosts);
+        expect({
+          route53domains: yield* hostOf(region, calls.route53domains, { provideRegion: false }),
+          costExplorer: yield* hostOf(region, calls.costExplorer, { provideRegion: false }),
         }).toEqual(hosts);
       }),
     );

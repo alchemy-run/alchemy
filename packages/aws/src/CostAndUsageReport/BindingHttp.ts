@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 import type { ReportDefinition } from "./ReportDefinition.ts";
 
 /**
@@ -12,16 +12,12 @@ import type { ReportDefinition } from "./ReportDefinition.ts";
  * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
  * below.
  *
- * The CUR control plane is a global service hosted only in `us-east-1`, so
- * every operation is resolved with the distilled Region pinned there —
- * exactly like the {@link ReportDefinition} provider. The distilled Region
- * service value is `Effect<RegionName>`, not a raw string, hence
- * `Effect.succeed`.
+ * The CUR control plane is a global service hosted only in the partition's
+ * global region (`us-east-1` in `aws`), so every operation is resolved with
+ * the distilled Region pinned there — exactly like the
+ * {@link ReportDefinition} provider.
  */
-const CUR_REGION = "us-east-1" as const;
-
-const pinCur = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(CUR_REGION)));
+const pinCur = withGlobalRegion;
 
 /**
  * Build the impl Effect for an account-level CUR operation.

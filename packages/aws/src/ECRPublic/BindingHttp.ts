@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /**
@@ -12,7 +12,7 @@ import type { PublicRepository } from "./Repository.ts";
  * repository-scoped builder) the injected repository name is boilerplate.
  *
  * Amazon ECR Public is a single global registry served exclusively from the
- * `us-east-1` endpoint, so every operation is resolved with the Region
+ * partition's global region (`us-east-1` in `aws`), so every operation is resolved with the Region
  * pinned via {@link pinEcrPublic} — exactly like the resource provider in
  * `Repository.ts`.
  *
@@ -23,11 +23,8 @@ import type { PublicRepository } from "./Repository.ts";
  * `Resource: ["*"]`.
  */
 
-const US_EAST_1 = "us-east-1";
-
 /** Pin a distilled `ecr-public` effect to the service's home region. */
-export const pinEcrPublic = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
+export const pinEcrPublic = withGlobalRegion;
 
 /**
  * Build the impl Effect for an operation scoped to one
