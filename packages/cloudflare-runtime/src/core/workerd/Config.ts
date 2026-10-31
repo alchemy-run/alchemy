@@ -20,7 +20,7 @@ export type Void = typeof kVoid;
 export interface Config {
   services?: Array<Service>;
   sockets?: Array<Socket>;
-  v8Flags?: Array<string>;
+  v8Flags?: ReadonlyArray<string>;
   extensions?: Array<Extension>;
   autogates?: Array<string>;
   structuredLogging?: boolean;

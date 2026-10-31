@@ -1,5 +1,6 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -13,6 +14,7 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { ResourceContext } from "../ResourceContext.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
+import { LogAnnotation } from "../Util/LogAnnotation.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
 
 /**
@@ -221,8 +223,16 @@ export const effect = <
                     )
                   : Layer.empty,
               );
+              if (Stream.isStream(result)) return result.pipe(Stream.provide(services));
+              // In a sidecar the engine's per-resource annotation doesn't
+              // cross the RPC boundary: tag the call's logs here.
+              const fqn =
+                Predicate.hasProperty(args[0], "fqn") && Predicate.isString(args[0].fqn)
+                  ? args[0].fqn
+                  : undefined;
               return result.pipe(
-                Stream.isStream(result) ? Stream.provide(services) : Effect.provide(services),
+                Effect.provide(services),
+                fqn === undefined ? identity : Effect.annotateLogs(LogAnnotation.fqn, fqn),
               );
             };
           },
