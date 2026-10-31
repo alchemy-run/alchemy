@@ -119,11 +119,7 @@ const BackfillLive = () =>
           instanceId: output.instanceId,
           simple: true,
         })
-        .pipe(
-          Effect.catchTag(["InstanceNotFound", "WorkflowNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["InstanceNotFound", "WorkflowNotFound"], () => Effect.void));
       return instance === undefined ? undefined : { ...output, status: instance.status };
     }),
     reconcile: Effect.fn(function* ({ instanceId: resource, news, session }) {

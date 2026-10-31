@@ -1,7 +1,7 @@
 import { GitHubAuthConfigSchema } from "@alchemy.run/github/AuthProvider";
 import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import {
   PROFILE_FORMAT,
   profileProviderFilePath,
@@ -21,7 +21,7 @@ const testLayer = () =>
   ProfileStoreLive.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         ConfigProvider.layer(ConfigProvider.fromUnknown({})),
         NodeServices.layer,
       ),

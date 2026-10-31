@@ -1,17 +1,12 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
-import {
-  type ReplayInput,
-  type ReplayResult,
-  type Routed,
-  routeLive,
-  targetId,
-} from "./CatchUp.ts";
+import { type ReplayInput, type ReplayResult, type Routed, routeLive } from "./CatchUp.ts";
 import type { Delivery } from "./Platform.ts";
 
 /**
@@ -494,14 +489,14 @@ const readAt = (
   limit: number,
 ): Effect.Effect<Read, unknown> =>
   bounded(net.source.read(ref, target, key, after, limit)).pipe(
-    Effect.catchCause((cause) =>
-      overloaded(cause)
-        ? Effect.failCause(cause)
-        : Effect.gen(function* () {
-            const from = after > 0 ? after : yield* cursorOf(net, ref, target);
-            const rows = yield* bounded(net.source.log(ref, from, limit));
-            return { from, rows } satisfies Read;
-          }),
+    Effect.catchCauseIf(
+      (cause) => !overloaded(cause),
+      () =>
+        Effect.gen(function* () {
+          const from = after > 0 ? after : yield* cursorOf(net, ref, target);
+          const rows = yield* bounded(net.source.log(ref, from, limit));
+          return { from, rows } satisfies Read;
+        }),
     ),
   );
 
@@ -509,9 +504,7 @@ const readAt = (
 const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
 
 /** Refused by an instance still on older code; the sender tries again later. */
-class Stale extends Error {
-  override readonly name = "Stale";
-}
+class Stale extends Data.TaggedError("Stale")<{ readonly message: string }> {}
 
 /**
  * A source's durable outbox of control messages: staged with the state change
@@ -1028,7 +1021,7 @@ export const makeConsumer = (
    */
   const stale = (target: string) =>
     generationOf(target) > generationOf(host.target())
-      ? Effect.die(new Stale(`${host.key} runs ${host.target()}, not ${target} yet`))
+      ? Effect.die(new Stale({ message: `${host.key} runs ${host.target()}, not ${target} yet` }))
       : Effect.void;
 
   interface Backfill {
@@ -1156,7 +1149,7 @@ export const makeConsumer = (
           // Keyed by its source: the key reads the source's log and routes it itself.
           const pulled = yield* readLog(target, feed.ref, feed.cursor).pipe(
             // Refused (still on older code) or lost in transit: pull it again later.
-            Effect.catchCause(() => Effect.succeed(undefined)),
+            Effect.catchCause(() => Effect.void),
           );
           if (pulled === undefined) return true;
           yield* storage.exclusive(
@@ -1302,9 +1295,7 @@ export const makeConsumer = (
         // A key with history is told it is ready by the scanners that pushed it. One
         // fed only live (no history) has no one to tell it: it asks the run.
         if (backfill.pushed) return false;
-        const phase = yield* net.run
-          .phase(target)
-          .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+        const phase = yield* net.run.phase(target).pipe(Effect.catchCause(() => Effect.void));
         if (phase === undefined)
           return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
         yield* trace("waiting", { key: host.key, target, phase });

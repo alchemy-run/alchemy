@@ -121,11 +121,20 @@ export interface SourceContext {
 /**
  * Runtime settings of a Worker beyond its bindings, Durable Objects,
  * Hyperdrives, queue consumers and assets: cron triggers, Workflows, tail
- * consumers, the Cache API, `request.cf`, the zone and Access.
+ * consumers, the Cache API, `request.cf`, the zone, Access and the workerd
+ * process overrides.
  */
 export type DevWorkerOptions = Pick<
   RuntimeWorker,
-  "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+  | "workflows"
+  | "crons"
+  | "tails"
+  | "streamingTails"
+  | "cache"
+  | "cf"
+  | "zone"
+  | "access"
+  | "workerd"
 >;
 
 /**
@@ -352,6 +361,14 @@ export const loadSource = (
   );
 
 /**
+ * Whether a Worker has no code at all — no `main`, `script`, `vite` or
+ * `source` — and only serves its `assets`. Every other Worker resolves a
+ * {@link SourceProvider} with {@link resolveSource}.
+ */
+export const isAssetsOnly = (props: WorkerProps) =>
+  props.main === undefined && props.script === undefined && !props.vite && !props.source;
+
+/**
  * Resolve the {@link SourceProvider} for a Worker from its props. The
  * `source` descriptor (external providers) wins; legacy props map to the
  * built-in providers, preserving the historical precedence exactly:
@@ -403,7 +420,7 @@ export const resolveSource = (
   if (props.bundle === false) {
     return Effect.succeed(makePrebuiltSource({ main: props.main!, rules: props.rules }));
   }
-  return Effect.succeed(makeRolldownSource({ main: props.main! }));
+  return Effect.succeed(makeRolldownSource({ main: props.main!, rules: props.rules }));
 };
 
 /**

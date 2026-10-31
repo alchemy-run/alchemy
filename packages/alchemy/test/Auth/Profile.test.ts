@@ -16,6 +16,7 @@ import {
   AuthProvider,
   AuthProviderLayer,
   AuthProviders,
+  AuthProvidersLive,
   getAuthProvider,
   NeedsReauth,
 } from "@/Auth/AuthProvider.ts";
@@ -168,7 +169,7 @@ const makeTestLayer = (config: Record<string, unknown> = {}) =>
     Layer.provideMerge(RotationLive),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
         NodeServices.layer,
       ),
@@ -659,12 +660,8 @@ it.live(
         }
         yield* resolveProviderConfig("OtherNoticeProvider");
         expect(messages).toEqual([
-          [
-            "FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-          ],
-          [
-            "OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN) instead of the profile.",
-          ],
+          ["FakeEnvAuthProvider: using environment variables (FAKE_ENV_TOKEN)."],
+          ["OtherNoticeProvider: using environment variables (FAKE_ENV_TOKEN)."],
         ]);
       }),
       { FAKE_ENV_TOKEN: "from-env" },

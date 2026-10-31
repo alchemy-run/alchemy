@@ -499,6 +499,7 @@ export default defineConfig({
           label: "CLI",
           items: [
             { label: "Overview", link: "/cli" },
+            { label: "Programmatic API", link: "/cli/api" },
             {
               label: "Deploy",
               items: [
@@ -1607,6 +1608,10 @@ export default defineConfig({
               ],
             },
             {
+              label: "Agents",
+              items: [{ label: "MCP", link: "/domain/mcp" }],
+            },
+            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1627,6 +1632,7 @@ export default defineConfig({
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
                 { label: "In memory", link: "/domain/in-memory" },
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },

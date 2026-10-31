@@ -172,11 +172,14 @@ export class NotesModel extends Domain.Model("Notes", {
 ```typescript
 // src/NotesApi.api.ts
 import * as Domain from "@alchemy.run/domain";
-import { Notes } from "./Notes.view.ts";
-import { WriteNote } from "./WriteNote.command.ts";
+import { NotesModel } from "./Notes.model.ts";
 
 /** What the browser reaches. */
-export class NotesApi extends Domain.Api("NotesApi", WriteNote, Notes) {}
+export class NotesApi extends Domain.Api("NotesApi", {
+  model: NotesModel,
+  commands: ["WriteNote"],
+  views: ["Notes"],
+}) {}
 ```
 
 `validate` runs on every read, so only the owner reads a notebook's notes.
@@ -298,7 +301,7 @@ import { SessionLive } from "./Session.ts";
 const NotesLive = SessionLive.pipe(
   Layer.provideMerge(AuthLive),
   Layer.provideMerge(NotesModel.layer(Layer.empty)),
-  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, CloudflareD1(AuthDb))),
+  Layer.provide(Layer.mergeAll(DomainCloudflare.layerDurableObjects(), CloudflareD1(AuthDb))),
 );
 
 /** Serves better-auth's routes under /api/auth, and the NotesApi under /api. */

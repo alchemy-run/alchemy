@@ -10,6 +10,7 @@ import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as CatchUp from "./CatchUp.ts";
+import type * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -89,11 +90,19 @@ export interface ModelClass<
   Name extends string,
   Provided,
   Policies,
-  Views extends string = string,
+  Parts extends Servable = Servable,
 > {
   new (_: never): {};
   readonly kind: "Model";
   readonly modelName: Name;
+  /** The model's aggregates, in order. */
+  readonly aggregates: Parts["aggregates"];
+  /** Every command of the model's aggregates, each once. */
+  readonly commands: Parts["commands"];
+  /** The model's views, in order. */
+  readonly views: Parts["views"];
+  /** The model's streams, in order. */
+  readonly streams: Parts["streams"];
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -103,17 +112,42 @@ export interface ModelClass<
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptions<Views>,
+    options?: LayerOptions<Parts["views"][number]["viewName"]>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
 /**
  * Structural constraint satisfied by every Model class.
  */
-export interface Any {
+export interface Any extends Servable {
   readonly kind: "Model";
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
+}
+
+/**
+ * What an Api over a model may serve, in the order the model lists them:
+ * its aggregates, their commands, its views and its streams. An Api names
+ * what it serves from these.
+ */
+export interface Servable {
+  readonly aggregates: ReadonlyArray<Aggregate.Any>;
+  /** Every command of the model's aggregates, each once. */
+  readonly commands: ReadonlyArray<Command.Any>;
+  readonly views: ReadonlyArray<View.Any>;
+  readonly streams: ReadonlyArray<DomainStream.Any>;
+}
+
+/** What a model's members serve. */
+export interface ServableBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+> {
+  readonly aggregates: A;
+  readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
+  readonly views: V;
+  readonly streams: S;
 }
 
 type ProvidedBy<
@@ -189,7 +223,7 @@ export const make = <
 >(
   name: Name,
   members: Members<A, V, P, J, S, G>,
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, V[number]["viewName"]> => {
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -202,6 +236,12 @@ export const make = <
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static readonly aggregates = definitions.aggregates;
+    static readonly commands = [
+      ...new Set(definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands)),
+    ];
+    static readonly views = definitions.views;
+    static readonly streams = definitions.streams;
     static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
         build(
@@ -217,7 +257,7 @@ export const make = <
     Name,
     ProvidedBy<A, V, J, S, G>,
     HandledBy<P, J, G>,
-    V[number]["viewName"]
+    ServableBy<A, V, S>
   >;
 };
 

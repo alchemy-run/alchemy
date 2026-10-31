@@ -21,7 +21,7 @@ const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
 export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Octane project root (the directory containing `vite.config.ts` and

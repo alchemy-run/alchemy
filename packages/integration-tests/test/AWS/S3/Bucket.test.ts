@@ -1932,7 +1932,7 @@ const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boo
         olds: props,
         output: stubbedOutput as never,
         bindings: [] as never,
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
         force: options?.force,
       });
     }).pipe(Effect.provide(BucketProvider()), Effect.provide(stubbedEnv(transport.layer)));
