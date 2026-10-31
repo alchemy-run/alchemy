@@ -328,18 +328,23 @@ More: [Stream](https://alchemy.run/domain/stream).
 
 ```ts
 // CustomerApi.api.ts
-export class CustomerApi extends Domain.Api(
-  "CustomerApi",
-  RegisterCustomer, DepositMoney, WithdrawMoney,   // commands: client methods
-  Account,                                          // aggregates with `read`
-  AccountSummary, Statement,                        // views
-  AccountCard,                                      // streams
-) {}
+export class CustomerApi extends Domain.Api("CustomerApi", {
+  model: Bank, // names must be part of it
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"], // client methods
+  views: ["AccountSummary", "Statement"],
+  streams: ["AccountCard"],
+  aggregates: ["Account"], // read directly, through their `read` contract
+}) {}
+// A kind left out is served whole; `[]` serves none. Aggregates only when named.
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
 
 More: [Api](https://alchemy.run/domain/api).
+
+`toHttpApi(CustomerApi)` from `@alchemy.run/domain/Http` publishes every call of the Api as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
+
+`toMcp(CustomerApi)` from `@alchemy.run/domain/Ai` gives an agent each call that returns once as an MCP tool; `toToolkit` gives the same tools to an in-app agent. See [hosting.md](hosting.md#mcp).
 
 ## Model
 
