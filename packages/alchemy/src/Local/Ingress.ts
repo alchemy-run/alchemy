@@ -21,8 +21,6 @@
  * (a routes file, a proxy handle) lives outside the adapter value.
  */
 import * as Context from "effect/Context";
-import type * as Digest from "effect/crypto/Digest";
-import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
@@ -126,19 +124,14 @@ export interface IngressFactory {
 }
 
 /**
- * The services an adapter runs under: the platform services a provider layer
- * may depend on in any host, plus the HTTP client. The dev sidecar provides
- * them to every local provider. A narrower set than the sidecar has, because a
- * local provider that calls {@link route} adds these to its layer's
- * requirements, which must stay within what a stack provides.
+ * The services an adapter runs under: the files, paths, processes and HTTP an
+ * adapter needs to keep a route table or drive a router. The dev sidecar
+ * provides them to every local provider. A smaller set than the sidecar has,
+ * because a local provider that calls {@link route} adds these to its layer's
+ * requirements, and `providers()` must keep asking only for what a stack
+ * already provides.
  */
-export type IngressServices =
-  | ChildProcessSpawner
-  | Digest.Digest
-  | SecureRandom.SecureRandom
-  | FileSystem
-  | Path
-  | HttpClient;
+export type IngressServices = ChildProcessSpawner | FileSystem | Path | HttpClient;
 
 /**
  * Adapter factories by {@link IngressConfig.type}, resolved before the
