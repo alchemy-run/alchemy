@@ -54,6 +54,24 @@ export class AmbiguousDomainLegacyData extends Data.TaggedError("AmbiguousDomain
   }
 }
 
+/**
+ * A newer Alchemy deployed this Worker, with a Domain layout this one doesn't
+ * know. Deploying would move its data back to an older layout, so the deploy
+ * stops before any upload.
+ */
+export class DomainVersionTooNew extends Data.TaggedError("DomainVersionTooNew")<{
+  readonly scriptName: string;
+  readonly deployed: number;
+  readonly current: number;
+}> {
+  override get message() {
+    return (
+      `Worker '${this.scriptName}' was deployed with Domain version ${this.deployed}, but this Alchemy only knows up to version ${this.current}. ` +
+      "Deploy it with the Alchemy release that deployed it, or a newer one."
+    );
+  }
+}
+
 /** The tag that records the Domain version a Worker was deployed with. */
 export const versionTag = (version: number) => `alchemy:domain:v${version}`;
 
@@ -82,6 +100,9 @@ export const migrate = Effect.fn(function* ({
   readonly classes: ReadonlyArray<DomainClass>;
   readonly deployedClasses: ReadonlySet<string>;
 }) {
+  if (deployed !== undefined && deployed > DOMAIN_VERSION) {
+    return yield* new DomainVersionTooNew({ scriptName, deployed, current: DOMAIN_VERSION });
+  }
   const renamed: Array<{ readonly from: string; readonly to: string }> = [];
   if (deployed === undefined) {
     // none -> 0: classes were named after the definition (`AccountAggregate`),

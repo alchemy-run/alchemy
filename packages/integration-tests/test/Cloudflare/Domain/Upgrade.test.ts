@@ -3,9 +3,12 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +18,7 @@ import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
 import SharedWorker from "./fixtures/shared-worker.ts";
+import UpgradeNextWorker from "./fixtures/upgrade-next-worker.ts";
 import UpgradeNoneWorker from "./fixtures/upgrade-none-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 
@@ -74,6 +78,20 @@ const namespacesOf = Effect.fn(function* (scriptName: string) {
   );
 });
 
+/**
+ * Read `path` every 250 ms, without retrying, until interrupted: every answer
+ * the Worker gave while a deploy rolled out.
+ */
+const watch = (url: string, path: string, answers: Array<{ status: number; body: string }>) =>
+  HttpClient.execute(
+    HttpClientRequest.get(`${url}${path}`).pipe(HttpClientRequest.setHeader("connection", "close")),
+  ).pipe(
+    Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
+    Effect.catch((error) => Effect.succeed({ status: 0, body: String(error) })),
+    Effect.tap((answer) => Effect.sync(() => answers.push(answer))),
+    Effect.repeat(Schedule.spaced("250 millis")),
+  );
+
 const tagsOf = Effect.fn(function* (scriptName: string) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   return yield* getWorkerTags(scriptName, accountId);
@@ -115,12 +133,23 @@ test.provider(
         (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
       ).toEqual([]);
 
+      // Read the account throughout the upgrade: while Cloudflare rolls the
+      // new code out, every request still answers with it.
+      const answers: Array<{ status: number; body: string }> = [];
+      const watcher = yield* Effect.forkChild(watch(url, "/Billing/state/a-1", answers));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeWorker };
         }),
       );
       yield* waitForVersion(url, 0);
+      yield* Effect.sleep("5 seconds");
+      yield* Fiber.interrupt(watcher);
+      expect(answers.length).toBeGreaterThan(10);
+      expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
+      expect(new Set(answers.map((answer) => answer.body))).toEqual(
+        new Set([JSON.stringify({ owner: "sam" })]),
+      );
 
       // the same namespaces, under the model's names
       expect(yield* namespacesOf(scriptName)).toEqual({
@@ -136,6 +165,48 @@ test.provider(
       yield* call(url, "/approve/s-1/lee", "POST");
       yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
       expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+      const upgraded = yield* namespacesOf(scriptName);
+
+      // A later code change at the same version moves nothing.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeNextWorker };
+        }),
+      );
+      yield* waitForVersion(url, 0);
+      expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+
+      // A Worker a newer Alchemy deployed (version 1) is never moved back.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* workers.patchScriptScriptAndVersionSetting({
+        accountId,
+        scriptName,
+        settings: {
+          // Cloudflare checks every class is still declared on any settings change.
+          exports: Object.fromEntries(
+            Object.keys(upgraded).map((className) => [
+              className,
+              { type: "durable-object", storage: "sqlite" },
+            ]),
+          ),
+          tags: (yield* tagsOf(scriptName)).map((tag) =>
+            tag === "alchemy:domain:v0" ? "alchemy:domain:v1" : tag,
+          ),
+        },
+      });
+      const downgrade = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return { worker: yield* UpgradeWorker };
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(downgrade)).toBe(true);
+      expect(String(downgrade)).toContain("DomainVersionTooNew");
+      expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
+      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
 
       yield* stack.destroy();
     }).pipe(logLevel),
