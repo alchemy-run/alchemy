@@ -14,6 +14,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RotationProps {
@@ -120,7 +121,7 @@ export const RotationProvider = () =>
 
       const rotationArn = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:ssm-contacts:${region}:${accountId}:rotation/${name}`;
+        return `arn:${partitionOf(region)}:ssm-contacts:${region}:${accountId}:rotation/${name}`;
       });
 
       const getRotation = (arn: string) =>

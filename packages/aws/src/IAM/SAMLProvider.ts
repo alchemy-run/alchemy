@@ -163,9 +163,9 @@ export const SAMLProviderProvider = () =>
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
       const name = output?.name ?? (yield* toName(id, news));
-      const accountId = (yield* AWSEnvironment.current).accountId;
+      const { accountId, partition } = yield* AWSEnvironment.current;
       const samlProviderArn =
-        output?.samlProviderArn ?? `arn:aws:iam::${accountId}:saml-provider/${name}`;
+        output?.samlProviderArn ?? `arn:${partition}:iam::${accountId}:saml-provider/${name}`;
 
       // Observe — `getSAMLProvider` returns the metadata, encryption
       // mode, and UUID; absence is `NoSuchEntityException`.

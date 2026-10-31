@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   retryConcurrentModification,
@@ -217,7 +218,7 @@ export const DataSourceProvider = () =>
         }
         if (news.type === "AMAZON_DYNAMODB" && news.dynamodbConfig !== undefined) {
           const tableRegion = news.dynamodbConfig.awsRegion ?? region;
-          const tableArn = `arn:aws:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
+          const tableArn = `arn:${partitionOf(tableRegion)}:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
           statements.push({
             Effect: "Allow",
             Action: [

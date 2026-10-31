@@ -8,12 +8,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
 
 export type JobQueueName = string;
-export type JobQueueArn = `arn:aws:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
+export type JobQueueArn =
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
 
 /**
  * Raised when a job queue's asynchronous deletion does not complete within
@@ -190,7 +192,8 @@ export const JobQueueProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.jobQueueName ?? (yield* toName(id, news));
-          const arn = `arn:aws:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
+          const arn =
+            `arn:${partitionOf(region)}:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";

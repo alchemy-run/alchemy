@@ -36,7 +36,7 @@ export const StartJobHttp = Layer.effect(
             {
               Effect: "Allow",
               Action: ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl"],
-              Resource: ["arn:aws:s3:::*aws-data-exchange*"],
+              Resource: [AWSBindings.partitionArn("s3:::*aws-data-exchange*")],
               Condition: {
                 "ForAnyValue:StringEquals": {
                   "aws:CalledVia": ["dataexchange.amazonaws.com"],

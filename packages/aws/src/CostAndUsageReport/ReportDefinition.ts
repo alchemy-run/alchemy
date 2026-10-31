@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { Region } from "../Region.ts";
 
@@ -233,7 +234,7 @@ export const ReportDefinitionProvider = () =>
       });
 
       const reportArn = (accountId: string, name: string) =>
-        `arn:aws:cur:${CUR_REGION}:${accountId}:definition/${name}`;
+        `arn:${partitionOf(CUR_REGION)}:cur:${CUR_REGION}:${accountId}:definition/${name}`;
 
       // There is no Get operation — observe by scanning the (small,
       // account-max ~10 entries) paginated list.

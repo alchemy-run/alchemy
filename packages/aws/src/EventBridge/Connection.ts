@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -19,7 +20,7 @@ export type {
 
 export type ConnectionName = string;
 export type ConnectionArn =
-  `arn:aws:events:${RegionID}:${AccountID}:connection/${ConnectionName}/${string}`;
+  `arn:${Partition}:events:${RegionID}:${AccountID}:connection/${ConnectionName}/${string}`;
 
 export interface ConnectionApiKeyAuthParameters {
   /** Header name the API key is sent under (e.g. `x-api-key`). */

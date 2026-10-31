@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Flow } from "./Flow.ts";
@@ -33,7 +34,7 @@ export const makeMediaConnectFlowHttpBinding = <I extends { FlowArn: string }, A
    * operations whose IAM resource types include more than the flow (e.g.
    * entitlement ops act on `…:entitlement:*` ARNs too).
    */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

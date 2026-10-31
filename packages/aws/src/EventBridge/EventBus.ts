@@ -9,6 +9,7 @@ import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "al
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { QueueArn } from "../SQS/Queue.ts";
@@ -16,7 +17,8 @@ import type { QueueArn } from "../SQS/Queue.ts";
 export type { IncludeDetail, Level, LogConfig } from "@distilled.cloud/aws/eventbridge";
 
 export type EventBusName = string;
-export type EventBusArn = `arn:aws:events:${RegionID}:${AccountID}:event-bus/${EventBusName}`;
+export type EventBusArn =
+  `arn:${Partition}:events:${RegionID}:${AccountID}:event-bus/${EventBusName}`;
 
 export interface EventBusDeadLetterConfig {
   /** ARN of the SQS queue used as the dead-letter queue. */
@@ -244,7 +246,7 @@ export const EventBusProvider = () =>
               const region = news.region ?? env.region;
               const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, news));
               const eventBusArn = (output?.eventBusArn ??
-                `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
+                `arn:${partitionOf(region)}:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
               const internalTags = yield* createInternalTags(id);
               const desiredTags = {
                 ...internalTags,

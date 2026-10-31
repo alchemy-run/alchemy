@@ -14,6 +14,7 @@ import {
   type RestApiResult,
   type RestApiRouteProps,
 } from "../ApiGateway/RestApiEventSource.ts";
+import { partitionOf } from "../Partition.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -122,7 +123,7 @@ export const RestApiEventSource = Layer.effect(
                 uri: Output.map(
                   Lambda.qualifiedArnOf(host),
                   (arn: string) =>
-                    `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+                    `arn:${arn.split(":")[1]}:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
                 ),
               },
             });
@@ -142,7 +143,7 @@ export const RestApiEventSource = Layer.effect(
                 Output.all(host.functionArn, api.restApiId),
                 ([fnArn, apiId]: [string, string]) => {
                   const [, , , region, accountId] = fnArn.split(":");
-                  return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
+                  return `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}/*`;
                 },
               ),
             });

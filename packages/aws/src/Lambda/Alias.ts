@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   observeEventInvokeConfig,
@@ -191,7 +192,7 @@ export const AliasProvider = () =>
           aliasName: alias.Name,
           functionName,
           functionVersion: alias.FunctionVersion,
-          invokeArn: `arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${alias.AliasArn}/invocations`,
+          invokeArn: `arn:${partitionOf(region)}:apigateway:${region}:lambda:path/2015-03-31/functions/${alias.AliasArn}/invocations`,
           description: alias.Description || undefined,
           routingConfig: normalizeRoutingConfig(alias.RoutingConfig),
           revisionId: alias.RevisionId,

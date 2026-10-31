@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { dnsSuffixOf, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { Api } from "./Api.ts";
 import {
@@ -182,7 +183,7 @@ const computeUrls = (input: {
   apiEndpoint: string | undefined;
 }) => {
   const { region, accountId, apiId, stageName, protocolType, apiEndpoint } = input;
-  const host = `${apiId}.execute-api.${region}.amazonaws.com`;
+  const host = `${apiId}.execute-api.${region}.${dnsSuffixOf(region)}`;
   const callbackUrl = `https://${host}/${stageName}`;
   const invokeUrl =
     protocolType === "WEBSOCKET"
@@ -190,7 +191,7 @@ const computeUrls = (input: {
       : stageName === "$default"
         ? (apiEndpoint ?? `https://${host}`)
         : `${apiEndpoint ?? `https://${host}`}/${stageName}`;
-  const connectionsArn = `arn:aws:execute-api:${region}:${accountId}:${apiId}/${stageName}/*/@connections/*`;
+  const connectionsArn = `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}/${stageName}/*/@connections/*`;
   return { invokeUrl, callbackUrl, connectionsArn };
 };
 

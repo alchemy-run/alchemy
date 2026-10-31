@@ -8,6 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { BudgetSubscriber } from "./Budget.ts";
 
@@ -210,8 +211,12 @@ export const BudgetAction = Resource<BudgetAction>("AWS.Budgets.BudgetAction");
  * Compute the ARN of a budget action. Budgets is a global service, so the ARN
  * has no region component.
  */
-export const budgetActionArn = (accountId: string, budgetName: string, actionId: string): string =>
-  `arn:aws:budgets::${accountId}:budget/${budgetName}/action/${actionId}`;
+export const budgetActionArn = (
+  partition: Partition,
+  accountId: string,
+  budgetName: string,
+  actionId: string,
+): string => `arn:${partition}:budgets::${accountId}:budget/${budgetName}/action/${actionId}`;
 
 const toDefinition = (d: BudgetActionDefinition): budgets.Definition => ({
   IamActionDefinition: d.iamActionDefinition
@@ -311,19 +316,24 @@ export const BudgetActionProvider = () =>
         }
       });
 
-      const attrs = (accountId: string, budgetName: string, actionId: string) =>
+      const attrs = (
+        partition: Partition,
+        accountId: string,
+        budgetName: string,
+        actionId: string,
+      ) =>
         ({
           actionId,
           budgetName,
           accountId,
-          actionArn: budgetActionArn(accountId, budgetName, actionId),
+          actionArn: budgetActionArn(partition, accountId, budgetName, actionId),
         }) as const;
 
       return BudgetAction.Provider.of({
         stables: ["actionId", "budgetName", "accountId", "actionArn"],
         list: () =>
           Effect.gen(function* () {
-            const { accountId } = yield* AWSEnvironment.current;
+            const { accountId, partition } = yield* AWSEnvironment.current;
             return yield* budgets.describeBudgetActionsForAccount
               .pages({ AccountId: accountId })
               .pipe(
@@ -331,7 +341,7 @@ export const BudgetActionProvider = () =>
                 Effect.map((chunk) =>
                   Array.from(chunk)
                     .flatMap((page) => page.Actions ?? [])
-                    .map((a) => attrs(accountId, a.BudgetName, a.ActionId)),
+                    .map((a) => attrs(partition, accountId, a.BudgetName, a.ActionId)),
                 ),
               );
           }),
@@ -339,7 +349,7 @@ export const BudgetActionProvider = () =>
           // The action ID is server-generated — without persisted output there
           // is no deterministic way to find the action.
           if (!output) return undefined;
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const found = yield* budgets
             .describeBudgetAction({
               AccountId: accountId,
@@ -348,7 +358,7 @@ export const BudgetActionProvider = () =>
             })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!found?.Action) return undefined;
-          return attrs(accountId, output.budgetName, output.actionId);
+          return attrs(partition, accountId, output.budgetName, output.actionId);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -357,7 +367,7 @@ export const BudgetActionProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const internalTags = yield* createInternalTags(id);
           const desiredSubscribers = toSubscribers(news.subscribers);
           const desired = {
@@ -445,11 +455,11 @@ export const BudgetActionProvider = () =>
           }
 
           // SYNC tags against observed cloud tags.
-          const arn = budgetActionArn(accountId, news.budgetName, actionId);
+          const arn = budgetActionArn(partition, accountId, news.budgetName, actionId);
           yield* syncTags(arn, { ...news.tags, ...internalTags });
 
           yield* session.note(actionId);
-          return attrs(accountId, news.budgetName, actionId);
+          return attrs(partition, accountId, news.budgetName, actionId);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* budgets

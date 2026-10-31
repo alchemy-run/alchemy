@@ -45,6 +45,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   observeEventInvokeConfig,
@@ -1547,8 +1548,8 @@ export const FunctionProvider = () =>
             roleName,
             policyName,
             functionName: fn,
-            roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
-            functionArn: `arn:aws:lambda:${region}:${accountId}:function:${fn}`,
+            roleArn: `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`,
+            functionArn: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${fn}`,
           };
         });
 
@@ -1624,7 +1625,7 @@ export const FunctionProvider = () =>
         return { env, vpc, fileSystemConfigs };
       });
 
-      const xrayWriteAccessPolicyArn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+      const xrayWriteAccessPolicyName = "AWSXRayDaemonWriteAccess";
 
       /**
        * Converge the X-Ray write managed policy on the execution role with
@@ -1642,6 +1643,8 @@ export const FunctionProvider = () =>
         tracing: FunctionProps["tracing"];
         mayHaveBeenActive: boolean;
       }) {
+        const { partition } = yield* AWSEnvironment.current;
+        const xrayWriteAccessPolicyArn = managedPolicyArn(partition, xrayWriteAccessPolicyName);
         if (tracing === "Active") {
           yield* iam.attachRolePolicy({
             RoleName: roleName,
@@ -1704,10 +1707,11 @@ export const FunctionProvider = () =>
         }
 
         yield* Effect.logDebug(`attaching policy ${id}`);
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            PolicyArn: managedPolicyArn(partition, "service-role/AWSLambdaBasicExecutionRole"),
           })
           .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
 
@@ -1715,7 +1719,10 @@ export const FunctionProvider = () =>
           yield* iam
             .attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "service-role/AWSLambdaVPCAccessExecutionRole",
+              ),
             })
             .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
         }
@@ -1747,7 +1754,7 @@ export const FunctionProvider = () =>
             {
               Effect: "Deny",
               Action: "logs:CreateLogGroup",
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+              Resource: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
             },
           ],
         });
@@ -1904,12 +1911,12 @@ export const FunctionProvider = () =>
       // AWS managed policies Alchemy attaches to the execution role. Other
       // attachments (e.g. an `IAM.RolePolicyAttachment` on `roleName`) are
       // not ours to observe.
-      const managedExecutionPolicyArns = new Set([
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-        "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
-        xrayWriteAccessPolicyArn,
-      ]);
+      const managedExecutionPolicyNames = [
+        "service-role/AWSLambdaBasicExecutionRole",
+        "service-role/AWSLambdaVPCAccessExecutionRole",
+        "AmazonElasticFileSystemClientReadWriteAccess",
+        xrayWriteAccessPolicyName,
+      ];
 
       /**
        * Project the configuration `alchemy drift` compares: every setting
@@ -1931,6 +1938,10 @@ export const FunctionProvider = () =>
       }) {
         const functionName = fn.FunctionName!;
         const policyName = yield* createPolicyName(id);
+        const { partition } = yield* AWSEnvironment.current;
+        const managedExecutionPolicyArns = new Set(
+          managedExecutionPolicyNames.map((name) => managedPolicyArn(partition, name)),
+        );
         const readInlinePolicy = (PolicyName: string) =>
           iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
@@ -3019,7 +3030,7 @@ export const FunctionProvider = () =>
             preferUpdate: true,
           });
 
-          const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+          const functionArn = `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${functionName}`;
           // Consumers in a cycle with this Function wire the alias before
           // reconcile runs, so the alias must already exist (serving the
           // stub until reconcile advances it).
@@ -3045,6 +3056,7 @@ export const FunctionProvider = () =>
           if (isFunctionImageProps(news)) {
             yield* decodeFunctionImageSource(id, news.image);
           }
+          const { partition } = yield* AWSEnvironment.current;
           const generated = yield* createNames(id, news.functionName);
           // Prefer the deployed identifiers: regenerating would target
           // different physical resources if the generator's output for this
@@ -3107,7 +3119,10 @@ export const FunctionProvider = () =>
           if (vpc) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "service-role/AWSLambdaVPCAccessExecutionRole",
+              ),
             });
           }
 
@@ -3150,7 +3165,10 @@ export const FunctionProvider = () =>
           if (desiredFileSystemConfigs.length > 0) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "AmazonElasticFileSystemClientReadWriteAccess",
+              ),
             });
           }
 
@@ -3375,7 +3393,7 @@ export const FunctionProvider = () =>
           const runTailSession = Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
 
-            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
+            const logGroupArn = `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [logGroupArn],
             });

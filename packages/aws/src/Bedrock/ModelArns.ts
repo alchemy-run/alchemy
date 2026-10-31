@@ -1,3 +1,4 @@
+import { partitionOf } from "../Partition.ts";
 /**
  * Cross-region inference profile geo prefixes. A model id beginning with one
  * of these (e.g. `us.amazon.nova-micro-v1:0`) is a system-defined inference
@@ -35,9 +36,9 @@ export const bedrockModelArns = (region: string, accountId: string, modelId: str
   const geoPrefix = modelId.split(".", 1)[0];
   if (geoPrefix && INFERENCE_PROFILE_GEO_PREFIXES.has(geoPrefix)) {
     return [
-      `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`,
-      `arn:aws:bedrock:*::foundation-model/${modelId.slice(geoPrefix.length + 1)}`,
+      `arn:${partitionOf(region)}:bedrock:${region}:${accountId}:inference-profile/${modelId}`,
+      `arn:${partitionOf(region)}:bedrock:*::foundation-model/${modelId.slice(geoPrefix.length + 1)}`,
     ];
   }
-  return [`arn:aws:bedrock:${region}::foundation-model/${modelId}`];
+  return [`arn:${partitionOf(region)}:bedrock:${region}::foundation-model/${modelId}`];
 };

@@ -7,10 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type TableBucketArn = `arn:aws:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
+export type TableBucketArn = `arn:${Partition}:s3tables:${RegionID}:${AccountID}:bucket/${string}`;
 
 /**
  * Server-side encryption configuration for an S3 table bucket. Applied at
@@ -134,7 +135,7 @@ export const TableBucketProvider = () =>
       const name = output?.name ?? (yield* createBucketName(id, olds ?? {}));
       const arn =
         output?.tableBucketArn ??
-        (`arn:aws:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
+        (`arn:${partitionOf(region)}:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
       return yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b): TableBucket["Attributes"] => ({
           tableBucketArn: b.arn as TableBucketArn,
@@ -166,7 +167,7 @@ export const TableBucketProvider = () =>
       const name = output?.name ?? (yield* createBucketName(id, news));
       const arn =
         output?.tableBucketArn ??
-        (`arn:aws:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
+        (`arn:${partitionOf(region)}:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
 
       // Observe — cloud state is authoritative. `output` is only a cache for
       // the deterministic ARN; the bucket may have been deleted out-of-band.

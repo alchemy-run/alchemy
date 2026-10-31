@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -130,7 +131,7 @@ export const DeploymentConfig = Resource<DeploymentConfig>("AWS.CodeDeploy.Deplo
 
 /** Build the ARN for a CodeDeploy deployment configuration. */
 const deploymentConfigArn = (region: string, account: string, name: string): string =>
-  `arn:aws:codedeploy:${region}:${account}:deploymentconfig:${name}`;
+  `arn:${partitionOf(region)}:codedeploy:${region}:${account}:deploymentconfig:${name}`;
 
 export const DeploymentConfigProvider = () =>
   Provider.effect(

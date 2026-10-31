@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { FlushStageCache } from "./FlushStageCache.ts";
 import type { ApiGatewayStage } from "./Stage.ts";
@@ -25,7 +26,7 @@ export const FlushStageCacheHttp = Layer.effect(
         target: stage,
         verb: "DELETE",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/data`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/data`,
         ],
       });
       return Effect.fn(`AWS.ApiGateway.FlushStageCache(${stage.LogicalId})`)(function* () {

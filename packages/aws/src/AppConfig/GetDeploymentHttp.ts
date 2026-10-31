@@ -1,5 +1,6 @@
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import * as Output from "alchemy/Output";
+import { partitionOf } from "../Partition.ts";
 import type { Application } from "./Application.ts";
 import { makeAppConfigHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
@@ -22,9 +23,9 @@ export const GetDeploymentHttp = makeAppConfigHttpBinding(GetDeployment, {
     iam: ({ region, accountId }) => ({
       actions: ["appconfig:GetDeployment"],
       resources: [
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}`,
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}`,
-        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/deployment/*`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}`,
+        Output.interpolate`arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/deployment/*`,
       ],
     }),
   }),

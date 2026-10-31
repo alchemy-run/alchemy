@@ -1,5 +1,6 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { makeRoute53AccountHttpBinding } from "./BindingHttp.ts";
 import { GetChange } from "./GetChange.ts";
 
@@ -11,6 +12,6 @@ export const GetChangeHttp = Layer.effect(
     actions: ["route53:GetChange"],
     // Change ids are minted at runtime by ChangeResourceRecordSets and
     // unknowable at deploy time.
-    resources: ["arn:aws:route53:::change/*"],
+    resources: [AWSBindings.partitionArn("route53:::change/*")],
   }),
 );

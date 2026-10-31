@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class MultiRegionEndpointUnexpectedResponse extends Data.TaggedError(
@@ -146,7 +147,7 @@ const toTagRecord = (
 // getMultiRegionEndpoint returns no ARN, so the ARN listTagsForResource needs
 // is derived from the endpoint NAME (not its id) — verified live.
 const endpointArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
 
 const sameRegions = (
   a: ReadonlyArray<string> | undefined,

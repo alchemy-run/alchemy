@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -21,7 +22,7 @@ import { readElbTags } from "./internal.ts";
 import type { Listener, ListenerArn } from "./Listener.ts";
 
 export type RuleArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:listener-rule/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:listener-rule/${string}`;
 
 /**
  * The requested rule priority is already taken by another rule on the same

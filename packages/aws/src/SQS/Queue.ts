@@ -18,11 +18,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type QueueName = string;
-export type QueueArn = `arn:aws:sqs:${RegionID}:${AccountID}:${QueueName}`;
+export type QueueArn = `arn:${Partition}:sqs:${RegionID}:${AccountID}:${QueueName}`;
 export type QueueUrl = string;
 
 export type QueueProps = {
@@ -479,7 +480,8 @@ export const QueueProvider = () =>
         yield* validateEncryption(news);
         const { accountId, region } = yield* AWSEnvironment.current;
         const queueName = output?.queueName ?? (yield* createQueueName(id, news));
-        const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+        const queueArn =
+          `arn:${partitionOf(region)}:sqs:${region}:${accountId}:${queueName}` as const;
         let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
           Effect.map((r) => r.QueueUrl),
           Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
@@ -542,7 +544,8 @@ export const QueueProvider = () =>
                     Effect.map((r) => {
                       const queueName =
                         r.Attributes?.QueueArn?.split(":").pop() ?? queueUrl.split("/").pop()!;
-                      const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+                      const queueArn =
+                        `arn:${partitionOf(region)}:sqs:${region}:${accountId}:${queueName}` as const;
                       return { queueName, queueUrl, queueArn };
                     }),
                     Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
@@ -559,7 +562,8 @@ export const QueueProvider = () =>
             Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (!url) return undefined;
-          const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+          const queueArn =
+            `arn:${partitionOf(region)}:sqs:${region}:${accountId}:${queueName}` as const;
           const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
             Effect.map((r) => r.Tags ?? {}),
             Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),

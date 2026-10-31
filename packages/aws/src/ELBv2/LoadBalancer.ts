@@ -15,6 +15,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
@@ -22,7 +23,7 @@ import { readElbTags } from "./internal.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:loadbalancer/${string}`;
 
 export interface LoadBalancerProps {
   /** The load balancer name. If omitted, a unique name is generated. Changing it replaces the load balancer. */

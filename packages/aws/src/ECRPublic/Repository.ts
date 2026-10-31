@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { Region } from "../Region.ts";
 
@@ -27,7 +28,8 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
 
 export type RepositoryName = string;
-export type RepositoryArn = `arn:aws:ecr-public::${AccountID}:repository/${RepositoryName}`;
+export type RepositoryArn =
+  `arn:${Partition}:ecr-public::${AccountID}:repository/${RepositoryName}`;
 
 /**
  * Catalog display metadata shown on the public.ecr.aws gallery page for a

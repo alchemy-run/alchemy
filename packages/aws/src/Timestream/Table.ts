@@ -11,6 +11,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
@@ -28,7 +29,7 @@ export class TimestreamTableUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 export type TableArn =
-  `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}/table/${string}`;
+  `arn:${Partition}:timestream:${RegionID}:${AccountID}:database/${string}/table/${string}`;
 
 export type TableStatus = "ACTIVE" | "DELETING" | "RESTORING";
 
@@ -297,7 +298,7 @@ export const TableProvider = () =>
           const databaseName = news.databaseName;
           const tableName = output?.tableName ?? (yield* createTableName(id, news));
           const tableArn =
-            `arn:aws:timestream:${region}:${accountId}:database/${databaseName}/table/${tableName}` as TableArn;
+            `arn:${partitionOf(region)}:timestream:${region}:${accountId}:database/${databaseName}/table/${tableName}` as TableArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredRetention = toWireRetention(news.retentionProperties);

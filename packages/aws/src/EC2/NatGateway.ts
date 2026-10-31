@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { AllocationId } from "./EIP.ts";
@@ -31,7 +32,8 @@ export type NatGatewayId<ID extends string = string> = `nat-${ID}`;
 export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =>
   `nat-${id}` as ID & NatGatewayId<ID>;
 
-export type NatGatewayArn = `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
+export type NatGatewayArn =
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
 
 export interface NatGatewayAvailabilityZoneAddress {
   /**
@@ -152,7 +154,7 @@ export interface NatGateway extends Resource<
     /**
      * The Amazon Resource Name (ARN) of the NAT gateway.
      */
-    natGatewayArn: `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${string}`;
+    natGatewayArn: `arn:${Partition}:ec2:${RegionID}:${AccountID}:natgateway/${string}`;
 
     /**
      * The ID of the subnet in which the NAT gateway is located.
@@ -387,7 +389,7 @@ export const NatGatewayProvider = () =>
         return {
           natGatewayId: gw.NatGatewayId as NatGatewayId,
           natGatewayArn:
-            `arn:aws:ec2:${region}:${accountId}:natgateway/${gw.NatGatewayId}` as NatGatewayArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:natgateway/${gw.NatGatewayId}` as NatGatewayArn,
           subnetId: gw.SubnetId as SubnetId | undefined,
           vpcId: gw.VpcId!,
           state: gw.State!,

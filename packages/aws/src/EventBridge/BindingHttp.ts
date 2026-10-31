@@ -2,6 +2,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { EventBus } from "./EventBus.ts";
 import type { Rule } from "./Rule.ts";
 
@@ -120,7 +121,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
         // invalid IAM policy (MalformedPolicyDocumentException).
         const resource = bus
           ? Output.interpolate`${bus.eventBusArn}`
-          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+          : (`arn:${partitionOf(region)}:events:${region}:${accountId}:event-bus/default` as const);
 
         yield* bind`${options.tag}(${bus ?? "default"})`({
           policyStatements: [

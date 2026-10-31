@@ -18,6 +18,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { tagListRecord } from "../internal/Observe.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
@@ -32,7 +33,7 @@ export type SubnetId<ID extends string = string> = `subnet-${ID}`;
 export const SubnetId = <ID extends string>(id: ID): ID & SubnetId<ID> =>
   `subnet-${id}` as ID & SubnetId<ID>;
 
-export type SubnetArn = `arn:aws:ec2:${RegionID}:${AccountID}:subnet/${SubnetId}`;
+export type SubnetArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:subnet/${SubnetId}`;
 
 export interface SubnetProps {
   /**

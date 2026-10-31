@@ -1,5 +1,6 @@
 import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Effect from "effect/Effect";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * Convert Redshift's `[{ Key, Value }]` tag list into a plain record,
@@ -38,7 +39,7 @@ export const redshiftArn = (
   accountId: string,
   resourceType: "cluster" | "subnetgroup" | "parametergroup" | "eventsubscription",
   name: string,
-): string => `arn:aws:redshift:${region}:${accountId}:${resourceType}:${name}`;
+): string => `arn:${partitionOf(region)}:redshift:${region}:${accountId}:${resourceType}:${name}`;
 
 /**
  * Apply a tag delta to a provisioned-Redshift resource via the shared

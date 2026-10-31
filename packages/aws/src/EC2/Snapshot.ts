@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VolumeId } from "./Volume.ts";
@@ -28,7 +29,7 @@ export type SnapshotId<ID extends string = string> = `snap-${ID}`;
 export const SnapshotId = <ID extends string>(id: ID): ID & SnapshotId<ID> =>
   `snap-${id}` as ID & SnapshotId<ID>;
 
-export type SnapshotArn = `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
+export type SnapshotArn = `arn:${Partition}:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
 
 export interface SnapshotProps {
   /**
@@ -260,7 +261,8 @@ const toSnapshotAttributes = (
   const snapshotId = snapshot.SnapshotId! as SnapshotId;
   return {
     snapshotId,
-    snapshotArn: `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
+    snapshotArn:
+      `arn:${partitionOf(region)}:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
     volumeId: snapshot.VolumeId! as VolumeId,
     volumeSize: snapshot.VolumeSize ?? 0,
     state: snapshot.State ?? "pending",

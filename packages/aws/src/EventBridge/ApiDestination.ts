@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -15,7 +16,7 @@ export type {
 
 export type ApiDestinationName = string;
 export type ApiDestinationArn =
-  `arn:aws:events:${RegionID}:${AccountID}:api-destination/${ApiDestinationName}/${string}`;
+  `arn:${Partition}:events:${RegionID}:${AccountID}:api-destination/${ApiDestinationName}/${string}`;
 
 export interface ApiDestinationProps {
   /**

@@ -6,10 +6,12 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type DataCatalogArn = `arn:aws:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
+export type DataCatalogArn =
+  `arn:${Partition}:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
 
 export interface DataCatalogProps {
   /**
@@ -144,7 +146,8 @@ export const DataCatalogProvider = () =>
           if (!name) return undefined;
           const dc = yield* getOne(name);
           if (!dc) return undefined;
-          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           return {
             name,
             dataCatalogArn: arn,
@@ -166,7 +169,7 @@ export const DataCatalogProvider = () =>
                       {
                         name: dc.CatalogName,
                         dataCatalogArn:
-                          `arn:aws:athena:${region}:${accountId}:datacatalog/${dc.CatalogName}` as DataCatalogArn,
+                          `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${dc.CatalogName}` as DataCatalogArn,
                         type: dc.Type ?? "LAMBDA",
                         parameters: {} as Record<string, string>,
                         description: undefined,
@@ -179,7 +182,8 @@ export const DataCatalogProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = news.name ?? output?.name!;
-          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredParams = news.parameters ?? {};

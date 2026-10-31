@@ -1,6 +1,7 @@
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import * as Output from "alchemy/Output";
 import * as Layer from "effect/Layer";
+import { partitionOf } from "../Partition.ts";
 import { makeAppIntegrationsHttpBinding } from "./BindingHttp.ts";
 import { CreateDataIntegrationAssociation } from "./CreateDataIntegrationAssociation.ts";
 import type { DataIntegration } from "./DataIntegration.ts";
@@ -23,7 +24,7 @@ export const CreateDataIntegrationAssociationHttp = Layer.effect(
     iamActions: ["app-integrations:CreateDataIntegrationAssociation"],
     resources: (integration, { region, accountId }) => [
       Output.interpolate`${integration.dataIntegrationArn}`,
-      Output.interpolate`arn:aws:app-integrations:${region}:${accountId}:data-integration-association/${integration.dataIntegrationId}/*`,
+      Output.interpolate`arn:${partitionOf(region)}:app-integrations:${region}:${accountId}:data-integration-association/${integration.dataIntegrationId}/*`,
     ],
     // AppIntegrations provisions an AppFlow flow (and Customer Profiles
     // snapshots) on the caller's behalf when an association is created.

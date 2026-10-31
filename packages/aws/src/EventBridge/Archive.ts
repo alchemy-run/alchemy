@@ -8,13 +8,14 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type { ArchiveState } from "@distilled.cloud/aws/eventbridge";
 
 export type ArchiveName = string;
-export type ArchiveArn = `arn:aws:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
+export type ArchiveArn = `arn:${Partition}:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
 
 export interface ArchiveProps {
   /**
@@ -185,7 +186,7 @@ export const ArchiveProvider = () =>
                 attrs.push({
                   archiveName: archive.ArchiveName,
                   archiveArn:
-                    `arn:aws:events:${region}:${accountId}:archive/${archive.ArchiveName}` as ArchiveArn,
+                    `arn:${partitionOf(region)}:events:${region}:${accountId}:archive/${archive.ArchiveName}` as ArchiveArn,
                   eventSourceArn: archive.EventSourceArn ?? "",
                 });
               }

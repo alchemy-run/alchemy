@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ActivityProps {
@@ -116,7 +117,7 @@ export const ActivityProvider = () =>
       });
 
       const activityArnOf = (region: string, accountId: string, name: string) =>
-        `arn:aws:states:${region}:${accountId}:activity:${name}`;
+        `arn:${partitionOf(region)}:states:${region}:${accountId}:activity:${name}`;
 
       const describeOrUndefined = Effect.fn(function* (activityArn: string) {
         return yield* sfn

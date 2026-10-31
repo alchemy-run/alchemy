@@ -9,13 +9,14 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type FlowLogId<ID extends string = string> = `fl-${ID}`;
 
 export type FlowLogArn<ID extends FlowLogId = FlowLogId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:vpc-flow-log/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:vpc-flow-log/${ID}`;
 
 /**
  * Raised when `createFlowLogs`/`deleteFlowLogs` report an item in the
@@ -214,7 +215,7 @@ export const FlowLogProvider = () =>
           Effect.map((env) => ({
             flowLogId: fl.FlowLogId as FlowLogId,
             flowLogArn:
-              `arn:aws:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
             resourceId: fl.ResourceId!,
             trafficType: (fl.TrafficType ?? "ALL") as "ACCEPT" | "REJECT" | "ALL",
             logDestinationType: (fl.LogDestinationType ?? "cloud-watch-logs") as
@@ -239,7 +240,7 @@ export const FlowLogProvider = () =>
                     .map((fl) => ({
                       flowLogId: fl.FlowLogId as FlowLogId,
                       flowLogArn:
-                        `arn:aws:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
+                        `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:vpc-flow-log/${fl.FlowLogId}` as FlowLogArn,
                       resourceId: fl.ResourceId!,
                       trafficType: (fl.TrafficType ?? "ALL") as "ACCEPT" | "REJECT" | "ALL",
                       logDestinationType: (fl.LogDestinationType ?? "cloud-watch-logs") as

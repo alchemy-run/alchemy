@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -27,7 +28,7 @@ export class TableUnexpectedResponse extends Data.TaggedError("TableUnexpectedRe
 
 export type TableName = string;
 
-export type TableArn = `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
+export type TableArn = `arn:${Partition}:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
 
 export type TableRecord<Data> = Omit<lambda.DynamoDBRecord, "dynamodb"> & {
   dynamodb: Omit<lambda.StreamRecord, "NewImage" | "OldImage"> & {

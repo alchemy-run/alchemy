@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -44,7 +45,7 @@ export const makeFSxFileSystemHttpBinding = <
    * (e.g. `CreateBackup` authorizes on the new backup's ARN, unknowable at
    * deploy time — grant `arn:aws:fsx:*:*:backup/*`).
    */
-  extraResourceArns?: readonly string[];
+  extraResourceArns?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;

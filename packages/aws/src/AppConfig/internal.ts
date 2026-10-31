@@ -1,13 +1,14 @@
 import * as appconfig from "@distilled.cloud/aws/appconfig";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * Build the ARN of an AppConfig application from its identity.
  * `arn:aws:appconfig:{region}:{account}:application/{appId}`
  */
 export const applicationArn = (region: string, accountId: string, applicationId: string): string =>
-  `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}`;
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${applicationId}`;
 
 /**
  * Build the ARN of an AppConfig environment.
@@ -19,7 +20,7 @@ export const environmentArn = (
   applicationId: string,
   environmentId: string,
 ): string =>
-  `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}/environment/${environmentId}`;
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${applicationId}/environment/${environmentId}`;
 
 /**
  * Build the ARN of an AppConfig configuration profile.
@@ -31,7 +32,7 @@ export const configurationProfileArn = (
   applicationId: string,
   configurationProfileId: string,
 ): string =>
-  `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}/configurationprofile/${configurationProfileId}`;
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${applicationId}/configurationprofile/${configurationProfileId}`;
 
 /**
  * Build the ARN of an AppConfig deployment strategy.
@@ -41,7 +42,8 @@ export const deploymentStrategyArn = (
   region: string,
   accountId: string,
   deploymentStrategyId: string,
-): string => `arn:aws:appconfig:${region}:${accountId}:deploymentstrategy/${deploymentStrategyId}`;
+): string =>
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:deploymentstrategy/${deploymentStrategyId}`;
 
 /**
  * Data-plane resource ARN used by appconfigdata (StartConfigurationSession /
@@ -56,7 +58,7 @@ export const configurationDataArn = (
   environmentId: string,
   configurationProfileId: string,
 ): string =>
-  `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}/environment/${environmentId}/configuration/${configurationProfileId}`;
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:application/${applicationId}/environment/${environmentId}/configuration/${configurationProfileId}`;
 
 /**
  * Build the ARN of an AppConfig extension association.
@@ -67,7 +69,7 @@ export const extensionAssociationArn = (
   accountId: string,
   extensionAssociationId: string,
 ): string =>
-  `arn:aws:appconfig:${region}:${accountId}:extensionassociation/${extensionAssociationId}`;
+  `arn:${partitionOf(region)}:appconfig:${region}:${accountId}:extensionassociation/${extensionAssociationId}`;
 
 /** Drop undefined values from an AppConfig tag map. */
 export const toTagRecord = (

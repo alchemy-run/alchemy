@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
 
@@ -15,7 +16,7 @@ export class DashboardUnexpectedResponse extends Data.TaggedError("DashboardUnex
 }> {}
 
 export type DashboardName = string;
-export type DashboardArn = `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
+export type DashboardArn = `arn:${Partition}:cloudwatch::${AccountID}:dashboard/${string}`;
 
 export type DashboardPeriodOverride = "inherit" | "auto";
 export type DashboardMetricRow = (string | number | boolean | null)[];
@@ -220,7 +221,7 @@ export const DashboardProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
+              `arn:${env.partition}:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
           ),
         );
 

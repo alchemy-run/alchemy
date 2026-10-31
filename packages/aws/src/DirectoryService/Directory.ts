@@ -10,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { readDirectoryTags, sameStringSet } from "./internal.ts";
 
@@ -281,7 +282,7 @@ export const DirectoryProvider = () =>
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
           directoryId: directory.DirectoryId,
-          directoryArn: `arn:aws:ds:${region}:${accountId}:directory/${directory.DirectoryId}`,
+          directoryArn: `arn:${partitionOf(region)}:ds:${region}:${accountId}:directory/${directory.DirectoryId}`,
           directoryName: directory.Name,
           type: directory.Type ?? "SimpleAD",
           stage: directory.Stage ?? "Active",
