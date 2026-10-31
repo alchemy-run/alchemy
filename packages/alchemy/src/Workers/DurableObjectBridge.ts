@@ -19,6 +19,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import type * as Tracer from "effect/Tracer";
 import type { HttpEffect } from "../Http.ts";
 import { isScopeEjected } from "../Http.ts";
 import { rpcMethodOf, serveRpc } from "../Rpc.ts";
@@ -117,8 +118,14 @@ export interface DurableObjectInstance {
     fn: (instance: DurableObjectInstanceShape) => Effect.Effect<any, any, any>,
     onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<T>,
   ) => Promise<T>;
-  /** An RPC method: run the named member of the shape and encode its exit for the wire. */
-  readonly dispatch: (method: string) => (...args: readonly unknown[]) => Promise<unknown>;
+  /**
+   * An RPC method: run the named member of the shape and encode its exit for
+   * the wire, as a child of `parent` (the caller's span) when given.
+   */
+  readonly dispatch: (
+    method: string,
+    parent?: Tracer.AnySpan,
+  ) => (...args: readonly unknown[]) => Promise<unknown>;
   /**
    * The HTTP handler served for one request: in `"static"` mode a request
    * on the RPC path is served by `serveRpc` over the instance's RPC
@@ -256,7 +263,7 @@ export const makeDurableObjectInstance = ({
   };
 
   const dispatch =
-    (method: string) =>
+    (method: string, parent?: Tracer.AnySpan) =>
     (...args: readonly unknown[]) =>
       execute(
         (shape) =>
@@ -280,7 +287,9 @@ export const makeDurableObjectInstance = ({
             return Effect.die(
               new Error(`Durable Object RPC member "${method}" must return an Effect or a Stream`),
             );
-          }),
+          }).pipe((effect) =>
+            parent === undefined ? effect : Effect.withParentSpan(effect, parent),
+          ),
         handleRpcExit,
       );
 

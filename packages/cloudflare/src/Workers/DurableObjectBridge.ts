@@ -9,6 +9,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
+import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { getWorkerExport } from "./WorkerBridge.ts";
 
 /**
@@ -28,6 +29,9 @@ export const makeDurableObjectBridge = (
     services: (state) =>
       Context.make(DurableObjectState, fromDurableObjectState(state)) as Context.Context<never>,
     callServices: (_, track) => Context.make(BackgroundWork, track) as Context.Context<never>,
+    // A stub appends the caller's trace context; one from an older deploy
+    // doesn't, and its call starts a trace of its own.
+    rpcArgs: takeRpcTraceContext,
   });
   return (className: string) => bridge(className);
 };

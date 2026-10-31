@@ -48,7 +48,7 @@ export interface WorkerBundleOptions {
 }
 
 /** The engine half of a workerd bundler. */
-export interface WorkerBundleEngine<Options extends WorkerBundleOptions> {
+export interface WorkerBundleEngine<Options extends WorkerBundleOptions, ModuleRule = never> {
   /**
    * The workerd compatibility (nodejs_compat) plugin factory, loaded lazily
    * so importing the engine never loads rolldown's native binding.
@@ -57,8 +57,18 @@ export interface WorkerBundleEngine<Options extends WorkerBundleOptions> {
     (options: {
       compatibilityDate: string;
       compatibilityFlags: string[];
+      moduleRules?: ModuleRule[] | undefined;
     }) => Array<rolldown.Plugin | null>
   >;
+  /**
+   * Module rules for the parent build's compatibility plugins: imports
+   * emitted as modules of their own instead of being bundled, given the
+   * resolved entry path. Nested `?worker` builds keep only their entry
+   * chunk, so rules never apply to them.
+   */
+  readonly moduleRules?: (options: Options, main: string) => ModuleRule[] | undefined;
+  /** Rewrite a build failure, e.g. to point at the engine's own options. */
+  readonly mapError?: (error: Bundle.BundleError) => Bundle.BundleError;
   /**
    * The generated entry wrapping the user's `main` (a function of the
    * real entry's import path), or `undefined` to bundle `main` as-is.
@@ -139,8 +149,8 @@ const configureCompatPlugins = (
   });
 };
 
-export const makeWorkerBundle = <Options extends WorkerBundleOptions>(
-  engine: WorkerBundleEngine<Options>,
+export const makeWorkerBundle = <Options extends WorkerBundleOptions, ModuleRule = never>(
+  engine: WorkerBundleEngine<Options, ModuleRule>,
 ) =>
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -164,11 +174,12 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions>(
       // The workerd compatibility plugin set, shared by the parent build and
       // by every nested `?worker` module build (see WorkerModulePlugin.ts).
       const overrides = options.extraOptions?.input;
-      const compatPlugins = () =>
+      const compatPlugins = (moduleRules?: ModuleRule[]) =>
         configureCompatPlugins(
           compatRolldown({
             compatibilityDate: options.compatibility.date,
             compatibilityFlags: options.compatibility.flags,
+            moduleRules,
           }),
           esmExternalRequirePlugin,
           overrides?.resolve?.alias,
@@ -200,7 +211,7 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions>(
         input: realMain,
         plugins: [
           overrides?.plugins,
-          compatPlugins(),
+          compatPlugins(engine.moduleRules?.(options, realMain)),
           workerModules,
           virtualEntry === undefined ? undefined : [virtualEntryPlugin(virtualEntry)],
         ],
@@ -242,18 +253,23 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions>(
         Effect.provide(context),
       );
 
+    const mapError = engine.mapError ?? ((error: Bundle.BundleError) => error);
     return {
       build: flow(
         makeOptions,
         Effect.flatMap((resolved) =>
           Bundle.build(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
         ),
+        Effect.mapError(mapError),
       ),
       watch: flow(
         makeOptions,
         Stream.fromEffect,
         Stream.flatMap((resolved) =>
           Bundle.watch(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
+        ),
+        Stream.map((event) =>
+          event._tag === "Error" ? { ...event, error: mapError(event.error) } : event,
         ),
       ),
     };

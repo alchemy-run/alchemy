@@ -755,6 +755,7 @@
       },
       "./Basin/internal/*": null,
       "./R2/internal/*": null,
+      "./Workers/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -783,6 +784,7 @@
     "@distilled.cloud/iceberg": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
+    "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
   },
@@ -794,6 +796,7 @@
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:",
