@@ -309,7 +309,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     // do live — same resource types and ids — with the framework's dev
     // server standing in for the S3 + Lambda origins.
     const kvNamespace = routerDomain
-      ? yield* registerDevRouterRoute(routerDomain, build.url)
+      ? yield* registerDevRouterRoute(routerDomain, build.localUrl)
       : undefined;
     return {
       bucket: undefined,

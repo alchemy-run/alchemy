@@ -6,10 +6,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../Diff.ts";
+import { parseFqn } from "../FQN.ts";
+import * as Ingress from "../Local/Ingress.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { Stack } from "../Stack.ts";
 import { initialCwd, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
@@ -95,6 +98,23 @@ export type ServerDevProps =
        * @default false
        */
       strictPort?: boolean;
+      /**
+       * Route this site's dev URL through an ingress adapter, for example
+       * `Portless.Ingress()`, so `url` is a stable HTTPS name instead of
+       * `http://localhost:<port>`.
+       *
+       * Under `alchemy dev`, `url` becomes the adapter's origin and
+       * {@link Server.localUrl} keeps the framework server's own address, which
+       * everything inside the dev session (a Router's dev origin, for one)
+       * dials. The route is named after the site: the id of the composite
+       * that builds this server, or this server's own id outside one. Changing
+       * `ingress` restarts the dev server.
+       *
+       * `alchemy dev` fails to start the server when the adapter can't be
+       * resolved or can't route, instead of advertising a URL that isn't
+       * routed. Inert on deploy.
+       */
+      ingress?: Ingress.IngressConfig;
     }
   | {
       /**
@@ -183,10 +203,18 @@ export interface Server extends Resource<
      */
     serverEntry: string | undefined;
     /**
-     * The framework dev server's local URL (e.g. `http://localhost:3000`)
-     * during `alchemy dev`. `undefined` on deploys.
+     * The URL the site is reachable at during `alchemy dev`: the framework
+     * dev server's local URL (e.g. `http://localhost:3000`), or its
+     * `dev.ingress` origin when it has one. `undefined` on deploys.
      */
     url: string | undefined;
+    /**
+     * The framework dev server's own URL (e.g. `http://localhost:3000`) during
+     * `alchemy dev`, whether or not `dev.ingress` routes {@link url}. Use it
+     * where something must dial the server itself rather than a routed name.
+     * `undefined` on deploys.
+     */
+    localUrl: string | undefined;
     hash: {
       /**
        * Hash of the input files (plus framework/target/options) that
@@ -358,6 +386,7 @@ export const ServerProviderLive = () =>
               ? path.relative(initialCwd, path.join(distDir, entryName))
               : undefined,
           url: undefined,
+          localUrl: undefined,
           hash:
             props.memo === false
               ? { input: undefined, output: undefined }
@@ -474,6 +503,16 @@ const normalizeAdvertisedUrl = (url: string) =>
   url.replace(/^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+(?::0+){7}\])(?=[:/]|$)/, "$1localhost");
 
 /**
+ * What a route to this server is called. A composite builds its server as
+ * `"Build"` inside the namespace named after the site (`Web/Build`), so the
+ * route takes the site's id; a server outside a namespace keeps its own.
+ */
+const siteLabel = (fqn: string) => {
+  const { path, logicalId } = parseFqn(fqn);
+  return path.at(-1) ?? logicalId;
+};
+
+/**
  * The `alchemy dev` variant: runs the framework's own dev server (native
  * HMR through the framework's kit — nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
@@ -486,8 +525,9 @@ export const ServerProviderLocal = () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
+      const stack = yield* Stack;
       return {
-        start: Effect.fn(function* ({ news: props }) {
+        start: Effect.fn(function* ({ id, fqn, news: props }) {
           // External mode: an external dev server (run out-of-band by the
           // user) serves the site — don't import the framework or spawn
           // anything, just surface the external URL as the attribute.
@@ -497,6 +537,7 @@ export const ServerProviderLocal = () =>
               clientDir: undefined,
               serverEntry: undefined,
               url: props.dev.url,
+              localUrl: props.dev.url,
               hash: { input: undefined, output: undefined },
             };
           }
@@ -546,14 +587,37 @@ export const ServerProviderLocal = () =>
                 cause,
               }),
           );
+          const localUrl = normalizeAdvertisedUrl(url);
+          // The route lives in the instance scope, so a restart or delete
+          // removes it. Fails when the adapter can't route: never advertise an
+          // origin nothing answers on.
+          const origin =
+            dev?.ingress === undefined
+              ? localUrl
+              : yield* Ingress.route(
+                  dev.ingress,
+                  Ingress.createTarget({
+                    stack,
+                    id,
+                    fqn,
+                    type: Server.Type,
+                    label: siteLabel(fqn),
+                  }),
+                  new URL(localUrl),
+                );
           return {
             distDir: undefined,
             clientDir: undefined,
             serverEntry: undefined,
-            url: normalizeAdvertisedUrl(url),
+            url: origin,
+            localUrl,
             hash: { input: undefined, output: undefined },
           };
         }),
-      } satisfies LocalProvider.LocalProviderSpec<Server>;
+      } satisfies LocalProvider.LocalProviderSpec<
+        Server,
+        LocalProvider.DefaultLocalConfig<Server>,
+        Ingress.IngressServices
+      >;
     }),
   );

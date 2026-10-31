@@ -222,7 +222,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       // for the S3 + Lambda origins.
       const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
       const kvNamespace = routerDomain
-        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        ? yield* registerDevRouterRoute(routerDomain, build.localUrl)
         : undefined;
       return {
         bucket: undefined,
