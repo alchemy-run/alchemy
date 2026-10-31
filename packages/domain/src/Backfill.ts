@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -1885,6 +1886,9 @@ interface RunState {
 /** Subtrees a run's root starts with at once: it grows to all of them while the account takes the load. */
 const RUN_WINDOW = 16;
 
+/** Calls a run's root keeps out at once: one object runs at most six. */
+const RUN_CALLS = 6;
+
 /**
  * The root of a consumer's run: it drives passes of a relay tree from its own
  * jobs. A consumer keyed by its source needs one pass (each key reads its own
@@ -1930,25 +1934,41 @@ export const makeRun = (
       const todo: Array<RelayItem> = [];
       for (const item of items ?? [])
         if ((yield* storage.get(doneKey(target, state.phase, item))) === undefined) todo.push(item);
-      // Rounds of `window` subtrees, each handed to the relay tree in one call: one object
-      // runs at most six calls at once, so the tree, not this root, fans them out. Like TCP's
-      // congestion window, it doubles while the account takes the load, then grows by a
-      // quarter, and halves when Cloudflare refuses calls; the subtrees a round gave back
-      // go again later. A wide run stays under the account's limit rather than hit it all
-      // at once and wait it out.
+      // Up to `window` subtrees out at once, in six calls (one object runs at most six at
+      // once), each handing the relay tree its share; a new call as each one answers, with
+      // what was given back sent again later. Like TCP's congestion window, `window` doubles
+      // while the account takes the load, then grows slowly, and halves (once per window)
+      // when Cloudflare refuses calls: a wide run stays under the account's limit rather
+      // than hit it all at once and wait it out.
       let window = state.window ?? RUN_WINDOW;
       let growing = state.window === undefined;
       const queue = [...todo];
+      let active = 0;
+      let calls = 0;
       let refused = 0;
       let done = items !== undefined;
-      for (let round = 0; queue.length > 0; round++) {
-        if (!quiet && round > 0 && (yield* Clock.currentTimeMillis) >= deadline) break;
-        const batch = queue.splice(0, Math.max(1, Math.round(window)));
-        const result = yield* relay.run(
-          `${state.phase}-${state.misses ?? 0}/${round}`,
-          relayRun,
-          batch,
-        );
+      let cutAt = 0;
+      const finished = yield* Queue.unbounded<{
+        readonly batch: ReadonlyArray<RelayItem>;
+        readonly result: RelayResult;
+        readonly launched: number;
+      }>();
+      while (queue.length > 0 || active > 0) {
+        const open = quiet || (yield* Clock.currentTimeMillis) < deadline;
+        while (open && active < RUN_CALLS && queue.length > 0) {
+          const batch = queue.splice(0, Math.max(1, Math.round(window / RUN_CALLS)));
+          const launched = yield* Clock.currentTimeMillis;
+          const name = `${state.phase}-${state.misses ?? 0}/${calls++}`;
+          yield* Effect.forkChild(
+            relay
+              .run(name, relayRun, batch)
+              .pipe(Effect.flatMap((result) => Queue.offer(finished, { batch, result, launched }))),
+          );
+          active += 1;
+        }
+        if (active === 0) break;
+        const { batch, result, launched } = yield* Queue.take(finished);
+        active -= 1;
         refused += result.refused;
         const marks: Record<string, true> = {};
         const back: Array<RelayItem> = [];
@@ -1959,8 +1979,14 @@ export const makeRun = (
         yield* storage.put(marks);
         if (result.refused > 0) {
           growing = false;
-          window = Math.max(1, window / 2);
-        } else window = Math.min(todo.length, growing ? window * 2 : window * 1.25);
+          if (launched >= cutAt) {
+            window = Math.max(1, window / 2);
+            cutAt = yield* Clock.currentTimeMillis;
+          }
+        } else {
+          const step = batch.length;
+          window = Math.min(todo.length, growing ? window + step : window + (step * step) / window);
+        }
         if (back.length === 0) continue;
         // One try at everything: what wasn't done waits for the next pass.
         if (quiet) {
