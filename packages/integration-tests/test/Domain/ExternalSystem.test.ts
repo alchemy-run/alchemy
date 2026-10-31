@@ -3,6 +3,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
@@ -172,6 +173,22 @@ describe("Domain ExternalSystem", () => {
         Effect.provide(layer),
       );
       expect(result).toEqual({ refundId: 42 });
+    }),
+  );
+
+  it.effect("refuses an operation named after a static of the class", () =>
+    Effect.gen(function* () {
+      class Clash extends Domain.ExternalSystem("Clash", {
+        // @ts-expect-error toLayer is the class's own static
+        toLayer: {},
+      }) {}
+      const exit = yield* Effect.exit(
+        Layer.build(Clash.toLayer(Effect.succeed({} as never))).pipe(Effect.scoped),
+      );
+      expect(defectOf(exit)).toMatchObject({
+        _tag: "DefinitionError",
+        reason: { _tag: "ReservedOperation", system: "Clash", operation: "toLayer" },
+      });
     }),
   );
 });

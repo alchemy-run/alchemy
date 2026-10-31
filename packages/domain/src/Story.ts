@@ -946,7 +946,7 @@ const make =
               if (!store.seed) return yield* fail("the platform cannot seed events");
               yield* store.seed(
                 s.ref.id as string,
-                s.events.map((e) => internals.kernel.encodeEvent(e)),
+                yield* Effect.forEach(s.events, internals.kernel.encodeEvent),
               );
               cursors.set(`${s.ref.aggregate}/${s.ref.id}`, (yield* committed(s.ref)).length);
               yield* settle(step);
@@ -978,7 +978,9 @@ const make =
                 .map((e) => e.event);
               const expected = s.events.map(encodeInstance);
               // Decoded, so redacted fields stay redacted in the message.
-              const got = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
+              const got = yield* Effect.forEach(events.slice(from), (e) =>
+                internals.kernel.decodeEvent(e.event),
+              );
               const compared = {
                 label: stream,
                 expected: summarizeAll(s.events),
@@ -1328,7 +1330,9 @@ const make =
           if (events.length <= from) continue;
           touched.set(stream, ref);
           // Decoded, so redacted fields stay redacted in the message.
-          const rest = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
+          const rest = yield* Effect.forEach(events.slice(from), (e) =>
+            internals.kernel.decodeEvent(e.event),
+          );
           const first = committedAt.get(`${stream}#${from}`);
           unasserted.push(
             `${stream}: ${summarizeAll(rest)}${first === undefined ? "" : ` (from step ${first})`}`,
