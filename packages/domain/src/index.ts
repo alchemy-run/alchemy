@@ -262,6 +262,8 @@ export { DefinitionError } from "./Kernel.ts";
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
 
+/** Host a model on `effect/cluster` with any `effect/sql` database. */
+export * as Cluster from "./Cluster.ts";
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";
 export type * as Middleware from "./Middleware.ts";
