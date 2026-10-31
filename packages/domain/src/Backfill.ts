@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
@@ -2072,16 +2073,28 @@ const RELAY_RETRY_MS = 250;
  * existing object to run the deployed code.
  */
 export const makeRelay = (net: Network) => {
-  /** Keep at `effect` until it succeeds or `until` (epoch ms) has passed; `undefined` then. */
-  const persist = <A>(effect: Effect.Effect<A>, until: number): Effect.Effect<A | undefined> =>
+  /**
+   * Keep at `effect` until it succeeds or `until` (epoch ms) has passed; `undefined`
+   * then, after logging why (`what` names the call).
+   */
+  const persist = <A>(
+    effect: Effect.Effect<A>,
+    until: number,
+    what: () => string,
+  ): Effect.Effect<A | undefined> =>
     Effect.gen(function* () {
       while (true) {
         const result = yield* effect.pipe(
           Effect.map((value) => ({ value })),
-          Effect.catchCause(() => Effect.succeed(undefined)),
+          Effect.catchCause((cause) => Effect.succeed({ cause })),
         );
-        if (result !== undefined) return result.value;
-        if ((yield* Clock.currentTimeMillis) + RELAY_RETRY_MS >= until) return undefined;
+        if ("value" in result) return result.value;
+        if ((yield* Clock.currentTimeMillis) + RELAY_RETRY_MS >= until) {
+          yield* Effect.logInfo(
+            `backfill relay-failed ${what()} ${String(Cause.squash(result.cause)).slice(0, 300)}`,
+          );
+          return undefined;
+        }
         yield* Effect.sleep(`${RELAY_RETRY_MS} millis`);
       }
     });
@@ -2092,7 +2105,7 @@ export const makeRelay = (net: Network) => {
       const items: Array<RelayItem> = [];
       let after: string | undefined;
       while (true) {
-        const page = yield* persist(net.node.list(path, after), until);
+        const page = yield* persist(net.node.list(path, after), until, () => `list ${path}`);
         if (page === undefined) return undefined;
         for (const ref of page.rows) items.push({ ref: withGeneration(ref, run.plan) });
         // The root lists one subtree per source: only those the consumer reads.
@@ -2118,9 +2131,14 @@ export const makeRelay = (net: Network) => {
             Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left)),
           ),
           until,
+          () => `start ${ref.source}/${ref.id}`,
         );
         if (started === "settled") return true;
-        if ((yield* Clock.currentTimeMillis) >= until) return false;
+        if ((yield* Clock.currentTimeMillis) >= until) {
+          if (started === "pending" && run.waitMillis > 0)
+            yield* Effect.logInfo(`backfill relay-pending ${run.target} ${ref.source}/${ref.id}`);
+          return false;
+        }
       }
     });
 
@@ -2133,7 +2151,11 @@ export const makeRelay = (net: Network) => {
       const until = (yield* Clock.currentTimeMillis) + relayRun.waitMillis;
       const child = (suffix: string, chunk: ReadonlyArray<RelayItem>) =>
         Effect.map(
-          persist(net.relay.run(`${name}${suffix}`, relayRun, chunk), until),
+          persist(
+            net.relay.run(`${name}${suffix}`, relayRun, chunk),
+            until,
+            () => `relay ${name}${suffix}`,
+          ),
           (done) => done === true,
         );
       if (items.length > RELAY_FANOUT) {

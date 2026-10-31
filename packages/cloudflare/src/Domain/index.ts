@@ -607,10 +607,14 @@ const relayObject = (net: Backfill.Network) =>
           if (yield* isDone(target)) return;
           const plan = yield* state.storage.get<Backfill.Plan>(planKey(target));
           if (plan === undefined) return;
+          const started = yield* Clock.currentTimeMillis;
           const done = yield* relay.run(
             relayRoot(target),
             { target, plan, waitMillis: RELAY_ROOT_WAIT_MS },
             [{ path: "" }],
+          );
+          yield* Effect.logInfo(
+            `backfill relay-pass ${target} done=${done} in ${(yield* Clock.currentTimeMillis) - started}ms`,
           );
           if (done) yield* state.storage.put(doneKey(target), true);
           else yield* runtime.jobs.schedule(`drive:${target}`, 0);
