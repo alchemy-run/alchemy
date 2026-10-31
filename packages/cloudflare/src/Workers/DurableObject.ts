@@ -241,7 +241,10 @@ const restrictToJurisdiction = (
 
 export interface DurableObjectProps {
   /**
-   * Name of the exported `DurableObject` class.
+   * Name of the exported `DurableObject` class. Set it when the class must
+   * keep a name that differs from the logical id (the binding's name in
+   * `env`). Changing it later ships a `renamed_classes` migration, which
+   * keeps the namespace and its stored objects.
    *
    * @default name
    */
@@ -531,7 +534,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * **Example:** Converting an async-form binding without a migration
  * ```typescript
- * // Before: bindings: { LENS_DO: Cloudflare.DurableObject("lens", { className: "LensServer" }) }
+ * // Before: env: { LENS_DO: Cloudflare.DurableObject("LENS_DO", { className: "LensServer" }) }
  * export class LensDo extends Cloudflare.DurableObject<LensDo, LensShape>()(
  *   "LENS_DO",
  *   { className: "LensServer" },
