@@ -92,11 +92,17 @@ export const NamespaceProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* namespaceName(id, olds?.name));
-          const ns = yield* observe(olds, name).pipe(
-            // A control plane that never came up has no namespace to find,
-            // and deleting one is a no-op: let it be destroyed with its stack.
+          // A control plane that never came up (or is gone) has no namespace
+          // to find, and deleting one is a no-op: let it go with its stack
+          // after a short wait rather than the full startup budget.
+          const ns = yield* observe(olds, name, 6).pipe(
             Effect.catchTag(
-              ["BadGateway", "ServiceUnavailable", "GatewayTimeout"],
+              ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
+              () => Effect.undefined,
+            ),
+            Effect.catchIf(
+              (error) =>
+                HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError",
               () => Effect.undefined,
             ),
           );
