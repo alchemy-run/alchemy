@@ -1424,15 +1424,16 @@ export const makeConsumer = (
           }),
         );
         if (started === "settled") return started;
-        yield* jobs.schedule(jobId(target), 0);
-        if (waitMillis <= 0) return started;
+        // Worked on here when asked to wait; the job takes over only if it isn't done in time.
+        if (waitMillis <= 0) return yield* Effect.as(jobs.schedule(jobId(target), 0), started);
         // Work on it here, rather than wait for an alarm to run the job: read its
         // source's log a page at a time until it has its history, or time is up.
         const until = (yield* Clock.currentTimeMillis) + waitMillis;
         for (let failures = 0; ;) {
           failures = (yield* merge(target)) ? failures + 1 : 0;
           if (yield* settled(target)) return "settled" as const;
-          if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
+          if ((yield* Clock.currentTimeMillis) >= until)
+            return yield* Effect.as(jobs.schedule(jobId(target), 0), "pending" as const);
           yield* Effect.sleep(`${yield* pause(failures)} millis`);
         }
       }),
@@ -1933,15 +1934,24 @@ export const makeRun = (
       const finished = yield* Queue.unbounded<{
         readonly item: RelayItem;
         readonly result: RelayResult;
+        readonly launched: number;
       }>();
+      // Halve once per window, like TCP: only for a refusal on a subtree launched after
+      // the last cut, not for every subtree that was already out when the account pushed back.
+      let cutAt = 0;
       const launch = (index: number) =>
-        Effect.forkChild(
-          relay
-            .run(`${state.phase}-${state.misses ?? 0}/${index}`, relayRun, [todo[index]!])
-            .pipe(
-              Effect.flatMap((result) => Queue.offer(finished, { item: todo[index]!, result })),
-            ),
-        );
+        Effect.gen(function* () {
+          const launched = yield* Clock.currentTimeMillis;
+          yield* Effect.forkChild(
+            relay
+              .run(`${state.phase}-${state.misses ?? 0}/${index}`, relayRun, [todo[index]!])
+              .pipe(
+                Effect.flatMap((result) =>
+                  Queue.offer(finished, { item: todo[index]!, result, launched }),
+                ),
+              ),
+          );
+        });
       while (next < todo.length || active > 0) {
         const open = quiet || (yield* Clock.currentTimeMillis) < deadline;
         while (open && active < window && next < todo.length) {
@@ -1950,14 +1960,17 @@ export const makeRun = (
           active += 1;
         }
         if (active === 0) break;
-        const { item, result } = yield* Queue.take(finished);
+        const { item, result, launched } = yield* Queue.take(finished);
         active -= 1;
         if (result.done) yield* storage.put({ [doneKey(target, state.phase, item)]: true });
         else done = false;
         refused += result.refused;
         if (result.refused > 0) {
           growing = false;
-          window = Math.max(1, Math.floor(window / 2));
+          if (launched >= cutAt) {
+            window = Math.max(1, Math.floor(window / 2));
+            cutAt = yield* Clock.currentTimeMillis;
+          }
         } else window = Math.min(RUN_WINDOW_MAX, growing ? window + 1 : window + 1 / window);
       }
       window = Math.max(1, Math.round(window));
