@@ -706,6 +706,11 @@ Worker. Ramping, rollback, smoke testing with version overrides, and
 pinning users to a version are covered in
 [Gradual deployments](/cloudflare/compute/gradual-deployments).
 
+Durable Objects that are busy during a deploy keep running their
+current code for up to 5 minutes. `codeUpdateStrategy` changes how
+long they wait, or switches them right away. See
+[Code updates](/cloudflare/compute/code-updates).
+
 The `version_metadata` binding tells a running Worker which version
 it is, so responses and logs can say exactly which deploy produced
 them:
@@ -737,6 +742,7 @@ object.
 Guides that build on Workers:
 
 - [Gradual deployments](/cloudflare/compute/gradual-deployments) — previews, canaries, and ramped rollouts across versions.
+- [Code updates](/cloudflare/compute/code-updates) — what a deploy does to running Workers and Durable Objects.
 - [Python Workers](/cloudflare/compute/python-workers) — point `main` at a `.py` file.
 - [Workers Cache](/cloudflare/compute/cache) — serve responses from the edge before the Worker runs.
 - [Rate limiting](/cloudflare/compute/rate-limiting) — throttle requests with a binding.

@@ -17,6 +17,7 @@
     "docs:check": "bun run docs:generate && DOCS_FAST=1 astro build",
     "generate:readme-hero": "bun scripts/generate-readme-hero.ts",
     "generate:patterns": "bun scripts/generate-yantra-patterns.ts",
+    "generate:backfill-charts": "bun scripts/generate-backfill-charts.ts",
     "build": "bun scripts/generate-brand-assets.ts && bun run build:reference && bun run build:llms && astro build",
     "dev:site": "API_REFERENCE_COPY_MARKERS=1 bun run build:reference && astro dev",
     "deploy": "alchemy deploy",
