@@ -7,7 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -120,6 +120,8 @@ export type EvaluationProps = {
   evaluationType?: EvaluationType;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Workload Manager accepts no label updates, so changing them replaces
+   * the evaluation.
    */
   labels?: Record<string, string>;
   /**
@@ -180,8 +182,8 @@ export type Evaluation = Resource<
  * validated against a scope of Cloud resources (SAP, SQL Server, or
  * custom).
  *
- * Changing `evaluationId`, `location`, or `kmsKey` replaces the
- * evaluation. Description, labels, resource filter, rule names,
+ * Changing `evaluationId`, `location`, `kmsKey`, or `labels` replaces the
+ * evaluation. Description, resource filter, rule names,
  * schedule, custom-rules bucket, BigQuery destination, and
  * `evaluationType` update in place.
  *
@@ -326,9 +328,11 @@ export const EvaluationProvider = () =>
           env.region,
         ),
         extra:
-          (olds?.kmsKey ?? output?.kmsKey) !== undefined &&
-          news.kmsKey !== undefined &&
-          (olds?.kmsKey ?? output?.kmsKey) !== news.kmsKey,
+          ((olds?.kmsKey ?? output?.kmsKey) !== undefined &&
+            news.kmsKey !== undefined &&
+            (olds?.kmsKey ?? output?.kmsKey) !== news.kmsKey) ||
+          // The API rejects label updates ("updating labels is not unsupported").
+          (olds !== undefined && fingerprint(olds.labels ?? {}) !== fingerprint(news.labels ?? {})),
       });
     }),
 
@@ -429,10 +433,8 @@ export const EvaluationProvider = () =>
         (item) => item.resourceStatus?.state,
       );
 
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
+      // Labels are fixed at create (a change replaces the evaluation).
       const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.description, news.description) && "description",
         fingerprint(toFilter(current.resourceFilter)) !== fingerprint(toFilter(resourceFilter)) &&
           "resourceFilter",
@@ -448,7 +450,7 @@ export const EvaluationProvider = () =>
         const operation = yield* workloadmanager.patchProjectsLocationsEvaluations({
           name: current.name ?? name,
           updateMask: mask,
-          body,
+          body: { ...body, labels: undefined },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

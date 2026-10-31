@@ -108,7 +108,7 @@ test.provider(
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
 
-      const updated = yield* stack.deploy(
+      const evaluation = (props: { description: string; labels: Record<string, string> }) =>
         Effect.gen(function* () {
           yield* WorkloadManagerApi;
           return yield* GCP.WorkloadManager.Evaluation("SapBest", {
@@ -116,16 +116,34 @@ test.provider(
             evaluationType: "SAP",
             ruleNames: [ruleName],
             resourceFilter: { scopes: [`projects/${project}`] },
-            description: "alchemy-test-evaluation-v2",
-            labels: { env: "prod", role: "eval" },
+            ...props,
           });
-        }),
-      );
+        });
 
+      // The description updates in place.
+      const updated = yield* stack.deploy(
+        evaluation({ description: "alchemy-test-evaluation-v2", labels: { env: "test" } }),
+      );
       expect(updated.name).toEqual(created.name);
       expect(updated.evaluationId).toEqual(created.evaluationId);
       expect(updated.description).toEqual("alchemy-test-evaluation-v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "eval" });
+
+      const refetched = yield* workloadmanager.getProjectsLocationsEvaluations({
+        name: created.name,
+      });
+      expect(refetched.description).toEqual("alchemy-test-evaluation-v2");
+      expect(refetched.labels?.env).toEqual("test");
+
+      const unchanged = yield* stack.plan(
+        evaluation({ description: "alchemy-test-evaluation-v2", labels: { env: "test" } }),
+      );
+      expect(unchanged.resources.SapBest?.action).toEqual("noop");
+
+      // Workload Manager accepts no label updates: a change replaces the evaluation.
+      const relabel = yield* stack.plan(
+        evaluation({ description: "alchemy-test-evaluation-v2", labels: { env: "prod" } }),
+      );
+      expect(relabel.resources.SapBest?.action).toEqual("replace");
 
       yield* stack.destroy();
 
