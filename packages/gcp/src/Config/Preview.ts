@@ -190,6 +190,9 @@ export type Preview = Resource<
  * @resource
  * @category Config
  */
+/** Preview ids are at most 40 characters ("must be no longer than 40 characters"). */
+const MAX_PREVIEW_ID_LENGTH = 40;
+
 export const Preview = Resource<Preview>("GCP.Config.Preview");
 
 const resourceName = (project: string, location: string, previewId: string) =>
@@ -323,7 +326,13 @@ export const PreviewProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const previewId = yield* toPhysicalId(id, olds?.previewId, output?.previewId, "preview");
+      const previewId = yield* toPhysicalId(
+        id,
+        olds?.previewId,
+        output?.previewId,
+        "preview",
+        MAX_PREVIEW_ID_LENGTH,
+      );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, previewId);
       const existing = yield* getByName(name);
@@ -341,7 +350,13 @@ export const PreviewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const previewId = yield* toPhysicalId(id, news.previewId, output?.previewId, "preview");
+      const previewId = yield* toPhysicalId(
+        id,
+        news.previewId,
+        output?.previewId,
+        "preview",
+        MAX_PREVIEW_ID_LENGTH,
+      );
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, previewId);
       const desiredLabels = {
