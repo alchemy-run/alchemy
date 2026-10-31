@@ -187,6 +187,16 @@ export interface LayerOptions<Views extends string = string> {
    * complete, the view's `history` says so.
    */
   readonly versions?: { readonly [View in Views]?: number };
+  /**
+   * How many times each view was recomputed, by name (0 when omitted). Bump
+   * it when only a view's `evolve` changed: each key re-folds the events it
+   * already received, in place, the first time it is read or written. Nothing
+   * is read from the history and the deploy waits for nothing. Bump `versions`
+   * instead when what reaches a key changed (its sources, the events it
+   * consumes, or how they are routed to keys). Every view and projection that
+   * reads a recomputed view is rebuilt.
+   */
+  readonly recompute?: { readonly [View in Views]?: number };
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -264,6 +274,7 @@ export const make = <
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? false,
           options?.versions ?? {},
+          options?.recompute ?? {},
         ),
       );
     }
@@ -353,6 +364,7 @@ const build = <A, E, R>(
   telemetry: Telemetry.Resolved,
   legacyData: boolean,
   versions: { readonly [view: string]: number | undefined },
+  recompute: { readonly [view: string]: number | undefined },
 ) =>
   Effect.gen(function* () {
     // The model's own storage: models sharing a definition never share its data.
@@ -365,6 +377,9 @@ const build = <A, E, R>(
     const kernel = yield* Kernel.make(definitions, telemetry);
     for (const [view, version] of Object.entries(versions)) {
       if (version) kernel.setVersion(`view:${view}`, version);
+    }
+    for (const [view, count] of Object.entries(recompute)) {
+      if (count) kernel.setRecompute(view, count);
     }
 
     const aggregateStores = new Map<string, AggregateStore>();
