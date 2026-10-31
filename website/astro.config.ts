@@ -1597,6 +1597,7 @@ export default defineConfig({
               items: [
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
+                { label: "Explore a model", link: "/domain/explore" },
               ],
             },
             {

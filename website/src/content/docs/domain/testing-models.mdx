@@ -218,5 +218,5 @@ A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to 
 A story fails if an event is committed and no `then` step checks it, if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
-Test what clients see through an Api in [Testing an Api](/domain/testing-apis).
+Test what clients see through an Api in [Testing an Api](/domain/testing-apis). To look for the orders of events you did not write, [explore the model](/domain/explore).
 :::

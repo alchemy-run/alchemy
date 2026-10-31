@@ -155,6 +155,12 @@ For every command, cover the happy path, each rejection, and each authorization 
 
 More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-models#check-every-outcome).
 
+### Orders no story covers
+
+A story checks one schedule. `@alchemy.run/domain/Explore` runs the real model under every order of moves inside bounds, and a broken rule gives a failing story. See [explore.md](explore.md).
+
+More: [Explore a model](https://alchemy.run/domain/explore).
+
 ## Api tests: the client's view
 
 In the server package, host the model in memory with the real middleware, and drive it through the Api client. This checks authentication, `validate`, and live reads.

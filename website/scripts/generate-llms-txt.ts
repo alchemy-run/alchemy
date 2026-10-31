@@ -743,6 +743,7 @@ const SECTIONS: Section[] = [
         "domain/story",
         "domain/testing-models",
         "domain/testing-apis",
+        "domain/explore",
         "domain/foldkit",
         "domain/optimistic-updates",
         "domain/local-first",
