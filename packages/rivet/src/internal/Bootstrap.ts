@@ -4,7 +4,7 @@
  *
  * @internal
  */
-import { BunServices } from "@effect/platform-bun";
+import { NodeServices } from "@effect/platform-node";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import {
   entrypointLayer,
@@ -28,7 +28,8 @@ import { runDurableObjects } from "./Runtime.ts";
 /** Build each entrypoint's class phase, then run the node until it is stopped. */
 export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> => {
   const platform = Layer.mergeAll(
-    BunServices.layer,
+    // Node services run under both Node (Fly) and Bun (every other host).
+    NodeServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
   ).pipe(

@@ -33,6 +33,9 @@
     },
     {
       "path": "../gcp/tsconfig.json"
+    },
+    {
+      "path": "../fly/tsconfig.json"
     }
   ]
 }

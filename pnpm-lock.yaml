@@ -10839,9 +10839,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
-      '@effect/platform-bun':
+      '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.1.0(effect@4.1.0)
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
       rivetkit:
         specifier: 3.0.0-preview.4
         version: 3.0.0-preview.4(d493a3e012606eb87f0fa69fe77abd6c)
@@ -10852,6 +10852,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/fly':
+        specifier: workspace:*
+        version: link:../fly
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../gcp

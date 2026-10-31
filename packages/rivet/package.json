@@ -33,6 +33,7 @@
     "./AWS": "./src/AWS/index.ts",
     "./Cloud": "./src/Cloud/index.ts",
     "./Docker": "./src/Docker/index.ts",
+    "./Fly": "./src/Fly/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./*": "./src/*.ts",
@@ -63,6 +64,12 @@
         "bun": "./src/Docker/index.ts",
         "worker": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
+      },
+      "./Fly": {
+        "types": "./lib/Fly/index.d.ts",
+        "bun": "./src/Fly/index.ts",
+        "worker": "./src/Fly/index.ts",
+        "default": "./lib/Fly/index.js"
       },
       "./GCP": {
         "types": "./lib/GCP/index.d.ts",
@@ -95,12 +102,13 @@
   "dependencies": {
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/rivet": "workspace:*",
-    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "rivetkit": "3.0.0-preview.4"
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@types/bun": "catalog:",
@@ -111,6 +119,7 @@
   "peerDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "alchemy": "workspace:*",
@@ -121,6 +130,9 @@
       "optional": true
     },
     "@alchemy.run/docker": {
+      "optional": true
+    },
+    "@alchemy.run/fly": {
       "optional": true
     },
     "@alchemy.run/gcp": {
