@@ -58,8 +58,7 @@ jobs:
       - name: Lint providers
         run: pnpm lint:providers
 
-      # Type-aware, so it also needs the build above. Also checks that package
-      # sources are Latin-1 (`pnpm latin1:check`).
+      # Type-aware, so it also needs the build above.
       - name: Run Lint
         run: pnpm lint
 

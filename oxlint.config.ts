@@ -7,6 +7,7 @@ export default defineConfig({
     typeCheck: false,
   },
   plugins: ["import", "effecttsgo", "typescript", "node", "unicorn", "oxc"],
+  jsPlugins: ["./scripts/oxlint-plugin.ts"],
   ignorePatterns: [
     "submodules/**",
     "packages/alchemy/test/**",
@@ -168,6 +169,11 @@ export default defineConfig({
     "unicorn/prefer-string-starts-ends-with": "error",
   },
   overrides: [
+    {
+      // Shipped package source stays Latin-1 (see scripts/oxlint-plugin.ts).
+      files: ["packages/*/src/**"],
+      rules: { "alchemy/latin1": "error" },
+    },
     {
       // CLI tooling, not library code: a plain Error is fine here.
       files: ["scripts/**", "benchmark/**", "stacks/**"],
