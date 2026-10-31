@@ -500,7 +500,7 @@ const handlersOf = (
         const aggregate = internals.commands.get(entry.tag);
         if (!aggregate) {
           return yield* Effect.die(
-            DefinitionError.make({ reason: UnroutedCommand.make({ command: entry.tag }) }),
+            new DefinitionError({ reason: new UnroutedCommand({ command: entry.tag }) }),
           );
         }
         const declared = declaredOnly(entry.rpc);
@@ -522,7 +522,7 @@ const handlersOf = (
       // Serving an aggregate's state without its read contract would skip its middleware.
       if (entry.kind === "Aggregate" && !entry.definition.read) {
         return yield* Effect.die(
-          DefinitionError.make({ reason: Unreadable.make({ aggregate: entry.aggregateName }) }),
+          new DefinitionError({ reason: new Unreadable({ aggregate: entry.aggregateName }) }),
         );
       }
       const name = nameOf(entry);

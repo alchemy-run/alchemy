@@ -74,8 +74,8 @@ export const judge = (
     if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
-        error: DefinitionError.make({
-          reason: UndeclaredDecision.make({
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
             aggregate: aggregateName,
             command: command.tag,
             returned: String(rejection?._tag),
@@ -90,8 +90,8 @@ export const judge = (
     if (!command.events.some((e) => e.tag === event._tag)) {
       return {
         _tag: "Undeclared",
-        error: DefinitionError.make({
-          reason: UndeclaredDecision.make({
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
             aggregate: aggregateName,
             command: command.tag,
             returned: event._tag,

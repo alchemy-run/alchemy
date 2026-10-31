@@ -109,9 +109,7 @@ export const restore = Effect.fn(function* (json: Json) {
   for (const [key, value] of Object.entries(json)) {
     const entry = registry.get(key);
     if (!entry)
-      return yield* Effect.die(
-        DefinitionError.make({ reason: UnknownRequestContext.make({ key }) }),
-      );
+      return yield* Effect.die(new DefinitionError({ reason: new UnknownRequestContext({ key }) }));
     context = EffectContext.add(context, entry.tag, entry.decode(value));
   }
   return context as EffectContext.Context<never>;

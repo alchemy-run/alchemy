@@ -456,8 +456,8 @@ export const predict = (
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
-        DefinitionError.make({
-          reason: UnhandledCommand.make({
+        new DefinitionError({
+          reason: new UnhandledCommand({
             aggregate: aggregate.aggregateName,
             command: command._tag,
           }),

@@ -360,8 +360,8 @@ const build = <A, E, R>(
       const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
       if (Option.isNone(engine)) {
         return yield* Effect.die(
-          DefinitionError.make({
-            reason: MissingWorkflowEngine.make({ sagas: sagas.map((saga) => saga.sagaName) }),
+          new DefinitionError({
+            reason: new MissingWorkflowEngine({ sagas: sagas.map((saga) => saga.sagaName) }),
           }),
         );
       }
@@ -770,7 +770,7 @@ const streamHost = (
         const writer = kernel.writerOf(stream);
         if (!meta || !writer || writer.projectionName !== meta.projection) {
           return Effect.die(
-            DefinitionError.make({ reason: ForeignAppend.make({ stream: stream.streamName }) }),
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
           );
         }
         meta.appends += 1;

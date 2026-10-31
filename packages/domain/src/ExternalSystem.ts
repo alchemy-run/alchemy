@@ -328,8 +328,8 @@ export const make = <const Name extends string, const Ops extends Record<string,
           const clash = Object.keys(ops).find((op) => reserved.has(op));
           if (clash !== undefined) {
             return yield* Effect.die(
-              DefinitionError.make({
-                reason: ReservedOperation.make({ system: name, operation: clash }),
+              new DefinitionError({
+                reason: new ReservedOperation({ system: name, operation: clash }),
               }),
             );
           }
