@@ -367,6 +367,12 @@ export interface ViewKit {
    * (state, entries, input log and cursors) before it is read or applied to.
    */
   readonly generation: number;
+  /**
+   * Set when the view fills lazily: no backfill runs at deploy, and each key
+   * reads its history from its one source (`source`, the instance with the
+   * key's own id) the first time it is read.
+   */
+  readonly lazy?: { readonly source: string };
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
   /**

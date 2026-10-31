@@ -151,6 +151,18 @@ Each key of the new consumer pulls the history from every instance that feeds it
 
 Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
 
+## Fill a view lazily
+
+A view keyed by the one aggregate it reads can skip the backfill. List it as lazy on the model's Layer:
+
+```typescript title="src/Bank.live.ts"
+Bank.layer(BankHandlers, { lazy: ["AccountSummary"] });
+```
+
+A deploy that adds or rebuilds it waits for nothing. Each key reads its own account's history the first time it's read, or when that account next changes, and every answer it gives covers the whole history. Keys nobody reads are never built.
+
+A view fed by many instances, like a total across every account, can't be lazy: one key doesn't know which instances feed it. The model fails to build if you try.
+
 ## Rebuild a view from the history
 
 A view's state is derived, so it can always be built again. When its `evolve` or routing changes what it should hold, or its state was lost, bump its version on the model's Layer:
