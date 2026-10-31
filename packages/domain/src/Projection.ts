@@ -26,6 +26,41 @@ export interface Input<Key extends Key.Any, S, E> {
   readonly state: View.SourceState<S>;
   /** The input's place in its key's input log, from 1. */
   readonly position: number;
+  /**
+   * The projection's generation: 0, then one more each time its version (or a
+   * view it reads) is bumped. A store kept per generation (a table per
+   * generation) writes this input to the one it names.
+   */
+  readonly generation: number;
+}
+
+/** Which generation a {@link Lifecycle} hook is for, and the one it replaces. */
+export interface Generation {
+  readonly generation: number;
+  /** The generation before it, which this one replaces; `undefined` for the first. */
+  readonly previous: number | undefined;
+}
+
+/**
+ * What a projection does around a rebuild, for a store a version bump must
+ * prepare or clean up. Each hook runs once per generation, from the one
+ * object that runs its backfill, so a deploy repeated or interrupted doesn't
+ * run it again; a crash between a hook and its record does, so make each one
+ * idempotent (`CREATE TABLE IF NOT EXISTS`, `DROP TABLE IF EXISTS`).
+ */
+export interface Lifecycle {
+  /** Before the generation's first input reaches the handler: create its table. */
+  readonly start?: (generation: Generation) => Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Once the handler has every input recorded before the generation began (its
+   * history): point readers at its table, and drop the previous one.
+   */
+  readonly complete?: (generation: Generation) => Effect.Effect<void, never, RuntimeContext>;
+}
+
+/** What a projection's Layer builds: its handler, with the hooks of its {@link Lifecycle}. */
+export interface Hosted<I> extends Lifecycle {
+  readonly handle: Handler<I>;
 }
 
 /**
@@ -58,8 +93,7 @@ export interface Options {
 }
 
 /** A projection's implementation, as its Layer provides it. @internal */
-export interface Implementation<I> {
-  readonly handle: Handler<I>;
+export interface Implementation<I> extends Hosted<I> {
   readonly options: Options;
 }
 
@@ -192,6 +226,7 @@ export interface Definition<
  * }) {}
  *
  * export const LedgerLive = Ledger.toLayer(
+ *   { batch: { size: 500, wait: "2 seconds" } },
  *   Effect.gen(function* () {
  *     const store = yield* LedgerStore;
  *     return Effect.fn(function* (batch) {
@@ -204,7 +239,28 @@ export interface Definition<
  *       );
  *     });
  *   }),
- *   { batch: { size: 500, wait: "2 seconds" } },
+ * );
+ * ```
+ *
+ * ### Rebuilding into a new table
+ * **Example:** A table per generation, swapped in once it has the history
+ * ```typescript
+ * export const LedgerLive = Ledger.toLayer(
+ *   { version: 1 },
+ *   Effect.gen(function* () {
+ *     const store = yield* LedgerStore;
+ *     return {
+ *       handle: Effect.fn(function* (batch) {
+ *         yield* store.upsert(`ledger_v${batch[0]!.generation}`, batch);
+ *       }),
+ *       start: ({ generation }) => store.create(`ledger_v${generation}`),
+ *       complete: ({ generation, previous }) =>
+ *         Effect.gen(function* () {
+ *           yield* store.use(`ledger_v${generation}`);
+ *           if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
+ *         }),
+ *     };
+ *   }),
  * );
  * ```
  *
@@ -248,10 +304,19 @@ export const make = <
         return yield* progress.caughtUp(receipt, options);
       });
     }
-    static toLayer<E, R>(build: Effect.Effect<Handler<I>, E, R>, options: Options = {}) {
+    static toLayer<E, R>(
+      first: Options | undefined | Effect.Effect<Handler<I> | Hosted<I>, E, R>,
+      second?: Effect.Effect<Handler<I> | Hosted<I>, E, R>,
+    ) {
+      // `toLayer(build)`, or `toLayer(options, build)`.
+      const [options, build] = Effect.isEffect(first)
+        ? [{} as Options, first]
+        : [first ?? {}, second!];
       return Layer.effect(
         Tag,
-        Effect.map(build, (handle): Implementation<I> => ({ handle, options })),
+        Effect.map(build, (built): Implementation<I> =>
+          typeof built === "function" ? { handle: built, options } : { ...built, options },
+        ),
       );
     }
   } as unknown as ProjectionClass<Name, From, Key, On, Writes>;
@@ -285,16 +350,26 @@ export interface ProjectionClass<
   ): Effect.Effect<void, View.ConsistencyTimeout, ProgressKey<Name>>;
   /**
    * Implement the projection. The construction Effect runs once, resolving
-   * your store and the streams it writes; the handler requires nothing.
-   * `options` tune how it runs, such as batching.
+   * your store and the streams it writes, and returns the handler, or the
+   * handler with the hooks of its {@link Lifecycle}; neither requires anything.
    */
   toLayer<E, R>(
     build: Effect.Effect<
-      Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      | Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
+      | Hosted<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
       E,
       R
     >,
-    options?: Options,
+  ): Layer.Layer<ProjectionKey<Name>, E, R>;
+  /** Implement the projection, with `options` that tune how it runs, such as batching and its version. */
+  toLayer<E, R>(
+    options: Options | undefined,
+    build: Effect.Effect<
+      | Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
+      | Hosted<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      E,
+      R
+    >,
   ): Layer.Layer<ProjectionKey<Name>, E, R>;
 }
 

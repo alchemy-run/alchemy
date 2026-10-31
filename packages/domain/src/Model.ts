@@ -22,6 +22,7 @@ import {
   type ModelHost,
   Platform,
   type PolicyStore,
+  type ProjectionKit,
   type ProjectionStore,
   type StreamEntry,
   type StreamMeta,
@@ -110,11 +111,17 @@ export interface ModelClass<
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
    * streams exist, so a handler can resolve them while it is constructed.
-   * `options` tune how it's hosted, such as what it records in traces.
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptions<Parts["views"][number]["viewName"]>,
+  ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
+  /**
+   * Host every entity, with `options` that tune how it's hosted: views'
+   * versions, and what it records in traces.
+   */
+  layer<E = never, R = never>(
+    options: LayerOptions<Parts["views"][number]["viewName"]> | undefined,
+    handlers: Layer.Layer<Policies, E, R>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
@@ -254,7 +261,14 @@ export const make = <
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
+    static layer<E, R>(
+      first: LayerOptions | undefined | Layer.Layer<HandledBy<P, J, G>, E, R>,
+      second?: Layer.Layer<HandledBy<P, J, G>, E, R>,
+    ) {
+      // `layer(handlers)`, or `layer(options, handlers)`.
+      const layered = Layer.isLayer(first);
+      const options = layered ? undefined : (first as LayerOptions | undefined);
+      const handlers = layered ? (first as Layer.Layer<HandledBy<P, J, G>, E, R>) : second!;
       return Layer.effectContext(
         build(
           name,
@@ -491,12 +505,35 @@ const build = <A, E, R>(
         implementations as Context.Context<unknown>,
         projection as Context.Key<unknown, Projection.Implementation<unknown>>,
       );
+    const policyImplementationOf = (policy: Policy.Any) =>
+      Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        policy as Context.Key<unknown, Policy.Implementation<unknown>>,
+      );
     for (const projection of definitions.projections) {
       const version = implementationOf(projection).options.version;
       if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
     }
+    for (const policy of definitions.policies) {
+      const { replay, version } = policyImplementationOf(policy).options;
+      if (!replay) continue;
+      kernel.setReplay(policy.policyName);
+      if (version) kernel.setVersion(`policy:${policy.policyName}`, version);
+    }
     for (const projection of definitions.projections) {
       const implementation = implementationOf(projection);
+      const generation = kernel.generationOf("projection", projection.projectionName);
+      const lifecycleOf = { generation, previous: generation > 0 ? generation - 1 : undefined };
+      // Platforms run hooks inside their runtime, as they run handlers.
+      const hook = (
+        run:
+          | ((generation: Projection.Generation) => Effect.Effect<void, never, unknown>)
+          | undefined,
+      ) =>
+        run === undefined
+          ? undefined
+          : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs hooks inside its runtime, which provides RuntimeContext
+            (Effect.suspend(() => run(lifecycleOf)) as Effect.Effect<void>);
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
@@ -505,7 +542,11 @@ const build = <A, E, R>(
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
-          generation: kernel.generationOf("projection", projection.projectionName),
+          generation,
+          lifecycle: {
+            ...(implementation.start ? { start: hook(implementation.start)! } : {}),
+            ...(implementation.complete ? { complete: hook(implementation.complete)! } : {}),
+          },
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           history: kernel.history,
           run: (key, batch) =>
@@ -531,13 +572,25 @@ const build = <A, E, R>(
       );
     }
     for (const policy of definitions.policies) {
-      const handler = Context.getUnsafe(
-        implementations as Context.Context<unknown>,
-        policy as Context.Key<unknown, Policy.Handler<unknown>>,
-      );
+      const implementation = policyImplementationOf(policy);
+      const kit = kernel.policyKit(policy, implementation.handle);
+      const target = `policy:${policy.policyName}`;
+      // A policy that replays catches up like a projection, one trigger at a time per key.
+      const replay: ProjectionKit | undefined = implementation.options.replay
+        ? {
+            name: policy.policyName,
+            kind: "policy",
+            options: {},
+            generation: kernel.generationOf("policy", policy.policyName),
+            singleSource: kernel.singleSource(target),
+            history: kernel.history,
+            run: (_key, batch) =>
+              Effect.forEach(batch, ({ delivery }) => kit.run(delivery), { discard: true }),
+          }
+        : undefined;
       policyStores.set(
         policy.policyName,
-        yield* platform.policy(policy, kernel.policyKit(policy, handler)),
+        yield* platform.policy(policy, replay ? { ...kit, replay } : kit),
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.

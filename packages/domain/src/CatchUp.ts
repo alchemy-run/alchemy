@@ -43,7 +43,11 @@ export const routeLive = (
   for (const target of targets) if (live(target)) next[target] = after;
   return {
     deliveries: deliveries.filter(
-      (delivery) => delivery.target.kind === "policy" || live(targetId(delivery.target)),
+      // A policy that doesn't replay isn't a target: it acts on every new event at once.
+      (delivery) => {
+        const target = targetId(delivery.target);
+        return delivery.target.kind === "policy" && !targets.includes(target) ? true : live(target);
+      },
     ),
     routed: next,
   };

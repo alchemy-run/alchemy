@@ -33,11 +33,11 @@ class Log extends Domain.Command("Log", {
 }) {}
 class Journal extends Domain.Aggregate("Journal", {
   id: Schema.String,
-  state: Schema.Struct({}),
-  initial: {},
+  state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
+  initial: { notes: [] },
   commands: [Log],
   decide: { Log: (_, cmd) => [new Logged({ note: cmd.note })] },
-  evolve: { Logged: (s) => s },
+  evolve: { Logged: (s, e) => ({ notes: [...s.notes, e.note] }) },
 }) {}
 
 // ---------------------------------------------------------------- consumers added later
@@ -63,6 +63,26 @@ const OnDepositLive = OnDeposit.toLayer(
   }),
 );
 
+/**
+ * A policy that notes every deposit in the account's journal, history included:
+ * `Reactions` counts the triggers it saw as history.
+ */
+class Mirror extends Domain.Policy("Mirror", { from: [Account], on: [Deposited] }) {}
+const mirrorLayer = (version?: number) =>
+  Mirror.toLayer(
+    { replay: true, ...(version === undefined ? {} : { version }) },
+    Effect.gen(function* () {
+      const journals = yield* Journal;
+      const reactions = yield* Reactions;
+      return Effect.fn(function* ({ source, event, history }) {
+        if (history) yield* Ref.update(reactions, (n) => n + 1);
+        yield* journals
+          .send(Journal.ref(`j-${source.id}`), new Log({ note: `deposit ${event.amount}` }))
+          .pipe(Effect.orDie);
+      });
+    }),
+  );
+
 /** A store outside the model: what one projection key received, in order. */
 class Feed extends Context.Service<Feed, Ref.Ref<ReadonlyArray<string>>>()("Test/Feed") {}
 class Timeline extends Domain.Projection("Timeline", {
@@ -73,6 +93,7 @@ class Timeline extends Domain.Projection("Timeline", {
 }) {}
 const timelineLayer = (options?: Domain.Projection.Options) =>
   Timeline.toLayer(
+    options,
     Effect.gen(function* () {
       const feed = yield* Feed;
       return Effect.fn(function* (batch) {
@@ -84,9 +105,40 @@ const timelineLayer = (options?: Domain.Projection.Options) =>
         ]);
       });
     }),
-    options,
   );
 const TimelineLive = timelineLayer();
+
+/**
+ * A projection keyed by its source that rebuilds into a table per generation:
+ * `Feed` records its hooks and each input, tagged with the generation. Its
+ * `start` fails the first `failures` times.
+ */
+class Ledger extends Domain.Projection("Ledger", {
+  from: [Account],
+  key: Account,
+  on: [Deposited],
+}) {}
+const ledgerLayer = (options?: Domain.Projection.Options, failures = 0) =>
+  Ledger.toLayer(
+    options,
+    Effect.gen(function* () {
+      const feed = yield* Feed;
+      const record = (line: string) => Ref.update(feed, (all) => [...all, line]);
+      let attempts = 0;
+      return {
+        handle: Effect.fn(function* (batch) {
+          for (const { event, generation } of batch)
+            yield* record(`g${generation} deposit ${event.amount}`);
+        }),
+        start: ({ generation, previous }) =>
+          attempts++ < failures
+            ? Effect.die(new Error("store unavailable"))
+            : record(`start g${generation} after ${previous ?? "none"}`),
+        complete: ({ generation, previous }) =>
+          record(`complete g${generation} after ${previous ?? "none"}`),
+      };
+    }),
+  );
 
 /** The same view, redefined: it now records each deposit doubled. */
 class DoubledDeposits extends Domain.View("Deposits", {
@@ -132,6 +184,14 @@ class Redefined extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   views: [DoubledDeposits],
 }) {}
+class WithLedger extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  projections: [Ledger],
+}) {}
+class WithMirror extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  policies: [Mirror],
+}) {}
 class WithTimeline extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   projections: [Timeline],
@@ -174,14 +234,14 @@ const platform = () => {
     settle,
     services,
     deploy: <A, E, R, P, PE, PR>(
-      model: { readonly layer: (policies: any, options?: any) => Layer.Layer<any, any, any> },
+      model: { readonly layer: (options: any, policies: any) => Layer.Layer<any, any, any> },
       policies: Layer.Layer<P, PE, PR>,
       effect: Effect.Effect<A, E, R>,
       options?: Domain.Model.LayerOptions,
     ) =>
       effect.pipe(
         Effect.tap(() => settle),
-        Effect.provide(model.layer(policies, options).pipe(Layer.provide(hosted.layer))),
+        Effect.provide(model.layer(options, policies).pipe(Layer.provide(hosted.layer))),
       ),
   };
 };
@@ -466,5 +526,120 @@ describe("Domain catch-up", () => {
       );
       expect(feed).toEqual(["deposit 1", "deposit 2", "deposit 1", "deposit 2"]);
     }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live(
+    "a projection's start runs before its first input and complete once its history is in, for each generation",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(Before, Layer.empty, Effect.all([deposit("a-1", 1), deposit("a-2", 2)]));
+        const first = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer(),
+          bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
+        );
+        expect(first[0]).toBe("start g0 after none");
+        expect(first.slice(1, 3).sort()).toEqual(["g0 deposit 1", "g0 deposit 2"]);
+        expect(first[3]).toBe("complete g0 after none");
+        expect(first).toHaveLength(4);
+
+        // A live input after the history is in carries the same generation.
+        const live = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer(),
+          deposit("a-1", 3).pipe(
+            Effect.andThen(bank.settle),
+            Effect.andThen(Effect.flatMap(Feed, Ref.get)),
+          ),
+        );
+        expect(live.slice(4)).toEqual(["g0 deposit 3"]);
+
+        // A version bump: a new generation, told which one it replaces.
+        const rebuilt = yield* bank.deploy(
+          WithLedger,
+          ledgerLayer({ version: 1 }),
+          bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
+        );
+        const second = rebuilt.slice(5);
+        expect(second[0]).toBe("start g1 after 0");
+        expect(second.slice(1, 4).sort()).toEqual(["g1 deposit 1", "g1 deposit 2", "g1 deposit 3"]);
+        expect(second[4]).toBe("complete g1 after 0");
+      }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("a projection's start that fails holds every key back until it succeeds", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Before, Layer.empty, deposit("a-1", 1));
+      const feed = yield* bank.deploy(
+        WithLedger,
+        ledgerLayer(undefined, 2),
+        // A live deposit while `start` keeps failing: its key waits for it too.
+        deposit("a-2", 2).pipe(
+          Effect.andThen(bank.settle),
+          Effect.andThen(Effect.flatMap(Feed, Ref.get)),
+        ),
+      );
+      // Nothing before `start`; the history before `complete` (the live deposit may land either side).
+      expect(feed[0]).toBe("start g0 after none");
+      expect(feed.indexOf("g0 deposit 1")).toBeLessThan(feed.indexOf("complete g0 after none"));
+      expect([...feed].sort()).toEqual([
+        "complete g0 after none",
+        "g0 deposit 1",
+        "g0 deposit 2",
+        "start g0 after none",
+      ]);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live(
+    "a policy that replays acts on the history once, then on new events, and a version bump sends no command twice",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(
+          Before,
+          Layer.empty,
+          Effect.all([deposit("a-1", 1), deposit("a-1", 2), deposit("a-2", 3)]),
+        );
+        const notes = Effect.fn(function* (id: string) {
+          const journals = yield* Journal;
+          return (yield* journals.state(Journal.ref(`j-${id}`))).notes;
+        });
+        const replayed = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(),
+          bank.settle.pipe(
+            Effect.andThen(
+              Effect.all([notes("a-1"), notes("a-2"), Effect.flatMap(Reactions, Ref.get)]),
+            ),
+          ),
+        );
+        expect(replayed).toEqual([["deposit 1", "deposit 2"], ["deposit 3"], 3]);
+
+        // A new deposit is no history.
+        const live = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(),
+          deposit("a-1", 4).pipe(
+            Effect.andThen(bank.settle),
+            Effect.andThen(Effect.all([notes("a-1"), Effect.flatMap(Reactions, Ref.get)])),
+          ),
+        );
+        expect(live).toEqual([["deposit 1", "deposit 2", "deposit 4"], 3]);
+
+        // Bumped: it acts on all four deposits again, and every command it sends was sent before.
+        const again = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(1),
+          bank.settle.pipe(
+            Effect.andThen(
+              Effect.all([notes("a-1"), notes("a-2"), Effect.flatMap(Reactions, Ref.get)]),
+            ),
+          ),
+        );
+        expect(again).toEqual([["deposit 1", "deposit 2", "deposit 4"], ["deposit 3"], 7]);
+      }).pipe(Effect.provide(platform().services)),
   );
 });

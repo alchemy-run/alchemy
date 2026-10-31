@@ -16,6 +16,8 @@ import BenchV2Short from "./fixtures/bench/v2-short.ts";
 import BenchV2 from "./fixtures/bench/v2.ts";
 import BenchV3 from "./fixtures/bench/v3.ts";
 import LedgerV1 from "./fixtures/catch-up/v1.ts";
+import LedgerV2Hooks from "./fixtures/catch-up/v2-hooks.ts";
+import LedgerV2Mirror from "./fixtures/catch-up/v2-mirror.ts";
 import LedgerV2WideBumped from "./fixtures/catch-up/v2-wide-bumped.ts";
 import LedgerV2Wide from "./fixtures/catch-up/v2-wide.ts";
 import LedgerV2 from "./fixtures/catch-up/v2.ts";
@@ -167,11 +169,27 @@ describe.sequential("a deploy and its backfill", () => {
   );
 
   test.provider(
-    "a deploy that times out leaves the backfill running, and the next deploy waits for it",
+    "a deploy that times out leaves the backfill running, reads of the view meanwhile have each key's history, and the next deploy waits for it",
     (stack) =>
       Effect.gen(function* () {
         const { url } = yield* seeded(stack);
         expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
+        yield* serving(url, "v2");
+        // The run is still going, but a key read before it gets there catches itself up.
+        const history = JSON.parse(yield* call(url, "GET", "/history")) as { complete: boolean };
+        expect(history.complete).toBe(false);
+        const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
+        yield* Effect.forEach(
+          Array.from({ length: 20 }, (_, n) => Math.floor((n * ACCOUNTS) / 20) + 7),
+          (i) =>
+            call(url, "GET", `/view/b${i}`).pipe(
+              Effect.map((body) => {
+                const view = JSON.parse(body) as { amounts: Array<number> } | null;
+                expect(view?.amounts).toEqual(expected);
+              }),
+            ),
+          { concurrency: 20, discard: true },
+        );
         yield* deployOf(stack, BenchV2);
         yield* serving(url, "v2");
         yield* checkViews(url);
@@ -257,6 +275,82 @@ describe.sequential("a deploy and its backfill", () => {
           entries: Array<string>;
         } | null;
         expect([...(timeline?.entries ?? [])].sort()).toEqual(["a-1:10", "a-2:5"]);
+        yield* stack.destroy();
+      }),
+    { timeout: 900_000 },
+  );
+
+  test.provider(
+    "a policy that replays acts on the history the deploy found, then on new events",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1 | typeof LedgerV2Mirror) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* call(url, "POST", "/deposit/a-1/20");
+        yield* call(url, "POST", "/deposit/a-2/5");
+
+        // The deploy waits for the policy's backfill: it has noted every earlier deposit.
+        yield* ledger(LedgerV2Mirror);
+        yield* serving(url, "v2-mirror");
+        const notes = (account: string) =>
+          call(url, "GET", `/journal/${account}`).pipe(
+            Effect.map((body) => (JSON.parse(body) as { notes: Array<string> }).notes),
+          );
+        expect(yield* notes("a-1")).toEqual(["past 10", "past 20"]);
+        expect(yield* notes("a-2")).toEqual(["past 5"]);
+
+        // A new deposit is acted on live, after the history.
+        yield* call(url, "POST", "/deposit/a-1/30");
+        const after = yield* notes("a-1").pipe(
+          Effect.filterOrFail(
+            (all) => all.length >= 3,
+            (all) => new NotYet({ status: 200, body: JSON.stringify(all) }),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+        );
+        expect(after).toEqual(["past 10", "past 20", "new 30"]);
+        yield* stack.destroy();
+      }),
+    { timeout: 900_000 },
+  );
+
+  test.provider(
+    "a projection's start runs before its first input, and complete before the deploy returns",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1 | typeof LedgerV2Hooks) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* call(url, "POST", "/deposit/a-1/20");
+        yield* call(url, "POST", "/deposit/a-2/5");
+
+        yield* ledger(LedgerV2Hooks);
+        yield* serving(url, "v2-hooks");
+        const { notes } = JSON.parse(yield* call(url, "GET", "/hooks")) as {
+          notes: Array<string>;
+        };
+        expect(notes[0]).toBe("start g0 after none");
+        expect(notes.slice(1, 4).sort()).toEqual(["g0 a-1:10", "g0 a-1:20", "g0 a-2:5"]);
+        expect(notes.indexOf("g0 a-1:10")).toBeLessThan(notes.indexOf("g0 a-1:20"));
+        expect(notes[4]).toBe("complete g0 after none");
+        expect(notes).toHaveLength(5);
         yield* stack.destroy();
       }),
     { timeout: 900_000 },

@@ -72,6 +72,7 @@ The handler lives in a Layer, built once with everything it needs. It always rec
 
 ```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export const LedgerLive = Ledger.toLayer(
+  { batch: { size: 100, wait: "1 second" } },
   Effect.gen(function* () {
     const store = yield* LedgerStore;
     return Effect.fn(function* (batch) {
@@ -87,7 +88,6 @@ export const LedgerLive = Ledger.toLayer(
       );
     });
   }),
-  { batch: { size: 100, wait: "1 second" } },
 );
 ```
 
@@ -170,18 +170,48 @@ The handler's code is the same either way: it always receives an array. Changing
 { batch: { size: 100, wait: "1 second" }, version: 1 },
 ```
 
+## Rebuild into a new table
+
+Rather than replay over the table readers are using, a projection can build each generation into its own table and switch over once it has the whole history. Return `start` and `complete` alongside the handler:
+
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
+export const LedgerLive = Ledger.toLayer(
+  { version: 1 },
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;
+    return {
+      handle: Effect.fn(function* (batch) {
+        yield* store.record(`ledger_v${batch[0]!.generation}`, batch.map(toRow));
+      }),
+      start: ({ generation }) => store.create(`ledger_v${generation}`),
+      complete: ({ generation, previous }) =>
+        Effect.gen(function* () {
+          yield* store.use(`ledger_v${generation}`);
+          if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
+        }),
+    };
+  }),
+);
+```
+
+Every input carries the `generation` it was routed for. A generation is the projection's version plus the versions of the views it reads, so it changes whenever the projection is rebuilt. `start` runs before the generation's first input, and `complete` runs once every key has handled the history recorded before the deploy, with `previous`, the generation it replaces. Inputs that arrive live keep coming after `complete`.
+
+Each hook runs at least once. One that fails is retried, with a longer wait each time, and the deploy reports it while it waits. Write them to be safe to run again, like the handler: create the table if it doesn't exist, drop it if it exists.
+
+Removing a projection deletes its code with it, so nothing runs to clean up after it. Drop its store yourself.
+
 ## It never sends commands
 
 A projection's effects stay in its own store. That's what makes it safe to replay: run it again over the same inputs, and the only thing that happens is the same rows are written again.
 
-A policy is the opposite. It acts on the world, through commands and external systems, so it handles each new event once and never replays. When you need both, split the work: the projection writes the store, and a policy on the same events sends the commands.
+A policy is the opposite. It acts on the world, through commands and external systems, so it handles each new event once, and replays the history only when it [opts in](/domain/policy#act-on-the-history-too). When you need both, split the work: the projection writes the store, and a policy on the same events sends the commands.
 
 <DAG
   nodes={[
     { id: "event", label: "MoneyWithdrawn", type: "Account a-1", kind: "event" },
     { id: "ledger", label: "Ledger", type: "replayable", kind: "projection" },
     { id: "table", label: "ledger table", type: "your store" },
-    { id: "review", label: "FraudReview", type: "never replays", kind: "policy" },
+    { id: "review", label: "FraudReview", type: "acts once", kind: "policy" },
     { id: "freeze", label: "FreezeAccount", type: "acts on the world", kind: "command" },
   ]}
   edges={[

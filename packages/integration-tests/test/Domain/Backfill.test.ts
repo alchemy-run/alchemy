@@ -70,6 +70,24 @@ const verify = (sim: Sim) =>
       ).toEqual([]);
     }
     for (const target of sim.targets) expect((yield* sim.status()).complete).toContain(target);
+    // The consumer's hooks: `start` before any key handled anything, `complete` after
+    // every key handled the history recorded before the deploy.
+    for (const target of sim.targets) {
+      const hooks = sim.hooks.filter((h) => h.target === target);
+      const start = hooks.findIndex((h) => h.hook === "start");
+      const complete = hooks.findIndex((h) => h.hook === "complete");
+      expect(start).toBe(0);
+      expect(hooks[0]!.applied.size).toBe(0);
+      expect(complete).toBeGreaterThan(start);
+      const history = [...sim.sources.values()].flatMap((source) =>
+        sim.feeds(source.ref.source, target)
+          ? source.events
+              .filter((event) => event.beforeDeploy && event.keys.length > 0)
+              .map((event) => `${source.ref.source}/${source.ref.id}#${event.seq}`)
+          : [],
+      );
+      for (const id of history) expect(hooks[complete]!.applied.has(id)).toBe(true);
+    }
   });
 
 /** Commit `count` events on `sources` instances, each routed to one of `keys` keys. */
@@ -111,6 +129,16 @@ const backfill = (sim: Sim, sources: number, events: number, keys: number) =>
   });
 
 describe("Domain backfill (simulated)", () => {
+  scenario(
+    "a consumer's hooks that fail run again, and keys wait for its start",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.hookFailures = 2;
+        yield* backfill(sim, 6, 30, 3);
+      }),
+    { faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.02 } },
+  );
+
   scenario("a consumer with no history completes", (sim) =>
     Effect.gen(function* () {
       yield* sim.deploy();
@@ -184,6 +212,41 @@ describe("Domain backfill (simulated)", () => {
       yield* sim.deploy();
       yield* sim.run([...own(sim, 6, 20), ...own(sim, 3, 9, "new")]);
     }),
+  );
+
+  scenario(
+    "a consumer that handles what it applies later completes once it has handled its history",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.handleLag = true;
+        yield* backfill(sim, 6, 30, 3);
+      }),
+  );
+
+  scenario(
+    "keyed by its source, a consumer that handles what it applies later completes once it has handled its history",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.singleSource = true;
+        sim.handleLag = true;
+        for (const commit of own(sim, 6, 30)) yield* commit();
+        yield* sim.deploy();
+        yield* sim.run([...own(sim, 6, 12)]);
+      }),
+  );
+
+  scenario(
+    "keyed by its source, commits while the consumer's start keeps failing wait for it",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.singleSource = true;
+        sim.hookFailures = 3;
+        for (const commit of own(sim, 6, 24)) yield* commit();
+        yield* sim.deploy();
+        // Live commits, to existing and new instances, before `start` goes through.
+        for (const commit of [...own(sim, 6, 12), ...own(sim, 3, 6, "new")]) yield* commit();
+        yield* sim.run();
+      }),
   );
 
   scenario("keyed by its source, with instances still on older code", (sim) =>

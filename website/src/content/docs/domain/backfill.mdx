@@ -5,7 +5,7 @@ description: How a deploy backfills new views and projections on Cloudflare, how
 
 import BackfillChart from "../../../components/charts/BackfillChart.astro";
 
-When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how, how long it takes, measured on Cloudflare, and what to keep in mind as a Domain grows.
+When a deploy adds a view, a projection or a [policy that replays](/domain/policy#act-on-the-history-too), or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how, how long it takes, measured on Cloudflare, and what to keep in mind as a Domain grows.
 
 ## The deploy waits for the history
 
@@ -44,6 +44,12 @@ While it waits, the deploy reports each run's phase and how far through the dire
 
 A consumer keyed by its source reads its history in one pass. Any other reads it, then applies it once every source's history is in. `refused` counts calls Cloudflare turned down for the account's load; the run sends them again, more slowly.
 
+A projection's [`start` and `complete`](/domain/projection#rebuild-into-a-new-table) run in the run: `start` before any key handles an input, and `complete` once every key has handled its history. The run counts as complete only after `complete` has run, so a deploy waits for it. A hook that fails is retried, and the deploy notes it:
+
+```sh
+[DomainBackfillRun] Backfilling projection:Ledger starting (start failed, retrying: table ledger_v1: permission denied) (12s) ...
+```
+
 The deploy waits 30 minutes at most. Set `backfillTimeout` to change that:
 
 ```ts
@@ -60,7 +66,7 @@ A run reads the sources its consumer read when the run started. If you change wh
 view:Timeline now reads Account, Journal, but its backfill was started reading Account. Bump its version to rebuild it from every source's history.
 ```
 
-To run a backfill again, bump the consumer's version. The new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the deploy returns, reads of the view see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
+To run a backfill again, bump the consumer's version. The new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the run completes, a view keyed by its aggregate catches up each key as it's read, so its reads have the instance's whole history; any other view's reads see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
 
 ## Width
 

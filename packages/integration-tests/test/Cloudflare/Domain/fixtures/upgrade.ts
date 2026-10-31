@@ -68,7 +68,7 @@ export const upgradeWorker = ({
     const Platform = DomainCloudflare.layerDurableObjects();
     const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
       Effect.provide(
-        Billing.layer(ApproveLive, { legacyData: legacyData === "Billing" }).pipe(
+        Billing.layer({ legacyData: legacyData === "Billing" }, ApproveLive).pipe(
           Layer.provide(Platform),
         ),
       ),
@@ -78,7 +78,7 @@ export const upgradeWorker = ({
       Audit: audit
         ? yield* Effect.all({ accounts: Account, owners: Owners }).pipe(
             Effect.provide(
-              Audit.layer(Layer.empty, { legacyData: legacyData === "Audit" }).pipe(
+              Audit.layer({ legacyData: legacyData === "Audit" }, Layer.empty).pipe(
                 Layer.provide(Platform),
               ),
             ),
