@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as Schedule from "effect/Schedule";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 
@@ -271,7 +272,25 @@ export const PoolProvider = () =>
                 }),
               ),
             ),
-            withConnection(olds),
+            withConnection(olds, { wait: "1 minute" }),
+            // A pool lives on its control plane: one that no longer answers
+            // (destroyed before this pool, e.g. by an interrupted destroy)
+            // took the pool with it.
+            Effect.catchTag(
+              ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
+              () =>
+                session.note(
+                  `Rivet pool ${output.name}'s control plane is unreachable; dropping it.`,
+                ),
+            ),
+            Effect.catchIf(
+              (error) =>
+                HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError",
+              () =>
+                session.note(
+                  `Rivet pool ${output.name}'s control plane is unreachable; dropping it.`,
+                ),
+            ),
           );
         }),
       };
