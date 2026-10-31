@@ -16,9 +16,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 const clusterName = "alchemy-test-aas-ecs";
 
 // The flagship ECS-service scaling flow: register the service's DesiredCount
-// dimension (min 1 / max 3), attach a CPU target-tracking policy, verify both
-// out-of-band, update the policy target in place, and destroy in dependency
-// order (policy -> target -> service -> cluster).
+// dimension (min 1 / max 3), attach CPU target-tracking, step and predictive
+// policies, verify them out-of-band, update the policy targets in place, and
+// destroy in dependency order (policy -> target -> service -> cluster).
 //
 // To stay inside the speed budget we avoid building/pushing a Docker image
 // and register a minimal task definition against a public image out of band
@@ -104,6 +104,24 @@ test.provider(
                 StepAdjustments: [{ MetricIntervalLowerBound: 0, ScalingAdjustment: 1 }],
               },
             });
+            // Predictive scaling is ECS-only in Application Auto Scaling.
+            // ForecastOnly so the policy never changes the desired count.
+            const predictivePolicy = yield* ScalingPolicy("AasEcsPredictivePolicy", {
+              serviceNamespace: target.serviceNamespace,
+              resourceId: target.resourceId,
+              scalableDimension: target.scalableDimension,
+              predictiveScaling: {
+                Mode: "ForecastOnly",
+                MetricSpecifications: [
+                  {
+                    TargetValue: targetValue,
+                    PredefinedMetricPairSpecification: {
+                      PredefinedMetricType: "ECSServiceCPUUtilization",
+                    },
+                  },
+                ],
+              },
+            });
             return {
               serviceName: service.serviceName.as<string>(),
               resourceId: target.resourceId.as<string>(),
@@ -112,6 +130,9 @@ test.provider(
               policyArn: policy.policyArn.as<string>(),
               stepPolicyName: stepPolicy.policyName.as<string>(),
               stepPolicyType: stepPolicy.policyType.as<string>(),
+              predictivePolicyName: predictivePolicy.policyName.as<string>(),
+              predictivePolicyArn: predictivePolicy.policyArn.as<string>(),
+              predictivePolicyType: predictivePolicy.policyType.as<string>(),
             };
           }),
         );
@@ -154,7 +175,20 @@ test.provider(
         { MetricIntervalLowerBound: 0, ScalingAdjustment: 1 },
       ]);
 
-      // Update the policy target in place — same policy ARN.
+      // Out-of-band: the predictive policy forecasts on the CPU metric pair.
+      expect(created.predictivePolicyType).toBe("PredictiveScaling");
+      const predictivePolicies = yield* aas.describeScalingPolicies({
+        ServiceNamespace: "ecs",
+        PolicyNames: [created.predictivePolicyName],
+        ResourceId: created.resourceId,
+      });
+      const observedPredictive =
+        predictivePolicies.ScalingPolicies?.[0]?.PredictiveScalingPolicyConfiguration;
+      expect(predictivePolicies.ScalingPolicies?.[0]?.PolicyType).toBe("PredictiveScaling");
+      expect(observedPredictive?.Mode).toBe("ForecastOnly");
+      expect(observedPredictive?.MetricSpecifications?.[0]?.TargetValue).toBe(50);
+
+      // Update the policy targets in place — same policy ARNs.
       const updated = yield* deploy(30);
       expect(updated.policyArn).toEqual(created.policyArn);
       const policiesAfterUpdate = yield* aas.describeScalingPolicies({
@@ -165,6 +199,16 @@ test.provider(
       expect(
         policiesAfterUpdate.ScalingPolicies?.[0]?.TargetTrackingScalingPolicyConfiguration
           ?.TargetValue,
+      ).toBe(30);
+      expect(updated.predictivePolicyArn).toEqual(created.predictivePolicyArn);
+      const predictiveAfterUpdate = yield* aas.describeScalingPolicies({
+        ServiceNamespace: "ecs",
+        PolicyNames: [created.predictivePolicyName],
+        ResourceId: created.resourceId,
+      });
+      expect(
+        predictiveAfterUpdate.ScalingPolicies?.[0]?.PredictiveScalingPolicyConfiguration
+          ?.MetricSpecifications?.[0]?.TargetValue,
       ).toBe(30);
 
       // Destroy in dependency order and verify deregistration out-of-band.
@@ -189,6 +233,12 @@ test.provider(
         ResourceId: created.resourceId,
       });
       expect(policiesAfterDestroy.ScalingPolicies ?? []).toHaveLength(0);
+      const predictiveAfterDestroy = yield* aas.describeScalingPolicies({
+        ServiceNamespace: "ecs",
+        PolicyNames: [created.predictivePolicyName],
+        ResourceId: created.resourceId,
+      });
+      expect(predictiveAfterDestroy.ScalingPolicies ?? []).toHaveLength(0);
 
       yield* reclaimTaskDefinitionFamily(clusterName);
     }),
