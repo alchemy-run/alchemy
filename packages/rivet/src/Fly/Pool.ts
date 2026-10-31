@@ -62,7 +62,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
         main: nodes.program.main,
         build: {
           input: nodes.program.build.input,
-          install: [`rivetkit@${RIVETKIT_VERSION}`],
+          install: { rivetkit: RIVETKIT_VERSION },
         },
         public: false,
         region: options.region ?? "iad",
