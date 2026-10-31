@@ -105,6 +105,9 @@ export const DOCS_TABS: DocsTab[] = [
     "/providers/git",
   ]),
   hub("Command", "command", "Source & CI", "build · dev · exec", ["/providers/command"]),
+  hub("Portless", "portless", "Source & CI", "stable HTTPS names for dev servers", [
+    "/providers/portless",
+  ]),
 
   // A provider's reference pages belong to its hub tab (the prefixes
   // above claim /providers/{provider} first) — the Reference tab owns

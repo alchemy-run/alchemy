@@ -1,0 +1,133 @@
+---
+title: Portless
+description: Stable HTTPS .localhost names for dev servers and local ports during alchemy dev, through one shared Portless proxy.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+[Portless](https://github.com/vercel-labs/portless) is a local HTTPS reverse
+proxy: a service on `localhost:<port>` gets a stable name such as
+`https://dev-alice.api.myapp.localhost`. The Portless provider declares that
+proxy and the names behind it as Stack resources, so every stage and
+worktree gets its own routes and none of them needs a port number, a
+hosts-file entry or a certificate warning.
+
+Install `@alchemy.run/portless`:
+
+<PackageManagers add="@alchemy.run/portless" />
+
+Portless needs Node.js 24 or newer. Register the provider in your stack:
+
+```typescript
+// alchemy.run.ts
+import * as Portless from "@alchemy.run/portless";
+
+providers: Portless.providers(),
+state: Alchemy.localState(),
+```
+
+When Portless runs alongside a cloud provider, merge the layers:
+`providers: Layer.merge(Cloudflare.providers(), Portless.providers())`.
+
+## Resources
+
+`Proxy` is the shared proxy. `Dev` serves a command behind it, and `Alias`
+names a port something else owns. A service's name is
+`<stage>.<id>.<domain>.localhost`: the stage `dev_alice`, the resource
+`Api` and the domain `myapp` give `https://dev-alice.api.myapp.localhost`.
+
+```typescript
+const proxy = yield* Portless.Proxy("Proxy", { domain: "myapp" });
+
+const api = yield* Portless.Dev("Api", {
+  proxy,
+  command: "node --watch server.ts",
+});
+api.origin; // "https://dev-alice.api.myapp.localhost"
+
+const floci = yield* Portless.Alias("Floci", {
+  proxy,
+  url: "http://localhost:4566",
+});
+floci.origin; // "https://dev-alice.floci.myapp.localhost"
+```
+
+The command a `Dev` runs listens on the `$PORT` it is given. Tools that
+ignore the variable take it as a flag: `vite --port $PORT --strictPort`. The
+command also gets `HOST` (`127.0.0.1`), `PORTLESS_URL` (its own origin) and a
+`NODE_EXTRA_CA_CERTS` bundle that trusts the proxy's CA, so one service can
+call another over HTTPS from Node.
+
+`Alias` forwards plain HTTP to a loopback port, so its `url` must be an
+`http://` url on `localhost`, `127.0.0.1` or `[::1]`. Pass `hostname` to
+register an exact name such as `status.localhost` instead.
+
+## Naming a service before it starts
+
+An API that allows a web app's origin in its CORS list can't wait for the web
+app to start. `Origin` computes the same origin the service will have, from
+the stage, the id and the proxy alone:
+
+```typescript
+const webOrigin = yield* Portless.Origin("Web", { proxy, port: 5173 });
+
+const api = yield* Portless.Dev("Api", {
+  proxy,
+  command: "node --watch server.ts",
+  env: { CORS_ORIGIN: webOrigin },
+});
+
+const web = yield* Portless.Dev("Web", {
+  proxy,
+  port: 5173,
+  command: "vite --port $PORT --strictPort",
+  env: { API_URL: api.origin },
+});
+```
+
+`port` is what `PORTLESS=0` serves the origin on, and the port `Web` keeps
+across restarts.
+
+## The proxy
+
+`alchemy dev` starts the proxy when it isn't running, reuses it when it is, and
+never stops, restarts or reconfigures it. One proxy serves every stage, stack
+and worktree on the machine.
+
+- It listens on port 443 as an unprivileged process
+  (`portless proxy start --unprivileged`), so Alchemy never asks for sudo and
+  never runs a root daemon. macOS allows that as it is. On Linux,
+  `net.ipv4.ip_unprivileged_port_start` must be 443 or lower; when it isn't,
+  the error prints the exact `sysctl` command.
+- The first run asks the operating system once to trust the proxy's CA
+  (`portless trust`: a Keychain prompt on macOS, sudo on Linux). Alchemy checks
+  first and prompts only when the CA isn't trusted, then checks again. On
+  Linux the CA is also added to Chromium's NSS database, which needs `certutil`.
+- A running proxy is reused only when it serves HTTPS on the same port,
+  `.localhost` only, unprivileged and with Portless's own CA. Otherwise the run
+  fails and says what differs. When port 443 belongs to something that isn't
+  Portless, the error names it, including Floci's container from an earlier
+  session and how to free the port.
+- Portless's own settings move the proxy: `PORTLESS_STATE_DIR` (default
+  `~/.portless`) and `PORTLESS_PORT` (default 443).
+
+During `alchemy deploy` these resources do nothing, and a plain deploy never
+starts a proxy. `PORTLESS=0 alchemy dev` skips the proxy: `Dev` serves
+`http://localhost:<port>`, `Alias` returns its `url`, and `Origin` returns
+`http://localhost:<port>`.
+
+## Routes
+
+A `Dev` or `Alias` route belongs to the dev sidecar, the process that outlives
+reloads of your stack program, so an edit that reloads your stack leaves
+the servers running and their routes in place. A `Dev` route goes when its
+command exits (the next plan then shows an update), when it restarts and when
+the resource is deleted. A hostname another resource or another dev session
+already routes is rejected, not taken over.
+
+## API reference
+
+- [`Proxy`](/providers/portless/proxy)
+- [`Dev`](/providers/portless/dev)
+- [`Alias`](/providers/portless/alias)
+- [`Origin`](/providers/portless/origin)
