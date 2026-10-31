@@ -159,6 +159,14 @@ const declare = CloudflareDurableObject as unknown as (
 const consumerClass = (kind: "view" | "projection", name: string, generation: number) =>
   `${name}${kind === "view" ? "View" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
 
+/**
+ * The class of a consumer generation's run: its root, relays and scanners. A
+ * class of its own, new with the deploy like the keys' class, so none of them
+ * can start on older code; and apart from the keys, so a burst of keys that
+ * runs an isolate out of memory doesn't reset the run that drives them.
+ */
+const runClass = (keys: string) => `${keys}Run`;
+
 /** A consumer's generation from its target id: `view:Name#2` is 2. */
 const generationOfTarget = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
 
@@ -1492,13 +1500,15 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     };
     const sourceObject = (namespace: Namespace, ref: Backfill.SourceRef) =>
       namespace.getByName(ref.id);
-    const consumerStub = (target: string, key: string) => {
+    /** A consumer's keys (`key`), or its run's root, relays and scanners (`run`): see `runClass`. */
+    const consumerStub = (target: string, key: string, role: "key" | "run" = "key") => {
       const { kind, name } = Backfill.consumerOf(target);
-      const cls = consumerClass(kind, name, generationOfTarget(target));
+      const keys = consumerClass(kind, name, generationOfTarget(target));
+      const cls = role === "run" ? runClass(keys) : keys;
       return (consumers.get(cls) ?? bound(cls))?.getByName(key);
     };
-    const consumerOf = (target: string, key: string) => {
-      const stub = consumerStub(target, key);
+    const consumerOf = (target: string, key: string, role: "key" | "run" = "key") => {
+      const stub = consumerStub(target, key, role);
       return stub === undefined
         ? Effect.die(new Error(`backfill: ${target} isn't in the code this object runs yet`))
         : Effect.succeed(stub);
@@ -1559,33 +1569,33 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       // A source instance's scanner is an object of the consumer's own class: it has its routing.
       scanner: {
         scan: (target, ref, waitMillis) =>
-          Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
+          Effect.flatMap(consumerOf(target, scannerName(ref), "run"), (stub) =>
             callOnce(stub.bfScannerScan(target, ref, waitMillis)),
           ),
         ready: (target, ref, waitMillis) =>
-          Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
+          Effect.flatMap(consumerOf(target, scannerName(ref), "run"), (stub) =>
             callOnce(stub.bfScannerReady(target, waitMillis)),
           ),
         kick: (target, ref) =>
-          Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
+          Effect.flatMap(consumerOf(target, scannerName(ref), "run"), (stub) =>
             callOnce(stub.bfScannerKick(target, ref)),
           ),
       },
       relay: {
         run: (name, run, items) =>
-          Effect.flatMap(consumerOf(run.target, relayName(run.target, name)), (stub) =>
+          Effect.flatMap(consumerOf(run.target, relayName(run.target, name), "run"), (stub) =>
             callOnce<Backfill.RelayResult>(stub.bfRelayRun(name, run, items)),
           ),
       },
       run: {
         begin: (target, plan) =>
-          Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
+          Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
             callOnce<boolean>(stub.bfRunBegin(target, plan)),
           ),
         phase: (target) =>
           complete.has(target)
             ? Effect.succeed("complete" as const)
-            : Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
+            : Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
                 callOnce<Backfill.Phase>(stub.bfRunPhase(target)),
               ).pipe(
                 Effect.tap((phase) =>
@@ -1617,7 +1627,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                 Effect.suspend(() => {
                   const { kind, name } = Backfill.consumerOf(target);
                   const namespace =
-                    workerEnv[consumerClass(kind, name, generationOfTarget(target))];
+                    workerEnv[runClass(consumerClass(kind, name, generationOfTarget(target)))];
                   return namespace === undefined
                     ? Effect.die(new Error(`backfill: ${target} isn't in the code this runs yet`))
                     : Effect.succeed(
@@ -1763,6 +1773,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             sources.set(cls, namespace);
             viewGenerations.set(view.viewName, kit.generation);
             consumers.set(cls, namespace);
+            consumers.set(
+              runClass(cls),
+              yield* declare(runClass(cls), viewObject(kit, net, current, consumerPlans)),
+            );
             const read = (key: string) =>
               announce.pipe(
                 Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
@@ -1806,6 +1820,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             const cls = consumerClass("projection", projection.projectionName, kit.generation);
             const namespace = yield* declare(cls, projectionObject(kit, net, consumerPlans));
             consumers.set(cls, namespace);
+            consumers.set(
+              runClass(cls),
+              yield* declare(runClass(cls), projectionObject(kit, net, consumerPlans)),
+            );
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),

@@ -426,13 +426,14 @@ const WAIT_PAUSE_MS = 50;
 
 /**
  * Cloudflare refuses calls when an account puts too much load on Durable
- * Objects. A refused call is tried again later, not at once, so a wide run
- * backs off to the load the account can take rather than collapse under its
- * own retries.
+ * Objects, and resets an isolate whose objects (many share one) use too much
+ * memory. Either is a sign to send less: a refused call is tried again later,
+ * not at once, so a wide run backs off to the load the account can take
+ * rather than collapse under its own retries.
  */
 export const overloaded = (cause: Cause.Cause<unknown>) => {
   const error = Cause.squash(cause);
-  return /too much load|too many concurrent|overloaded|try again later/i.test(
+  return /too much load|too many concurrent|overloaded|try again later|exceeded its memory limit/i.test(
     Predicate.hasProperty(error, "message") ? String(error.message) : String(error),
   );
 };
@@ -1872,7 +1873,7 @@ interface RunState {
 
 /** Subtrees a run's root starts with at once, and the most it grows to. */
 const RUN_WINDOW = 16;
-const RUN_WINDOW_MAX = 1024;
+const RUN_WINDOW_MAX = 256;
 
 /**
  * The root of a consumer's run: it drives passes of a relay tree from its own
