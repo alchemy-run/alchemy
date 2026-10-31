@@ -1459,12 +1459,17 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces and logs settings contributed by
-     * `Cloudflare.Telemetry()`. Merged into upload metadata: bound traces
-     * and logs fill in when `WorkerProps.observability` omits them. An
-     * explicit `observability.traces` / `observability.logs` wins.
+     * Workers Observability traces and logs fields set on
+     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * they can be merged with `WorkerProps.observability` field by field.
+     * Where the props omit `traces` / `logs`, these fill in over the
+     * defaults (on); a field set to different values in both fails the
+     * deploy with `ObservabilityConflictError`.
      */
-    observability?: Pick<WorkerObservability, "traces" | "logs">;
+    observability?: {
+      traces?: Partial<NonNullable<WorkerObservability["traces"]>>;
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */

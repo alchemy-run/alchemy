@@ -56,8 +56,9 @@ export interface CloudflareTelemetryProps {
   persist?: boolean;
   /**
    * Workers Logs settings for the host Worker. Logs are on by default;
-   * pass `{ enabled: false }` to turn them off. An explicit
-   * `observability.logs` on the Worker's props wins.
+   * pass `{ enabled: false }` to turn them off. Merged field by field
+   * with `observability.logs` on the Worker's props; a field set to
+   * different values in both fails the deploy.
    * @default { enabled: true, invocationLogs: true }
    */
   logs?: CloudflareTelemetryLogsProps;
@@ -91,19 +92,28 @@ export interface CloudflareTelemetryLogsProps {
   destinations?: Input<string>[];
 }
 
-const tracesFromProps = (props: CloudflareTelemetryProps) => ({
-  enabled: props.enabled ?? true,
-  ...(props.headSamplingRate !== undefined ? { headSamplingRate: props.headSamplingRate } : {}),
-  ...(props.persist !== undefined ? { persist: props.persist } : {}),
-});
+const defined = <T extends object>(fields: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 
-const logsFromProps = ({ logs = {} }: CloudflareTelemetryProps) => ({
-  enabled: logs.enabled ?? true,
-  invocationLogs: logs.invocationLogs ?? true,
-  ...(logs.headSamplingRate !== undefined ? { headSamplingRate: logs.headSamplingRate } : {}),
-  ...(logs.persist !== undefined ? { persist: logs.persist } : {}),
-  ...(logs.destinations !== undefined ? { destinations: logs.destinations } : {}),
-});
+// Only the fields the caller set: the Worker fills in the defaults, and
+// merges these with its own `observability` props field by field.
+const tracesFromProps = (props: CloudflareTelemetryProps) =>
+  defined({
+    enabled: props.enabled,
+    headSamplingRate: props.headSamplingRate,
+    persist: props.persist,
+  });
+
+const logsFromProps = ({ logs = {} }: CloudflareTelemetryProps) =>
+  defined({
+    enabled: logs.enabled,
+    invocationLogs: logs.invocationLogs,
+    headSamplingRate: logs.headSamplingRate,
+    persist: logs.persist,
+    destinations: logs.destinations,
+  });
 
 /**
  * Fail deploy when `Cloudflare.Telemetry()` is bound and the Worker's

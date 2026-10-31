@@ -5,12 +5,9 @@ import {
   type CloudflareTelemetryProps,
   MIN_CLOUDFLARE_TRACING_DATE,
 } from "@alchemy.run/cloudflare/Workers/Telemetry";
-import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import { resolveObservability } from "@alchemy.run/cloudflare/Workers/WorkerAsyncBindings";
-import { describe, expect, test as unit } from "@alchemy.run/test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import type { ResourceBinding } from "alchemy/Resource";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -94,74 +91,6 @@ const traceOf = (spans: SpanRow[], root: string, id: string) => {
         },
       };
 };
-
-type Bindings = ReadonlyArray<ResourceBinding<Worker["Binding"]>>;
-
-const tracesBind = (traces: NonNullable<Worker["Binding"]["observability"]>["traces"]): Bindings =>
-  [{ sid: "Cloudflare.Telemetry", data: { observability: { traces } } }] as unknown as Bindings;
-
-describe(
-  "resolveObservability",
-  {
-    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
-  },
-  () => {
-    unit("omitted props + bound traces keep default logs", () => {
-      const resolved = resolveObservability({}, tracesBind({ enabled: true }));
-      expect(resolved.enabled).toBe(true);
-      expect(resolved.logs?.enabled).toBe(true);
-      expect(resolved.logs?.invocationLogs).toBe(true);
-      expect(resolved.traces?.enabled).toBe(true);
-    });
-
-    unit("explicit traces.enabled false wins over the bind", () => {
-      const resolved = resolveObservability(
-        { observability: { enabled: true, traces: { enabled: false } } },
-        tracesBind({ enabled: true, persist: true }),
-      );
-      expect(resolved.traces?.enabled).toBe(false);
-      expect(resolved.traces?.persist).toBeUndefined();
-    });
-
-    unit("fills traces when news.observability exists without traces", () => {
-      const resolved = resolveObservability(
-        {
-          observability: {
-            enabled: true,
-            logs: { enabled: true, invocationLogs: true, persist: true },
-          },
-        },
-        tracesBind({ enabled: true, headSamplingRate: 1 }),
-      );
-      expect(resolved.logs?.persist).toBe(true);
-      expect(resolved.traces?.enabled).toBe(true);
-      expect(resolved.traces?.headSamplingRate).toBe(1);
-    });
-
-    unit("Issues coexist with Telemetry traces and explicit logs", () => {
-      const resolved = resolveObservability(
-        {
-          observability: {
-            enabled: true,
-            logs: { enabled: true, invocationLogs: true },
-            issues: { enabled: true },
-          },
-        },
-        tracesBind({ enabled: true, headSamplingRate: 0.1 }),
-      );
-      expect(resolved.issues?.enabled).toBe(true);
-      expect(resolved.logs?.invocationLogs).toBe(true);
-      expect(resolved.traces?.enabled).toBe(true);
-      expect(resolved.traces?.headSamplingRate).toBe(0.1);
-    });
-
-    unit("no bind returns default logs", () => {
-      const resolved = resolveObservability({}, []);
-      expect(resolved.traces).toBeUndefined();
-      expect(resolved.logs?.invocationLogs).toBe(true);
-    });
-  },
-);
 
 test.provider(
   "Cloudflare.Telemetry() enables traces without clobbering default logs",
@@ -327,7 +256,7 @@ test.provider(
 );
 
 test.provider(
-  "explicit observability.logs wins over Cloudflare.Telemetry({ logs })",
+  "Cloudflare.Telemetry({ logs }) merges with observability.logs field by field",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -336,12 +265,12 @@ test.provider(
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* makeLogsWorker(
-            "NativeTracingLogsOverride",
+            "NativeTracingLogsMerge",
             { logs: { persist: false, headSamplingRate: 0.5 } },
             {
               observability: {
                 enabled: true,
-                logs: { enabled: true, invocationLogs: false, persist: true },
+                logs: { enabled: true, invocationLogs: false },
               },
             },
           );
@@ -352,16 +281,53 @@ test.provider(
         accountId,
         scriptName: worker.workerName,
       });
-      // Telemetry still binds traces; the explicit logs object is kept whole.
       expect(settings.observability?.traces?.enabled).toBe(true);
+      // From the Worker's props.
       expect(settings.observability?.logs?.invocationLogs).toBe(false);
-      expect(settings.observability?.logs?.persist).toBe(true);
-      expect(settings.observability?.logs?.headSamplingRate).not.toBe(0.5);
+      // From Cloudflare.Telemetry({ logs }).
+      expect(settings.observability?.logs?.persist).toBe(false);
+      expect(settings.observability?.logs?.headSamplingRate).toBe(0.5);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
   { tags: LOGS_TAGS, timeout: 180_000 },
+);
+
+test.provider(
+  "a field set differently on the Worker and Cloudflare.Telemetry() fails deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* makeLogsWorker(
+              "NativeTracingLogsConflict",
+              { logs: { persist: false } },
+              {
+                observability: {
+                  enabled: true,
+                  logs: { enabled: true, invocationLogs: true, persist: true },
+                },
+              },
+            );
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error).toMatchObject({
+        _tag: "ObservabilityConflictError",
+        key: "logs",
+        field: "persist",
+        worker: true,
+        telemetry: false,
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: LOGS_TAGS, timeout: 120_000 },
 );
 
 test.provider(
