@@ -77,7 +77,7 @@ class Balance extends Domain.View("Balance", {
 
 class Wallets extends Domain.Model("Wallets", { aggregates: [Wallet], views: [Balance] }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Deposit, Balance) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Wallets }) {}
 
 const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe(
   Layer.provide(InMemory),
@@ -102,6 +102,11 @@ const call = (name: string, params: unknown, owner?: string) =>
   }).pipe(Effect.provideService(ActingFor, owner));
 
 const ToolsLive = walletTools.layer.pipe(Layer.provideMerge(WalletsLive));
+
+/** The session's client half, as a server that makes its own calls would hold it. */
+const ServerCredential = RpcMiddleware.layerClient(Session, ({ request, next }) =>
+  next({ ...request, headers: Headers.set(request.headers, "x-owner", "server") }),
+);
 
 // ---------------------------------------------------------------- tests
 
@@ -185,6 +190,16 @@ describe("Domain Ai: toToolkit", () => {
     }).pipe(Effect.provide(ToolsLive)),
   );
 
+  it.live("a middleware's client half never signs the agent in as the server", () =>
+    Effect.gen(function* () {
+      const result = yield* call("WalletApi_Deposit_send", {
+        target: "server-wallet",
+        input: { amount: 5 },
+      });
+      expect(result).toEqual({ isFailure: true, encoded: { _tag: "Unauthenticated" } });
+    }).pipe(Effect.provide(ToolsLive.pipe(Layer.provide(ServerCredential)))),
+  );
+
   it.live("a read tool runs the view's validate, and wraps a value that is not an object", () =>
     Effect.gen(function* () {
       const receipt = yield* call(
@@ -207,7 +222,7 @@ describe("Domain Ai: toToolkit", () => {
 
   it.live("a tool name a model provider would refuse fails the Layer with a DefinitionError", () =>
     Effect.gen(function* () {
-      class LongApi extends Domain.Api("A".repeat(60), Deposit) {}
+      class LongApi extends Domain.Api("A".repeat(60), { model: Wallets, views: [] }) {}
       const exit = yield* Layer.build(DomainAi.toToolkit(LongApi).layer).pipe(
         Effect.provide(WalletsLive),
         Effect.scoped,

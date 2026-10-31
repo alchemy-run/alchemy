@@ -6,60 +6,31 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
-import * as RpcSchema from "effect/rpc/RpcSchema";
+import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
-import type { Entry } from "./Api.ts";
+import type { Servable } from "./Api.ts";
 import { DefinitionError } from "./internal.ts";
-import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
+import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
 
-/** What {@link toToolkit} reads from an Api class: its entries, the RPCs it serves, and its in-process client. */
+/** What {@link toToolkit} reads from an Api class: what it serves, its RPCs, and its in-process client. */
 export interface Toolable {
   readonly apiName: string;
-  readonly entries: ReadonlyArray<Entry>;
+  readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
 }
 
-/** The services an Api's tools need: the hosted Domain and its middleware Layers. */
+/**
+ * The services an Api's tools need: the hosted Domain and its middleware
+ * Layers. Not the client half of any middleware: the agent's calls carry
+ * their own headers.
+ */
 export type Services<A extends Toolable> = Exclude<
   Effect.Services<A["clientInProcess"]>,
-  Scope.Scope
+  Scope.Scope | RpcMiddleware.ForClient<any>
 >;
-
-/** One call an Api serves. */
-interface Operation {
-  readonly api: string;
-  /** The entry it belongs to: a command's tag, or a view's, stream's or aggregate's name. */
-  readonly entry: Entry;
-  readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `list`, ...). */
-  readonly operation: string;
-  /** The RPC the server answers, with middleware applied to the whole Api. */
-  readonly rpc: Rpc.AnyWithProps;
-  readonly stream: boolean;
-}
-
-/** Every call an Api serves, in the order it lists its entries. */
-const operationsOf = (api: Toolable): ReadonlyArray<Operation> =>
-  api.entries.flatMap((entry): ReadonlyArray<Operation> => {
-    const served = (rpc: Rpc.Any) => (api.group.requests.get(rpc._tag) ?? rpc) as Rpc.AnyWithProps;
-    if (entry.kind === "Command") {
-      const rpc = served(entry.rpc);
-      return [{ api: api.apiName, entry, name: entry.tag, operation: "send", rpc, stream: false }];
-    }
-    const name = nameOf(entry);
-    return Object.entries(readRpcs(entry)).flatMap(([call, read]) => {
-      if (read === undefined) return [];
-      const rpc = served(read);
-      // A stream's `get` RPC is its client's `peek`.
-      const operation =
-        (call as keyof ReadRpcs) === "get" && entry.kind === "Stream" ? "peek" : call;
-      const stream = RpcSchema.isStreamSchema(rpc.successSchema);
-      return [{ api: api.apiName, entry, name, operation, rpc, stream }];
-    });
-  });
 
 /** One schema for several failures, without repeats or `Never`. */
 const failures = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
@@ -99,22 +70,21 @@ const unsafe = /[^A-Za-z0-9_-]/g;
 const MAX_NAME = 64;
 
 /**
- * The tool's name: `<api>_<entry>_<operation>`, with any other character
+ * The tool's name: `<api>_<name>_<operation>`, with any other character
  * than a letter, digit, `_` or `-` replaced by `_`.
  */
 export const toolName = (op: {
   readonly api: string;
-  readonly entry: string;
+  readonly name: string;
   readonly operation: string;
-}): string => `${op.api}_${op.entry}_${op.operation}`.replace(unsafe, "_");
+}): string => `${op.api}_${op.name}_${op.operation}`.replace(unsafe, "_");
 
 /**
  * What the model reads about the tool: a command's Schema `description`
- * annotation, or a sentence built from the call. Entry `examples` (#2581)
- * will add here.
+ * annotation, or a sentence built from the call.
  */
 const toolDescription = (op: Operation): string =>
-  (op.entry.kind === "Command" ? SchemaAST.resolveDescription(op.entry.ast) : undefined) ??
+  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
   (op.operation === "send"
     ? `Send the ${op.name} command.`
     : op.operation === "peek"
@@ -124,18 +94,6 @@ const toolDescription = (op: Operation): string =>
         : op.operation === "snapshot"
           ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
           : `Get the current ${op.name} of a key.`);
-
-/**
- * Whether an agent may see the entry. Every entry, until entries declare
- * where they are published (#2585: `Domain.exposureOf(entry).mcp`).
- */
-const isExposed = (_entry: Entry): boolean => true;
-
-/**
- * Whether a person must confirm a call first. Never, until commands declare
- * it (#2585: `(call) => Domain.needsApproval(entry, call)`).
- */
-const approvalOf = (_entry: Entry): Tool.NeedsApproval<Schema.Top> | undefined => undefined;
 
 /**
  * A call that returns once. A stream (`watch`, `events`) is not one tool
@@ -155,14 +113,14 @@ const isObject = (schema: Schema.Top): boolean => {
 };
 
 /** The tool for one call, and how to call it with the in-process client. */
-const toolOf = (op: Operation) => {
+const toolOf = (api: string) => (op: Operation) => {
   const { rpc } = op;
   const success = rpc.successSchema;
   // MCP clients reject a tool whose output is not an object (`State | null`),
   // so such a value is returned as `{ value }`.
   const wrapped = !isObject(success);
   const write = op.operation === "send";
-  const tool = Tool.make(toolName({ api: op.api, entry: op.name, operation: op.operation }), {
+  const tool = Tool.make(toolName({ api, name: op.name, operation: op.operation }), {
     description: toolDescription(op),
     // JSON codecs, as the Api's HTTP server uses: the tool decodes the
     // call's JSON once, and the in-process call does not decode it again.
@@ -173,7 +131,6 @@ const toolOf = (op: Operation) => {
     ),
     // A rejection is a result the model can act on, not a failed generation.
     failureMode: "return",
-    needsApproval: approvalOf(op.entry),
   })
     .annotate(Tool.Readonly, !write)
     .annotate(Tool.Destructive, write)
@@ -220,7 +177,7 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  * `watch` and `events` are streams, not one tool result, so they stay on the
  * Api's own clients.
  *
- * A tool is named `<api>_<entry>_<operation>` (`BankApi_DepositMoney_send`),
+ * A tool is named `<api>_<name>_<operation>` (`BankApi_DepositMoney_send`),
  * with every character other than a letter, digit, `_` or `-` replaced by
  * `_`. Its parameters, success and failure are the call's own schemas, as the
  * Api's RPC server decodes them. A read is marked
@@ -259,9 +216,9 @@ export const toToolkit = <A extends Toolable, R = never>(
   // A tool name a model provider would refuse fails the Layer, like the model's own definition problems.
   const problems: Array<DefinitionError> = [];
   const names = new Set<string>();
-  const tools = operationsOf(api)
-    .filter((op) => isToolCall(op) && isExposed(op.entry))
-    .map(toolOf)
+  const tools = operationsOf(api.serves)
+    .filter(isToolCall)
+    .map(toolOf(api.apiName))
     .filter(({ tool }) => {
       if (tool.name.length > MAX_NAME) {
         problems.push(
@@ -288,7 +245,8 @@ export const toToolkit = <A extends Toolable, R = never>(
   const layer = toolkit.toLayer(
     Effect.gen(function* () {
       if (problems.length > 0) return yield* Effect.die(problems[0]);
-      const client = (yield* api.clientInProcess) as Client;
+      // Without the client half of any middleware (see `outsideClient`).
+      const client = (yield* outsideClient(api)) as Client;
       return Object.fromEntries(
         tools.map(({ tool, op, wrapped }) => [
           tool.name,

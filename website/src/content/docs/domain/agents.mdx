@@ -9,7 +9,7 @@ An Api already lists what one kind of client may do. `@alchemy.run/domain/Ai` tu
 
 `DomainAi.toToolkit` makes one tool for each call of the Api that returns once:
 
-| Entry     | Tools                 | Kind of tool |
+| Served    | Tools                 | Kind of tool |
 | --------- | --------------------- | ------------ |
 | Command   | `send`                | write        |
 | View      | `get`, `list`, `snapshot` | read     |
@@ -26,12 +26,32 @@ Object.keys(toolkit.tools);
 // ["CustomerApi_DepositMoney_send", "CustomerApi_AccountSummary_get", "CustomerApi_AccountSummary_list", ...]
 ```
 
-- **Name.** `<api>_<entry>_<operation>`. A character other than a letter, a digit, `_` or `-` becomes `_`, because model providers and MCP clients accept only those. A name longer than 64 characters, or two calls with one name, fail the toolkit's Layer with a `DefinitionError`. `DomainAi.toolName({ api, entry, operation })` gives the name of a call.
-- **Schemas.** The parameters, the success and the failure of a tool are the schemas of its call. They are the JSON the Api's RPC server reads and writes. One difference: MCP requires an object as a tool's output, so a success that is not an object (a view's `state | null`) comes back as `{ value }`.
-- **Hints.** A read is marked read-only and idempotent. A command is marked destructive.
-- **Description.** A command's `description` annotation, or a sentence made from the call ("Send the DepositMoney command.").
+A tool is named `<api>_<name>_<operation>`, with any character other than a letter, a digit, `_` or `-` turned into `_`, since model providers and MCP clients accept only those:
 
-`layer` holds the tools' handlers. It needs what the Api needs to serve: the hosted model and the Layers of the middleware its entries declare.
+```typescript
+DomainAi.toolName({ api: "CustomerApi", name: "DepositMoney", operation: "send" });
+// "CustomerApi_DepositMoney_send"
+```
+
+A name longer than 64 characters, or two calls with one name, fail the toolkit's Layer with a `DefinitionError`.
+
+A tool's parameters, success and failure are its call's own schemas, the JSON the Api's RPC server reads and writes. MCP requires an object as a tool's output, so a success that is not one, such as a view's `state | null`, comes back as `{ value }`:
+
+```json
+{ "value": { "balance": 1000 } }
+```
+
+A read is marked read-only and idempotent, and a command destructive, as an MCP client's `tools/list` shows:
+
+```json
+{
+  "name": "CustomerApi_DepositMoney_send",
+  "description": "Send the DepositMoney command.",
+  "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false }
+}
+```
+
+`layer` holds the tools' handlers. It needs what the Api needs to serve: the hosted model and the Layers of the middleware of what it serves.
 
 ## An agent in the app
 
@@ -87,6 +107,15 @@ const { handler } = HttpRouter.toWebHandler(BankMcp);
 
 Each tool call sends headers to the Api's middleware, as an HTTP client does. Set them with the `headers` option, an Effect that runs for each call. By default, a call sends the headers of the current `HttpServerRequest`, if there is one. So an MCP client signs in to your MCP server with the same header or cookie that your Api's session middleware reads, and an in-app agent that runs inside a request acts for the user who sent it.
 
+The client half of a middleware never runs for a tool call. A server that provides one for its own calls still can't sign an agent in as itself:
+
+```typescript
+// held by the server for the calls it makes; an agent's call still carries only its own headers
+const ServerCredential = RpcMiddleware.layerClient(Session, ({ request, next }) =>
+  next({ ...request, headers: Headers.set(request.headers, "authorization", serverToken) }),
+);
+```
+
 A call with no session fails as it does for any client:
 
 ```json
@@ -95,7 +124,21 @@ A call with no session fails as it does for any client:
 
 ## Limits
 
-- **Streams.** `watch` and `events` are not tools. An MCP resource subscription can serve them later.
-- **One list for every caller.** `tools/list` shows every tool to every MCP client. The Api still checks each call, so a caller who may not use a tool gets a rejection. To list only the tools a caller may use, `McpServer` must filter per request, which Effect does not do yet.
-- **No approval step.** Nothing asks a person before a dangerous write. `LanguageModel` can ask when a tool sets `needsApproval`, and an MCP server can ask with elicitation; neither is set from the Api yet.
-- **Every entry is a tool.** An Api for agents lists only what agents may reach. To keep an entry from agents, leave it out of that Api.
+`watch` and `events` are not tools; an MCP resource subscription can serve them later.
+
+`tools/list` shows every tool to every MCP client. The Api still checks each call, so a caller who may not use a tool gets a rejection. Listing only the tools a caller may use needs `McpServer` to filter per request, which Effect does not do yet.
+
+Nothing asks a person before a dangerous write. `LanguageModel` can ask when a tool sets `needsApproval`, and an MCP server can ask with elicitation, but neither is set from the Api yet.
+
+Every call the Api serves is a tool, so give agents their own Api with only what they may reach:
+
+```typescript
+export class AgentApi extends Domain.Api("AgentApi", {
+  model: Bank,
+  commands: ["DepositMoney", "RequestTransfer"],
+  views: ["AccountSummary"],
+  streams: [],
+}) {}
+
+const BankMcp = DomainAi.toMcp(AgentApi);
+```
