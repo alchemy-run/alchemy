@@ -68,6 +68,28 @@ export interface ContainerProps {
   capAdd?: string[];
   /** Host devices to expose to the container. */
   devices?: Container.DeviceMapping[];
+  /** Memory limit in Docker's byte-suffix format, such as `"512m"` or `"2g"`. */
+  memory?: string;
+  /**
+   * Memory-plus-swap limit in the same format. Requires `memory`. Docker
+   * defaults it to twice `memory`; set it equal to `memory` to disable swap,
+   * or `"-1"` for unlimited swap.
+   */
+  memorySwap?: string;
+  /**
+   * Mount the root filesystem read-only. Every writable path must then be a
+   * volume.
+   * @default false
+   */
+  readOnly?: boolean;
+  /**
+   * Forbid gaining privileges through setuid or setgid binaries
+   * (`--security-opt no-new-privileges`).
+   * @default false
+   */
+  noNewPrivileges?: boolean;
+  /** User the process runs as, `uid[:gid]` or a name. Unset keeps the image's user. */
+  user?: string;
   /**
    * Extra `/etc/hosts` entries, each `hostname:address`. Docker's
    * `host-gateway` alias resolves to the host machine, so
@@ -295,6 +317,20 @@ export interface Container extends Resource<
  *   image: "ubuntu:latest",
  *   capAdd: ["SYS_ADMIN"],
  *   devices: [{ hostPath: "/dev/fuse", containerPath: "/dev/fuse" }],
+ * });
+ * ```
+ *
+ * **Example:** Limit memory and harden the runtime
+ * ```typescript
+ * const tmp = yield* Docker.Volume("api-tmp");
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   memory: "512m",
+ *   readOnly: true,
+ *   noNewPrivileges: true,
+ *   user: "1000:1000",
+ *   // A read-only root filesystem needs an explicit writable path.
+ *   volumes: [{ hostPath: tmp.name, containerPath: "/tmp" }],
  * });
  * ```
  *
@@ -635,6 +671,11 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       network: normalizeNetworkMode(news.networkMode),
       "cap-add": normalizeCapabilities(news.capAdd),
       device: normalizeDevices(news.devices),
+      memory: news.memory,
+      "memory-swap": news.memorySwap,
+      user: news.user,
+      "security-opt": news.noNewPrivileges ? ["no-new-privileges"] : undefined,
+      "read-only": news.readOnly ? true : undefined,
       restart: news.restart ?? "no",
       label: news.labels,
       "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
@@ -727,6 +768,11 @@ const validateContainerOptions = (news: ContainerProps) => {
       );
     }
     targets.add(device.containerPath);
+  }
+  if (news.memorySwap !== undefined && news.memory === undefined) {
+    return Effect.fail(
+      new InvalidContainerOptions({ message: "Docker.Container memorySwap requires memory" }),
+    );
   }
   return Effect.void;
 };
