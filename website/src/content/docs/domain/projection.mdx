@@ -13,7 +13,7 @@ It shares the view's routing and ordering, and differs from a [policy](/domain/p
 
 A view answers one question about one key, and the model serves it. That covers most screens. Some questions don't fit that shape. An accountant wants every money movement across every account this quarter, filtered by amount and sorted by date. A search box wants to find a customer by any part of their name. A data team wants the whole history in their warehouse. Each needs a store built for its kind of query, a SQL table, a search index, a warehouse, and each is a store you run.
 
-A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. If the table is lost or its schema changes, you empty it and replay the projection over the history to build it again.
+A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. Add one to a model that already has history, and it receives that history first, so its store starts complete (see [Consumers added later receive the history](/domain/model#consumers-added-later-receive-the-history)).
 
 <DAG
   nodes={[
@@ -163,6 +163,12 @@ Batching changes how a projection runs, not what it means, so it lives on the La
 ```
 
 The handler's code is the same either way: it always receives an array. Changing the batch size is pure tuning.
+
+`version` is tuning too. Bump it and the projection runs again over the whole history on the next deploy, for example after its table was lost, or once the handler writes a new shape. Empty or migrate the table first if a replayed write wouldn't overwrite the old row.
+
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
+{ batch: { size: 100, wait: "1 second" }, version: 1 },
+```
 
 ## It never sends commands
 
