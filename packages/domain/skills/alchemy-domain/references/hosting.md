@@ -147,7 +147,7 @@ const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFo
 
 More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
 
-## Agents and MCP
+## MCP
 
 `toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
 
@@ -175,7 +175,7 @@ const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
 const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
 ```
 
-More: [Agents and MCP](https://alchemy.run/domain/agents).
+More: [MCP](https://alchemy.run/domain/mcp).
 
 ## Deploying
 

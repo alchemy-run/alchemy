@@ -901,7 +901,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Integrate with foldkit](https://alchemy.run/domain/foldkit) — Run domain commands from foldkit commands, watch views with subscriptions, and give the app its Api client as a resource.
 - [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show a change the moment the user asks for it, then confirm it when the bank's event arrives, or mark it rejected.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
-- [Agents and MCP](https://alchemy.run/domain/agents) — Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
+- [MCP](https://alchemy.run/domain/mcp) — Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
 - [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 - [Views as security boundaries](https://alchemy.run/domain/view-security) — Decide who may read each view, keep watches honest as data changes hands, and give each audience a view of its own.

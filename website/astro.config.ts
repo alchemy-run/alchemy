@@ -1609,7 +1609,7 @@ export default defineConfig({
             },
             {
               label: "Agents",
-              items: [{ label: "Agents and MCP", link: "/domain/agents" }],
+              items: [{ label: "MCP", link: "/domain/mcp" }],
             },
             {
               label: "Security",
