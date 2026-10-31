@@ -23,17 +23,20 @@ export interface ControlPlaneProps {
    */
   image?: string;
   /**
-   * The Docker engine to run on: a context name or a `Docker.Context`.
+   * The Docker engine to run on: a context name, a `Docker.Context`, or a
+   * `Docker.Swarm` (which orders the control plane after the swarm).
    * @default the current Docker context
    */
-  context?: Docker.Docker.ContextRef;
+  context?: Docker.Docker.EngineRef;
 }
 
 /**
- * A single-instance Rivet control plane in a local Docker container, as a
- * `Rivet.Cluster` Layer: the engine with file-system storage on a named
- * volume, a generated admin token, a Docker network that Worker containers
- * join, and a namespace for the stage.
+ * A single-instance Rivet control plane on a Docker swarm, as a
+ * `Rivet.Cluster` Layer: the engine as a one-replica swarm service with
+ * file-system storage on a named volume, a generated admin token, an overlay
+ * network that Worker services join, and a namespace for the stage. The
+ * Docker engine must be in swarm mode (`Docker.Swarm`, or `docker swarm
+ * init`).
  *
  * It is meant for development and tests. One instance keeps recent writes
  * only on its own disk, so losing the volume loses data; production control
@@ -67,15 +70,16 @@ export const ControlPlane = (
         return { endpoint, token: Redacted.make(""), namespace: "default" };
       }
       const token = yield* Random(`${id}AdminToken`, { bytes: 32 });
-      const network = yield* Docker.Network(`${id}Network`, {
-        ...(props.context === undefined ? {} : { context: props.context }),
-      });
-      const data = yield* Docker.Volume(`${id}Data`, {
-        ...(props.context === undefined ? {} : { context: props.context }),
-      });
-      const engine = yield* Docker.Container(`${id}Engine`, {
+      const context = props.context === undefined ? {} : { context: props.context };
+      const network = yield* Docker.Network(`${id}Network`, { driver: "overlay", ...context });
+      const volumeContext = Docker.dockerEngineContextName(props.context);
+      const data = yield* Docker.Volume(
+        `${id}Data`,
+        volumeContext === undefined ? {} : { context: volumeContext },
+      );
+      const engine = yield* Docker.Service(`${id}Engine`, {
         image: props.image ?? DEFAULT_ENGINE_IMAGE,
-        ...(props.context === undefined ? {} : { context: props.context }),
+        ...context,
         environment: {
           RIVET__AUTH__ADMIN_TOKEN: token.text,
           RIVET__STORAGE__LOG_DIRECTORY: "/var/lib/rivet",
@@ -85,8 +89,7 @@ export const ControlPlane = (
         ports: [{ external: port, internal: 6420 }],
         volumes: [{ hostPath: data.name, containerPath: "/var/lib/rivet" }],
         networks: [{ name: network.name, aliases: ["rivet-engine"] }],
-        restart: "unless-stopped",
-        start: true,
+        replicas: 1,
       });
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Ordered after the engine container: the namespace is created

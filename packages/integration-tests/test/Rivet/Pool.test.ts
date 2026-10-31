@@ -7,6 +7,7 @@ import * as RivetApi from "@distilled.cloud/rivet";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Docker.providers(), Rivet.providers()),
@@ -51,6 +52,8 @@ describe("Rivet.Pool", { tags: ["provider:rivet", "provider:rivet:pool", "local"
     "creates, updates in place and deletes a pool",
     (stack) =>
       Effect.gen(function* () {
+        // The control plane runs as a swarm service.
+        yield* ensureDockerSwarm;
         yield* stack.destroy();
 
         const created = yield* stack.deploy(deployPool({}));
