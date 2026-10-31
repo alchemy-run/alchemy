@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -1809,37 +1810,47 @@ export const makeRun = (
       const todo: Array<RelayItem> = [];
       for (const item of items ?? [])
         if ((yield* storage.get(doneKey(target, state.phase, item))) === undefined) todo.push(item);
-      // Rounds of `window` subtrees at once: it grows while the account takes the load, and
-      // halves when Cloudflare refuses calls, so a wide run stays under the account's limit
-      // rather than hit it all at once and wait it out.
+      // Up to `window` subtrees at once, a new one as each finishes. Like TCP's congestion
+      // window, it doubles while the account takes the load, grows by one once it has been
+      // refused, and halves when Cloudflare refuses calls: a wide run stays under the
+      // account's limit rather than hit it all at once and wait it out.
       let window = state.window ?? RUN_WINDOW;
+      let growing = state.window === undefined;
       let next = 0;
+      let active = 0;
       let refused = 0;
       let done = items !== undefined;
-      for (let round = 0; next < todo.length; round++) {
-        if (!quiet && round > 0 && (yield* Clock.currentTimeMillis) >= deadline) break;
-        const batch = todo.slice(next, next + window);
-        const results = yield* Effect.forEach(
-          batch,
-          (item, i) =>
-            relay.run(`${state.phase}-${state.misses ?? 0}/${next + i}`, relayRun, [item]),
-          { concurrency: "unbounded" },
+      const finished = yield* Queue.unbounded<{
+        readonly item: RelayItem;
+        readonly result: RelayResult;
+      }>();
+      const launch = (index: number) =>
+        Effect.forkChild(
+          relay
+            .run(`${state.phase}-${state.misses ?? 0}/${index}`, relayRun, [todo[index]!])
+            .pipe(
+              Effect.flatMap((result) => Queue.offer(finished, { item: todo[index]!, result })),
+            ),
         );
-        next += batch.length;
-        const marks: Record<string, true> = {};
-        let roundRefused = 0;
-        results.forEach((result, i) => {
-          roundRefused += result.refused;
-          if (result.done) marks[doneKey(target, state.phase, batch[i]!)] = true;
-          else done = false;
-        });
-        yield* storage.put(marks);
-        refused += roundRefused;
-        window =
-          roundRefused > 0
-            ? Math.max(1, Math.floor(window / 2))
-            : Math.min(RUN_WINDOW_MAX, window + Math.max(1, Math.floor(window / 4)));
+      while (next < todo.length || active > 0) {
+        const open = quiet || (yield* Clock.currentTimeMillis) < deadline;
+        while (open && active < window && next < todo.length) {
+          yield* launch(next);
+          next += 1;
+          active += 1;
+        }
+        if (active === 0) break;
+        const { item, result } = yield* Queue.take(finished);
+        active -= 1;
+        if (result.done) yield* storage.put({ [doneKey(target, state.phase, item)]: true });
+        else done = false;
+        refused += result.refused;
+        if (result.refused > 0) {
+          growing = false;
+          window = Math.max(1, Math.floor(window / 2));
+        } else window = Math.min(RUN_WINDOW_MAX, growing ? window + 1 : window + 1 / window);
       }
+      window = Math.max(1, Math.round(window));
       if (next < todo.length) done = false;
       yield* Effect.logInfo(
         `backfill run-pass ${target} ${state.phase} done=${done} subtrees=${todo.length} window=${window} refused=${refused} in ${(yield* Clock.currentTimeMillis) - started}ms`,
