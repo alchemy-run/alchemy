@@ -271,6 +271,7 @@ const build = (
         `${aggregate.aggregateName}.initial does not match its state schema: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    for (const message of Aggregate.phaseProblems(aggregate)) problem(message);
     aggregateCodecs.set(aggregate.aggregateName, {
       state,
       initial,
@@ -618,6 +619,11 @@ const build = (
       const events: Array<StoredEvent> = [];
       const deliveries: Array<Delivery> = [];
       const sourceRef = Aggregate.makeRef(aggregate, id);
+      const moves: Array<{ readonly from: string | undefined; readonly to: string }> = [];
+      const first = Aggregate.phaseIn(aggregate, state);
+      if (version === 0 && first !== undefined && decided.length > 0) {
+        moves.push({ from: undefined, to: first });
+      }
       let next = state;
       decided.forEach((event, index) => {
         if (!codecs.events.has(event._tag)) {
@@ -633,11 +639,20 @@ const build = (
           commandId,
           correlationId,
         };
+        const before = next;
         next = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
           next,
           event,
           envelope,
         );
+        // Seeded history is the past: it may start anywhere.
+        const undeclared = history
+          ? undefined
+          : Aggregate.undeclaredMove(aggregate, event._tag, before, next);
+        if (undeclared) throw undeclared;
+        const from = Aggregate.phaseIn(aggregate, before);
+        const to = Aggregate.phaseIn(aggregate, next);
+        if (to !== undefined && from !== to) moves.push({ from, to });
         const stored: StoredEvent = {
           event: encodeEvent(event),
           envelope: encodeEnvelope(envelope, trace),
@@ -658,7 +673,7 @@ const build = (
           ),
         );
       });
-      return { next, events, deliveries };
+      return { next, events, deliveries, moves };
     };
     return {
       name: aggregate.aggregateName,
@@ -706,17 +721,19 @@ const build = (
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-            state,
-            decoded,
-            {
-              id,
-              now,
-              commandId: input.commandId,
-              stream: `${aggregate.aggregateName}/${id}`,
-              version: input.version,
-            },
-          );
+          let decision =
+            Aggregate.refusal(aggregate, command.cls, state) ??
+            (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
+              state,
+              decoded,
+              {
+                id,
+                now,
+                commandId: input.commandId,
+                stream: `${aggregate.aggregateName}/${id}`,
+                version: input.version,
+              },
+            );
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
@@ -746,7 +763,7 @@ const build = (
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
           const trace = yield* Telemetry.currentTrace;
-          const { next, events, deliveries } = commit(
+          const { next, events, deliveries, moves } = commit(
             id,
             state,
             input.version,
@@ -780,6 +797,24 @@ const build = (
               "domain.event": event._tag,
             });
           }
+          const { arm, cancel } = Aggregate.timerChanges(aggregate, moves, next);
+          const timers =
+            arm.length + cancel.length === 0
+              ? undefined
+              : {
+                  cancel,
+                  arm: arm.map(({ commandId, command, afterMillis }) => ({
+                    command: codecs.commands.get(command._tag)!.codec.encode(command),
+                    at: input.now + afterMillis,
+                    meta: {
+                      commandId,
+                      context: {},
+                      correlationId,
+                      ...(trace ? { trace } : {}),
+                      link: true,
+                    },
+                  })),
+                };
           return {
             _tag: "Accepted",
             state: codecs.state.encode(next),
@@ -787,6 +822,7 @@ const build = (
             events,
             reply,
             deliveries,
+            ...(timers ? { timers } : {}),
           } as HandleResult;
         });
         return Effect.gen(function* () {

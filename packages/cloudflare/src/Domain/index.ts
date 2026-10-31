@@ -24,7 +24,7 @@ import {
   type ViewKit,
   type ViewSnapshot,
 } from "@alchemy.run/domain/Platform";
-import { makeCallback } from "alchemy/Callback";
+import { type Callback, makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -337,6 +337,14 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
     return response;
   });
 
+/** A scheduled command, as its durable callback job holds it. */
+interface ScheduledJob {
+  readonly id: string;
+  readonly command: Json;
+  readonly meta: Aggregate.SendMeta;
+  readonly token?: string;
+}
+
 const aggregateObject = (kit: AggregateKit) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -394,6 +402,22 @@ const aggregateObject = (kit: AggregateKit) =>
               });
               yield* state.storage.put(`receipt:${meta.commandId}`, sent);
               yield* outbox.stage(result.deliveries);
+              // A phase's timers change with the commit, so a crash can't split them.
+              for (const commandId of result.timers?.cancel ?? []) {
+                yield* state.storage.delete(`scheduled:${commandId}`);
+                yield* timers.cancel(commandId);
+              }
+              for (const { command, meta: timer, at } of result.timers?.arm ?? []) {
+                const token = yield* Effect.sync(() => crypto.randomUUID());
+                yield* state.storage.delete(`receipt:${timer.commandId}`);
+                yield* state.storage.put(`scheduled:${timer.commandId}`, token);
+                yield* timers.schedule(timer.commandId, {
+                  at,
+                  payload: { id, command, meta: timer, token },
+                  // A timer can arm itself from its own job: this commit is progress.
+                  progress: result.version,
+                });
+              }
             }),
           );
           const committed = { state: result.state, version: result.version };
@@ -425,14 +449,9 @@ const aggregateObject = (kit: AggregateKit) =>
       // run, or `CANCELLED` once it is cancelled, so a job cancelled or
       // replaced after the alarm claimed it does nothing. It is cleared after
       // the commit (the receipt takes over), so a retried job still runs.
-      const timers = yield* makeCallback(
+      const timers: Callback<ScheduledJob> = yield* makeCallback(
         "domain:schedule",
-        (job: {
-          readonly id: string;
-          readonly command: Json;
-          readonly meta: Aggregate.SendMeta;
-          readonly token?: string;
-        }) =>
+        (job: ScheduledJob) =>
           Effect.gen(function* () {
             const key = `scheduled:${job.meta.commandId}`;
             const kick = yield* exclusively(
@@ -444,7 +463,10 @@ const aggregateObject = (kit: AggregateKit) =>
                 )
                   return false;
                 const { kick } = yield* commit(job.id, job.command, job.meta);
-                yield* state.storage.delete(key);
+                // A commit that left this timer's phase and returned armed it again.
+                if ((yield* state.storage.get<string>(key)) === job.token) {
+                  yield* state.storage.delete(key);
+                }
                 return kick;
               }),
             );
