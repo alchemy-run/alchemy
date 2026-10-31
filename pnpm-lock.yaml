@@ -9180,6 +9180,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
