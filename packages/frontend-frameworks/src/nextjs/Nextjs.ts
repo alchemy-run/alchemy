@@ -402,6 +402,7 @@ export const make = (
               ...new Set(["nodejs_compat", ...(options?.vite?.compatibilityFlags ?? [])]),
             ],
             ...(worker?.name !== undefined ? { proxyName: `${worker.name}-dev-proxy` } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }).pipe(Effect.provideContext(context));
           return { url: server.url.href };
@@ -458,6 +459,7 @@ export const make = (
               ? { queueConsumers: worker.queueConsumers }
               : {}),
             ...(worker?.unsafe !== undefined ? { unsafe: worker.unsafe } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }),
         ).pipe(

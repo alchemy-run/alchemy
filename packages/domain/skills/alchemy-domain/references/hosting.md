@@ -1,6 +1,6 @@
 # Hosting on Cloudflare with alchemy
 
-The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.DurableObjects` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.DurableObjectEngine`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
+The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts
 // packages/server/src/BankWorker.ts
@@ -22,7 +22,7 @@ const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
-    Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
+    Layer.mergeAll(DomainCloudflare.layerDurableObjects(), SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
   ),
 );
 
@@ -44,14 +44,14 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-- Swap `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
+- Swap `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
 ## Calling the Api in process
 
-Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with every entry's middleware. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
+Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with the middleware of everything it serves. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
 
 ```ts
 const asSystem = Layer.succeed(Session, (effect) =>
@@ -71,6 +71,111 @@ More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-proces
 Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
 
 More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
+
+## Plain HTTP and OpenAPI
+
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes an Api as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+
+```ts
+import * as DomainHttp from "@alchemy.run/domain/Http";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+
+// every call the Api serves; a typed failure answers at its `httpApiStatus`, else 422
+const BankHttp = DomainHttp.toHttpApi(CustomerApi);
+
+// in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
+return {
+  fetch: HttpApiBuilder.layer(BankHttp.api, { openapiPath: "/openapi.json" }).pipe(
+    Layer.provide(BankHttp.layer),
+    Layer.provide([HttpPlatform.layer, Etag.layer]),
+    HttpRouter.toHttpEffect,
+  ),
+};
+```
+
+A command is a `POST` with the RPC payload as its JSON body, and answers with its receipt:
+
+```sh
+curl -X POST /DepositMoney -H "cookie: $SESSION" \
+  -d '{ "target": "a-1", "commandId": "d-1", "input": { "amount": 1000 } }'
+# { "reply": { "balance": 1000 }, "stream": "Account/a-1", "version": 3 }
+```
+
+A read is a `GET` by key, and the receipt's `stream` and `version` make it wait for your own write:
+
+```sh
+curl "/AccountSummary/a-1?stream=Account/a-1&version=3"
+curl "/AccountSummary/a-1/snapshot"
+curl "/AccountSummary/a-1/list?order=desc&take=20&after=118"
+```
+
+`watch` and `events` answer with Server-Sent Events, one value per event:
+
+```ts
+const summary = new EventSource(`/AccountSummary/${accountId}/events?after=${cursor}`);
+summary.onmessage = (event) => render(JSON.parse(event.data));
+```
+
+Every call runs through the Api's own handlers with the request's headers, so a rejection answers with the status its schema declares (422 if none):
+
+```ts
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
+// GET /AccountSummary/a-2 as someone else -> 403 { "_tag": "NotOwner" }
+```
+
+What the Api serves is what is published, so HTTP clients get their own Api:
+
+```ts
+export class PartnerApi extends Domain.Api("PartnerApi", {
+  model: Bank,
+  commands: ["DepositMoney"],
+  views: ["AccountSummary"],
+  streams: [],
+}) {}
+const PartnerHttp = DomainHttp.toHttpApi(PartnerApi);
+```
+
+To serve the group next to others or under a prefix, add it to your own `HttpApi`:
+
+```ts
+const AppApi = HttpApi.make("App").add(BankHttp.group.prefix("/v1"));
+const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFor(AppApi)));
+```
+
+More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
+
+## MCP
+
+`toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
+
+```ts
+import * as DomainAi from "@alchemy.run/domain/Ai";
+import { McpProtocol, McpServer } from "effect/ai";
+
+// packages/server/src/BankMcp.ts
+export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
+  Layer.provide(
+    McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] }),
+  ),
+  Layer.provide(BankLive),
+);
+```
+
+On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_28`. Each call carries the MCP request's headers to the Api's middleware, so an MCP client signs in like any other client, and a rejection comes back as the tool's typed failure.
+
+`toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
+
+```ts
+const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
+  headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
+});
+const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
+```
+
+More: [MCP](https://alchemy.run/domain/mcp).
 
 ## Deploying
 

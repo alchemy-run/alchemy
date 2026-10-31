@@ -1,15 +1,29 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import * as Framework from "./Framework.ts";
 import * as Server from "./Server.ts";
 
 export { Cwd } from "./Cwd.ts";
 
+/**
+ * Effect's default logger minus annotations: framework child output carries an
+ * `alchemy.stream` annotation that would otherwise trail every line.
+ */
+const logger = Logger.make<unknown, void>(({ message, logLevel, cause, date }) => {
+  const parts = Array.isArray(message) ? message : [message];
+  const text = parts.map((part) => (typeof part === "string" ? part : String(part))).join(" ");
+  console.log(`[${date.toISOString().slice(11, 23)}] ${logLevel.toUpperCase()}: ${text}`);
+  if (cause.reasons.length > 0) console.log(Cause.pretty(cause));
+});
+
 export const layer = Server.layer.pipe(
+  Layer.provideMerge(Logger.layer([logger])),
   Layer.provideMerge(Framework.layer),
   Layer.provideMerge(
     ConfigProvider.layer(

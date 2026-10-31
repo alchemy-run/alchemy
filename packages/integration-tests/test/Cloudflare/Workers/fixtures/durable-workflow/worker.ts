@@ -12,7 +12,7 @@ export default class DurableWorkflowWorker extends Cloudflare.Worker<DurableWork
   { main: import.meta.url },
   app.pipe(
     Effect.provide(
-      WorkflowsLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine)),
+      WorkflowsLive.pipe(Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine())),
     ),
   ),
 ) {}

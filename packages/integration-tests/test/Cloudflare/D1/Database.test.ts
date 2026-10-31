@@ -5,6 +5,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Drift from "alchemy/Drift";
 import { State } from "alchemy/State";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -44,6 +45,23 @@ test.provider(
 
       const actualDatabase = yield* d1.getDatabase({ accountId, databaseId: database.databaseId });
       expect(actualDatabase.uuid).toEqual(database.databaseId);
+
+      // Cloudflare reports `{ mode: "disabled" }` for an omitted
+      // `readReplication`; `read` keeps the persisted shape, so an unchanged
+      // database is not reported as drifted.
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      const unchanged = yield* detectDrift();
+      expect(unchanged.resources.DefaultDatabase?.action).toBe("unchanged");
+
+      // Enabling replication outside Alchemy is still real drift.
+      yield* d1.patchDatabase({
+        accountId,
+        databaseId: database.databaseId,
+        readReplication: { mode: "auto" },
+      });
+      const changed = yield* detectDrift();
+      expect(changed.resources.DefaultDatabase?.action).toBe("drifted");
+      expect(changed.resources.DefaultDatabase?.attr.readReplication).toEqual({ mode: "auto" });
 
       yield* stack.destroy();
 

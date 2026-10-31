@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -66,7 +65,7 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
   }
 
   if (manifest.packages.length === 0) {
-    yield* Console.log("No affected packages to publish.");
+    yield* Effect.logInfo("No affected packages to publish.");
     return { packages: [] };
   }
 
@@ -78,14 +77,14 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
         query: run,
         payload: bytes,
       }).pipe(Effect.mapError(failed(`upload ${pkg.name}`)));
-      yield* Console.log(
+      yield* Effect.logInfo(
         `${result.uploaded ? "Uploaded" : "Reused"} ${pkg.name} (${pkg.sha256.slice(0, 12)}, ${pkg.size} bytes)`,
       );
     });
 
   const uploadMissing = (missing: ReadonlyArray<TarballRef>) => {
     const wanted = new Set(missing.map((ref) => `${ref.name}@${ref.sha256}`));
-    return Console.log(
+    return Effect.logInfo(
       `${missing.length} of ${manifest.packages.length} tarball(s) to upload`,
     ).pipe(
       Effect.andThen(
@@ -116,7 +115,7 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
   );
 
   for (const pkg of published.packages) {
-    yield* Console.log(`${pkg.name}: ${pkg.url}  [${pkg.tags.join(", ")}]`);
+    yield* Effect.logInfo(`${pkg.name}: ${pkg.url}  [${pkg.tags.join(", ")}]`);
   }
   return published;
 });

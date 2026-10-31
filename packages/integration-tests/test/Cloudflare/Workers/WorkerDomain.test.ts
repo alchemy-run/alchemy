@@ -4,6 +4,7 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Drift from "alchemy/Drift";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -27,6 +28,8 @@ const domainSuffix = `alchemy-worker-domain-${process.env.PULL_REQUEST ?? proces
 
 const DECLARED_HOSTNAME = `wd1-${domainSuffix}.${zoneName}`;
 const OUT_OF_BAND_HOSTNAME = `wd2-${domainSuffix}.${zoneName}`;
+const ZONED_HOSTNAME = `wd6-${domainSuffix}.${zoneName}`;
+const ZONED_DRIFT_HOSTNAME = `wd7-${domainSuffix}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -194,6 +197,84 @@ test.provider(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
             yield* purgeDomains(DECLARED_HOSTNAME, OUT_OF_BAND_HOSTNAME).pipe(Effect.ignore);
+            if (workerName) {
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
+            }
+          }),
+        ),
+      );
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],
+    timeout: 300_000,
+  },
+);
+
+test.provider(
+  "a domain with zoneName does not drift until a hostname is attached out-of-band",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zoneId = yield* resolveZoneId;
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+
+      yield* stack.destroy();
+      yield* purgeDomains(ZONED_HOSTNAME, ZONED_DRIFT_HOSTNAME);
+
+      let workerName: string | undefined;
+
+      yield* Effect.gen(function* () {
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("ZonedDomainWorker", {
+              main,
+              workersDev: false,
+              compatibility: { date: "2024-01-01" },
+              domain: { name: ZONED_HOSTNAME, zoneName },
+            });
+          }),
+        );
+        workerName = worker.workerName;
+        expect(worker.domain).toEqual({
+          name: ZONED_HOSTNAME,
+          aliases: [],
+          redirects: [],
+          zone: zoneName,
+        });
+
+        // `read` keeps the resolved zone while the declared hostname is
+        // attached, so an unchanged Worker is not reported as drifted.
+        const unchanged = yield* detectDrift();
+        expect(unchanged.resources.ZonedDomainWorker?.action).toBe("unchanged");
+
+        // A hostname attached outside Alchemy is still real drift.
+        yield* workers
+          .putDomain({
+            accountId,
+            hostname: ZONED_DRIFT_HOSTNAME,
+            service: worker.workerName,
+            zoneId,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "WorkerNotFound" || e._tag === "TooManyRequests",
+              schedule: transientRetrySchedule,
+              times: 8,
+            }),
+          );
+        const changed = yield* detectDrift();
+        expect(changed.resources.ZonedDomainWorker?.action).toBe("drifted");
+        expect(changed.resources.ZonedDomainWorker?.attr.domain).toEqual({
+          name: ZONED_HOSTNAME,
+          aliases: [ZONED_DRIFT_HOSTNAME],
+          redirects: [],
+          zone: zoneName,
+        });
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* stack.destroy().pipe(Effect.ignore);
+            yield* purgeDomains(ZONED_HOSTNAME, ZONED_DRIFT_HOSTNAME).pipe(Effect.ignore);
             if (workerName) {
               yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
