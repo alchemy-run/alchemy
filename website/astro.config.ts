@@ -1632,6 +1632,7 @@ export default defineConfig({
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "In memory", link: "/domain/in-memory" },
                 { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },
