@@ -156,6 +156,11 @@ export const batchSize = Metric.histogram("domain.projection.batch_size", {
   description: "Inputs per projection batch",
   boundaries: Metric.exponentialBoundaries({ start: 1, factor: 2, count: 12 }),
 });
+/** Queries run, by `domain.query` and `domain.outcome`. */
+export const queries = Metric.counter("domain.queries", {
+  description: "Queries run",
+  incremental: true,
+});
 /** External system calls, by `domain.system`, `domain.operation` and `domain.outcome`. */
 export const externalCalls = Metric.counter("domain.external.calls", {
   description: "Calls to external systems",

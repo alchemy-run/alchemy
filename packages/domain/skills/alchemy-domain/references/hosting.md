@@ -66,6 +66,12 @@ yield* bank.DepositMoney(accountId, { amount });
 
 More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
 
+## Queries
+
+A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its `validate` reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
+
+More: [Query](https://alchemy.run/domain/query), [Cloudflare](https://alchemy.run/domain/cloudflare).
+
 ## Live reads
 
 Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
@@ -85,10 +91,11 @@ Every command, event and reaction is traced automatically:
 - `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
 - `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
 - `Domain.external` spans for external system calls.
+- `Domain.query` spans in the Worker, with `domain.outcome`, `domain.query.rows` and `domain.query.hidden`, and a `Domain.caughtUp` child when it waits for the caller's write.
 
 All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
 
-Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
+Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`, `domain.queries`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
 
 More: [Observability](https://alchemy.run/domain/observability).
 

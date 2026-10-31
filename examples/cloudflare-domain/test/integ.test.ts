@@ -204,16 +204,10 @@ test(
     // the stream's validate: only the owner reads the card
     expect((yield* alex.AccountCard.peek(samMain).pipe(Effect.flip))._tag).toBe("NotOwner");
 
-    // a projection (Ledger) writes D1 in batches; the ledger is served by a plain route
-    const ledger = yield* HttpClient.execute(
-      HttpClientRequest.get(`${base}/api/ledger/${samMain}`).pipe(
-        HttpClientRequest.bearerToken(yield* signIn(base, "c-1")),
-      ),
-    ).pipe(
-      Effect.flatMap((res) => res.json),
-      Effect.map(
-        (rows) => rows as ReadonlyArray<{ readonly kind: string; readonly amount: number }>,
-      ),
+    // a projection (Ledger) writes D1 in batches; the AccountLedger query reads it, typed.
+    // The debit comes from the transfer's saga, not from a receipt sam holds, so poll for it.
+    const ledger = yield* sam.AccountLedger({ account: samMain }).pipe(
+      Effect.map((page) => page.entries),
       Effect.filterOrFail(
         (rows) => rows.length === 3,
         () => "not projected yet",

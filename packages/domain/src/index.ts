@@ -1,7 +1,8 @@
 /**
  * Model a domain from commands, events and rejections; aggregates that decide;
- * views that fold; and policies that react. Expose it to clients as an Api,
- * and host it on whichever Platform Layer is provided.
+ * views that fold; policies that react; and queries that read across keys.
+ * Expose it to clients as an Api, and host it on whichever Platform Layer is
+ * provided.
  *
  * ```typescript
  * import * as Domain from "@alchemy.run/domain";
@@ -26,6 +27,7 @@ import type * as KeyModule from "./Key.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
+import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as SagaModule from "./Saga.ts";
@@ -175,6 +177,21 @@ export declare namespace Projection {
 /** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
 export const Projection = ProjectionModule.make;
 
+export declare namespace Query {
+  /** Any Query class. */
+  export type Any = QueryModule.Any;
+  export type InputOf<Q extends QueryModule.Any> = QueryModule.InputOf<Q>;
+  export type ResultOf<Q extends QueryModule.Any> = QueryModule.ResultOf<Q>;
+  /** A page of a paged query's rows. */
+  export type Page<Row> = QueryModule.Page<Row>;
+  /** The page a paged query's handler is asked for. */
+  export type PageRequest = QueryModule.PageRequest;
+  /** What `validate` sees besides the input. */
+  export type Request = QueryModule.Request;
+}
+/** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
+export const Query = QueryModule.make;
+
 export declare namespace Stream {
   /** Any Stream class. */
   export type Any = StreamModule.Any;
@@ -199,7 +216,7 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may expose: commands, views, and aggregates with a `read` contract. */
+  /** What an Api may expose: commands, views, streams, queries, and aggregates with a `read` contract. */
   export type Entry = ApiModule.Entry;
   /** The typed client of an Api. */
   export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
@@ -211,6 +228,9 @@ export declare namespace Api {
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
+  export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** Everything a query can fail with. */
+  export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
   /** Any Api class, for code that works with every Api. */
@@ -235,7 +255,7 @@ export declare namespace Model {
   /** Any Model class. */
   export type Any = ModelModule.Any;
 }
-/** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
+/** The aggregates, views, policies, projections, streams and queries hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
 /** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
