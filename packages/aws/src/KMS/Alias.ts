@@ -8,12 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { KeyId } from "./Key.ts";
 
 export type AliasName = `alias/${string}`;
-export type AliasArn = `arn:aws:kms:${RegionID}:${AccountID}:${AliasName}`;
+export type AliasArn = `arn:${Partition}:kms:${RegionID}:${AccountID}:${AliasName}`;
 
 export interface AliasProps {
   /**
@@ -193,7 +194,7 @@ const findAlias = Effect.fn(function* (aliasName: AliasName) {
 
 const aliasArn = Effect.fn(function* (aliasName: AliasName) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:kms:${region}:${accountId}:${aliasName}` as AliasArn;
+  return `arn:${partitionOf(region)}:kms:${region}:${accountId}:${aliasName}` as AliasArn;
 });
 
 const resolveTargetKeyId = Effect.fn(function* (targetKeyId: string) {

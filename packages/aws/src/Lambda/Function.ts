@@ -45,6 +45,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   observeEventInvokeConfig,
@@ -1548,7 +1549,7 @@ export const FunctionProvider = () =>
             policyName,
             functionName: fn,
             roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
-            functionArn: `arn:aws:lambda:${region}:${accountId}:function:${fn}`,
+            functionArn: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${fn}`,
           };
         });
 
@@ -1747,7 +1748,7 @@ export const FunctionProvider = () =>
             {
               Effect: "Deny",
               Action: "logs:CreateLogGroup",
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+              Resource: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
             },
           ],
         });
@@ -3019,7 +3020,7 @@ export const FunctionProvider = () =>
             preferUpdate: true,
           });
 
-          const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+          const functionArn = `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${functionName}`;
           // Consumers in a cycle with this Function wire the alias before
           // reconcile runs, so the alias must already exist (serving the
           // stub until reconcile advances it).
@@ -3375,7 +3376,7 @@ export const FunctionProvider = () =>
           const runTailSession = Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
 
-            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
+            const logGroupArn = `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [logGroupArn],
             });

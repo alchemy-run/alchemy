@@ -13,6 +13,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { tagListRecord } from "../internal/Observe.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -57,7 +58,7 @@ export interface RouteTable extends Resource<
     /**
      * The Amazon Resource Name (ARN) of the route table.
      */
-    routeTableArn: `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`;
+    routeTableArn: `arn:${Partition}:ec2:${RegionID}:${AccountID}:route-table/${string}`;
 
     /**
      * The ID of the AWS account that owns the route table.
@@ -285,7 +286,7 @@ export const RouteTableProvider = () =>
                       return {
                         routeTableId,
                         routeTableArn:
-                          `arn:aws:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`,
+                          `arn:${partitionOf(region)}:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:${Partition}:ec2:${RegionID}:${AccountID}:route-table/${string}`,
                         vpcId: rt.VpcId as VpcId,
                         ownerId: rt.OwnerId,
                         associations: rt.Associations?.map((assoc) => ({
@@ -425,7 +426,7 @@ export const RouteTableProvider = () =>
           return {
             routeTableId,
             routeTableArn:
-              `arn:aws:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`,
+              `arn:${partitionOf(region)}:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:${Partition}:ec2:${RegionID}:${AccountID}:route-table/${string}`,
             vpcId: news.vpcId as VpcId,
             ownerId: final.OwnerId,
             associations: final.Associations?.map((assoc) => ({

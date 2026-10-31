@@ -34,6 +34,7 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -50,7 +51,7 @@ export class JobDefinitionConflict extends Data.TaggedError("JobDefinitionConfli
 export type JobDefinitionName = string;
 /** Revision-qualified job definition ARN (`.../job-definition/{name}:{revision}`). */
 export type JobDefinitionArn =
-  `arn:aws:batch:${RegionID}:${AccountID}:job-definition/${JobDefinitionName}:${number}`;
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:job-definition/${JobDefinitionName}:${number}`;
 
 /**
  * Raised when the props don't select exactly one of the two forms: the

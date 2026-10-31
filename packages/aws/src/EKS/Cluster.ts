@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
@@ -43,7 +44,7 @@ export class EKSClusterOperationFailed extends Data.TaggedError("EKSClusterOpera
 }> {}
 
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:${Partition}:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**

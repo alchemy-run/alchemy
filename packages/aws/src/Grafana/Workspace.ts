@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { syncGrafanaTags, toTagRecord, unredact } from "./internal.ts";
 
@@ -116,7 +117,7 @@ export const WorkspaceProvider = () =>
     Workspace,
     Effect.gen(function* () {
       const arnFor = (accountId: string, region: string, id: string) =>
-        `arn:aws:grafana:${region}:${accountId}:/workspaces/${id}`;
+        `arn:${partitionOf(region)}:grafana:${region}:${accountId}:/workspaces/${id}`;
 
       const toAttrs = (accountId: string, region: string, ws: grafana.WorkspaceDescription) => ({
         workspaceId: ws.id,

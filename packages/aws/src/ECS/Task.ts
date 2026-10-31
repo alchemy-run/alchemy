@@ -33,6 +33,7 @@ import {
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class TaskConflict extends Data.TaggedError("TaskConflict")<{
@@ -618,7 +619,7 @@ export const ensureTaskLogGroup = Effect.fn(function* ({
       tags,
     })
     .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
-  return `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`;
+  return `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`;
 });
 
 /**
@@ -1081,7 +1082,7 @@ export const TaskProvider = () =>
           executionRoleArn,
           executionRoleName,
           logGroupName,
-          logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+          logGroupArn: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`,
           code: { hash },
         };
       };

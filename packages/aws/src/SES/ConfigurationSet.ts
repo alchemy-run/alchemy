@@ -10,6 +10,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -213,7 +214,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const configurationSetArnOf = (region: string, accountId: string, name: string) =>
-  `arn:aws:ses:${region}:${accountId}:configuration-set/${name}`;
+  `arn:${partitionOf(region)}:ses:${region}:${accountId}:configuration-set/${name}`;
 
 const sameReasons = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string>) => {
   const left = [...(a ?? [])].sort();

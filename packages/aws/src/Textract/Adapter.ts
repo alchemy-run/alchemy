@@ -7,6 +7,7 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AdapterProps {
@@ -157,7 +158,7 @@ export const AdapterProvider = () =>
       const adapterArn = (adapterId: string) =>
         Effect.gen(function* () {
           const { accountId, region } = yield* AWSEnvironment.current;
-          return `arn:aws:textract:${region}:${accountId}:/adapters/${adapterId}`;
+          return `arn:${partitionOf(region)}:textract:${region}:${accountId}:/adapters/${adapterId}`;
         });
 
       const getOne = (adapterId: string) =>

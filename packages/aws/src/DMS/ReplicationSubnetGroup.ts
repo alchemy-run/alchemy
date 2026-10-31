@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ReplicationSubnetGroupUnexpectedResponse extends Data.TaggedError(
@@ -123,7 +124,7 @@ export const ReplicationSubnetGroupProvider = () =>
       // them rather than reading one back (describe returns no ARN).
       const toArn = Effect.fn(function* (identifier: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:dms:${region}:${accountId}:subgrp:${identifier}`;
+        return `arn:${partitionOf(region)}:dms:${region}:${accountId}:subgrp:${identifier}`;
       });
 
       const findGroup = Effect.fn(function* (identifier: string) {

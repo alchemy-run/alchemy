@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
@@ -21,7 +22,8 @@ export class MetricStreamUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 export type MetricStreamName = string;
-export type MetricStreamArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
+export type MetricStreamArn =
+  `arn:${Partition}:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
 
 export interface MetricStreamProps extends Omit<cloudwatch.PutMetricStreamInput, "Name" | "Tags"> {
   /**
@@ -107,7 +109,7 @@ export const MetricStreamProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:metric-stream/${name}` as MetricStreamArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:metric-stream/${name}` as MetricStreamArn,
           ),
         );
 

@@ -26,6 +26,7 @@ import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Role } from "../IAM/Role.ts";
+import { partitionOf } from "../Partition.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 /**
@@ -39,8 +40,8 @@ const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined
     region: string;
   }>;
   return group
-    ? Output.interpolate`arn:aws:scheduler:${region}:${accountId}:schedule/${group.scheduleGroupName}/*`
-    : (`arn:aws:scheduler:${region}:${accountId}:schedule/default/*` as const);
+    ? Output.interpolate`arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/${group.scheduleGroupName}/*`
+    : (`arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/default/*` as const);
 });
 
 /**
@@ -53,7 +54,7 @@ const allSchedulesArnPattern = Effect.gen(function* () {
     accountId: string;
     region: string;
   }>;
-  return `arn:aws:scheduler:${region}:${accountId}:schedule/*/*` as const;
+  return `arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/*/*` as const;
 });
 
 /**

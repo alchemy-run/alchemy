@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { UpdateUsage, type UpdateUsageRequest } from "./UpdateUsage.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
@@ -24,7 +25,7 @@ export const UpdateUsageHttp = Layer.effect(
         target: usagePlan,
         verb: "PATCH",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/usageplans/${usagePlan.id}/keys/*/usage`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/usageplans/${usagePlan.id}/keys/*/usage`,
         ],
       });
       return Effect.fn(`AWS.ApiGateway.UpdateUsage(${usagePlan.LogicalId})`)(function* (

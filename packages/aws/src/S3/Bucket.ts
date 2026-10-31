@@ -21,11 +21,12 @@ import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type BucketName = string;
-export type BucketArn = `arn:aws:s3:::${BucketName}`;
+export type BucketArn = `arn:${Partition}:s3:::${BucketName}`;
 
 /**
  * Server-side encryption configuration for a bucket.

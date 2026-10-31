@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface DomainProps {
@@ -80,7 +81,7 @@ export const DomainProvider = () =>
       });
 
       const domainArn = (region: string, accountId: string, name: string) =>
-        `arn:aws:sdb:${region}:${accountId}:domain/${name}`;
+        `arn:${partitionOf(region)}:sdb:${region}:${accountId}:domain/${name}`;
 
       const observeDomain = Effect.fn(function* (name: string) {
         return yield* sdb

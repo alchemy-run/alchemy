@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
@@ -18,7 +19,7 @@ import { readElbTags } from "./internal.ts";
 
 export type TargetGroupName = string;
 export type TargetGroupArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:targetgroup/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:targetgroup/${string}`;
 
 export interface TargetGroupProps {
   /** The target group name. If omitted, a unique name is generated. Changing it replaces the target group. */

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -205,7 +206,7 @@ export const DeploymentProvider = () =>
 
       const deploymentArn = Effect.fn(function* (deploymentId: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:greengrass:${region}:${accountId}:deployments:${deploymentId}`;
+        return `arn:${partitionOf(region)}:greengrass:${region}:${accountId}:deployments:${deploymentId}`;
       });
 
       const observeDeployment = (deploymentId: string) =>

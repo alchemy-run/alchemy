@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { Api } from "./Api.ts";
 import {
@@ -190,7 +191,7 @@ const computeUrls = (input: {
       : stageName === "$default"
         ? (apiEndpoint ?? `https://${host}`)
         : `${apiEndpoint ?? `https://${host}`}/${stageName}`;
-  const connectionsArn = `arn:aws:execute-api:${region}:${accountId}:${apiId}/${stageName}/*/@connections/*`;
+  const connectionsArn = `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}/${stageName}/*/@connections/*`;
   return { invokeUrl, callbackUrl, connectionsArn };
 };
 

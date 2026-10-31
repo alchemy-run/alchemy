@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord } from "./internal.ts";
 
@@ -122,7 +123,7 @@ export const DestinationProvider = () =>
       // construct it from the ambient account/region.
       const destinationArn = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:iotmanagedintegrations:${region}:${accountId}:destination/${name}`;
+        return `arn:${partitionOf(region)}:iotmanagedintegrations:${region}:${accountId}:destination/${name}`;
       });
 
       const toAttributes = Effect.fn(function* (destination: mi.GetDestinationResponse) {

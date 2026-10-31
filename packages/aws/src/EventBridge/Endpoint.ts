@@ -7,13 +7,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type { EndpointState } from "@distilled.cloud/aws/eventbridge";
 
 export type EndpointName = string;
-export type EndpointArn = `arn:aws:events:${RegionID}:${AccountID}:endpoint/${EndpointName}`;
+export type EndpointArn =
+  `arn:${Partition}:events:${RegionID}:${AccountID}:endpoint/${EndpointName}`;
 
 export interface EndpointFailoverConfig {
   /**

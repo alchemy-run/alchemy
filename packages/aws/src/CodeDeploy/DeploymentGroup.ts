@@ -10,6 +10,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -204,7 +205,8 @@ const deploymentGroupArn = (
   account: string,
   appName: string,
   groupName: string,
-): string => `arn:aws:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
+): string =>
+  `arn:${partitionOf(region)}:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
 
 /**
  * Retry an effect while CodeDeploy reports that it cannot yet assume the

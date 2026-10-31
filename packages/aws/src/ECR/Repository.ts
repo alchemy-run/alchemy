@@ -12,6 +12,7 @@ import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import { canonicalJson, tagListRecord } from "../internal/Observe.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -23,7 +24,8 @@ export class ECRRepositoryUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 export type RepositoryName = string;
-export type RepositoryArn = `arn:aws:ecr:${RegionID}:${AccountID}:repository/${RepositoryName}`;
+export type RepositoryArn =
+  `arn:${Partition}:ecr:${RegionID}:${AccountID}:repository/${RepositoryName}`;
 export type RepositoryUri = `${AccountID}.dkr.ecr.${RegionID}.amazonaws.com/${RepositoryName}`;
 
 export interface RepositoryProps {

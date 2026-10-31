@@ -18,6 +18,7 @@ import * as Schedule from "effect/Schedule";
 // `Stream` module to avoid the collision.
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -38,7 +39,7 @@ export type StreamRecord = lambda.KinesisStreamRecord;
 export type StreamEvent = lambda.KinesisStreamEvent;
 
 export type StreamName = string;
-export type StreamArn = `arn:aws:kinesis:${RegionID}:${AccountID}:stream/${StreamName}`;
+export type StreamArn = `arn:${Partition}:kinesis:${RegionID}:${AccountID}:stream/${StreamName}`;
 
 export type StreamStatus = "CREATING" | "DELETING" | "ACTIVE" | "UPDATING";
 
@@ -480,7 +481,8 @@ export const StreamProvider = () =>
           yield* assertProvisionedProps(news);
 
           const streamName = output?.streamName ?? (yield* createStreamName(id, news));
-          const streamArn = `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
+          const streamArn =
+            `arn:${partitionOf(region)}:kinesis:${region}:${accountId}:stream/${streamName}` as const;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 

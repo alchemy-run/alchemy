@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class KendraSearchIndexInvalidProps extends Data.TaggedError(
@@ -305,7 +306,8 @@ const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>
 
 const currentArnOf = Effect.gen(function* () {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return (indexId: string) => `arn:aws:kendra:${region}:${accountId}:index/${indexId}`;
+  return (indexId: string) =>
+    `arn:${partitionOf(region)}:kendra:${region}:${accountId}:index/${indexId}`;
 });
 
 export const IndexProvider = () =>

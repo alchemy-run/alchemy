@@ -13,6 +13,7 @@ import {
   type WebSocketResult,
   type WebSocketRouteProps,
 } from "../ApiGatewayV2/WebSocketEventSource.ts";
+import { partitionOf } from "../Partition.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -108,7 +109,7 @@ export const WebSocketEventSource = Layer.effect(
                 Output.all(host.functionArn, api.apiId),
                 ([fnArn, apiId]: [string, string]) => {
                   const [, , , region, accountId] = fnArn.split(":");
-                  return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
+                  return `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}/*`;
                 },
               ),
             });

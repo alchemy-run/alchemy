@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { SecurityGroupArn, SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 import {
@@ -288,7 +289,7 @@ export const DefaultSecurityGroupProvider = () =>
         return {
           groupId: group.GroupId as SecurityGroupId,
           groupArn:
-            `arn:aws:ec2:${region}:${accountId}:security-group/${group.GroupId}` as SecurityGroupArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:security-group/${group.GroupId}` as SecurityGroupArn,
           groupName: group.GroupName!,
           description: group.Description!,
           vpcId: group.VpcId as VpcId,

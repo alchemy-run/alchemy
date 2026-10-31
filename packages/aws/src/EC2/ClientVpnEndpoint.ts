@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { retryClientVpn } from "./ClientVpnWait.ts";
 
@@ -315,7 +316,7 @@ const toAttrs = Effect.fn(function* (endpoint: EC2.ClientVpnEndpoint) {
   const { region, accountId } = yield* AWSEnvironment.current;
   return {
     clientVpnEndpointId: endpoint.ClientVpnEndpointId as ClientVpnEndpointId,
-    clientVpnEndpointArn: `arn:aws:ec2:${region}:${accountId}:client-vpn-endpoint/${endpoint.ClientVpnEndpointId}`,
+    clientVpnEndpointArn: `arn:${partitionOf(region)}:ec2:${region}:${accountId}:client-vpn-endpoint/${endpoint.ClientVpnEndpointId}`,
     dnsName: endpoint.DnsName ?? "",
     status: endpoint.Status?.Code ?? "pending-associate",
     description: endpoint.Description ?? "",

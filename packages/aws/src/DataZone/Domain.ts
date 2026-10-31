@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import { syncDataZoneTags, toTagRecord, unredact } from "./internal.ts";
 
 /**
@@ -229,7 +230,7 @@ export const DomainProvider = () =>
       });
 
       const domainArnOf = (region: string, accountId: string, domainId: string) =>
-        `arn:aws:datazone:${region}:${accountId}:domain/${domainId}`;
+        `arn:${partitionOf(region)}:datazone:${region}:${accountId}:domain/${domainId}`;
 
       const ensureExecutionRole = Effect.fn(function* ({
         id,

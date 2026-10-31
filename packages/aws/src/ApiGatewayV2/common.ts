@@ -4,22 +4,23 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Schedule from "effect/Schedule";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * API Gateway v2 ARN helpers. Unlike most services the resource ARNs used
  * for tagging omit the account id (`arn:aws:apigateway:{region}::/apis/{id}`).
  */
 export const apiArn = (region: string, apiId: string) =>
-  `arn:aws:apigateway:${region}::/apis/${apiId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/apis/${apiId}`;
 
 export const stageArn = (region: string, apiId: string, stageName: string) =>
-  `arn:aws:apigateway:${region}::/apis/${apiId}/stages/${stageName}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/apis/${apiId}/stages/${stageName}`;
 
 export const domainNameArn = (region: string, domainName: string) =>
-  `arn:aws:apigateway:${region}::/domainnames/${domainName}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/domainnames/${domainName}`;
 
 export const vpcLinkArn = (region: string, vpcLinkId: string) =>
-  `arn:aws:apigateway:${region}::/vpclinks/${vpcLinkId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/vpclinks/${vpcLinkId}`;
 
 /**
  * The `execute-api` ARN that IAM policies (Lambda resource policies,
@@ -27,7 +28,7 @@ export const vpcLinkArn = (region: string, vpcLinkId: string) =>
  * to an API. Wildcards match across path segments.
  */
 export const executeApiArn = (region: string, accountId: string, apiId: string, suffix = "/*") =>
-  `arn:aws:execute-api:${region}:${accountId}:${apiId}${suffix}`;
+  `arn:${partitionOf(region)}:execute-api:${region}:${accountId}:${apiId}${suffix}`;
 
 /**
  * `Create/Update/Delete` operations across API Gateway v2 share an

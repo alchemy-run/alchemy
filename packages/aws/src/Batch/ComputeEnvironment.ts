@@ -11,13 +11,14 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
 
 export type ComputeEnvironmentName = string;
 export type ComputeEnvironmentArn =
-  `arn:aws:batch:${RegionID}:${AccountID}:compute-environment/${ComputeEnvironmentName}`;
+  `arn:${Partition}:batch:${RegionID}:${AccountID}:compute-environment/${ComputeEnvironmentName}`;
 
 /**
  * Raised when networking is left implicit but the account/region has no
@@ -476,7 +477,7 @@ export const ComputeEnvironmentProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.computeEnvironmentName ?? (yield* toName(id, news));
           const arn =
-            `arn:aws:batch:${region}:${accountId}:compute-environment/${name}` as ComputeEnvironmentArn;
+            `arn:${partitionOf(region)}:batch:${region}:${accountId}:compute-environment/${name}` as ComputeEnvironmentArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";

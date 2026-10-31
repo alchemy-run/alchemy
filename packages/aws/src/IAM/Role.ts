@@ -12,12 +12,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import { normalizePolicyDocument, type PolicyDocument, type PolicyStatement } from "./Policy.ts";
 
 export type RoleName = string;
-export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;
+export type RoleArn = `arn:${Partition}:iam::${AccountID}:role/${RoleName}`;
 
 /**
  * IAM misuses `MalformedPolicyDocument` for an eventual-consistency case: a

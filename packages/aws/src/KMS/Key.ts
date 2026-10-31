@@ -12,11 +12,12 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type KeyId = string;
-export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;
+export type KeyArn = `arn:${Partition}:kms:${RegionID}:${AccountID}:key/${KeyId}`;
 
 export type { KeySpec, KeyState, KeyUsageType } from "@distilled.cloud/aws/kms";
 

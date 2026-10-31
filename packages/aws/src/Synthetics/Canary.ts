@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CanaryProps {
@@ -358,7 +359,7 @@ export const CanaryProvider = () =>
 
       const canaryArnOf = Effect.fn(function* (canaryName: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:synthetics:${region}:${accountId}:canary:${canaryName}`;
+        return `arn:${partitionOf(region)}:synthetics:${region}:${accountId}:canary:${canaryName}`;
       });
 
       const getCanaryOrUndefined = Effect.fn(function* (canaryName: string) {
@@ -652,7 +653,9 @@ export const CanaryProvider = () =>
               {
                 Effect: "Allow",
                 Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-                Resource: [`arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`],
+                Resource: [
+                  `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/cwsyn-*`,
+                ],
               },
               {
                 Effect: "Allow",

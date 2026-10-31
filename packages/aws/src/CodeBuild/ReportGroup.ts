@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 
 export class ReportGroupUnexpectedResponse extends Data.TaggedError(
   "ReportGroupUnexpectedResponse",
@@ -145,7 +146,7 @@ const toWireExportConfig = (
 /** Builds a report group's ARN from its name in the ambient account/region. */
 const reportGroupArn = Effect.fn(function* (name: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:codebuild:${region}:${accountId}:report-group/${name}`;
+  return `arn:${partitionOf(region)}:codebuild:${region}:${accountId}:report-group/${name}`;
 });
 
 /** Structural comparison for the export-config sync no-op check. */

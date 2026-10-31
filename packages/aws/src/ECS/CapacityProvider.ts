@@ -10,12 +10,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type CapacityProviderName = string;
 export type CapacityProviderArn =
-  `arn:aws:ecs:${RegionID}:${AccountID}:capacity-provider/${CapacityProviderName}`;
+  `arn:${Partition}:ecs:${RegionID}:${AccountID}:capacity-provider/${CapacityProviderName}`;
 
 export interface CapacityProviderProps {
   /**
@@ -247,7 +248,7 @@ export const CapacityProviderProvider = () =>
           }
 
           const capacityProviderArn = (existing?.capacityProviderArn ??
-            `arn:aws:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
+            `arn:${partitionOf(region)}:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
 
           // Sync managed scaling — observed ↔ desired. ECS
           // updateCapacityProvider only mutates managed* fields; ASG ARN is

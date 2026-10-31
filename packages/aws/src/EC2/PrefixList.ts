@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -16,7 +17,7 @@ export const PrefixListId = <ID extends string>(id: ID): ID & PrefixListId<ID> =
   `pl-${id}` as ID & PrefixListId<ID>;
 
 export type PrefixListArn<ID extends PrefixListId = PrefixListId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:prefix-list/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:prefix-list/${ID}`;
 
 /**
  * A single CIDR entry in a managed prefix list.
@@ -217,7 +218,7 @@ export const PrefixListProvider = () =>
             prefixListId: pl.PrefixListId as PrefixListId,
             prefixListArn:
               (pl.PrefixListArn as PrefixListArn) ??
-              (`arn:aws:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
+              (`arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
             prefixListName: pl.PrefixListName!,
             addressFamily: pl.AddressFamily as "IPv4" | "IPv6",
             maxEntries: pl.MaxEntries!,
@@ -250,7 +251,7 @@ export const PrefixListProvider = () =>
                       prefixListId: pl.PrefixListId as PrefixListId,
                       prefixListArn:
                         (pl.PrefixListArn as PrefixListArn) ??
-                        (`arn:aws:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
+                        (`arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:prefix-list/${pl.PrefixListId}` as PrefixListArn),
                       prefixListName: pl.PrefixListName!,
                       addressFamily: pl.AddressFamily as "IPv4" | "IPv6",
                       maxEntries: pl.MaxEntries!,

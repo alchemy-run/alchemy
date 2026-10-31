@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import { BusSink, type BusSinkEntry } from "./BusSink.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents } from "./PutEvents.ts";
@@ -85,7 +86,7 @@ export const BusSinkHttp = Layer.effect(
         // by the engine before the host reconciles (see PutEventsHttp).
         const resource = bus
           ? Output.interpolate`${bus.eventBusArn}`
-          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+          : (`arn:${partitionOf(region)}:events:${region}:${accountId}:event-bus/default` as const);
 
         yield* bind`AWS.EventBridge.BusSink(${bus ?? "default"})`({
           policyStatements: [

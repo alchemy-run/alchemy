@@ -19,12 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type DeliveryStreamName = string;
 export type DeliveryStreamArn =
-  `arn:aws:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
+  `arn:${Partition}:firehose:${RegionID}:${AccountID}:deliverystream/${DeliveryStreamName}`;
 
 export type DeliveryStreamStatus =
   | "CREATING"

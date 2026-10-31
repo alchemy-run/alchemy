@@ -2,6 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { CreateApiKey, type CreateApiKeyRequest } from "./CreateApiKey.ts";
 
@@ -20,7 +21,7 @@ export const CreateApiKeyHttp = Layer.effect(
         cap: "AWS.ApiGateway.CreateApiKey",
         target: "",
         verb: "POST",
-        paths: (region) => [`arn:aws:apigateway:${region}::/apikeys`],
+        paths: (region) => [`arn:${partitionOf(region)}:apigateway:${region}::/apikeys`],
       });
       return Effect.fn("AWS.ApiGateway.CreateApiKey")(function* (request?: CreateApiKeyRequest) {
         return yield* createApiKey(request ?? {});

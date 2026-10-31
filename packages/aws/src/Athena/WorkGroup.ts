@@ -7,11 +7,13 @@ import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type WorkGroupName = string;
-export type WorkGroupArn = `arn:aws:athena:${RegionID}:${AccountID}:workgroup/${WorkGroupName}`;
+export type WorkGroupArn =
+  `arn:${Partition}:athena:${RegionID}:${AccountID}:workgroup/${WorkGroupName}`;
 
 export interface WorkGroupProps {
   /**
@@ -177,7 +179,8 @@ export const WorkGroupProvider = () =>
           const name = output?.workGroupName ?? (yield* toName(id, olds ?? {}));
           const wg = yield* getOne(name);
           if (!wg) return undefined;
-          const arn = `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
           return {
             workGroupName: name,
             workGroupArn: arn,
@@ -201,7 +204,7 @@ export const WorkGroupProvider = () =>
                       {
                         workGroupName: wg.Name,
                         workGroupArn:
-                          `arn:aws:athena:${region}:${accountId}:workgroup/${wg.Name}` as WorkGroupArn,
+                          `arn:${partitionOf(region)}:athena:${region}:${accountId}:workgroup/${wg.Name}` as WorkGroupArn,
                         state: (wg.State ?? "ENABLED") as "ENABLED" | "DISABLED",
                         outputLocation: undefined,
                         tags: {} as Record<string, string>,
@@ -213,7 +216,8 @@ export const WorkGroupProvider = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.workGroupName ?? (yield* toName(id, news));
-          const arn = `arn:aws:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
+          const arn =
+            `arn:${partitionOf(region)}:athena:${region}:${accountId}:workgroup/${name}` as WorkGroupArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";
