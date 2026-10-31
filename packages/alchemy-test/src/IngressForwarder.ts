@@ -1,16 +1,40 @@
+/**
+ * A dev ingress router for tests.
+ *
+ * `makeForwarder` is an `alchemy/Local/Ingress` adapter that really routes: one
+ * HTTP server on a free loopback port that forwards each request to the
+ * listener attached for its `Host`. Tests of the ingress contract and of every
+ * resource that takes `dev.ingress` share it, so a routed URL is exercised
+ * end to end without installing a router.
+ *
+ * ```ts
+ * const forwarder = yield* makeForwarder;
+ * const worker = yield* stack.deploy(program).pipe(Effect.provide(forwarder.adapters));
+ * const answer = yield* getRouted(worker.url); // worker.url is on the forwarder
+ * ```
+ */
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
-import * as Effect from "effect/Effect";
 import {
+  Adapters,
   IngressError,
   type IngressAdapter,
+  type IngressConfig,
   type IngressFactory,
   type IngressOptions,
   type IngressTarget,
-} from "@/Local/Ingress.ts";
+} from "alchemy/Local/Ingress";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 /** The `IngressConfig.type` the forwarder's factory is registered under. */
 export const FORWARDER_TYPE = "forwarder";
+
+/** The `dev.ingress` value that selects a forwarder, with optional adapter options. */
+export const forwarderConfig = (options?: IngressOptions): IngressConfig => ({
+  type: FORWARDER_TYPE,
+  options,
+});
 
 /** Lowercase, host-safe label: `dev_alice` becomes `dev-alice`. */
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -25,6 +49,11 @@ interface Route {
 export interface Forwarder {
   /** Register under `IngressConfig.type` `"forwarder"` (see {@link FORWARDER_TYPE}). */
   readonly factory: IngressFactory;
+  /**
+   * `factory` as `Ingress.Adapters`: provide it around the code under test so
+   * the resolution finds the forwarder before any contributed adapter.
+   */
+  readonly adapters: Layer.Layer<Adapters>;
   /** The forwarder's own port: every origin it names answers here. */
   readonly port: number;
   /** The live routes, by fqn. */
@@ -34,13 +63,14 @@ export interface Forwarder {
 }
 
 /**
- * A router for tests: one HTTP server on a free loopback port that forwards a
- * request to the listener attached for its `Host`. Origins are
+ * A router for tests. Origins are
  * `http://<stage>.<label>.<domain>.localhost:<port>`, with `domain` from the
- * adapter's options (default: the stack name). It refuses non-`http:` listeners.
+ * adapter's options (default: the stack name). It refuses non-`http:`
+ * listeners with an `IngressError`.
  *
- * Clients reach it with {@link get}, which dials the loopback address with the
- * origin's `Host`, so no test depends on resolving `*.localhost`.
+ * Reach an origin it named with {@link getRouted}, which dials the loopback
+ * address with the origin's `Host`, so no test depends on resolving
+ * `*.localhost`.
  */
 export const makeForwarder = Effect.gen(function* () {
   const routes = new Map<string, Route>();
@@ -125,6 +155,7 @@ export const makeForwarder = Effect.gen(function* () {
 
   return {
     factory,
+    adapters: Layer.succeed(Adapters, { [FORWARDER_TYPE]: factory }),
     port,
     routes: () =>
       new Map(
@@ -137,7 +168,7 @@ export const makeForwarder = Effect.gen(function* () {
   } satisfies Forwarder;
 });
 
-/** What a client sees from {@link get}. */
+/** What a client sees from {@link getRouted}. */
 export interface Answer {
   readonly status: number;
   readonly body: string;
@@ -147,7 +178,7 @@ export interface Answer {
  * GET `path` from an origin the forwarder named: dial the forwarder on
  * loopback and send the origin's host as `Host`.
  */
-export const get = (origin: string, path = "/") =>
+export const getRouted = (origin: string, path = "/") =>
   Effect.callback<Answer, Error>((resume) => {
     const url = new URL(origin);
     const request = NodeHttp.request(

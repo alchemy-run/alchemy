@@ -1,4 +1,10 @@
 import { assert, describe, expect, it } from "@alchemy.run/test";
+import {
+  FORWARDER_TYPE,
+  getRouted,
+  makeForwarder,
+  makeListener,
+} from "@alchemy.run/test/IngressForwarder";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -8,7 +14,6 @@ import * as Ingress from "@/Local/Ingress.ts";
 import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack } from "@/Stack.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { FORWARDER_TYPE, get, makeForwarder, makeListener } from "./fixtures/ingress-forwarder.ts";
 
 const config: Ingress.IngressConfig = { type: FORWARDER_TYPE };
 
@@ -29,9 +34,7 @@ const withForwarder = <A, E>(
 ) =>
   Effect.gen(function* () {
     const forwarder = yield* makeForwarder;
-    return yield* use(forwarder).pipe(
-      Effect.provide(Layer.succeed(Ingress.Adapters, { [FORWARDER_TYPE]: forwarder.factory })),
-    );
+    return yield* use(forwarder).pipe(Effect.provide(forwarder.adapters));
   }).pipe(Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)), Effect.scoped);
 
 describe("Ingress", { tags: ["unit", "local"] }, () => {
@@ -56,7 +59,7 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const listener = yield* makeListener("api");
         const origin = yield* Ingress.route(config, target, listener);
-        const answer = yield* get(origin, "/hello");
+        const answer = yield* getRouted(origin, "/hello");
         expect(answer.status).toBe(200);
         // The listener sees the routed host, as a browser's request would carry it.
         expect(answer.body).toBe(`api /hello ${new URL(origin).host}`);
@@ -71,11 +74,11 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
         const scope = yield* Scope.make();
         const origin = yield* Ingress.route(config, target, listener).pipe(Scope.provide(scope));
         expect(forwarder.routes().get(target.fqn)?.listener).toBe(listener.href);
-        expect((yield* get(origin)).status).toBe(200);
+        expect((yield* getRouted(origin)).status).toBe(200);
 
         yield* Scope.close(scope, Exit.void);
         expect(forwarder.routes().size).toBe(0);
-        expect((yield* get(origin)).status).toBe(502);
+        expect((yield* getRouted(origin)).status).toBe(502);
       }),
     ),
   );
@@ -93,7 +96,7 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
 
         // The later attach owns the route: the earlier scope leaves it alone.
         yield* Scope.close(first, Exit.void);
-        expect((yield* get(one)).status).toBe(200);
+        expect((yield* getRouted(one)).status).toBe(200);
         yield* Scope.close(second, Exit.void);
         expect(forwarder.routes().size).toBe(0);
       }),
@@ -108,13 +111,13 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
         const first = yield* Scope.make();
         const second = yield* Scope.make();
         const origin = yield* Ingress.route(config, target, before).pipe(Scope.provide(first));
-        expect((yield* get(origin)).body).toMatch(/^before /);
+        expect((yield* getRouted(origin)).body).toMatch(/^before /);
 
         yield* Ingress.route(config, target, after).pipe(Scope.provide(second));
-        expect((yield* get(origin)).body).toMatch(/^after /);
+        expect((yield* getRouted(origin)).body).toMatch(/^after /);
 
         yield* Scope.close(first, Exit.void);
-        expect((yield* get(origin)).body).toMatch(/^after /);
+        expect((yield* getRouted(origin)).body).toMatch(/^after /);
         yield* Scope.close(second, Exit.void);
         expect(forwarder.routes().size).toBe(0);
       }),
@@ -131,12 +134,12 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
         const apiOrigin = yield* Ingress.route(config, target, api).pipe(Scope.provide(apiScope));
         const webOrigin = yield* Ingress.route(config, other, web);
         expect(apiOrigin).not.toBe(webOrigin);
-        expect((yield* get(apiOrigin)).body).toMatch(/^api /);
-        expect((yield* get(webOrigin)).body).toMatch(/^web /);
+        expect((yield* getRouted(apiOrigin)).body).toMatch(/^api /);
+        expect((yield* getRouted(webOrigin)).body).toMatch(/^web /);
 
         yield* Scope.close(apiScope, Exit.void);
         expect(forwarder.routes().has(other.fqn)).toBe(true);
-        expect((yield* get(webOrigin)).status).toBe(200);
+        expect((yield* getRouted(webOrigin)).status).toBe(200);
       }),
     ),
   );
