@@ -110,6 +110,7 @@ const SECTIONS: Section[] = [
         "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
         "infrastructure-as-effects/layers",
+        "infrastructure-as-effects/async-code",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",

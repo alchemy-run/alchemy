@@ -378,6 +378,10 @@ export default defineConfig({
                 },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
+                  label: "Calling Effect from Async Code",
+                  link: "/infrastructure-as-effects/async-code",
+                },
+                {
                   label: "Event Sources",
                   link: "/infrastructure-as-effects/event-sources",
                 },
