@@ -161,6 +161,8 @@ Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
 
 On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
 
+While it rebuilds, a view keyed by its aggregate answers every read with that instance's whole history: on Cloudflare, a key the rebuild hasn't reached yet reads its instance's events first, then answers. Any other view answers from what the rebuild has got to.
+
 Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
 
 ## Know when the history has arrived
@@ -171,7 +173,7 @@ Until a new or rebuilt view has received the history, its answers cover only par
 const { complete } = yield* summaries.history;
 ```
 
-A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`.
+A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`, complete once the projection has handled the history, not just received it.
 
 On Cloudflare the deploy itself waits until the history is complete. See [History at scale](/domain/backfill) for how long that takes and what it costs.
 

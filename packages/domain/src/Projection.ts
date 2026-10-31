@@ -255,7 +255,7 @@ export interface Definition<
  *       start: ({ generation }) => store.create(`ledger_v${generation}`),
  *       complete: ({ generation, previous }) =>
  *         Effect.gen(function* () {
- *           yield* store.point("ledger", `ledger_v${generation}`);
+ *           yield* store.use(`ledger_v${generation}`);
  *           if (previous !== undefined) yield* store.drop(`ledger_v${previous}`);
  *         }),
  *     };

@@ -1572,6 +1572,9 @@ export const makeConsumer = (
     /** The merge job for one target. */
     merge,
 
+    /** Keyed by its source: whether it has its history (read to the end of its log and applied). */
+    settled,
+
     /** Is a backfill of `target` still running on this key? */
     backfilling: (target: string) =>
       Effect.map(storage.get(backfillKey(target)), (backfill) => backfill !== undefined),

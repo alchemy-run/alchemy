@@ -167,11 +167,27 @@ describe.sequential("a deploy and its backfill", () => {
   );
 
   test.provider(
-    "a deploy that times out leaves the backfill running, and the next deploy waits for it",
+    "a deploy that times out leaves the backfill running, reads of the view meanwhile have each key's history, and the next deploy waits for it",
     (stack) =>
       Effect.gen(function* () {
         const { url } = yield* seeded(stack);
         expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
+        yield* serving(url, "v2");
+        // The run is still going, but a key read before it gets there catches itself up.
+        const history = JSON.parse(yield* call(url, "GET", "/history")) as { complete: boolean };
+        expect(history.complete).toBe(false);
+        const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
+        yield* Effect.forEach(
+          Array.from({ length: 20 }, (_, n) => Math.floor((n * ACCOUNTS) / 20) + 7),
+          (i) =>
+            call(url, "GET", `/view/b${i}`).pipe(
+              Effect.map((body) => {
+                const view = JSON.parse(body) as { amounts: Array<number> } | null;
+                expect(view?.amounts).toEqual(expected);
+              }),
+            ),
+          { concurrency: 20, discard: true },
+        );
         yield* deployOf(stack, BenchV2);
         yield* serving(url, "v2");
         yield* checkViews(url);
