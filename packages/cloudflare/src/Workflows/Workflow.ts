@@ -1278,7 +1278,7 @@ export const ProviderLive = () =>
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName =
         output?.workflowName ??
@@ -1300,8 +1300,13 @@ export const ProviderLive = () =>
         schedules: fromObservedSchedules(workflow.schedules),
         jurisdiction: workflow.jurisdiction ?? undefined,
       };
-      // Explicit names carry no ownership marker; cold reads require adoption.
-      return output === undefined && olds?.workflowName !== undefined ? Unowned(attrs) : attrs;
+      // Explicit names carry no ownership marker; cold reads require adoption,
+      // except of the generation a replacement is replacing.
+      return output === undefined &&
+        olds?.workflowName !== undefined &&
+        previous?.workflowId !== workflow.id
+        ? Unowned(attrs)
+        : attrs;
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
