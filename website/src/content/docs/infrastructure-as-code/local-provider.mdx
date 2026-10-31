@@ -216,15 +216,17 @@ before `reconcile` sees them.
 ```typescript
 import * as Ingress from "alchemy/Local/Ingress";
 
-const target = Ingress.createTarget({ stack, id, fqn, type: Web.Type, label: "Web" });
+const target = Ingress.createTarget({ stack, id, fqn, type: Web.Type, config: news.dev.ingress });
 ```
 
 The target names the resource to the adapter: stack, stage, fqn, logical id
 and resource type. `stack` is the `Stack` service the provider read when its
 layer was built, and `id` and `fqn` come from the context `start` receives.
-`label` is what the route is called, and defaults to the logical id. A
-composite that builds a server inside itself passes its own id, because the
-server is always `"Build"`.
+`label` is what the route is called: the `name` on the user's `IngressConfig`,
+else the logical id. Two resources in one stack and stage need distinct
+names, so a resource that builds another one inside itself (a site composite
+builds its server as `"Build"`) sets `name` for the user, to its own id, when
+the user gave an `ingress` and no `name`.
 
 ### Ask for the origin before the listener exists
 
@@ -299,12 +301,15 @@ export const factory: IngressFactory = {
 ```
 
 The package also exports the constructor users call to get the
-`IngressConfig` for `dev.ingress`:
+`IngressConfig` for `dev.ingress`. A user who needs two routes with the same
+logical id, or a name other than the id, sets `name` on the result:
 
 ```typescript
 export const Ingress = (
   options: { domain?: string } = {},
 ): IngressConfig<"acme-router"> => ({ type: "acme-router", options });
+
+// dev: { ingress: { ...Ingress(), name: "api" } }
 ```
 
 `attach` keeps its route in the `Scope` and returns the same origin as
