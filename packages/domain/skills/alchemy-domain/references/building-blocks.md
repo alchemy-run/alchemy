@@ -335,7 +335,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   streams: ["AccountCard"],
   aggregates: ["Account"], // read directly, through their `read` contract
 }) {}
-// A kind left out is served whole; `[]` serves none. Aggregates only when named.
+// A kind left out is served whole (aggregates: those with `read`); `[]` serves none.
 ```
 
 Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.

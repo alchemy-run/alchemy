@@ -134,6 +134,7 @@ export class PartnerApi extends Domain.Api("PartnerApi", {
   commands: ["DepositMoney"],
   views: ["AccountSummary"],
   streams: [],
+  aggregates: [],
 }) {}
 const PartnerHttp = DomainHttp.toHttpApi(PartnerApi);
 ```
