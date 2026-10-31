@@ -16,15 +16,13 @@ Alongside your Worker, the Domain declares a backfill run for every consumer the
 [DomainBackfillRun] created — Backfilling view:Deposits, view:Timeline (8s) ... (9.7s)
 ```
 
-When the deploy finishes, `history` is already `complete`, so nothing reads a half-built view. A deploy that changes no consumer waits for nothing.
-
-The deploy waits up to 30 minutes. Past that it fails, but the backfill keeps running on Cloudflare, and the next deploy waits on the same run instead of starting over. `alchemy dev` has nothing to wait for: the local Domain backfills itself on its first call.
+When the deploy finishes, `history` is already `complete`. A deploy that changes no consumer waits for nothing. `alchemy dev` has nothing to wait for: the local Domain backfills itself on its first call.
 
 ## How the work spreads out
 
 Every instance lists itself in a directory on its first commit: a tree of Durable Objects, one subtree per aggregate and view, where each node lists up to 256 instances and splits into 16 children when it fills. The directory is only an index. A backfill reads it and does its work elsewhere.
 
-The work belongs to the run, and every part of the run is an object of a class the deploy adds. A new view's class exists only in the code that adds it, and a rebuilt view gets a new class too (`DepositsViewV1`), so none of these objects can start on the code from before the deploy while Cloudflare rolls it out. The previous generation keeps serving until the deploy replaces it.
+The work belongs to the run, and every part of the run is an object of a class the deploy adds. A new view's class exists only in the code that adds it, and a rebuilt view gets a new class too (`DepositsViewV1`), so none of these objects can start on the code from before the deploy while Cloudflare rolls it out.
 
 The run's root lists the directory into a few hundred subtrees and hands them to relays. Each relay splits its share six ways, the most calls one Durable Object makes at once, so a million instances are reached in about eight levels of calls. At the bottom, each instance's history goes to its keys:
 
@@ -32,6 +30,31 @@ The run's root lists the directory into a few hundred subtrees and hands them to
 - Any other consumer, like a timeline every account feeds, gets a scanner per instance. The scanner reads the instance's events, routes them with the consumer's code and pushes each key its part. Once every scanner has pushed, the run tells the keys to apply what they have, in the order it was recorded.
 
 An instance hands over its stored events whatever code it runs, so the deploy never waits for Cloudflare to move existing instances onto the new code. Switching an instance to live delivery does need its new code; until then a commit holds back the new consumer's events, and the reader picks them up from the log when it checks back.
+
+## Deploy safely
+
+A backfill is a run on Cloudflare, not a step on your machine. Each consumer has one run per generation, held by one Durable Object, and the first deploy to reach it starts it; a deploy that reaches it later finds it started. The deploy starts the runs its model needs, waits for them, and reports how far they have got. It holds none of their state, so you can repeat a deploy, let it time out or stop it, and nothing is lost or done twice.
+
+While it waits, the deploy reports each run's phase and how far through the directory it is:
+
+```sh
+[DomainBackfillRun] Backfilling view:Deposits reading history 41% (1,690/4,096 subtrees, 410,211 instances) (48s) ...
+[DomainBackfillRun] Backfilled view:Deposits (112.4s)
+```
+
+A consumer keyed by its source reads its history in one pass. Any other reads it, then applies it once every source's history is in. `refused` counts calls Cloudflare turned down for the account's load; the run sends them again, more slowly.
+
+The deploy waits 30 minutes at most. Set `backfillTimeout` to change that:
+
+```ts
+const BankLive = Bank.layer(BankPolicies).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects({ backfillTimeout: "2 hours" })),
+);
+```
+
+Past it, the deploy fails with `BackfillStillRunning`, naming how far each run got, and the runs keep going on Cloudflare. Deploy again and it waits on the same runs from where they are, or returns at once if they finished meanwhile. Stopping a deploy with Ctrl-C works the same way.
+
+To run a backfill again, bump the consumer's version. The new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the deploy returns, reads of the view see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
 
 ## Width
 

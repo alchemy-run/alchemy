@@ -302,9 +302,7 @@ const BackfillLive = () =>
         if (status !== undefined) progress = progressOf(status.steps ?? []) ?? progress;
 
         if (current.status === "complete") {
-          yield* session.note(`Backfilled ${label} (${Math.round(elapsed / 1000)}s)`, {
-            kind: "status",
-          });
+          yield* session.note(`Backfilled ${label}`, { kind: "status" });
           return { ...attrs(), instanceId: id, status: "complete" };
         }
         if (current.status === "errored" || current.status === "terminated") {
