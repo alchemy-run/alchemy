@@ -14,7 +14,7 @@ export class CatalogNotFound extends Data.TaggedError("Fly.CatalogNotFound")<{
 const notFound = (kind: CatalogKind, ref: string) => new CatalogNotFound({ kind, ref });
 
 /**
- * Current token organization slug (`getCurrentToken` → `tokens[0].org_slug`).
+ * Current token organization slug (`getCurrentToken` -> `tokens[0].org_slug`).
  * Feeds `listApps({ org_slug })`. Not a resource.
  */
 export const currentOrgSlug = resolveOrgSlug;
@@ -28,7 +28,7 @@ export const listRegions = Effect.fn(function* () {
 });
 
 /**
- * Resolve a Fly region by code (`iad`, `ord`, `sjc`, …).
+ * Resolve a Fly region by code (`iad`, `ord`, `sjc`, ...).
  */
 export const findRegion = (code: string) =>
   Effect.gen(function* () {

@@ -43,7 +43,7 @@ export interface StreamProps {
    */
   kmsKeyId?: string;
   /**
-   * How long stream data is retained. Zero duration means no retention —
+   * How long stream data is retained. Zero duration means no retention --
    * data is only available live. Accepts any `Duration.Input` (e.g.
    * `"24 hours"`, `Duration.hours(24)`; a bare number is milliseconds); the
    * wire unit is whole hours. Adjusted in place via `UpdateDataRetention`.
@@ -71,7 +71,7 @@ export interface Stream extends Resource<
  * An Amazon Kinesis Video Stream for ingesting, storing, and consuming
  * live video.
  *
- * Stream creation is asynchronous — the provider waits (bounded) for the
+ * Stream creation is asynchronous -- the provider waits (bounded) for the
  * stream to become `ACTIVE` before returning. `deviceName` and `mediaType`
  * are updated in place; `dataRetention` converges via `UpdateDataRetention`;
  * changing `streamName` or `kmsKeyId` replaces the stream.
@@ -194,7 +194,7 @@ export const StreamProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // `news` is undefined when the resource is declared without props
-          // (`Stream("Id")`) — normalize WITHOUT a destructuring default
+          // (`Stream("Id")`) -- normalize WITHOUT a destructuring default
           // (defaults widen the inferred Props type).
           const props = news ?? {};
           const streamName = output?.streamName ?? (yield* createName(id, props));
@@ -203,20 +203,20 @@ export const StreamProvider = () =>
           // Wire unit is whole hours (DataRetentionInHours).
           const desiredRetention = toWireHours(props.dataRetention);
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let info = yield* observeStream(streamName);
 
           // A previous incarnation still in DELETING blocks re-creation of
-          // the same name — wait for the purge to finish, then recreate.
+          // the same name -- wait for the purge to finish, then recreate.
           if (info?.Status === "DELETING") {
             yield* session.note(`waiting for previous stream ${streamName} to finish deleting...`);
             yield* waitForStreamGone(streamName);
             info = undefined;
           }
 
-          // 2. ENSURE — create if missing; a `ResourceInUseException` means a
+          // 2. ENSURE -- create if missing; a `ResourceInUseException` means a
           // peer created it concurrently (or a prior incarnation is still
-          // DELETING — retried inside the helper), so fall through to
+          // DELETING -- retried inside the helper), so fall through to
           // observation. Creation is async; wait for ACTIVE (bounded).
           if (info === undefined) {
             yield* retryWhileResourceInUse(
@@ -236,12 +236,12 @@ export const StreamProvider = () =>
             yield* session.note(`creating stream ${streamName}...`);
             info = yield* waitForStreamActive(streamName);
           } else if (info.Status !== "ACTIVE") {
-            // A CREATING/UPDATING stream rejects mutations — wait it out.
+            // A CREATING/UPDATING stream rejects mutations -- wait it out.
             info = yield* waitForStreamActive(streamName);
           }
           const streamArn = info.StreamARN!;
 
-          // 3. SYNC — deviceName/mediaType (versioned update; only when the
+          // 3. SYNC -- deviceName/mediaType (versioned update; only when the
           // observed metadata differs from the desired state)
           if (
             (props.deviceName !== undefined && props.deviceName !== info.DeviceName) ||
@@ -261,7 +261,7 @@ export const StreamProvider = () =>
             info = yield* waitForStreamActive(streamName, info.Version);
           }
 
-          // 3b. SYNC — data retention (delta-based API: INCREASE/DECREASE by
+          // 3b. SYNC -- data retention (delta-based API: INCREASE/DECREASE by
           // the difference between observed and desired)
           const observedRetention = info.DataRetentionInHours ?? 0;
           if (desiredRetention !== undefined && desiredRetention !== observedRetention) {
@@ -279,7 +279,7 @@ export const StreamProvider = () =>
             info = yield* waitForStreamActive(streamName, info.Version);
           }
 
-          // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3c. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           // converges
           const observedTags = yield* fetchObservedTags(streamArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -306,7 +306,7 @@ export const StreamProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A CREATING/UPDATING stream rejects deletion with
-          // ResourceInUseException — retry through the transition (bounded).
+          // ResourceInUseException -- retry through the transition (bounded).
           yield* retryWhileResourceInUse(kv.deleteStream({ StreamARN: output.streamArn })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );

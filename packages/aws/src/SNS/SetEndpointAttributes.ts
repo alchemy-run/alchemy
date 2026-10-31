@@ -9,7 +9,7 @@ export interface SetEndpointAttributesRequest extends sns.SetEndpointAttributesI
  * Runtime binding for `sns:SetEndpointAttributes`.
  *
  * Bind this operation to a {@link PlatformApplication} to update a device
- * endpoint — e.g. re-enable it after a delivery failure or rotate its token.
+ * endpoint -- e.g. re-enable it after a delivery failure or rotate its token.
  * Provide the `SetEndpointAttributesHttp` layer on the Function to implement the binding.
  * ### Mobile Push
  * **Example:** Re-enable an Endpoint

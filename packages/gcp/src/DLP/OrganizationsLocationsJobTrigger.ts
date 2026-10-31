@@ -39,18 +39,18 @@ export type OrganizationsLocationsJobTriggerProps = {
    * Trigger id (the `{jobTrigger}` segment of
    * `organizations/{organization}/locations/{location}/jobTriggers/{jobTrigger}`).
    * If omitted, a unique id is generated. Letters, digits, hyphens, and
-   * underscores; max 100 characters. Immutable — changing it replaces
+   * underscores; max 100 characters. Immutable -- changing it replaces
    * the trigger.
    */
   triggerId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the trigger.
+   * Manager ancestor. Immutable -- changing it replaces the trigger.
    */
   organization?: string;
   /**
-   * Processing location (`us-central1`, `global`, `us`, …). Immutable —
+   * Processing location (`us-central1`, `global`, `us`, ...). Immutable --
    * changing it replaces the trigger.
    * @default "global"
    */
@@ -61,7 +61,7 @@ export type OrganizationsLocationsJobTriggerProps = {
   displayName?: string;
   /**
    * Human-readable description (max 256 characters). Job triggers have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]` prefix
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]` prefix
    * and stripped from attributes.
    */
   description?: string;
@@ -121,7 +121,7 @@ export type OrganizationsLocationsJobTrigger = Resource<
  * An organization-scoped Sensitive Data Protection job trigger that
  * inspects storage on a schedule.
  *
- * Job triggers have no labels field — Alchemy stamps ownership into the
+ * Job triggers have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Trigger id, organization,
  * and location are identity. Display name, description, status, triggers,
  * and inspect job update in place. Keep `status` as `PAUSED` unless jobs

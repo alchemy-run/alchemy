@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:AddJobFlowSteps` — submits work (Spark jobs, Hive queries, custom JARs) to the bound cluster as steps. The cluster id is injected as `JobFlowId`.
+ * Runtime binding for `elasticmapreduce:AddJobFlowSteps` -- submits work (Spark jobs, Hive queries, custom JARs) to the bound cluster as steps. The cluster id is injected as `JobFlowId`.
  * ### Running Steps
  * **Example:** Submit a Spark Step
  * ```typescript

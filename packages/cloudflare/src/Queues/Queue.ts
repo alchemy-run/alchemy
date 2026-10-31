@@ -235,11 +235,11 @@ export const ProviderLive = () =>
       const queueName = yield* createQueueName(id, news.name);
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached queue; fall back to a name scan
+      // Observe -- re-fetch the cached queue; fall back to a name scan
       // when the cached id is gone (out-of-band delete or partial
       // state-persistence failure).
       let observed: ObservedQueue | undefined;
-      // A `dev:` id (a mis-stamped legacy local row) is not a real queue id —
+      // A `dev:` id (a mis-stamped legacy local row) is not a real queue id --
       // skip the lookup (Cloudflare rejects it as a malformed parameter) and
       // fall through to the name scan.
       if (output?.queueId && isLiveId(output.queueId)) {
@@ -254,7 +254,7 @@ export const ProviderLive = () =>
         observed = yield* findQueueByName(queueName);
       }
 
-      // Ensure — create if missing. Cloudflare returns a generic
+      // Ensure -- create if missing. Cloudflare returns a generic
       // failure when the queue name is taken; tolerate by adopting
       // the queue with the same name so reconciles converge after a
       // crashed peer.
@@ -294,7 +294,7 @@ export const ProviderLive = () =>
         });
       }
 
-      // Sync settings — diff the observed settings against the declared
+      // Sync settings -- diff the observed settings against the declared
       // ones and patch only the delta.
       const current = toSettings(observed.settings);
       const desired = desiredSettings(news, olds);
@@ -324,11 +324,11 @@ export const ProviderLive = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       // A `dev:` id means the physical resource only ever existed locally
-      // (a mis-stamped legacy row) — there is nothing to delete, and the
+      // (a mis-stamped legacy row) -- there is nothing to delete, and the
       // API would reject the id as a malformed parameter.
       if (!isLiveId(output.queueId)) return;
       // Dependents (e.g. R2 event notification configs targeting this
-      // queue) may still be tearing down concurrently — ride out the
+      // queue) may still be tearing down concurrently -- ride out the
       // dependency violation briefly, then fail loudly instead of
       // silently leaking the queue. A worker producer binding
       // (`QueueInUseByWorkerBinding`) gets a shorter window: a sibling
@@ -400,7 +400,7 @@ export const ProviderLive = () =>
       const match = yield* findQueueByName(queueName);
       if (match && match.queueId && match.queueName) {
         // A queue in another jurisdiction can't be converged, only
-        // replaced — and replacing it deletes whatever owns that name.
+        // replaced -- and replacing it deletes whatever owns that name.
         // Report it as foreign so the engine refuses it without `--adopt`
         // (and still admits our own previous generation on replacement).
         const attrs = toAttributes(match, accountId);
@@ -517,7 +517,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queue
         `pre-providerMode dev run)`,
     );
     yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
-      // The orphan may also be registered as a queue consumer — detach
+      // The orphan may also be registered as a queue consumer -- detach
       // its consumers and retry, mirroring the Worker provider's own
       // delete recovery.
       Effect.catchTag("QueueConsumerConflict", () =>
@@ -598,7 +598,7 @@ export const ProviderLocal = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const accountId = yield* localAccountId;
           const queue: Queue["Attributes"] = {
-            // Never carry a real (non-`dev:`) id forward onto a local row —
+            // Never carry a real (non-`dev:`) id forward onto a local row --
             // the worker binding would treat it as an `Alchemy.remote()`
             // queue and fail on the missing producer shim.
             queueId:
@@ -614,7 +614,7 @@ export const ProviderLocal = () =>
         delete: Effect.fn(function* ({ output }) {
           MutableHashMap.remove(localRuntimeState.queues, output.queueId);
           // Legacy local-mode rows written before providerMode stamping can
-          // carry a real queue's id — remove the live queue too so migrating
+          // carry a real queue's id -- remove the live queue too so migrating
           // the row to a true local identity doesn't leak it.
           if (isLiveId(output.queueId)) {
             yield* queues

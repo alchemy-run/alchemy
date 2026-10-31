@@ -23,7 +23,7 @@ export interface CloudControlResourceProps {
   /**
    * The desired state of the resource as a plain object matching the CFN
    * resource type's property schema (e.g. `{ Name, Type, Value }` for
-   * `AWS::SSM::Parameter`). Only the keys you specify are managed — on update,
+   * `AWS::SSM::Parameter`). Only the keys you specify are managed -- on update,
    * a JSON Patch is computed over exactly these keys, so create-only
    * properties you never change are left untouched.
    */
@@ -51,7 +51,7 @@ export interface CloudControlResource extends makeResource<
 > {}
 
 /**
- * A generic AWS resource managed through the Cloud Control API — the escape
+ * A generic AWS resource managed through the Cloud Control API -- the escape
  * hatch that covers hundreds of CloudFormation resource types with a single
  * Alchemy resource.
  *
@@ -122,7 +122,7 @@ const escapePointer = (key: string): string => key.replace(/~/g, "~0").replace(/
 
 /**
  * Build an RFC 6902 JSON Patch that converges the observed properties to the
- * user-specified desired state. Only keys present in `desired` are touched —
+ * user-specified desired state. Only keys present in `desired` are touched --
  * create-only properties the user never changes are left alone (patching them
  * would trigger `NotUpdatableException`).
  */
@@ -148,7 +148,7 @@ const buildPatch = (
  * Normalize `AWS::SSM::Document` state before diffing. SSM returns JSON
  * `Content` as a formatted string, so compare it structurally, and omits
  * the write-only `UpdateMethod`, which selects how a real change is applied
- * rather than describing persistent document state — resend it only
+ * rather than describing persistent document state -- resend it only
  * alongside an actual change.
  *
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ssm-document.html
@@ -248,13 +248,13 @@ export const CloudControlResourceProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const typeName = news.typeName;
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           // cache.
           let identifier = output?.identifier;
           let description =
             identifier !== undefined ? yield* getResource(typeName, identifier) : undefined;
 
-          // 2. Ensure — create if missing, then poll to SUCCESS.
+          // 2. Ensure -- create if missing, then poll to SUCCESS.
           if (description === undefined) {
             const created = yield* cloudcontrol.createResource({
               TypeName: typeName,
@@ -266,7 +266,7 @@ export const CloudControlResourceProvider = () =>
             identifier = settled.Identifier!;
             description = yield* getResource(typeName, identifier);
           } else {
-            // 3. Sync — patch only the drifted user-specified keys.
+            // 3. Sync -- patch only the drifted user-specified keys.
             identifier = description.Identifier!;
             const patch = resourcePatch(
               typeName,

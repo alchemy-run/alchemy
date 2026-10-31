@@ -7,7 +7,7 @@
  * Native Linux Docker cannot SYN Docker's `host-gateway` (bridge IP) without
  * hitting host INPUT / UFW. Binding extra host IPs does not skip that.
  * The workerd sidecar proxy instead unix-socket-tunnels these ports into
- * the container netns — see `DockerLoopback.ts` in cloudflare-runtime.
+ * the container netns -- see `DockerLoopback.ts` in cloudflare-runtime.
  */
 export const isLoopbackHost = (hostname: string) =>
   hostname === "localhost" ||

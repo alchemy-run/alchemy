@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Orchestrating Serverless Replications
  * **Example:** Stop a Serverless Replication
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const stopReplication = yield* AWS.DMS.StopReplication();
  *
  * // runtime

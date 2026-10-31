@@ -47,7 +47,7 @@ export const makeWorkflowBridge =
   ) =>
   (className: string) => {
     // One isolate-lifetime layer build shared by every instantiation of this
-    // workflow class — `build` memoizes the built context.
+    // workflow class -- `build` memoizes the built context.
     const { build } = getWorkerExport<WorkflowExport>({ entrypoint, stack, exportName: className });
 
     return class WorkflowBridge extends WorkflowEntrypoint {
@@ -108,7 +108,7 @@ export const makeWorkflowBridge =
         );
         // Settle the run's resources with its real exit, unless a binding
         // ejected the scope to outlive the invocation. The workflow runtime has
-        // no `waitUntil` to detach cleanup to, so close inline — a failing
+        // no `waitUntil` to detach cleanup to, so close inline -- a failing
         // finalizer (e.g. a pg pool `end()` on a dropped connection) is logged
         // and ignored so it can't mask the run's outcome.
         if (!isScopeEjected(scope)) {

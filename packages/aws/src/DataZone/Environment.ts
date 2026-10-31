@@ -34,7 +34,7 @@ export interface EnvironmentProps {
   projectId: string;
   /**
    * Name of the environment. If omitted, a deterministic physical name is
-   * generated from the app, stage, and logical ID. The name is mutable — it
+   * generated from the app, stage, and logical ID. The name is mutable -- it
    * converges via `UpdateEnvironment` without replacement.
    */
   name?: string;
@@ -101,11 +101,11 @@ export interface Environment extends Resource<
 > {}
 
 /**
- * An Amazon DataZone environment — the provisioned collection of AWS
+ * An Amazon DataZone environment -- the provisioned collection of AWS
  * resources (Glue databases, IAM roles, Athena workgroups, ...) a project
  * works with, deployed from an environment blueprint via CloudFormation.
  *
- * Environment deployment is asynchronous (minutes — DataZone drives a
+ * Environment deployment is asynchronous (minutes -- DataZone drives a
  * CloudFormation stack) and is polled to `ACTIVE` with a bounded wait. The
  * environment's blueprint must be configured in the domain first (see
  * {@link EnvironmentBlueprintConfiguration}).
@@ -166,7 +166,7 @@ export const EnvironmentProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
-      // A deleted environment — or one inside a deleted domain — is reported
+      // A deleted environment -- or one inside a deleted domain -- is reported
       // as AccessDeniedException, NOT ResourceNotFoundException: DataZone
       // evaluates domain-scoped authorization before existence. Both mean
       // "absent".
@@ -207,7 +207,7 @@ export const EnvironmentProvider = () =>
       });
 
       // Poll the environment to a settled (non-transient) status. Deployment
-      // drives a CloudFormation stack — bounded at ~5 minutes.
+      // drives a CloudFormation stack -- bounded at ~5 minutes.
       const waitForSettled = Effect.fn(function* (domainId: string, environmentId: string) {
         return yield* getEnvironmentOrUndefined(domainId, environmentId).pipe(
           Effect.repeat({
@@ -221,7 +221,7 @@ export const EnvironmentProvider = () =>
         );
       });
 
-      // Poll the environment until it no longer exists — teardown drives a
+      // Poll the environment until it no longer exists -- teardown drives a
       // CloudFormation stack delete, bounded at ~5 minutes.
       const waitForGone = Effect.fn(function* (domainId: string, environmentId: string) {
         yield* getEnvironmentOrUndefined(domainId, environmentId).pipe(
@@ -288,7 +288,7 @@ export const EnvironmentProvider = () =>
       return Environment.Provider.of({
         stables: ["environmentId", "domainId", "projectId", "awsAccountId", "awsAccountRegion"],
 
-        // Environments are keyed by their parent domain + project — there is
+        // Environments are keyed by their parent domain + project -- there is
         // no account-level enumeration without those identifiers.
         list: () => Effect.succeed([]),
 
@@ -306,7 +306,7 @@ export const EnvironmentProvider = () =>
           if (env === undefined || env.status === "DELETING" || env.status === "DELETED") {
             return undefined;
           }
-          // Environments have no tags — ownership is tracked purely by
+          // Environments have no tags -- ownership is tracked purely by
           // identity.
           return toAttributes(env, environmentId);
         }),
@@ -333,7 +333,7 @@ export const EnvironmentProvider = () =>
           const projectId = news.projectId;
           const name = yield* createName(id, news);
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
           let environmentId = output?.environmentId;
           let env = environmentId
@@ -347,7 +347,7 @@ export const EnvironmentProvider = () =>
           }
 
           if (env === undefined) {
-            // 2. ENSURE — create and wait out the CloudFormation deployment.
+            // 2. ENSURE -- create and wait out the CloudFormation deployment.
             const created = yield* datazone.createEnvironment({
               domainIdentifier: domainId,
               projectIdentifier: projectId,
@@ -378,7 +378,7 @@ export const EnvironmentProvider = () =>
             }
             env = yield* failIfDeploymentFailed(env, environmentId);
           } else {
-            // 3. SYNC — wait out any in-flight transition, then converge the
+            // 3. SYNC -- wait out any in-flight transition, then converge the
             //    mutable aspects by diffing OBSERVED state against desired.
             env = (yield* waitForSettled(domainId, environmentId!)) ?? env;
             const drifted =
@@ -403,7 +403,7 @@ export const EnvironmentProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // wait out any in-flight transition first — deleting a CREATING
+          // wait out any in-flight transition first -- deleting a CREATING
           // environment is rejected with a conflict.
           const env = yield* waitForSettled(output.domainId, output.environmentId);
           yield* datazone
@@ -415,7 +415,7 @@ export const EnvironmentProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // deleting an environment whose domain is already gone surfaces
-                // as AccessDenied — auth is checked before existence.
+                // as AccessDenied -- auth is checked before existence.
                 AccessDeniedException: () => Effect.void,
               }),
             );

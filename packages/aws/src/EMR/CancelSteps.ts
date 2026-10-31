@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:CancelSteps` — cancels pending or running steps on the bound cluster. Cancellation is asynchronous — poll {@link DescribeStep} for the final state.
+ * Runtime binding for `elasticmapreduce:CancelSteps` -- cancels pending or running steps on the bound cluster. Cancellation is asynchronous -- poll {@link DescribeStep} for the final state.
  * ### Running Steps
  * **Example:** Cancel a Step
  * ```typescript

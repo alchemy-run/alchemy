@@ -30,7 +30,7 @@ export interface BetterAuthProps extends Omit<
   "database" | "secondaryStorage" | "secret"
 > {
   /**
-   * Distinguishes multiple BetterAuth instances in one namespace — suffixes
+   * Distinguishes multiple BetterAuth instances in one namespace -- suffixes
    * the auto-provisioned secret resource and the migration action logical
    * ids.
    *
@@ -64,7 +64,7 @@ export interface BetterAuthProps extends Omit<
 }
 
 /**
- * The Better Auth options type seen by `Auth<Options>` — the user's literal
+ * The Better Auth options type seen by `Auth<Options>` -- the user's literal
  * options with the alchemy extension fields stripped, so plugin/session/user
  * type inference flows through untouched.
  */
@@ -89,7 +89,7 @@ export interface BetterAuthInstance<O extends BetterAuthProps> {
    */
   readonly api: BetterAuthApi<Auth<AuthOptions<O>>["api"]>;
   /**
-   * HTTP handler for the Better Auth routes — mount it under your
+   * HTTP handler for the Better Auth routes -- mount it under your
    * `basePath` (default `/api/auth`):
    *
    * ```typescript
@@ -105,7 +105,7 @@ export interface BetterAuthInstance<O extends BetterAuthProps> {
   readonly fetch: HttpEffect<RuntimeContext>;
   /**
    * Look up the session for the ambient request (or explicit `Headers`).
-   * Resolves `null` for anonymous requests — failures are real errors, not
+   * Resolves `null` for anonymous requests -- failures are real errors, not
    * missing sessions.
    */
   readonly getSession: {
@@ -116,7 +116,7 @@ export interface BetterAuthInstance<O extends BetterAuthProps> {
     >;
     (headers: Headers): Effect.Effect<Session<O> | null, BetterAuthApiError, RuntimeContext>;
   };
-  /** Type-level mirror of `auth.$Infer` (phantom — no runtime value). */
+  /** Type-level mirror of `auth.$Infer` (phantom -- no runtime value). */
   readonly Infer: Auth<AuthOptions<O>>["$Infer"];
 }
 
@@ -164,8 +164,8 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       secretAccessor = Effect.succeed(secret);
     }
 
-    // Deploy-time migration registration. The whole block — including the
-    // Migrate module with its better-auth/db + kysely imports — is
+    // Deploy-time migration registration. The whole block -- including the
+    // Migrate module with its better-auth/db + kysely imports -- is
     // unreachable at runtime and dead-code-eliminated from bundles.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       const { registerMigration } = yield* Effect.promise(() => import("./Migrate.ts"));
@@ -174,7 +174,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
 
     // One Better Auth instance per execution (Worker event, DO call,
     // Lambda invoke): the database input may hold sockets (pg/mysql
-    // pools), which are IoContext-pinned on workerd — they are acquired
+    // pools), which are IoContext-pinned on workerd -- they are acquired
     // on the execution scope and released when the event settles.
     const makeAuth = yield* makeExecutionMemo(
       Effect.gen(function* () {
@@ -182,7 +182,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
         const secretValue = Redacted.value(yield* secretAccessor);
 
         // Background tasks (better-auth's internal fire-and-forget work)
-        // are awaited by a finalizer on the execution scope — the bridges
+        // are awaited by a finalizer on the execution scope -- the bridges
         // register it with `ctx.waitUntil` on workerd and settle it
         // inline on Lambda.
         const pending: Promise<unknown>[] = [];
@@ -219,7 +219,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       const request = yield* HttpServerRequest.HttpServerRequest;
       const webRequest = yield* HttpServerRequest.toWeb(request).pipe(Effect.orDie);
       const auth = yield* makeAuth;
-      // `auth.handler` never rejects for API errors — they come back as
+      // `auth.handler` never rejects for API errors -- they come back as
       // error Responses, exactly what a pass-through route wants.
       const response = yield* Effect.promise(() => auth.handler(webRequest));
       return HttpServerResponse.fromWeb(response);
@@ -249,9 +249,9 @@ export const BetterAuth = <const O extends BetterAuthProps>(
     } satisfies BetterAuthInstance<O>;
   }).pipe(
     (effect) =>
-      // Deploy-only requirements picked up by the init effect — the Random
+      // Deploy-only requirements picked up by the init effect -- the Random
       // provider during stack evaluation, RuntimeContext for Output binds,
-      // Stack for migration Action registration — are provided ambiently by
+      // Stack for migration Action registration -- are provided ambiently by
       // stack evaluation at deploy and by the bridge at runtime. They are
       // erased from the public type (same doctrine as `makeExecutionMemo`
       // erasing `Scope`); the one requirement the CALLER owns is `Database`.

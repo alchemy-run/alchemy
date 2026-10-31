@@ -77,7 +77,7 @@ export interface NetworkInterfaceAttachment extends Resource<
  * Zone. On delete the interface is detached (force-detached as a fallback)
  * before the resource is removed.
  *
- * This is an existence-style resource — its identity is the
+ * This is an existence-style resource -- its identity is the
  * `networkInterfaceId`/`instanceId`/`deviceIndex` triple. Changing any of them
  * replaces the attachment.
  *
@@ -120,7 +120,7 @@ export const NetworkInterfaceAttachmentProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — the attachment lives on the interface.
+          // 1. OBSERVE -- the attachment lives on the interface.
           const lookup = yield* ec2
             .describeNetworkInterfaces({
               NetworkInterfaceIds: [news.networkInterfaceId],
@@ -137,7 +137,7 @@ export const NetworkInterfaceAttachmentProvider = () =>
             existing?.Status !== "detaching" &&
             existing?.Status !== "detached";
 
-          // 2. ENSURE — attach when not already attached to this instance.
+          // 2. ENSURE -- attach when not already attached to this instance.
           let attachmentId =
             attachedToInstance && existing?.AttachmentId
               ? (existing.AttachmentId as NetworkInterfaceAttachmentId)
@@ -155,7 +155,7 @@ export const NetworkInterfaceAttachmentProvider = () =>
             );
           }
 
-          // 3. WAIT — until attached.
+          // 3. WAIT -- until attached.
           const status = yield* waitForEniAttachmentState(
             news.networkInterfaceId,
             "attached",
@@ -190,7 +190,7 @@ export const NetworkInterfaceAttachmentProvider = () =>
             })
             .pipe(
               Effect.catchTag("InvalidAttachmentID.NotFound", () => Effect.void),
-              // The interface can still be in-use momentarily — retry.
+              // The interface can still be in-use momentarily -- retry.
               Effect.retry({
                 while: (e) => e._tag === "DependencyViolation",
                 schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(15)]),

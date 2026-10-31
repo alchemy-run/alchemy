@@ -29,7 +29,7 @@ export type RegionBackendBucketProps = {
    */
   name?: string;
   /**
-   * Region the backend bucket lives in. Immutable — changing it replaces
+   * Region the backend bucket lives in. Immutable -- changing it replaces
    * the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -115,8 +115,8 @@ export type RegionBackendBucket = Resource<
  * bucket for HTTP(S) load balancing.
  *
  * Compute Engine backend buckets have no labels field, so Alchemy
- * stamps ownership into the description (`[alchemy alchemy-stack=…
- * alchemy-stage=… alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find
+ * stamps ownership into the description (`[alchemy alchemy-stack=...
+ * alchemy-stage=... alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find
  * them.
  *
  * ### Creating a Region Backend Bucket

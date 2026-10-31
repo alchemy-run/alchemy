@@ -17,7 +17,7 @@ export interface GetMetadataGenerationRunRequest extends Omit<
  * ### Metadata Generation
  * **Example:** Check a Generation Run
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getMetadataGenerationRun = yield* AWS.DataZone.GetMetadataGenerationRun(domain);
  *
  * // runtime

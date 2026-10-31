@@ -2,14 +2,14 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/Worker";
 import { Random } from "alchemy/Random";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 /**
- * The pack hasher (DESIGN §22.7): the CPU-heavy half of push ingest —
- * inflating and hashing entries, applying in-buffer deltas — as a service
+ * The pack hasher (DESIGN §22.7): the CPU-heavy half of push ingest --
+ * inflating and hashing entries, applying in-buffer deltas -- as a service
  * the receive-pack pipeline calls per spilled part, so the repo's Durable
  * Object only receives bytes and stages rows.
  *
  * Two layers:
  *
- * - {@link HasherInline} runs the scan in the calling isolate — the
+ * - {@link HasherInline} runs the scan in the calling isolate -- the
  *   reference assembly. On Cloudflare Workers a service-binding subrequest
  *   executes on the caller's own thread (measured, DESIGN §22.10), so
  *   fanning out buys no CPU there; inline avoids the copies and framing.
@@ -91,7 +91,7 @@ export interface HashPartOptions {
 }
 
 /**
- * A scan plus, when a spill was requested, the uploaded part's identity —
+ * A scan plus, when a spill was requested, the uploaded part's identity --
  * DEFERRED: the scan is available as soon as the hasher has it, while the
  * part's upload to blob storage may still be in flight (DESIGN §22.9).
  */
@@ -204,7 +204,7 @@ export const InternalSecret: Effect.Effect<Effect.Effect<Redacted.Redacted<strin
 
 export const HASHER_BINDING = "GIT_SELF";
 
-// ── self-binding layer ──────────────────────────────────────────────────────
+// -- self-binding layer ------------------------------------------------------
 
 interface SelfFetcher {
   readonly fetch: (input: string, init?: RequestInit) => Promise<Response>;

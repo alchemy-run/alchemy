@@ -33,12 +33,12 @@ export type ConnectorProps = {
    * `projects/{project}/locations/{location}/connectors/{connector}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-25 characters and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * connector.
    */
   connectorId?: string;
   /**
-   * Region of the connector (`us-central1`, …). Immutable — changing it
+   * Region of the connector (`us-central1`, ...). Immutable -- changing it
    * replaces the connector. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -47,19 +47,19 @@ export type ConnectorProps = {
   /**
    * VPC network name or URL to house the connector. Used with
    * `ipCidrRange` to create an `aet-*` `/28` subnet. Ignored when
-   * `subnet` is set. Immutable — changing it replaces the connector.
+   * `subnet` is set. Immutable -- changing it replaces the connector.
    * @default "default"
    */
   network?: string;
   /**
    * Unused `/28` CIDR (RFC 4632, e.g. `"10.8.0.0/28"`) used when the
    * connector creates its own subnet in `network`. Required unless
-   * `subnet` is set. Immutable — changing it replaces the connector.
+   * `subnet` is set. Immutable -- changing it replaces the connector.
    */
   ipCidrRange?: string;
   /**
    * Existing subnet to house the connector (Shared VPC or a subnet you
-   * manage). Immutable — changing it replaces the connector. When set,
+   * manage). Immutable -- changing it replaces the connector. When set,
    * `network` and `ipCidrRange` are not sent.
    */
   subnet?: ConnectorSubnet;
@@ -70,23 +70,23 @@ export type ConnectorProps = {
    */
   machineType?: string;
   /**
-   * Minimum instances in the connector's autoscaling group (2–9). Takes
+   * Minimum instances in the connector's autoscaling group (2-9). Takes
    * precedence over `minThroughput`. Prefer this over throughput.
    */
   minInstances?: number;
   /**
-   * Maximum instances in the connector's autoscaling group (3–10). Takes
+   * Maximum instances in the connector's autoscaling group (3-10). Takes
    * precedence over `maxThroughput`. Prefer this over throughput.
    */
   maxInstances?: number;
   /**
-   * Minimum throughput in Mbps for `e2-micro` (multiple of 100, 200–900).
-   * Discouraged — use `minInstances`.
+   * Minimum throughput in Mbps for `e2-micro` (multiple of 100, 200-900).
+   * Discouraged -- use `minInstances`.
    */
   minThroughput?: number;
   /**
-   * Maximum throughput in Mbps for `e2-micro` (multiple of 100, 300–1000).
-   * Discouraged — use `maxInstances`.
+   * Maximum throughput in Mbps for `e2-micro` (multiple of 100, 300-1000).
+   * Discouraged -- use `maxInstances`.
    */
   maxThroughput?: number;
 };
@@ -119,7 +119,7 @@ export type Connector = Resource<
     minThroughput: number | undefined;
     /** Maximum throughput in Mbps. */
     maxThroughput: number | undefined;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Projects currently using the connector. */
     connectedProjects: ReadonlyArray<string>;
@@ -132,7 +132,7 @@ export type Connector = Resource<
  * A Serverless VPC Access connector.
  *
  * Connectors let Cloud Run, Cloud Functions, and App Engine reach resources
- * in a VPC. The API has no labels or description field — Alchemy treats
+ * in a VPC. The API has no labels or description field -- Alchemy treats
  * existence at the computed name as ownership, and `list` returns every
  * connector in the project so `pnpm nuke:gcp` can still clean leaks.
  *
@@ -446,7 +446,7 @@ export const ConnectorProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       // Connectors have no labels or description. Existence at the computed
-      // name is ownership — the same approach Cloud KMS KeyRing uses.
+      // name is ownership -- the same approach Cloud KMS KeyRing uses.
       return toAttrs(existing, env.project, env.region);
     }),
 

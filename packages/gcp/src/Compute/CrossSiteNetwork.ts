@@ -21,8 +21,8 @@ export type CrossSiteNetworkProps = {
    */
   crossSiteNetworkName?: string;
   /**
-   * Optional description. Compute CrossSiteNetwork has no labels field —
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Optional description. Compute CrossSiteNetwork has no labels field --
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;
@@ -56,7 +56,7 @@ export type CrossSiteNetwork = Resource<
  *
  * Cross-site networks group Wire Groups that connect on-premises and
  * cloud sites through Cross-Cloud Interconnect. The resource itself is a
- * named container — Wire Groups attach later. Compute has no labels
+ * named container -- Wire Groups attach later. Compute has no labels
  * field, so Alchemy stamps ownership into the description.
  *
  * ### Creating a Cross-Site Network

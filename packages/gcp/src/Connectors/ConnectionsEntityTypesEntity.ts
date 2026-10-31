@@ -18,13 +18,13 @@ export type ConnectionsEntityTypesEntityProps = {
   /**
    * Parent entity type resource name
    * `projects/{project}/locations/{location}/connections/{connection}/entityTypes/{type}`.
-   * Immutable — changing it replaces the entity.
+   * Immutable -- changing it replaces the entity.
    */
   parent: string;
   /**
    * External-system entity id (the `{id}` segment of
    * `.../entityTypes/{type}/entities/{id}`). Server-assigned on create.
-   * Immutable — changing it replaces the entity.
+   * Immutable -- changing it replaces the entity.
    */
   entityId?: string;
   /**
@@ -66,7 +66,7 @@ export type ConnectionsEntityTypesEntity = Resource<
  * A row in a connected system, reached through Integration Connectors.
  *
  * Entities live under a Connection entity type. The entity id is
- * assigned by the external system. Parent and entity id are identity —
+ * assigned by the external system. Parent and entity id are identity --
  * changing either replaces the row. `fields` update in place via patch.
  * Entities have no labels, so nothing is written into the external row
  * to mark ownership: Alchemy tracks the row by its server-assigned name.

@@ -45,7 +45,7 @@ export interface ClusterProps {
    */
   sourceBackupId?: string;
   /**
-   * IP address type of the cluster's endpoints — `"IPV4"` or `"DUALSTACK"`.
+   * IP address type of the cluster's endpoints -- `"IPV4"` or `"DUALSTACK"`.
    * Changing the network type replaces the cluster.
    * @default "IPV4"
    */
@@ -126,14 +126,14 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An AWS CloudHSM cluster — a fleet of FIPS-validated, single-tenant
+ * An AWS CloudHSM cluster -- a fleet of FIPS-validated, single-tenant
  * hardware security modules (HSMs) inside your VPC.
  *
  * A fresh cluster provisions to the `UNINITIALIZED` state in a few minutes
  * and holds no HSMs; add {@link Hsm} resources to place HSMs into its
  * subnets' Availability Zones (each HSM is billed hourly). Activating the
  * cluster (signing the cluster CSR and calling InitializeCluster) is an
- * offline certificate-authority ceremony that stays out of band — the
+ * offline certificate-authority ceremony that stays out of band -- the
  * `clusterCsr` attribute exposes the CSR to sign.
  * ### Creating a Cluster
  * **Example:** Cluster Spanning Two Availability Zones
@@ -189,7 +189,7 @@ export const ClusterProvider = () =>
         return toTagRecord(response?.TagList);
       });
 
-      // CloudHSM clusters have no caller-chosen name — the id is
+      // CloudHSM clusters have no caller-chosen name -- the id is
       // auto-assigned. When we have no cached id (state persistence failed
       // mid-reconcile), recover ownership by scanning for the cluster
       // carrying our alchemy tags.
@@ -301,14 +301,14 @@ export const ClusterProvider = () =>
           const desiredTags = { ...internalTags, ...props.tags };
           const backupRetentionDays = toWireDays(props.backupRetention);
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           //    cache. Without one, recover by alchemy tags (crash recovery /
           //    adoption both land here).
           let observed = output?.clusterId
             ? yield* findClusterById(output.clusterId)
             : yield* findClusterByAlchemyTags(id);
 
-          // 2. Ensure — create if missing (or terminally deleted).
+          // 2. Ensure -- create if missing (or terminally deleted).
           if (isGone(observed)) {
             const created = yield* cloudhsm.createCluster({
               HsmType: props.hsmType,
@@ -338,7 +338,7 @@ export const ClusterProvider = () =>
           // (bounded) so subsequent modify calls do not race the transition.
           observed = yield* waitUntilSettled(clusterId);
 
-          // 3. Sync backup retention — diff OBSERVED policy against desired.
+          // 3. Sync backup retention -- diff OBSERVED policy against desired.
           if (
             backupRetentionDays !== undefined &&
             String(backupRetentionDays) !== observed.BackupRetentionPolicy?.Value
@@ -353,7 +353,7 @@ export const ClusterProvider = () =>
             observed = yield* waitUntilSettled(clusterId);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readClusterTags(clusterId);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

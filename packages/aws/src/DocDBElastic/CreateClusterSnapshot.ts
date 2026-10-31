@@ -8,7 +8,7 @@ import type { Cluster } from "./Cluster.ts";
  * `docdb-elastic:CreateClusterSnapshot` + `docdb-elastic:TagResource`),
  * scoped to one {@link Cluster}.
  *
- * Takes an on-demand manual snapshot of the bound elastic cluster — e.g. a
+ * Takes an on-demand manual snapshot of the bound elastic cluster -- e.g. a
  * pre-migration backup from an operational Lambda. Provide the
  * implementation with
  * `Effect.provide(AWS.DocDBElastic.CreateClusterSnapshotHttp)`.
@@ -18,7 +18,7 @@ import type { Cluster } from "./Cluster.ts";
  * const createSnapshot = yield* DocDBElastic.CreateClusterSnapshot(cluster);
  *
  * const result = yield* createSnapshot({ snapshotName: "pre-migration" });
- * // result.snapshot.status → "CREATING"
+ * // result.snapshot.status -> "CREATING"
  * ```
  *
  * @binding

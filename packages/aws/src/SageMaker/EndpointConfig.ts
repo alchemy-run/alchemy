@@ -96,12 +96,12 @@ export interface EndpointConfig extends Resource<
 > {}
 
 /**
- * An Amazon SageMaker EndpointConfig — the deployment recipe that maps one
+ * An Amazon SageMaker EndpointConfig -- the deployment recipe that maps one
  * or more `Model`s to hosting resources (provisioned instances or serverless
  * capacity). Pure configuration: it costs nothing until an `Endpoint`
  * references it.
  *
- * Endpoint configurations are immutable — any change other than tags
+ * Endpoint configurations are immutable -- any change other than tags
  * replaces the configuration. To roll a live endpoint onto new settings,
  * point the `Endpoint` at the replacement config (alchemy creates the new
  * config first, updates the endpoint, then deletes the old config).
@@ -197,7 +197,7 @@ export const EndpointConfigProvider = () =>
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           if (olds === undefined) return;
-          // Endpoint configs are immutable — everything except tags replaces.
+          // Endpoint configs are immutable -- everything except tags replaces.
           const identity = (props: EndpointConfigProps) => [
             props.productionVariants,
             props.shadowProductionVariants,
@@ -231,7 +231,7 @@ export const EndpointConfigProvider = () =>
           // Observe.
           let attrs = yield* readEndpointConfig(name);
 
-          // Ensure — create if missing; tolerate the already-exists race.
+          // Ensure -- create if missing; tolerate the already-exists race.
           if (attrs === undefined) {
             yield* sagemaker
               .createEndpointConfig({
@@ -259,7 +259,7 @@ export const EndpointConfigProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchConfigTags(attrs.endpointConfigArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * `session.url`. Stripe hosts the payment page and sends
  * `checkout.session.completed` when it succeeds.
  *
- * Account-scoped — binds the API key onto the host, not a specific
+ * Account-scoped -- binds the API key onto the host, not a specific
  * resource.
  *
  * ### Starting a subscription checkout

@@ -31,7 +31,7 @@ export type StoredInfoTypeProps = {
    * StoredInfoType id (the `{storedInfoType}` segment of
    * `projects/{project}/storedInfoTypes/{storedInfoType}`). If omitted, a
    * unique name is generated. Must match `[a-zA-Z0-9_-]+` and is at most
-   * 100 characters. Immutable — changing it replaces the stored info type.
+   * 100 characters. Immutable -- changing it replaces the stored info type.
    */
   storedInfoTypeId?: string;
   /**
@@ -41,7 +41,7 @@ export type StoredInfoTypeProps = {
   /**
    * Human-readable description (max 256 characters). Stored info types
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -79,7 +79,7 @@ export type StoredInfoType = Resource<
     dictionary: StoredInfoTypeDictionary | undefined;
     /** Large custom dictionary, if set. */
     largeCustomDictionary: StoredInfoTypeLargeCustomDictionary | undefined;
-    /** Current version state (`READY`, `PENDING`, …). */
+    /** Current version state (`READY`, `PENDING`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp of the current version. */
     createTime: string | undefined;
@@ -93,7 +93,7 @@ export type StoredInfoType = Resource<
  * (`projects.storedInfoTypes`, global processing location).
  *
  * Stored info types have no labels field, so Alchemy stamps ownership
- * into the config description for `list` / nuke. Id is identity —
+ * into the config description for `list` / nuke. Id is identity --
  * changing it replaces the resource. Display name, description, and
  * detector config update in place (a new version).
  *

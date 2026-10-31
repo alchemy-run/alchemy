@@ -39,7 +39,7 @@ export type PostgresPlan = "basic" | "starter" | "launch" | "scale" | "performan
 
 export interface PostgresProps {
   /**
-   * Region the cluster lives in (`iad`, `ord`, `sjc`, …). Required.
+   * Region the cluster lives in (`iad`, `ord`, `sjc`, ...). Required.
    * The cluster is regional; a {@link App} is global. Changing it
    * replaces the cluster.
    */
@@ -111,7 +111,7 @@ export type Postgres = Resource<
     clusterId: string;
     /** Cluster name (unique in the org). */
     name: string;
-    /** Observed status (`creating`, `ready`, `error`, `deleted`, …). */
+    /** Observed status (`creating`, `ready`, `error`, `deleted`, ...). */
     status: string | undefined;
     /** Region the cluster lives in. */
     region: string;
@@ -465,9 +465,9 @@ export const directUri = (
   credentials: ClusterCredentials | undefined,
 ): string | undefined => {
   // Derive the direct host from the server-provided PgBouncer URI:
-  // `pgbouncer.<hash>.flympg.net` → `direct.<hash>.flympg.net`. The `<hash>`
-  // is the cluster's DNS hash, which is NOT any id the cluster API returns —
-  // `mpgd_cluster_id` is the `fly-mpg-…` cluster id, and a host synthesized
+  // `pgbouncer.<hash>.flympg.net` -> `direct.<hash>.flympg.net`. The `<hash>`
+  // is the cluster's DNS hash, which is NOT any id the cluster API returns --
+  // `mpgd_cluster_id` is the `fly-mpg-...` cluster id, and a host synthesized
   // from it does not resolve. Rewriting the observed pooled host is the only
   // reliable derivation.
   const pooled = unwrapSensitive(credentials?.pgbouncer_uri);

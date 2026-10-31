@@ -35,7 +35,7 @@ export interface AlertManagerDefinition extends Resource<
 
 /**
  * The Alertmanager definition for an Amazon Managed Service for Prometheus
- * workspace — configures how firing alerts are grouped, routed, and
+ * workspace -- configures how firing alerts are grouped, routed, and
  * dispatched to receivers (SNS, etc.). A workspace has at most one.
  *
  * ### Creating an Alert Manager Definition
@@ -62,7 +62,7 @@ export const AlertManagerDefinitionProvider = () =>
   Provider.effect(
     AlertManagerDefinition,
     Effect.gen(function* () {
-      /** Describe the definition; typed not-found → undefined. */
+      /** Describe the definition; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeAlertManagerDefinition({ workspaceId })
@@ -102,7 +102,7 @@ export const AlertManagerDefinitionProvider = () =>
           if (!workspaceId) return undefined;
           const def = yield* describe(workspaceId);
           if (def === undefined) return undefined;
-          // AMP alert manager definitions are not taggable — ownership is
+          // AMP alert manager definitions are not taggable -- ownership is
           // implied by the owned parent workspace.
           return { workspaceId, status: def.status.statusCode };
         }),
@@ -111,10 +111,10 @@ export const AlertManagerDefinitionProvider = () =>
           const workspaceId = news!.workspaceId;
           const desiredData = yield* encodeDefinition(news!.definition);
 
-          // 1. Observe — the live definition is authoritative.
+          // 1. Observe -- the live definition is authoritative.
           const existing = yield* describe(workspaceId);
 
-          // 2/3. Ensure + sync — create when absent, put when the YAML drifts.
+          // 2/3. Ensure + sync -- create when absent, put when the YAML drifts.
           // `data` is present once ACTIVE (omitted while CREATING).
           if (existing === undefined) {
             yield* amp.createAlertManagerDefinition({

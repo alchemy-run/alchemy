@@ -59,12 +59,12 @@ export interface HttpNamespace extends Resource<
 > {}
 
 /**
- * An AWS Cloud Map HTTP namespace — an API-only service registry. Instances
+ * An AWS Cloud Map HTTP namespace -- an API-only service registry. Instances
  * registered in an HTTP namespace are discoverable via the
  * `DiscoverInstances` API but not via DNS, so no VPC or hosted zone is
  * required.
  *
- * Namespace creation and deletion are asynchronous — the provider polls the
+ * Namespace creation and deletion are asynchronous -- the provider polls the
  * Cloud Map operations API (bounded) until they complete.
  * ### Creating Namespaces
  * **Example:** HTTP Namespace
@@ -153,7 +153,7 @@ export const HttpNamespaceProvider = () =>
           // 1. OBSERVE
           let namespace = yield* observeNamespace("HTTP", name, output?.namespaceId);
 
-          // 2. ENSURE — create if missing (async operation); the created
+          // 2. ENSURE -- create if missing (async operation); the created
           // namespace is observed by the operation's target id, riding out
           // a same-name predecessor still deleting (see ensureNamespace)
           if (namespace === undefined) {
@@ -177,7 +177,7 @@ export const HttpNamespaceProvider = () =>
             });
           }
 
-          // 3. SYNC — description (updateHttpNamespace requires Description)
+          // 3. SYNC -- description (updateHttpNamespace requires Description)
           if (news.description !== undefined && news.description !== namespace.Description) {
             const update = yield* sd.updateHttpNamespace({
               Id: namespace.Id,
@@ -188,7 +188,7 @@ export const HttpNamespaceProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(namespace.Arn!);
           yield* syncTags(namespace.Arn!, observedTags, desiredTags);
 
@@ -202,7 +202,7 @@ export const HttpNamespaceProvider = () =>
           ).pipe(
             Effect.catchTags({
               NamespaceNotFound: () => Effect.succeed({ OperationId: undefined }),
-              // an identical delete is already in flight — await THAT operation
+              // an identical delete is already in flight -- await THAT operation
               // instead of silently skipping the deletion
               DuplicateRequest: (e) => Effect.succeed({ OperationId: e.DuplicateOperationId }),
             }),

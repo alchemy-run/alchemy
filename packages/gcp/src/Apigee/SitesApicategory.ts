@@ -15,18 +15,18 @@ const MAX_NAME_LENGTH = 255;
 export type SitesApicategoryProps = {
   /**
    * Portal site id (the `{site}` segment of
-   * `organizations/{org}/sites/{site}`). Required. Immutable — changing
+   * `organizations/{org}/sites/{site}`). Required. Immutable -- changing
    * it replaces the category.
    */
   siteId: string;
   /**
-   * Apigee organization id. Defaults to the stack GCP project. Immutable —
+   * Apigee organization id. Defaults to the stack GCP project. Immutable --
    * changing it replaces the category.
    */
   organization?: string;
   /**
    * Server-assigned category UUID. Set when adopting an existing category.
-   * Immutable — changing it replaces the category.
+   * Immutable -- changing it replaces the category.
    */
   categoryId?: string;
   /**
@@ -64,8 +64,8 @@ export type SitesApicategory = Resource<
  * API categories have no labels field and the name is shown to portal
  * users, so Alchemy finds its category by name: `read` reports a
  * category as owned only when it carries the generated name (an explicit
- * `name` is reported as unowned — adopt it with `--adopt`), and nuke
- * cannot discover categories. `siteId` and `organization` are identity —
+ * `name` is reported as unowned -- adopt it with `--adopt`), and nuke
+ * cannot discover categories. `siteId` and `organization` are identity --
  * changing either replaces the category. The display name updates in
  * place.
  *

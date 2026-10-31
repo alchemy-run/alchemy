@@ -47,11 +47,11 @@ export type SecurityActionConditionConfig = {
   accessTokens?: string[];
   /** ASN numbers. */
   asns?: string[];
-  /** Bot reasons (`Flooder`, `Robot Abuser`, …). */
+  /** Bot reasons (`Flooder`, `Robot Abuser`, ...). */
   botReasons?: string[];
   /** ISO 3166-1 alpha-2 region codes. */
   regionCodes?: string[];
-  /** HTTP methods (`GET`, `POST`, …). */
+  /** HTTP methods (`GET`, `POST`, ...). */
   httpMethods?: string[];
 };
 
@@ -75,22 +75,22 @@ export type SecurityActionFlag = {
 export type EnvironmentsSecurityActionProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the action.
+   * current GCP project id. Immutable -- changing it replaces the action.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the action.
    */
   environment: string;
   /**
    * Security action id (rfc1035, 1-63 chars). If omitted, a unique name
-   * is generated. Immutable — changing it replaces the action.
+   * is generated. Immutable -- changing it replaces the action.
    */
   securityActionId?: string;
   /**
    * Human-readable description. Alchemy stamps ownership into a
-   * `[alchemy …]` prefix because security actions have no labels field.
+   * `[alchemy ...]` prefix because security actions have no labels field.
    */
   description?: string;
   /**
@@ -166,7 +166,7 @@ export type EnvironmentsSecurityAction = Resource<
 >;
 
 /**
- * An environment-level Apigee SecurityAction — allow, deny, or flag
+ * An environment-level Apigee SecurityAction -- allow, deny, or flag
  * requests that match a condition.
  *
  * Security actions have no labels, so Alchemy stamps ownership into

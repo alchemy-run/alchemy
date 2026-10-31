@@ -47,18 +47,18 @@ export type CollectionsEngineCommonConfig = {
 export type CollectionsEngineProps = {
   /**
    * Engine id (the `{engine}` segment of the resource name). If omitted,
-   * a unique RFC-1034 id is generated. Immutable — changing it replaces
+   * a unique RFC-1034 id is generated. Immutable -- changing it replaces
    * the engine.
    */
   engineId?: string;
   /**
-   * Location (`global`, `us`, `eu`, …). Immutable — changing it replaces
+   * Location (`global`, `us`, `eu`, ...). Immutable -- changing it replaces
    * the engine.
    * @default "global"
    */
   location?: string;
   /**
-   * Collection id. Immutable — changing it replaces the engine.
+   * Collection id. Immutable -- changing it replaces the engine.
    * @default "default_collection"
    */
   collectionId?: string;
@@ -68,7 +68,7 @@ export type CollectionsEngineProps = {
    */
   displayName?: string;
   /**
-   * Solution type. Immutable — changing it replaces the engine.
+   * Solution type. Immutable -- changing it replaces the engine.
    * @default "SOLUTION_TYPE_SEARCH"
    */
   solutionType?: discoveryengine.GoogleCloudDiscoveryengineV1EngineSolutionTypeEnum;
@@ -146,7 +146,7 @@ export type CollectionsEngine = Resource<
 >;
 
 /**
- * A Discovery Engine Engine under a collection — serves Search,
+ * A Discovery Engine Engine under a collection -- serves Search,
  * Recommendation, or Chat from one or more DataStores.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

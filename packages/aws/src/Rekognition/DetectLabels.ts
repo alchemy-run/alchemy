@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DetectLabels` — detect real-world
+ * Runtime binding for `rekognition:DetectLabels` -- detect real-world
  * entities (objects, scenes, concepts) in a JPEG or PNG image.
  *
  * Rekognition is a pure pay-per-call service with no resource to manage:
  * the binding takes no arguments and grants the function
  * `rekognition:DetectLabels` (the action has no resource-level IAM).
  * Pass the image as raw bytes (`Image.Bytes`) or as an S3 object
- * reference (`Image.S3Object`) — raw distilled types, no marshalling.
+ * reference (`Image.S3Object`) -- raw distilled types, no marshalling.
  * Provide the implementation with
  * `Effect.provide(AWS.Rekognition.DetectLabelsHttp)`.
  *

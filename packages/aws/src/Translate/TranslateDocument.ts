@@ -3,12 +3,12 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:TranslateDocument` — synchronously
+ * Runtime binding for `translate:TranslateDocument` -- synchronously
  * translate a whole document (plain text, HTML, or Word) between a source
  * and a target language.
  *
  * One of the two language codes must be `en` (English). The document
- * content and the translated result are sensitive blobs — the response's
+ * content and the translated result are sensitive blobs -- the response's
  * `TranslatedDocument.Content` decodes as `Redacted<Uint8Array>`.
  *
  * ### Translating Documents

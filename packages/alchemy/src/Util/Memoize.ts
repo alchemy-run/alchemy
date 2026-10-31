@@ -8,8 +8,8 @@ import * as Scope from "effect/Scope";
  * its own, owned by `scope`.
  *
  * `Effect.cached` evaluates on the fiber of whichever caller gets there
- * first. When that caller is interrupted while others are waiting — a
- * concurrent plan cancelling sibling diffs — every waiter fails
+ * first. When that caller is interrupted while others are waiting -- a
+ * concurrent plan cancelling sibling diffs -- every waiter fails
  * interrupt-only and the cache stays poisoned for the rest of the process.
  * A computation that many fibers share must not have that failure mode: here
  * it runs detached from every caller, so interrupting a waiter never touches

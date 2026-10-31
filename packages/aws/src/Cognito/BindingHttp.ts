@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
  * NOT exported from `index.ts`. Unlike services whose capabilities are one
  * operation per `Binding.Service`, Cognito's runtime bindings are grouped
  * clients (`UserPoolAuth`, `UserPoolAdmin`, `IdentityPoolAuth`,
- * `IdentityPoolAdmin`) — many operations sharing one bound resource. The
+ * `IdentityPoolAdmin`) -- many operations sharing one bound resource. The
  * boilerplate factored here is the per-method wrapper: a traced `Effect.fn`
  * named `{binding}.{method}({logicalId})` that injects the bound resource's
  * resolved identifier (`UserPoolId` / `ClientId` / `IdentityPoolId`) into

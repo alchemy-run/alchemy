@@ -15,8 +15,8 @@ import type { Providers } from "../Providers.ts";
 /**
  * The state you want the pipe to be in after reconciliation.
  *
- * - `RUNNING` — the pipe polls the source and delivers to the target.
- * - `STOPPED` — the pipe exists but does not poll the source.
+ * - `RUNNING` -- the pipe polls the source and delivers to the target.
+ * - `STOPPED` -- the pipe exists but does not poll the source.
  */
 export type PipeDesiredState = "RUNNING" | "STOPPED";
 
@@ -37,7 +37,7 @@ export interface PipeProps {
   desiredState?: PipeDesiredState;
   /**
    * The ARN of the source resource (SQS queue, Kinesis stream, DynamoDB
-   * stream, etc.). Changing the source triggers a **replacement** — the
+   * stream, etc.). Changing the source triggers a **replacement** -- the
    * EventBridge Pipes API does not allow updating a pipe's source.
    */
   source: string;
@@ -112,17 +112,17 @@ export interface Pipe extends Resource<
 > {}
 
 /**
- * An Amazon EventBridge Pipe — point-to-point source→(filter)→(enrich)→target
+ * An Amazon EventBridge Pipe -- point-to-point source->(filter)->(enrich)->target
  * plumbing between AWS services without glue code.
  *
  * `Pipe` owns the lifecycle of an EventBridge Pipe. Reconcile waits (bounded)
  * for the pipe to leave its `CREATING`/`UPDATING` transitional states, and a
  * pipe that lands in a `*_FAILED` state surfaces as a typed {@link PipeFailed}
  * error rather than hanging. Prefer the {@link from} builder for the common
- * pairs — it synthesizes the `pipes.amazonaws.com` execution role with
+ * pairs -- it synthesizes the `pipes.amazonaws.com` execution role with
  * source-read and target-invoke policies for you.
  * ### Creating Pipes
- * **Example:** SQS to Lambda (builder — role synthesized automatically)
+ * **Example:** SQS to Lambda (builder -- role synthesized automatically)
  * ```typescript
  * import * as AWS from "@alchemy.run/aws";
  *
@@ -245,7 +245,7 @@ const unwrapTags = (
  * Bounded retry helpers with EXPLICIT `Effect.Effect<A, E, R>` annotations.
  * Inlining `Effect.retry` with options in provider lifecycle code leaves
  * `Retry.Return`'s conditional type unresolved in the provider's inferred
- * layer type, which declaration emit widens to an `unknown` R — poisoning
+ * layer type, which declaration emit widens to an `unknown` R -- poisoning
  * `AWS.providers()` for every downstream consumer (see
  * `retryThroughDeletionWindow` in AWS/SecretsManager/Secret.ts).
  */
@@ -301,7 +301,7 @@ const retryWhileConflicting = <A, E extends { _tag: string }, R>(
 /**
  * `true` when every DEFINED field of `desired` deep-equals the observed
  * value (Redacted values are unwrapped on both sides). Undefined desired
- * fields are skipped — AWS fills unspecified parameter fields with
+ * fields are skipped -- AWS fills unspecified parameter fields with
  * defaults, so only user-specified values participate in drift detection.
  */
 const subsetMatches = (desired: unknown, observed: unknown): boolean => {
@@ -335,7 +335,7 @@ const startingPositionOf = (params: pipes.PipeSourceParameters | undefined) =>
 
 /**
  * Convert create-shape source parameters into the update shape. Stream
- * starting positions are immutable (replacement — see `diff`), so they are
+ * starting positions are immutable (replacement -- see `diff`), so they are
  * stripped. `FilterCriteria` is always sent (defaulting to no filters) so
  * removing a filter from props converges: EventBridge resets unspecified
  * fields inside `SourceParameters` to their defaults on update.
@@ -372,7 +372,7 @@ const toUpdateSourceParameters = (
 });
 
 /**
- * Source parameters with `FilterCriteria` removed — filters get dedicated
+ * Source parameters with `FilterCriteria` removed -- filters get dedicated
  * removal-sensitive comparison, everything else uses `subsetMatches`.
  */
 const sourceParametersSansFilters = (
@@ -403,7 +403,7 @@ export const PipeProvider = () =>
        * Poll (bounded, ~60s) until the pipe leaves its transitional state.
        * A `*_FAILED` terminal state surfaces as a typed `PipeFailed`; a pipe
        * still transitioning after the bounded wait surfaces as a typed
-       * `PipeStateTimeout` — never a hang.
+       * `PipeStateTimeout` -- never a hang.
        */
       const awaitSettled = Effect.fn(function* (pipeName: string) {
         const described = yield* describeOrUndefined(pipeName).pipe(
@@ -509,7 +509,7 @@ export const PipeProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // fall through: undefined → default update path
+          // fall through: undefined -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -521,7 +521,7 @@ export const PipeProvider = () =>
           };
           const desiredState = news.desiredState ?? "RUNNING";
 
-          // 1. OBSERVE — settle any in-flight transition first; cloud state
+          // 1. OBSERVE -- settle any in-flight transition first; cloud state
           //    is authoritative, `output` is only a name cache. A pipe stuck
           //    in a `*_FAILED` state can't be repaired in place (the failure
           //    is usually IAM propagation from a crashed prior run), so it
@@ -542,7 +542,7 @@ export const PipeProvider = () =>
             ),
           );
 
-          // 2. ENSURE — create if missing; tolerate the concurrent-create
+          // 2. ENSURE -- create if missing; tolerate the concurrent-create
           //    race and retry while a freshly-created IAM role propagates.
           if (observed?.Arn === undefined) {
             yield* pipes
@@ -576,7 +576,7 @@ export const PipeProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED cloud state against desired and update
+          // 3. SYNC -- diff OBSERVED cloud state against desired and update
           //    only on drift. Filters/desired-state/target/enrichment are
           //    removal-sensitive; parameter objects compare user-specified
           //    fields only (AWS fills the rest with defaults).
@@ -629,7 +629,7 @@ export const PipeProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (never against olds/output).
           const observedTags = unwrapTags(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -658,7 +658,7 @@ export const PipeProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* pipes.deletePipe({ Name: output.pipeName }).pipe(
             // A delete racing an in-flight CREATE/UPDATE transition
-            // returns ConflictException — retry until the pipe settles.
+            // returns ConflictException -- retry until the pipe settles.
             retryWhileConflicting,
             Effect.catchTag("NotFoundException", () => Effect.void),
           );

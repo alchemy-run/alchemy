@@ -247,7 +247,7 @@ export interface Job extends Resource<
 > {}
 
 /**
- * An AWS Glue DataBrew job definition — either a `PROFILE` job that analyzes
+ * An AWS Glue DataBrew job definition -- either a `PROFILE` job that analyzes
  * a dataset and writes a data-quality profile to S3, or a `RECIPE` job that
  * applies a published recipe's transformations and writes the result to S3.
  * The definition is free and instant; job *runs* are billed per node-hour
@@ -463,7 +463,7 @@ export const JobProvider = () =>
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
           // The Update APIs accept neither the job type nor the input
-          // associations — those are create-only.
+          // associations -- those are create-only.
           if (olds.type !== news.type) return { action: "replace" } as const;
           if (olds.datasetName !== news.datasetName) {
             return { action: "replace" } as const;
@@ -490,7 +490,7 @@ export const JobProvider = () =>
           // 1. OBSERVE
           const job = yield* observe(name);
 
-          // 2. ENSURE / 3. SYNC — Update{Profile,Recipe}Job is a full PUT
+          // 2. ENSURE / 3. SYNC -- Update{Profile,Recipe}Job is a full PUT
           if (job === undefined) {
             if (news.type === "PROFILE") {
               yield* retryWhileRoleNotAssumable(
@@ -517,7 +517,7 @@ export const JobProvider = () =>
                     ? {
                         Name: news.recipeReference.name,
                         // the API rejects a null version ("version null is
-                        // invalid") — apply the documented default explicitly
+                        // invalid") -- apply the documented default explicitly
                         RecipeVersion: news.recipeReference.recipeVersion ?? "LATEST_PUBLISHED",
                       }
                     : undefined,
@@ -562,8 +562,8 @@ export const JobProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A run in STARTING/RUNNING/STOPPING keeps the job's dataset and
-          // recipe associated — downstream Dataset/Recipe deletes then fail
-          // with ConflictException ("is used in job …") long after DeleteJob
+          // recipe associated -- downstream Dataset/Recipe deletes then fail
+          // with ConflictException ("is used in job ...") long after DeleteJob
           // itself succeeds. Stop in-flight runs and wait (bounded) for every
           // run to reach a terminal state before deleting the job.
           const runs = yield* databrew.listJobRuns.items({ Name: output.jobName }).pipe(

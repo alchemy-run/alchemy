@@ -188,7 +188,7 @@ export interface Dashboard extends Resource<
  * ### Reading Dashboards at Runtime
  * **Example:** Read the Dashboard Body from a Function
  * ```typescript
- * // init — bind the dashboard to the function (see GetDashboard)
+ * // init -- bind the dashboard to the function (see GetDashboard)
  * const getDashboard = yield* AWS.CloudWatch.GetDashboard(dashboard);
  *
  * // runtime
@@ -259,12 +259,12 @@ export const DashboardProvider = () =>
           return yield* readDashboard(name);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // Observe — pin the physical name from `output` if present so we
+          // Observe -- pin the physical name from `output` if present so we
           // never rename an existing dashboard; otherwise derive from
           // desired props.
           const name = output?.dashboardName ?? (yield* createDashboardName(id, news));
 
-          // Ensure — `putDashboard` is a pure upsert. The CloudWatch
+          // Ensure -- `putDashboard` is a pure upsert. The CloudWatch
           // dashboard API has no separate update path, so we always send
           // the full body and let the API converge.
           yield* retryConcurrent(

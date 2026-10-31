@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { GenerateCardValidationData } from "./GenerateCardValidationData.ts";
 
 /**
- * HTTP implementation of {@link GenerateCardValidationData} — grants the
+ * HTTP implementation of {@link GenerateCardValidationData} -- grants the
  * host Function `payment-cryptography:GenerateCardValidationData` on the CVK
  * and calls the Payment Cryptography Data API at runtime.
  */

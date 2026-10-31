@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeFargateProfile`.
  *
- * Reads one Fargate profile's state — pod execution role, selectors, subnets, and status.
+ * Reads one Fargate profile's state -- pod execution role, selectors, subnets, and status.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeFargateProfile` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeFargateProfileHttp)`.

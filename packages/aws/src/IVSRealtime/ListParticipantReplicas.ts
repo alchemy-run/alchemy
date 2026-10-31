@@ -13,7 +13,7 @@ export interface ListParticipantReplicasRequest extends Omit<
 > {}
 
 /**
- * List the replicas of a participant of the bound (source) stage — the
+ * List the replicas of a participant of the bound (source) stage -- the
  * destination stages a participant's media is replicated to and each
  * replica's state.
  *

@@ -6,8 +6,8 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:GetInvestigation`.
  *
- * Reads a single investigation's detail — entity, scope window, status,
- * severity, and state — so a triage function can poll a running
+ * Reads a single investigation's detail -- entity, scope window, status,
+ * severity, and state -- so a triage function can poll a running
  * investigation to completion. The graph ARN is injected from the bound
  * {@link Graph}.
  * Provide the implementation with

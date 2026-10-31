@@ -88,12 +88,12 @@ export type BackupSettings = {
    */
   enabled?: boolean;
   /**
-   * Number of automated backups to retain (1–365).
+   * Number of automated backups to retain (1-365).
    * @default 7
    */
   retainedBackups?: number;
   /**
-   * Days of transaction logs kept for point-in-time restore (1–7 on
+   * Days of transaction logs kept for point-in-time restore (1-7 on
    * `ENTERPRISE`, up to 35 on `ENTERPRISE_PLUS`).
    * @default 7
    */
@@ -110,27 +110,27 @@ export type InstanceProps = {
    * `projects/{project}/instances/{instance}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must start with a
    * letter, contain only lowercase letters, numbers, and hyphens, and not
-   * end with a hyphen (1–98 characters). Immutable — changing it replaces
+   * end with a hyphen (1-98 characters). Immutable -- changing it replaces
    * the instance.
    */
   instanceName?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Database engine and major version (`MYSQL_8_0`, `POSTGRES_15`, …).
-   * Changing the version within the same engine (`POSTGRES_16` →
+   * Database engine and major version (`MYSQL_8_0`, `POSTGRES_15`, ...).
+   * Changing the version within the same engine (`POSTGRES_16` ->
    * `POSTGRES_17`) runs an in-place major version upgrade. Changing the
-   * engine (`MYSQL_8_0` → `POSTGRES_17`) replaces the instance.
+   * engine (`MYSQL_8_0` -> `POSTGRES_17`) replaces the instance.
    * @default "MYSQL_8_0"
    */
   databaseVersion?: sqladmin.DatabaseInstanceDatabaseVersionEnum | (string & {});
   /**
-   * Machine type (`db-f1-micro`, `db-custom-1-3840`, …). Changing it
+   * Machine type (`db-f1-micro`, `db-custom-1-3840`, ...). Changing it
    * restarts the instance.
    * @default "db-f1-micro"
    */
@@ -217,7 +217,7 @@ export type Instance = Resource<
     instanceName: string;
     /** Project id. */
     project: string;
-    /** Region (`us-central1`, …). */
+    /** Region (`us-central1`, ...). */
     region: string;
     /** Database engine and version. */
     databaseVersion: string | undefined;
@@ -225,9 +225,9 @@ export type Instance = Resource<
     databaseInstalledVersion: string | undefined;
     /** Machine type. */
     tier: string | undefined;
-    /** Edition (`ENTERPRISE`, …). */
+    /** Edition (`ENTERPRISE`, ...). */
     edition: string | undefined;
-    /** Serving state (`RUNNABLE`, `PENDING_CREATE`, …). */
+    /** Serving state (`RUNNABLE`, `PENDING_CREATE`, ...). */
     state: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -247,7 +247,7 @@ export type Instance = Resource<
     sslMode: string | undefined;
     /** Whether deletion protection is enabled. */
     deletionProtectionEnabled: boolean;
-    /** Activation policy (`ALWAYS`, `NEVER`, …). */
+    /** Activation policy (`ALWAYS`, `NEVER`, ...). */
     activationPolicy: string | undefined;
     /** Availability type (`ZONAL`, `REGIONAL`). */
     availabilityType: string | undefined;
@@ -277,7 +277,7 @@ export type Instance = Resource<
  *
  * Changing `instanceName`, `region`, or the `databaseVersion` engine
  * replaces the instance; a major version upgrade within the same engine
- * runs in place. Provisioning typically takes several minutes (often 5–15).
+ * runs in place. Provisioning typically takes several minutes (often 5-15).
  *
  * ### Creating an Instance
  * **Example:** Generated name, MySQL 8.0 shared-core
@@ -520,7 +520,7 @@ const getByName = (project: string, instance: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
- * Instance create, patch, and delete operations routinely run 5–15
+ * Instance create, patch, and delete operations routinely run 5-15
  * minutes; poll every 10s for up to 20 minutes.
  */
 const LONG_OPERATION_POLL = {
@@ -803,7 +803,7 @@ export const InstanceProvider = () =>
           databaseVersion: version,
         });
         // A major version upgrade outlasts the default budget even on
-        // db-f1-micro (33–54 minutes observed for POSTGRES_16 → POSTGRES_17).
+        // db-f1-micro (33-54 minutes observed for POSTGRES_16 -> POSTGRES_17).
         yield* waitForSqlOperation(env.project, upgraded, { budget: "2 hours" });
         current = yield* waitUntilRunnable(env.project, instanceName);
       }

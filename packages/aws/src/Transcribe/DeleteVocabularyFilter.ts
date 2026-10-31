@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:DeleteVocabularyFilter` — delete a vocabulary filter.
+ * Runtime binding for `transcribe:DeleteVocabularyFilter` -- delete a vocabulary filter.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:DeleteVocabularyFilter` on `*`.

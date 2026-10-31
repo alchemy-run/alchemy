@@ -12,7 +12,7 @@ export interface SubmitFeedbackRequest extends Omit<kendra.SubmitFeedbackRequest
  * Runtime binding for the `SubmitFeedback` operation (IAM action
  * `kendra:SubmitFeedback`), scoped to one {@link Index}.
  *
- * Submits click and relevance feedback for a query's results — Kendra
+ * Submits click and relevance feedback for a query's results -- Kendra
  * uses it to tune the index's relevance over time (incremental learning).
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.SubmitFeedbackHttp)`.

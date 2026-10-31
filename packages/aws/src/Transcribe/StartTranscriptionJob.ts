@@ -3,13 +3,13 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:StartTranscriptionJob` — kick off an
+ * Runtime binding for `transcribe:StartTranscriptionJob` -- kick off an
  * asynchronous batch transcription of an audio/video file stored in S3.
  *
  * Transcribe batch jobs are account-scoped (no resource to manage): the
  * binding takes no arguments and grants the function
  * `transcribe:StartTranscriptionJob` (the action has no resource-level IAM).
- * The input `Media.MediaFileUri` and the output bucket are S3 locations —
+ * The input `Media.MediaFileUri` and the output bucket are S3 locations --
  * grant the function S3 access to those buckets separately. Poll the job to
  * completion with {@link GetTranscriptionJob}.
  *

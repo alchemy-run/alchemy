@@ -62,12 +62,12 @@ export type SavedQueryProps = {
    * `projects/{project}/locations/{location}/savedQueries/{query}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the saved query.
    */
   savedQueryId?: string;
   /**
-   * Location that stores the saved query. Immutable after create —
+   * Location that stores the saved query. Immutable after create --
    * changing it replaces the query.
    * @default "global"
    */
@@ -94,7 +94,7 @@ export type SavedQueryProps = {
   opsAnalyticsQuery?: SavedQueryOpsAnalyticsQuery;
   /**
    * Human-readable description. Saved queries have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -136,7 +136,7 @@ export type SavedQuery = Resource<
  *
  * Saved queries have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. `savedQueryId` and `location` are
- * identity — changing either replaces the query. Display name, visibility,
+ * identity -- changing either replaces the query. Display name, visibility,
  * description, and query body update in place.
  *
  * ### Creating a Saved Query

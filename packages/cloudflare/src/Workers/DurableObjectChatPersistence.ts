@@ -16,7 +16,7 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * cached AI responses, or any other persisted state lives in the DO
  * SQLite store with `${storeId}:` key namespacing.
  *
- * Multiple `storeId`s can coexist within a single Durable Object —
+ * Multiple `storeId`s can coexist within a single Durable Object --
  * keys are namespaced with a `${storeId}:` prefix so they don't
  * collide.
  *

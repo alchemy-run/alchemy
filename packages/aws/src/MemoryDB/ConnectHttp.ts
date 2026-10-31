@@ -11,7 +11,7 @@ import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
  * on the host Function and grants `memorydb:Connect` on the cluster ARN plus
  * any IAM-auth users' ARNs; at runtime it resolves the same values into a
  * typed connection descriptor. The valkey/redis data plane itself is reached
- * over the VPC network — password auth needs no IAM, while IAM auth
+ * over the VPC network -- password auth needs no IAM, while IAM auth
  * additionally requires the `memorydb:Connect` grant this binding attaches.
  */
 export const ConnectHttp = Layer.effect(
@@ -36,7 +36,7 @@ export const ConnectHttp = Layer.effect(
         yield* bind`AWS.MemoryDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpointAddress,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${cluster.endpointPort}`,
             [`${prefix}_TLS`]: Output.map(cluster.tlsEnabled, (tls) => String(tls ?? true)),
           },

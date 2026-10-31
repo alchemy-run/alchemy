@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { AccessKey } from "./AccessKey.ts";
 
 /**
- * Runtime binding for `iam:GetAccessKeyLastUsed` — read when (and against
+ * Runtime binding for `iam:GetAccessKeyLastUsed` -- read when (and against
  * which service/region) a bound {@link AccessKey} last authenticated. The
  * primitive behind key-rotation and stale-credential reapers.
  *

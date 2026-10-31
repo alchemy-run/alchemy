@@ -12,7 +12,7 @@ export interface VerifyMacRequest extends Omit<kms.VerifyMacRequest, "KeyId"> {}
  * Bind this operation to an HMAC KMS {@link Key} (or the `alias/...` name of
  * a pre-existing key) to get a callable that automatically injects the
  * `KeyId`. A mismatched MAC surfaces as the typed
- * `KMSInvalidMacException` — a valid MAC returns `MacValid: true`.
+ * `KMSInvalidMacException` -- a valid MAC returns `MacValid: true`.
  *
  * ### Message Authentication
  * **Example:** Verify an HMAC

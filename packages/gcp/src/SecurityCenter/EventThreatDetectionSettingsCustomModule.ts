@@ -45,11 +45,11 @@ export type EventThreatDetectionSettingsCustomModuleProps = {
    * Module id (the `{module}` segment of
    * `projects/{project}/eventThreatDetectionSettings/customModules/{module}`).
    * Server-assigned on create. Supply it to target an existing module.
-   * Immutable — changing it replaces the module.
+   * Immutable -- changing it replaces the module.
    */
   moduleId?: string;
   /**
-   * Module type, e.g. `CONFIGURABLE_BAD_IP`. Immutable — changing it
+   * Module type, e.g. `CONFIGURABLE_BAD_IP`. Immutable -- changing it
    * replaces the module.
    */
   type: string;
@@ -59,7 +59,7 @@ export type EventThreatDetectionSettingsCustomModuleProps = {
   displayName?: string;
   /**
    * Human-readable description. Custom modules have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -114,7 +114,7 @@ export type EventThreatDetectionSettingsCustomModule = Resource<
 /**
  * A project-scoped Event Threat Detection custom module.
  *
- * Custom modules have no labels field — Alchemy stamps ownership into
+ * Custom modules have no labels field -- Alchemy stamps ownership into
  * the description so `list` / nuke can find them. Module id and type are
  * identity (the id is server-assigned). Display name, description,
  * enablement, and config update in place.

@@ -30,7 +30,7 @@ export type ApplePayDomain = Resource<
   "Stripe.ApplePayDomain",
   ApplePayDomainProps,
   {
-    /** Stripe Apple Pay domain id (`apwc_…`). */
+    /** Stripe Apple Pay domain id (`apwc_...`). */
     id: string;
     /** Fully-qualified hostname registered with Apple Pay. */
     domainName: string;
@@ -44,7 +44,7 @@ export type ApplePayDomain = Resource<
 >;
 
 /**
- * A Stripe Apple Pay Domain — a hostname registered so Apple Pay can be
+ * A Stripe Apple Pay Domain -- a hostname registered so Apple Pay can be
  * offered on that origin. Existence-only: there is nothing to update in
  * place; changing `domainName` replaces the registration. Destroy deletes
  * it.

@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 
 /**
  * The vector-store and embedding configuration of a knowledge base. Passed
- * through to the Bedrock API unchanged — see the AWS SDK
+ * through to the Bedrock API unchanged -- see the AWS SDK
  * `KnowledgeBaseConfiguration` shape. The common case is a `VECTOR` type with
  * `vectorKnowledgeBaseConfiguration.embeddingModelArn` set.
  */
@@ -19,7 +19,7 @@ export type KnowledgeBaseConfiguration = bedrock.KnowledgeBaseConfiguration;
 
 /**
  * The backing vector store (OpenSearch Serverless, Pinecone, RDS/pgvector,
- * S3 Vectors, ...). Passed through to the Bedrock API unchanged — see the AWS
+ * S3 Vectors, ...). Passed through to the Bedrock API unchanged -- see the AWS
  * SDK `StorageConfiguration` shape. Omit for a managed vector store.
  */
 export type StorageConfiguration = bedrock.StorageConfiguration;
@@ -81,7 +81,7 @@ export interface KnowledgeBase extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock knowledge base — a managed RAG index that embeds source
+ * An Amazon Bedrock knowledge base -- a managed RAG index that embeds source
  * documents into a vector store for retrieval.
  *
  * `KnowledgeBase` owns the index configuration; attach one or more
@@ -91,7 +91,7 @@ export interface KnowledgeBase extends Resource<
  *
  * The `roleArn` must grant Bedrock access to the embedding model, the vector
  * store, and the source data. The vector store (`storageConfiguration`) must
- * already exist — provision an OpenSearch Serverless collection (with a
+ * already exist -- provision an OpenSearch Serverless collection (with a
  * vector index) or another supported store first.
  *
  * ### Creating Knowledge Bases
@@ -281,7 +281,7 @@ export const KnowledgeBaseProvider = () =>
             kb = created.knowledgeBase;
             kb = (yield* waitForSettled(kb.knowledgeBaseId)) ?? kb;
           } else {
-            // 3. SYNC — converge mutable settings.
+            // 3. SYNC -- converge mutable settings.
             kb = (yield* waitForSettled(kb.knowledgeBaseId)) ?? kb;
             const drifted =
               kb.description !== news.description ||

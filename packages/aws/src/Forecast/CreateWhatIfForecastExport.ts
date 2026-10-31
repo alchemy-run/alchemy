@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateWhatIfForecastExport` — export one or
+ * Runtime binding for `forecast:CreateWhatIfForecastExport` -- export one or
  * more scenario forecasts to S3 as CSV/Parquet so they can be compared
  * offline or fed into downstream analytics.
  *

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `CopyDBClusterSnapshot` operation (IAM action
  * `rds:CopyDBClusterSnapshot`).
  *
- * Copies a Neptune cluster snapshot — e.g. archive a nightly snapshot under
+ * Copies a Neptune cluster snapshot -- e.g. archive a nightly snapshot under
  * a retention prefix, or copy it for cross-region disaster recovery. Provide
  * the implementation with
  * `Effect.provide(AWS.Neptune.CopyDBClusterSnapshotHttp)`.

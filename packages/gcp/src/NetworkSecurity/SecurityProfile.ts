@@ -34,23 +34,23 @@ export type SecurityProfileType =
   | (string & {});
 
 export type AntivirusOverride = {
-  /** Protocol to match (`HTTP`, `SMTP`, `FTP`, …). */
+  /** Protocol to match (`HTTP`, `SMTP`, `FTP`, ...). */
   protocol?: networksecurity.AntivirusOverrideProtocolEnum | (string & {});
-  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
+  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, ...). */
   action?: networksecurity.AntivirusOverrideActionEnum | (string & {});
 };
 
 export type SeverityOverride = {
   /** Severity level to match (`INFORMATIONAL`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). */
   severity?: networksecurity.SeverityOverrideSeverityEnum | (string & {});
-  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
+  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, ...). */
   action?: networksecurity.SeverityOverrideActionEnum | (string & {});
 };
 
 export type ThreatOverride = {
   /** Vendor-specific threat id to override. */
   threatId?: string;
-  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
+  /** Threat action override (`ALLOW`, `ALERT`, `DENY`, ...). */
   action?: networksecurity.ThreatOverrideActionEnum | (string & {});
 };
 
@@ -65,7 +65,7 @@ export type ThreatPreventionProfile = {
 
 export type CustomMirroringProfile = {
   /**
-   * Target MirroringEndpointGroup. Immutable — changing it replaces the
+   * Target MirroringEndpointGroup. Immutable -- changing it replaces the
    * profile.
    */
   mirroringEndpointGroup?: string;
@@ -73,7 +73,7 @@ export type CustomMirroringProfile = {
 
 export type CustomInterceptProfile = {
   /**
-   * Target InterceptEndpointGroup. Immutable — changing it replaces the
+   * Target InterceptEndpointGroup. Immutable -- changing it replaces the
    * profile.
    */
   interceptEndpointGroup?: string;
@@ -102,12 +102,12 @@ export type SecurityProfileProps = {
    * `projects/{project}/locations/{location}/securityProfiles/{securityProfile}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, letters, numbers, hyphens, and
-   * underscores, and must not start with a number. Immutable — changing
+   * underscores, and must not start with a number. Immutable -- changing
    * it replaces the profile.
    */
   securityProfileId?: string;
   /**
-   * Location. Security profiles live in `global`. Immutable — changing
+   * Location. Security profiles live in `global`. Immutable -- changing
    * it replaces the profile.
    * @default "global"
    */
@@ -122,7 +122,7 @@ export type SecurityProfileProps = {
   labels?: Record<string, string>;
   /**
    * Single ProfileType this resource configures. Inferred from nested
-   * profile blocks when omitted. Immutable — changing it replaces the
+   * profile blocks when omitted. Immutable -- changing it replaces the
    * profile.
    * @default "THREAT_PREVENTION"
    */
@@ -134,13 +134,13 @@ export type SecurityProfileProps = {
   threatPreventionProfile?: ThreatPreventionProfile;
   /**
    * Out-of-band packet mirroring configuration. Used when `type` is
-   * `CUSTOM_MIRRORING`. Immutable nested target — changing
+   * `CUSTOM_MIRRORING`. Immutable nested target -- changing
    * `mirroringEndpointGroup` replaces the profile.
    */
   customMirroringProfile?: CustomMirroringProfile;
   /**
    * In-band intercept configuration. Used when `type` is
-   * `CUSTOM_INTERCEPT`. Immutable nested target — changing
+   * `CUSTOM_INTERCEPT`. Immutable nested target -- changing
    * `interceptEndpointGroup` replaces the profile.
    */
   customInterceptProfile?: CustomInterceptProfile;
@@ -188,7 +188,7 @@ export type SecurityProfile = Resource<
 >;
 
 /**
- * A Network Security SecurityProfile — the behavior for one ProfileType
+ * A Network Security SecurityProfile -- the behavior for one ProfileType
  * (threat prevention, URL filtering, custom mirroring, or custom
  * intercept).
  *

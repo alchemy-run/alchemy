@@ -56,7 +56,7 @@ export interface VehicleProps {
    */
   associationBehavior?: iotfleetwise.VehicleAssociationBehavior;
   /**
-   * State templates associated with the vehicle — each pairs a
+   * State templates associated with the vehicle -- each pairs a
    * {@link StateTemplate} identifier (name or ARN) with an update strategy
    * (`{ onChange: {} }` or `{ periodic: { stateTemplateUpdateRate } }`).
    * Synced in place via add/remove/update deltas.
@@ -88,7 +88,7 @@ export interface Vehicle extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise vehicle — the digital twin of a physical vehicle,
+ * An AWS IoT FleetWise vehicle -- the digital twin of a physical vehicle,
  * created from an `ACTIVE` {@link ModelManifest} and
  * {@link DecoderManifest} pair and backed by an AWS IoT thing.
  * ### Creating a Vehicle
@@ -190,10 +190,10 @@ export const VehicleProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readVehicle(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createVehicle({
@@ -221,7 +221,7 @@ export const VehicleProvider = () =>
             );
           }
 
-          // 3. Sync manifests + attributes — apply only the observed delta.
+          // 3. Sync manifests + attributes -- apply only the observed delta.
           const manifestChanged =
             observed.modelManifestArn !== news.modelManifestArn ||
             observed.decoderManifestArn !== news.decoderManifestArn;

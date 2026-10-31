@@ -24,7 +24,7 @@ export interface ListProps {
   /**
    * The variable type of the list's elements (e.g. `IP_ADDRESS`,
    * `EMAIL_ADDRESS`). Fraud Detector only allows setting the variable type
-   * once — changing an already-set variable type replaces the list.
+   * once -- changing an already-set variable type replaces the list.
    */
   variableType?: string;
   /**
@@ -56,7 +56,7 @@ export interface List extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector list — a set of input values for a variable (an
+ * An Amazon Fraud Detector list -- a set of input values for a variable (an
  * allow-list or deny-list, e.g. known-fraud IP addresses) referenced from
  * detector rule expressions.
  *
@@ -103,7 +103,7 @@ export const ListProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
-      /** Look a list's metadata up by name; typed not-found → undefined. */
+      /** Look a list's metadata up by name; typed not-found -> undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getListsMetadata({ name })
@@ -131,7 +131,7 @@ export const ListProvider = () =>
           const newName = yield* createName(id, news);
           if (
             oldName !== newName ||
-            // The variable type can only be set once — changing an
+            // The variable type can only be set once -- changing an
             // already-set variable type requires a replacement.
             (olds.variableType !== undefined && news.variableType !== olds.variableType)
           ) {
@@ -154,11 +154,11 @@ export const ListProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredElements = news.elements ?? [];
 
-          // Observe — the live list is authoritative.
+          // Observe -- the live list is authoritative.
           let list = yield* get(name);
 
           if (list === undefined) {
-            // Ensure — greenfield create carries the full desired state.
+            // Ensure -- greenfield create carries the full desired state.
             yield* frauddetector.createList({
               name,
               description: news.description,
@@ -171,7 +171,7 @@ export const ListProvider = () =>
             });
             list = yield* get(name);
           } else {
-            // Sync — diff each mutable aspect against OBSERVED state and send
+            // Sync -- diff each mutable aspect against OBSERVED state and send
             // only the delta.
             const observedElements = yield* getElements(name);
             const desiredSet = new Set(desiredElements);
@@ -197,7 +197,7 @@ export const ListProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(list!.arn!, desiredTags);
 
           yield* session.note(name);

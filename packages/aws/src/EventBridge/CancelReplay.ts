@@ -14,10 +14,10 @@ export interface CancelReplayRequest extends eventbridge.CancelReplayRequest {}
  * ### Replaying Events
  * **Example:** Cancel a Running Replay
  * ```typescript
- * // init — bind the operation (provide AWS.EventBridge.CancelReplayHttp on the Function)
+ * // init -- bind the operation (provide AWS.EventBridge.CancelReplayHttp on the Function)
  * const cancelReplay = yield* AWS.EventBridge.CancelReplay();
  *
- * // runtime — abort the replay
+ * // runtime -- abort the replay
  * yield* cancelReplay({ ReplayName: "backfill-2026-07-14" });
  * ```
  *

@@ -247,7 +247,7 @@ export const KvRoutesUpdateProvider = () =>
           Effect.fn(function* ({ news, output }) {
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
-                // Observe — figure out whether the prior entry lived at a
+                // Observe -- figure out whether the prior entry lived at a
                 // different location. When location changes (or this is
                 // the first reconcile), we strip the old entry from the
                 // old routes array first, then add the new one to the
@@ -262,7 +262,7 @@ export const KvRoutesUpdateProvider = () =>
                   yield* deleteOp(output);
                 }
 
-                // Sync — append the desired entry to the routes array at
+                // Sync -- append the desired entry to the routes array at
                 // the new location. If the entry was previously at the
                 // same location, drop the old value from the in-memory
                 // array before re-appending so a value change is treated

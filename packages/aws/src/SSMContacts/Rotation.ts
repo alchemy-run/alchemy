@@ -72,7 +72,7 @@ export interface Rotation extends Resource<
 > {}
 
 /**
- * An Incident Manager on-call rotation — a recurring schedule that rotates
+ * An Incident Manager on-call rotation -- a recurring schedule that rotates
  * engagement duty between contacts. Attach rotations to an
  * `ONCALL_SCHEDULE` contact via its engagement plan's `RotationIds`.
  *
@@ -127,7 +127,7 @@ export const RotationProvider = () =>
         contacts.getRotation({ RotationId: arn }).pipe(
           // A rotation ARN that does not resolve surfaces as either a plain
           // ResourceNotFoundException or the "Invalid resource Arn"
-          // ValidationException (typed as InvalidRotationArn) — both mean
+          // ValidationException (typed as InvalidRotationArn) -- both mean
           // "missing" to the reconciler.
           Effect.catchTag(
             ["ResourceNotFoundException", "InvalidRotationArn"],
@@ -201,7 +201,7 @@ export const RotationProvider = () =>
           // 1. OBSERVE
           let rotation = yield* getRotation(arn);
 
-          // 2. ENSURE — create if missing; tolerate the already-exists race.
+          // 2. ENSURE -- create if missing; tolerate the already-exists race.
           if (rotation === undefined) {
             yield* session.note(`creating rotation ${name}`);
             yield* contacts
@@ -220,7 +220,7 @@ export const RotationProvider = () =>
             rotation = (yield* getRotation(arn))!;
           }
 
-          // 3. SYNC contacts / start time / time zone / recurrence —
+          // 3. SYNC contacts / start time / time zone / recurrence --
           //    observed vs desired (epoch-second granularity for the start
           //    time, matching the wire format).
           const contactsDelta = !same(rotation.ContactIds, news.contactIds);
@@ -257,7 +257,7 @@ export const RotationProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(rotation.RotationArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

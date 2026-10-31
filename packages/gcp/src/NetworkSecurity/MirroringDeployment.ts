@@ -31,11 +31,11 @@ export type MirroringDeploymentProps = {
    * Deployment id (the `{mirroringDeployment}` segment of
    * `projects/{project}/locations/{location}/mirroringDeployments/{mirroringDeployment}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the deployment.
+   * and logical id. Immutable -- changing it replaces the deployment.
    */
   mirroringDeploymentId?: string;
   /**
-   * Zone of the deployment (e.g. `us-central1-a`). Immutable — changing
+   * Zone of the deployment (e.g. `us-central1-a`). Immutable -- changing
    * it replaces the deployment. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -43,12 +43,12 @@ export type MirroringDeploymentProps = {
   location?: string;
   /**
    * Parent mirroring deployment group, as a full resource name.
-   * Immutable — changing it replaces the deployment.
+   * Immutable -- changing it replaces the deployment.
    */
   mirroringDeploymentGroup: string;
   /**
    * Regional forwarding rule that fronts the mirroring collectors, as a
-   * resource path or Compute self-link. Immutable — changing it replaces
+   * resource path or Compute self-link. Immutable -- changing it replaces
    * the deployment.
    */
   forwardingRule: string;
@@ -82,7 +82,7 @@ export type MirroringDeployment = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether the API is still reconciling intended vs actual state. */
     reconciling: boolean;
@@ -96,7 +96,7 @@ export type MirroringDeployment = Resource<
 >;
 
 /**
- * A Network Security Integration mirroring deployment — a zonal GENEVE
+ * A Network Security Integration mirroring deployment -- a zonal GENEVE
  * collector, typically an internal passthrough load balancer, that
  * belongs to a global mirroring deployment group.
  *

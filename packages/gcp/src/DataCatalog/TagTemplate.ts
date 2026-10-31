@@ -45,12 +45,12 @@ export type TagTemplateProps = {
    * `projects/{project}/locations/{location}/tagTemplates/{tagTemplate}`).
    * If omitted, a unique id is generated. Must contain only lowercase
    * letters, numbers, or underscores, start with a letter or underscore,
-   * and be at most 64 bytes. Immutable — changing it replaces the
+   * and be at most 64 bytes. Immutable -- changing it replaces the
    * template.
    */
   tagTemplateId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the template. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -101,7 +101,7 @@ export type TagTemplate = Resource<
 >;
 
 /**
- * A Data Catalog tag template — a schema for tags attached to catalog
+ * A Data Catalog tag template -- a schema for tags attached to catalog
  * entries.
  *
  * Tag templates have no labels field. Alchemy stamps ownership into a

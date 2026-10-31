@@ -45,7 +45,7 @@ export interface FlowProps {
    */
   availabilityZone?: string;
   /**
-   * The source the flow ingests. Raw distilled `SetSourceRequest` shape —
+   * The source the flow ingests. Raw distilled `SetSourceRequest` shape --
    * e.g. `{ Protocol: "rtp", WhitelistCidr: "10.0.0.0/8", IngestPort: 5000 }`.
    * Mutable source settings (protocol, whitelist CIDR, ingest port, bitrate,
    * latency, stream id, sender address/port, description) are updated in
@@ -53,7 +53,7 @@ export interface FlowProps {
    */
   source: mediaconnect.SetSourceRequest;
   /**
-   * Outputs of the flow (up to 50). Each output MUST have a `Name` — the
+   * Outputs of the flow (up to 50). Each output MUST have a `Name` -- the
    * reconciler converges outputs by name: missing outputs are added, extra
    * non-entitlement outputs are removed, and changed settings (destination,
    * port, protocol, CIDR allow list, latency, description) are updated in
@@ -75,7 +75,7 @@ export interface Flow extends Resource<
     flowName: string;
     /** ARN of the flow. */
     flowArn: string;
-    /** Current status — a freshly created flow is `STANDBY` (not billing for transport). */
+    /** Current status -- a freshly created flow is `STANDBY` (not billing for transport). */
     status: string;
     /** Availability Zone the flow runs in. */
     availabilityZone: string;
@@ -105,7 +105,7 @@ export interface Flow extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaConnect flow — a reliable live-video transport
+ * An AWS Elemental MediaConnect flow -- a reliable live-video transport
  * between a source and one or more outputs.
  *
  * Creating a flow leaves it in `STANDBY`; a flow only ingests/egresses media
@@ -162,7 +162,7 @@ type DescribedFlow = NonNullable<mediaconnect.DescribeFlowResponse["Flow"]>;
 // The element type of a described flow's Outputs, INCLUDING the response
 // refinements (required Name/OutputArn). Note: DescribedFlow["Outputs"] is an
 // intersection of array types, so `.map` resolves its callback against the
-// base `Output[]` signature and drops these refinements — iterate with
+// base `Output[]` signature and drops these refinements -- iterate with
 // `for..of` (which uses the number-index element type) instead of `.map`.
 type ObservedOutput = DescribedFlow["Outputs"][number];
 
@@ -186,7 +186,7 @@ export const FlowProvider = () =>
         return response?.Flow;
       });
 
-      // Flow names are not unique in MediaConnect — identity is the ARN.
+      // Flow names are not unique in MediaConnect -- identity is the ARN.
       // When the ARN cache is lost (state persistence failure) fall back to
       // the first flow bearing our deterministic name.
       const findFlowArnByName = Effect.fn(function* (name: string) {
@@ -330,18 +330,18 @@ export const FlowProvider = () =>
           for (const desired of props.outputs ?? []) {
             if (desired.Name === undefined) {
               return yield* new FlowOutputNameMissing({
-                message: `every output of MediaConnect flow '${name}' must set a Name — outputs are converged by name`,
+                message: `every output of MediaConnect flow '${name}' must set a Name \u2014 outputs are converged by name`,
               });
             }
             desiredOutputs.push({ ...desired, Name: desired.Name });
           }
 
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           //    ARN cache (flow names are not unique, so fall back to search).
           let arn = output?.flowArn ?? (yield* findFlowArnByName(name));
           let observed = arn !== undefined ? yield* readFlow(arn) : undefined;
 
-          // 2. Ensure — create if missing. Creation leaves the flow in
+          // 2. Ensure -- create if missing. Creation leaves the flow in
           //    STANDBY; alchemy never starts a flow (ACTIVE bills hourly).
           if (observed === undefined) {
             const created = yield* mediaconnect.createFlow({
@@ -359,7 +359,7 @@ export const FlowProvider = () =>
           }
           observed = yield* waitUntilSettled(arn);
 
-          // 3. Sync source — diff OBSERVED source settings against desired
+          // 3. Sync source -- diff OBSERVED source settings against desired
           //    and apply only the delta via UpdateFlowSource.
           const source = observed.Source;
           if (source?.SourceArn !== undefined) {
@@ -426,7 +426,7 @@ export const FlowProvider = () =>
             }
           }
 
-          // 3b. Sync outputs by name — add missing, update drifted, remove
+          // 3b. Sync outputs by name -- add missing, update drifted, remove
           //     extras (entitlement-generated outputs are not ours to remove).
           const observedOutputs = observed.Outputs ?? [];
           const observedByName = new Map<string, ObservedOutput>();
@@ -522,7 +522,7 @@ export const FlowProvider = () =>
             observed = yield* waitUntilSettled(arn);
           }
 
-          // 3c. Sync tags — diff against OBSERVED cloud tags.
+          // 3c. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readFlowTags(arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -564,7 +564,7 @@ export const FlowProvider = () =>
           if (settled !== undefined) {
             yield* mediaconnect.deleteFlow({ FlowArn: arn }).pipe(
               // Status races (e.g. a transition that began after our read)
-              // surface as BadRequestException — bounded retry through it.
+              // surface as BadRequestException -- bounded retry through it.
               Effect.retry({
                 while: (e) => e._tag === "BadRequestException",
                 schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),

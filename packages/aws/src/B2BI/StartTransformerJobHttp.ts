@@ -11,7 +11,7 @@ export const StartTransformerJobHttp = Layer.effect(
     actions: ["b2bi:StartTransformerJob"],
     // B2BI reads `inputFile` and writes `outputLocation` through the
     // caller's session (verified live: "Access denied when getting object
-    // attributes from s3://…" without these). The buckets are request-time
+    // attributes from s3://..." without these). The buckets are request-time
     // values, so the grant cannot be resource-scoped here.
     companionStatements: [
       {

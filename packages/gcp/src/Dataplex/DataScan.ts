@@ -40,12 +40,12 @@ export type DataScanProps = {
   /**
    * DataScan id. If omitted, a unique name is generated. Must contain
    * only lowercase letters, numbers and hyphens, start with a letter,
-   * end with a letter or number, and be 1-63 characters. Immutable —
+   * end with a letter or number, and be 1-63 characters. Immutable --
    * changing it replaces the scan.
    */
   dataScanId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * scan.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */

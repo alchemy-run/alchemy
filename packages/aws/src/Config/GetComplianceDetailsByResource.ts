@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetComplianceDetailsByResource` — read the
+ * Runtime binding for `config:GetComplianceDetailsByResource` -- read the
  * per-rule evaluation results (who evaluated the resource, when, and the
  * verdict) for one resource.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Compliance
  * **Example:** Read a Resource's Evaluation Results
  * ```typescript
- * // init — grants config:GetComplianceDetailsByResource
+ * // init -- grants config:GetComplianceDetailsByResource
  * const getComplianceDetailsByResource = yield* AWS.Config.GetComplianceDetailsByResource();
  *
  * // runtime

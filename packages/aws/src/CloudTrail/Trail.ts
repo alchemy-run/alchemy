@@ -35,7 +35,7 @@ export interface TrailEventSelector {
    * @default true
    */
   includeManagementEvents?: boolean;
-  /** Data-event resources to log (S3 objects, Lambda functions, …). */
+  /** Data-event resources to log (S3 objects, Lambda functions, ...). */
   dataResources?: TrailDataResource[];
   /**
    * Management event sources to exclude (`kms.amazonaws.com`,
@@ -296,7 +296,7 @@ export const Trail = Resource<Trail>("AWS.CloudTrail.Trail");
  * Expressed as an explicitly-typed helper: inlining `Effect.retry` here
  * leaves `Retry.Return`'s conditional type unresolved in the provider's
  * inferred layer type, which TypeScript's declaration emit widens to an
- * `unknown` R — poisoning the whole `AWS.providers()` union for every
+ * `unknown` R -- poisoning the whole `AWS.providers()` union for every
  * downstream consumer.
  */
 const retryThroughBucketPropagation = <A, E extends { _tag: string }, R>(
@@ -445,10 +445,10 @@ export const TrailProvider = () =>
             IsOrganizationTrail: news.isOrganizationTrail ?? false,
           };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let trail = yield* readTrail(name);
 
-          // 2. ENSURE — create if missing; tolerate the AlreadyExists race.
+          // 2. ENSURE -- create if missing; tolerate the AlreadyExists race.
           if (trail === undefined) {
             yield* session.note(`Creating CloudTrail trail ${name}`);
             yield* retryThroughBucketPropagation(
@@ -464,12 +464,12 @@ export const TrailProvider = () =>
             trail = yield* readTrail(name);
           }
           if (trail === undefined) {
-            // The trail vanished between create and re-read — surface the
+            // The trail vanished between create and re-read -- surface the
             // typed not-found from a direct get instead of inventing one.
             trail = (yield* cloudtrail.getTrail({ Name: name })).Trail!;
           }
 
-          // 3. SYNC settings — diff observed against desired, push only the
+          // 3. SYNC settings -- diff observed against desired, push only the
           // fields that actually changed (UpdateTrail leaves omitted fields
           // untouched, except booleans which we always pin to desired).
           const settingsDelta: Partial<Omit<cloudtrail.UpdateTrailRequest, "Name">> = {};
@@ -531,7 +531,7 @@ export const TrailProvider = () =>
             }
           }
 
-          // 3c. SYNC event selectors — only when declared (undefined leaves
+          // 3c. SYNC event selectors -- only when declared (undefined leaves
           // the trail's selectors untouched). Basic and advanced selectors
           // are mutually exclusive in the API; observed cloud selectors are
           // the diff baseline.
@@ -570,7 +570,7 @@ export const TrailProvider = () =>
             }
           }
 
-          // 3d. SYNC Insights selectors — only when declared. `[]` disables
+          // 3d. SYNC Insights selectors -- only when declared. `[]` disables
           // Insights; a trail with Insights disabled reads as [] (the typed
           // InsightNotEnabledException).
           if (news.insightSelectors !== undefined) {

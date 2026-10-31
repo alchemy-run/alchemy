@@ -34,7 +34,7 @@ export type AppAttributes = {
   accountId: string;
   /**
    * App secret (bearer token) used to authenticate against the Realtime SFU
-   * HTTPS API. Returned only at creation time and never re-readable — Alchemy
+   * HTTPS API. Returned only at creation time and never re-readable -- Alchemy
    * persists it in state and carries it forward across updates.
    */
   secret: Redacted.Redacted<string>;
@@ -78,10 +78,10 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * ### Using the credentials
  * **Example:** Passing the appId and secret to a backend
  * ```typescript
- * // appId is public — it appears in client session URLs:
+ * // appId is public -- it appears in client session URLs:
  * const appId = app.appId;
  *
- * // The secret is redacted — use it server-side as a bearer token
+ * // The secret is redacted -- use it server-side as a bearer token
  * // against https://rtc.live.cloudflare.com/v1/apps/{appId}/...
  * const secret = app.secret; // Redacted<string>
  * ```
@@ -107,8 +107,8 @@ export const AppProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Account-scoped collection: enumerate every Calls app under the
       // account, exhaustively paginating `result`. The create-only secret
-      // is never returned by the list endpoint, so — matching `read` for a
-      // resource without prior state — hydrate it as an empty Redacted.
+      // is never returned by the list endpoint, so -- matching `read` for a
+      // resource without prior state -- hydrate it as an empty Redacted.
       return yield* calls.listSfus.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
@@ -127,7 +127,7 @@ export const AppProvider = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       // The app secret is returned only at creation time, so an app cannot
-      // be re-hydrated without prior state — no cold read / adoption path.
+      // be re-hydrated without prior state -- no cold read / adoption path.
       if (!output?.appId) return undefined;
       const observed = yield* getApp(output.accountId, output.appId);
       return observed ? toAttributes(observed, output.accountId, output.secret) : undefined;
@@ -136,21 +136,21 @@ export const AppProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
-      // Observe — the appId cached on `output` is a hint, not a guarantee:
+      // Observe -- the appId cached on `output` is a hint, not a guarantee:
       // a missing app (code 20007) falls through and we recreate.
       const observed = output?.appId
         ? yield* getApp(output.accountId ?? accountId, output.appId)
         : undefined;
 
       if (!observed || !output) {
-        // Ensure — greenfield (or out-of-band delete): create and capture
+        // Ensure -- greenfield (or out-of-band delete): create and capture
         // the create-only secret. Names are not unique on Cloudflare's
         // side, so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createSfu({ accountId, name });
         return toAttributes(created, accountId, Redacted.make(created.secret ?? ""));
       }
 
-      // Sync — the only mutable aspect is `name`; diff observed cloud
+      // Sync -- the only mutable aspect is `name`; diff observed cloud
       // state against desired and skip the PUT entirely on a no-op.
       if (observed.name === name) {
         return toAttributes(observed, output.accountId, output.secret);

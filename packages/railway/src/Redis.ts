@@ -90,7 +90,7 @@ export interface RedisProps {
    */
   image?: string;
   /**
-   * Region for the service instance (`us-west2`, `us-east4`, …). If
+   * Region for the service instance (`us-west2`, `us-east4`, ...). If
    * omitted, Railway picks the default. Updates in place.
    */
   region?: string;
@@ -124,7 +124,7 @@ export type Redis = Resource<
     privateHost: string;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
   },
   never,

@@ -25,7 +25,7 @@ export type Tag = Resource<
   "Cloudflare.Access.Tag",
   TagProps,
   {
-    /** The name of the tag — also its identity on the Cloudflare API. */
+    /** The name of the tag -- also its identity on the Cloudflare API. */
     name: string;
     /** Cloudflare account that owns the tag. */
     accountId: string;
@@ -38,7 +38,7 @@ export type Tag = Resource<
  * A Cloudflare Zero Trust Access tag. Tags are plain labels that can be
  * attached to Access applications to group and filter them.
  *
- * The tag's name is its identity — there is nothing to update in place, so
+ * The tag's name is its identity -- there is nothing to update in place, so
  * renaming replaces the tag.
  * ### Creating a Tag
  * **Example:** Tag with a generated name
@@ -97,7 +97,7 @@ export const TagProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The name is the identity — an explicit rename is a replacement.
+      // The name is the identity -- an explicit rename is a replacement.
       if (output && news.name !== undefined && news.name !== output.name) {
         return { action: "replace" } as const;
       }
@@ -117,12 +117,12 @@ export const TagProvider = () =>
       const acct = output?.accountId ?? accountId;
       const name = yield* createTagName(id, news.name);
 
-      // Observe — the name is the identity, so existence is the only state.
+      // Observe -- the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
         .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
 
-      // Ensure — create when missing; a create race resolves to the same tag.
+      // Ensure -- create when missing; a create race resolves to the same tag.
       if (!observed) {
         const created = yield* zeroTrust
           .createAccessTag({ accountId: acct, name })

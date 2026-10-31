@@ -19,7 +19,7 @@ export const toTagRecord = (
 /**
  * Read the observed tags of an Entity Resolution resource by ARN. The
  * `Get*` operations do NOT return tags even when they exist, so ownership
- * checks must go through `listTagsForResource`. Tag reads are best-effort —
+ * checks must go through `listTagsForResource`. Tag reads are best-effort --
  * a failure (e.g. a race with deletion) reports no tags.
  */
 export const readEntityResolutionTags = Effect.fn(function* (arn: string) {

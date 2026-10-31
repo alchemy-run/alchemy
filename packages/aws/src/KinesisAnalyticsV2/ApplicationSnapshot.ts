@@ -53,7 +53,7 @@ export interface ApplicationSnapshot extends Resource<
  * A snapshot (Flink savepoint) of a running Managed Service for Apache
  * Flink application's state.
  *
- * Snapshots are immutable — every prop change replaces the snapshot. The
+ * Snapshots are immutable -- every prop change replaces the snapshot. The
  * source application must be `RUNNING` with `snapshotsEnabled: true` when
  * the snapshot is created.
  * ### Creating Snapshots
@@ -187,7 +187,7 @@ export const ApplicationSnapshotProvider = () =>
       return ApplicationSnapshot.Provider.of({
         stables: ["applicationName", "snapshotName", "applicationVersionId"],
 
-        // Sub-resource keyed by its parent application — snapshots are not
+        // Sub-resource keyed by its parent application -- snapshots are not
         // enumerable account-wide, so `list` is empty and refresh flows
         // through `read` on known instances.
         list: () => Effect.succeed([]),
@@ -211,7 +211,7 @@ export const ApplicationSnapshotProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          // Snapshots are immutable — any identity change replaces.
+          // Snapshots are immutable -- any identity change replaces.
           const oldName = yield* createSnapshotName(id, olds ?? {});
           const newName = yield* createSnapshotName(id, news ?? {});
           if (olds?.applicationName !== news?.applicationName || oldName !== newName) {
@@ -219,7 +219,7 @@ export const ApplicationSnapshotProvider = () =>
           }
         }),
 
-        // Existence-only resource: observe → if missing, create → wait for
+        // Existence-only resource: observe -> if missing, create -> wait for
         // READY. Nothing about a snapshot is mutable.
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const applicationName = news.applicationName;
@@ -254,7 +254,7 @@ export const ApplicationSnapshotProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // DeleteApplicationSnapshot requires the snapshot's creation
-          // timestamp — observe it fresh. A missing snapshot (or a missing
+          // timestamp -- observe it fresh. A missing snapshot (or a missing
           // application) means the delete already happened.
           const details = yield* describeSnapshot({
             applicationName: output.applicationName,

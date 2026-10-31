@@ -18,7 +18,7 @@ export const StopDeploymentHttp = makeAppConfigHttpBinding(StopDeployment, {
       EnvironmentId: environment.environmentId,
     },
     // The live authorizer evaluates the parent container ARNs (application,
-    // environment) in addition to the deployment — observed via CloudTrail.
+    // environment) in addition to the deployment -- observed via CloudTrail.
     iam: ({ region, accountId }) => ({
       actions: ["appconfig:StopDeployment"],
       resources: [

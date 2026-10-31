@@ -211,7 +211,7 @@ export const OriginRequestPolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // Observe — locate the policy by id (cached on `output`) or
+          // Observe -- locate the policy by id (cached on `output`) or
           // by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.originRequestPolicyId
             ? yield* getById(output.originRequestPolicyId).pipe(
@@ -224,7 +224,7 @@ export const OriginRequestPolicyProvider = () =>
             observed = yield* getByName(name);
           }
 
-          // Ensure — create the policy if it's missing. Tolerate
+          // Ensure -- create the policy if it's missing. Tolerate
           // `OriginRequestPolicyAlreadyExists` (race with a peer
           // reconciler).
           if (!observed) {
@@ -268,7 +268,7 @@ export const OriginRequestPolicyProvider = () =>
             );
           }
 
-          // Sync — patch the observed config to the desired state. The
+          // Sync -- patch the observed config to the desired state. The
           // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateOriginRequestPolicy({
             Id: observed.id,

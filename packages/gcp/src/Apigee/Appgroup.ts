@@ -89,7 +89,7 @@ export type Appgroup = Resource<
 >;
 
 /**
- * An Apigee AppGroup — a logical grouping of apps that share credentials.
+ * An Apigee AppGroup -- a logical grouping of apps that share credentials.
  *
  * AppGroups have no labels field. Alchemy stamps ownership into
  * attributes so `list` / nuke can find them. The name is immutable.

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link CreateLibraryItem} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link CreateLibraryItem} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface CreateLibraryItemRequest extends Omit<
   qapps.CreateLibraryItemInput,
@@ -19,7 +19,7 @@ export interface CreateLibraryItemRequest extends Omit<
  * ### Library Items
  * **Example:** Publish the App to the Library
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const createLibraryItem = yield* AWS.QApps.CreateLibraryItem(app);
  *
  * // runtime

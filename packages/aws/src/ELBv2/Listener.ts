@@ -74,7 +74,7 @@ export interface ListenerProps {
     advertiseTrustStoreCaNames?: "on" | "off";
   };
   /**
-   * Raw listener attributes, synced via `modifyListenerAttributes` — e.g.
+   * Raw listener attributes, synced via `modifyListenerAttributes` -- e.g.
    * `tcp.idle_timeout.seconds` (NLB TCP listeners) or
    * `routing.http.response.server.enabled` (ALB HTTP/HTTPS listeners).
    */
@@ -392,7 +392,7 @@ export const ListenerProvider = () =>
       const certs = desiredCertificates(news);
       const mutualAuthentication = desiredMutualAuth(news);
 
-      // Observe — describe the listener if we have a prior ARN; otherwise
+      // Observe -- describe the listener if we have a prior ARN; otherwise
       // list listeners on the load balancer and find one matching port.
       let listener: elbv2.Listener | undefined;
       if (output?.listenerArn) {
@@ -417,7 +417,7 @@ export const ListenerProvider = () =>
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
       }
 
-      // Ensure — create if missing. The first certificate is the default.
+      // Ensure -- create if missing. The first certificate is the default.
       if (!listener?.ListenerArn) {
         const created = yield* elbv2.createListener({
           LoadBalancerArn: loadBalancerArn,
@@ -434,7 +434,7 @@ export const ListenerProvider = () =>
           return yield* Effect.die(new Error("createListener returned no listener"));
         }
       } else {
-        // Sync — modifyListener fully replaces these mutable fields.
+        // Sync -- modifyListener fully replaces these mutable fields.
         const modified = yield* elbv2.modifyListener({
           ListenerArn: listener.ListenerArn,
           Port: news.port,
@@ -450,7 +450,7 @@ export const ListenerProvider = () =>
 
       const listenerArn = listener.ListenerArn!;
 
-      // Sync attributes — diff the observed values of the declared keys
+      // Sync attributes -- diff the observed values of the declared keys
       // against desired and apply only the delta.
       let attributes = yield* readListenerAttributes(listenerArn, news.attributes);
       const attributeChanges = attributeDelta(news.attributes, attributes);
@@ -465,7 +465,7 @@ export const ListenerProvider = () =>
         };
       }
 
-      // Sync additional SNI certificates — observed ↔ desired. The default
+      // Sync additional SNI certificates -- observed <-> desired. The default
       // certificate (certs[0]) is carried by modifyListener and is excluded
       // from the SNI set. Only the explicit plural `certificates` prop is
       // declarative over the FULL list: pruning is skipped otherwise so that

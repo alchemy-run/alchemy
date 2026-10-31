@@ -35,30 +35,30 @@ export type EvaluationJobProps = {
   /**
    * Evaluation job id (the last segment of
    * `projects/{project}/evaluationJobs/{evaluation_job}`).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * job.
    */
   evaluationJobId?: string;
   /**
    * Description of the job. Maximum 25,000 characters. Evaluation jobs
    * have no labels field, so Alchemy stamps ownership into this field.
-   * Immutable — changing it replaces the job.
+   * Immutable -- changing it replaces the job.
    */
   description?: string;
   /**
    * Annotation spec set resource name describing the labels the model
-   * outputs. Immutable — changing it replaces the job.
+   * outputs. Immutable -- changing it replaces the job.
    */
   annotationSpecSet: string;
   /**
    * AI Platform Prediction model version sampled for evaluation, as
-   * `projects/{project}/models/{model}/versions/{version}`. Immutable —
+   * `projects/{project}/models/{model}/versions/{version}`. Immutable --
    * changing it replaces the job.
    */
   modelVersion: string;
   /**
    * Run interval, in crontab or English-like format. Must be at least
-   * one day. Immutable — changing it replaces the job.
+   * one day. Immutable -- changing it replaces the job.
    */
   schedule: string;
   /**
@@ -125,7 +125,7 @@ export type EvaluationJob = Resource<
  * Patch can only update `evaluationJobConfig.humanAnnotationConfig.instruction`,
  * `evaluationJobConfig.exampleCount`, and
  * `evaluationJobConfig.exampleSamplePercentage`. Pause and resume are
- * separate RPCs. Every other field is identity — changing it replaces
+ * separate RPCs. Every other field is identity -- changing it replaces
  * the job. There is no labels API, so Alchemy stamps ownership into
  * `description`.
  *

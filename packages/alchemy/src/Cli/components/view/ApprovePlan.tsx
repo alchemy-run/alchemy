@@ -50,7 +50,7 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
         {answer ? glyphs.success : glyphs.error} {answer ? action : "Cancelled"}
       </Text>
     );
-    // On approval the plan disappears — the apply progress that follows
+    // On approval the plan disappears -- the apply progress that follows
     // shows every row again. A declined plan stays on screen (complete,
     // unscrolled) so the user can review what they just turned down.
     if (!answer) tree.setViewport("full");

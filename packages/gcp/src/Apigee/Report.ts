@@ -45,13 +45,13 @@ export type ReportProperty = {
 export type ReportProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the report.
+   * Immutable -- changing it replaces the report.
    */
   organization?: string;
   /**
    * Report id (the `{report}` segment of
    * `organizations/{org}/reports/{report}`). If omitted, a unique name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the report.
    */
   reportId?: string;
@@ -94,7 +94,7 @@ export type ReportProps = {
   properties?: ReportProperty[];
   /**
    * User comments. Alchemy ownership is stored as a leading
-   * `[alchemy …]` comment and stripped from attributes. Reports have no
+   * `[alchemy ...]` comment and stripped from attributes. Reports have no
    * labels field.
    */
   comments?: string[];
@@ -151,8 +151,8 @@ export type Report = Resource<
  * An Apigee custom analytics report.
  *
  * Custom reports have no labels field, so Alchemy stamps ownership into
- * a leading comments entry (`[alchemy …]`) for `list` / nuke. Name and
- * organization are identity — changing them replaces the report.
+ * a leading comments entry (`[alchemy ...]`) for `list` / nuke. Name and
+ * organization are identity -- changing them replaces the report.
  * Metrics, dimensions, filter, chart type, and comments update in
  * place.
  *

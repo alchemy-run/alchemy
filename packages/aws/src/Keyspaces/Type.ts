@@ -39,7 +39,7 @@ export interface TypeProps {
   typeName?: string;
   /**
    * Field definitions of the type. Amazon Keyspaces user-defined types are
-   * immutable — any change to the fields replaces the type.
+   * immutable -- any change to the fields replaces the type.
    */
   fields: KeyspacesField[];
 }
@@ -67,7 +67,7 @@ export interface Type extends Resource<
 > {}
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) — a
+ * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) -- a
  * named group of fields usable as a column type in tables of the same
  * keyspace.
  *
@@ -142,7 +142,7 @@ export const TypeProvider = () =>
           if ((yield* toName(id, oldProps)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
-          // UDTs are immutable — any field change replaces the type.
+          // UDTs are immutable -- any field change replaces the type.
           if (fieldsKey(news.fields) !== fieldsKey(oldProps.fields)) {
             return { action: "replace" } as const;
           }
@@ -164,10 +164,10 @@ export const TypeProvider = () =>
           const keyspaceName = props.keyspaceName;
           const typeName = output?.typeName ?? (yield* toName(id, props));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readType(keyspaceName, typeName);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* keyspaces
               .createType({
@@ -195,7 +195,7 @@ export const TypeProvider = () =>
             );
           }
 
-          // 3. Sync — nothing to sync: UDTs have no mutable aspects (any
+          // 3. Sync -- nothing to sync: UDTs have no mutable aspects (any
           //    field change is a replacement, decided in diff).
 
           yield* session.note(`${keyspaceName}.${typeName}`);

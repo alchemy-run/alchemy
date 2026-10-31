@@ -85,7 +85,7 @@ export const UsagePlanKeyProvider = () =>
           const usagePlanId = (output?.usagePlanId ?? news.usagePlanId) as string;
           const keyId = (output?.keyId ?? news.keyId) as string;
 
-          // Observe — fetch the live link. UsagePlanKey is a pure
+          // Observe -- fetch the live link. UsagePlanKey is a pure
           // association (no patchable fields apart from the natural-key
           // tuple, which is modeled as `replace` in `diff`), so once it
           // exists there's nothing to sync.
@@ -93,7 +93,7 @@ export const UsagePlanKeyProvider = () =>
             .getUsagePlanKey({ usagePlanId, keyId })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
-          // Ensure — create the link if missing.
+          // Ensure -- create the link if missing.
           if (!observed?.id) {
             const created = yield* ag.createUsagePlanKey({
               usagePlanId: news.usagePlanId as string,

@@ -6,7 +6,7 @@ import type { ResponsePlan } from "./ResponsePlan.ts";
 /**
  * Runtime binding for `ssm-incidents:StartIncident`.
  *
- * Starts an incident from the bound {@link ResponsePlan} — Incident Manager
+ * Starts an incident from the bound {@link ResponsePlan} -- Incident Manager
  * creates the incident record, engages the plan's contacts, posts to its
  * chat channel, and runs its Automation runbooks. The response plan ARN is
  * injected from the binding; pass `triggerDetails` to record what fired the
@@ -16,7 +16,7 @@ import type { ResponsePlan } from "./ResponsePlan.ts";
  * ### Starting Incidents
  * **Example:** Open An Incident From An Alarm Handler
  * ```typescript
- * // init — bind the operation to the response plan
+ * // init -- bind the operation to the response plan
  * const startIncident = yield* AWS.SSMIncidents.StartIncident(plan);
  *
  * // runtime

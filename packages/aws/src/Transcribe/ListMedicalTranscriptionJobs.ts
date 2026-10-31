@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:ListMedicalTranscriptionJobs` — list the medical transcription jobs in the account.
+ * Runtime binding for `transcribe:ListMedicalTranscriptionJobs` -- list the medical transcription jobs in the account.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:ListMedicalTranscriptionJobs` on `*`.

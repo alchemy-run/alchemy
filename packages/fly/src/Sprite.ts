@@ -104,7 +104,7 @@ export type Sprite = Resource<
     /** Physical Sprite name (unique per org). */
     name: string;
     /**
-     * Public Sprite URL (`https://{name}-….sprites.app`).
+     * Public Sprite URL (`https://{name}-....sprites.app`).
      */
     url: string;
     /** Observed runtime status. Hibernates to `cold` when idle. */
@@ -177,7 +177,7 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  *
  * ### The public URL
  * Yield the Sprite in the Stack. `box.url` is
- * `https://{name}-….sprites.app`.
+ * `https://{name}-....sprites.app`.
  *
  * **Example:** Stack output
  * ```typescript
@@ -559,7 +559,7 @@ export const SpriteProvider = () =>
               return { action: "update" as const };
             }
           }
-          // The code hash depends only on statically-known props — never
+          // The code hash depends only on statically-known props -- never
           // gate it on the WHOLE props being resolved: an unresolved
           // reference elsewhere in props would make code-only changes
           // silently noop (see the same pattern in Service.ts). By diff

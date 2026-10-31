@@ -13,10 +13,10 @@ import type * as Effect from "effect/Effect";
  * ### Deliverability Insights
  * **Example:** Check Blacklist Status for Dedicated IPs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getBlacklists = yield* SES.GetBlacklistReports();
  *
- * // runtime — the dedicated IP addresses to check
+ * // runtime -- the dedicated IP addresses to check
  * const { BlacklistReport } = yield* getBlacklists({
  *   BlacklistItemNames: ["192.0.2.1"],
  * });

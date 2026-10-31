@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/solidstart/node` — the Node container
+ * `@alchemy.run/frontend-frameworks/solidstart/node` -- the Node container
  * deploy target for the SolidStart integration.
  *
  * SolidStart's Node story is nitro's `node` (node-listener) preset:
@@ -9,9 +9,9 @@
  * `clientDirectory` first, then falls through to that handler on `PORT`
  * (default 3000), and answers `GET /health`.
  *
- * - **`nitroPreset`** — `"node"`, enforced as the last word on the
+ * - **`nitroPreset`** -- `"node"`, enforced as the last word on the
  *   resolved nitro config. A user `nitro.preset` mismatch fails the build.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  *
  * Do not use the `aws-lambda` preset: that emits a Lambda `handler`, not a
  * Node listener.
@@ -32,7 +32,7 @@ import { make, type SolidStartTarget, type SolidStartTargetConfig } from "./Soli
 export const NITRO_PRESET = "node";
 
 /**
- * The importable specifier of nitro's node-listener runtime handler — the
+ * The importable specifier of nitro's node-listener runtime handler -- the
  * module a USER entry re-exports to wrap the framework's handler.
  */
 export const NITRO_HANDLER_SPECIFIER = "nitropack/presets/node/runtime/node-listener";

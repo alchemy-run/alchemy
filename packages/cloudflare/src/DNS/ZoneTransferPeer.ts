@@ -17,7 +17,7 @@ export interface ZoneTransferPeerProps {
    * Human-readable name of the peer. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -28,13 +28,13 @@ export interface ZoneTransferPeerProps {
    * secondary (incoming) zones it is the primary Cloudflare transfers
    * from.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   ip?: string;
   /**
    * DNS port of the primary or secondary nameserver.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    * @default 53
    */
   port?: number;
@@ -42,14 +42,14 @@ export interface ZoneTransferPeerProps {
    * TSIG used to authenticate zone transfers with this peer. Reference
    * a {@link ZoneTransferTsig} via its `tsigId` attribute.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   tsigId?: string;
   /**
    * Use the IXFR (incremental) transfer protocol instead of AXFR. Only
    * applicable to secondary zones.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    * @default false
    */
   ixfrEnable?: boolean;
@@ -82,7 +82,7 @@ export type ZoneTransferPeer = Resource<
 
 /**
  * A Secondary DNS zone-transfer peer
- * (`/accounts/{account_id}/secondary_dns/peers`) — an external
+ * (`/accounts/{account_id}/secondary_dns/peers`) -- an external
  * nameserver Cloudflare exchanges zone transfers with. Link peers to a
  * zone via {@link ZoneTransferIncoming} (secondary zones) or
  * {@link ZoneTransferOutgoing} (primary zones).
@@ -135,7 +135,7 @@ export const ZoneTransferPeerProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Account-scoped collection (pattern b) — secondary_dns peers
+      // Account-scoped collection (pattern b) -- secondary_dns peers
       // live under the account, not a zone. Exhaustively paginate and
       // hydrate each row into the exact `read` Attributes shape.
       return yield* dns.listZoneTransferPeers.pages({ accountId }).pipe(
@@ -164,7 +164,7 @@ export const ZoneTransferPeerProvider = () =>
         const observed = yield* getPeer(acct, output.peerId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic physical name. Peers carry no ownership markers,
       // so gate takeover behind adoption.
       const name = yield* createPeerName(id, olds?.name);
@@ -184,19 +184,19 @@ export const ZoneTransferPeerProvider = () =>
         ixfrEnable: news.ixfrEnable,
       };
 
-      // Observe — the id cached on `output` is a hint, not a guarantee.
+      // Observe -- the id cached on `output` is a hint, not a guarantee.
       let observed = output?.peerId
         ? yield* getPeer(output.accountId ?? accountId, output.peerId)
         : undefined;
       const acct = observed ? (output?.accountId ?? accountId) : accountId;
 
       if (!observed) {
-        // Ensure — Cloudflare's create only accepts `name`; the
+        // Ensure -- Cloudflare's create only accepts `name`; the
         // connection settings are applied by the sync step below.
         observed = yield* dns.createZoneTransferPeer({ accountId, name });
       }
 
-      // Sync — PUT with the full desired body; skip the call when no
+      // Sync -- PUT with the full desired body; skip the call when no
       // declared field differs from the observed cloud state.
       const dirty =
         observed.name !== desired.name ||
@@ -268,7 +268,7 @@ const toAttributes = (peer: ObservedPeer, accountId: string): ZoneTransferPeerAt
   accountId,
   name: peer.name,
   // Cloudflare returns "" / 0 for unset ip/port on freshly-created
-  // peers — normalize those to undefined.
+  // peers -- normalize those to undefined.
   ip: undef(peer.ip) || undefined,
   port: undef(peer.port) || undefined,
   tsigId: undef(peer.tsigId) || undefined,

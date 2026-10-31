@@ -161,7 +161,7 @@ export type Secret = Resource<
 
 /**
  * A Google Cloud Secret Manager secret (metadata and replication). Secret
- * payloads live on versions — use `AddSecretVersion` and
+ * payloads live on versions -- use `AddSecretVersion` and
  * `AccessSecretVersion` to write and read them.
  *
  * Changing `secretId` or `replication` replaces the secret.

@@ -40,7 +40,7 @@ export type InboundSamlSsoProfileIdpConfig = {
 export type InboundSamlSsoProfileProps = {
   /**
    * Customer (`customers/C0123abc` or `customers/my_customer`).
-   * Immutable — changing it replaces the profile.
+   * Immutable -- changing it replaces the profile.
    * @default "customers/my_customer"
    */
   customer?: string;

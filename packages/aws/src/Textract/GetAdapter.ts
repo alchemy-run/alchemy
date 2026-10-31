@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Adapter } from "./Adapter.ts";
 
 /**
- * Runtime binding for `textract:GetAdapter` — read the configuration
+ * Runtime binding for `textract:GetAdapter` -- read the configuration
  * (name, feature types, auto-update, tags) of the bound adapter at
  * runtime. The grant is scoped to the adapter's ARN and the `AdapterId`
  * is injected automatically.

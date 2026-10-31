@@ -18,12 +18,12 @@ export class PlaceIndexUnexpectedResponse extends Data.TaggedError("PlaceIndexUn
 
 export interface PlaceIndexProps {
   /**
-   * Name of the place index. Immutable — changing it replaces the index.
+   * Name of the place index. Immutable -- changing it replaces the index.
    * @default ${app}-${stage}-${id}
    */
   indexName?: string;
   /**
-   * Data provider for geocoding/search. Immutable — changing it replaces the
+   * Data provider for geocoding/search. Immutable -- changing it replaces the
    * index. One of `Esri`, `Grab`, or `Here`.
    */
   dataSource: string;
@@ -146,7 +146,7 @@ export const PlaceIndexProvider = () =>
           if (!isResolved(news)) return;
           const oldName = yield* createIndexName(id, olds);
           const newName = yield* createIndexName(id, news);
-          // Name and data source are immutable — either change forces a replace.
+          // Name and data source are immutable -- either change forces a replace.
           if (oldName !== newName || olds.dataSource !== news.dataSource) {
             return { action: "replace" } as const;
           }

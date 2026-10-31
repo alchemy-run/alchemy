@@ -212,7 +212,7 @@ export const GroupProvider = () =>
                 }).pipe(
                   // A group can be deleted between `listGroups` and this
                   // per-group hydration (e.g. a sibling test tearing its group
-                  // down) — `NoSuchEntityException` here just means it's gone,
+                  // down) -- `NoSuchEntityException` here just means it's gone,
                   // so drop it rather than failing the whole enumeration.
                   Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
@@ -255,7 +255,7 @@ export const GroupProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const groupName = output?.groupName ?? (yield* toName(id, news));
 
-          // Observe — fetch the live group. `getGroup` returns
+          // Observe -- fetch the live group. `getGroup` returns
           // `NoSuchEntityException` when the group has not been created or
           // was deleted out-of-band, in which case we fall through to the
           // ensure step below.
@@ -263,7 +263,7 @@ export const GroupProvider = () =>
             .getGroup({ GroupName: groupName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
-          // Ensure — create the group when it is missing. A concurrent
+          // Ensure -- create the group when it is missing. A concurrent
           // peer reconciler may win the race, so tolerate
           // `EntityAlreadyExistsException` and reload.
           if (!observed?.Group?.Arn) {
@@ -284,7 +284,7 @@ export const GroupProvider = () =>
               );
           }
 
-          // Sync — for each mutable aspect, diff observed against desired
+          // Sync -- for each mutable aspect, diff observed against desired
           // and apply only the delta. We trust the cloud as the source of
           // truth instead of relying on `olds`.
           const [observedManagedPolicies, observedInlinePolicies] = yield* Effect.all([

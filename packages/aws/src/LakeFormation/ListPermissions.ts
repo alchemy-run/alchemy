@@ -11,13 +11,13 @@ export interface ListPermissionsRequest extends lf.ListPermissionsRequest {}
  * Runtime binding for `lakeformation:ListPermissions`.
  *
  * Lists the Lake Formation permission grants visible to the caller,
- * optionally filtered by principal or resource — runtime authorization
+ * optionally filtered by principal or resource -- runtime authorization
  * introspection. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.ListPermissionsHttp)`.
  * ### Auditing Permissions
  * **Example:** List Grants on a Database
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listPermissions = yield* AWS.LakeFormation.ListPermissions();
  *
  * // runtime

@@ -7,13 +7,13 @@ import type * as Effect from "effect/Effect";
  *
  * Enumerates every registered version of a component, newest first. The
  * caller supplies the component's base ARN
- * (`arn:aws:greengrass:…:components:{name}`, without the `:versions:`
+ * (`arn:aws:greengrass:...:components:{name}`, without the `:versions:`
  * suffix). Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.ListComponentVersionsHttp)`.
  * ### Reading Components
  * **Example:** List A Component's Versions
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listComponentVersions = yield* AWS.GreengrassV2.ListComponentVersions();
  *
  * // runtime

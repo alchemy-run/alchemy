@@ -33,7 +33,7 @@ export const profileHub = Effect.fn(function* (options: {
   // stack module evaluates synchronously on the main thread and would freeze
   // the credential spinner mid-frame. Like deploy's planning session, show a
   // static (non-spinning) row that makes no motion promise. Failures are
-  // ignored here — `loadDetails` re-imports from the cache and surfaces them.
+  // ignored here -- `loadDetails` re-imports from the cache and surfaces them.
   const cli = yield* Interaction;
   yield* Effect.scoped(
     Effect.gen(function* () {

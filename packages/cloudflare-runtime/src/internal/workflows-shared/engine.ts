@@ -1250,7 +1250,7 @@ export class Engine extends DurableObject<Env, EngineProps> {
       case "resume": {
         const currentStatus = await this.getStatus();
         if (currentStatus === InstanceStatus.WaitingForPause) {
-          // Engine is still running — cancel the pending pause
+          // Engine is still running -- cancel the pending pause
           this.timeoutHandler.cancelWaitingPromisesByType("pause");
           await this.setStatus(metadata.accountId, metadata.instance.id, InstanceStatus.Running);
         } else if (currentStatus === InstanceStatus.Paused) {
@@ -1523,7 +1523,7 @@ export class Engine extends DurableObject<Env, EngineProps> {
     }
 
     // If the DO restarted (e.g. from alarm) while in WaitingForPause state,
-    // transition to Paused and return early — same as production behaviour.
+    // transition to Paused and return early -- same as production behaviour.
     if (status === InstanceStatus.WaitingForPause) {
       await this.ctx.storage.put(PAUSE_DATETIME, new Date());
       await this.setStatus(accountId, instance.id, InstanceStatus.Paused);

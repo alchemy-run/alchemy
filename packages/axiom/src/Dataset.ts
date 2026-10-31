@@ -25,7 +25,7 @@ export type DatasetKind =
 
 export type DatasetProps = {
   /**
-   * Dataset name. Used as the dataset's stable identifier in Axiom — changing
+   * Dataset name. Used as the dataset's stable identifier in Axiom -- changing
    * this triggers a replacement.
    */
   name: string;
@@ -35,7 +35,7 @@ export type DatasetProps = {
    * Edge deployment where Axiom stores and processes the dataset's data.
    * Defaults to the organization's default edge deployment.
    *
-   * Cannot be changed after creation — triggers a replacement.
+   * Cannot be changed after creation -- triggers a replacement.
    */
   edgeDeployment?: string;
   /**
@@ -46,10 +46,10 @@ export type DatasetProps = {
    * - `otel:logs:v1` for logs
    * - `otel:metrics:v1` for metrics
    *
-   * Cannot be changed after creation — triggers a replacement.
+   * Cannot be changed after creation -- triggers a replacement.
    */
   kind?: DatasetKind;
-  /** Retention in days. Plan-dependent — see Axiom docs. */
+  /** Retention in days. Plan-dependent -- see Axiom docs. */
   retentionDays?: number;
   /** Whether to enforce the configured retention period. */
   useRetentionPeriod?: boolean;
@@ -92,7 +92,7 @@ export type Dataset = Resource<
 >;
 
 /**
- * An Axiom dataset — the top-level container that stores events, logs,
+ * An Axiom dataset -- the top-level container that stores events, logs,
  * traces, or metrics. Pick a `kind` up-front: it determines schema and how
  * the data is shown in the UI, and **cannot be changed** after creation
  * (changing it triggers a replacement, which deletes the data).
@@ -101,9 +101,9 @@ export type Dataset = Resource<
  * (`otelTracesEndpoint`, `otelLogsEndpoint`, `otelMetricsEndpoint`) as output
  * attributes so you can inject them into a Worker / Lambda's env vars for
  * OpenTelemetry shipping. The bearer token is **not** stored in resource state
- * — supply `Authorization: Bearer <AXIOM_TOKEN>` separately at runtime.
+ * -- supply `Authorization: Bearer <AXIOM_TOKEN>` separately at runtime.
  * @see https://axiom.co/docs/reference/datasets
- * @see https://axiom.co/docs/send-data/opentelemetry — OTLP endpoint reference
+ * @see https://axiom.co/docs/send-data/opentelemetry -- OTLP endpoint reference
  *
  * ### Creating a Dataset
  * **Example:** Logs dataset with 30-day retention
@@ -147,7 +147,7 @@ export const Dataset = Resource<Dataset>("Axiom.Dataset");
  * Axiom has no tags/labels API. The only writable field we can use to mark
  * ownership is `description`. We append a deterministic marker on create so
  * that on a re-apply (e.g. state was wiped) we can safely identify a dataset
- * that **we** previously created and adopt it idempotently — without
+ * that **we** previously created and adopt it idempotently -- without
  * accidentally hijacking a dataset created by someone else with the same name.
  */
 const MARKER_RE = /\s*\[alchemy:stack=([^;]+);stage=([^;]+);id=([^\]]+)\]\s*$/;
@@ -215,7 +215,7 @@ export const DatasetProvider = () =>
         // Enumerate every dataset in the org. Axiom exposes a single
         // account-wide `GET /v2/datasets` collection op (no pagination), so we
         // fetch it once and hydrate each row into the exact `read`/`toAttrs`
-        // Attributes shape — directly usable by `delete` with no follow-up get.
+        // Attributes shape -- directly usable by `delete` with no follow-up get.
         list: () =>
           Effect.gen(function* () {
             const datasets = yield* listDatasets({});
@@ -246,7 +246,7 @@ export const DatasetProvider = () =>
           const stage = yield* Stage;
           const marker = buildMarker(stack.name, stage, id);
 
-          // Observe — Axiom's dataset path identifier is `name`, which is
+          // Observe -- Axiom's dataset path identifier is `name`, which is
           // also stable input. Probe for live state by name (preferring the
           // cached `output.id` when present). `read` upstream has already
           // surfaced foreign datasets as `Unowned`, so by the time we land
@@ -256,9 +256,9 @@ export const DatasetProvider = () =>
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
-          // Ensure — POST creates the dataset. Tolerate Conflict/
+          // Ensure -- POST creates the dataset. Tolerate Conflict/
           // UnprocessableEntity as a race with a peer reconciler (or with
-          // upstream read↔create), falling through to the sync path.
+          // upstream read<->create), falling through to the sync path.
           let current = observed;
           if (current === undefined) {
             current = yield* (
@@ -286,7 +286,7 @@ export const DatasetProvider = () =>
             return yield* toAttrs(current);
           }
 
-          // Sync — the dataset exists. Apply mutable aspects (description,
+          // Sync -- the dataset exists. Apply mutable aspects (description,
           // retentionDays, useRetentionPeriod) via PATCH. `kind` and `name`
           // are stable and replacement-only via diff above.
           const desiredDescription = augmentDescription(news.description, marker);

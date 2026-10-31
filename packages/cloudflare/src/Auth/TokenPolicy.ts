@@ -35,7 +35,7 @@ export const selectableScopes: ReadonlySet<string> = new Set([
 
 /**
  * Bucket permission groups by resource scope into Cloudflare's policy shape.
- * Groups whose scope has no known bucket are dropped — they cannot be granted.
+ * Groups whose scope has no known bucket are dropped -- they cannot be granted.
  */
 export const tokenPolicies = (
   accountIds: ReadonlyArray<string>,

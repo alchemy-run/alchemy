@@ -20,14 +20,14 @@ export type RegionTargetHttpProxyProps = {
    */
   targetHttpProxyName?: string;
   /**
-   * Region the proxy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the proxy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute
    * RegionTargetHttpProxy has no labels field and no patch API, so
    * changing the description replaces the proxy).
@@ -42,14 +42,14 @@ export type RegionTargetHttpProxyProps = {
   /**
    * Bind inbound traffic to the forwarding-rule address. Only applies when
    * the referencing forwarding rule uses `INTERNAL_SELF_MANAGED`.
-   * Immutable — changing it replaces the proxy.
+   * Immutable -- changing it replaces the proxy.
    * @default false
    */
   proxyBind?: boolean;
   /**
    * Idle keep-alive timeout in seconds after a response completes with no
-   * matching traffic. Regional Application Load Balancers allow 5–600
-   * (default 610). Immutable — changing it replaces the proxy.
+   * matching traffic. Regional Application Load Balancers allow 5-600
+   * (default 610). Immutable -- changing it replaces the proxy.
    */
   httpKeepAliveTimeoutSec?: number;
 };
@@ -94,7 +94,7 @@ export type RegionTargetHttpProxy = Resource<
  * and point at a regional URL map that routes host/path to a backend
  * service or redirect. This resource maps to the `regionTargetHttpProxies`
  * collection (`targetHttpProxies` is `GCP.Compute.TargetHttpProxy`).
- * Compute RegionTargetHttpProxy has no labels field — Alchemy ownership is
+ * Compute RegionTargetHttpProxy has no labels field -- Alchemy ownership is
  * stored in the description so nuke can find leaked proxies. The only
  * in-place mutation is `setUrlMap`; name, region, description,
  * `proxyBind`, and `httpKeepAliveTimeoutSec` replace the proxy.

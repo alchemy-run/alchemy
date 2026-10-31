@@ -22,7 +22,7 @@ type TypeId = typeof TypeId;
 export type CustomRulesetKind = "custom" | "root";
 
 /**
- * A rule inside an account custom ruleset — same shape Cloudflare accepts
+ * A rule inside an account custom ruleset -- same shape Cloudflare accepts
  * on the update (PUT) endpoint.
  */
 export type CustomRulesetRule = NonNullable<
@@ -47,7 +47,7 @@ export type CustomRulesetProps = {
    */
   phase: Phase;
   /**
-   * The full list of rules in the ruleset. This resource owns every rule —
+   * The full list of rules in the ruleset. This resource owns every rule --
    * rules added out-of-band are overwritten on the next deploy.
    */
   rules: CustomRulesetRule[];
@@ -61,7 +61,7 @@ export type CustomRulesetAttributes = {
   /** The unique ID of the ruleset (Cloudflare `id`). */
   rulesetId: string;
   /**
-   * Account the ruleset belongs to. Alchemy-flattened identifier — not part
+   * Account the ruleset belongs to. Alchemy-flattened identifier -- not part
    * of Cloudflare's ruleset response.
    */
   accountId: string;
@@ -96,7 +96,7 @@ export type CustomRuleset = Resource<
  * reusable ruleset once at the account level, then deploy it across zones
  * with an `execute` rule in a phase entrypoint (see
  * `Cloudflare.Ruleset.AccountEntrypoint`). Account-level WAF phases require
- * an Enterprise plan — on lower plans, creation fails with the typed
+ * an Enterprise plan -- on lower plans, creation fails with the typed
  * `PhaseNotEntitled` error.
  *
  * For zone-level rules, use `Cloudflare.Ruleset.Ruleset` (the zone phase
@@ -190,9 +190,9 @@ export const CustomRulesetProvider = () =>
             Effect.catchTag("RulesetNotFound", () => Effect.undefined),
           );
       }
-      // Cold lookup — no persisted state. Find the ruleset by its
+      // Cold lookup -- no persisted state. Find the ruleset by its
       // deterministic name + phase + kind. Rulesets carry no tags, so we
-      // cannot prove we created a match — report it `Unowned` and let the
+      // cannot prove we created a match -- report it `Unowned` and let the
       // engine gate takeover behind `--adopt`.
       const name = olds?.name ?? (yield* createPhysicalName({ id }));
       const kind = olds?.kind ?? "custom";
@@ -219,7 +219,7 @@ export const CustomRulesetProvider = () =>
       const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
       const kind = news.kind ?? "custom";
 
-      // 1. Observe — the persisted rulesetId is a cache, not a guarantee.
+      // 1. Observe -- the persisted rulesetId is a cache, not a guarantee.
       const observed =
         output !== undefined
           ? yield* rulesets
@@ -230,7 +230,7 @@ export const CustomRulesetProvider = () =>
               .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined))
           : undefined;
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (observed === undefined) {
         const created = yield* rulesets.createRulesetForAccount({
           accountId,
@@ -243,7 +243,7 @@ export const CustomRulesetProvider = () =>
         return toCustomRulesetAttributes(accountId, created);
       }
 
-      // 3. Sync — PUT the full desired state only when it differs from the
+      // 3. Sync -- PUT the full desired state only when it differs from the
       //    observed cloud state.
       const observedAttributes = toCustomRulesetAttributes(accountId, observed);
       const desiredRules = normalizeDesiredRules(news.rules);
@@ -265,7 +265,7 @@ export const CustomRulesetProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — a ruleset already deleted out-of-band is not an error.
+      // Idempotent -- a ruleset already deleted out-of-band is not an error.
       yield* rulesets
         .deleteRulesetForAccount({
           accountId: output.accountId,

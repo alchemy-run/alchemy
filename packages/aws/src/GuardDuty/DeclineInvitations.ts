@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:DeclineInvitations`.
  *
  * Declines membership invitations from the given administrator account ids.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.DeclineInvitationsHttp)`.
  * ### Administrator & Invitations
  * **Example:** Decline Invitations
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const declineInvitations = yield* AWS.GuardDuty.DeclineInvitations();
  *
  * // runtime

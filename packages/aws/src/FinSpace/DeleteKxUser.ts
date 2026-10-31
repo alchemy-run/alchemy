@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:DeleteKxUser` — deletes a kdb user of the bound environment.
+ * Runtime binding for `finspace:DeleteKxUser` -- deletes a kdb user of the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.DeleteKxUserHttp)`.
  * ### Managing kdb Users

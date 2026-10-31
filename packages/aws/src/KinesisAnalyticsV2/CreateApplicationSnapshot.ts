@@ -9,7 +9,7 @@ export interface CreateApplicationSnapshotRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:CreateApplicationSnapshot` — takes
+ * Runtime binding for `kinesisanalytics:CreateApplicationSnapshot` -- takes
  * a snapshot (Flink savepoint) of the bound application's state on demand,
  * e.g. a scheduled backup ahead of a deploy. The application must be
  * `RUNNING` with snapshots enabled; poll the result with

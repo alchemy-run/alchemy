@@ -15,10 +15,10 @@ export interface RotateSecretRequest extends Omit<secretsmanager.RotateSecretReq
  * ### Rotating Secrets
  * **Example:** Trigger an On-Demand Rotation
  * ```typescript
- * // init — bind the operation to the secret
+ * // init -- bind the operation to the secret
  * const rotateSecret = yield* AWS.SecretsManager.RotateSecret(secret);
  *
- * // runtime — kicks off the configured rotation function
+ * // runtime -- kicks off the configured rotation function
  * const result = yield* rotateSecret();
  * const pendingVersionId = result.VersionId;
  * ```

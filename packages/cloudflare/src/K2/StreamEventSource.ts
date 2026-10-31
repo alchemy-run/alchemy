@@ -60,7 +60,7 @@ export type StreamEventSourceService = (
  * long-running hosts. Consume it through {@link consumeStreamRecords}.
  *
  * :::note
- * TODO: Workers cannot consume K2 yet — K2 has no push consumers (they are
+ * TODO: Workers cannot consume K2 yet -- K2 has no push consumers (they are
  * on Cloudflare's roadmap), so no Worker layer ships.
  * :::
  */
@@ -74,7 +74,7 @@ export class StreamEventSource extends Context.Service<
  * handler.
  *
  * - **Deploy-time**: creates a {@link Subscription} owned by the host
- *   (unless `subscription` is passed — hosts sharing one compete for
+ *   (unless `subscription` is passed -- hosts sharing one compete for
  *   batches).
  * - **Runtime**: `concurrency` pollers lease batches of records, run the
  *   handler, and acknowledge each batch when the handler succeeds. When the
@@ -85,11 +85,11 @@ export class StreamEventSource extends Context.Service<
  *
  * Provide {@link StreamEventSourcePolling} together with a
  * `ReadSubscription` implementation (`ReadSubscriptionHttp` on a deployed
- * host). It runs on hosts with a long-lived process — Fly, ECS, EC2,
+ * host). It runs on hosts with a long-lived process -- Fly, ECS, EC2,
  * Railway, Hetzner, Docker.
  *
  * :::note
- * TODO: Workers cannot consume K2 yet — K2 has no push consumers (they are
+ * TODO: Workers cannot consume K2 yet -- K2 has no push consumers (they are
  * on Cloudflare's roadmap), so no Worker layer ships.
  * :::
  * ### Consuming a Stream

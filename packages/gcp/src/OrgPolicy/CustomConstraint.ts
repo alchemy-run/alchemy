@@ -32,17 +32,17 @@ export type CustomConstraintProps = {
    * `organizations/{organization}/customConstraints/{customConstraint}`).
    * Must start with `custom.` and contain only letters, digits, and
    * periods. If omitted, a unique id is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the constraint.
+   * and logical id. Immutable -- changing it replaces the constraint.
    */
   constraintId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project's Resource Manager ancestor. Immutable — changing it replaces the constraint.
+   * id). Defaults to the project's Resource Manager ancestor. Immutable -- changing it replaces the constraint.
    */
   organization?: string;
   /**
    * Resource types this constraint applies to, e.g.
-   * `compute.googleapis.com/Instance`. Immutable — changing the set
+   * `compute.googleapis.com/Instance`. Immutable -- changing the set
    * replaces the constraint.
    */
   resourceTypes: string[];
@@ -66,7 +66,7 @@ export type CustomConstraintProps = {
   /**
    * Human-readable description (max 2000 characters including the
    * Alchemy ownership prefix). Custom constraints have no labels, so
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
@@ -109,14 +109,14 @@ export type CustomConstraint = Resource<
  * A Google Cloud Organization Policy custom constraint.
  *
  * Custom constraints can only be created on an organization. Creating one
- * does not enforce anything — attach a `GCP.OrgPolicy.Policy` that
+ * does not enforce anything -- attach a `GCP.OrgPolicy.Policy` that
  * references the constraint id to enforce it.
  *
  * Custom constraints have no labels. Alchemy stamps ownership into the
- * description (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`)
+ * description (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`)
  * so `list` / `pnpm nuke:gcp` can find them.
  *
- * `constraintId`, `organization`, and `resourceTypes` are immutable —
+ * `constraintId`, `organization`, and `resourceTypes` are immutable --
  * changing them replaces the constraint. `methodTypes`, `condition`,
  * `actionType`, `displayName`, and `description` update in place.
  *

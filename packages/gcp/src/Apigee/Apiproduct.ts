@@ -128,7 +128,7 @@ export type Apiproduct = Resource<
 >;
 
 /**
- * An Apigee API product — a bundle of proxies, resources, quota, and
+ * An Apigee API product -- a bundle of proxies, resources, quota, and
  * metadata delivered to developers.
  *
  * Products have no labels field. Alchemy stamps ownership into

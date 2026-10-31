@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:GetSuppressedDestination`.
  *
- * Retrieves a specific address from the account-level suppression list —
+ * Retrieves a specific address from the account-level suppression list --
  * check whether (and why) an address is suppressed before attempting a
  * send. Fails with the typed `NotFoundException` tag when the address is
  * not on the list. Account-level operation. Provide the implementation with
@@ -13,14 +13,14 @@ import type * as Effect from "effect/Effect";
  * ### Suppression List
  * **Example:** Look Up a Suppressed Address
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSuppressed = yield* SES.GetSuppressedDestination();
  *
  * // runtime
  * const { SuppressedDestination } = yield* getSuppressed({
  *   EmailAddress: "bouncing@example.com",
  * });
- * // SuppressedDestination.Reason — "BOUNCE" | "COMPLAINT"
+ * // SuppressedDestination.Reason -- "BOUNCE" | "COMPLAINT"
  * ```
  *
  * @binding

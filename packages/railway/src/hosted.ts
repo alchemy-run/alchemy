@@ -39,7 +39,7 @@ export type RailwayHostRuntimeContext = HostRuntimeContext;
  * Container host. RPC wrapping lives in `Service.ts` so canvas Functions
  * do not pay for `rpc-server.ts` in the 96KB start command. The generated
  * Service entry is a shim that imports `@alchemy.run/railway/Bootstrap`
- * (Node HTTP) plus the user's `main` — see that module for why.
+ * (Node HTTP) plus the user's `main` -- see that module for why.
  */
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
 
@@ -156,7 +156,7 @@ const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
 
 /**
  * The generated entry for `Railway.Service` containers: a shim importing
- * only `@alchemy.run/railway/Bootstrap` plus the user's `main` — see
+ * only `@alchemy.run/railway/Bootstrap` plus the user's `main` -- see
  * that module for why the entry never imports alchemy's own dependencies.
  */
 const makeNodeBootstrap =
@@ -349,7 +349,7 @@ const pinImport = (name: string, version?: string): string => {
 
 /**
  * Canvas wrapper that listens first, then import()s the bundled module.
- * Static `import "pkg@version"` pins are for Railway's AST installer —
+ * Static `import "pkg@version"` pins are for Railway's AST installer --
  * `effect` is 4.x here, 3.x on npm without a pin. Extra pins come from
  * remaining external imports (`pg`, `drizzle-orm`, `@effect/sql-pg`).
  */
@@ -386,7 +386,7 @@ g.__aFF=async()=>new Response(String(e),{status:500});
 
 /**
  * Canvas wrapper for async (non-Effect) Functions. No Effect pin, no
- * `__aFF` bridge — the user's `export default { fetch }` is the handler,
+ * `__aFF` bridge -- the user's `export default { fetch }` is the handler,
  * with `process.env` as the second argument (Cloudflare `env`).
  */
 const wrapAsyncCanvasListener = (
@@ -537,8 +537,8 @@ const createBundleProgram = (
           resolve: {
             // Hosted images run on Node but must still match the `bun`
             // export of workspace packages (`@distilled.cloud/*`, alchemy).
-            // Those maps have no `node` condition — only `bun`/`worker`/
-            // `default` — and `default` is `lib/` which is absent in a
+            // Those maps have no `node` condition -- only `bun`/`worker`/
+            // `default` -- and `default` is `lib/` which is absent in a
             // source checkout. Leaving the specifier unresolved makes
             // rolldown treat it as external, so the container dies with
             // `ERR_MODULE_NOT_FOUND` (the Volume tutorial's FAILED deploy).
@@ -616,7 +616,7 @@ export const createRailwayFunctionSupport = ({
     canvasExternals: true,
     bootstrap: makeFunctionBootstrap,
     output: {
-      // dce-only (Bundle.build default) keeps `import … from "effect/…"`
+      // dce-only (Bundle.build default) keeps `import ... from "effect/..."`
       // readable so Railway's AST installer sees Effect 4 pins. Full
       // minify still 502s: npm `effect` is 3.x without those subpaths.
       codeSplitting: false,

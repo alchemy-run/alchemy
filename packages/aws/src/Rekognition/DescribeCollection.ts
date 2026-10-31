@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DescribeCollection` — describe a face collection — face count, face model version, ARN, and creation time.
+ * Runtime binding for `rekognition:DescribeCollection` -- describe a face collection -- face count, face model version, ARN, and creation time.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DescribeCollection` on `*` (Rekognition data-plane resources such

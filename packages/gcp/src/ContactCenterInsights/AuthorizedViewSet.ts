@@ -27,12 +27,12 @@ export type AuthorizedViewSetProps = {
    * AuthorizedViewSet id (the `{authorized_view_set}` segment of
    * `projects/{project}/locations/{location}/authorizedViewSets/{authorized_view_set}`).
    * If omitted, a unique id is generated. Must match
-   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable — changing it replaces
+   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable -- changing it replaces
    * the set.
    */
   authorizedViewSetId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the set.
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the set.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -40,7 +40,7 @@ export type AuthorizedViewSetProps = {
   /**
    * Display name (max 64 characters including Alchemy's ownership
    * marker). AuthorizedViewSets have no labels field, so ownership is
-   * stored in a `[alchemy …]` prefix and stripped from attributes.
+   * stored in a `[alchemy ...]` prefix and stripped from attributes.
    */
   displayName?: string;
 };
@@ -72,7 +72,7 @@ export type AuthorizedViewSet = Resource<
  * A Contact Center AI Insights AuthorizedViewSet, a container for
  * AuthorizedView resources.
  *
- * AuthorizedViewSets have no labels field — Alchemy stamps ownership into
+ * AuthorizedViewSets have no labels field -- Alchemy stamps ownership into
  * the display name. Location and id are immutable. Display name updates
  * in place.
  *

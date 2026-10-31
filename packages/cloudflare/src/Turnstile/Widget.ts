@@ -48,7 +48,7 @@ export type WidgetProps = {
    */
   mode: WidgetMode;
   /**
-   * Region where this widget can be used. Cannot be changed after creation —
+   * Region where this widget can be used. Cannot be changed after creation --
    * updating this property triggers a replacement.
    * @default "world"
    */
@@ -136,7 +136,7 @@ export type WidgetAttributes = {
 export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Providers>;
 
 /**
- * A Cloudflare Turnstile widget — Cloudflare's CAPTCHA alternative.
+ * A Cloudflare Turnstile widget -- Cloudflare's CAPTCHA alternative.
  *
  * A widget is identified by its auto-assigned `sitekey` (the public key you
  * embed in HTML) and produces a `secret` used server-side against the
@@ -163,10 +163,10 @@ export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Prov
  * ### Using the keys
  * **Example:** Embedding the sitekey and verifying tokens
  * ```typescript
- * // The sitekey is public — render it in your HTML:
+ * // The sitekey is public -- render it in your HTML:
  * const sitekey = widget.sitekey;
  *
- * // The secret is redacted — pass it to your server-side verifier:
+ * // The secret is redacted -- pass it to your server-side verifier:
  * const secret = widget.secret; // Redacted<string>
  * ```
  *
@@ -208,7 +208,7 @@ export const WidgetProvider = () =>
         const observed = yield* getWidget(acct, output.sitekey);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createWidgetName(id, olds?.name);
@@ -223,14 +223,14 @@ export const WidgetProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createWidgetName(id, news.name);
 
-      // Observe — the sitekey cached on `output` is a hint, not a
+      // Observe -- the sitekey cached on `output` is a hint, not a
       // guarantee: a 404 falls through to "missing" and we recreate.
       const observed = output?.sitekey
         ? yield* getWidget(output.accountId ?? accountId, output.sitekey)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. Names are not unique so there is no
         // AlreadyExists race to tolerate.
         const created = yield* turnstile.createWidget({
@@ -247,7 +247,7 @@ export const WidgetProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; the update API
+      // Sync -- diff observed cloud state against desired; the update API
       // is a PUT that requires the full body, so send everything, but
       // skip the call entirely on a no-op.
       const desired = {

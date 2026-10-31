@@ -42,7 +42,7 @@ export interface ChannelAssociation extends Resource<
 > {}
 
 /**
- * An AWS User Notifications **channel association** — attaches a delivery
+ * An AWS User Notifications **channel association** -- attaches a delivery
  * channel (an email contact, an Amazon Q Developer chat channel, or a
  * Console Mobile Application device) to a
  * {@link NotificationConfiguration}, so matching events are actually
@@ -79,7 +79,7 @@ export const ChannelAssociationProvider = () =>
   Provider.effect(
     ChannelAssociation,
     Effect.gen(function* () {
-      // The association has no ARN of its own — identity is the
+      // The association has no ARN of its own -- identity is the
       // (configuration, channel) pair, observed via ListChannels.
       const findAssociation = Effect.fn(function* (
         notificationConfigurationArn: string,
@@ -99,7 +99,7 @@ export const ChannelAssociationProvider = () =>
       return ChannelAssociation.Provider.of({
         stables: ["channelArn", "notificationConfigurationArn"],
 
-        // Sub-resource keyed by its parent notification configuration —
+        // Sub-resource keyed by its parent notification configuration --
         // there is no account-wide enumeration without a parent ARN.
         list: () => Effect.succeed([]),
 
@@ -111,7 +111,7 @@ export const ChannelAssociationProvider = () =>
             return undefined;
           }
           const found = yield* findAssociation(configArn, channelArn);
-          // Associations are not taggable — identity is the pair itself.
+          // Associations are not taggable -- identity is the pair itself.
           return found !== undefined
             ? { channelArn, notificationConfigurationArn: configArn }
             : undefined;
@@ -129,13 +129,13 @@ export const ChannelAssociationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // OBSERVE — existence-only: is the channel already associated?
+          // OBSERVE -- existence-only: is the channel already associated?
           const existing = yield* findAssociation(
             news.notificationConfigurationArn,
             news.channelArn,
           );
 
-          // ENSURE — associate when missing; a ConflictException means a
+          // ENSURE -- associate when missing; a ConflictException means a
           // peer associated the same pair concurrently.
           if (existing === undefined) {
             yield* pinNotificationsRegion(
@@ -148,7 +148,7 @@ export const ChannelAssociationProvider = () =>
             );
           }
 
-          // No SYNC step — the association has no mutable aspects.
+          // No SYNC step -- the association has no mutable aspects.
           yield* session.note(news.channelArn);
           return {
             channelArn: news.channelArn,
@@ -157,7 +157,7 @@ export const ChannelAssociationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — a missing association (or an already-deleted
+          // Idempotent -- a missing association (or an already-deleted
           // parent configuration) is not an error.
           yield* pinNotificationsRegion(
             notifications

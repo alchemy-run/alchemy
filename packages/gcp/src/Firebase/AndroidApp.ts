@@ -21,14 +21,14 @@ import {
 
 export type AndroidAppProps = {
   /**
-   * Canonical Android package name (`com.example.app`). Immutable —
+   * Canonical Android package name (`com.example.app`). Immutable --
    * changing it replaces the app. If omitted, a unique
    * `com.alchemy.test.{id}` name is generated.
    */
   packageName?: string;
   /**
    * User-assigned display name. Android apps have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   displayName?: string;
@@ -81,7 +81,7 @@ export type AndroidApp = Resource<
 /**
  * A Firebase Android app in a Firebase project.
  *
- * Apps have no labels — Alchemy stamps ownership into `displayName`.
+ * Apps have no labels -- Alchemy stamps ownership into `displayName`.
  * `packageName` is immutable. Delete uses `androidApps.remove` with
  * `immediate: true` so tests do not leave a 30-day tombstone.
  *

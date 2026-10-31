@@ -33,11 +33,11 @@ export type ActiveDirectoryProps = {
    * Active Directory id (the `{activeDirectory}` segment of
    * `projects/{project}/locations/{location}/activeDirectories/{activeDirectory}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the directory.
+   * and logical id. Immutable -- changing it replaces the directory.
    */
   activeDirectoryId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the directory. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -60,7 +60,7 @@ export type ActiveDirectoryProps = {
    */
   username: string;
   /**
-   * Domain administrator password. Write-only — never returned on read.
+   * Domain administrator password. Write-only -- never returned on read.
    */
   password?: string;
   /**

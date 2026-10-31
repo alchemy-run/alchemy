@@ -211,7 +211,7 @@ export const COHORT_LOOKUP_TIMEOUT_MS = 5;
  * Resolves the deployment cohort for a customer account via the
  * AccountCohortQuerier RPC binding. Returns null when the binding is
  * unavailable, the RPC fails, times out, or the cohort is undetermined
- * (cold cache). Intentionally fails open — a null cohort means the
+ * (cold cache). Intentionally fails open -- a null cohort means the
  * request runs under default routing.
  */
 export async function lookupCohort(

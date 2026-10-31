@@ -27,14 +27,14 @@ export type FutureReservationProps = {
    */
   futureReservationName?: string;
   /**
-   * Zone of the reservation (e.g. `us-central1-a`). Immutable — changing
+   * Zone of the reservation (e.g. `us-central1-a`). Immutable -- changing
    * it replaces the reservation.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
-   * Optional description. Future reservations have no labels field —
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Optional description. Future reservations have no labels field --
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;

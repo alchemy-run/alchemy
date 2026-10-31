@@ -8,8 +8,8 @@ import type { KeyValueStore } from "./KeyValueStore.ts";
 /**
  * Shared scaffolding for CloudFront HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier is boilerplate.
  */
@@ -67,7 +67,7 @@ export const makeDistributionScopedHttpBinding = <
  * {@link KeyValueStore}'s ARN as the request's `KvsARN`; the deploy-time half
  * grants `actions` on the store's ARN. The data-plane endpoint is global
  * (derived from the ARN), but distilled signs with plain SigV4 against the
- * context region and the service only accepts `us-east-1` signatures — so
+ * context region and the service only accepts `us-east-1` signatures -- so
  * the operation is resolved with the Region pinned to {@link KVS_REGION},
  * exactly like the resource providers in `common.ts`.
  */
@@ -104,7 +104,7 @@ export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string },
         request: Omit<I, "KvsARN">,
       ) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* withKvsRegion(
           op({

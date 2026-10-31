@@ -21,7 +21,7 @@ export type WatermarkProps = {
   /**
    * A short description of the watermark profile. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Watermark
-   * profiles have no update endpoint — changing the name triggers a
+   * profiles have no update endpoint -- changing the name triggers a
    * replacement.
    * @default ${app}-${stage}-${id}
    */
@@ -115,7 +115,7 @@ export type WatermarkAttributes = {
 export type Watermark = Resource<TypeId, WatermarkProps, WatermarkAttributes, never, Providers>;
 
 /**
- * A Cloudflare Stream watermark profile — a PNG image stamped onto
+ * A Cloudflare Stream watermark profile -- a PNG image stamped onto
  * videos at upload time.
  *
  * Watermark profiles are create-only: Cloudflare exposes no update
@@ -166,10 +166,10 @@ export const WatermarkProvider = () =>
         return { action: "replace" } as const;
       }
       if (olds === undefined) return undefined;
-      // `news` may still contain unresolved Outputs at plan time — let
+      // `news` may still contain unresolved Outputs at plan time -- let
       // the engine apply the default update logic in that case.
       if (!isResolved(news)) return undefined;
-      // No update endpoint — any prop change is a replacement. Compare
+      // No update endpoint -- any prop change is a replacement. Compare
       // against the observed output where the API echoes the value, and
       // against olds for the create-only `url`.
       const oldName = output?.name ?? olds.name ?? (yield* watermarkName(id, olds.name));
@@ -195,7 +195,7 @@ export const WatermarkProvider = () =>
         const observed = yield* getWatermark(acct, output.watermarkId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic physical name. Names are not unique on
       // Cloudflare's side; an exact match on our generated/explicit
       // name is the best identity we have.
@@ -208,7 +208,7 @@ export const WatermarkProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* watermarkName(id, news.name);
 
-      // Observe — the uid cached on `output` is a hint, not a
+      // Observe -- the uid cached on `output` is a hint, not a
       // guarantee: a not-found falls through to "missing" and we
       // recreate.
       const observed = output?.watermarkId
@@ -216,12 +216,12 @@ export const WatermarkProvider = () =>
         : undefined;
 
       if (observed) {
-        // Create-only resource — prop drift is handled as a replacement
+        // Create-only resource -- prop drift is handled as a replacement
         // by `diff`; nothing to sync here.
         return toAttributes(observed, output?.accountId ?? accountId);
       }
 
-      // Ensure — create with the full desired body. uids are
+      // Ensure -- create with the full desired body. uids are
       // auto-assigned so there is no AlreadyExists race to tolerate.
       const created = yield* stream.createWatermark({
         accountId,
@@ -236,7 +236,7 @@ export const WatermarkProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      // Account-scoped collection — watermark profiles are enumerated
+      // Account-scoped collection -- watermark profiles are enumerated
       // per account. `listWatermarks` is paginated (items: "result");
       // collect every page and hydrate into the `read` Attributes shape.
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -251,7 +251,7 @@ export const WatermarkProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — a watermark already deleted out-of-band surfaces
+      // Idempotent -- a watermark already deleted out-of-band surfaces
       // as `WatermarkNotFound` (Cloudflare error code 10003).
       yield* stream
         .deleteWatermark({
@@ -272,7 +272,7 @@ const getWatermark = (accountId: string, watermarkId: string) =>
     .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.undefined));
 
 /**
- * Find a watermark by exact name. Names are not unique — if several
+ * Find a watermark by exact name. Names are not unique -- if several
  * watermarks carry the same name, pick the oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>

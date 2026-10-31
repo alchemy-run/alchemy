@@ -143,7 +143,7 @@ export interface ImagePipeline extends Resource<
 > {}
 
 /**
- * An EC2 Image Builder image pipeline — wires a recipe to an infrastructure
+ * An EC2 Image Builder image pipeline -- wires a recipe to an infrastructure
  * configuration (and optionally a distribution configuration) and automates
  * image builds on a schedule or on demand.
  *
@@ -246,13 +246,13 @@ export const ImagePipelineProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // One idempotency token per reconcile — retries within this run
+          // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
           const name = output?.imagePipelineName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          // Desired state in wire shape (Duration timeout → whole minutes)
+          // Desired state in wire shape (Duration timeout -> whole minutes)
           // so create/update/drift all compare like against like.
           const desired = {
             ...news,
@@ -263,7 +263,7 @@ export const ImagePipelineProvider = () =>
           const arn = output?.imagePipelineArn ?? (yield* toArn(name));
           let observed = yield* getPipeline(arn);
 
-          // 2. Ensure — create if missing; tolerate an AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate an AlreadyExists race.
           if (observed === undefined) {
             const created = yield* imagebuilder
               .createImagePipeline({
@@ -292,7 +292,7 @@ export const ImagePipelineProvider = () =>
             }
           }
 
-          // 3. Sync — compare OBSERVED cloud state against the desired
+          // 3. Sync -- compare OBSERVED cloud state against the desired
           //    props; a full-PUT update converges any drift (`olds` is only
           //    a hint for removed props).
           const drifted = mutableKeys.some(
@@ -320,7 +320,7 @@ export const ImagePipelineProvider = () =>
             observed = (yield* getPipeline(observed.arn)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           if (observed.arn) {
             yield* syncImageBuilderTags(observed.arn, desiredTags);
           }

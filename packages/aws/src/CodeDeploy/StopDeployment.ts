@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:StopDeployment` — attempts to stop an
+ * Runtime binding for `codedeploy:StopDeployment` -- attempts to stop an
  * ongoing deployment of the bound deployment group (optionally rolling
  * back).
  * ### Controlling Deployments

@@ -20,7 +20,7 @@ export {
 
 /**
  * Injects the SESSION KV binding into the app manifest's session config.
- * Idempotent — safe to call on every request.
+ * Idempotent -- safe to call on every request.
  */
 export function injectSessionBinding(manifest: ManifestLike, env: Env): void {
   if (env[sessionKVBindingName]) {

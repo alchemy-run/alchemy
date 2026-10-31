@@ -27,18 +27,18 @@ export type DocumentProps = {
   /**
    * Document id (the `{document}` segment of
    * `projects/{project}/locations/{location}/documents/{document}`).
-   * Assigned by the API on create. Immutable — changing it replaces the
+   * Assigned by the API on create. Immutable -- changing it replaces the
    * document. Supply it to adopt an existing document.
    */
   documentId?: string;
   /**
    * Customer-assigned reference id, unique per project and location.
    * If omitted, a unique id is generated and used for lookup.
-   * Immutable — changing it replaces the document.
+   * Immutable -- changing it replaces the document.
    */
   referenceId?: string;
   /**
-   * Multi-region location (`us` or `eu`). Immutable — changing it
+   * Multi-region location (`us` or `eu`). Immutable -- changing it
    * replaces the document. `US` is accepted and normalized to `us`.
    * @default "us"
    */
@@ -46,7 +46,7 @@ export type DocumentProps = {
   /**
    * Parent document schema resource name
    * `projects/{project}/locations/{location}/documentSchemas/{schema}`.
-   * Immutable — changing it replaces the document.
+   * Immutable -- changing it replaces the document.
    */
   documentSchemaName: string;
   /**
@@ -71,7 +71,7 @@ export type DocumentProps = {
    */
   displayUri?: string;
   /**
-   * Category of the original content (`CONTENT_CATEGORY_IMAGE`, …).
+   * Category of the original content (`CONTENT_CATEGORY_IMAGE`, ...).
    */
   contentCategory?: string;
   /**
@@ -127,7 +127,7 @@ export type Document = Resource<
 >;
 
 /**
- * A Document AI Warehouse document — structured content plus metadata
+ * A Document AI Warehouse document -- structured content plus metadata
  * that conforms to a {@link DocumentSchema}.
  *
  * Documents have no labels field, so Alchemy identifies a document by its

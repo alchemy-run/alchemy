@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:CreateSampleFindings`.
  *
  * Creates sample findings.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.CreateSampleFindingsHttp)`.
  * ### Working with Findings
  * **Example:** Generate Sample Findings
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const createSampleFindings = yield* AWS.Macie2.CreateSampleFindings();
  *
  * // runtime

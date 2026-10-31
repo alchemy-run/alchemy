@@ -6,7 +6,7 @@ import type { User } from "./User.ts";
 /**
  * Runtime binding for `transfer:DescribeUser`.
  *
- * Reads the bound {@link User}'s live configuration — home directory, role,
+ * Reads the bound {@link User}'s live configuration -- home directory, role,
  * POSIX profile, and the SSH public keys currently registered (including
  * their `SshPublicKeyId`s, which {@link DeleteSshPublicKey} needs). The
  * `ServerId` and `UserName` are injected from the binding. Provide the
@@ -14,7 +14,7 @@ import type { User } from "./User.ts";
  * ### Managing Users at Runtime
  * **Example:** Read the User's SSH Keys
  * ```typescript
- * // init — bind the operation to the user
+ * // init -- bind the operation to the user
  * const describeUser = yield* AWS.Transfer.DescribeUser(user);
  *
  * // runtime

@@ -34,17 +34,17 @@ export type FindIdentityProviderOptions = {
 
 /**
  * Looks up an existing Access identity provider by display name and/or
- * type, returning its attributes — or `undefined` when nothing matches.
+ * type, returning its attributes -- or `undefined` when nothing matches.
  *
  * As a **data source**, invoke it at plan time via
- * {@link getIdentityProvider} — the result is an `Output` resolved during
+ * {@link getIdentityProvider} -- the result is an `Output` resolved during
  * plan/deploy and inert inside deployed bundles. Useful for referencing
  * IdPs that are managed outside the stack (e.g. the dashboard-provisioned
  * `cloudflare` WARP login method, whose display name is often `""`).
  * The implementation is registered by `Cloudflare.providers()`.
  *
  * As a **runtime binding** inside a Worker, provide
- * {@link GetIdentityProviderHttp} — it mints a scoped
+ * {@link GetIdentityProviderHttp} -- it mints a scoped
  * {@link AccountApiToken} with the `Access: Organizations, Identity
  * Providers, and Groups Read` permission and binds it into the Worker so
  * the lookup can run at runtime.
@@ -66,12 +66,12 @@ export type FindIdentityProviderOptions = {
  * ```
  * **Example:** Look up an IdP at runtime inside a Worker
  * ```typescript
- * // init — bind the lookup
+ * // init -- bind the lookup
  * const findWarpIdp = yield* Cloudflare.Access.GetIdentityProvider({
  *   type: "cloudflare",
  * });
  *
- * // runtime — resolve the IdP
+ * // runtime -- resolve the IdP
  * const warp = yield* findWarpIdp();
  * ```
  *
@@ -98,7 +98,7 @@ export const GetIdentityProvider = Binding.Service<GetIdentityProvider>(
 );
 
 /**
- * Plan-time identity-provider lookup — the data-source form of
+ * Plan-time identity-provider lookup -- the data-source form of
  * {@link GetIdentityProvider} (what Terraform calls a data source and
  * Pulumi an invoke). Returns an
  * `Output<IdentityProviderAttributes | undefined>` resolved during

@@ -49,17 +49,17 @@ export type VolumeServer = { readonly serverId: number };
 export interface VolumeProps {
   /**
    * Size of the Volume in GB. Minimum 10, maximum 10240. Increasing size
-   * updates in place (Hetzner cannot shrink a Volume — decreasing it
+   * updates in place (Hetzner cannot shrink a Volume -- decreasing it
    * replaces).
    */
   size: number;
   /**
    * Filesystem to format on create. One of `ext4` or `xfs`. Cannot be
-   * changed after creation — changing it replaces the Volume.
+   * changed after creation -- changing it replaces the Volume.
    */
   format?: VolumeFormat;
   /**
-   * Location to create the Volume in (`nbg1`, `fsn1`, `hel1`, …). Required
+   * Location to create the Volume in (`nbg1`, `fsn1`, `hel1`, ...). Required
    * unless `server` is set (the Volume is then created in the Server's
    * location). Cannot be changed after creation.
    *
@@ -67,7 +67,7 @@ export interface VolumeProps {
    */
   location?: string;
   /**
-   * Volume name. Must be unique per project, 1–64 characters, alphanumeric
+   * Volume name. Must be unique per project, 1-64 characters, alphanumeric
    * with dashes/underscores/dots, starting and ending alphanumeric. If
    * omitted, a unique name is generated from the stack, stage and logical
    * ID.
@@ -105,11 +105,11 @@ export type Volume = Resource<
     size: number;
     /** Filesystem if formatted on creation. */
     format: VolumeFormat | undefined;
-    /** Location name (`nbg1`, `fsn1`, …). */
+    /** Location name (`nbg1`, `fsn1`, ...). */
     location: string;
     /** Numeric location ID. */
     locationId: number;
-    /** Device path on the file system (e.g. `/dev/disk/by-id/scsi-…`). */
+    /** Device path on the file system (e.g. `/dev/disk/by-id/scsi-...`). */
     linuxDevice: string;
     /** Volume status. */
     status: VolumeStatus;
@@ -125,7 +125,7 @@ export type Volume = Resource<
 >;
 
 /**
- * A Hetzner Cloud Volume — a network block device that can be attached to
+ * A Hetzner Cloud Volume -- a network block device that can be attached to
  * a Server in the same Location. Unattached Volumes are valid; pass
  * `server` to attach at create time.
  *
@@ -349,14 +349,14 @@ export const VolumeProvider = () =>
         news.location ?? (desiredServerId === undefined ? DEFAULT_LOCATION : undefined);
 
       // Observe by id then desired name only. Do not fall back to
-      // ownership labels — a create-first replacement still has the old
+      // ownership labels -- a create-first replacement still has the old
       // generation live under the same logical id.
       let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
         current = yield* getByName(name);
       }
 
-      // Ensure — create only when missing. A Conflict is a race with a
+      // Ensure -- create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
         const created = yield* Hetzner.volumes
@@ -398,7 +398,7 @@ export const VolumeProvider = () =>
         current = updated.volume;
       }
 
-      // Sync size — grow only. Shrink is a replacement (handled in diff).
+      // Sync size -- grow only. Shrink is a replacement (handled in diff).
       if (news.size > current.size) {
         const { action } = yield* Hetzner.volumeActions.resizeVolume({
           id: current.id,
@@ -408,7 +408,7 @@ export const VolumeProvider = () =>
         current = yield* waitUntilAvailable(current.id);
       }
 
-      // Sync attach — create-time sugar also applies on later updates.
+      // Sync attach -- create-time sugar also applies on later updates.
       const observedServerId = current.server ?? undefined;
       if (desiredServerId !== observedServerId) {
         if (observedServerId !== undefined) {

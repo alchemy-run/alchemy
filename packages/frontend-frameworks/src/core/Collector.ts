@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 
 /**
- * Module names in a BuildOutput are always POSIX-separated — they become
+ * Module names in a BuildOutput are always POSIX-separated -- they become
  * workerd module names and worker-upload paths, where `\` is never valid.
  * Filesystem paths stay platform-native; only names go through this.
  */
@@ -86,7 +86,7 @@ export interface CollectorOptions {
 
 /**
  * Build a {@link CollectorOptions.selectEntry} predicate that pins the chunk
- * whose facade module is the given entry file — tolerating synthetic wrapper
+ * whose facade module is the given entry file -- tolerating synthetic wrapper
  * ids that embed the resolved path (the `\0distilled:worker-entry:`-wrapped
  * main). Pair with `resolveDeployTargetEntry`: when a deploy target carries a
  * user entry ({@link DeployTargetEntry}), the chunk built from it must become

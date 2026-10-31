@@ -29,12 +29,12 @@ export type GroupProps = {
   /**
    * Group id (the `{group}` segment of
    * `projects/{project}/locations/{location}/groups/{group}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it replaces
+   * a unique RFC1035 name is generated. Immutable -- changing it replaces
    * the group.
    */
   groupId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * group. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)

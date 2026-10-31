@@ -13,7 +13,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Tasks
  * **Example:** Page Through A Job's Tasks
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const searchTasks = yield* AWS.Deadline.SearchTasks(queue);
  *
  * // runtime

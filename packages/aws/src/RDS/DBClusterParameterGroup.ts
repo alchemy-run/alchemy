@@ -65,7 +65,7 @@ export interface DBClusterParameterGroup extends Resource<
 > {}
 
 /**
- * An Aurora cluster parameter group — cluster-wide engine settings shared by
+ * An Aurora cluster parameter group -- cluster-wide engine settings shared by
  * every instance in a `DBCluster`.
  *
  * Name, family, and description changes force a replacement (RDS has no
@@ -118,7 +118,7 @@ export const DBClusterParameterGroupProvider = () =>
           // describeDBClusterParameterGroups and map each group to the exact
           // `read` Attributes shape. `read` derives `tags` from the cached
           // output (the describe response does not surface tags), so list
-          // returns `tags: {}` to match — a future read/delete can hydrate
+          // returns `tags: {}` to match -- a future read/delete can hydrate
           // them via listTagsForResource. Per-item not-found
           // (DBParameterGroupNotFoundFault) cannot occur here: enumeration
           // passes no name, so the describe never targets a single group.
@@ -135,7 +135,7 @@ export const DBClusterParameterGroupProvider = () =>
                     } =>
                       g.DBClusterParameterGroupName != null &&
                       // AWS-managed `default.*` groups cannot be deleted
-                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      // (InvalidDBParameterGroupStateFault) -- don't enumerate.
                       !g.DBClusterParameterGroupName.startsWith("default."),
                   )
                   .map((g) => ({
@@ -181,10 +181,10 @@ export const DBClusterParameterGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch the parameter group's live state.
+          // Observe -- fetch the parameter group's live state.
           let observed = yield* readGroup(name);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBParameterGroupAlreadyExistsFault` as a race with a peer
           // reconciler by re-reading.
           if (!observed?.DBClusterParameterGroupName) {
@@ -209,8 +209,8 @@ export const DBClusterParameterGroupProvider = () =>
 
           const dbClusterParameterGroupArn = observed.DBClusterParameterGroupArn;
 
-          // Sync tags — diff observed (the describe response does not
-          // surface tags, so use prior `output.tags` as the baseline) ↔
+          // Sync tags -- diff observed (the describe response does not
+          // surface tags, so use prior `output.tags` as the baseline) <->
           // desired.
           const observedTags = output?.tags ?? {};
           const { removed, upsert } = diffTags(observedTags, desiredTags);

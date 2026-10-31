@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:StartJobsQuery` — start an asynchronous,
+ * Runtime binding for `mediaconvert:StartJobsQuery` -- start an asynchronous,
  * filtered query over your job history (the async counterpart of
  * `SearchJobs` for larger result sets). Retrieve the results with
  * {@link GetJobsQueryResults} using the returned query `Id`.

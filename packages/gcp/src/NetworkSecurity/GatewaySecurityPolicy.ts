@@ -33,11 +33,11 @@ export type GatewaySecurityPolicyProps = {
    * GatewaySecurityPolicy id (the `{gatewaySecurityPolicy}` segment of
    * `projects/{project}/locations/{location}/gatewaySecurityPolicies/{gatewaySecurityPolicy}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the policy.
+   * and logical id. Immutable -- changing it replaces the policy.
    */
   gatewaySecurityPolicyId?: string;
   /**
-   * Region of the policy (`us-central1`, …). Immutable — changing it
+   * Region of the policy (`us-central1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -45,7 +45,7 @@ export type GatewaySecurityPolicyProps = {
   location?: string;
   /**
    * Human-readable description. GatewaySecurityPolicy has no labels
-   * field, so Alchemy stamps ownership into a `[alchemy …]` prefix and
+   * field, so Alchemy stamps ownership into a `[alchemy ...]` prefix and
    * strips it from attributes.
    */
   description?: string;
@@ -82,7 +82,7 @@ export type GatewaySecurityPolicy = Resource<
 >;
 
 /**
- * A Gateway Security Policy — a collection of
+ * A Gateway Security Policy -- a collection of
  * GatewaySecurityPolicyRules used by Secure Web Proxy.
  *
  * The API has no labels field, so Alchemy stamps ownership into the

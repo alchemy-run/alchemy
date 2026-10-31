@@ -39,7 +39,7 @@ export interface DeviceCustomProfileProps {
   /**
    * The wirefilter expression to match devices, e.g.
    * `identity.email == "user@example.com"` or `os.name == "windows"`.
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   match: string;
   /**
@@ -97,7 +97,7 @@ export interface DeviceCustomProfileProps {
   allowUpdates?: boolean;
   /**
    * When `true`, fallback domains without an explicit `dnsServer` are NOT
-   * resolved via the system resolver — WARP refuses to resolve them.
+   * resolved via the system resolver -- WARP refuses to resolve them.
    */
   disableAutoFallback?: boolean;
   /**
@@ -160,7 +160,7 @@ export type DeviceCustomProfileAttributes = {
   enabled: boolean | undefined;
   /** Observed description. */
   description: string | undefined;
-  /** Always `false` — custom profiles are never the default profile. */
+  /** Always `false` -- custom profiles are never the default profile. */
   default: boolean;
   /** Observed per-profile split-tunnel include list. */
   include: DeviceDefaultProfile.SplitTunnelEntry[];
@@ -205,7 +205,7 @@ export type DeviceCustomProfile = Resource<
 >;
 
 /**
- * A Cloudflare WARP **custom device profile** — a settings profile applied
+ * A Cloudflare WARP **custom device profile** -- a settings profile applied
  * to the subset of devices matched by a wirefilter `match` expression at a
  * given `precedence`.
  *
@@ -293,13 +293,13 @@ export const DeviceCustomProfileProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createProfileName(id, news.name);
 
-      // 1. Observe — the policy id cached on `output` is a hint, not a
+      // 1. Observe -- the policy id cached on `output` is a hint, not a
       //    guarantee: a missing profile falls through to create.
       let observed = output?.policyId
         ? yield* observeProfile(accountId, output.policyId)
         : undefined;
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race; a
       //    precedence collision is a real validation error and propagates.
       if (!observed) {
@@ -343,7 +343,7 @@ export const DeviceCustomProfileProvider = () =>
       }
       const policyId = observed.policyId!;
 
-      // 3. Sync (a) — patch the profile body with only the changed fields.
+      // 3. Sync (a) -- patch the profile body with only the changed fields.
       const patch: zeroTrust.PatchDevicePolicyCustomRequest = {
         accountId,
         policyId,
@@ -395,7 +395,7 @@ export const DeviceCustomProfileProvider = () =>
         dirty = true;
       }
       // lanAllow* are accepted by PATCH but not reliably echoed on GET,
-      // so push them whenever the user sets them — the API is idempotent.
+      // so push them whenever the user sets them -- the API is idempotent.
       if (news.lanAllowMinutes !== undefined) {
         patch.lanAllowMinutes = news.lanAllowMinutes;
         dirty = true;
@@ -408,7 +408,7 @@ export const DeviceCustomProfileProvider = () =>
         yield* zeroTrust.patchDevicePolicyCustom(patch);
       }
 
-      // 3. Sync (b) — replace the per-profile lists when they differ from
+      // 3. Sync (b) -- replace the per-profile lists when they differ from
       //    the observed cloud state.
       const lists = yield* observeLists(accountId, policyId);
       if (news.include !== undefined && !sameJSON(news.include, lists.include)) {
@@ -436,7 +436,7 @@ export const DeviceCustomProfileProvider = () =>
         });
       }
 
-      // 4. Return — re-read so attrs reflect post-sync truth.
+      // 4. Return -- re-read so attrs reflect post-sync truth.
       const final = yield* observeProfile(accountId, policyId);
       if (!final) {
         return yield* new CustomProfileUnexpectedResponse({

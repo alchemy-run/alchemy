@@ -8,14 +8,14 @@ import { makeLocalSearchNamespaceClient, type SearchAuth } from "./SearchHttpCli
 import type { SearchNamespace } from "./SearchNamespace.ts";
 
 /**
- * Local implementation of the {@link QuerySearchNamespace} binding — queries an
+ * Local implementation of the {@link QuerySearchNamespace} binding -- queries an
  * AI Search namespace over the Cloudflare HTTP API using the **current
  * credentials** instead of a native Worker binding
  * (`QuerySearchNamespaceBinding`).
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) to `list`
  * instances, run a multi-instance `search`, or `.get(instanceName)` a
- * single-instance client — the same client you'd use inside a Worker. The
+ * single-instance client -- the same client you'd use inside a Worker. The
  * namespace name is resolved at apply time through the ambient RuntimeContext.
  *
  * `raw` (the native `AiSearchNamespace` runtime handle) is unavailable outside a
@@ -47,7 +47,7 @@ export const QuerySearchNamespaceLocal = Layer.effect(
     };
 
     return Effect.fn(function* (namespace: SearchNamespace) {
-      // Deferred accessor — resolved against the tracker at apply time.
+      // Deferred accessor -- resolved against the tracker at apply time.
       const name = yield* namespace.name;
       return makeLocalSearchNamespaceClient(auth, name);
     });

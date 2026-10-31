@@ -9,7 +9,7 @@ import type { Workspace } from "./Workspace.ts";
  * {@link Workspace}.
  *
  * Defines the SAML identity provider the workspace authenticates users from
- * — IdP metadata, assertion-attribute mapping, and which groups receive the
+ * -- IdP metadata, assertion-attribute mapping, and which groups receive the
  * `Admin` and `Editor` roles. Changes can take a few minutes to apply.
  * Provide the implementation with
  * `Effect.provide(AWS.Grafana.UpdateWorkspaceAuthenticationHttp)`.

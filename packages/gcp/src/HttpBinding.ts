@@ -25,7 +25,7 @@ export type GcpHttpOp<I, A, E> = Effect.Effect<
  * resource: `role` is the narrowest predefined role covering the
  * operation. With `on`, the role is granted on the bound resource's own
  * IAM policy (resource-scoped, like an AWS statement's `Resource: [arn]`);
- * without it — only for services that have no resource-level IAM — the
+ * without it -- only for services that have no resource-level IAM -- the
  * role is granted on the project.
  */
 export interface BindingIam {

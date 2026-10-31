@@ -68,7 +68,7 @@ export type AppsSecret = Resource<
   "Stripe.AppsSecret",
   AppsSecretProps,
   {
-    /** Stripe secret id (`appsecret_…` or `secret_…`). */
+    /** Stripe secret id (`appsecret_...` or `secret_...`). */
     id: string;
     /** Name unique within the scope. */
     name: string;
@@ -88,7 +88,7 @@ export type AppsSecret = Resource<
 >;
 
 /**
- * A Stripe Apps Secret — a named secret in the Stripe Apps Secret Store,
+ * A Stripe Apps Secret -- a named secret in the Stripe Apps Secret Store,
  * used by UI extensions and app backends. Secrets are unique per
  * `(name, scope)`. Create is upsert: posting the same name and scope
  * replaces payload and expiry. Name and scope are identity; changing

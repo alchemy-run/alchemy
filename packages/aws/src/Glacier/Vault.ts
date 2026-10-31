@@ -51,7 +51,7 @@ export interface VaultProps {
   /**
    * Vault lock policy (an IAM policy document enforcing compliance
    * controls), provided as a JSON string or a plain object. Setting it
-   * initiates the vault lock, leaving it in the `InProgress` state — the
+   * initiates the vault lock, leaving it in the `InProgress` state -- the
    * policy is in effect but can still be changed or removed for 24 hours.
    * Alchemy never calls `CompleteVaultLock`, so the lock is never made
    * immutable by this resource. Removing the prop aborts an in-progress
@@ -81,7 +81,7 @@ export interface Vault extends Resource<
 > {}
 
 /**
- * An Amazon S3 Glacier vault — a container for archives in the original
+ * An Amazon S3 Glacier vault -- a container for archives in the original
  * (vault-based) S3 Glacier service.
  *
  * Vault creation is idempotent and free; storage is billed per archive.
@@ -154,7 +154,7 @@ export const Vault = Resource<Vault>("AWS.Glacier.Vault");
 /**
  * Raised when the desired `lockPolicy` differs from (or removes) a vault
  * lock that is already in the `Locked` state. A locked vault lock policy is
- * immutable — it can never be changed or removed.
+ * immutable -- it can never be changed or removed.
  */
 export class GlacierVaultLockImmutable extends Data.TaggedError("GlacierVaultLockImmutable")<{
   message: string;
@@ -162,7 +162,7 @@ export class GlacierVaultLockImmutable extends Data.TaggedError("GlacierVaultLoc
 
 /**
  * Raised when DescribeVault returns a vault record missing its ARN or
- * creation date — never expected from the live API.
+ * creation date -- never expected from the live API.
  */
 export class GlacierVaultIncomplete extends Data.TaggedError("GlacierVaultIncomplete")<{
   message: string;
@@ -269,7 +269,7 @@ export const VaultProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // undefined → default update path (reconcile syncs the rest)
+          // undefined -> default update path (reconcile syncs the rest)
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -277,11 +277,11 @@ export const VaultProvider = () =>
           const vaultName = output?.vaultName ?? (yield* createVaultName(id, props));
           const internalTags = yield* createInternalTags(id);
 
-          // 1. OBSERVE — cloud state is authoritative; output is only a
+          // 1. OBSERVE -- cloud state is authoritative; output is only a
           //    name cache.
           let live = yield* describeVault(vaultName);
 
-          // 2. ENSURE — CreateVault is an idempotent PUT; re-observe for the
+          // 2. ENSURE -- CreateVault is an idempotent PUT; re-observe for the
           //    full record (create only returns a Location header). A brief
           //    bounded retry covers read-after-create consistency.
           if (live === undefined) {
@@ -296,7 +296,7 @@ export const VaultProvider = () =>
             });
           }
 
-          // 3a. SYNC notification configuration — observed vs desired.
+          // 3a. SYNC notification configuration -- observed vs desired.
           const observedNotifications = yield* glacier
             .getVaultNotifications({ accountId: ACCOUNT, vaultName })
             .pipe(
@@ -325,7 +325,7 @@ export const VaultProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
-          // 3b. SYNC access policy — observed vs desired.
+          // 3b. SYNC access policy -- observed vs desired.
           const observedPolicy = yield* glacier
             .getVaultAccessPolicy({ accountId: ACCOUNT, vaultName })
             .pipe(
@@ -347,7 +347,7 @@ export const VaultProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
-          // 3c. SYNC vault lock — observed vs desired. An `InProgress` lock
+          // 3c. SYNC vault lock -- observed vs desired. An `InProgress` lock
           //     can be aborted and re-initiated; a `Locked` lock is immutable
           //     forever, so any drift from the desired state is surfaced as a
           //     typed failure rather than silently ignored.
@@ -392,7 +392,7 @@ export const VaultProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
 
-          // 3d. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3d. SYNC tags -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = yield* readVaultTags(vaultName);
           const desiredTags: Record<string, string> = {

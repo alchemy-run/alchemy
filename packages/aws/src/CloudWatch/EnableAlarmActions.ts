@@ -6,7 +6,7 @@ import type { AlarmResource } from "./binding-common.ts";
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
 /**
- * Runtime binding for `cloudwatch:EnableAlarmActions` — re-enable the
+ * Runtime binding for `cloudwatch:EnableAlarmActions` -- re-enable the
  * actions of the bound alarms after they were suppressed with
  * {@link DisableAlarmActions}. Bind it to one or more {@link Alarm} /
  * {@link CompositeAlarm} resources; the alarm names are injected
@@ -17,7 +17,7 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  * ### Managing Alarm Actions
  * **Example:** Re-enable an Alarm After a Deploy
  * ```typescript
- * // init — grants cloudwatch:EnableAlarmActions on the alarm
+ * // init -- grants cloudwatch:EnableAlarmActions on the alarm
  * const enableAlarmActions = yield* AWS.CloudWatch.EnableAlarmActions(alarm);
  *
  * // runtime

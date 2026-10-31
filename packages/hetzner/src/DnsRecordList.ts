@@ -16,7 +16,7 @@ export class DnsRecordListInvalidProps extends Data.TaggedError("DnsRecordListIn
 
 export interface RecordListProps {
   /**
-   * Zone that owns every record — a Hetzner zone id or zone name. When
+   * Zone that owns every record -- a Hetzner zone id or zone name. When
    * omitted, each record's zone is inferred from its name by walking its
    * parent domains, so one list may span several zones.
    */
@@ -75,7 +75,7 @@ export type RecordList = Resource<
 
 /**
  * An explicit list of Hetzner DNS records whose values are typically
- * computed from another resource's outputs — ACM certificate validation
+ * computed from another resource's outputs -- ACM certificate validation
  * CNAMEs, a platform's ownership-verification TXT, a server's addresses.
  *
  * This is the resource a `Hetzner.DNS.Adapter()` declares for
@@ -147,7 +147,7 @@ const resolveZone = (pinned: string | undefined, hostname: string) =>
       }
     }
     return yield* new DnsRecordListInvalidProps({
-      message: `No Hetzner DNS zone contains "${hostname}" — create the zone first or pass "zone" explicitly.`,
+      message: `No Hetzner DNS zone contains "${hostname}" \u2014 create the zone first or pass "zone" explicitly.`,
     });
   });
 

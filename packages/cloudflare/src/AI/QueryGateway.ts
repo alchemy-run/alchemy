@@ -19,10 +19,10 @@ import { type LanguageModelOptions } from "./LanguageModel.ts";
  * `Layer`.
  *
  * Bind a {@link Gateway} to a Worker and obtain the
- * Effect-native AI Gateway client (`run`, `getUrl`, `model`, …).
+ * Effect-native AI Gateway client (`run`, `getUrl`, `model`, ...).
  *
  * `QueryGateway` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.AI.QueryGateway(gateway)`.
  *
  *
@@ -111,7 +111,7 @@ export interface QueryGatewayClient {
   /**
    * Effect resolving to the gateway id (the resource attribute, captured at
    * bind time). Useful when calling `ai.run(model, inputs, { gateway: { id } })`
-   * — the in-account path for first-party services like Workers AI.
+   * -- the in-account path for first-party services like Workers AI.
    */
   id: Effect.Effect<string, never, RuntimeContext>;
   /**

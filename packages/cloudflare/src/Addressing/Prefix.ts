@@ -14,27 +14,27 @@ type TypeId = typeof TypeId;
 export interface PrefixProps {
   /**
    * IP Prefix in Classless Inter-Domain Routing format (e.g.
-   * `192.0.2.0/24`). Immutable — changing it forces a replacement.
+   * `192.0.2.0/24`). Immutable -- changing it forces a replacement.
    */
   cidr: string;
   /**
    * Autonomous System Number (ASN) the prefix will be advertised under.
-   * Immutable — changing it forces a replacement.
+   * Immutable -- changing it forces a replacement.
    */
   asn: number;
   /**
-   * Description of the prefix. The only mutable field — patched in place
+   * Description of the prefix. The only mutable field -- patched in place
    * via `patchPrefix`.
    */
   description?: string;
   /**
    * Identifier for an uploaded LOA (Letter of Authorization) document.
-   * Create-only — changing it forces a replacement.
+   * Create-only -- changing it forces a replacement.
    */
   loaDocumentId?: string;
   /**
    * Whether Cloudflare is allowed to generate the LOA document on behalf of
-   * the prefix owner. Create-only — changing it forces a replacement.
+   * the prefix owner. Create-only -- changing it forces a replacement.
    * @default false
    */
   delegateLoaCreation?: boolean;
@@ -75,7 +75,7 @@ export type Prefix = Resource<TypeId, PrefixProps, PrefixAttributes, never, Prov
  * A BYOIP (Bring Your Own IP) prefix onboarded to Cloudflare's network.
  *
  * Requires the BYOIP enterprise add-on; onboarding a prefix is a contract
- * process (LOA, IRR/RPKI validation, manual approval) — `approved` flips
+ * process (LOA, IRR/RPKI validation, manual approval) -- `approved` flips
  * from `"P"` (pending) to `"V"` (active) on Cloudflare's side and is never
  * waited on by this resource.
  *
@@ -154,7 +154,7 @@ export const PrefixProvider = () =>
 
     // BYOIP prefixes are account-scoped; the catalog list endpoint returns
     // the full prefix object per item, so each row hydrates directly into the
-    // same `Attributes` shape `read` produces — no per-item fetch needed.
+    // same `Attributes` shape `read` produces -- no per-item fetch needed.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* addressing.listPrefixes.pages({ accountId }).pipe(
@@ -175,7 +175,7 @@ export const PrefixProvider = () =>
         const observed = yield* getPrefix(acct, output.prefixId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — a CIDR is unique per account, so match on it.
+      // Cold read -- a CIDR is unique per account, so match on it.
       const cidr = output?.cidr ?? olds?.cidr;
       if (typeof cidr !== "string") return undefined;
       const match = yield* findByCidr(acct, cidr);
@@ -186,14 +186,14 @@ export const PrefixProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // 1. Observe — the prefix id on `output` is a hint; a missing prefix
+      // 1. Observe -- the prefix id on `output` is a hint; a missing prefix
       //    falls through to the by-CIDR lookup and then to create.
       let observed = output?.prefixId ? yield* getPrefix(acct, output.prefixId) : undefined;
       if (!observed) {
         observed = yield* findByCidr(acct, news.cidr);
       }
 
-      // 2. Ensure — create the prefix if it is missing.
+      // 2. Ensure -- create the prefix if it is missing.
       if (!observed) {
         const created = yield* addressing.createPrefix({
           accountId: acct,
@@ -206,7 +206,7 @@ export const PrefixProvider = () =>
         return toAttributes(created, acct);
       }
 
-      // 3. Sync — `description` is the only mutable field; skip the PATCH
+      // 3. Sync -- `description` is the only mutable field; skip the PATCH
       //    entirely on a no-op.
       const desiredDescription = news.description ?? "";
       if ((observed.description ?? "") !== desiredDescription) {
@@ -223,7 +223,7 @@ export const PrefixProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Deleting an onboarded prefix can be rejected while service bindings
-      // or BGP advertisements still exist — children delete first; the
+      // or BGP advertisements still exist -- children delete first; the
       // engine orders dependencies, so a hard failure here is genuine.
       yield* addressing
         .deletePrefix({
@@ -244,7 +244,7 @@ const getPrefix = (accountId: string, prefixId: string) =>
     .pipe(Effect.catchTag("PrefixNotFound", () => Effect.undefined));
 
 /**
- * Find a prefix by exact CIDR — unique per account.
+ * Find a prefix by exact CIDR -- unique per account.
  */
 const findByCidr = (accountId: string, cidr: string) =>
   addressing.listPrefixes.items({ accountId }).pipe(

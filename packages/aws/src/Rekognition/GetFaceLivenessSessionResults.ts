@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetFaceLivenessSessionResults` — get the confidence score, status, and audit images of a completed Face Liveness session.
+ * Runtime binding for `rekognition:GetFaceLivenessSessionResults` -- get the confidence score, status, and audit images of a completed Face Liveness session.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetFaceLivenessSessionResults` on `*` (Rekognition data-plane resources such

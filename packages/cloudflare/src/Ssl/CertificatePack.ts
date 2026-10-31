@@ -18,9 +18,9 @@ type TypeId = typeof TypeId;
 /**
  * Certificate Authorities available for Advanced Certificate Manager orders.
  *
- * - `google` — Google Trust Services
- * - `lets_encrypt` — Let's Encrypt (no `cloudflareBranding`)
- * - `ssl_com` — SSL.com (supports `email` validation)
+ * - `google` -- Google Trust Services
+ * - `lets_encrypt` -- Let's Encrypt (no `cloudflareBranding`)
+ * - `ssl_com` -- SSL.com (supports `email` validation)
  */
 export type CertificatePackCertificateAuthority = "google" | "lets_encrypt" | "ssl_com";
 
@@ -62,7 +62,7 @@ export type CertificatePackStatus =
   | "holding_deployment";
 
 /**
- * A Domain Control Validation record for a certificate pack — create the
+ * A Domain Control Validation record for a certificate pack -- create the
  * indicated TXT/CNAME record (or serve the HTTP token) to complete
  * validation when the pack is `pending_validation`.
  */
@@ -87,14 +87,14 @@ export interface CertificatePackValidationRecord {
 
 export interface CertificatePackProps {
   /**
-   * Zone the certificate pack belongs to. Stable — moving a pack to a
+   * Zone the certificate pack belongs to. Stable -- moving a pack to a
    * different zone triggers a replacement.
    */
   zoneId: string;
   /**
    * Certificate Authority to order the certificates from.
    *
-   * Immutable — the Cloudflare API has no way to change the CA of an
+   * Immutable -- the Cloudflare API has no way to change the CA of an
    * existing pack, so changing it triggers a replacement.
    */
   certificateAuthority: CertificatePackCertificateAuthority;
@@ -102,28 +102,28 @@ export interface CertificatePackProps {
    * Hostnames the certificates cover. Must contain the zone apex, may
    * contain wildcards, and may not exceed 50 hosts.
    *
-   * Immutable — hosts cannot be added to or removed from an existing
+   * Immutable -- hosts cannot be added to or removed from an existing
    * pack, so changing them (order-insensitively) triggers a replacement.
    */
   hosts: string[];
   /**
    * Domain Control Validation method for the order.
    *
-   * Mutable — changed in place on the existing pack via the SSL
+   * Mutable -- changed in place on the existing pack via the SSL
    * verification API (`PATCH /ssl/verification/{certificatePackId}`).
    */
   validationMethod: CertificatePackValidationMethod;
   /**
    * Validity period of the issued certificates, in days.
    *
-   * Immutable — changing it triggers a replacement (re-order).
+   * Immutable -- changing it triggers a replacement (re-order).
    */
   validityDays: CertificatePackValidityDays;
   /**
    * Whether to add Cloudflare branding to the order: a subdomain of
    * `sni.cloudflaressl.com` is used as the certificate's Common Name.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -136,7 +136,7 @@ export interface CertificatePackAttributes {
   /** Zone the pack belongs to. */
   zoneId: string;
   /**
-   * Current status of the pack. Issuance is asynchronous — a freshly
+   * Current status of the pack. Issuance is asynchronous -- a freshly
    * ordered pack starts in `initializing`/`pending_validation` and only
    * reaches `active` once Domain Control Validation completes.
    */
@@ -152,7 +152,7 @@ export interface CertificatePackAttributes {
   /** Identifier of the primary certificate in the pack, once issued. */
   primaryCertificate: string | undefined;
   /**
-   * Outstanding Domain Control Validation records — create these
+   * Outstanding Domain Control Validation records -- create these
    * TXT/CNAME records (or serve the HTTP tokens) to complete validation.
    */
   validationRecords: CertificatePackValidationRecord[] | undefined;
@@ -169,7 +169,7 @@ export type CertificatePack = Resource<
 >;
 
 /**
- * An Advanced Certificate Manager (ACM) certificate pack — an order for
+ * An Advanced Certificate Manager (ACM) certificate pack -- an order for
  * edge certificates covering a custom set of hostnames in a zone, with a
  * choice of Certificate Authority, validation method, and validity period.
  *
@@ -179,11 +179,11 @@ export type CertificatePack = Resource<
  *
  * Issuance is asynchronous: the resource returns as soon as the order is
  * placed (status `initializing`/`pending_validation`) and does not wait for
- * `active`, because validation may require you to create DNS records first —
+ * `active`, because validation may require you to create DNS records first --
  * the outstanding records are exported as `validationRecords`.
  *
  * The pack's `certificateAuthority`, `hosts`, and `validityDays` are
- * immutable — changing any of them replaces the pack (a new order).
+ * immutable -- changing any of them replaces the pack (a new order).
  * `validationMethod` and `cloudflareBranding` are updated in place.
  * ### Ordering a certificate pack
  * **Example:** Order an advanced certificate for the apex and a wildcard
@@ -241,9 +241,9 @@ export const CertificatePackProvider = () =>
     stables: ["certificatePackId", "zoneId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      // news is Input<Props> during plan — only compare once resolved.
+      // news is Input<Props> during plan -- only compare once resolved.
       if (!isResolved(news)) return undefined;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (olds?.hosts === undefined) return undefined;
       // zoneId is the pack's scope; it is Input<string>, so compare only
       // once both sides are concrete.
@@ -252,7 +252,7 @@ export const CertificatePackProvider = () =>
       if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
-      // The order is immutable in CA, hosts, and validity — any change is
+      // The order is immutable in CA, hosts, and validity -- any change is
       // a re-order (replacement). hosts compare order-insensitively.
       if (
         olds.certificateAuthority !== news.certificateAuthority ||
@@ -291,7 +291,7 @@ export const CertificatePackProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the pack id cached on `output` is a hint, not a
+      // 1. Observe -- the pack id cached on `output` is a hint, not a
       //    guarantee: a missing pack falls through to the host-set scan
       //    and then to a fresh order.
       let observed = output?.certificatePackId
@@ -304,7 +304,7 @@ export const CertificatePackProvider = () =>
         observed = yield* findByHosts(zoneId, news.hosts);
       }
 
-      // 3. Ensure — order the pack when missing. Ordering is gated on the
+      // 3. Ensure -- order the pack when missing. Ordering is gated on the
       //    Advanced Certificate Manager subscription; the typed
       //    `AdvancedCertificateManagerRequired` error propagates to the
       //    caller untouched.
@@ -320,7 +320,7 @@ export const CertificatePackProvider = () =>
         });
       }
 
-      // 4. Sync — diff each mutable aspect of the observed pack against
+      // 4. Sync -- diff each mutable aspect of the observed pack against
       //    the desired props; skip the API entirely on a no-op. A freshly
       //    ordered pack already matches, so both checks fall through.
       if (
@@ -352,10 +352,10 @@ export const CertificatePackProvider = () =>
       // Certificate packs are zone-scoped; there is no account-wide
       // enumeration API. Fan out over every zone in the account and list
       // its packs, restricting to `advanced` packs (the only kind this
-      // resource manages — universal/total_tls packs are not orderable).
+      // resource manages -- universal/total_tls packs are not orderable).
       const zones = yield* listAllZones(accountId);
       // Cloudflare auto-orders an `advanced` pack for every Worker custom
-      // domain (hosts `[apex, host, *.host]`) and owns its lifecycle — the
+      // domain (hosts `[apex, host, *.host]`) and owns its lifecycle -- the
       // domain's `certId` is that pack's id. Those packs are not ours to
       // enumerate (deleting one strips TLS from a live custom domain), so
       // exclude them. Only zones that have candidate packs look up their
@@ -389,7 +389,7 @@ export const CertificatePackProvider = () =>
                   ),
             ),
             // A plan-gated zone (no ACM) rejects the route, and a freshly
-            // minted token may briefly answer Forbidden — skip either.
+            // minted token may briefly answer Forbidden -- skip either.
             Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
               Effect.succeed([] as CertificatePackAttributes[]),
             ),
@@ -402,7 +402,7 @@ export const CertificatePackProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, certificatePackId } = output;
       yield* Effect.gen(function* () {
-        // Observe first — a missing pack (404, code 1408), a `deleted`
+        // Observe first -- a missing pack (404, code 1408), a `deleted`
         // tombstone, or a pack Cloudflare is already deleting are all done.
         const observed = yield* getPack(zoneId, certificatePackId);
         if (!observed || observed.status === "pending_deletion") return;
@@ -413,7 +413,7 @@ export const CertificatePackProvider = () =>
         // Cloudflare's certificate service answers a code-less 400 "Bad
         // response certificate service" while it is mid-transition on the
         // pack (observed on a just-deleted tombstone). Re-observe on a short
-        // bounded schedule — the next pass usually sees the tombstone and
+        // bounded schedule -- the next pass usually sees the tombstone and
         // returns. If the pack is still live after ~50s, fail honestly
         // rather than report a delete that did not happen.
         Effect.retry({

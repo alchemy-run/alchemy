@@ -15,7 +15,7 @@ export type Annotation = Resource<
 >;
 
 /**
- * An Axiom annotation — a vertical marker overlaid on charts to flag a
+ * An Axiom annotation -- a vertical marker overlaid on charts to flag a
  * deploy, incident, feature flag flip, or any other point/range event you
  * want correlated with telemetry.
  *
@@ -72,12 +72,12 @@ export const AnnotationProvider = () =>
         stables: ["id"],
         // Axiom exposes a flat, account-wide `GET /v2/annotations` list that
         // returns every annotation's full record in one (non-paginated)
-        // response — the exact same shape `get`/`read` produce. Hand each
+        // response -- the exact same shape `get`/`read` produce. Hand each
         // record back directly as the resource's Attributes.
         list: () =>
           listAnnotations({}).pipe(Effect.map((annotations) => annotations.map((a) => ({ ...a })))),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — Axiom assigns the annotation id server-side, so the
+          // Observe -- Axiom assigns the annotation id server-side, so the
           // only handle to a previously-created annotation is the cached
           // `output.id`. Probe for live state with that id; treat NotFound
           // (deleted out-of-band, or never created) as "no observed state".
@@ -87,13 +87,13 @@ export const AnnotationProvider = () =>
               )
             : undefined;
 
-          // Ensure — when no observed annotation exists, POST creates one
+          // Ensure -- when no observed annotation exists, POST creates one
           // and Axiom assigns the id.
           if (observed === undefined) {
             return yield* create(news);
           }
 
-          // Sync — the annotation exists; apply desired props with PUT and
+          // Sync -- the annotation exists; apply desired props with PUT and
           // preserve the stable id and original time as fallbacks.
           const result = yield* update({ ...news, id: observed.id! });
           return {

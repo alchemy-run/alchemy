@@ -11,7 +11,7 @@ export interface ListApplicationsRequest extends SVC.ListApplicationsRequest {}
  * Runtime binding for `kinesisanalytics:ListApplications`.
  *
  * An account-level operation (no application argument) that pages through
- * the account's Managed Service for Apache Flink applications — name, ARN,
+ * the account's Managed Service for Apache Flink applications -- name, ARN,
  * and status for each. Useful for fleet dashboards and governance sweeps
  * that audit which applications exist and whether they are RUNNING.
  * Provide the implementation with
@@ -19,7 +19,7 @@ export interface ListApplicationsRequest extends SVC.ListApplicationsRequest {}
  * ### Inspecting the Application
  * **Example:** List the Account's Applications
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listApplications = yield* AWS.KinesisAnalyticsV2.ListApplications();
  *
  * // runtime

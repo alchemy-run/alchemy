@@ -31,7 +31,7 @@ export type ServicesBackupProps = {
   /**
    * Parent Dataproc Metastore service. Full name
    * `projects/{project}/locations/{location}/services/{service}` or the
-   * service id (combined with `location`). Immutable — changing it
+   * service id (combined with `location`). Immutable -- changing it
    * replaces the backup.
    */
   service: string;
@@ -43,7 +43,7 @@ export type ServicesBackupProps = {
   /**
    * Backup id (the `{backup}` segment). If omitted, a unique RFC1035 name
    * is generated. Must begin with a letter and end with a letter or
-   * number. Immutable — changing it replaces the backup.
+   * number. Immutable -- changing it replaces the backup.
    */
   backupId?: string;
   /**
@@ -84,7 +84,7 @@ export type ServicesBackup = Resource<
 >;
 
 /**
- * A Dataproc Metastore service backup — a point-in-time capture of a
+ * A Dataproc Metastore service backup -- a point-in-time capture of a
  * Hive metastore.
  *
  * Changing `backupId`, `service`, or `location` replaces the backup.

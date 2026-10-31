@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:DescribeSolutionVersion` — Polls a solution version for training completion — pairs with
+ * Runtime binding for `personalize:DescribeSolutionVersion` -- Polls a solution version for training completion -- pairs with
  * {@link CreateSolutionVersion} in the MLOps retraining loop.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.DescribeSolutionVersionHttp)`.

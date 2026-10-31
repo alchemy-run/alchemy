@@ -8,7 +8,7 @@ export type NuxtProps = FrameworkSiteProps & {
 };
 
 /**
- * Nuxt SSR and prerendered assets on Neon Functions. The Node target owns Nitro’s node preset; do not override nitro.preset.
+ * Nuxt SSR and prerendered assets on Neon Functions. The Node target owns Nitro's node preset; do not override nitro.preset.
  *
  * Native framework development and HMR run without Neon cloud resources.
  * Apply `Alchemy.remote()` to use the live Function deployment during dev.

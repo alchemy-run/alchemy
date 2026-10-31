@@ -40,7 +40,7 @@ export type SparkProperties = {
 export type CloudSqlCredential = {
   /** Database username. */
   username?: string;
-  /** Database password. Input-only — omitted from attributes. */
+  /** Database password. Input-only -- omitted from attributes. */
   password?: string;
 };
 
@@ -59,7 +59,7 @@ export type CloudSqlProperties = {
 
 export type CloudResourceProperties = {
   /**
-   * Google-managed service account for this connection. Output-only —
+   * Google-managed service account for this connection. Output-only --
    * ignored on create.
    */
   serviceAccountId?: string;
@@ -154,7 +154,7 @@ export type ConnectorEndpoint = {
 
 export type ConnectorConfiguration = {
   /**
-   * Connector id (for example `google-alloydb`). Immutable — changing it
+   * Connector id (for example `google-alloydb`). Immutable -- changing it
    * replaces the connection.
    */
   connectorId?: string;
@@ -181,13 +181,13 @@ export type ConnectionProps = {
    * `projects/{project}/locations/{location}/connections/{connection}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must contain only letters, numbers, and underscores, start
-   * with a letter or underscore, and be at most 64 characters. Immutable —
+   * with a letter or underscore, and be at most 64 characters. Immutable --
    * changing it replaces the connection.
    */
   connectionId?: string;
   /**
    * BigQuery connection location (`us-central1`, `US`, `EU`,
-   * `aws-us-east-1`, …). Immutable — changing it replaces the connection.
+   * `aws-us-east-1`, ...). Immutable -- changing it replaces the connection.
    * Regional ids are lowercased; multi-regions `US` / `EU` stay uppercase.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -199,18 +199,18 @@ export type ConnectionProps = {
   /**
    * Human-readable description. Connections have no labels, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `list` / nuke.
+   * in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
    * Cloud KMS key used to encrypt credentials, as
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Immutable — changing it replaces the connection.
+   * Immutable -- changing it replaces the connection.
    */
   kmsKeyName?: string;
   /**
    * Cloud resource connection (GCS, Bigtable, and other GCP resources).
-   * Default when no other connection type is set. Cheap to create — no
+   * Default when no other connection type is set. Cheap to create -- no
    * extra resources required.
    */
   cloudResource?: CloudResourceProperties;
@@ -242,7 +242,7 @@ export type ConnectionProps = {
    */
   salesforceDataCloud?: SalesforceDataCloudProperties;
   /**
-   * Connector-framework configuration (AlloyDB, MySQL, PostgreSQL, …).
+   * Connector-framework configuration (AlloyDB, MySQL, PostgreSQL, ...).
    * Mutually exclusive with the typed property blocks. `connectorId` is
    * immutable.
    */
@@ -259,7 +259,7 @@ export type Connection = Resource<
     connectionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `US`, …). */
+    /** Location id (`us-central1`, `US`, ...). */
     location: string;
     /** User-friendly display name. */
     friendlyName: string | undefined;
@@ -305,11 +305,11 @@ export type Connection = Resource<
  * A BigQuery Connection to an external data source.
  *
  * Connections have no resource labels. Alchemy stamps ownership into the
- * description (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`)
+ * description (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`)
  * so `list` / `pnpm nuke:gcp` can find them.
  *
  * When no connection type is set, Alchemy creates a Cloud resource
- * connection (`cloudResource: {}`) — the cheapest type, with no extra
+ * connection (`cloudResource: {}`) -- the cheapest type, with no extra
  * Cloud SQL / Spanner / AWS resources. `connectionId`, `location`,
  * `kmsKeyName`, and the connection type are immutable.
  *
@@ -339,7 +339,7 @@ export type Connection = Resource<
  * ```
  *
  * ### Cloud SQL
- * Cloud SQL connections need a live instance, database, and password —
+ * Cloud SQL connections need a live instance, database, and password --
  * skip them in cheap tests.
  *
  * **Example:** Postgres Cloud SQL connection

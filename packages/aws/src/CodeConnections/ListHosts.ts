@@ -11,7 +11,7 @@ export interface ListHostsRequest extends codeconnections.ListHostsInput {}
  * Runtime binding for `codeconnections:ListHosts`.
  *
  * An account-level operation (no host argument) that enumerates the
- * account's hosts — the self-managed provider endpoints (GitHub Enterprise
+ * account's hosts -- the self-managed provider endpoints (GitHub Enterprise
  * Server, GitLab self-managed) that connections attach to. Useful for
  * governance sweeps that audit which provider endpoints are registered.
  * Provide the implementation with
@@ -19,7 +19,7 @@ export interface ListHostsRequest extends codeconnections.ListHostsInput {}
  * ### Inspecting a Host
  * **Example:** List the Account's Hosts
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listHosts = yield* AWS.CodeConnections.ListHosts();
  *
  * // runtime

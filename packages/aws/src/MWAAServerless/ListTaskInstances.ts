@@ -18,7 +18,7 @@ export type ListTaskInstancesInput = Omit<mwaa.ListTaskInstancesRequest, "Workfl
  * ### Observing Tasks
  * **Example:** List A Run's Task Instances
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const listTaskInstances = yield* AWS.MWAAServerless.ListTaskInstances(workflow);
  *
  * // runtime

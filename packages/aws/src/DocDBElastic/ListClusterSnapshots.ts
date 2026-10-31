@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListClusterSnapshots` operation (IAM action
  * `docdb-elastic:ListClusterSnapshots`).
  *
- * Lists the account's elastic-cluster snapshots (one page per call —
+ * Lists the account's elastic-cluster snapshots (one page per call --
  * `nextToken` continues), optionally filtered to one cluster's ARN or to
  * `manual`/`automated` snapshots. Provide the implementation with
  * `Effect.provide(AWS.DocDBElastic.ListClusterSnapshotsHttp)`.

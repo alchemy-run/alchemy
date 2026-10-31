@@ -40,7 +40,7 @@ export interface OriginEndpointProps {
   originEndpointName?: string;
   /**
    * The container format packaged for the endpoint's manifests: `TS`,
-   * `CMAF`, or `ISM`. Immutable — changing it replaces the endpoint.
+   * `CMAF`, or `ISM`. Immutable -- changing it replaces the endpoint.
    */
   containerType: mediapackagev2.ContainerType;
   /**
@@ -140,7 +140,7 @@ export interface OriginEndpoint extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaPackage v2 origin endpoint — the output side of a
+ * An AWS Elemental MediaPackage v2 origin endpoint -- the output side of a
  * channel. The endpoint packages the channel's ingested content into HLS,
  * low-latency HLS, DASH, and/or MSS manifests and serves them to downstream
  * devices (players or CDNs) on the channel group's egress domain.
@@ -254,7 +254,7 @@ export const OriginEndpointProvider = () =>
         mssManifests: manifestRefs(endpoint.MssManifests),
       });
 
-      /** Get an origin endpoint; typed not-found → undefined. */
+      /** Get an origin endpoint; typed not-found -> undefined. */
       const getEndpoint = Effect.fn(function* (
         channelGroupName: string,
         channelName: string,
@@ -318,10 +318,10 @@ export const OriginEndpointProvider = () =>
           const startoverWindowSeconds = toWireSeconds(news.startoverWindow);
           const name = output?.originEndpointName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let endpoint = yield* getEndpoint(channelGroupName, channelName, name);
 
-          // 2. Ensure — create if missing; a Conflict means a peer created it
+          // 2. Ensure -- create if missing; a Conflict means a peer created it
           //    concurrently, so fall through to observing the winner.
           if (endpoint === undefined) {
             endpoint = yield* mediapackagev2
@@ -351,7 +351,7 @@ export const OriginEndpointProvider = () =>
                 ),
               );
           } else {
-            // 3. Sync — the update is a full PUT of the mutable aspects, so
+            // 3. Sync -- the update is a full PUT of the mutable aspects, so
             //    apply it only when the observed state has drifted from the
             //    desired subset. Manifest arrays are compared by length and
             //    by the fields the desired config specifies, so server-side
@@ -397,10 +397,10 @@ export const OriginEndpointProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMpTags(endpoint.Arn, toMpTagRecord(endpoint.Tags), desiredTags);
 
-          // 3c. Sync the resource policy — observe the live policy (absent
+          // 3c. Sync the resource policy -- observe the live policy (absent
           //     policy is the typed not-found) and apply only the delta.
           const observedPolicy = yield* mediapackagev2
             .getOriginEndpointPolicy({
@@ -460,7 +460,7 @@ export const OriginEndpointProvider = () =>
         }),
 
         // Origin endpoints are keyed by their parent channel, so enumerate
-        // groups → channels → endpoints.
+        // groups -> channels -> endpoints.
         list: () =>
           Effect.gen(function* () {
             const groups = yield* listAllChannelGroups();

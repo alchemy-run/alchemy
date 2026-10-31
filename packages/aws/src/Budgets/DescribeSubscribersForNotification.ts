@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Budget } from "./Budget.ts";
 
 /**
- * Request for {@link DescribeSubscribersForNotification} — the bound budget's
+ * Request for {@link DescribeSubscribersForNotification} -- the bound budget's
  * `AccountId` and `BudgetName` are injected automatically. `Notification`
  * identifies which alert threshold to list subscribers for (the same shape
  * returned by `DescribeNotificationsForBudget`).
@@ -19,7 +19,7 @@ export interface DescribeSubscribersForNotificationRequest extends Omit<
  * `DescribeSubscribersForNotification`.
  *
  * Bind this operation to a {@link Budget} to list who is notified when a
- * given alert threshold is crossed — pair it with
+ * given alert threshold is crossed -- pair it with
  * `DescribeNotificationsForBudget` to enumerate a budget's full alerting
  * fan-out (each subscriber's `Address` comes back `Redacted`). Provide the
  * implementation with
@@ -27,7 +27,7 @@ export interface DescribeSubscribersForNotificationRequest extends Omit<
  * ### Reading Budget Alerts
  * **Example:** List the Recipients of Each Alert
  * ```typescript
- * // init — bind both operations to the budget
+ * // init -- bind both operations to the budget
  * const notifications = yield* AWS.Budgets.DescribeNotificationsForBudget(budget);
  * const subscribers = yield* AWS.Budgets.DescribeSubscribersForNotification(budget);
  *

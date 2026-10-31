@@ -31,12 +31,12 @@ export type VolumesSnapshotProps = {
   /**
    * Parent volume. Full name
    * `projects/{project}/locations/{location}/volumes/{volume}` or the
-   * volume id (combined with `location`). Immutable — changing it
+   * volume id (combined with `location`). Immutable -- changing it
    * replaces the snapshot.
    */
   volume: string;
   /**
-   * Region used when `volume` is a bare id. Immutable — changing it
+   * Region used when `volume` is a bare id. Immutable -- changing it
    * replaces the snapshot. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -46,7 +46,7 @@ export type VolumesSnapshotProps = {
    * Snapshot id (the `{snapshot}` segment of
    * `.../volumes/{volume}/snapshots/{snapshot}`). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the snapshot.
+   * Immutable -- changing it replaces the snapshot.
    */
   snapshotId?: string;
   /**
@@ -91,7 +91,7 @@ export type VolumesSnapshot = Resource<
 >;
 
 /**
- * A Cloud NetApp Volumes snapshot — a point-in-time copy of a volume.
+ * A Cloud NetApp Volumes snapshot -- a point-in-time copy of a volume.
  *
  * Changing `snapshotId`, `volume`, or `location` replaces the snapshot.
  * Description and labels update in place.

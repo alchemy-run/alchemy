@@ -6,7 +6,7 @@ import type { Server } from "./Server.ts";
 /**
  * Runtime binding for `transfer:ListUsers`.
  *
- * Lists the users attached to the bound {@link Server} — the `ServerId` is
+ * Lists the users attached to the bound {@link Server} -- the `ServerId` is
  * injected from the binding. Pass `MaxResults`/`NextToken` to page through
  * large user sets. The building block for self-service user portals over a
  * service-managed server. Provide the implementation with
@@ -14,7 +14,7 @@ import type { Server } from "./Server.ts";
  * ### Managing Users at Runtime
  * **Example:** List the Server's Users
  * ```typescript
- * // init — bind the operation to the server
+ * // init -- bind the operation to the server
  * const listUsers = yield* AWS.Transfer.ListUsers(server);
  *
  * // runtime

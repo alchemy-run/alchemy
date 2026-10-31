@@ -7,7 +7,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * Runtime binding for the `GetBootstrapBrokers` operation (IAM action
  * `kafka:GetBootstrapBrokers`), scoped to one {@link ServerlessCluster}.
  *
- * Resolves the cluster's bootstrap broker connection strings at runtime —
+ * Resolves the cluster's bootstrap broker connection strings at runtime --
  * for MSK Serverless the SASL/IAM string
  * (`BootstrapBrokerStringSaslIam`) is the one Kafka clients connect to.
  * Provide the implementation with
@@ -18,7 +18,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * const getBootstrapBrokers = yield* Kafka.GetBootstrapBrokers(cluster);
  *
  * const brokers = yield* getBootstrapBrokers();
- * // brokers.BootstrapBrokerStringSaslIam → "b-1.….kafka-serverless.…:9098"
+ * // brokers.BootstrapBrokerStringSaslIam -> "b-1.....kafka-serverless....:9098"
  * ```
  *
  * @binding

@@ -75,7 +75,7 @@ export interface SubscriptionFilter extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs subscription filter — fans matching log events out of a
+ * A CloudWatch Logs subscription filter -- fans matching log events out of a
  * log group to a Lambda function, Kinesis stream, Firehose delivery stream, or
  * cross-account logs destination. A log group supports at most two
  * subscription filters.
@@ -117,7 +117,7 @@ export const SubscriptionFilter = Resource<SubscriptionFilter>("AWS.Logs.Subscri
  * message...") until IAM propagates. Retry on a bounded schedule; a genuine
  * validation error still surfaces after the window.
  *
- * NOTE: explicit return annotation is load-bearing — an inlined `Effect.retry`
+ * NOTE: explicit return annotation is load-bearing -- an inlined `Effect.retry`
  * in provider lifecycle code widens the provider layer during declaration emit
  * (see PATTERNS.md §7).
  */
@@ -170,7 +170,7 @@ export const SubscriptionFilterProvider = () =>
 
       return {
         stables: ["filterName", "logGroupName"],
-        // Subscription filters have no account-wide list API — fan out over
+        // Subscription filters have no account-wide list API -- fan out over
         // every log group (a group holds at most two filters).
         list: () =>
           Effect.gen(function* () {
@@ -198,7 +198,7 @@ export const SubscriptionFilterProvider = () =>
                   Effect.map((chunk) =>
                     Array.from(chunk).map((filter) => toAttributes(logGroupName, filter)),
                   ),
-                  // group deleted between list and describe — skip
+                  // group deleted between list and describe -- skip
                   Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
@@ -227,7 +227,7 @@ export const SubscriptionFilterProvider = () =>
           const filterName = output?.filterName ?? (yield* toFilterName(id, news));
           const desiredPattern = news.filterPattern ?? "";
 
-          // Observe — the filter name is the identity within the log group and
+          // Observe -- the filter name is the identity within the log group and
           // putSubscriptionFilter has natural upsert semantics, so observation
           // only decides whether the put can be skipped entirely.
           const observed = yield* observe(logGroupName, filterName);

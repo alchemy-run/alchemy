@@ -33,7 +33,7 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
   readonly target?: AstroTargetInput<TargetConfig> | undefined;
   /**
    * Target configuration passed to a target factory or specifier-loaded
-   * target module. Opaque to this module — its shape belongs to the target
+   * target module. Opaque to this module -- its shape belongs to the target
    * (Cloudflare: `{ worker?: CloudflareVitePluginOptions,
    * sessionKVBindingName?: string }`). Unused when {@link target} is already
    * a target *value*.
@@ -45,8 +45,8 @@ export interface AstroFrameworkOptions<TargetConfig = unknown> {
    * project's own `astro.config.*` file loads natively; this inline config
    * is merged OVER it by astro (arrays like `integrations`/`vite.plugins`
    * concatenate, scalars override). `root` is pinned; `output` is only set
-   * when passed here (so a config file's `output` — or astro's `"static"`
-   * default — is honored). Do not pass `adapter` — the deploy target
+   * when passed here (so a config file's `output` -- or astro's `"static"`
+   * default -- is honored). Do not pass `adapter` -- the deploy target
    * provides it, and a user-declared adapter fails the build with an
    * actionable error.
    */
@@ -88,7 +88,7 @@ export interface AstroConfigInputs {
 }
 
 /**
- * Build the in-memory `AstroInlineConfig` — the overlay astro merges OVER
+ * Build the in-memory `AstroInlineConfig` -- the overlay astro merges OVER
  * the project's own `astro.config.*` (which loads natively; `configFile`
  * is left undiscovered-default unless the user overlay carries one, so a
  * project without a config file falls back to a purely programmatic
@@ -147,7 +147,7 @@ export const makeAstroInlineConfig = (inputs: AstroConfigInputs): AstroInlineCon
  *   path so prerendered HTML written after the Vite build rides along.
  * - `dev` runs astro's `dev()` with the target's adapter integration; with
  *   the Cloudflare target the `ssr` environment executes inside workerd via
- *   the cloudflare-vite-plugin module runner, with in-memory bindings — no
+ *   the cloudflare-vite-plugin module runner, with in-memory bindings -- no
  *   wrangler config anywhere. Closing the Scope stops the server.
  *
  * Returns the service implementation as an Effect (the alchemy-side
@@ -293,7 +293,7 @@ export const make = <TargetConfig = unknown>(
         const target = yield* resolveTarget(root);
         const astro = yield* loadAstro(root);
         // `port: 0` (true OS-assigned) when the Vite under Astro is
-        // >= 8.2.1, probed ephemeral port otherwise — see
+        // >= 8.2.1, probed ephemeral port otherwise -- see
         // `resolveViteDevPort`. Astro's dev server runs on Astro's own
         // Vite dependency, so the version is resolved from the astro
         // package's directory, not the project root.
@@ -329,7 +329,7 @@ export const make = <TargetConfig = unknown>(
   });
 
 /**
- * The `Layer` form of {@link make} — the shape the e2e harness's framework
+ * The `Layer` form of {@link make} -- the shape the e2e harness's framework
  * factory contract expects (`(options) => Layer<Framework>`).
  */
 export const layer = <TargetConfig = unknown>(

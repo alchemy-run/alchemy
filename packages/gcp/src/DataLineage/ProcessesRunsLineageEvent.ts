@@ -51,7 +51,7 @@ export type ProcessesRunsLineageEventProps = {
   /**
    * Parent run. Full name
    * `projects/{project}/locations/{location}/processes/{process}/runs/{run}`
-   * or a run id combined with `process`. Immutable — changing it replaces
+   * or a run id combined with `process`. Immutable -- changing it replaces
    * the event.
    */
   run: string;
@@ -63,7 +63,7 @@ export type ProcessesRunsLineageEventProps = {
   /**
    * Event id (the `{lineage_event}` segment). If omitted, a unique name
    * is generated. Max 200 characters: letters, digits, underscores,
-   * hyphens, colons, periods. Immutable — changing it replaces the event.
+   * hyphens, colons, periods. Immutable -- changing it replaces the event.
    */
   lineageEventId?: string;
   /**
@@ -116,7 +116,7 @@ export type ProcessesRunsLineageEvent = Resource<
 >;
 
 /**
- * A Data Lineage event — one operation that moved data from source
+ * A Data Lineage event -- one operation that moved data from source
  * assets to target assets.
  *
  * Events are immutable after create (no patch API). Identity is the

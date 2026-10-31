@@ -33,7 +33,7 @@ export interface CreateScheduleRequest extends Omit<
 }
 
 /**
- * Runtime binding for `scheduler:CreateSchedule` — THE dynamic-scheduling
+ * Runtime binding for `scheduler:CreateSchedule` -- THE dynamic-scheduling
  * pattern (per-user reminders, delayed callbacks): a deployed Lambda mints
  * one-shot `at(...)` or recurring schedules at runtime.
  *
@@ -41,7 +41,7 @@ export interface CreateScheduleRequest extends Omit<
  * role EventBridge Scheduler assumes to invoke the target) and, optionally, a
  * `ScheduleGroup` that scopes which schedules the host may create. At deploy
  * time it contributes BOTH `scheduler:CreateSchedule` on the group's schedule
- * ARN pattern AND `iam:PassRole` on the execution role — without the PassRole
+ * ARN pattern AND `iam:PassRole` on the execution role -- without the PassRole
  * statement schedule creation fails only at runtime.
  * ### Creating Schedules At Runtime
  * **Example:** Mint A One-Shot Schedule From A Lambda

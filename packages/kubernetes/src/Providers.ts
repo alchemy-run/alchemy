@@ -15,7 +15,7 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Kuberne
  * (`Deployment`, `Job`, `Manifest`, `HelmChart`), `LocalCluster`, and the
  * built-in cluster adapters (`kubeconfig`, `token`, `client-cert`, `exec`).
  *
- * Managed-cloud clusters need their platform's adapter alongside — e.g.
+ * Managed-cloud clusters need their platform's adapter alongside -- e.g.
  * targeting an `AWS.EKS.Cluster` requires `AWS.providers()` in the same
  * stack:
  *

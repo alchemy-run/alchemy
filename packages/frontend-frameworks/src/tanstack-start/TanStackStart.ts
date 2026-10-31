@@ -13,7 +13,7 @@ import {
 
 /**
  * The structural slice of the project's `vite` module this package drives.
- * Typed structurally so the package carries no dependency on vite — the
+ * Typed structurally so the package carries no dependency on vite -- the
  * *project's* install is always the one loaded.
  *
  * `createBuilder` (not `build`) is the entry point: TanStack Start's plugin
@@ -48,7 +48,7 @@ export interface TanStackStartViteDevServer {
  */
 export interface TanStackStartTargetConfig {
   /**
-   * Build output directory relative to the project root — the parent of
+   * Build output directory relative to the project root -- the parent of
    * `client/` and `server/`. Mirrors the project config's `build.outDir`.
    * @default "dist"
    */
@@ -57,15 +57,15 @@ export interface TanStackStartTargetConfig {
 
 /**
  * A deploy target for TanStack Start: the generic `DeployTarget` seams plus
- * the one framework-specific hook the build needs — the file name of the
+ * the one framework-specific hook the build needs -- the file name of the
  * server entry the SSR environment emits, which the target's finishing pass
  * wraps.
  */
 export interface TanStackStartTarget extends DeployTarget<TanStackStartTargetConfig> {
   /**
    * The server entry file name within the SSR output directory. TanStack
-   * Start's SSR environment builds a single rollup input — the resolved
-   * server entry (`src/server.ts`, else the framework's default one) — so
+   * Start's SSR environment builds a single rollup input -- the resolved
+   * server entry (`src/server.ts`, else the framework's default one) -- so
    * the emitted chunk is named after it (`server.js`). Omitted targets fall
    * back to {@link DEFAULT_SERVER_ENTRY_FILE_NAME}, and a build that emits
    * exactly one top-level module under the server directory uses that
@@ -87,7 +87,7 @@ export type TanStackStartTargetInput = DeployTargetInput<
 /**
  * The default deploy target: this package's own AWS Lambda target module,
  * loaded from the project's dependency tree. (Cloudflare deploys TanStack
- * Start through its native Vite integration — `Cloudflare.Website.Vite` —
+ * Start through its native Vite integration -- `Cloudflare.Website.Vite` --
  * so no Cloudflare target exists here.)
  */
 export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/tanstack-start/aws";
@@ -114,7 +114,7 @@ export interface TanStackStartOptions {
    */
   readonly target?: TanStackStartTargetInput | undefined;
   /**
-   * Build output directory relative to the project root — the parent of
+   * Build output directory relative to the project root -- the parent of
    * `client/` and `server/`. Must match the project's `build.outDir` when it
    * sets one.
    * @default "dist"
@@ -140,7 +140,7 @@ const fail = (message: string, cause?: unknown) =>
  * default, so a stock TanStack Start server build emits
  * `import { RouterProvider } from "@tanstack/react-router"` and is only
  * runnable next to an installed dependency tree. A Lambda ships the server
- * directory alone, so the SSR bundle must be self-contained — only `node:`
+ * directory alone, so the SSR bundle must be self-contained -- only `node:`
  * builtins stay external. Declared on both the legacy `ssr` key and the
  * environment key so it holds across Vite majors.
  */
@@ -164,16 +164,16 @@ export const inlineBuildConfig = (
  * - `build` resolves the deploy target, then either delegates wholesale
  *   (`target.build`) or drives the PROJECT's own Vite install
  *   programmatically: `createBuilder({ root, ... })` followed by
- *   `buildApp()`. TanStack Start is pure Vite — `tanstackStart()` in the
+ *   `buildApp()`. TanStack Start is pure Vite -- `tanstackStart()` in the
  *   project's `vite.config.ts` owns routing, the client/`ssr` environments,
- *   and the server entry — so there is no adapter to select and no plugin to
+ *   and the server entry -- so there is no adapter to select and no plugin to
  *   inject; the integration only forces the SSR bundle to be self-contained
  *   (see {@link inlineBuildConfig}). The `BuildOutput` is read from disk:
  *   `serverModules` entry-first from `<outDir>/server`, `clientDirectory` =
  *   `<outDir>/client`.
  * - `dev` runs the project's own Vite dev server (TanStack Start's
  *   dev-server plugin serves SSR, server routes, and server functions
- *   through it with native HMR), scoped — closing the Scope closes the
+ *   through it with native HMR), scoped -- closing the Scope closes the
  *   server.
  *
  * This module is target-agnostic: everything AWS-specific lives in
@@ -211,7 +211,7 @@ export const make: (
       };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
-      // build in a disposable child process — vite.config.* executes user
+      // build in a disposable child process -- vite.config.* executes user
       // plugins that must not touch the engine process, and TanStack
       // Start's plugin crawls framework packages from `process.cwd()`).
       if (target.build !== undefined) {
@@ -254,7 +254,7 @@ export const make: (
       const root = devOptions?.root ?? baseRoot;
       const vite = yield* loadVite(root);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-      // on older Vite — see `resolveViteDevPort`.
+      // on older Vite -- see `resolveViteDevPort`.
       const port = yield* FrameworkCore.resolveViteDevPort(
         vite.version,
         devOptions?.port ?? options?.dev?.port,
@@ -331,7 +331,7 @@ export interface TanStackStartOutputDirs {
  *
  * The expected name wins. Otherwise, a build whose server directory holds
  * exactly one top-level module (chunks live under `assets/`) is
- * unambiguous — that module is the entry, which covers a project that names
+ * unambiguous -- that module is the entry, which covers a project that names
  * its server entry something other than `server.ts`.
  */
 export const selectServerEntryName = (
@@ -375,7 +375,7 @@ export const readTanStackStartOutput = (
     );
     if (entryName === undefined) {
       return yield* fail(
-        `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} — ` +
+        `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} \u2014 ` +
           "is the SSR environment's rollup input the project's server entry?",
       );
     }
@@ -389,7 +389,7 @@ export const readTanStackStartOutput = (
 
 /**
  * A `Layer` providing framework-core's `Framework` service for a TanStack
- * Start project — the fully-typed entrypoint for `e2e.config.ts` and
+ * Start project -- the fully-typed entrypoint for `e2e.config.ts` and
  * alchemy's `AWS.Website.TanStackStart` composite.
  */
 export const layer = (

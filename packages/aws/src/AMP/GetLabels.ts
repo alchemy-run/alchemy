@@ -38,7 +38,7 @@ export interface GetLabelsClient {
 }
 
 /**
- * Runtime binding for `aps:GetLabels` — list label names and label values
+ * Runtime binding for `aps:GetLabels` -- list label names and label values
  * from an AMP {@link Workspace}'s Prometheus-compatible query API,
  * SigV4-signed with the host Function's credentials.
  *

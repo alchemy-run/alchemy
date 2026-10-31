@@ -26,12 +26,12 @@ export interface MySQLPasswordProps {
   name?: string;
 
   /**
-   * MySQL database — string name or {@link MySQLDatabase} resource.
+   * MySQL database -- string name or {@link MySQLDatabase} resource.
    */
   database: string | MySQLDatabase;
 
   /**
-   * Branch — string name or {@link MySQLBranch} resource.
+   * Branch -- string name or {@link MySQLBranch} resource.
    * @default "main"
    */
   branch?: string | MySQLBranch;
@@ -169,7 +169,7 @@ export const MySQLPasswordProvider = () =>
       // attribute. Fall through to greenfield create in `reconcile`.
       if (!output) return undefined;
 
-      // Refresh — verify the cached password still exists and
+      // Refresh -- verify the cached password still exists and
       // re-emit the persisted output (with plaintext intact).
       // If it's gone, return undefined so the engine routes to
       // reconcile, which will surface the unrecoverable-rotation
@@ -196,7 +196,7 @@ export const MySQLPasswordProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const newName = yield* createPasswordName(id, news.name);
 
-      // Identifiers — stable across update (diff replaces on
+      // Identifiers -- stable across update (diff replaces on
       // database/branch changes), so we can pull from `output` first
       // and fall back to `news` for greenfield.
       const { organization: envOrg } = yield* yield* Credentials;
@@ -204,7 +204,7 @@ export const MySQLPasswordProvider = () =>
       const databaseName = output?.database ?? resolveDatabaseName(news.database);
       const branchName = output?.branch ?? resolveBranchName(news.branch);
 
-      // 1. Observe — read live state. The PlanetScale API has no
+      // 1. Observe -- read live state. The PlanetScale API has no
       //    "lookup by name" path (names aren't unique within a branch)
       //    so the only way to find the live password is by id. Without
       //    a cached output we cannot observe and fall straight through
@@ -220,7 +220,7 @@ export const MySQLPasswordProvider = () =>
             .pipe(Effect.catchTag("NotFound", () => Effect.undefined))
         : undefined;
 
-      // 2. Ensure — create the password if it doesn't exist live.
+      // 2. Ensure -- create the password if it doesn't exist live.
       //    This single branch covers greenfield (no output) AND the
       //    out-of-band-deletion case (output cached but cloud lost it).
       //    The latter is structurally a rotation: the new password
@@ -249,7 +249,7 @@ export const MySQLPasswordProvider = () =>
         live = created;
       }
 
-      // 3. Sync — diff observed cloud state against desired and patch
+      // 3. Sync -- diff observed cloud state against desired and patch
       //    only what changed. Only `name` and `cidrs` are mutable in
       //    place; everything else triggers a replace via diff().
       //    Skip the API entirely when there's no delta.
@@ -269,7 +269,7 @@ export const MySQLPasswordProvider = () =>
         });
       }
 
-      // 4. Return — fresh attrs sourced from observed cloud state,
+      // 4. Return -- fresh attrs sourced from observed cloud state,
       //    re-using cached plaintext when we didn't just create.
       return buildAttributes(live, plaintext, {
         organization,
@@ -351,7 +351,7 @@ export const MySQLPasswordProvider = () =>
   });
 
 // At runtime, Resource references in props are resolved to their full
-// attributes — so `news.database` (when a Database resource was passed)
+// attributes -- so `news.database` (when a Database resource was passed)
 // is `{ name: string; organization: string; ... }` rather than the
 // statically-typed Resource (whose attributes are `Output<...>`). We
 // cast through structural shapes here.

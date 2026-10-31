@@ -49,7 +49,7 @@ export class EntrypointUnavailableError extends Data.TaggedError("EntrypointUnav
  */
 export interface EntrypointOptions {
   /**
-   * Properties the target entrypoint reads from `ctx.props` — via
+   * Properties the target entrypoint reads from `ctx.props` -- via
    * `WorkerExecutionContext.props` in an Effect Worker. Must be
    * structured-cloneable.
    */
@@ -76,7 +76,7 @@ export const getLoopbackEntrypoint = (
           message:
             exports === undefined
               ? `ctx.exports is not available, so entrypoint "${name}" cannot be ` +
-                "minted — remove the `disable_ctx_exports` compatibility flag."
+                "minted \u2014 remove the `disable_ctx_exports` compatibility flag."
               : `"${name}" is not a WorkerEntrypoint exported by this Worker's main module.`,
         }),
       );
@@ -207,7 +207,7 @@ export const fromExecutionContext = (
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
+      // Register the promise with workerd un-awaited -- waitUntil extends the
       // invocation's lifetime without blocking the response.
       yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
     }),
@@ -226,7 +226,7 @@ export const fromExecutionContext = (
         : Effect.fail(
             new CachePurgeError({
               message:
-                "ctx.cache is not available — enable Workers Cache on this " +
+                "ctx.cache is not available \u2014 enable Workers Cache on this " +
                 "Worker (the `cache` prop or `yield* Cloudflare.cache()`) " +
                 "and note it is not supported in local dev.",
             }),

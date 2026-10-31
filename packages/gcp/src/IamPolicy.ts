@@ -45,7 +45,7 @@ export interface IamPolicyBinding {
 /**
  * An IAM Condition (CEL). Alchemy uses it to narrow a project-level grant
  * to one resource on services with no per-resource IAM policy (Firestore,
- * Cloud SQL, Memorystore, …): `resource.name == "projects/p/…"`.
+ * Cloud SQL, Memorystore, ...): `resource.name == "projects/p/..."`.
  */
 export interface IamCondition {
   title?: string;
@@ -373,7 +373,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   ),
 };
 
-/** A single `role` → `member` edge on one resource's IAM policy. */
+/** A single `role` -> `member` edge on one resource's IAM policy. */
 export interface IamMembership {
   kind: GcpIamResourceKind;
   /** Full resource name (`projects/p/topics/t`) or project id for `project`. */
@@ -395,8 +395,8 @@ const targetName = (kind: GcpIamResourceKind, name: string) =>
 /**
  * Rewrite `policy` so `member` holds exactly `add` roles out of `managed`
  * (roles in `managed` but not in `add` are revoked from the member).
- * Conditional bindings are never touched — only unconditional
- * role → members edges are Alchemy's to manage. Returns `undefined` when
+ * Conditional bindings are never touched -- only unconditional
+ * role -> members edges are Alchemy's to manage. Returns `undefined` when
  * the policy already matches.
  */
 const rewrite = (

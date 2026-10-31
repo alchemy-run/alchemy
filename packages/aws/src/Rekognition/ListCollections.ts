@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:ListCollections` — list the face collection IDs in the account.
+ * Runtime binding for `rekognition:ListCollections` -- list the face collection IDs in the account.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:ListCollections` on `*` (Rekognition data-plane resources such

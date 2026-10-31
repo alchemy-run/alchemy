@@ -9,7 +9,7 @@ import type * as GitHub from "./Providers.ts";
 
 export interface CollaboratorProps {
   /**
-   * Repository owner — a user or organization login.
+   * Repository owner -- a user or organization login.
    */
   owner: string;
 
@@ -25,11 +25,11 @@ export interface CollaboratorProps {
 
   /**
    * Permission level to grant.
-   * - `pull` — read-only access
-   * - `push` — read and write access
-   * - `maintain` — read, write, and manage issues/PRs
-   * - `triage` — read and manage issues/PRs without write access
-   * - `admin` — full admin access
+   * - `pull` -- read-only access
+   * - `push` -- read and write access
+   * - `maintain` -- read, write, and manage issues/PRs
+   * - `triage` -- read and manage issues/PRs without write access
+   * - `admin` -- full admin access
    *
    * @default "push"
    */
@@ -39,7 +39,7 @@ export interface CollaboratorProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -70,7 +70,7 @@ export interface Collaborator extends Resource<
  * organization-owned repositories, prefer `GitHub.TeamAccess` to grant
  * access through teams instead of individual users.
  *
- * Collaborators default to **retain** on removal — destroying the stack does
+ * Collaborators default to **retain** on removal -- destroying the stack does
  * NOT remove the collaborator, preventing accidental lockout. Opt in to
  * actual removal by wrapping the resource in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
@@ -147,7 +147,7 @@ export const CollaboratorProvider = () =>
 
     reconcile: Effect.fn(
       function* ({ news }) {
-        // Ensure & Sync — PUT is idempotent; creates or updates permission
+        // Ensure & Sync -- PUT is idempotent; creates or updates permission
         yield* Repos.addCollaborator({
           owner: news.owner,
           repo: news.repository,

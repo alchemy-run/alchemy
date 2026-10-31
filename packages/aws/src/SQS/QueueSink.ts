@@ -32,7 +32,7 @@ export type QueueSinkError = sqs.SendMessageBatchError | BatchRetryExhaustedErro
  * const sink = yield* SQS.QueueSink(queue);
  *
  * // runtime: batching, size limits, and transient-failure retry are handled
- * // by the sink — each element is a SendMessageBatchRequestEntry minus `Id`.
+ * // by the sink -- each element is a SendMessageBatchRequestEntry minus `Id`.
  * yield* Stream.fromIterable(messages).pipe(
  *   Stream.map((message) => ({ MessageBody: message })),
  *   Stream.run(sink),

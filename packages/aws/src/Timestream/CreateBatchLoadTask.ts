@@ -9,7 +9,7 @@ export interface CreateBatchLoadTaskRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `timestream-write:CreateBatchLoadTask` — start a bulk
+ * Runtime binding for `timestream-write:CreateBatchLoadTask` -- start a bulk
  * CSV import from S3 into a Timestream {@link Table}.
  *
  * Bind the operation to the target table to get a callable with
@@ -25,10 +25,10 @@ export interface CreateBatchLoadTaskRequest extends Omit<
  * ### Batch Loading
  * **Example:** Start a bulk CSV import
  * ```typescript
- * // init — bind the operation to the target table
+ * // init -- bind the operation to the target table
  * const createBatchLoadTask = yield* Timestream.CreateBatchLoadTask(table);
  *
- * // runtime — import CSV rows from S3
+ * // runtime -- import CSV rows from S3
  * const task = yield* createBatchLoadTask({
  *   DataSourceConfiguration: {
  *     DataSourceS3Configuration: { BucketName: "my-ingest-bucket", ObjectKeyPrefix: "metrics/" },

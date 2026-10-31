@@ -74,7 +74,7 @@ export interface ObservabilityConfiguration extends Resource<
 > {}
 
 /**
- * An AWS App Runner observability configuration — enables AWS X-Ray tracing
+ * An AWS App Runner observability configuration -- enables AWS X-Ray tracing
  * for the App Runner services that reference it.
  *
  * Observability configurations are immutable revisions: changing
@@ -165,7 +165,7 @@ export const ObservabilityConfigurationProvider = () =>
        * `DeleteObservabilityConfiguration` has no `DeleteAllRevisions`
        * flag (unlike auto scaling configurations), so enumerate and delete
        * each revision. A revision still referenced by a service rejects
-       * with InvalidRequestException — retry through that window (bounded).
+       * with InvalidRequestException -- retry through that window (bounded).
        */
       const deleteAllRevisions = Effect.fn(function* (name: string) {
         const pages = yield* apprunner.listObservabilityConfigurations
@@ -222,10 +222,10 @@ export const ObservabilityConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the latest ACTIVE revision is authoritative.
+          // 1. Observe -- the latest ACTIVE revision is authoritative.
           let observed = yield* findLatest(name);
 
-          // 2/3. Ensure + sync — trace settings live on immutable
+          // 2/3. Ensure + sync -- trace settings live on immutable
           // revisions, so a drift on the user-specified vendor is converged
           // by creating a new revision under the same name. Only compare
           // what the user actually specified.
@@ -245,7 +245,7 @@ export const ObservabilityConfigurationProvider = () =>
             observed = created.ObservabilityConfiguration;
           }
 
-          // 3b. Sync tags on the latest revision ARN — diff against
+          // 3b. Sync tags on the latest revision ARN -- diff against
           // OBSERVED cloud tags.
           if (observed.ObservabilityConfigurationArn) {
             yield* syncAppRunnerTags(observed.ObservabilityConfigurationArn, desiredTags);
@@ -269,7 +269,7 @@ export const ObservabilityConfigurationProvider = () =>
                   s.ObservabilityConfigurationArn !== undefined &&
                   // App Runner ships an AWS-managed `DefaultConfiguration`
                   // revision that always exists and can never be deleted
-                  // — keep it out of enumeration for account-wide
+                  // -- keep it out of enumeration for account-wide
                   // teardown (nuke).
                   s.ObservabilityConfigurationName !== "DefaultConfiguration"
                     ? [s.ObservabilityConfigurationArn]
@@ -294,7 +294,7 @@ export const ObservabilityConfigurationProvider = () =>
                             )
                           : Effect.undefined,
                       ),
-                      // Tolerate a delete race — drop the item.
+                      // Tolerate a delete race -- drop the item.
                       Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },

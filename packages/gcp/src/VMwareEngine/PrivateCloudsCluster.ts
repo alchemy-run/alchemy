@@ -71,7 +71,7 @@ export type AutoscalingSettings = {
 export type DatastoreNetwork = {
   /** Output-only network peering used to reach the file share. */
   networkPeering?: string;
-  /** NFS connections from each ESXi host (`1`–`4`). */
+  /** NFS connections from each ESXi host (`1`-`4`). */
   connectionCount?: number;
   /** Subnet resource name. */
   subnet?: string;
@@ -98,7 +98,7 @@ export type PrivateCloudsClusterProps = {
   /**
    * Parent PrivateCloud resource name
    * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
-   * or the cloud id. Immutable — changing it replaces the cluster.
+   * or the cloud id. Immutable -- changing it replaces the cluster.
    */
   privateCloud: string;
   /**
@@ -172,7 +172,7 @@ export type PrivateCloudsCluster = Resource<
  * independently.
  *
  * Clusters have no labels or description field, so Alchemy treats
- * clusters whose parent private cloud carries the `[alchemy …]`
+ * clusters whose parent private cloud carries the `[alchemy ...]`
  * ownership marker as owned for `list` / nuke. Changing the parent
  * cloud, cluster id, location, or stretched config replaces the
  * cluster. Node counts and autoscaling update in place.

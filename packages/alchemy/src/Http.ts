@@ -27,7 +27,7 @@ export type HttpEffect<Req = never> = Effect.Effect<
 
 /**
  * `effect`'s HttpEffect brands a request scope as "ejected" when ownership
- * is transferred to a consumer that outlives the handler's return — a
+ * is transferred to a consumer that outlives the handler's return -- a
  * streaming response body, a WebSocket upgrade, an RPC stream. Bridges check
  * this before their close-on-return path: an ejected scope is closed by its
  * new owner when it finishes, not by the bridge.
@@ -50,7 +50,7 @@ export const serve = <Req = never>(
         ? // `HttpServer.serve` registers the server on the ambient Scope and
           // RETURNS; the server lives until that scope closes. A host program
           // (ECS task/service, EC2 instance) must therefore park forever after
-          // a successful registration — otherwise a pure `{ fetch }` program
+          // a successful registration -- otherwise a pure `{ fetch }` program
           // completes immediately, `Effect.scoped` closes the scope, and the
           // container exits 0 in a crash-loop. (One-shot `{ run }` programs
           // never call `serve`, so they still exit when `run` completes.)
@@ -90,7 +90,7 @@ export const safeHttpEffect = <Req = never>(
     (cause) =>
       // `causeResponse` is effect's native failure boundary: Respondable
       // failures keep their intended response (e.g. RouteNotFound -> 404),
-      // client aborts map to 499, and everything else becomes an empty 500 —
+      // client aborts map to 499, and everything else becomes an empty 500 --
       // the cause is never echoed to the network, as it can contain sensitive
       // data (prompt contents, API keys baked into error messages, internal
       // file paths).
@@ -136,7 +136,7 @@ export interface BunHttpServerOptions {
    *
    * Always passed explicitly to `Bun.serve` so container bootstraps bind a
    * predictable IPv4 wildcard regardless of the platform default
-   * (`@effect/platform-bun` ≥ 4.0.0-rc.115 defaults to `::`; rc.113/114
+   * (`@effect/platform-bun` >= 4.0.0-rc.115 defaults to `::`; rc.113/114
    * crash-looped on the omitted-hostname case).
    *
    * @default "0.0.0.0"

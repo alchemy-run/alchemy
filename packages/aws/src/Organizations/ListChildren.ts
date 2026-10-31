@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListChildren`.
  *
- * Lists the child accounts or organizational units directly under the specified parent root or OU — one level of the organization tree at a time.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists the child accounts or organizational units directly under the specified parent root or OU -- one level of the organization tree at a time.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListChildrenHttp)`.
  * ### Reading the Organization Tree
  * **Example:** Walk One Tree Level
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listChildren = yield* AWS.Organizations.ListChildren();
  *
  * // runtime

@@ -29,7 +29,7 @@ export type EvaluationItemProps = {
    */
   evaluationItemId?: string;
   /**
-   * Region. Immutable — changing it replaces the item.
+   * Region. Immutable -- changing it replaces the item.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -97,7 +97,7 @@ export type EvaluationItem = Resource<
 >;
 
 /**
- * A Vertex AI Evaluation Item — one request or result row used by
+ * A Vertex AI Evaluation Item -- one request or result row used by
  * Evaluation Sets and Evaluation Runs.
  *
  * Vertex assigns the resource id. There is no update API: changing type,

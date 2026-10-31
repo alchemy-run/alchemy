@@ -54,7 +54,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  * `SUCCEEDED`, `FAILED`, `TIMEOUT`, or `STOPPED`; this subscribes the host
  * Function to those events so it can chain pipelines or alert on failures.
  *
- * Glue publishes to EventBridge automatically — no additional resource is
+ * Glue publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
@@ -72,7 +72,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  *       (events) =>
  *         Stream.runForEach(events, (event) =>
  *           Effect.logError(
- *             `glue run failed: ${event.detail.jobName} — ${event.detail.message}`,
+ *             `glue run failed: ${event.detail.jobName} -- ${event.detail.message}`,
  *           ),
  *         ),
  *     );

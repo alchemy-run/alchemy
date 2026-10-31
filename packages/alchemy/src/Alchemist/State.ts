@@ -85,7 +85,7 @@ export const providerContext = Effect.fn(function* (
  * Resolve the state service a source addresses, in the caller's `Scope`: the
  * store's resources live until that scope closes. The tree operations
  * (`State.listState`, `State.readState`, `State.deleteState`) take `State`
- * from context — provide the resolved service (or {@link layer}) to run
+ * from context -- provide the resolved service (or {@link layer}) to run
  * them against the chosen store:
  *
  * ```ts

@@ -3,9 +3,9 @@
  *
  * One contract, two renderers:
  *
- * - {@link layerSigil} — the interactive Sigil renderer: live rows,
+ * - {@link layerSigil} -- the interactive Sigil renderer: live rows,
  *   prompts as real screens, full-screen sessions.
- * - {@link layerNonInteractive} — append-only plain output for CI, piped
+ * - {@link layerNonInteractive} -- append-only plain output for CI, piped
  *   output, the Alchemist API and tests. Views print once, every prompt,
  *   screen and session fails with the typed {@link NonInteractiveTerminal}.
  *
@@ -13,7 +13,7 @@
  * callers never branch on the renderer themselves.
  *
  * Child processes (the RPC sidecar, spawned dev children) deliberately do
- * NOT provide this service at all — interaction capability is structural,
+ * NOT provide this service at all -- interaction capability is structural,
  * not configured. Code that might need a human declares it; a process that
  * cannot reach one simply doesn't have the service in its graph.
  */
@@ -118,7 +118,7 @@ export interface BrowserLoginOptions<A, E, R, E2 = never, R2 = never> {
   readonly url: string;
   /** Short code the user confirms on the login page (device flows). */
   readonly code?: string;
-  /** @default "waiting for browser authorization (up to 5 minutes)…" */
+  /** @default "waiting for browser authorization (up to 5 minutes)..." */
   readonly waitingLabel?: string;
   /** Completes the login: a token poll, a CLI process, an OAuth callback. */
   readonly waitFor: Effect.Effect<A, E, R>;
@@ -191,8 +191,8 @@ export interface ProgressHandle {
 }
 
 /**
- * A mounted live view. The view itself is immutable — dynamic content flows
- * through a caller-owned store that its component subscribes to — so the
+ * A mounted live view. The view itself is immutable -- dynamic content flows
+ * through a caller-owned store that its component subscribes to -- so the
  * handle only controls the block's lifetime. Scope-bound the same way as
  * {@link ProgressHandle}; `close` settles early and is idempotent.
  */
@@ -317,7 +317,7 @@ export const screen = <Value>(scene: Screen<Value>) =>
 
 /**
  * `task` for any renderer: a scoped progress row settled by the effect's
- * exit. Interruption (Ctrl+C) is not a failure — the row is dropped instead
+ * exit. Interruption (Ctrl+C) is not a failure -- the row is dropped instead
  * of painted as an error.
  */
 export const taskFromProgress =
@@ -343,7 +343,7 @@ export const taskFromProgress =
  *
  * Fails with {@link BrowserOpenFailed} when the launcher exits non-zero (e.g.
  * `xdg-open` with no handler installed). Some `xdg-open` configurations block
- * until the browser itself exits — a launcher still running after a short
+ * until the browser itself exits -- a launcher still running after a short
  * grace period is treated as a successful launch rather than awaited.
  */
 export const openUrl = (url: string) =>

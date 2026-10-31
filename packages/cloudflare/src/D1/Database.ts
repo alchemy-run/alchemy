@@ -53,14 +53,14 @@ export type DatabaseProps = {
   name?: string;
   /**
    * Region in which the primary copy of the data is stored. Cannot be
-   * changed after creation — updating this property triggers a replacement.
+   * changed after creation -- updating this property triggers a replacement.
    *
-   * - `wnam` — Western North America
-   * - `enam` — Eastern North America
-   * - `weur` — Western Europe
-   * - `eeur` — Eastern Europe
-   * - `apac` — Asia Pacific
-   * - `oc`   — Oceania
+   * - `wnam` -- Western North America
+   * - `enam` -- Eastern North America
+   * - `weur` -- Western Europe
+   * - `eeur` -- Eastern Europe
+   * - `apac` -- Asia Pacific
+   * - `oc`   -- Oceania
    */
   primaryLocationHint?: PrimaryLocationHint;
   /**
@@ -86,7 +86,7 @@ export type DatabaseProps = {
    * `wrangler d1 migrations apply` is adopted by a ONE-WAY conversion on
    * first deploy: the old tool's applied history is copied into Alchemy's
    * table (validated against the local files) and the old table is left
-   * frozen — never written, never dropped. From then on Alchemy owns the
+   * frozen -- never written, never dropped. From then on Alchemy owns the
    * migration state.
    *
    * Pending migrations are detected on each deploy and applied in order as
@@ -109,8 +109,8 @@ export type DatabaseProps = {
    *
    * Accepts:
    * - another `D1Database` resource (uses its `databaseId`)
-   * - `{ databaseId }` — clone by explicit UUID
-   * - `{ name }` — look up the source by name and clone it
+   * - `{ databaseId }` -- clone by explicit UUID
+   * - `{ name }` -- look up the source by name and clone it
    */
   clone?: CloneSource;
 };
@@ -154,7 +154,7 @@ export type Database = Resource<
  * ```
  *
  * **Example:** Database with read replication
- * Read replication is the only mutable property after creation — toggling it
+ * Read replication is the only mutable property after creation -- toggling it
  * triggers an update rather than a replacement.
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
@@ -174,7 +174,7 @@ export type Database = Resource<
  * migrations are skipped on subsequent deploys; new files are detected
  * automatically and applied as part of the next update.
  *
- * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table —
+ * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table --
  * one format, owned by Alchemy. A database previously migrated with
  * drizzle-kit, Prisma, or wrangler is adopted by a one-way conversion on
  * first deploy: the old tool's applied history is copied into Alchemy's
@@ -220,7 +220,7 @@ export type Database = Resource<
  * ```
  *
  * ### Cloning a Database
- * `clone` performs a full export → import from a source database during
+ * `clone` performs a full export -> import from a source database during
  * creation. It accepts a `D1Database` resource, a `{ databaseId }`, or a
  * `{ name }` to look up by name.
  *
@@ -330,7 +330,7 @@ export const ProviderLive = () =>
       }
       return undefined;
     }),
-    // Account-scoped collection — D1 databases live under an account and the
+    // Account-scoped collection -- D1 databases live under an account and the
     // distilled `listDatabases` op paginates them. Hydrate each row into the
     // same Attributes shape `read`'s name-lookup branch returns.
     list: Effect.fn(function* () {
@@ -409,7 +409,7 @@ export const ProviderLive = () =>
       const jurisdiction = news.jurisdiction ?? "default";
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached database; fall back to a name
+      // Observe -- re-fetch the cached database; fall back to a name
       // lookup so we recover from out-of-band deletes or partial
       // state-persistence failures (the create call may have written
       // the database but lost the result before persist).
@@ -434,7 +434,7 @@ export const ProviderLive = () =>
         );
       }
 
-      // Ensure — create if missing. Cloudflare returns
+      // Ensure -- create if missing. Cloudflare returns
       // `InvalidProperty` when a database with the same name already
       // exists; we tolerate the race by re-listing to find it.
       let databaseId: string;
@@ -472,7 +472,7 @@ export const ProviderLive = () =>
         databaseName = observed.name ?? name;
       }
 
-      // Sync read replication — the only mutable property on the
+      // Sync read replication -- the only mutable property on the
       // database resource itself. Always patch with the desired mode
       // so adoption converges drifted state.
       const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
@@ -502,7 +502,7 @@ export const ProviderLive = () =>
         });
       }
 
-      // Sync migrations — the shared pipeline is idempotent
+      // Sync migrations -- the shared pipeline is idempotent
       // (already-applied entries are skipped), so this works for both
       // first create and ongoing updates. Foreign (drizzle/prisma/
       // wrangler) or legacy history is converted into
@@ -559,7 +559,7 @@ export const ProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the database is purely virtual: a `dev:` id keyed
+ * Local (dev) provider -- the database is purely virtual: a `dev:` id keyed
  * into the local workerd D1 simulator (DO SQLite under `.alchemy/local/d1`).
  * `toRuntimeBinding` lowers a `d1` binding whose id is `dev:`-prefixed onto
  * the local D1 service.
@@ -569,9 +569,9 @@ export const ProviderLive = () =>
  * migration flow the live provider uses, against the simulator's storage.
  *
  * RPC-backed: under `alchemy dev` (an `RpcProviderProxy` in context) the
- * whole lifecycle runs in the Cloudflare sidecar process — where
+ * whole lifecycle runs in the Cloudflare sidecar process -- where
  * `localRuntimeServices()` is real and shared with the Worker/Queue/
- * Container local providers — instead of in the user's process where that
+ * Container local providers -- instead of in the user's process where that
  * layer is gated empty (the root cause of #1007). In-process runs (no
  * proxy: `sidecar: false` tests, a plain deploy deleting a local-mode row)
  * build the provider directly with the un-gated runtime from the `dual`
@@ -583,7 +583,7 @@ export const ProviderLocal = () =>
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       // The local runtime services (workerd `Runtime`, binding plugins) and
-      // the HTTP client are resolved once at layer build and closed over —
+      // the HTTP client are resolved once at layer build and closed over --
       // lifecycle effects run with the engine's call-time context, which
       // doesn't include them.
       const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
@@ -597,7 +597,7 @@ export const ProviderLocal = () =>
           if (output.accountId !== accountId) {
             return { action: "replace" } as const;
           }
-          // Detect migration/import file drift — same rules as the live
+          // Detect migration/import file drift -- same rules as the live
           // provider.
           if (yield* diffMigrations({ news, output })) {
             return { action: "update" } as const;
@@ -611,14 +611,14 @@ export const ProviderLocal = () =>
           // Fall through to the engine's default prop diff.
         }),
         read: Effect.fn(function* ({ output }) {
-          // Purely virtual — the persisted state row is the source of truth.
+          // Purely virtual -- the persisted state row is the source of truth.
           return output ?? undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const accountId = yield* localAccountId;
           const databaseId = output?.databaseId ?? generateLocalId();
 
-          // Sync migrations — the shared pipeline, driven through the
+          // Sync migrations -- the shared pipeline, driven through the
           // ephemeral local gateway so the SAME bookkeeping applies
           // locally as in the cloud.
           const migrationsInput = migrationsInputOf(news);
@@ -660,7 +660,7 @@ export const ProviderLocal = () =>
         }),
         delete: Effect.fn(function* () {
           // The simulator's on-disk data is keyed by the dev id; dropping
-          // the state row is enough — orphaned data is reclaimed with
+          // the state row is enough -- orphaned data is reclaimed with
           // `.alchemy`.
         }),
       };

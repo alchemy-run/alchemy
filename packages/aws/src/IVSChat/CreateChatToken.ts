@@ -22,11 +22,11 @@ export interface CreateChatTokenRequest extends Omit<
 
 /**
  * Mint an encrypted chat token that an end user presents to open a WebSocket
- * connection to the bound room — the effectful call made from a deployed
+ * connection to the bound room -- the effectful call made from a deployed
  * Lambda or Task. The `capabilities` field grants `SEND_MESSAGE`,
  * `DELETE_MESSAGE`, and/or `DISCONNECT_USER` to the token holder (a token
  * with no capabilities can only view chat); `attributes` attaches profile
- * data (display name, icon, …) to every message the user sends. The returned
+ * data (display name, icon, ...) to every message the user sends. The returned
  * `token` is sensitive and surfaces as a `Redacted` value.
  *
  * ### Minting Chat Tokens

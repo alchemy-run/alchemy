@@ -234,8 +234,8 @@ export type GatewayDynamicRouting = Resource<
 /**
  * A dynamic routing configuration ("route") on a Cloudflare.AI. Gateway.
  *
- * Dynamic routing models request handling as a graph of elements — start,
- * conditional, percentage split, rate limit, model, and end nodes — so a
+ * Dynamic routing models request handling as a graph of elements -- start,
+ * conditional, percentage split, rate limit, model, and end nodes -- so a
  * single gateway endpoint can A/B test models, enforce per-user budgets, and
  * fall back between providers without app changes.
  *
@@ -272,7 +272,7 @@ export type GatewayDynamicRouting = Resource<
  * ```
  *
  * ### Updating a Route
- * **Example:** Change the model — creates and deploys a new version
+ * **Example:** Change the model -- creates and deploys a new version
  * ```typescript
  * const route = yield* Cloudflare.AI.GatewayDynamicRouting("Llama", {
  *   gatewayId: gateway.gatewayId,
@@ -322,7 +322,7 @@ export const DynamicRoutingProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The gateway is a path parameter — a route cannot move between
+      // The gateway is a path parameter -- a route cannot move between
       // gateways in place. By diff time both sides are resolved strings.
       const oldGatewayId = output?.gatewayId ?? olds?.gatewayId;
       if (
@@ -344,7 +344,7 @@ export const DynamicRoutingProvider = () =>
         const observed = yield* getRoute(acct, gatewayId, output.routeId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Route names are unique within a gateway, so an exact
       // match identifies the route.
       const name = yield* createRouteName(id, olds?.name);
@@ -361,13 +361,13 @@ export const DynamicRoutingProvider = () =>
       const name = yield* createRouteName(id, news.name);
       const desired = news.elements ?? [];
 
-      // Observe — the routeId cached on `output` is a hint, not a
+      // Observe -- the routeId cached on `output` is a hint, not a
       // guarantee: a missing route falls through and we recreate.
       const observed = output?.routeId
         ? yield* getRoute(output.accountId ?? accountId, gatewayId, output.routeId)
         : undefined;
 
-      // Ensure — create if missing. Route names are unique per gateway:
+      // Ensure -- create if missing. Route names are unique per gateway:
       // tolerate the `RouteAlreadyExists` race (a peer reconciler created
       // it concurrently, or state persistence failed after a previous
       // create) by recovering the existing route by name.
@@ -389,7 +389,7 @@ export const DynamicRoutingProvider = () =>
             Effect.map((route) => route.id),
           ));
 
-      // Sync — observed cloud state is the diff baseline. Creation above
+      // Sync -- observed cloud state is the diff baseline. Creation above
       // auto-deploys version 1, so a fresh `get` covers all paths.
       const current = yield* aiGateway.getDynamicRouting({
         accountId,
@@ -413,7 +413,7 @@ export const DynamicRoutingProvider = () =>
             // routes.gateway_id)` constraint (leaked as a 500, typed as
             // `RouteAlreadyExists` via a distilled patch). Route names are
             // unique and deterministic, so the holder is a stale duplicate
-            // of this logical resource — delete it and retry the rename.
+            // of this logical resource -- delete it and retry the rename.
             Effect.catchTag("RouteAlreadyExists", (error) =>
               Effect.gen(function* () {
                 const holder = yield* findByName(accountId, gatewayId, name);
@@ -456,7 +456,7 @@ export const DynamicRoutingProvider = () =>
         });
       }
 
-      // Return — re-read the final state so attributes reflect the
+      // Return -- re-read the final state so attributes reflect the
       // deployed version, not stale intermediate responses.
       const final = yield* aiGateway.getDynamicRouting({
         accountId,
@@ -473,7 +473,7 @@ export const DynamicRoutingProvider = () =>
           id: output.routeId,
         })
         .pipe(
-          // Route already gone — or the whole parent gateway is gone.
+          // Route already gone -- or the whole parent gateway is gone.
           Effect.catchTags({
             RouteNotFound: () => Effect.void,
             GatewayNotFound: () => Effect.void,
@@ -494,7 +494,7 @@ export const DynamicRoutingProvider = () =>
         (gateway) =>
           listRoutes(accountId, gateway.id).pipe(
             // A gateway removed between enumeration and its route list is
-            // gone — skip it rather than failing the whole listing.
+            // gone -- skip it rather than failing the whole listing.
             Effect.catchTag("GatewayNotFound", () =>
               Effect.succeed([] as GatewayDynamicRoutingAttributes[]),
             ),
@@ -511,8 +511,8 @@ export const DynamicRoutingProvider = () =>
  * `page`/`per_page`, no total), so page manually until a short page signals
  * the end.
  *
- * The list endpoint omits each route's element graph — its items carry only
- * deployment/version metadata, no `version.data` — so hydrate every route with
+ * The list endpoint omits each route's element graph -- its items carry only
+ * deployment/version metadata, no `version.data` -- so hydrate every route with
  * a per-route `get` to populate `elements` into the exact `read` shape.
  */
 const listRoutes = (accountId: string, gatewayId: string) =>

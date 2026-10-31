@@ -4,7 +4,7 @@ import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 import { SendDirectMessage } from "./SendDirectMessage.ts";
 
 /**
- * HTTP implementation of the {@link SendDirectMessage} capability — grants
+ * HTTP implementation of the {@link SendDirectMessage} capability -- grants
  * `iot:SendDirectMessage` on the bound client filter and calls the IoT
  * data-plane `SendDirectMessage` API.
  */

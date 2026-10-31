@@ -5,12 +5,12 @@ import type * as Effect from "effect/Effect";
 /**
  * The `Rerank` request. The reranker model is referenced inside
  * `rerankingConfiguration.bedrockRerankingConfiguration.modelConfiguration.modelArn`
- * — pass the full foundation-model ARN of one of the bound models there.
+ * -- pass the full foundation-model ARN of one of the bound models there.
  */
 export interface RerankRequest extends bedrock.RerankRequest {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:Rerank` — re-order a list of
+ * Runtime binding for `bedrock-agent-runtime:Rerank` -- re-order a list of
  * candidate documents by semantic relevance to a query using a Bedrock
  * reranker model (e.g. `amazon.rerank-v1:0`, `cohere.rerank-v3-5:0`).
  *

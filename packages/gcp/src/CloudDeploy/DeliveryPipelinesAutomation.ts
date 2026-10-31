@@ -107,7 +107,7 @@ export type DeliveryPipelinesAutomationProps = {
   /**
    * Parent delivery pipeline. Full name
    * `projects/{project}/locations/{location}/deliveryPipelines/{deliveryPipeline}`
-   * or the pipeline id (combined with `location`). Immutable — changing
+   * or the pipeline id (combined with `location`). Immutable -- changing
    * it replaces the automation.
    */
   deliveryPipeline: string;
@@ -119,7 +119,7 @@ export type DeliveryPipelinesAutomationProps = {
   /**
    * Automation id (the `{automation}` segment). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the automation.
+   * Immutable -- changing it replaces the automation.
    */
   automationId?: string;
   /**

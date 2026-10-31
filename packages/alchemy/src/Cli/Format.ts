@@ -1,7 +1,7 @@
 import { ansiFg } from "../Util/Terminal.ts";
 import { theme } from "../Util/Theme.ts";
 
-/** `450ms` under a second, `1.2s` at or above — shared by every renderer. */
+/** `450ms` under a second, `1.2s` at or above -- shared by every renderer. */
 export const formatElapsed = (ms: number): string =>
   ms < 1000 ? `${Math.max(0, Math.round(ms))}ms` : `${(ms / 1000).toFixed(1)}s`;
 

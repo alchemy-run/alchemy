@@ -26,21 +26,21 @@ import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 export type OrganizationBucketsLinkProps = {
   /**
    * Link id (alphanumeric and underscores only). If omitted, a unique
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the link. A log bucket may contain only one
    * link.
    */
   linkId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the link.
    */
   organization?: string;
   /**
    * Parent analytics-enabled log bucket resource name
    * (`organizations/{organization}/locations/{location}/buckets/{bucket}`).
-   * Required. Immutable — changing it replaces the link.
+   * Required. Immutable -- changing it replaces the link.
    */
   bucket: string;
   /**
@@ -50,7 +50,7 @@ export type OrganizationBucketsLinkProps = {
   location?: string;
   /**
    * Human-readable description (max 8000 characters). Links have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes. The Logging API cannot update a
    * link after create.
    */
@@ -81,7 +81,7 @@ export type OrganizationBucketsLink = Resource<
     description: string | undefined;
     /** Linked BigQuery dataset id, if reported. */
     datasetId: string | undefined;
-    /** Link lifecycle (`ACTIVE`, `CREATING`, …). */
+    /** Link lifecycle (`ACTIVE`, `CREATING`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -96,7 +96,7 @@ export type OrganizationBucketsLink = Resource<
  * Analytics must be enabled on the parent bucket. A bucket may contain
  * only one link. Links have no labels field, so Alchemy stamps
  * ownership into the description for `list` / nuke. The API has no
- * update method — `linkId`, organization, and bucket are identity.
+ * update method -- `linkId`, organization, and bucket are identity.
  *
  * ### Creating an Organization Bucket Link
  * **Example:** Link an analytics-enabled organization bucket

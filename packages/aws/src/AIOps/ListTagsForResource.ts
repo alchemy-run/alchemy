@@ -6,14 +6,14 @@ import type { InvestigationGroup } from "./InvestigationGroup.ts";
 /**
  * Runtime binding for `aiops:ListTagsForResource`.
  *
- * Reads the tags on the bound {@link InvestigationGroup} — useful for
+ * Reads the tags on the bound {@link InvestigationGroup} -- useful for
  * ownership/audit reporting from an ops function. The group's ARN is
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.AIOps.ListTagsForResourceHttp)`.
  * ### Reading Tags
  * **Example:** List the Group's Tags
  * ```typescript
- * // init — grants aiops:ListTagsForResource on the group
+ * // init -- grants aiops:ListTagsForResource on the group
  * const listTagsForResource = yield* AWS.AIOps.ListTagsForResource(group);
  *
  * // runtime

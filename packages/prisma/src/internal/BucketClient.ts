@@ -1,6 +1,6 @@
 /**
  * Runtime half of the Prisma Object Store bindings: an S3-compatible client
- * pointed at a bucket key's endpoint. Internal — the capability modules
+ * pointed at a bucket key's endpoint. Internal -- the capability modules
  * (`ReadBucket.ts`, `WriteBucket.ts`, `ReadWriteBucket.ts`) build their public
  * clients on top of these primitives.
  */

@@ -5,7 +5,7 @@ import { ReadDns } from "./ReadDns.ts";
 import { dnsReadClient } from "./ReadDnsHttp.ts";
 
 /**
- * Local implementation of the {@link ReadDns} binding — reads Cloudflare DNS
+ * Local implementation of the {@link ReadDns} binding -- reads Cloudflare DNS
  * records over the HTTP API using the **current credentials** instead of a
  * scoped API token ({@link ReadDnsHttp}). DNS is a zone-management capability
  * with no native Worker binding.

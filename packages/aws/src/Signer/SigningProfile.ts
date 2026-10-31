@@ -63,7 +63,7 @@ export interface SigningPlatformOverrides {
 export interface SigningProfileProps {
   /**
    * Name of the signing profile. Must match `^[a-zA-Z0-9_]{2,64}$` (letters,
-   * digits, and underscores only — no hyphens). If omitted, a unique
+   * digits, and underscores only -- no hyphens). If omitted, a unique
    * underscore-delimited name is generated. Changing it replaces the profile.
    */
   profileName?: string;
@@ -131,14 +131,14 @@ export interface SigningProfile extends Resource<
 > {}
 
 /**
- * An AWS Signer signing profile — a code-signing template (platform +
+ * An AWS Signer signing profile -- a code-signing template (platform +
  * signing material + signature validity) used to sign code, most commonly
  * as the trust anchor for Lambda code signing configs.
  *
  * `PutSigningProfile` is create-only in practice (re-putting an existing
  * name fails with "Profile with name X already exists"), so every property
- * except tags is immutable — changing one replaces the profile under a new
- * generated name. On destroy the profile is canceled — AWS retains canceled
+ * except tags is immutable -- changing one replaces the profile under a new
+ * generated name. On destroy the profile is canceled -- AWS retains canceled
  * profiles (the name stays reserved) and deletes them per its data-retention
  * policy, so prefer generated names over fixed `profileName`s.
  *
@@ -164,7 +164,7 @@ export interface SigningProfile extends Resource<
 export const SigningProfile = Resource<SigningProfile>("AWS.Signer.SigningProfile");
 
 /**
- * Signer profile names accept only `[a-zA-Z0-9_]` — coerce any other
+ * Signer profile names accept only `[a-zA-Z0-9_]` -- coerce any other
  * character (hyphens from stack/stage names, etc.) to an underscore.
  */
 const sanitizeProfileName = (name: string): string => name.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -210,7 +210,7 @@ export const SigningProfileProvider = () =>
 
       return SigningProfile.Provider.of({
         // Updates only sync tags (all other props replace), so every
-        // identifying attribute — including the version — is update-stable.
+        // identifying attribute -- including the version -- is update-stable.
         stables: ["profileName", "arn", "profileVersion", "profileVersionArn", "platformId"],
 
         list: () =>
@@ -242,7 +242,7 @@ export const SigningProfileProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const profileName = output?.profileName ?? (yield* createName(id, olds ?? {}));
           const live = yield* getProfile(profileName);
-          // Canceled/revoked profiles cannot sign — treat them as deleted so
+          // Canceled/revoked profiles cannot sign -- treat them as deleted so
           // a re-deploy publishes a fresh active version.
           if (live === undefined || live.status !== "Active") return undefined;
           const attrs = toAttributes(profileName, live);
@@ -257,7 +257,7 @@ export const SigningProfileProvider = () =>
           if (oldName !== newName) return { action: "replace" } as const;
           // PutSigningProfile is create-only (re-putting an existing name
           // fails with "already exists"), so every property except tags is
-          // immutable — any change replaces the profile. Mirrors
+          // immutable -- any change replaces the profile. Mirrors
           // CloudFormation, where all AWS::Signer::SigningProfile properties
           // trigger replacement.
           if (
@@ -280,13 +280,13 @@ export const SigningProfileProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — cloud state is authoritative; output is only a cache
+          // OBSERVE -- cloud state is authoritative; output is only a cache
           let live = yield* getProfile(profileName);
 
-          // ENSURE — PutSigningProfile is create-only in practice: re-putting
+          // ENSURE -- PutSigningProfile is create-only in practice: re-putting
           // an existing name (even Active with identical config) fails with
           // "Profile with name X already exists". Every property except tags
-          // is therefore immutable and handled by diff → replace; here we
+          // is therefore immutable and handled by diff -> replace; here we
           // only create when the profile is missing.
           if (live === undefined) {
             yield* signer
@@ -300,7 +300,7 @@ export const SigningProfileProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                // Race with a concurrent create — fall through to re-observe.
+                // Race with a concurrent create -- fall through to re-observe.
                 Effect.catchTag("SigningProfileAlreadyExists", () => Effect.void),
               );
             live = yield* getProfile(profileName);
@@ -312,16 +312,16 @@ export const SigningProfileProvider = () =>
             });
           }
           if (live.status !== "Active") {
-            // The name is tombstoned by a canceled/revoked profile — Signer
+            // The name is tombstoned by a canceled/revoked profile -- Signer
             // reserves canceled names, so the profile cannot be recreated
             // under this name. Only reachable with a user-fixed profileName
             // (generated names get a fresh random suffix per instance).
             return yield* signer.SigningProfileAlreadyExists.make({
-              message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
+              message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved \u2014 use a different profileName (or omit it to generate one)`,
             });
           }
 
-          // SYNC TAGS — diff against OBSERVED cloud tags (adoption may bring
+          // SYNC TAGS -- diff against OBSERVED cloud tags (adoption may bring
           // foreign tags; put only applies tags on first creation).
           const observedTags = toTagRecord(live.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -343,7 +343,7 @@ export const SigningProfileProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Signing profiles cannot be deleted directly — cancel deactivates
+          // Signing profiles cannot be deleted directly -- cancel deactivates
           // them and AWS deletes canceled profiles per its data-retention
           // policy. Cancel is idempotent (re-canceling a canceled profile
           // succeeds); a missing profile is not an error.

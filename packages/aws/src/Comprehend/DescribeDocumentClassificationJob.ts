@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DescribeDocumentClassificationJob` — get the
+ * Runtime binding for `comprehend:DescribeDocumentClassificationJob` -- get the
  * properties (status, input/output config, timings) of an asynchronous
  * document classification job started with {@link StartDocumentClassificationJob}.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const job = yield* describeDocumentClassificationJob({ JobId: jobId });
- * // job.DocumentClassificationJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | …
+ * // job.DocumentClassificationJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | ...
  * ```
  *
  * @binding

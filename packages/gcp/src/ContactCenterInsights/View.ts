@@ -28,11 +28,11 @@ export type ViewProps = {
   /**
    * View id (the `{view}` segment of
    * `projects/{project}/locations/{location}/views/{view}`). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the view.
+   * unique id is generated. Immutable -- changing it replaces the view.
    */
   viewId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * view. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -40,7 +40,7 @@ export type ViewProps = {
   /**
    * Display name (max 64 characters including Alchemy's ownership
    * marker). Views have no labels field, so ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   displayName?: string;
   /**
@@ -76,9 +76,9 @@ export type View = Resource<
 >;
 
 /**
- * A Contact Center AI Insights saved view — a named conversation filter.
+ * A Contact Center AI Insights saved view -- a named conversation filter.
  *
- * Views have no labels field — Alchemy stamps ownership into the display
+ * Views have no labels field -- Alchemy stamps ownership into the display
  * name. Location and id are immutable. Display name and filter value
  * update in place.
  *

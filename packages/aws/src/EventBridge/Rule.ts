@@ -394,7 +394,7 @@ export const RuleProvider = () =>
             // A Rule belongs to an event bus and `listRules` is scoped to one
             // bus (defaulting to "default"). To enumerate every rule in the
             // account/region we first enumerate all event buses (manual
-            // NextToken pagination — neither op is a paginated distilled op),
+            // NextToken pagination -- neither op is a paginated distilled op),
             // then list rules per bus with bounded concurrency.
             const busNames: string[] = [];
             let busToken: string | undefined;
@@ -427,7 +427,7 @@ export const RuleProvider = () =>
                   let ruleToken: string | undefined;
                   do {
                     // A peer reconciler may delete an event bus between our
-                    // `listEventBuses` snapshot and this `listRules` call —
+                    // `listEventBuses` snapshot and this `listRules` call --
                     // treat a vanished bus as contributing zero rules rather
                     // than failing the whole enumeration.
                     const page = yield* eventbridge
@@ -450,7 +450,7 @@ export const RuleProvider = () =>
                       // Rules created and owned by another AWS service (e.g.
                       // B2BI's DO-NOT-DELETE-* or DevOpsGuru's managed rules)
                       // reject DeleteRule without Force and are recreated by
-                      // the owning service anyway — skip them in enumeration
+                      // the owning service anyway -- skip them in enumeration
                       // for account-wide teardown (nuke).
                       if (rule.ManagedBy) {
                         continue;
@@ -485,7 +485,7 @@ export const RuleProvider = () =>
             ...(news.tags as Record<string, string> | undefined),
           };
 
-          // Ensure + Sync rule definition — `putRule` is the single
+          // Ensure + Sync rule definition -- `putRule` is the single
           // create-or-update API for the rule itself. It's idempotent on
           // matching params and overwrites schedule/eventPattern/state/etc.
           // on differences, so we call it unconditionally. `Tags` only
@@ -505,7 +505,7 @@ export const RuleProvider = () =>
             (RuleArn as RuleArn | undefined) ??
             toRuleArn(region, accountId, eventBusName, ruleName);
 
-          // Sync targets — observed cloud targets vs desired. `listTargetsByRule`
+          // Sync targets -- observed cloud targets vs desired. `listTargetsByRule`
           // gives us the live target ids; we remove anything no longer desired,
           // and `putTargets` overwrites/upserts the rest.
           const resolvedTargets = (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
@@ -548,7 +548,7 @@ export const RuleProvider = () =>
             yield* assertPutTargetsSucceeded(response);
           }
 
-          // Sync tags — diff observed cloud tags against desired. Adoption
+          // Sync tags -- diff observed cloud tags against desired. Adoption
           // and partial prior runs both converge here.
           const observedTagsList = yield* eventbridge
             .listTagsForResource({

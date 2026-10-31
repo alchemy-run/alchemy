@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `auditmanager:GetInsights`.
  *
- * Gets the latest analytics data for all active assessments —
+ * Gets the latest analytics data for all active assessments --
  * compliance-check counts by status across the account. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.GetInsightsHttp)`.
  * ### Insights

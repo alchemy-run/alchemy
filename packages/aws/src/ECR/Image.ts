@@ -21,7 +21,7 @@ export class ImageUnexpectedResponse extends Data.TaggedError("ImageUnexpectedRe
 /**
  * Docker login credentials for the account's private ECR registry, in the
  * shape `Docker.image.push` expects. The password is the decoded ECR bearer
- * token — a credential — so it is carried as `Redacted` and only unwrapped
+ * token -- a credential -- so it is carried as `Redacted` and only unwrapped
  * inside `docker push`'s ephemeral auth config.
  */
 export interface EcrRegistryCredentials {
@@ -124,7 +124,7 @@ export interface ImageProps {
   dockerfile?: string;
   /**
    * Target platform for the image build. Fargate defaults to X86_64, so the
-   * default pins `linux/amd64` — without it an image built on an ARM64 host
+   * default pins `linux/amd64` -- without it an image built on an ARM64 host
    * (e.g. Apple Silicon) is rejected at task start.
    * @default "linux/amd64"
    */
@@ -271,7 +271,7 @@ export const ImageProvider = () =>
           "effective",
         );
 
-      // Observe the pushed image in ECR. Missing repository or tag → undefined.
+      // Observe the pushed image in ECR. Missing repository or tag -> undefined.
       const describeImage = Effect.fn(function* (repositoryName: string, imageTag: string) {
         const described = yield* ecr
           .describeImages({
@@ -328,7 +328,7 @@ export const ImageProvider = () =>
         // Content changes don't change Props (the context path stays the
         // same while the files under it change), so surface them here: hash
         // the build inputs and request an update when the hash drifts from
-        // the pushed tag. Replacement is never needed — a new hash is just a
+        // the pushed tag. Replacement is never needed -- a new hash is just a
         // new tag + digest on the same resource.
         diff: Effect.fn(function* ({ news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
@@ -367,7 +367,7 @@ export const ImageProvider = () =>
           const imageTag = yield* hashBuildInputs(news);
           const imageUri = `${repositoryUri}:${imageTag}`;
 
-          // Observe — if this exact content hash is already pushed, there is
+          // Observe -- if this exact content hash is already pushed, there is
           // nothing to build (crash-safe: a re-run after a mid-reconcile
           // failure converges without a rebuild).
           const observed = yield* describeImage(repositoryName, imageTag);
@@ -392,7 +392,7 @@ export const ImageProvider = () =>
             buildArgs: news.buildArgs,
             // Engines using the containerd image store attach provenance
             // attestations by default, turning the pushed tag into an OCI
-            // image index — which Lambda (a valid consumer of these images)
+            // image index -- which Lambda (a valid consumer of these images)
             // rejects. Disable: single-manifest pushes work everywhere.
             args: ["--provenance=false"],
           });
@@ -416,7 +416,7 @@ export const ImageProvider = () =>
         // Enumerate every tagged image across every repository in the
         // account/region. Repository ownership is recorded per-instance in
         // state and cannot be recovered from enumeration, so listed items are
-        // conservatively marked `ownsRepository: false` — orphan deletion
+        // conservatively marked `ownsRepository: false` -- orphan deletion
         // removes the tag but leaves the repository (ECR.Repository's own
         // list()/delete() covers repositories).
         list: () =>

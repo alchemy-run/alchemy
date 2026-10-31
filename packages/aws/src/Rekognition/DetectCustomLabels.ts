@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DetectCustomLabels` — detect custom labels in an image using a trained and running Rekognition Custom Labels model version.
+ * Runtime binding for `rekognition:DetectCustomLabels` -- detect custom labels in an image using a trained and running Rekognition Custom Labels model version.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DetectCustomLabels` on `*` (Rekognition data-plane resources such

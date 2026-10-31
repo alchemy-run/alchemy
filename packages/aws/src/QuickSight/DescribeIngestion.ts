@@ -13,7 +13,7 @@ import type { DataSet } from "./DataSet.ts";
  * ### Refreshing SPICE Data
  * **Example:** Poll An Ingestion Until It Settles
  * ```typescript
- * // init — bind the operation to the dataset
+ * // init -- bind the operation to the dataset
  * const describeIngestion = yield* AWS.QuickSight.DescribeIngestion(dataSet);
  *
  * // runtime

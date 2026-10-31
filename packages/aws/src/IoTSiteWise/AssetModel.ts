@@ -101,12 +101,12 @@ export interface AssetModel extends Resource<
 > {}
 
 /**
- * An AWS IoT SiteWise asset model — a standardized definition of
+ * An AWS IoT SiteWise asset model -- a standardized definition of
  * properties (attributes, measurements, transforms, metrics) and
  * hierarchies from which industrial assets are created.
  *
  * Asset model creation and updates are asynchronous
- * (`CREATING`/`UPDATING` → `ACTIVE`); the provider waits for the model to
+ * (`CREATING`/`UPDATING` -> `ACTIVE`); the provider waits for the model to
  * converge to `ACTIVE` before returning.
  *
  * ### Creating Asset Models
@@ -196,7 +196,7 @@ const findAssetModelByName = Effect.fn(function* (name: string) {
 });
 
 /**
- * An asset model still transitioning toward the awaited state — retried
+ * An asset model still transitioning toward the awaited state -- retried
  * by {@link waitForAssetModelState}'s bounded schedule.
  */
 class AssetModelNotReady extends Data.TaggedError("AssetModelNotReady")<{
@@ -213,7 +213,7 @@ export class AssetModelProvisioningFailed extends Data.TaggedError("AssetModelPr
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -228,7 +228,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   });
 
 // A delete/update racing an in-flight CREATING/UPDATING transition
-// surfaces as ConflictingOperationException — bounded retry through it.
+// surfaces as ConflictingOperationException -- bounded retry through it.
 const retryThroughConflictingOperation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -326,14 +326,14 @@ export const AssetModelProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so
+          // Observe -- prefer the cached id; fall back to a name lookup so
           // a create whose state failed to persist is adopted, not
           // duplicated.
           let state = output?.assetModelId
             ? yield* readAssetModelById(output.assetModelId)
             : yield* findAssetModelByName(name);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* sitewise.createAssetModel({
               assetModelName: name,
@@ -354,7 +354,7 @@ export const AssetModelProvider = () =>
             }
           }
 
-          // Sync — diff observed definition against desired; UpdateAssetModel
+          // Sync -- diff observed definition against desired; UpdateAssetModel
           // replaces the full definition, so send the complete desired set
           // with observed ids preserved by name.
           const described = state.described;
@@ -398,7 +398,7 @@ export const AssetModelProvider = () =>
             yield* session.note(`Updated asset model ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncSiteWiseTags(state.attrs.assetModelArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.assetModelArn);
@@ -414,7 +414,7 @@ export const AssetModelProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Deleting while assets still reference the model (or while a
           // prior transition is settling) raises
-          // ConflictingOperationException — retry through the window.
+          // ConflictingOperationException -- retry through the window.
           yield* retryThroughConflictingOperation(
             sitewise
               .deleteAssetModel({ assetModelId: output.assetModelId })

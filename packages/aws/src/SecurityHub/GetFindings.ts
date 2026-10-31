@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:GetFindings`.
  *
  * Returns findings that match the specified filter criteria. With cross-Region aggregation enabled, the home Region returns matching findings from all linked Regions.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetFindingsHttp)`.
  * ### Working with Findings
  * **Example:** Query High-Severity Findings
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getFindings = yield* AWS.SecurityHub.GetFindings();
  *
  * // runtime

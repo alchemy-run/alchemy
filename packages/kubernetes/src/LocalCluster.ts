@@ -326,7 +326,7 @@ export const LocalClusterProvider = () =>
           })),
           Effect.scoped,
           // A spawn failure (almost always ENOENT) means the CLI itself is
-          // missing — a machine-setup problem, not a resource error.
+          // missing -- a machine-setup problem, not a resource error.
           Effect.catchCause((cause) =>
             Effect.die(
               new Error(
@@ -519,7 +519,7 @@ export const LocalClusterProvider = () =>
           );
         }
 
-        // containerd on each node: pull `localhost:<port>/…` from the
+        // containerd on each node: pull `localhost:<port>/...` from the
         // registry container over the kind network.
         const registryDir = `/etc/containerd/certs.d/localhost:${options.registryPort}`;
         const { stdout } = yield* kind(["get", "nodes", "--name", options.name]);

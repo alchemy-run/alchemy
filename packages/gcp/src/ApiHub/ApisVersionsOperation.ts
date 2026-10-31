@@ -65,13 +65,13 @@ export type ApisVersionsOperationProps = {
   /**
    * Parent version. Full name
    * `projects/{project}/locations/{location}/apis/{api}/versions/{version}`.
-   * Immutable — changing it replaces the operation.
+   * Immutable -- changing it replaces the operation.
    */
   version: string;
   /**
    * Operation id (the `{operation}` segment of
    * `.../versions/{version}/operations/{operation}`). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the operation.
+   * id is generated. Immutable -- changing it replaces the operation.
    */
   apiOperationId?: string;
   /**
@@ -81,7 +81,7 @@ export type ApisVersionsOperationProps = {
   location?: string;
   /**
    * Operation details. `httpOperation.method` and `httpOperation.path.path`
-   * are required on create. Description is stamped with `[alchemy …]`
+   * are required on create. Description is stamped with `[alchemy ...]`
    * because operations have no labels field.
    */
   details: OperationDetails;
@@ -126,7 +126,7 @@ export type ApisVersionsOperation = Resource<
  *
  * Parent version and id are immutable. Description, documentation, HTTP
  * path/method, deprecation, and attributes update in place. Operations
- * have no labels field — Alchemy stamps ownership into
+ * have no labels field -- Alchemy stamps ownership into
  * `details.description`.
  *
  * ### Creating an Operation

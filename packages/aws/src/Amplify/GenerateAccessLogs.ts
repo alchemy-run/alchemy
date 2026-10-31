@@ -12,16 +12,16 @@ export interface GenerateAccessLogsRequest extends Omit<
  * Runtime binding for `amplify:GenerateAccessLogs`.
  *
  * Bind an {@link App} in the function's init phase to get a callable that
- * generates a pre-signed URL to the app's access logs for a time range —
+ * generates a pre-signed URL to the app's access logs for a time range --
  * e.g. an analytics function ingesting traffic data on a schedule. Provide the
  * implementation with `Effect.provide(AWS.Amplify.GenerateAccessLogsHttp)`.
  * ### Reading Access Logs
  * **Example:** Pull the Last Day of Access Logs
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const generateAccessLogs = yield* AWS.Amplify.GenerateAccessLogs(app);
  *
- * // runtime — logUrl is a pre-signed CSV download
+ * // runtime -- logUrl is a pre-signed CSV download
  * const { logUrl } = yield* generateAccessLogs({
  *   domainName: "example.com",
  *   startTime: new Date(Date.now() - 24 * 60 * 60 * 1000),

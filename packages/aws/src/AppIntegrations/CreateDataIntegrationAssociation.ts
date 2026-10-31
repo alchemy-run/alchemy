@@ -12,7 +12,7 @@ export interface CreateDataIntegrationAssociationRequest extends Omit<
  * Associates a client (identified by `ClientId` / `ClientAssociationMetadata`)
  * with an AppIntegrations {@link DataIntegration}
  * (`app-integrations:CreateDataIntegrationAssociation`). Associations have no
- * independent delete API — they live and die with the data integration — so
+ * independent delete API -- they live and die with the data integration -- so
  * they are exposed as a runtime binding rather than a Resource.
  *
  * Provide the `CreateDataIntegrationAssociationHttp` layer on the Function to
@@ -24,7 +24,7 @@ export interface CreateDataIntegrationAssociationRequest extends Omit<
  * const createDataIntegrationAssociation =
  *   yield* AWS.AppIntegrations.CreateDataIntegrationAssociation(integration);
  *
- * // runtime — the DataIntegrationIdentifier is injected automatically
+ * // runtime -- the DataIntegrationIdentifier is injected automatically
  * const { DataIntegrationAssociationId } =
  *   yield* createDataIntegrationAssociation({
  *     ClientId: "my-client",

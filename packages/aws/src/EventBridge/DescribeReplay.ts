@@ -14,10 +14,10 @@ export interface DescribeReplayRequest extends eventbridge.DescribeReplayRequest
  * ### Replaying Events
  * **Example:** Poll a Replay's State
  * ```typescript
- * // init — bind the operation (provide AWS.EventBridge.DescribeReplayHttp on the Function)
+ * // init -- bind the operation (provide AWS.EventBridge.DescribeReplayHttp on the Function)
  * const describeReplay = yield* AWS.EventBridge.DescribeReplay();
  *
- * // runtime — read the replay's state and progress
+ * // runtime -- read the replay's state and progress
  * const replay = yield* describeReplay({ ReplayName: "backfill-2026-07-14" });
  * console.log(replay.State, replay.EventLastReplayedTime);
  * ```

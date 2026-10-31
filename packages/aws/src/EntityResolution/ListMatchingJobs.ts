@@ -11,7 +11,7 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
  * ### Running Matching Jobs
  * **Example:** List Recent Jobs
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const listMatchingJobs = yield* AWS.EntityResolution.ListMatchingJobs(workflow);
  *
  * // runtime

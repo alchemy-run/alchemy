@@ -25,7 +25,7 @@ export type UsersSshPublicKeyProps = {
    * Google account that owns the key. Email, `"me"`, or
    * `users/{user}`. `"me"` only works for user credentials; with a
    * service account, pass its email (`users/me` fails with
-   * `UserCredentialMismatch`). Immutable — changing it replaces the key.
+   * `UserCredentialMismatch`). Immutable -- changing it replaces the key.
    * @default "me"
    */
   user?: string;
@@ -66,7 +66,7 @@ export type UsersSshPublicKey = Resource<
  *
  * SSH public keys have no labels field, so Alchemy tracks a key by the
  * name in state; without state an identical key on the account is
- * reported as unowned. `user` and the key text are identity — changing
+ * reported as unowned. `user` and the key text are identity -- changing
  * either replaces the key. Expiration updates in place. `"me"` works for
  * user credentials; service accounts must pass their email as `user`.
  *

@@ -40,7 +40,7 @@ export type OrganizationInvite = Resource<
  * An invitation for someone to join your Turso organization by email.
  * Changing `role` re-sends the invite with the new role; destroying the
  * resource withdraws a pending invite. Requires a team organization on a
- * paid plan — the Starter plan rejects invites with `BadRequest`.
+ * paid plan -- the Starter plan rejects invites with `BadRequest`.
  * @see https://docs.turso.tech/api-reference/organizations/invites/create
  *
  * ### Inviting Members
@@ -97,7 +97,7 @@ export const OrganizationInviteProvider = () =>
           // Observe
           const invite = yield* observe(org, news.email);
 
-          // Ensure / sync — invites have no update API, so a role change
+          // Ensure / sync -- invites have no update API, so a role change
           // withdraws and re-sends.
           if (invite?.role === role) {
             return { email: invite.email ?? news.email, organization: org, role };

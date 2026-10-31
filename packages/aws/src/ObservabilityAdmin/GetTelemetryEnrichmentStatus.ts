@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `observabilityadmin:GetTelemetryEnrichmentStatus` —
+ * Runtime binding for `observabilityadmin:GetTelemetryEnrichmentStatus` --
  * reads the status of the account's telemetry enrichment feature (resource
  * tags added to telemetry). Fails with a typed
  * `ResourceNotFoundException` when the account has never onboarded to
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Enrichment Status
  * **Example:** Read the enrichment status, tolerating never-onboarded
  * ```typescript
- * // init — grants observabilityadmin:GetTelemetryEnrichmentStatus
+ * // init -- grants observabilityadmin:GetTelemetryEnrichmentStatus
  * const getEnrichmentStatus = yield* AWS.ObservabilityAdmin.GetTelemetryEnrichmentStatus();
  *
  * // runtime

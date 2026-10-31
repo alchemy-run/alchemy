@@ -13,7 +13,7 @@ export type ListJobRunAttemptsInput = Omit<emr.ListJobRunAttemptsRequest, "appli
  * Runtime binding for `emr-serverless:ListJobRunAttempts`.
  *
  * Enumerates the attempts of a retried job run on the bound
- * {@link Application} — how many times the retry policy re-ran the job and
+ * {@link Application} -- how many times the retry policy re-ran the job and
  * how each attempt ended. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.ListJobRunAttemptsHttp)`.
  * ### Running Jobs

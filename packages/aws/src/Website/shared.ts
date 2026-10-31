@@ -8,7 +8,7 @@ import type { AssetFileOption } from "./AssetDeployment.ts";
 /**
  * Same-stack resources a Router-attached site binds its concrete hostnames
  * onto, so declaring `domain: { name, router }` on the site alone is enough
- * for the hostname to be fully provisioned — distribution alias, certificate
+ * for the hostname to be fully provisioned -- distribution alias, certificate
  * SAN, and Route 53 record. Populated by `AWS.Website.Router` when it owns a
  * `domain`; absent on cross-stack references (bindings are same-stack), in
  * which case the site registers KV host-matching only and the hostname must
@@ -16,12 +16,12 @@ import type { AssetFileOption } from "./AssetDeployment.ts";
  */
 export interface WebsiteRouterBindTargets {
   /**
-   * The Router's CloudFront distribution — bound hostnames become
+   * The Router's CloudFront distribution -- bound hostnames become
    * distribution aliases.
    */
   distribution?: Distribution;
   /**
-   * The Router's managed ACM certificate — bound hostnames become
+   * The Router's managed ACM certificate -- bound hostnames become
    * certificate SANs (a SAN change replaces the certificate, create-first).
    * Absent when the Router uses a user-provided `domain.cert`, which must
    * then already cover attached-site hostnames (e.g. a wildcard
@@ -31,7 +31,7 @@ export interface WebsiteRouterBindTargets {
   /**
    * The Router's alias record set (`AWS.Route53.Records` by default, or
    * the record set of the Router domain's DNS adapter, e.g.
-   * `Cloudflare.DNS.Records`) — bound hostnames get records pointing at
+   * `Cloudflare.DNS.Records`) -- bound hostnames get records pointing at
    * the distribution. Absent when the Router's domain sets `dns: false`.
    * Without an explicit zone, the set infers it from the first bound
    * hostname.
@@ -41,7 +41,7 @@ export interface WebsiteRouterBindTargets {
 
 /**
  * Structural slice of an `AWS.Website.Router` that a site attaches to via
- * `domain.router` — satisfied by the Router's own return value.
+ * `domain.router` -- satisfied by the Router's own return value.
  */
 export interface WebsiteRouterRef {
   kvStoreArn: Input<string>;
@@ -51,7 +51,7 @@ export interface WebsiteRouterRef {
   url: Input<string>;
   /**
    * Same-stack bind targets for attached-site hostnames (see
-   * {@link WebsiteRouterBindTargets}). Cross-stack refs omit this — the
+   * {@link WebsiteRouterBindTargets}). Cross-stack refs omit this -- the
    * attached site then falls back to KV host-matching only.
    */
   bindTargets?: WebsiteRouterBindTargets | undefined;
@@ -65,14 +65,14 @@ export interface WebsiteRouterRef {
 export interface WebsiteStandaloneDomainProps {
   /**
    * The canonical hostname (e.g. `"www.example.com"`). Attached to the
-   * distribution as an alias — certificate and Route 53 records are managed
+   * distribution as an alias -- certificate and Route 53 records are managed
    * automatically (see {@link cert} and {@link dns} to opt out).
    *
    * When set, `https://<name>` is the site's primary `url` output.
    */
   name: string;
   /**
-   * Hosted zone used for Route 53 automation. Optional — when omitted,
+   * Hosted zone used for Route 53 automation. Optional -- when omitted,
    * the most specific PUBLIC hosted zone in the account containing each
    * hostname is inferred by walking its parent domains; the deploy fails
    * actionably when no zone matches. Pass an explicit id to pin the zone
@@ -89,7 +89,7 @@ export interface WebsiteStandaloneDomainProps {
   aliases?: string[];
   /**
    * Hostnames that permanently redirect (HTTP 301, path and query
-   * preserved) to {@link name} — e.g. `"old.example.com"`. Each is attached
+   * preserved) to {@link name} -- e.g. `"old.example.com"`. Each is attached
    * as a distribution alias (for TLS) with a certificate SAN and Route 53
    * record, and the generated viewer-request CloudFront Function issues the
    * redirect. Redirect hostnames serve no content, so they appear in the
@@ -109,25 +109,25 @@ export interface WebsiteStandaloneDomainProps {
    */
   dns?: false | DnsConfig;
   /**
-   * Never set on a standalone domain — attach to a Router by setting
+   * Never set on a standalone domain -- attach to a Router by setting
    * {@link WebsiteRouterDomainProps.router}.
    */
   router?: undefined;
   /**
-   * Never set on a standalone domain — `path` only applies to
+   * Never set on a standalone domain -- `path` only applies to
    * Router-attached sites ({@link WebsiteRouterDomainProps.path}).
    */
   path?: undefined;
 }
 
 /**
- * A Router-attached domain: the site owns no distribution — it registers
+ * A Router-attached domain: the site owns no distribution -- it registers
  * itself in the Router's KV store and is served through the Router's
  * distribution, matched by host pattern and path prefix.
  */
 export interface WebsiteRouterDomainProps {
   /**
-   * Host pattern this site is served for on the Router — an exact hostname
+   * Host pattern this site is served for on the Router -- an exact hostname
    * (`"docs.example.com"`) or a wildcard pattern (`"*.example.com"`). When
    * omitted, the site matches any host on the Router.
    *
@@ -139,7 +139,7 @@ export interface WebsiteRouterDomainProps {
    * fully provisioned from this declaration alone: the site binds it onto
    * the Router's distribution (alias), certificate (SAN), and Route 53
    * record set (see {@link WebsiteRouterBindTargets}). Wildcard patterns
-   * bind nothing concrete — a wildcard-matched site still needs the
+   * bind nothing concrete -- a wildcard-matched site still needs the
    * Router's own `domain`/certificate to cover its hostnames (e.g. a
    * wildcard alias on the Router). The same applies to cross-stack Router
    * references, where bindings cannot flow.

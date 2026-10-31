@@ -23,12 +23,12 @@ export type ConversationsAnalysesProps = {
   /**
    * Parent Conversation resource name
    * (`projects/{project}/locations/{location}/conversations/{conversation}`).
-   * Immutable — changing it replaces the analysis.
+   * Immutable -- changing it replaces the analysis.
    */
   parent: string;
   /**
    * Annotators to run. Analyses have no update RPC; changing the selector
-   * replaces the analysis. Analyses have no labels or description field —
+   * replaces the analysis. Analyses have no labels or description field --
    * nuke finds them by walking alchemy-labeled parent conversations.
    */
   annotatorSelector?: AnalysisAnnotatorSelector;
@@ -62,7 +62,7 @@ export type ConversationsAnalyses = Resource<
 /**
  * An analysis of a Contact Center Insights conversation.
  *
- * Parent conversation and annotator selector are immutable — there is no
+ * Parent conversation and annotator selector are immutable -- there is no
  * update RPC, so changing either replaces the analysis. Create is a
  * long-running operation that completes when the analysis finishes.
  * Analyses have no labels field; `list` walks alchemy-labeled parent

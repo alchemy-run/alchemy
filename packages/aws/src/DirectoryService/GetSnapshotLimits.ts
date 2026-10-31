@@ -7,15 +7,15 @@ import type { Directory } from "./Directory.ts";
  * Runtime binding for the `GetSnapshotLimits` operation (IAM action
  * `ds:GetSnapshotLimits`), scoped to one {@link Directory}.
  *
- * Reads the bound directory's manual snapshot limits — how many manual
- * snapshots exist versus the allowed maximum — so a backup function can
+ * Reads the bound directory's manual snapshot limits -- how many manual
+ * snapshots exist versus the allowed maximum -- so a backup function can
  * prune before taking a new snapshot. The directory id is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.DirectoryService.GetSnapshotLimitsHttp)`.
  * ### Managing Snapshots
  * **Example:** Check the Manual Snapshot Quota
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const getSnapshotLimits = yield* AWS.DirectoryService.GetSnapshotLimits(directory);
  *
  * // runtime

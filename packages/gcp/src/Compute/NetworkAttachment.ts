@@ -25,12 +25,12 @@ export type NetworkAttachmentConnectedEndpoint = compute.NetworkAttachmentConnec
 export type NetworkAttachmentProps = {
   /**
    * Attachment name (RFC1035, 1-63 characters). If omitted, a unique name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the attachment.
    */
   networkAttachmentName?: string;
   /**
-   * Region the attachment lives in. Immutable — changing it replaces the
+   * Region the attachment lives in. Immutable -- changing it replaces the
    * attachment. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -44,7 +44,7 @@ export type NetworkAttachmentProps = {
   /**
    * How producer connections are admitted. `ACCEPT_AUTOMATIC` always
    * accepts; `ACCEPT_MANUAL` uses the accept and reject lists.
-   * Immutable — GCP rejects `patch` of this field, so changing it
+   * Immutable -- GCP rejects `patch` of this field, so changing it
    * replaces the attachment.
    * @default "ACCEPT_AUTOMATIC"
    */
@@ -52,7 +52,7 @@ export type NetworkAttachmentProps = {
   /**
    * Optional description. Compute network attachments have no labels
    * field, so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
    * Updated in place via `patch`.
    */
   description?: string;
@@ -115,7 +115,7 @@ export type NetworkAttachment = Resource<
  * A network attachment lets a producer VPC initiate connections into a
  * consumer VPC through a PSC interface. It lists consumer subnets and
  * admits producers either automatically or via accept/reject lists.
- * Compute NetworkAttachment has no labels field — Alchemy ownership is
+ * Compute NetworkAttachment has no labels field -- Alchemy ownership is
  * stored in the description so nuke can find leaked attachments.
  *
  * ### Creating a Network Attachment

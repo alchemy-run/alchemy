@@ -11,13 +11,13 @@ export interface GetApproximateUsageRecordsRequest extends ce.GetApproximateUsag
  * Runtime binding for `ce:GetApproximateUsageRecords`.
  *
  * Retrieve estimated counts of hourly (or daily resource-level)
- * usage records per service — useful for sizing Data Exports and CUR
+ * usage records per service -- useful for sizing Data Exports and CUR
  * deliveries before enabling them. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetApproximateUsageRecordsHttp)`.
  * ### Querying Cost and Usage
  * **Example:** Estimate Usage Record Volume
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getApproximateUsageRecords = yield* AWS.CostExplorer.GetApproximateUsageRecords();
  *
  * // runtime

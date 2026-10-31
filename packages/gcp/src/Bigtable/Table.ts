@@ -33,13 +33,13 @@ export type ColumnFamily = {
 
 export type ChangeStreamConfig = {
   /**
-   * How long change-stream data is retained (`1d`–`7d`, e.g. `"86400s"`).
+   * How long change-stream data is retained (`1d`-`7d`, e.g. `"86400s"`).
    */
   retentionPeriod?: string;
 };
 
 export type AutomatedBackupPolicy = {
-  /** How long automated backups are retained (`3d`–`90d`). */
+  /** How long automated backups are retained (`3d`-`90d`). */
   retentionPeriod?: string;
   /** Backup frequency. Only `"24h"` is supported. */
   frequency?: string;
@@ -48,14 +48,14 @@ export type AutomatedBackupPolicy = {
 export type TableProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the table.
+   * or the instance id. Immutable -- changing it replaces the table.
    */
   instance: string;
   /**
    * Table id (the `{table}` segment of
    * `.../instances/{instance}/tables/{table}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must be 1-50
-   * characters. Immutable — changing it replaces the table.
+   * characters. Immutable -- changing it replaces the table.
    */
   tableId?: string;
   /**
@@ -116,7 +116,7 @@ export type Table = Resource<
 >;
 
 /**
- * A Cloud Bigtable table — rows keyed by row key, grouped into column
+ * A Cloud Bigtable table -- rows keyed by row key, grouped into column
  * families.
  *
  * The parent instance must already exist. Changing `tableId`,

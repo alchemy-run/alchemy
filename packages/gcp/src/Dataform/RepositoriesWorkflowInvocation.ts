@@ -25,7 +25,7 @@ export type RepositoriesWorkflowInvocationProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the invocation.
    */
   repository: string;
@@ -47,7 +47,7 @@ export type RepositoriesWorkflowInvocationProps = {
    */
   workflowConfig?: string;
   /**
-   * Invocation options. Immutable — changing them replaces the
+   * Invocation options. Immutable -- changing them replaces the
    * invocation.
    */
   invocationConfig?: InvocationConfig;
@@ -73,7 +73,7 @@ export type RepositoriesWorkflowInvocation = Resource<
     workflowConfig: string | undefined;
     /** Resolved compilation result. */
     resolvedCompilationResult: string | undefined;
-    /** Current state (`RUNNING`, `SUCCEEDED`, `FAILED`, …). */
+    /** Current state (`RUNNING`, `SUCCEEDED`, `FAILED`, ...). */
     state: string | undefined;
     /** Inclusive start of the invocation. */
     startTime: string | undefined;
@@ -85,7 +85,7 @@ export type RepositoriesWorkflowInvocation = Resource<
 >;
 
 /**
- * A Dataform workflow invocation — a single run of a compilation
+ * A Dataform workflow invocation -- a single run of a compilation
  * result (directly or via a workflow config).
  *
  * Invocations have no update API and no labels. Identity is

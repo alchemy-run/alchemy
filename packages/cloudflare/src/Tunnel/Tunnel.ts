@@ -127,11 +127,11 @@ export type Tunnel = Resource<
  * provisions a least-privilege {@link AccountApiToken} and injects it into the
  * Worker:
  *
- * - {@link ReadTunnel} — read-only (`get`, `list`, `getToken`,
+ * - {@link ReadTunnel} -- read-only (`get`, `list`, `getToken`,
  *   `getConfiguration`); scoped to `Cloudflare Tunnel Read`.
- * - {@link WriteTunnel} — mutating (`create`, `update`, `delete`,
+ * - {@link WriteTunnel} -- mutating (`create`, `update`, `delete`,
  *   `putConfiguration`); scoped to `Cloudflare Tunnel Write`.
- * - {@link ReadWriteTunnel} — the full CRUD surface; scoped to both.
+ * - {@link ReadWriteTunnel} -- the full CRUD surface; scoped to both.
  *
  * **Example:** Create a tunnel on demand from a Worker
  * ```typescript
@@ -230,7 +230,7 @@ export const TunnelProvider = () =>
       const tunnelSecret = news.tunnelSecret ? Redacted.value(news.tunnelSecret) : undefined;
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached tunnel; fall back to a name
+      // Observe -- re-fetch the cached tunnel; fall back to a name
       // lookup so we recover from out-of-band deletes or partial
       // state-persistence failures.
       let observed:
@@ -254,7 +254,7 @@ export const TunnelProvider = () =>
         observed = yield* findTunnelByName(name);
       }
 
-      // Ensure — create if missing. Cloudflare rejects a duplicate
+      // Ensure -- create if missing. Cloudflare rejects a duplicate
       // name with a generic error; tolerate by adopting the
       // existing tunnel when the caller opted into adoption.
       if (!observed || !observed.id) {
@@ -279,7 +279,7 @@ export const TunnelProvider = () =>
           );
       }
 
-      // Sync — when the tunnel is managed in Cloudflare, push the
+      // Sync -- when the tunnel is managed in Cloudflare, push the
       // desired ingress + originRequest configuration. The PUT is
       // idempotent: equal payloads converge to the same state, so we
       // always push to apply drift.
@@ -304,7 +304,7 @@ export const TunnelProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      // Observe — an already-(soft-)deleted tunnel means nothing to do.
+      // Observe -- an already-(soft-)deleted tunnel means nothing to do.
       const observed = yield* zeroTrust
         .getTunnelCloudflared({
           accountId: output.accountId,
@@ -312,7 +312,7 @@ export const TunnelProvider = () =>
         })
         .pipe(Effect.catchTag("TunnelNotFound", () => Effect.undefined));
       if (observed === undefined || observed.deletedAt != null) return;
-      // Delete — sibling route/config deletions propagate asynchronously and
+      // Delete -- sibling route/config deletions propagate asynchronously and
       // Cloudflare transiently rejects the tunnel delete while they drain.
       // Retry bounded and let a persistent failure surface: a swallowed
       // failure silently leaks the tunnel.

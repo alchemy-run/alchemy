@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:GetPersistentAppUIPresignedURL` — mints a presigned URL for a persistent application UI of the bound cluster (works after the cluster terminates).
+ * Runtime binding for `elasticmapreduce:GetPersistentAppUIPresignedURL` -- mints a presigned URL for a persistent application UI of the bound cluster (works after the cluster terminates).
  * ### Application UIs
  * **Example:** Link to the Spark History Server
  * ```typescript

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:IndexFaces` — detect faces in an image and add them to a face collection for later search.
+ * Runtime binding for `rekognition:IndexFaces` -- detect faces in an image and add them to a face collection for later search.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:IndexFaces` on `*` (Rekognition data-plane resources such

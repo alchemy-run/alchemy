@@ -172,7 +172,7 @@ export const RootProvider = () =>
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // Observe — discover the live root. `Root` is import-only: AWS
+          // Observe -- discover the live root. `Root` is import-only: AWS
           // creates the root for us when the organization is created, and we
           // never create or delete it. We always look it up fresh.
           const root = yield* readRoot({
@@ -187,7 +187,7 @@ export const RootProvider = () =>
             });
           }
 
-          // Sync tags — diff observed cloud tags against desired. Using
+          // Sync tags -- diff observed cloud tags against desired. Using
           // `root.tags` as the baseline (instead of stale `olds.tags`) keeps
           // the reconciler convergent even on adoption or after drift.
           const tags = yield* updateResourceTags({

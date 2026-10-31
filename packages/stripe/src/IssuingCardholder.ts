@@ -97,11 +97,11 @@ export interface IssuingCardholderCompany {
 
 export interface IssuingCardholderDob {
   /**
-   * Day of birth, 1–31. Cardholders must be older than 13.
+   * Day of birth, 1-31. Cardholders must be older than 13.
    */
   day: number;
   /**
-   * Month of birth, 1–12.
+   * Month of birth, 1-12.
    */
   month: number;
   /**
@@ -188,7 +188,7 @@ export interface IssuingCardholderProps {
   /**
    * The cardholder's name, printed on cards issued to them. Max 24
    * characters; letters and spaces only (no numbers or special
-   * characters). Create-only — changing it replaces the cardholder.
+   * characters). Create-only -- changing it replaces the cardholder.
    */
   name: string;
   /**
@@ -196,7 +196,7 @@ export interface IssuingCardholderProps {
    */
   billing: IssuingCardholderBilling;
   /**
-   * `individual` or `company`. Create-only — changing it replaces the
+   * `individual` or `company`. Create-only -- changing it replaces the
    * cardholder.
    * @default "individual"
    */
@@ -259,7 +259,7 @@ export type IssuingCardholder = Resource<
   "Stripe.IssuingCardholder",
   IssuingCardholderProps,
   {
-    /** Stripe issuing cardholder id (`ich_…`). */
+    /** Stripe issuing cardholder id (`ich_...`). */
     id: string;
     /** The cardholder's name, printed on cards. */
     name: string;
@@ -299,7 +299,7 @@ export type IssuingCardholder = Resource<
 >;
 
 /**
- * A Stripe Issuing Cardholder — an individual or company who can be
+ * A Stripe Issuing Cardholder -- an individual or company who can be
  * issued cards. Billing address, email, phone, preferred locales,
  * spending controls, status, and metadata update in place. Name and
  * type are immutable; changing them replaces the cardholder.

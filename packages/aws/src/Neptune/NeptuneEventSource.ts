@@ -65,7 +65,7 @@ export interface NeptuneEventSourceProps extends EventRouteProps {
   /**
    * Restrict to events about specific clusters, instances, or snapshots
    * (matched against the event's top-level `resources`, which carries the
-   * resource ARNs). Strongly recommended — the `aws.rds` source also carries
+   * resource ARNs). Strongly recommended -- the `aws.rds` source also carries
    * events for RDS and DocumentDB resources in the account.
    */
   resourceArns?: readonly string[];
@@ -74,13 +74,13 @@ export interface NeptuneEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting Neptune notifications to the hosting compute.
  * Neptune publishes cluster, instance, snapshot, and parameter-group
- * lifecycle events — failovers, maintenance, backups, configuration changes
- * — through the shared RDS eventing plane to the account's default
+ * lifecycle events -- failovers, maintenance, backups, configuration changes
+ * -- through the shared RDS eventing plane to the account's default
  * EventBridge bus (source `aws.rds`); this subscribes the host Function to
  * those events so it can alert on failovers or react to completed
  * snapshots.
  *
- * Neptune publishes to EventBridge automatically — no additional resource
+ * Neptune publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Because the
  * `aws.rds` source is shared with RDS and DocumentDB, pass `resourceArns`
  * (e.g. the cluster ARN) to scope the rule to your Neptune resources.

@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:DescribeServiceUpdates`).
  *
  * Lists the service updates (security patches, engine upgrades) available or
- * scheduled for the account's clusters — pair with
+ * scheduled for the account's clusters -- pair with
  * {@link BatchUpdateCluster} to build patch automation. Provide the
  * implementation with
  * `Effect.provide(AWS.MemoryDB.DescribeServiceUpdatesHttp)`.

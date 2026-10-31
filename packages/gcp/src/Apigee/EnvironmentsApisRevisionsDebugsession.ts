@@ -25,26 +25,26 @@ import {
 export type EnvironmentsApisRevisionsDebugsessionProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the session.
+   * current GCP project id. Immutable -- changing it replaces the session.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the session.
    */
   environment: string;
   /**
-   * API proxy id. Immutable — changing it replaces the session.
+   * API proxy id. Immutable -- changing it replaces the session.
    */
   api: string;
   /**
-   * Deployed revision id. Immutable — changing it replaces the session.
+   * Deployed revision id. Immutable -- changing it replaces the session.
    */
   revision: string;
   /**
    * Debug session id. If omitted, a unique name is generated. Sessions
    * have no labels; Alchemy uses this id as the ownership marker for
-   * `list` / nuke. Immutable — changing it replaces the session.
+   * `list` / nuke. Immutable -- changing it replaces the session.
    */
   debugsessionId?: string;
   /**
@@ -77,7 +77,7 @@ export type EnvironmentsApisRevisionsDebugsession = Resource<
   "GCP.Apigee.EnvironmentsApisRevisionsDebugsession",
   EnvironmentsApisRevisionsDebugsessionProps,
   {
-    /** Full resource name `…/apis/{api}/revisions/{revision}/debugsessions/{id}`. */
+    /** Full resource name `.../apis/{api}/revisions/{revision}/debugsessions/{id}`. */
     name: string;
     /** Debug session id. */
     debugsessionId: string;

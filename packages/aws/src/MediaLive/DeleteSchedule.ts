@@ -7,14 +7,14 @@ import type { Channel } from "./Channel.ts";
  * Runtime binding for `medialive:DeleteSchedule`.
  *
  * Clears every scheduled action from the bound {@link Channel}'s schedule
- * in one call — the reset lever a playout-automation Lambda pulls before
+ * in one call -- the reset lever a playout-automation Lambda pulls before
  * programming a fresh broadcast rundown with {@link BatchUpdateSchedule}.
  * The channel id is injected from the binding. Provide the implementation
  * with `Effect.provide(AWS.MediaLive.DeleteScheduleHttp)`.
  * ### Driving the Channel Schedule
  * **Example:** Reset the Channel's Schedule
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const deleteSchedule = yield* AWS.MediaLive.DeleteSchedule(channel);
  *
  * // runtime

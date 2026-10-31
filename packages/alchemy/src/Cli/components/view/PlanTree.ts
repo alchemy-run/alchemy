@@ -42,7 +42,7 @@ export type PlanRow =
       action: "create" | "update" | "delete" | "noop";
       /**
        * Row key of the resource that carries this binding. Bindings have no
-       * lifecycle of their own — the host provider reconciles them — so the
+       * lifecycle of their own -- the host provider reconciles them -- so the
        * row mirrors the host's apply status instead of tracking its own.
        */
       hostKey: string;

@@ -6,7 +6,7 @@ import type { Table } from "./Table.ts";
 export interface PrepareQueryRequest extends TSQ.PrepareQueryRequest {}
 
 /**
- * Runtime binding for `timestream-query:PrepareQuery` — validate a SQL query
+ * Runtime binding for `timestream-query:PrepareQuery` -- validate a SQL query
  * against a Timestream {@link Table} and inspect its result schema and
  * parameter mappings without running it.
  *
@@ -21,10 +21,10 @@ export interface PrepareQueryRequest extends TSQ.PrepareQueryRequest {}
  * ### Querying Data
  * **Example:** Validate a query before running it
  * ```typescript
- * // init — bind the operation to the table the SQL reads
+ * // init -- bind the operation to the table the SQL reads
  * const prepareQuery = yield* Timestream.PrepareQuery(table);
  *
- * // runtime — validate only; Columns/Parameters describe the result shape
+ * // runtime -- validate only; Columns/Parameters describe the result shape
  * const prepared = yield* prepareQuery({
  *   QueryString: `SELECT COUNT(*) AS c FROM "${databaseName}"."${tableName}"`,
  *   ValidateOnly: true,

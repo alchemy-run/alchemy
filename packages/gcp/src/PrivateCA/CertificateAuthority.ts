@@ -32,13 +32,13 @@ export type DesiredState = "ENABLED" | "DISABLED" | "STAGED";
 export type KeyVersionSpec = {
   /**
    * Algorithm for a Google-managed Cloud KMS key. Managed keys use
-   * `HSM` protection. Immutable — changing it replaces the CA.
+   * `HSM` protection. Immutable -- changing it replaces the CA.
    */
   algorithm?: privateca.KeyVersionSpecAlgorithmEnum | (string & {});
   /**
    * Existing Cloud KMS CryptoKeyVersion
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}/cryptoKeyVersions/{version}`.
-   * Immutable — changing it replaces the CA.
+   * Immutable -- changing it replaces the CA.
    */
   cloudKmsKeyVersion?: string;
 };
@@ -102,9 +102,9 @@ export type ExtendedKeyUsageOptions = {
 };
 
 export type KeyUsage = {
-  /** High-level key uses (digital signature, cert sign, …). */
+  /** High-level key uses (digital signature, cert sign, ...). */
   baseKeyUsage?: KeyUsageOptions;
-  /** Extended key uses (server auth, client auth, …). */
+  /** Extended key uses (server auth, client auth, ...). */
   extendedKeyUsage?: ExtendedKeyUsageOptions;
 };
 
@@ -160,13 +160,13 @@ export type CertificateAuthorityProps = {
   /**
    * Parent CaPool. Full name
    * `projects/{project}/locations/{location}/caPools/{caPool}` or the
-   * pool id (combined with `location`). Immutable — changing it replaces
+   * pool id (combined with `location`). Immutable -- changing it replaces
    * the CA.
    */
   caPool: string;
   /**
-   * Location (`us-central1`, …). Used when `caPool` is a bare id.
-   * Immutable — changing it replaces the CA. `US-CENTRAL1` is accepted
+   * Location (`us-central1`, ...). Used when `caPool` is a bare id.
+   * Immutable -- changing it replaces the CA. `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -174,29 +174,29 @@ export type CertificateAuthorityProps = {
   /**
    * CertificateAuthority id (the last path segment). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Must match
-   * `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the CA.
+   * `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it replaces the CA.
    */
   certificateAuthorityId?: string;
   /**
-   * `SELF_SIGNED` root or `SUBORDINATE`. Immutable — changing it
+   * `SELF_SIGNED` root or `SUBORDINATE`. Immutable -- changing it
    * replaces the CA.
    * @default "SELF_SIGNED"
    */
   type?: privateca.CertificateAuthorityTypeEnum | (string & {});
   /**
    * Desired lifetime of the CA certificate (e.g. `"315360000s"`).
-   * Immutable — changing it replaces the CA.
+   * Immutable -- changing it replaces the CA.
    * @default "315360000s"
    */
   lifetime?: string;
   /**
    * Signing key. Either `algorithm` (Google-managed HSM key) or
-   * `cloudKmsKeyVersion`. Immutable — changing it replaces the CA.
+   * `cloudKmsKeyVersion`. Immutable -- changing it replaces the CA.
    * @default { algorithm: "EC_P256_SHA256" }
    */
   keySpec?: KeyVersionSpec;
   /**
-   * X.509 certificate config (subject + CA extensions). Immutable —
+   * X.509 certificate config (subject + CA extensions). Immutable --
    * changing it replaces the CA. When omitted, Alchemy fills a self-signed
    * CA subject (`organization: "Alchemy"`, `commonName` = id) with
    * `isCa: true` and cert/CRL sign usage.
@@ -245,11 +245,11 @@ export type CertificateAuthorityAttrs = {
   caPool: string;
   /** Project id. */
   project: string;
-  /** Location id (`us-central1`, …). */
+  /** Location id (`us-central1`, ...). */
   location: string;
   /** `SELF_SIGNED` or `SUBORDINATE`. */
   type: string;
-  /** Server-reported state (`ENABLED`, `STAGED`, `DISABLED`, …). */
+  /** Server-reported state (`ENABLED`, `STAGED`, `DISABLED`, ...). */
   state: string | undefined;
   /** CaPool tier (`ENTERPRISE`, `DEVOPS`). */
   tier: string | undefined;
@@ -290,7 +290,7 @@ export type CertificateAuthority = Resource<
 >;
 
 /**
- * A Certificate Authority Service CertificateAuthority — a named CA in a
+ * A Certificate Authority Service CertificateAuthority -- a named CA in a
  * CaPool that issues certificates.
  *
  * Changing `certificateAuthorityId`, `caPool`, `location`, `type`,

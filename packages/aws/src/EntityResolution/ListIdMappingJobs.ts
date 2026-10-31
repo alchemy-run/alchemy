@@ -11,7 +11,7 @@ import type { IdMappingWorkflow } from "./IdMappingWorkflow.ts";
  * ### Running ID Mapping Jobs
  * **Example:** List Recent Jobs
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const listIdMappingJobs = yield* AWS.EntityResolution.ListIdMappingJobs(workflow);
  *
  * // runtime

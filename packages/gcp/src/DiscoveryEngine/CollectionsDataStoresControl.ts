@@ -28,13 +28,13 @@ export type ControlCondition = {
 
 export type CollectionsDataStoresControlProps = {
   /**
-   * Parent data store resource name. Immutable — changing it replaces
+   * Parent data store resource name. Immutable -- changing it replaces
    * the control.
    */
   dataStore: string;
   /**
    * Control id (`[a-z-_]`, 1-63 characters). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the control.
+   * generated. Immutable -- changing it replaces the control.
    */
   controlId?: string;
   /**

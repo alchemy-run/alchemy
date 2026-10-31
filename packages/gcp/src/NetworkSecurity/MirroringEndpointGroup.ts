@@ -55,23 +55,23 @@ export type MirroringEndpointGroupProps = {
    * Endpoint group id (the `{mirroringEndpointGroup}` segment of
    * `projects/{project}/locations/{location}/mirroringEndpointGroups/{mirroringEndpointGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   mirroringEndpointGroupId?: string;
   /**
-   * Location of the group. Endpoint groups are global — always
-   * `"global"`. Immutable — changing it replaces the group. `GLOBAL` is
+   * Location of the group. Endpoint groups are global -- always
+   * `"global"`. Immutable -- changing it replaces the group. `GLOBAL` is
    * accepted and normalized to `global`.
    * @default "global"
    */
   location?: string;
   /**
    * Deployment group this DIRECT endpoint group is connected to, as a
-   * full resource name. Immutable — changing it replaces the group.
+   * full resource name. Immutable -- changing it replaces the group.
    */
   mirroringDeploymentGroup: string;
   /**
-   * Endpoint group type. If omitted, defaults to `DIRECT`. Immutable —
+   * Endpoint group type. If omitted, defaults to `DIRECT`. Immutable --
    * changing it replaces the group.
    * @default "DIRECT"
    */
@@ -100,13 +100,13 @@ export type MirroringEndpointGroup = Resource<
     location: string;
     /** Connected deployment group resource name. */
     mirroringDeploymentGroup: string | undefined;
-    /** Endpoint group type (`DIRECT`, …). */
+    /** Endpoint group type (`DIRECT`, ...). */
     type: string | undefined;
     /** User-provided description. */
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether the API is still reconciling intended vs actual state. */
     reconciling: boolean;
@@ -124,7 +124,7 @@ export type MirroringEndpointGroup = Resource<
 >;
 
 /**
- * A Network Security Integration mirroring endpoint group — the consumer
+ * A Network Security Integration mirroring endpoint group -- the consumer
  * frontend for a mirroring deployment group.
  *
  * Changing `mirroringEndpointGroupId`, `location`, `type`, or

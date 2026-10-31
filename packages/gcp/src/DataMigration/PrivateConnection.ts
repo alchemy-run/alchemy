@@ -35,30 +35,30 @@ export type PrivateConnectionProps = {
   /**
    * Private connection id (the `{privateConnection}` segment of
    * `projects/{project}/locations/{location}/privateConnections/{privateConnection}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the connection.
    */
   privateConnectionId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * connection. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * User-friendly display name. The API has no patch method — changing
+   * User-friendly display name. The API has no patch method -- changing
    * display name replaces the connection.
    */
   displayName?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * The API has no patch method — changing labels replaces the
+   * The API has no patch method -- changing labels replaces the
    * connection.
    */
   labels?: Record<string, string>;
   /**
    * VPC peering configuration. Mutually exclusive with
-   * `pscInterfaceConfig`. Immutable — changing it replaces the
+   * `pscInterfaceConfig`. Immutable -- changing it replaces the
    * connection. `vpcName` may be a full resource name or a bare network
    * id.
    */
@@ -68,7 +68,7 @@ export type PrivateConnectionProps = {
   };
   /**
    * PSC interface configuration. Mutually exclusive with
-   * `vpcPeeringConfig`. Immutable — changing it replaces the connection.
+   * `vpcPeeringConfig`. Immutable -- changing it replaces the connection.
    */
   pscInterfaceConfig?: PscInterfaceConfig;
   /**

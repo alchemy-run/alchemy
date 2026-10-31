@@ -4,7 +4,7 @@
  * Container platform props accept `dockerfile: string | { content: Input<string> }`:
  * a plain string is always a **path** (relative to `context`); an object with a
  * `content` key is **inline Dockerfile content**. `Dockerfile.inline` is the
- * ergonomic way to produce the latter — a tagged template whose interpolations
+ * ergonomic way to produce the latter -- a tagged template whose interpolations
  * ride the normal {@link Output} machinery, so referencing another resource's
  * attributes (e.g. an {@link ECR.Image}'s `imageUri`) creates a real dependency
  * edge and re-resolves on change.

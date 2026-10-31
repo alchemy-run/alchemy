@@ -31,14 +31,14 @@ export type FolderNotificationConfigProps = {
    * Config id (the `{config}` segment of
    * `folders/{folder}/notificationConfigs/{config}`). If omitted, a unique
    * id is generated from the stack, stage, and logical id. Letters,
-   * digits, and hyphens; max 63 characters. Immutable — changing it
+   * digits, and hyphens; max 63 characters. Immutable -- changing it
    * replaces the config.
    */
   configId?: string;
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder ancestor.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   folder?: string;
   /**
@@ -52,7 +52,7 @@ export type FolderNotificationConfigProps = {
   filter?: string;
   /**
    * Human-readable description. Notification configs have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -88,7 +88,7 @@ export type FolderNotificationConfig = Resource<
 /**
  * A folder-scoped Security Command Center notification config.
  *
- * Notification configs have no labels field — Alchemy stamps ownership
+ * Notification configs have no labels field -- Alchemy stamps ownership
  * into the description so `list` / nuke can find them. Config id and
  * folder are identity. Pub/Sub topic, filter, and description update in
  * place.

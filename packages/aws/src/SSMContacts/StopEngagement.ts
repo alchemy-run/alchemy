@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ssm-contacts:StopEngagement`.
  *
  * Stop a running engagement, halting any further stages of the contact's
- * engagement plan — e.g. once the incident is acknowledged or resolved.
+ * engagement plan -- e.g. once the incident is acknowledged or resolved.
  * Engagement ARNs are minted at runtime by `StartEngagement`, so this
  * binding is account-scoped.
  * Provide the implementation with

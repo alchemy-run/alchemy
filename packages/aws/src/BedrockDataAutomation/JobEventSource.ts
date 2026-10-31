@@ -62,7 +62,7 @@ export interface DataAutomationJobEventSourceProps extends EventRouteProps {
  * EventBridge bus (source `aws.bedrock`); this subscribes the host Function
  * to those events so it can pick up results the moment a job settles.
  *
- * Bedrock publishes to EventBridge directly — no additional resource is
+ * Bedrock publishes to EventBridge directly -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

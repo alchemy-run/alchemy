@@ -37,7 +37,7 @@ export type ServiceTokenProps = {
   duration?: string;
   /**
    * A version number identifying the current client secret. Incrementing it
-   * triggers a rotation — a new client secret is generated and the previous
+   * triggers a rotation -- a new client secret is generated and the previous
    * secret remains valid until `previousClientSecretExpiresAt`.
    *
    * @default 1
@@ -106,7 +106,7 @@ export type ServiceToken = Resource<
  * **Example:** Increment clientSecretVersion to rotate
  * ```typescript
  * const token = yield* Cloudflare.Access.ServiceToken("Ci", {
- *   clientSecretVersion: 2, // was 1 — bumping rotates the secret
+ *   clientSecretVersion: 2, // was 1 -- bumping rotates the secret
  * });
  * ```
  *
@@ -153,7 +153,7 @@ export const ServiceTokenProvider = () =>
                 accountId,
                 clientId: t.clientId,
                 // The secret is only revealed on create/rotate, never on
-                // enumeration — match read and leave it undefined.
+                // enumeration -- match read and leave it undefined.
                 clientSecret: undefined,
                 name: t.name ?? "",
                 duration: t.duration ?? undefined,
@@ -187,7 +187,7 @@ export const ServiceTokenProvider = () =>
             serviceTokenId: direct.id,
             accountId: acct,
             clientId: direct.clientId ?? output.clientId,
-            // The API never returns the secret on GET — carry it forward.
+            // The API never returns the secret on GET -- carry it forward.
             clientSecret: output.clientSecret,
             name: direct.name ?? output.name,
             duration: direct.duration ?? output.duration,
@@ -216,7 +216,7 @@ export const ServiceTokenProvider = () =>
       const acct = output?.accountId ?? accountId;
       const desiredVersion = news.clientSecretVersion ?? 1;
 
-      // Observe — prefer the cached id, fall back to a name lookup so we
+      // Observe -- prefer the cached id, fall back to a name lookup so we
       // recover from out-of-band deletes and partial state-persistence
       // failures.
       let observed: ObservedToken | undefined;
@@ -232,7 +232,7 @@ export const ServiceTokenProvider = () =>
         observed = yield* findTokenByName(acct, name);
       }
 
-      // Ensure — create the token when missing, capturing the one-time
+      // Ensure -- create the token when missing, capturing the one-time
       // client secret. Tolerate a same-named create race by re-observing.
       if (!observed || !observed.id) {
         const created = yield* zeroTrust
@@ -276,7 +276,7 @@ export const ServiceTokenProvider = () =>
         };
       }
 
-      // Sync — converge name/duration via PUT only when the observed state
+      // Sync -- converge name/duration via PUT only when the observed state
       // differs from the desired state. The PUT deliberately omits
       // clientSecretVersion: rotation must go through the explicit rotate
       // endpoint, which is the only call that returns the new secret.
@@ -298,7 +298,7 @@ export const ServiceTokenProvider = () =>
         };
       }
 
-      // Rotate — when the declared secret version moved past the version we
+      // Rotate -- when the declared secret version moved past the version we
       // last reconciled, mint a new secret. The previous secret stays valid
       // until previousClientSecretExpiresAt.
       const priorVersion = output?.clientSecretVersion ?? olds?.clientSecretVersion ?? 1;

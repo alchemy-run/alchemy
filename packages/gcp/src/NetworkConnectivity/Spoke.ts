@@ -28,7 +28,7 @@ export type SpokeType = networkconnectivity.SpokeSpokeTypeEnum | (string & {});
 export type SpokeGatewayCapacity = networkconnectivity.GatewayCapacityEnum | (string & {});
 
 export type SpokeStateReason = {
-  /** Reason code (`PENDING_REVIEW`, `REJECTED`, `FAILED`, …). */
+  /** Reason code (`PENDING_REVIEW`, `REJECTED`, `FAILED`, ...). */
   code: string | undefined;
   /** Human-readable details. */
   message: string | undefined;
@@ -40,7 +40,7 @@ export type LinkedVpcNetwork = {
   /**
    * URI of the VPC network
    * (`projects/{project}/global/networks/{network}` or a Compute
-   * selfLink). Immutable — changing it replaces the spoke.
+   * selfLink). Immutable -- changing it replaces the spoke.
    */
   uri: string;
   /**
@@ -55,12 +55,12 @@ export type LinkedVpcNetwork = {
 
 export type LinkedVpnTunnels = {
   /**
-   * URIs of HA VPN tunnels. Immutable — changing them replaces the
+   * URIs of HA VPN tunnels. Immutable -- changing them replaces the
    * spoke.
    */
   uris: ReadonlyArray<string>;
   /**
-   * Enable site-to-site data transfer. Immutable — changing it replaces
+   * Enable site-to-site data transfer. Immutable -- changing it replaces
    * the spoke.
    */
   siteToSiteDataTransfer?: boolean;
@@ -76,12 +76,12 @@ export type LinkedVpnTunnels = {
 
 export type LinkedInterconnectAttachments = {
   /**
-   * URIs of VLAN attachments. Immutable — changing them replaces the
+   * URIs of VLAN attachments. Immutable -- changing them replaces the
    * spoke.
    */
   uris: ReadonlyArray<string>;
   /**
-   * Enable site-to-site data transfer. Immutable — changing it replaces
+   * Enable site-to-site data transfer. Immutable -- changing it replaces
    * the spoke.
    */
   siteToSiteDataTransfer?: boolean;
@@ -109,7 +109,7 @@ export type LinkedRouterApplianceInstances = {
    */
   instances: ReadonlyArray<RouterApplianceInstance>;
   /**
-   * Enable site-to-site data transfer. Immutable — changing it replaces
+   * Enable site-to-site data transfer. Immutable -- changing it replaces
    * the spoke.
    */
   siteToSiteDataTransfer?: boolean;
@@ -125,13 +125,13 @@ export type LinkedRouterApplianceInstances = {
 
 export type LinkedProducerVpcNetwork = {
   /**
-   * Service-consumer VPC the producer VPC is peered with. Immutable —
+   * Service-consumer VPC the producer VPC is peered with. Immutable --
    * changing it replaces the spoke.
    */
   network: string;
   /**
    * Name of the ACTIVE VPC peering to the producer (tenant) VPC.
-   * Immutable — changing it replaces the spoke.
+   * Immutable -- changing it replaces the spoke.
    */
   peering: string;
   /** Subnet CIDRs excluded from export to the hub. */
@@ -143,19 +143,19 @@ export type LinkedProducerVpcNetwork = {
 export type SpokeGatewayIpRangeReservation = {
   /**
    * `/23` CIDR reserved for gateway infrastructure (e.g. `10.1.2.0/23`).
-   * Immutable — changing it replaces the spoke.
+   * Immutable -- changing it replaces the spoke.
    */
   ipRange: string;
 };
 
 export type SpokeGateway = {
   /**
-   * Aggregate processing capacity. Immutable — changing it replaces the
+   * Aggregate processing capacity. Immutable -- changing it replaces the
    * spoke.
    */
   capacity?: SpokeGatewayCapacity;
   /**
-   * CIDRs reserved for gateway infrastructure. Immutable — changing
+   * CIDRs reserved for gateway infrastructure. Immutable -- changing
    * them replaces the spoke.
    */
   ipRangeReservations?: ReadonlyArray<SpokeGatewayIpRangeReservation>;
@@ -167,28 +167,28 @@ export type SpokeProps = {
    * `projects/{project}/locations/{location}/spokes/{spoke}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * spoke.
    */
   spokeId?: string;
   /**
    * Location of the spoke. VPC and producer-VPC spokes must use
    * `global`; VPN, VLAN-attachment, router-appliance, and gateway
-   * spokes use a region (`us-central1`, …). `US-CENTRAL1` is accepted
-   * and normalized to `us-central1`. Immutable — changing it replaces
+   * spokes use a region (`us-central1`, ...). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`. Immutable -- changing it replaces
    * the spoke.
    * @default "global"
    */
   location?: string;
   /**
-   * Hub this spoke attaches to — a full resource name
+   * Hub this spoke attaches to -- a full resource name
    * `projects/{project}/locations/global/hubs/{hub}` or a hub id.
-   * Immutable — changing it replaces the spoke.
+   * Immutable -- changing it replaces the spoke.
    */
   hub: string;
   /**
    * Group this spoke belongs to (star / hybrid-inspection topologies).
-   * Immutable — changing it replaces the spoke.
+   * Immutable -- changing it replaces the spoke.
    */
   group?: string;
   /**
@@ -236,7 +236,7 @@ export type Spoke = Resource<
     spokeId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Hub resource name this spoke is attached to. */
     hub: string | undefined;
@@ -258,11 +258,11 @@ export type Spoke = Resource<
     linkedProducerVpcNetwork: LinkedProducerVpcNetwork | undefined;
     /** Gateway config, if this is a gateway spoke. */
     gateway: SpokeGateway | undefined;
-    /** Server-reported spoke type (`VPC_NETWORK`, `VPN_TUNNEL`, …). */
+    /** Server-reported spoke type (`VPC_NETWORK`, `VPN_TUNNEL`, ...). */
     spokeType: string | undefined;
     /** Server-generated UUID, unique across spokes. */
     uniqueId: string | undefined;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Reasons the spoke is not `ACTIVE`, if any. */
     reasons: ReadonlyArray<SpokeStateReason>;
@@ -276,7 +276,7 @@ export type Spoke = Resource<
 >;
 
 /**
- * A Network Connectivity Center spoke — one VPC, VPN tunnel set, VLAN
+ * A Network Connectivity Center spoke -- one VPC, VPN tunnel set, VLAN
  * attachment set, router-appliance set, producer VPC, or gateway
  * attached to a hub.
  *

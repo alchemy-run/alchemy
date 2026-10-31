@@ -34,7 +34,7 @@ export type InstancesSnapshotProps = {
   /**
    * Parent Filestore instance. Full name
    * `projects/{project}/locations/{location}/instances/{instance}` or
-   * the instance id (combined with `location`). Immutable — changing it
+   * the instance id (combined with `location`). Immutable -- changing it
    * replaces the snapshot.
    *
    * Snapshots require a Zonal, Regional, Enterprise, or High Scale SSD
@@ -43,7 +43,7 @@ export type InstancesSnapshotProps = {
   instance: string;
   /**
    * Location of the parent instance when `instance` is a bare id.
-   * Ignored when `instance` is a full resource name. Immutable —
+   * Ignored when `instance` is a full resource name. Immutable --
    * changing it replaces the snapshot. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -54,7 +54,7 @@ export type InstancesSnapshotProps = {
    * `.../instances/{instance}/snapshots/{snapshot}`). If omitted, a
    * unique RFC1035 name is generated from the stack, stage, and logical
    * id. Must start with a letter, be 1-63 characters, and end with a
-   * letter or digit. Immutable — changing it replaces the snapshot.
+   * letter or digit. Immutable -- changing it replaces the snapshot.
    */
   snapshotId?: string;
   /**

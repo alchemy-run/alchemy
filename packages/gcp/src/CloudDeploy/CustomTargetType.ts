@@ -113,11 +113,11 @@ export type CustomTargetTypeProps = {
    * Custom target type id (the `{customTargetType}` segment of
    * `projects/{project}/locations/{location}/customTargetTypes/{customTargetType}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the type.
+   * and logical id. Immutable -- changing it replaces the type.
    */
   customTargetTypeId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the type. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -183,7 +183,7 @@ export type CustomTargetType = Resource<
 >;
 
 /**
- * A Cloud Deploy custom target type — a reusable render/deploy
+ * A Cloud Deploy custom target type -- a reusable render/deploy
  * definition for deploying to systems besides the supported runtimes.
  *
  * Changing `customTargetTypeId` or `location` replaces the type.

@@ -42,18 +42,18 @@ export type QaAnswerLabel = {
 export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProps = {
   /**
    * Parent conversation under an AuthorizedView
-   * (`{authorizedView}/conversations/{conversation}`). Immutable —
+   * (`{authorizedView}/conversations/{conversation}`). Immutable --
    * changing it replaces the label.
    */
   parent: string;
   /**
    * Feedback label id (the `{feedback_label}` segment). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the label.
+   * unique id is generated. Immutable -- changing it replaces the label.
    */
   feedbackLabelId?: string;
   /**
    * String label used for topic modeling. Feedback labels have no labels
-   * map, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * map, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   label?: string;
@@ -100,7 +100,7 @@ export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel = Resour
  * A Contact Center AI Insights feedback label on a conversation, created
  * through an AuthorizedView.
  *
- * Feedback labels have no labels map — Alchemy stamps ownership into the
+ * Feedback labels have no labels map -- Alchemy stamps ownership into the
  * string `label`. Parent conversation and id are immutable. Label text,
  * labeled resource, and QA answer update in place.
  *

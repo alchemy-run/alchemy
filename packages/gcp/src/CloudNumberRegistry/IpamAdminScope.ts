@@ -36,21 +36,21 @@ export type IpamAdminScopeProps = {
   /**
    * IPAM admin scope id (the `{ipamAdminScope}` segment of
    * `projects/{project}/locations/{location}/ipamAdminScopes/{ipamAdminScope}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the scope. Only one admin scope may exist per
    * organization.
    */
   ipamAdminScopeId?: string;
   /**
-   * Location of the scope. Cloud Number Registry is global — `global`
-   * is the only supported value. Immutable — changing it replaces the
+   * Location of the scope. Cloud Number Registry is global -- `global`
+   * is the only supported value. Immutable -- changing it replaces the
    * scope.
    * @default "global"
    */
   location?: string;
   /**
    * Administrative scopes enabled for discovery. Preview allows a
-   * single organization (`organizations/{org}`). Immutable — changing
+   * single organization (`organizations/{org}`). Immutable -- changing
    * it replaces the scope.
    */
   scopes: string[];
@@ -83,7 +83,7 @@ export type IpamAdminScope = Resource<
     enabledAddonPlatforms: string[];
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Discovery pipeline state (`SETUP_IN_PROGRESS`, `READY_FOR_USE`, …). */
+    /** Discovery pipeline state (`SETUP_IN_PROGRESS`, `READY_FOR_USE`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -95,7 +95,7 @@ export type IpamAdminScope = Resource<
 >;
 
 /**
- * A Cloud Number Registry IPAM admin scope — the organization-wide
+ * A Cloud Number Registry IPAM admin scope -- the organization-wide
  * boundary for IP address discovery. Only one project in an
  * organization may own the admin scope. Creating it also creates a
  * default registry book and starts discovery (up to 24 hours).

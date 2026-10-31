@@ -99,7 +99,7 @@ export type TcpProxy = Resource<
     serviceId: string;
     /** Environment the proxy lives in. */
     environmentId: string;
-    /** Observed Railway sync status (`ACTIVE`, `CREATING`, …). */
+    /** Observed Railway sync status (`ACTIVE`, `CREATING`, ...). */
     syncStatus: string;
   },
   never,
@@ -108,7 +108,7 @@ export type TcpProxy = Resource<
 
 /**
  * A Railway.TcpProxy exposes a service over public TCP. Identity is the
- * Railway proxy id. There is no in-place update — changing `service`,
+ * Railway proxy id. There is no in-place update -- changing `service`,
  * `postgres`, `redis`, `environment`, or `applicationPort` replaces the
  * proxy.
  *

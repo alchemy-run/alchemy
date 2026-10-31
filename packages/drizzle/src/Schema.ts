@@ -175,7 +175,7 @@ export type SchemaProps = {
    * Output directory for generated migrations, in drizzle-kit's own layout:
    * `{out}/{timestamp}_{name}/{migration.sql, snapshot.json}`. Pass this
    * through as a database resource's `migrations` prop (`Neon.Branch`,
-   * `Fly.Postgres`, `Cloudflare.D1.Database`, …) to apply pending
+   * `Fly.Postgres`, `Cloudflare.D1.Database`, ...) to apply pending
    * migrations on deploy.
    *
    * @default "./migrations"
@@ -356,7 +356,7 @@ export const SchemaProvider = () =>
         return Record.fromEntries(entries.flat());
       });
 
-      // The latest snapshot is the head of the `prevIds` chain — the one no
+      // The latest snapshot is the head of the `prevIds` chain -- the one no
       // other snapshot points back to. Directory-name order alone is not
       // enough: two migrations generated within the same second share the
       // timestamp prefix, and the random name suffix then decides the sort.
@@ -556,7 +556,7 @@ export const SchemaProvider = () =>
             return undefined;
           }
           // Only flag an update when drizzle-kit would emit new SQL (or the
-          // folder needs upgrading) — otherwise downstream resources (e.g.
+          // folder needs upgrading) -- otherwise downstream resources (e.g.
           // Neon.Branch) would see `schema.out` as an unresolved Output during
           // plan and cascade into spurious updates of their own.
           const { changed, upgraded } = yield* detectDrift(news);
@@ -604,7 +604,7 @@ export const SchemaProvider = () =>
     }),
   );
 
-// drizzle-kit hint kinds → snapshot `ddl` entity types.
+// drizzle-kit hint kinds -> snapshot `ddl` entity types.
 const ddlEntityTypes: Record.ReadonlyRecord<string, string> = {
   table: "tables",
   column: "columns",
@@ -706,7 +706,7 @@ const applyRenames = (rows: ReadonlyArray<Located>, hints: ReadonlyArray<Hint>) 
 /**
  * Entities a rename-or-create question could have been renamed from: same
  * kind, present before (after the renames answered so far), gone now.
- * Columns, indexes, … are offered from the same table first.
+ * Columns, indexes, ... are offered from the same table first.
  */
 const renameCandidates = (
   hint: MissingHint,
@@ -730,7 +730,7 @@ const renameCandidates = (
 
 /**
  * Answer one drizzle-kit `MissingHint` with an Alchemy prompt. drizzle-kit
- * only asks when a rename is possible, so the question is always shown —
+ * only asks when a rename is possible, so the question is always shown --
  * never answered with "create" on the user's behalf. A dismissed prompt stays
  * a `TerminalCancelled` so the CLI exits quietly, the same as cancelling the
  * deploy confirmation.
@@ -757,7 +757,7 @@ const askHint = Effect.fn("Drizzle.askHint")(
         },
         ...renameCandidates(hint, prev, cur, hints).map((from) => ({
           value: { type: "rename", kind: hint.kind, from, to: hint.entity } satisfies Hint,
-          label: `~ ${formatEntity(from)} › ${name}`,
+          label: `~ ${formatEntity(from)} \u203a ${name}`,
           description: `rename ${hint.kind}`,
         })),
       ],

@@ -45,7 +45,7 @@ export type RepositoriesRuleProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the rule.
    */
   repository: string;
@@ -57,7 +57,7 @@ export type RepositoriesRuleProps = {
   /**
    * Rule id (the `{rule}` segment of `.../repositories/{repository}/rules/{rule}`).
    * If omitted, a unique name is generated. Max 256 characters:
-   * alphanumeric plus `-._~:@+^`. Immutable — changing it replaces the
+   * alphanumeric plus `-._~:@+^`. Immutable -- changing it replaces the
    * rule.
    */
   ruleId?: string;

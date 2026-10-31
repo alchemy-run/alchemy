@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { AnomalyMonitor } from "./AnomalyMonitor.ts";
 
 /**
- * Request for {@link GetAnomalies} — the bound monitor's ARN is
+ * Request for {@link GetAnomalies} -- the bound monitor's ARN is
  * injected automatically.
  */
 export interface GetAnomaliesRequest extends Omit<ce.GetAnomaliesRequest, "MonitorArn"> {}
@@ -18,7 +18,7 @@ export interface GetAnomaliesRequest extends Omit<ce.GetAnomaliesRequest, "Monit
  * ### Anomaly Detection at Runtime
  * **Example:** List a Monitor's Anomalies
  * ```typescript
- * // init — bind the operation to the monitor
+ * // init -- bind the operation to the monitor
  * const getAnomalies = yield* AWS.CostExplorer.GetAnomalies(monitor);
  *
  * // runtime

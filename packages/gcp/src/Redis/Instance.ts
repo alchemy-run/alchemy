@@ -33,18 +33,18 @@ const LONG_POLL = { times: 72, schedule: Schedule.spaced("10 seconds") };
 const MAX_NAME_LENGTH = 40;
 
 export type RedisTimeOfDay = {
-  /** Hours of day in 24-hour format (`0`–`23`). */
+  /** Hours of day in 24-hour format (`0`-`23`). */
   hours?: number;
-  /** Minutes of hour (`0`–`59`). */
+  /** Minutes of hour (`0`-`59`). */
   minutes?: number;
-  /** Seconds of minute (`0`–`59`). */
+  /** Seconds of minute (`0`-`59`). */
   seconds?: number;
   /** Fractional seconds, in nanoseconds. */
   nanos?: number;
 };
 
 export type WeeklyMaintenanceWindow = {
-  /** Day of week that maintenance occurs (`MONDAY` … `SUNDAY`). */
+  /** Day of week that maintenance occurs (`MONDAY` ... `SUNDAY`). */
   day?: redis.WeeklyMaintenanceWindowDayEnum | (string & {});
   /** Start time of the window in UTC. */
   startTime?: RedisTimeOfDay;
@@ -81,11 +81,11 @@ export type InstanceProps = {
    * `projects/{project}/locations/{location}/instances/{instance}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `^[a-z][a-z0-9-]{0,38}[a-z0-9]$` (1-40
-   * characters). Immutable — changing it replaces the instance.
+   * characters). Immutable -- changing it replaces the instance.
    */
   instanceId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -110,7 +110,7 @@ export type InstanceProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Redis software version (`REDIS_7_0`, `REDIS_7_2`, …). Upgrading uses
+   * Redis software version (`REDIS_7_0`, `REDIS_7_2`, ...). Upgrading uses
    * `instances.upgrade`; downgrading replaces the instance.
    */
   redisVersion?: string;
@@ -126,11 +126,11 @@ export type InstanceProps = {
   secondaryIpRange?: string;
   /**
    * Redis config parameters (`maxmemory-policy`, `notify-keyspace-events`,
-   * …). See Memorystore supported parameters.
+   * ...). See Memorystore supported parameters.
    */
   redisConfigs?: Record<string, string>;
   /**
-   * Service tier. Immutable — changing it replaces the instance.
+   * Service tier. Immutable -- changing it replaces the instance.
    * @default "BASIC"
    */
   tier?: redis.InstanceTierEnum | (string & {});
@@ -167,11 +167,11 @@ export type InstanceProps = {
   maintenancePolicy?: MaintenancePolicy;
   /**
    * Replica count. BASIC is `0`. STANDARD_HA without read replicas is
-   * `1`. STANDARD_HA with read replicas is `1`–`5`.
+   * `1`. STANDARD_HA with read replicas is `1`-`5`.
    */
   replicaCount?: number;
   /**
-   * Read replica mode. Create-time only — changing it replaces the
+   * Read replica mode. Create-time only -- changing it replaces the
    * instance.
    */
   readReplicasMode?: redis.InstanceReadReplicasModeEnum | (string & {});
@@ -200,7 +200,7 @@ export type Instance = Resource<
     instanceId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** User-facing display name. */
     displayName: string | undefined;
@@ -222,7 +222,7 @@ export type Instance = Resource<
     host: string | undefined;
     /** Redis endpoint port. */
     port: number | undefined;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Extra status text, if any. */
     statusMessage: string | undefined;

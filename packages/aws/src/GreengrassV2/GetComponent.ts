@@ -13,7 +13,7 @@ import type { ComponentVersion } from "./ComponentVersion.ts";
  * ### Reading Components
  * **Example:** Fetch A Component's Recipe
  * ```typescript
- * // init — bind the operation to the component version
+ * // init -- bind the operation to the component version
  * const getComponent = yield* AWS.GreengrassV2.GetComponent(component);
  *
  * // runtime

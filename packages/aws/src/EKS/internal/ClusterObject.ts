@@ -8,7 +8,7 @@ import {
  * Internal helpers for binding Kubernetes objects onto an `AWS.EKS.Cluster`
  * through its `KubernetesObjectBinding` contract. The cluster's reconciler
  * server-side-applies every bound object after the control plane is ACTIVE.
- * Not exported from the EKS index — the public path for raw manifests is
+ * Not exported from the EKS index -- the public path for raw manifests is
  * `Kubernetes.Manifest`.
  */
 import * as Effect from "effect/Effect";

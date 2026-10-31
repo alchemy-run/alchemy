@@ -28,7 +28,7 @@ export type RegionDiskProps = {
    */
   diskName?: string;
   /**
-   * Region the disk lives in (e.g. `us-central1`). Immutable — changing
+   * Region the disk lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the disk. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -36,14 +36,14 @@ export type RegionDiskProps = {
   region?: string;
   /**
    * Zones the disk is replicated to. Two zones in `region` are required.
-   * Short names (`us-central1-a`) or URLs are accepted. Immutable —
+   * Short names (`us-central1-a`) or URLs are accepted. Immutable --
    * changing them replaces the disk.
    * @default ["{region}-a", "{region}-b"]
    */
   replicaZones?: string[];
   /**
    * Persistent disk type (`pd-standard`, `pd-balanced`, `pd-ssd`,
-   * `pd-extreme`, `hyperdisk-balanced`, …). Immutable — changing it
+   * `pd-extreme`, `hyperdisk-balanced`, ...). Immutable -- changing it
    * replaces the disk.
    * @default "pd-standard"
    */
@@ -63,27 +63,27 @@ export type RegionDiskProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Source image used to create the disk. Immutable — changing it replaces
+   * Source image used to create the disk. Immutable -- changing it replaces
    * the disk.
    */
   sourceImage?: string;
   /**
-   * Source snapshot used to create the disk. Immutable — changing it
+   * Source snapshot used to create the disk. Immutable -- changing it
    * replaces the disk.
    */
   sourceSnapshot?: string;
   /**
-   * Source disk used to create this disk. Immutable — changing it replaces
+   * Source disk used to create this disk. Immutable -- changing it replaces
    * the disk.
    */
   sourceDisk?: string;
   /**
-   * CPU architecture (`ARM64` or `X86_64`). Immutable — changing it
+   * CPU architecture (`ARM64` or `X86_64`). Immutable -- changing it
    * replaces the disk.
    */
   architecture?: string;
   /**
-   * Physical block size in bytes (typically `4096`). Immutable — changing
+   * Physical block size in bytes (typically `4096`). Immutable -- changing
    * it replaces the disk.
    */
   physicalBlockSizeBytes?: number;
@@ -96,7 +96,7 @@ export type RegionDiskProps = {
    */
   provisionedThroughput?: number;
   /**
-   * Whether confidential compute is enabled. Immutable — changing it
+   * Whether confidential compute is enabled. Immutable -- changing it
    * replaces the disk.
    */
   enableConfidentialCompute?: boolean;
@@ -120,7 +120,7 @@ export type RegionDisk = Resource<
     type: string;
     /** Size in GB. */
     sizeGb: number;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;

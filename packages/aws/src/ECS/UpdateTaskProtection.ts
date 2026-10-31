@@ -11,7 +11,7 @@ export interface UpdateTaskProtectionRequest extends Omit<
   /**
    * How long the protection should last, e.g. `"20 minutes"` or
    * `Duration.hours(1)`. Rounded to whole minutes on the wire
-   * (1 minute – 48 hours).
+   * (1 minute - 48 hours).
    * @default "2 hours"
    */
   expiresIn?: Duration.Input;
@@ -22,7 +22,7 @@ export interface UpdateTaskProtectionRequest extends Omit<
  *
  * Bind this operation to a `Cluster` inside a function runtime to get a
  * callable that toggles scale-in protection on service-managed tasks in the
- * bound cluster — the canonical pattern is a task protecting *itself* while
+ * bound cluster -- the canonical pattern is a task protecting *itself* while
  * it processes long-running work so deployments and scale-in don't terminate
  * it. The cluster ARN is injected automatically and the host is granted
  * `ecs:UpdateTaskProtection` on the cluster's tasks.

@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:DescribeProvisionedProduct`.
  *
- * Gets information about a provisioned product by ID or name — its status (`AVAILABLE`, `UNDER_CHANGE`, `ERROR`, …) and the record of its last operation.
+ * Gets information about a provisioned product by ID or name -- its status (`AVAILABLE`, `UNDER_CHANGE`, `ERROR`, ...) and the record of its last operation.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.DescribeProvisionedProductHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** Get a Provisioned Product's Status
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeProvisionedProduct = yield* AWS.ServiceCatalog.DescribeProvisionedProduct();
  *
  * // runtime

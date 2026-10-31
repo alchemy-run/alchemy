@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:ResumeResource` — resume a stopped Forecast
+ * Runtime binding for `forecast:ResumeResource` -- resume a stopped Forecast
  * monitor so it continues evaluating a deployed predictor's drift.
  *
  * Monitor ARNs are created at runtime, so the binding takes no arguments and

@@ -47,7 +47,7 @@ export interface HelmChartProps {
    */
   repo?: string;
   /**
-   * Chart version to render. Pin this for repository/OCI charts — without
+   * Chart version to render. Pin this for repository/OCI charts -- without
    * it, helm resolves the latest version at each deploy and the rendered
    * objects can drift between runs. Ignored for local chart directories.
    */
@@ -67,7 +67,7 @@ export interface HelmChartProps {
    */
   namespace?: string;
   /**
-   * Values passed to the chart — a literal object, the same shape as a
+   * Values passed to the chart -- a literal object, the same shape as a
    * `values.yaml` file.
    */
   values?: Record<string, unknown>;
@@ -119,7 +119,7 @@ export interface HelmChart extends Resource<
  * Renders a Helm chart and converges its objects onto any Kubernetes
  * cluster via server-side apply.
  *
- * The chart is rendered locally with the `helm` CLI (`helm template` —
+ * The chart is rendered locally with the `helm` CLI (`helm template` --
  * install helm on the deploying machine, like Docker for image builds);
  * the rendered objects then flow through the same apply machinery as
  * `Kubernetes.Manifest`: Alchemy owns the object lifecycle, re-applies the
@@ -130,7 +130,7 @@ export interface HelmChart extends Resource<
  * can reach.
  *
  * Helm lifecycle hooks (`helm.sh/hook`-annotated objects: install/upgrade/
- * delete hooks, tests) are neither executed nor applied — the chart is
+ * delete hooks, tests) are neither executed nor applied -- the chart is
  * rendered with `--no-hooks`, so they never enter the managed-object graph.
  * Charts that depend on hooks for correctness should be installed with Helm
  * directly.
@@ -278,7 +278,7 @@ export const HelmChartProvider = () =>
           const releaseName = yield* resolveReleaseName(id, news, output);
           const oldCluster = connectionIdentity(tryConnectionOf(olds?.cluster));
           const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
-          // Object identity is the (cluster, release, namespace) triple —
+          // Object identity is the (cluster, release, namespace) triple --
           // moving any of it means a different set of objects.
           if (
             output &&

@@ -4,20 +4,20 @@
  *
  * SolidStart 2's `solidStart()` is a plain Vite plugin: it declares the
  * `client` / `ssr` environments and a `builder.buildApp` that builds both.
- * The server half — turning the SSR bundle into a deployable server — is
+ * The server half -- turning the SSR bundle into a deployable server -- is
  * `@solidjs/vite-plugin-nitro-2`, a second Vite plugin whose `buildApp`
  * replaces SolidStart's and runs nitro over the emitted SSR bundle.
  *
  * That plugin takes its nitro configuration as a plain argument and always
  * passes a `preset` down to nitro (its own default is `"node-server"`), so
  * neither `NITRO_PRESET` nor a `nitro.config.ts` can override it. The only
- * seam that gets the last word is the plugin instance itself — so this
+ * seam that gets the last word is the plugin instance itself -- so this
  * integration constructs it:
  *
  * 1. The project's `vite.config.*` loads natively (its `solidStart()` and any
  *    other plugins are untouched).
- * 2. The integration APPENDS its own `nitroV2Plugin(...)` instance — loaded
- *    from the *project's* `node_modules` — through vite's inline config.
+ * 2. The integration APPENDS its own `nitroV2Plugin(...)` instance -- loaded
+ *    from the *project's* `node_modules` -- through vite's inline config.
  *    Inline plugins are concatenated after the config file's, and vite merges
  *    plugin `config()` results in order, so the appended instance's
  *    `builder.buildApp` (and therefore its nitro config) wins.
@@ -75,7 +75,7 @@ export const isSamePreset = (a: string, b: string): boolean =>
 /** The actionable error message for a caller-configured foreign preset. */
 export const presetConflictMessage = (userPreset: string, targetPreset: string): string =>
   `The integration was given \`nitro.preset: "${userPreset}"\`, but this deploy target ` +
-  `builds through the "${targetPreset}" preset — a "${userPreset}" build would never be ` +
+  `builds through the "${targetPreset}" preset \u2014 a "${userPreset}" build would never be ` +
   "deployed. Remove `nitro.preset` and let the deploy target select it, or run the " +
   `framework's own CLI for a "${userPreset}" build outside this integration.`;
 
@@ -88,7 +88,7 @@ export const pluginConflictMessage = (): string =>
   "to the integration instead (`nitro: { ... }`, e.g. `nitro: { prerender: { crawlLinks: true } }`).";
 
 export interface ResolveNitroConfigInput {
-  /** The deploy target's nitro preset — always the last word. */
+  /** The deploy target's nitro preset -- always the last word. */
   readonly preset: string;
   /** Absolute project root, forwarded to nitro as `rootDir`. */
   readonly rootDir: string;

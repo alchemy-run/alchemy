@@ -9,7 +9,7 @@ export interface GetThingShadowRequest extends Omit<iotdata.GetThingShadowReques
  * Runtime binding for the IoT data-plane `GetThingShadow` operation (IAM
  * action `iot:GetThingShadow`).
  *
- * Bind it to a {@link Thing} to read the thing's device shadow — the thing
+ * Bind it to a {@link Thing} to read the thing's device shadow -- the thing
  * name is injected automatically. The response `payload` is a byte Stream;
  * decode it with `Stream.decodeText` + `Stream.mkString`. Provide the
  * implementation with `Effect.provide(AWS.IoT.GetThingShadowHttp)`.

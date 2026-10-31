@@ -126,7 +126,7 @@ export type PostgresMetalClusterSize =
  *
  * [PlanetScale Metal](https://planetscale.com/docs/metal) sizes are backed
  * by locally-attached NVMe. Pass a **full Metal SKU** from
- * {@link PostgresMetalClusterSize} — short `M-*` names are not valid on
+ * {@link PostgresMetalClusterSize} -- short `M-*` names are not valid on
  * their own because Metal SKUs also encode CPU series, architecture, and
  * drive size. See [Postgres pricing](https://planetscale.com/docs/postgres/pricing).
  *
@@ -161,7 +161,7 @@ export type PostgresClusterSize =
  *
  * Metal-backed sizes (anything starting with `M`) are passed through after
  * hyphen normalization. The short `M_*` / `M-*` form is not a valid SKU on
- * its own — the API requires the full Metal SKU (e.g.
+ * its own -- the API requires the full Metal SKU (e.g.
  * `M1_10_AWS_ARM_D_METAL_10`), which encodes the CPU series, provider,
  * arch, and storage size.
  *
@@ -195,7 +195,7 @@ const changeRequestSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedu
 
 /**
  * Polls branch change requests until all visible changes are in a terminal
- * state (`completed` or `canceled`), or — if `changeId` is provided — until
+ * state (`completed` or `canceled`), or -- if `changeId` is provided -- until
  * that specific change reaches a terminal state.
  */
 export const waitForPendingPostgresChanges = Effect.fn(function* (
@@ -238,7 +238,7 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
   expectedClusterSize: PostgresClusterSize,
 ) {
   // A freshly-forked branch can't accept (or complete) change requests
-  // until it has finished provisioning — queueing a resize against it
+  // until it has finished provisioning -- queueing a resize against it
   // just leaves the change pending until the poll budget runs out.
   const data = yield* waitForBranchReady(organization, database, branch);
 

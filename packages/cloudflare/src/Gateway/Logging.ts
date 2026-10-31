@@ -71,7 +71,7 @@ export type Logging = Resource<TypeId, LoggingProps, LoggingAttributes, never, P
 
 /**
  * Manages the **singleton** Cloudflare Zero Trust **Gateway logging
- * settings** for an account (`/accounts/{accountId}/gateway/logging`) —
+ * settings** for an account (`/accounts/{accountId}/gateway/logging`) --
  * PII redaction and per-rule-type (DNS / HTTP / L4) activity-log toggles.
  *
  * The singleton always exists, so reconcile converges only the fields you
@@ -122,7 +122,7 @@ export const LoggingProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Account singleton — there is no enumeration API; the Gateway
+      // Account singleton -- there is no enumeration API; the Gateway
       // logging settings object always exists for the account. Mirror
       // `read`: observe the single instance and return it as a
       // one-element array (its observed snapshot is its own
@@ -135,7 +135,7 @@ export const LoggingProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const observed = yield* observeLogging(acct);
-      // The singleton always exists with account defaults — there is
+      // The singleton always exists with account defaults -- there is
       // nothing to "own", so a cold read adopts freely. The observed
       // snapshot at adoption time becomes the restore target.
       const initialSettings = output?.initialSettings ?? observed;
@@ -145,13 +145,13 @@ export const LoggingProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the singleton always exists; read its live state.
+      // 1. Observe -- the singleton always exists; read its live state.
       const observed = yield* observeLogging(accountId);
 
-      // 2. Capture — the pre-management snapshot, restored on destroy.
+      // 2. Capture -- the pre-management snapshot, restored on destroy.
       const initialSettings = output?.initialSettings ?? observed;
 
-      // 3. Sync — merge the declared fields over the observed state and
+      // 3. Sync -- merge the declared fields over the observed state and
       //    PUT only when something actually changes (the API has no
       //    PATCH, so the merge keeps undeclared fields at their current
       //    values).
@@ -166,14 +166,14 @@ export const LoggingProvider = () =>
       }
       yield* putLogging(accountId, desired);
 
-      // 4. Return — re-read so attrs reflect post-sync truth.
+      // 4. Return -- re-read so attrs reflect post-sync truth.
       const final = yield* observeLogging(accountId);
       return toAttributes(accountId, final, initialSettings);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialSettings } = output;
-      // Observe — skip the restore when the account already matches the
+      // Observe -- skip the restore when the account already matches the
       // captured snapshot (idempotent re-delete after a crashed run).
       const observed = yield* observeLogging(accountId);
       if (sameSnapshot(observed, initialSettings)) return;

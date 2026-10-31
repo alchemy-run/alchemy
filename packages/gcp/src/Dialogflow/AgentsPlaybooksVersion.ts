@@ -28,18 +28,18 @@ export type AgentsPlaybooksVersionProps = {
   /**
    * Parent playbook resource name
    * `projects/{project}/locations/{location}/agents/{agent}/playbooks/{playbook}`.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   playbook: string;
   /**
    * Version id (the `{version}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
    * Snapshot description. Playbook versions have no labels field, so
    * Alchemy stamps ownership into this field and strips it from
-   * attributes. Versions are immutable snapshots — changing the
+   * attributes. Versions are immutable snapshots -- changing the
    * description after create is a no-op.
    */
   description?: string;
@@ -71,7 +71,7 @@ export type AgentsPlaybooksVersion = Resource<
 /**
  * A Dialogflow CX playbook version (immutable snapshot of a playbook).
  *
- * Versions have no labels field and no update RPC — Alchemy stamps
+ * Versions have no labels field and no update RPC -- Alchemy stamps
  * ownership into `description` so `list` / nuke can find them. Reconcile
  * is observe-ensure: if the snapshot is missing it is created; later
  * description edits are ignored.

@@ -49,20 +49,20 @@ export type InstancesBackupProps = {
   /**
    * Parent instance id or full name
    * (`projects/{project}/instances/{instance}`). Must be the instance
-   * that owns `database`. Immutable — changing it replaces the backup.
+   * that owns `database`. Immutable -- changing it replaces the backup.
    */
   instance: string;
   /**
    * Source database id or full name
    * (`projects/{project}/instances/{instance}/databases/{database}`).
-   * Immutable — changing it replaces the backup.
+   * Immutable -- changing it replaces the backup.
    */
   database: string;
   /**
    * Backup id (the `{backup}` segment of
    * `projects/{project}/instances/{instance}/backups/{backup}`). If
    * omitted, a unique name is generated. Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters). Immutable —
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-60 characters). Immutable --
    * changing it replaces the backup.
    */
   backupId?: string;
@@ -73,11 +73,11 @@ export type InstancesBackupProps = {
   expireTime?: string;
   /**
    * Externally consistent version timestamp. Defaults to create time.
-   * Immutable — changing it replaces the backup.
+   * Immutable -- changing it replaces the backup.
    */
   versionTime?: string;
   /**
-   * Backup encryption. Immutable — changing it replaces the backup.
+   * Backup encryption. Immutable -- changing it replaces the backup.
    */
   encryptionConfig?: BackupEncryptionConfig;
 };

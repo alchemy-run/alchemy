@@ -16,11 +16,11 @@ interface Dispatcher {
 
 /**
  * Node 26 bundles undici 8, whose `fetch` negotiates HTTP/2 by default and
- * funnels every concurrent request onto one session — which undici's
+ * funnels every concurrent request onto one session -- which undici's
  * HTTP/2 path has been resetting under load. Wrap Node's own global
  * dispatcher (the npm `undici` package would mismatch the bundled major)
  * so each request carries `allowH2: false`. `undefined` on Bun, on older
- * Node, or if the slot can't be found — plain `fetch` as before.
+ * Node, or if the slot can't be found -- plain `fetch` as before.
  */
 const resolveHttp1Dispatcher = async () => {
   if ("Bun" in globalThis || Number.parseInt(process.versions.undici ?? "0", 10) < 8) return;

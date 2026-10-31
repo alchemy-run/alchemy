@@ -13,7 +13,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Steps
  * **Example:** Find A Job's Failed Steps
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const searchSteps = yield* AWS.Deadline.SearchSteps(queue);
  *
  * // runtime

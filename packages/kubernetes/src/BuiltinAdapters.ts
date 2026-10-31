@@ -4,7 +4,7 @@
  * `exec`. They cover any cluster `kubectl` can reach; managed-cloud
  * adapters (EKS's `aws-eks`) are contributed by their provider layers.
  *
- * These adapters are auth-only — no workload identity and no managed image
+ * These adapters are auth-only -- no workload identity and no managed image
  * registry. Workloads on such clusters bind through environment variables
  * and run pre-built `image` references (or images pushed by the user's own
  * pipeline).
@@ -50,7 +50,7 @@ const requireEndpoint = (connection: Connection) =>
       );
 
 /**
- * `kubeconfig` — resolve the cluster and credentials from a kubeconfig
+ * `kubeconfig` -- resolve the cluster and credentials from a kubeconfig
  * file, honoring static tokens, client certificates, and `exec` credential
  * plugins.
  */
@@ -109,7 +109,7 @@ export const KubeConfigAdapter: Layer.Layer<
   }),
 );
 
-/** `token` — a static bearer token against an explicit endpoint. */
+/** `token` -- a static bearer token against an explicit endpoint. */
 export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
   ClusterAdapter("token"),
   {
@@ -131,7 +131,7 @@ export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
   },
 );
 
-/** `client-cert` — mutual TLS against an explicit endpoint. */
+/** `client-cert` -- mutual TLS against an explicit endpoint. */
 export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
   ClusterAdapter("client-cert"),
   {
@@ -157,7 +157,7 @@ export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> = Layer.succe
 );
 
 /**
- * `exec` — mint credentials with a kubeconfig-style exec credential plugin
+ * `exec` -- mint credentials with a kubeconfig-style exec credential plugin
  * against an explicit endpoint.
  */
 export const ExecAdapter: Layer.Layer<

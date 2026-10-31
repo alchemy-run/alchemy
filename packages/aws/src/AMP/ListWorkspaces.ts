@@ -7,7 +7,7 @@ export interface ListWorkspacesRequest extends amp.ListWorkspacesRequest {}
 /**
  * Runtime binding for `aps:ListWorkspaces`.
  *
- * An account-level binding — call it with no arguments to get a callable that
+ * An account-level binding -- call it with no arguments to get a callable that
  * lists AMP workspaces in the region. Provide the `ListWorkspacesHttp` layer
  * on the Function to satisfy the binding.
  *

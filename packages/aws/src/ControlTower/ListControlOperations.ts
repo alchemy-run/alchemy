@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Polling Asynchronous Operations
  * **Example:** List Failed Control Operations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listControlOperations = yield* AWS.ControlTower.ListControlOperations();
  *
  * // runtime

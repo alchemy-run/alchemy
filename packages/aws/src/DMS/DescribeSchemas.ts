@@ -13,7 +13,7 @@ import type { Endpoint } from "./Endpoint.ts";
  * ### Listing Discovered Schemas
  * **Example:** List Schemas at a Source Endpoint
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const describeSchemas = yield* AWS.DMS.DescribeSchemas(source);
  *
  * // runtime

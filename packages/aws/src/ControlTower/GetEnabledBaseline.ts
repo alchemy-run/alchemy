@@ -13,7 +13,7 @@ import type { EnabledBaseline } from "./EnabledBaseline.ts";
  * ### Inspecting an Enabled Baseline
  * **Example:** Read the Enabled Baseline's Status
  * ```typescript
- * // init — bind the operation to the enabled baseline
+ * // init -- bind the operation to the enabled baseline
  * const getEnabledBaseline = yield* AWS.ControlTower.GetEnabledBaseline(ouBaseline);
  *
  * // runtime

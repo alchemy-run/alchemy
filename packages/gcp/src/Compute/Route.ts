@@ -19,37 +19,37 @@ const DEFAULT_INTERNET_GATEWAY = "default-internet-gateway";
 export type RouteProps = {
   /**
    * Route name (RFC1035, 1-63 chars). If omitted, a unique name is generated
-   * from the stack, stage, and logical id. Immutable — changing it replaces
+   * from the stack, stage, and logical id. Immutable -- changing it replaces
    * the route.
    */
   routeName?: string;
   /**
    * Destination range of outgoing packets this route applies to (IPv4 or
-   * IPv6 CIDR). Immutable — changing it replaces the route.
+   * IPv6 CIDR). Immutable -- changing it replaces the route.
    */
   destRange: string;
   /**
    * VPC network this route belongs to. Accepts a name (`default`), a
    * partial URL (`global/networks/default`), or a full resource URL.
-   * Immutable — changing it replaces the route.
+   * Immutable -- changing it replaces the route.
    */
   network: string;
   /**
    * Optional description. Compute routes have no labels field, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `list` / nuke. Immutable — changing the
+   * in a `[alchemy ...]` prefix for `list` / nuke. Immutable -- changing the
    * user-facing description replaces the route.
    */
   description?: string;
   /**
    * Priority used to break ties among equal-prefix matches. Lower wins.
-   * Range `0`–`65535`.
+   * Range `0`-`65535`.
    * @default 1000
    */
   priority?: number;
   /**
    * Instance tags this route applies to. Empty means every instance.
-   * Immutable — changing it replaces the route.
+   * Immutable -- changing it replaces the route.
    */
   tags?: string[];
   /**
@@ -126,7 +126,7 @@ export type Route = Resource<
  * A VPC static route.
  *
  * Routes tell instances where to send packets whose destination matches
- * `destRange`. Compute Engine has no update API for routes — every
+ * `destRange`. Compute Engine has no update API for routes -- every
  * user-facing field is immutable and changing it replaces the resource.
  * Ownership is stamped into the description because routes have no labels.
  *

@@ -11,7 +11,7 @@ export interface EncryptRequest extends Omit<kms.EncryptRequest, "KeyId"> {}
  *
  * Bind this operation to a KMS {@link Key} (or the `alias/...` name of a
  * pre-existing key) inside a function runtime to get a callable that
- * automatically injects the `KeyId`. Payloads are raw `Uint8Array`s — the
+ * automatically injects the `KeyId`. Payloads are raw `Uint8Array`s -- the
  * distilled client handles base64 wire encoding transparently.
  *
  * IAM is scoped to least privilege: the exact key ARN for a `Key` resource,

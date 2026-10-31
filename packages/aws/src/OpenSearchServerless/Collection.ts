@@ -17,9 +17,9 @@ import {
 
 /**
  * The collection type, which determines the OpenSearch features available:
- * - `SEARCH` — full-text search and analytics.
- * - `TIMESERIES` — log analytics over time-ordered data.
- * - `VECTORSEARCH` — vector (k-NN) similarity search — the type required to
+ * - `SEARCH` -- full-text search and analytics.
+ * - `TIMESERIES` -- log analytics over time-ordered data.
+ * - `VECTORSEARCH` -- vector (k-NN) similarity search -- the type required to
  *   back an Amazon Bedrock Knowledge Base.
  */
 export type CollectionType = "SEARCH" | "TIMESERIES" | "VECTORSEARCH";
@@ -102,14 +102,14 @@ export interface Collection extends Resource<
 > {}
 
 /**
- * An Amazon OpenSearch Serverless collection — a group of OpenSearch indexes
+ * An Amazon OpenSearch Serverless collection -- a group of OpenSearch indexes
  * that scales OpenSearch Compute Units (OCUs) automatically. A collection of
  * type `VECTORSEARCH` is the vector store required to back an Amazon Bedrock
  * Knowledge Base.
  *
  * A collection requires a matching encryption {@link SecurityPolicy} to exist
  * before creation, plus a network security policy and a data
- * {@link AccessPolicy} to be reachable and usable. Creation is asynchronous —
+ * {@link AccessPolicy} to be reachable and usable. Creation is asynchronous --
  * the provider polls (bounded, ~5 minutes) until the collection reaches
  * `ACTIVE`.
  *
@@ -262,10 +262,10 @@ export const CollectionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let detail = yield* observeByName(name);
 
-          // 2. ENSURE — create if missing; wait for ACTIVE (async provisioning)
+          // 2. ENSURE -- create if missing; wait for ACTIVE (async provisioning)
           if (detail === undefined) {
             const created = yield* aoss
               .createCollection({
@@ -278,7 +278,7 @@ export const CollectionProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.createCollectionDetail),
-                // a concurrent reconciler already created it — fall through
+                // a concurrent reconciler already created it -- fall through
                 Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const collectionId = created?.id ?? (yield* observeByName(name))?.id;
@@ -293,7 +293,7 @@ export const CollectionProvider = () =>
             detail = yield* awaitCollectionActive(detail.id!);
           }
 
-          // 3. SYNC — description (deletionProtection updates alongside)
+          // 3. SYNC -- description (deletionProtection updates alongside)
           const descriptionDrift =
             news.description !== undefined && news.description !== detail.description;
           const protectionDrift =
@@ -307,7 +307,7 @@ export const CollectionProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags
+          // 3b. SYNC TAGS -- diff against observed cloud tags
           yield* syncTags(detail.arn!, desiredTags);
 
           yield* session.note(detail.id!);

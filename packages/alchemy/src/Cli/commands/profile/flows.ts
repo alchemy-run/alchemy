@@ -34,7 +34,7 @@ export const showProfileFlow = Effect.fn(function* (options: {
       `${profile.active ? "*" : "-"} ${profile.name}`,
       ...profile.providers.map((provider) =>
         [
-          `  ${provider.name} (${provider.method}) — ${provider.status}`,
+          `  ${provider.name} (${provider.method}) \u2014 ${provider.status}`,
           ...provider.details.map(({ key, value }) => `    ${key}: ${value}`),
           ...(provider.diagnostic ? [`    ${provider.diagnostic.message}`] : []),
         ].join("\n"),
@@ -66,7 +66,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
   main: string;
   yes: boolean;
 }) {
-  // Existence check only — skip the provider-status probe (it imports the
+  // Existence check only -- skip the provider-status probe (it imports the
   // stack entrypoint and reaches provider APIs).
   const exists = yield* Alchemist.Profile.get({
     name: options.name,

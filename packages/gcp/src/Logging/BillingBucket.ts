@@ -35,26 +35,26 @@ export type BillingBucketProps = {
    * `billingAccounts/{billingAccount}/locations/{location}/buckets/{bucket}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the bucket.
    */
   bucketId?: string;
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the bucket.
    */
   billingAccountId?: string;
   /**
    * Location that stores log entries. `global` leaves placement unspecified.
-   * Immutable after create — changing it replaces the bucket.
+   * Immutable after create -- changing it replaces the bucket.
    * @default "global"
    */
   location?: string;
   /**
    * Human-readable description. Log buckets have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -118,7 +118,7 @@ export type BillingBucket = Resource<
     indexConfigs: BillingBucketIndexConfig[];
     /** CMEK key name, if configured. */
     cmekSettings: BillingBucketCmekSettings | undefined;
-    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, …). */
+    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. Unset on GCP default buckets. */
     createTime: string | undefined;
@@ -134,7 +134,7 @@ export type BillingBucket = Resource<
  *
  * Log buckets have no labels field, so Alchemy stamps ownership into the
  * description for `list` / nuke. `bucketId`, `location`, and
- * `billingAccountId` are identity — changing any replaces the bucket.
+ * `billingAccountId` are identity -- changing any replaces the bucket.
  * Delete marks the bucket `DELETE_REQUESTED`; GCP purges it after 7 days.
  * Reconcile undeletes a bucket still in that grace period so the same
  * name can be reused.

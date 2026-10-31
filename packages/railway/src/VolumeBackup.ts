@@ -89,7 +89,7 @@ export interface VolumeBackupProps {
    */
   name?: string;
   /**
-   * Lock the backup so it does not expire. One-way — Railway has no
+   * Lock the backup so it does not expire. One-way -- Railway has no
    * unlock. Updates in place via `volumeInstanceBackupLock`.
    *
    * @default false
@@ -163,7 +163,7 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
 
 /**
  * A Railway.VolumeBackup is a snapshot of a volume instance. Create it
- * next to a `Railway.Volume`. Railway backups run as workflows —
+ * next to a `Railway.Volume`. Railway backups run as workflows --
  * Alchemy waits for `workflowStatus` then reads the backup list.
  *
  * Restore is destructive to the volume instance; use
@@ -175,7 +175,7 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  *
  * ### Create a backup
  * Pass the Volume. Alchemy generates a unique name. The volume should
- * be attached to a Service — Railway only backups mounted volumes.
+ * be attached to a Service -- Railway only backups mounted volumes.
  *
  * **Example:** Manual snapshot
  * ```typescript
@@ -622,7 +622,7 @@ const observeInstance = Effect.fn(function* (input: {
 
 /**
  * Restore a volume instance from a backup. Destructive to the live
- * volume — the instance is overwritten. Waits for the restore workflow.
+ * volume -- the instance is overwritten. Waits for the restore workflow.
  */
 export const restoreVolumeBackup = Effect.fn(function* (input: {
   volumeInstanceId: string;

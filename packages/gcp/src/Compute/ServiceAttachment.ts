@@ -38,7 +38,7 @@ export type ServiceAttachmentConsumerAccept = {
 };
 
 export type ServiceAttachmentConnectedEndpoint = {
-  /** Connection status (`PENDING`, `ACCEPTED`, `REJECTED`, …). */
+  /** Connection status (`PENDING`, `ACCEPTED`, `REJECTED`, ...). */
   status: string | undefined;
   /** Consumer forwarding-rule URL. */
   endpoint: string | undefined;
@@ -56,11 +56,11 @@ export type ServiceAttachmentProps = {
   /**
    * Service attachment name (RFC1035, 1-63 characters). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the attachment.
+   * Immutable -- changing it replaces the attachment.
    */
   serviceAttachmentName?: string;
   /**
-   * Region the attachment lives in. Immutable — changing it replaces
+   * Region the attachment lives in. Immutable -- changing it replaces
    * the attachment. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -69,7 +69,7 @@ export type ServiceAttachmentProps = {
   /**
    * Optional description. Compute service attachments have no labels
    * field, so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) plus user `labels` are stored in a `[alchemy …]`
+   * `alchemy-id`) plus user `labels` are stored in a `[alchemy ...]`
    * prefix for `list` / nuke. Updated in place via `patch`.
    */
   description?: string;
@@ -102,8 +102,8 @@ export type ServiceAttachmentProps = {
   /**
    * Projects, networks, or endpoints allowed to connect, each with a
    * connection limit. Used with `ACCEPT_MANUAL`. A given attachment
-   * manages connections at one level — projects, networks, or
-   * endpoints — not mixed. Updated in place via `patch`.
+   * manages connections at one level -- projects, networks, or
+   * endpoints -- not mixed. Updated in place via `patch`.
    */
   consumerAcceptLists?: ServiceAttachmentConsumerAccept[];
   /**
@@ -129,7 +129,7 @@ export type ServiceAttachmentProps = {
   natIpsPerEndpoint?: number;
   /**
    * DNS domain names used when integrating connected endpoints with
-   * Cloud DNS (max 1, for example `p.mycompany.com.`). Immutable —
+   * Cloud DNS (max 1, for example `p.mycompany.com.`). Immutable --
    * changing them replaces the attachment.
    */
   domainNames?: string[];
@@ -202,7 +202,7 @@ export type ServiceAttachment = Resource<
  * with purpose `PRIVATE_SERVICE_CONNECT`, and admits consumers either
  * automatically or via accept/reject lists.
  *
- * Compute ServiceAttachment has no labels field — Alchemy ownership is
+ * Compute ServiceAttachment has no labels field -- Alchemy ownership is
  * stored in the description so nuke can find leaked attachments.
  *
  * ### Creating a Service Attachment

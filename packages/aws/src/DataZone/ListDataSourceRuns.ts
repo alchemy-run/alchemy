@@ -17,7 +17,7 @@ export interface ListDataSourceRunsRequest extends Omit<
  * ### Data Source Runs
  * **Example:** List Recent Runs
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const listDataSourceRuns = yield* AWS.DataZone.ListDataSourceRuns(domain);
  *
  * // runtime

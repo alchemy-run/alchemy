@@ -39,32 +39,32 @@ export type PrivateCloudsManagementDnsZoneBindingProps = {
   /**
    * Parent private cloud. Full name
    * `projects/{project}/locations/{location}/privateClouds/{privateCloud}`.
-   * Immutable — changing it replaces the binding.
+   * Immutable -- changing it replaces the binding.
    */
   privateCloud: string;
   /**
    * Binding id (the `{managementDnsZoneBinding}` segment). If omitted, a
-   * unique RFC1035 name is generated. Immutable — changing it replaces
+   * unique RFC1035 name is generated. Immutable -- changing it replaces
    * the binding.
    */
   managementDnsZoneBindingId?: string;
   /**
    * Consumer VPC to bind
    * (`projects/{project}/global/networks/{network}`). Mutually exclusive
-   * with `vmwareEngineNetwork`. Immutable — changing it replaces the
+   * with `vmwareEngineNetwork`. Immutable -- changing it replaces the
    * binding.
    */
   vpcNetwork?: string;
   /**
    * VMware Engine network to bind
    * (`projects/{project}/locations/global/vmwareEngineNetworks/{id}`).
-   * Mutually exclusive with `vpcNetwork`. Immutable — changing it
+   * Mutually exclusive with `vpcNetwork`. Immutable -- changing it
    * replaces the binding.
    */
   vmwareEngineNetwork?: string;
   /**
    * Human-readable description. Bindings have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -90,7 +90,7 @@ export type PrivateCloudsManagementDnsZoneBinding = Resource<
     vmwareEngineNetwork: string | undefined;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Server-generated uid. */
     uid: string | undefined;

@@ -15,9 +15,9 @@ type TypeId = typeof TypeId;
 /**
  * Which per-hostname TLS setting to override:
  *
- * - `ciphers` — allowed cipher suites (BoringSSL names) for the hostname
- * - `min_tls_version` — minimum TLS protocol version for the hostname
- * - `http2` — whether HTTP/2 is offered to clients connecting to the hostname
+ * - `ciphers` -- allowed cipher suites (BoringSSL names) for the hostname
+ * - `min_tls_version` -- minimum TLS protocol version for the hostname
+ * - `http2` -- whether HTTP/2 is offered to clients connecting to the hostname
  */
 export type Id = "ciphers" | "min_tls_version" | "http2";
 
@@ -25,26 +25,26 @@ export type Id = "ciphers" | "min_tls_version" | "http2";
  * The value of a per-hostname TLS setting. The shape depends on
  * {@link Id}:
  *
- * - `ciphers` → `string[]` of BoringSSL cipher suite names
- * - `min_tls_version` → `"1.0" | "1.1" | "1.2" | "1.3"`
- * - `http2` → `"on" | "off"`
+ * - `ciphers` -> `string[]` of BoringSSL cipher suite names
+ * - `min_tls_version` -> `"1.0" | "1.1" | "1.2" | "1.3"`
+ * - `http2` -> `"on" | "off"`
  */
 export type Value = "1.0" | "1.1" | "1.2" | "1.3" | "on" | "off" | string[];
 
 export interface Props {
   /**
-   * Zone the hostname belongs to. Stable — moving the override to another
+   * Zone the hostname belongs to. Stable -- moving the override to another
    * zone triggers a replacement.
    */
   zoneId: string;
   /**
    * Which TLS setting to override (`ciphers`, `min_tls_version`, or
-   * `http2`). Part of the override's identity — changing it triggers a
+   * `http2`). Part of the override's identity -- changing it triggers a
    * replacement.
    */
   settingId: Id;
   /**
-   * The hostname the override applies to. Part of the override's identity —
+   * The hostname the override applies to. Part of the override's identity --
    * changing it triggers a replacement.
    *
    * Per-hostname TLS settings require the hostname to be covered by
@@ -59,7 +59,7 @@ export interface Props {
    * `min_tls_version` takes `"1.0" | "1.1" | "1.2" | "1.3"`, and `http2`
    * takes `"on" | "off"`.
    *
-   * Mutable — upserted in place via PUT.
+   * Mutable -- upserted in place via PUT.
    */
   value: Value;
 }
@@ -88,14 +88,14 @@ export type HostnameTlsSetting = Resource<TypeId, Props, Attributes, never, Prov
 
 /**
  * A per-hostname TLS setting override
- * (`/zones/{zone_id}/hostnames/settings/{settingId}/{hostname}`) — pins
+ * (`/zones/{zone_id}/hostnames/settings/{settingId}/{hostname}`) -- pins
  * `ciphers`, `min_tls_version`, or `http2` for a single hostname instead of
  * the whole zone.
  *
  * Each `(settingId, hostname)` pair is an independent override with PUT
  * (upsert) / DELETE semantics; deleting the override reverts the hostname to
  * the zone-wide default. Overrides are mostly useful with Cloudflare for
- * SaaS custom hostnames or Advanced Certificate Manager — on zones without
+ * SaaS custom hostnames or Advanced Certificate Manager -- on zones without
  * that entitlement, writes fail with the typed
  * `AdvancedCertificateManagerRequired` error (Cloudflare code 1450).
  *
@@ -188,7 +188,7 @@ export const HostnameTlsSettingProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      // `news` may still carry unresolved plan-time expressions — defer to
+      // `news` may still carry unresolved plan-time expressions -- defer to
       // the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
       // (settingId, hostname) is the override's identity.
@@ -219,7 +219,7 @@ export const HostnameTlsSettingProvider = () =>
       if (observed === undefined) return undefined;
 
       const attrs = toAttributes(zoneId, settingId, hostname, observed);
-      // Overrides carry no ownership markers — on a cold read (no prior
+      // Overrides carry no ownership markers -- on a cold read (no prior
       // state) we cannot prove we created it, so brand it `Unowned` and
       // let the engine gate takeover behind the adopt policy.
       return output !== undefined ? attrs : Unowned(attrs);
@@ -230,10 +230,10 @@ export const HostnameTlsSettingProvider = () =>
       const zoneId = news.zoneId as string;
       const { settingId, hostname } = news;
 
-      // 1. Observe — list the setting's overrides and match on hostname.
+      // 1. Observe -- list the setting's overrides and match on hostname.
       const observed = yield* findSetting(zoneId, settingId, hostname);
 
-      // 2. Sync — PUT is a true upsert, so a single call covers both the
+      // 2. Sync -- PUT is a true upsert, so a single call covers both the
       //    missing and the drifted case; skip it entirely on a no-op.
       if (observed !== undefined && valueEquals(observed.value, news.value)) {
         return toAttributes(zoneId, settingId, hostname, observed);
@@ -245,18 +245,18 @@ export const HostnameTlsSettingProvider = () =>
         value: news.value,
       });
       // The list can briefly echo a stale value after the PUT (edge
-      // deployment is async) — trust the PUT response, not a re-read.
+      // deployment is async) -- trust the PUT response, not a re-read.
       return toAttributes(zoneId, settingId, hostname, updated);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, settingId, hostname } = output;
-      // Observe first — deleting an already-removed override is not an
+      // Observe first -- deleting an already-removed override is not an
       // error (idempotent re-delete after a crashed run).
       const observed = yield* findSetting(zoneId, settingId, hostname);
       if (observed === undefined) return;
       yield* hostnames.deleteSettingTls({ zoneId, settingId, hostname }).pipe(
-        // Lost a race with an out-of-band delete — already converged.
+        // Lost a race with an out-of-band delete -- already converged.
         Effect.catchTag("HostnameTlsSettingNotFound", () => Effect.void),
       );
     }),
@@ -274,7 +274,7 @@ const findSetting = (zoneId: string, settingId: string, hostname: string) =>
     .pipe(Effect.map((settings) => settings.find((setting) => setting.hostname === hostname)));
 
 /**
- * Structural equality for setting values — scalar versions/toggles compare
+ * Structural equality for setting values -- scalar versions/toggles compare
  * by identity, cipher lists element-wise (order matters: the list is the
  * client-facing preference order).
  */
@@ -303,7 +303,7 @@ const toAttributes = (
 
 /**
  * Distilled types the echoed value as nullable and cipher arrays as
- * `readonly string[]` — normalize to the props-facing shape. A persisted
+ * `readonly string[]` -- normalize to the props-facing shape. A persisted
  * override always carries a value; fall back to `"off"` purely to satisfy
  * the type.
  */

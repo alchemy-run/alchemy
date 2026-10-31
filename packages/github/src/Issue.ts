@@ -63,7 +63,7 @@ export interface IssueProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -200,7 +200,7 @@ export const IssueProvider = () =>
   Provider.succeed(Issue, {
     stables: ["issueNumber", "nodeId"],
 
-    // An issue belongs to (host, owner, repository) — its server-assigned
+    // An issue belongs to (host, owner, repository) -- its server-assigned
     // number is meaningless elsewhere, so moving it replaces the resource:
     // a fresh issue is created on the new repository, and the old one is
     // retained by default (matching the resource's `retain` removal policy).

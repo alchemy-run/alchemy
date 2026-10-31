@@ -52,7 +52,7 @@ export type EncryptionSpec = {
    * Cloud KMS CryptoKey used to encrypt Subject, SubjectAltNames, and
    * PEM certificate fields at rest
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
-   * Immutable — changing it replaces the pool.
+   * Immutable -- changing it replaces the pool.
    */
   cloudKmsKey?: string;
 };
@@ -68,13 +68,13 @@ export type CaPoolProps = {
    * CaPool id (the `{caPool}` segment of
    * `projects/{project}/locations/{location}/caPools/{caPool}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it
+   * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it
    * replaces the pool.
    */
   caPoolId?: string;
   /**
    * Certificate Authority Service location (`us-central1`, `us-east1`,
-   * …). Immutable — changing it replaces the pool. `US-CENTRAL1` is
+   * ...). Immutable -- changing it replaces the pool. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -82,7 +82,7 @@ export type CaPoolProps = {
   /**
    * Pool tier. `DEVOPS` is cheaper and intended for tests and
    * non-production; `ENTERPRISE` enables CA-certificate and CRL
-   * publication. Immutable — changing it replaces the pool.
+   * publication. Immutable -- changing it replaces the pool.
    * @default "DEVOPS"
    */
   tier?: CaPoolTier;
@@ -102,7 +102,7 @@ export type CaPoolProps = {
   issuancePolicy?: IssuancePolicy;
   /**
    * Customer-managed encryption for certificate fields at rest.
-   * Immutable — changing it replaces the pool.
+   * Immutable -- changing it replaces the pool.
    */
   encryptionSpec?: EncryptionSpec;
 };
@@ -117,7 +117,7 @@ export type CaPool = Resource<
     caPoolId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Pool tier (`DEVOPS` or `ENTERPRISE`). */
     tier: string;
@@ -135,7 +135,7 @@ export type CaPool = Resource<
 >;
 
 /**
- * A Certificate Authority Service CaPool — a group of Certificate
+ * A Certificate Authority Service CaPool -- a group of Certificate
  * Authorities that share issuance policy and form a trust anchor.
  *
  * Changing `caPoolId`, `location`, `tier`, or `encryptionSpec` replaces

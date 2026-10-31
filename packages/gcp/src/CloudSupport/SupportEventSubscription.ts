@@ -36,13 +36,13 @@ export type SupportEventSubscriptionProps = {
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the subscription.
+   * Manager ancestor. Immutable -- changing it replaces the subscription.
    */
   organization?: string;
   /**
    * Resource name
    * `organizations/{organization}/supportEventSubscriptions/{subscription}`
-   * or the `{subscription}` id. Server-assigned on create. Immutable —
+   * or the `{subscription}` id. Server-assigned on create. Immutable --
    * changing it replaces the subscription.
    */
   subscriptionId?: string;
@@ -101,7 +101,7 @@ export type SupportEventSubscription = Resource<
  * ownership onto the destination Pub/Sub topic for `list` / nuke and
  * grants `roles/pubsub.publisher` to
  * `cloud-support-apievents@system.gserviceaccount.com`. Organization and
- * subscription id are identity — changing either replaces the
+ * subscription id are identity -- changing either replaces the
  * subscription. The Pub/Sub topic updates in place. Creating a
  * subscription requires the Cloud Support API and Cloud Customer Care on
  * the organization.

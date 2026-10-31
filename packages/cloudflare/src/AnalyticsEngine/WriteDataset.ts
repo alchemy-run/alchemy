@@ -9,7 +9,7 @@ import type { Dataset as AnalyticsEngineDatasetLike } from "./Dataset.ts";
  * Effect-native client (`writeDataPoint`, `raw`).
  *
  * `WriteDataset` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.AnalyticsEngine.WriteDataset(dataset)`.
  *
  *

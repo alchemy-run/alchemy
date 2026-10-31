@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `emr-containers:ListJobTemplates`.
  *
  * Enumerates the account's EMR on EKS job templates, optionally filtered by
- * creation time. Account-level — no resource argument. Provide the
+ * creation time. Account-level -- no resource argument. Provide the
  * implementation with
  * `Effect.provide(AWS.EMRContainers.ListJobTemplatesHttp)`.
  * ### Job Templates
  * **Example:** List All Templates
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listJobTemplates = yield* AWS.EMRContainers.ListJobTemplates();
  *
  * // runtime

@@ -2,7 +2,7 @@ import * as ces from "@distilled.cloud/gcp/ces_v1";
 import * as Effect from "effect/Effect";
 import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
-// A display-name clash ("App with display name … already exists") also reports
+// A display-name clash ("App with display name ... already exists") also reports
 // ALREADY_EXISTS but means our resource was never created, so it must fail.
 
 /** CES app and agent operations finish within a few minutes. */

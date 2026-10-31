@@ -27,8 +27,8 @@ export type ServiceProps = {
   /**
    * DNS service name (for example
    * `hello.endpoints.my-project.cloud.goog`). If omitted, Alchemy
-   * generates `{alch-…}.endpoints.{project}.cloud.goog` from the stack,
-   * stage, and logical id. Immutable — changing it replaces the service.
+   * generates `{alch-...}.endpoints.{project}.cloud.goog` from the stack,
+   * stage, and logical id. Immutable -- changing it replaces the service.
    * After delete the name is reserved for 30 days; reconcile undeletes
    * instead of recreating.
    */
@@ -40,7 +40,7 @@ export type ServiceProps = {
   title?: string;
   /**
    * Producer project id. Defaults to the current stack project.
-   * Immutable — changing it replaces the service.
+   * Immutable -- changing it replaces the service.
    */
   producerProjectId?: string;
 };
@@ -68,7 +68,7 @@ export type Service = Resource<
  *
  * A managed service is identity-only and immutable. Create and delete
  * return long-running operations. After delete the name stays reserved
- * for 30 days — reconcile undeletes rather than recreating. There is no
+ * for 30 days -- reconcile undeletes rather than recreating. There is no
  * labels field: `list` / `pnpm nuke:gcp` find services by their generated
  * `alch-` name, and `read` reports an explicitly named service it has no
  * state for as unowned. Changing `serviceName` or `producerProjectId`

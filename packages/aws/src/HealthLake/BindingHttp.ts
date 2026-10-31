@@ -7,8 +7,8 @@ import type { FHIRDatastore } from "./FHIRDatastore.ts";
 /**
  * Shared scaffolding for AWS HealthLake HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate: every HealthLake job operation is scoped to one FHIR data
  * store, whose id is injected as `DatastoreId` and whose ARN receives the
@@ -70,7 +70,7 @@ export const makeHealthLakeDatastoreHttpBinding = <
  * policy must allow `healthlake.amazonaws.com`). The runtime callable injects
  * the data store id as `DatastoreId` and the role's ARN as
  * `DataAccessRoleArn`; the deploy-time half grants `actions` on the data
- * store ARN plus `iam:PassRole` on the role — without the PassRole grant,
+ * store ARN plus `iam:PassRole` on the role -- without the PassRole grant,
  * `Start*Job` fails only at runtime with an AccessDeniedException.
  */
 export const makeHealthLakeStartJobHttpBinding = <

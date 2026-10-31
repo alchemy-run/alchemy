@@ -64,11 +64,11 @@ export type LocationsDlpJobProps = {
    * Job id (the `{dlpJob}` segment of
    * `projects/{project}/locations/{location}/dlpJobs/{dlpJob}`). If
    * omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 64 characters. Immutable — changing it replaces the job.
+   * is at most 64 characters. Immutable -- changing it replaces the job.
    */
   jobId?: string;
   /**
-   * Processing location (`global`, `us`, `europe-west1`, …). Immutable —
+   * Processing location (`global`, `us`, `europe-west1`, ...). Immutable --
    * changing it replaces the job. `us-central1` is not a valid DLP job
    * location.
    * @default "global"
@@ -76,7 +76,7 @@ export type LocationsDlpJobProps = {
   location?: string;
   /**
    * Inspect-job configuration. Defaults to a hybrid EMAIL_ADDRESS
-   * inspect job. DlpJob has no update API — changing this replaces the
+   * inspect job. DlpJob has no update API -- changing this replaces the
    * job.
    */
   inspectJob?: InspectJobConfig;
@@ -101,7 +101,7 @@ export type LocationsDlpJob = Resource<
     project: string;
     /** Job type (`INSPECT_JOB` or `RISK_ANALYSIS_JOB`). */
     type: string | undefined;
-    /** Job state (`PENDING`, `RUNNING`, `ACTIVE`, `DONE`, …). */
+    /** Job state (`PENDING`, `RUNNING`, `ACTIVE`, `DONE`, ...). */
     state: string | undefined;
     /** Inspect-job configuration, Alchemy labels stripped. */
     inspectJob: InspectJobConfig | undefined;
@@ -126,7 +126,7 @@ export type LocationsDlpJob = Resource<
  * Creating a DlpJob starts it immediately. Inspect jobs are stored as
  * `i-{jobId}` and risk jobs as `r-{jobId}`. There is no update API, so
  * reconcile is observe-ensure (create if missing). Delete cancels a
- * running/active job, then deletes it. DLP jobs have no labels field —
+ * running/active job, then deletes it. DLP jobs have no labels field --
  * Alchemy stamps ownership into hybrid inspect `storageConfig.hybridOptions`
  * (labels + description) so `list` / nuke can find them.
  *

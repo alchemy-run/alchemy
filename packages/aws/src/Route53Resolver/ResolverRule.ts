@@ -95,7 +95,7 @@ export interface ResolverRule extends Resource<
 > {}
 
 /**
- * A Route 53 Resolver rule — tells Resolver how to handle DNS queries for a
+ * A Route 53 Resolver rule -- tells Resolver how to handle DNS queries for a
  * domain that originate in your VPCs.
  *
  * A `FORWARD` rule sends matching queries through an OUTBOUND
@@ -134,7 +134,7 @@ export const ResolverRule = Resource<ResolverRule>("AWS.Route53Resolver.Resolver
  * Creating a FORWARD rule can transiently fail while its OUTBOUND endpoint
  * is still provisioning (`ResourceUnavailableException`), and recreating a
  * rule whose deterministic `CreatorRequestId` is held by a `DELETING`
- * predecessor raises `ResourceExistsException`. Both are bounded races —
+ * predecessor raises `ResourceExistsException`. Both are bounded races --
  * retry (~2 min).
  *
  * Explicitly typed: inlining `Effect.retry` in provider lifecycle code can
@@ -237,7 +237,7 @@ export const ResolverRuleProvider = () =>
                   // Autodefined rules (e.g. the Internet Resolver rule for
                   // `.`, id `rslvr-autodefined-rr-internet-resolver`) are
                   // owned by Route 53 Resolver itself and can never be
-                  // deleted — keep them out of enumeration for account-wide
+                  // deleted -- keep them out of enumeration for account-wide
                   // teardown (nuke).
                   !rule.Id.startsWith("rslvr-autodefined")
                     ? [
@@ -289,7 +289,7 @@ export const ResolverRuleProvider = () =>
           // 1. OBSERVE
           let rule = yield* observe(name, output?.resolverRuleId);
 
-          // 2. ENSURE — create if missing, riding out the bounded races
+          // 2. ENSURE -- create if missing, riding out the bounded races
           //    (endpoint still provisioning, DELETING predecessor).
           if (rule === undefined) {
             yield* session.note(`creating resolver rule ${name}`);
@@ -307,7 +307,7 @@ export const ResolverRuleProvider = () =>
           }
           const ruleId = rule.Id!;
 
-          // 3. SYNC — name, target IPs, and the endpoint reference are
+          // 3. SYNC -- name, target IPs, and the endpoint reference are
           //    mutable via UpdateResolverRule. Diff observed against
           //    desired; skip the API on no-op.
           const desiredTargets = news.targetIps ? toWireTargets(news.targetIps) : undefined;
@@ -331,7 +331,7 @@ export const ResolverRuleProvider = () =>
               .pipe(Effect.map((r) => r.ResolverRule ?? rule!));
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const arn = rule.Arn!;
           yield* syncResolverTags(arn, desiredTags);
 
@@ -344,7 +344,7 @@ export const ResolverRuleProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // A rule associated with VPCs cannot be deleted — disassociate all
+          // A rule associated with VPCs cannot be deleted -- disassociate all
           // associations first (idempotent: a vanished association is
           // already gone).
           const associations = yield* r53r.listResolverRuleAssociations

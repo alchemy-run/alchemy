@@ -16,7 +16,7 @@ export type VirtualField = Resource<
 >;
 
 /**
- * An Axiom virtual field — a saved APL expression that appears as a derived
+ * An Axiom virtual field -- a saved APL expression that appears as a derived
  * column on a dataset at query time. Use these to standardise common
  * computations (status classes, latency buckets, parsed JSON paths) so
  * dashboards and monitors don't have to redefine them.
@@ -25,7 +25,7 @@ export type VirtualField = Resource<
  * @see https://axiom.co/docs/query-data/virtual-fields
  *
  * ### Creating a Virtual Field
- * **Example:** HTTP status class (e.g. 200 → "2xx")
+ * **Example:** HTTP status class (e.g. 200 -> "2xx")
  * ```typescript
  * yield* Axiom.VirtualField("status-class", {
  *   dataset: "my-app-traces",
@@ -89,7 +89,7 @@ export const VirtualFieldProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — Axiom assigns the virtual-field id server-side, so
+          // Observe -- Axiom assigns the virtual-field id server-side, so
           // the only handle to a previously-created field is the cached
           // `output.id`. Probe for live state with that id; treat NotFound
           // (deleted out-of-band) as "no observed state" so we converge by
@@ -100,12 +100,12 @@ export const VirtualFieldProvider = () =>
               )
             : undefined;
 
-          // Ensure — POST mints a new virtual field with a fresh id.
+          // Ensure -- POST mints a new virtual field with a fresh id.
           if (observed === undefined) {
             return yield* create(news);
           }
 
-          // Sync — the field exists; PUT against its id with the desired
+          // Sync -- the field exists; PUT against its id with the desired
           // props. `dataset` is replacement-only (handled in diff).
           return yield* update({ ...news, id: observed.id });
         }),

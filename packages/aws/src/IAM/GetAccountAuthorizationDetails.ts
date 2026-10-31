@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetAccountAuthorizationDetails` — snapshot every
+ * Runtime binding for `iam:GetAccountAuthorizationDetails` -- snapshot every
  * IAM user, group, role, and policy in the account together with their
  * relationships. The single-call foundation for permission-graph analyzers
  * and drift detectors.
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getAuthorizationDetails = yield* IAM.GetAccountAuthorizationDetails();
  *
- * // runtime — paginate with the Marker until IsTruncated is false
+ * // runtime -- paginate with the Marker until IsTruncated is false
  * const page = yield* getAuthorizationDetails({
  *   Filter: ["Role"],
  *   MaxItems: 100,

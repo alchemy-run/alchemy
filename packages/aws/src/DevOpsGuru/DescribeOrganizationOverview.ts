@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Visibility
  * **Example:** Summarize the Organization over a Time Range
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeOrganizationOverview = yield* AWS.DevOpsGuru.DescribeOrganizationOverview();
  *
  * // runtime

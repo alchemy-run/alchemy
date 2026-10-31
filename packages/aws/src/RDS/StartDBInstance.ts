@@ -7,14 +7,14 @@ import type { DBInstance } from "./DBInstance.ts";
  * Runtime binding for the `StartDBInstance` operation (IAM action
  * `rds:StartDBInstance`).
  *
- * Starts the bound {@link DBInstance} after it was stopped — e.g. an ops
+ * Starts the bound {@link DBInstance} after it was stopped -- e.g. an ops
  * function that wakes a development database on a schedule. The instance
  * identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.StartDBInstanceHttp)`.
  * ### Operating an Instance
  * **Example:** Start a Stopped Instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const startDBInstance = yield* AWS.RDS.StartDBInstance(instance);
  *
  * // runtime

@@ -30,7 +30,7 @@ export type WorkloadIdentityPoolProps = {
   displayName?: string;
   /**
    * Description. Pools have no labels, so Alchemy stamps ownership into a
-   * `[alchemy …]` prefix and strips it from the `description` attribute. The
+   * `[alchemy ...]` prefix and strips it from the `description` attribute. The
    * marker and this text share the API's 256-character limit; overflow is
    * truncated.
    */
@@ -227,7 +227,7 @@ export const WorkloadIdentityPoolProvider = () =>
       // Observe
       let current = yield* getPool(name);
 
-      // Ensure — the id stays reserved for 30 days after delete, so a
+      // Ensure -- the id stays reserved for 30 days after delete, so a
       // soft-deleted pool is restored rather than re-created.
       if (current === undefined) {
         const operation = yield* iam.createProjectsLocationsWorkloadIdentityPools({

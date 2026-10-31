@@ -40,7 +40,7 @@ export interface Profile extends Resource<
 > {}
 
 /**
- * An Amazon Route 53 Profile — a reusable container of DNS configuration
+ * An Amazon Route 53 Profile -- a reusable container of DNS configuration
  * (private hosted zones, Resolver rules, and DNS Firewall rule groups) that
  * can be associated with many VPCs at once.
  *
@@ -80,7 +80,7 @@ export const Profile = Resource<Profile>("AWS.Route53Profiles.Profile");
 /**
  * A Profile whose VPC associations are still draining rejects `DeleteProfile`
  * with `ConflictException`. Disassociation completes asynchronously (observed
- * ~1–2 minutes), so retry deletion on a bounded schedule (~2 min).
+ * ~1-2 minutes), so retry deletion on a bounded schedule (~2 min).
  *
  * Explicitly typed: inlining `Effect.retry` in provider lifecycle code can
  * widen the provider layer to `unknown` in declaration emit.
@@ -116,14 +116,14 @@ export const ProfileProvider = () =>
   Provider.effect(
     Profile,
     Effect.gen(function* () {
-      // `props` may be undefined at runtime — all ProfileProps fields are
+      // `props` may be undefined at runtime -- all ProfileProps fields are
       // optional, so callers can omit the props object entirely.
       const createName = Effect.fn(function* (id: string, props: ProfileProps | undefined) {
         return props?.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // A deleted Profile lingers in `DELETING`/`DELETED` and is still
-      // returned by `GetProfile` — those states count as missing.
+      // returned by `GetProfile` -- those states count as missing.
       const observe = (profileId: string) =>
         profiles.getProfile({ ProfileId: profileId }).pipe(
           Effect.map((r) =>
@@ -229,7 +229,7 @@ export const ProfileProvider = () =>
         reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const name = output?.profileName ?? (yield* createName(id, news));
 
-          // OBSERVE — output is only an id cache; fall back to a lookup by
+          // OBSERVE -- output is only an id cache; fall back to a lookup by
           // deterministic name so state loss / adoption converges.
           let live = output?.profileId ? yield* observe(output.profileId) : undefined;
           if (!live) {
@@ -237,7 +237,7 @@ export const ProfileProvider = () =>
             live = found?.Id ? yield* observe(found.Id) : undefined;
           }
 
-          // ENSURE — the instance ID is the idempotency token, so a crashed
+          // ENSURE -- the instance ID is the idempotency token, so a crashed
           // reconcile that re-runs the create is a no-op returning the same
           // Profile.
           if (!live) {

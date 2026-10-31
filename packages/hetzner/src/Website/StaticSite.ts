@@ -89,7 +89,7 @@ export interface StaticSiteProps extends Pick<
  * `StaticSite` runs a build command (e.g. `npm run build`), packs the
  * output directory into the unit archive, and deploys a tiny static-file
  * server (`GET` assets, `/health`, optional SPA / 404-page). Use this
- * when your site has its own build step — Hugo, Zola, Eleventy, or any
+ * when your site has its own build step -- Hugo, Zola, Eleventy, or any
  * custom pipeline.
  *
  * For Vite-based projects, prefer {@link Vite | Hetzner.Website.Vite}.

@@ -114,7 +114,7 @@ export type InstanceTemplateProps = {
   description?: string;
   /**
    * Machine type name (not a URL), e.g. `e2-micro`. Instance templates are
-   * immutable — changing this replaces the template.
+   * immutable -- changing this replaces the template.
    * @default "e2-micro"
    */
   machineType?: string;

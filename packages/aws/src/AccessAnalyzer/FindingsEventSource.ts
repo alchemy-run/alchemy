@@ -57,9 +57,9 @@ export interface FindingsEventSourceProps extends EventRouteProps {
   id?: string;
   /**
    * Which finding events to subscribe to:
-   * - `"external"` — external-access findings (`Access Analyzer Finding`)
-   * - `"unused"` — unused-access findings (`Unused Access Finding for IAM entities`)
-   * - `"all"` — both detail types
+   * - `"external"` -- external-access findings (`Access Analyzer Finding`)
+   * - `"unused"` -- unused-access findings (`Unused Access Finding for IAM entities`)
+   * - `"all"` -- both detail types
    * @default "all"
    */
   kind?: "external" | "unused" | "all";
@@ -78,7 +78,7 @@ const DETAIL_TYPES = {
  * subscribes the host Function to those events so it can alert on or
  * auto-remediate new findings.
  *
- * Analyzers publish to EventBridge automatically — no additional resource is
+ * Analyzers publish to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

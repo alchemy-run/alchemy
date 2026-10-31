@@ -17,14 +17,14 @@ export class LexiconNotReady extends Data.TaggedError("LexiconNotReady")<{
 
 export interface LexiconProps {
   /**
-   * Name of the lexicon — an alphanumeric string up to 20 characters
+   * Name of the lexicon -- an alphanumeric string up to 20 characters
    * (`[0-9A-Za-z]{1,20}`). If omitted, a unique name is generated. Changing
    * this replaces the lexicon.
    */
   lexiconName?: string;
   /**
    * The lexicon content, a W3C Pronunciation Lexicon Specification (PLS)
-   * XML document. Updatable in place — `PutLexicon` is a true upsert.
+   * XML document. Updatable in place -- `PutLexicon` is a true upsert.
    */
   content: string;
 }
@@ -60,7 +60,7 @@ export interface Lexicon extends Resource<
 > {}
 
 /**
- * An Amazon Polly pronunciation lexicon — a W3C PLS document stored in a
+ * An Amazon Polly pronunciation lexicon -- a W3C PLS document stored in a
  * region that customizes how `SynthesizeSpeech` pronounces specific words.
  * Identity is the region-scoped `lexiconName`; the PLS `content` is
  * updatable in place.
@@ -122,7 +122,7 @@ export const LexiconProvider = () =>
   Provider.effect(
     Lexicon,
     Effect.gen(function* () {
-      // Lexicon names must match [0-9A-Za-z]{1,20} — generate the engine
+      // Lexicon names must match [0-9A-Za-z]{1,20} -- generate the engine
       // name, drop every non-alphanumeric character, and keep the trailing
       // 20 characters so the unique suffix survives truncation. The
       // `typeof === "string"` guard (rather than truthiness) keeps this
@@ -257,7 +257,7 @@ export const LexiconProvider = () =>
         // The engine commits precreate's Attributes to state ahead of any
         // API call, so if reconcile fails (or is interrupted) after
         // PutLexicon succeeded, destroy still has `output.lexiconName` and
-        // deletes the lexicon instead of orphaning it — the engine skips
+        // deletes the lexicon instead of orphaning it -- the engine skips
         // provider.delete entirely for rows whose attr was never persisted.
         // No API call is made here; delete tolerates the not-yet-created case.
         precreate: Effect.fn(function* ({ id, news }) {
@@ -273,7 +273,7 @@ export const LexiconProvider = () =>
               ? news.lexiconName
               : (output?.lexiconName ?? (yield* toName(id, news)));
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           const observed = yield* getOne(name);
 
           // Ensure + sync in one step: PutLexicon is a true upsert, so a
@@ -295,7 +295,7 @@ export const LexiconProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the lexicon may already be gone (including the case
+          // Idempotent -- the lexicon may already be gone (including the case
           // where only the precreate stub was persisted and PutLexicon never
           // ran).
           yield* retryTransient(polly.deleteLexicon({ Name: output.lexiconName })).pipe(

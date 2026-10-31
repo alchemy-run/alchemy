@@ -12,7 +12,7 @@ const TypeId = "Cloudflare.Iam.ResourceGroup" as const;
 type TypeId = typeof TypeId;
 
 /**
- * The scope of a resource group — a scope key (e.g.
+ * The scope of a resource group -- a scope key (e.g.
  * `com.cloudflare.api.account.{accountId}`) plus the objects it contains
  * (e.g. `com.cloudflare.api.account.zone.{zoneId}` or `*` for everything
  * in the scope).
@@ -74,7 +74,7 @@ export type ResourceGroup = Resource<
 >;
 
 /**
- * A Cloudflare IAM resource group — a named set of account resources
+ * A Cloudflare IAM resource group -- a named set of account resources
  * (zones, or the whole account) that fine-grained policies attach to.
  *
  * Resource groups pair with permission groups inside a user group policy:
@@ -151,7 +151,7 @@ export const ResourceGroupProvider = () =>
         return undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createGroupName(id, olds?.name);
@@ -165,7 +165,7 @@ export const ResourceGroupProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const desiredScope = resolveScope(news.scope);
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing group falls through to the name scan and then create.
       let observed = output?.resourceGroupId
         ? yield* getResourceGroup(accountId, output.resourceGroupId)
@@ -174,7 +174,7 @@ export const ResourceGroupProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to tolerate.
       if (!observed) {
         const created = yield* iam.createResourceGroup({
@@ -185,7 +185,7 @@ export const ResourceGroupProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — diff observed name/scope against desired; the update is
+      // 3. Sync -- diff observed name/scope against desired; the update is
       //    a PUT, so send the full body, but skip the call on a no-op.
       const observedScope = parseScope(observed.scope);
       const dirty = (observed.name ?? "") !== name || !sameScope(observedScope, desiredScope);
@@ -211,7 +211,7 @@ export const ResourceGroupProvider = () =>
         .pipe(Effect.catchTag("ResourceGroupNotFound", () => Effect.void));
     }),
 
-    // Account collection — the list op returns the full group record (id,
+    // Account collection -- the list op returns the full group record (id,
     // name, scope) per page, so each item maps straight to the `read`
     // Attributes shape without a per-item GET. Predefined/system resource
     // groups are returned alongside ours, so a read-only list is often

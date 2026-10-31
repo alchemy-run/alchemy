@@ -6,7 +6,7 @@ import { GcpEnvironment } from "./Environment.ts";
 export type { RegionalEndpointMode, RegionName } from "@distilled.cloud/gcp/Region";
 
 /**
- * Override the default GCP region — the region regional resources land in
+ * Override the default GCP region -- the region regional resources land in
  * when created without an explicit `location` / `region`.
  *
  * The region normally comes with the credentials (the profile's

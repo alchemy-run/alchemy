@@ -21,14 +21,14 @@ const OWNERSHIP_ENTRY = "__alchemy";
 export type KeyvaluemapProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the map.
+   * Immutable -- changing it replaces the map.
    */
   organization?: string;
   /**
    * Key value map id (the `{keyvaluemap}` segment of
    * `organizations/{org}/keyvaluemaps/{keyvaluemap}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the map.
+   * Immutable -- changing it replaces the map.
    */
   mapId?: string;
   /**
@@ -64,7 +64,7 @@ export type Keyvaluemap = Resource<
  * stamps ownership into a reserved `__alchemy` entry so `read` can
  * detect foreign maps, and `list` walks maps referenced by that entry
  * when the parent is known from state. `mapId` and `organization` are
- * identity — changing them replaces the map. `maskedValues` updates in
+ * identity -- changing them replaces the map. `maskedValues` updates in
  * place. Entries are always encrypted on Apigee X.
  *
  * ### Creating a Map

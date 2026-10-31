@@ -31,13 +31,13 @@ export type OrganizationsNotificationConfigProps = {
    * Config id (the `{config}` segment of
    * `organizations/{organization}/notificationConfigs/{config}`). If omitted,
    * a unique id is generated. Letters, digits, and hyphens; must start with
-   * a letter; max 63 characters. Immutable — changing it replaces the config.
+   * a letter; max 63 characters. Immutable -- changing it replaces the config.
    */
   configId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric id).
    * Defaults to the project's Resource Manager
-   * ancestor. Immutable — changing it replaces the config.
+   * ancestor. Immutable -- changing it replaces the config.
    */
   organization?: string;
   /**
@@ -48,7 +48,7 @@ export type OrganizationsNotificationConfigProps = {
   /**
    * Human-readable description (max 1024 characters). Notification configs
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -88,7 +88,7 @@ export type OrganizationsNotificationConfig = Resource<
  * An organization-scoped Security Command Center notification config that
  * publishes findings to a Pub/Sub topic.
  *
- * Notification configs have no labels field — Alchemy stamps ownership
+ * Notification configs have no labels field -- Alchemy stamps ownership
  * into the description so `list` / nuke can find them. Config id and
  * organization are identity. Description, Pub/Sub topic, and streaming
  * filter update in place.

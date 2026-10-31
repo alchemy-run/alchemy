@@ -27,7 +27,7 @@ import {
 export type ServicesResourcePolicyProps = {
   /**
    * App Check service id. Currently only `oauth2.googleapis.com`
-   * (Google Identity for iOS) supports resource policies. Immutable —
+   * (Google Identity for iOS) supports resource policies. Immutable --
    * changing it replaces the policy.
    * @default "oauth2.googleapis.com"
    */
@@ -38,7 +38,7 @@ export type ServicesResourcePolicyProps = {
    * The target may be missing at create time. Resource policies have no
    * labels or description field, so when this is omitted Alchemy targets
    * a dummy `alc-{alchemy-id}` OAuth client so `list` / nuke can find
-   * the policy. Immutable — changing it replaces the policy.
+   * the policy. Immutable -- changing it replaces the policy.
    */
   targetResource?: string;
   /**
@@ -87,7 +87,7 @@ export type ServicesResourcePolicy = Resource<
  * Resource policies have no labels field. When `targetResource` is
  * omitted, Alchemy points the policy at a dummy OAuth client whose id
  * starts with `alc-` so `list` / nuke can identify it. `serviceId` and
- * `targetResource` are identity — changing either replaces the policy.
+ * `targetResource` are identity -- changing either replaces the policy.
  * Enforcement mode updates in place.
  *
  * ### Creating a Resource Policy

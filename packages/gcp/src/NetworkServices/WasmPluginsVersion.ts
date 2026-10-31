@@ -32,7 +32,7 @@ export type WasmPluginsVersionProps = {
   /**
    * Parent WasmPlugin. Full name
    * `projects/{project}/locations/{location}/wasmPlugins/{wasmPlugin}`
-   * or the plugin id (combined with `location`). Immutable — changing
+   * or the plugin id (combined with `location`). Immutable -- changing
    * it replaces the version.
    */
   wasmPlugin: string;
@@ -41,12 +41,12 @@ export type WasmPluginsVersionProps = {
    * `.../wasmPlugins/{wasmPlugin}/versions/{wasmPluginVersion}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   wasmPluginVersionId?: string;
   /**
    * Location of the parent plugin. Used when `wasmPlugin` is a bare
-   * id. Wasm plugins live in `global`. Immutable — changing it
+   * id. Wasm plugins live in `global`. Immutable -- changing it
    * replaces the version. `GLOBAL` is accepted and normalized to
    * `global`.
    * @default "global"
@@ -66,18 +66,18 @@ export type WasmPluginsVersionProps = {
    * Artifact Registry URI of the image that contains `plugin.wasm`.
    * Docker (`LOCATION-docker.pkg.dev/...`) or generic artifact
    * (`projects/{project}/locations/{location}/repositories/{repository}/genericArtifacts/{package}:{version}`)
-   * forms are accepted. Immutable — changing it replaces the version.
+   * forms are accepted. Immutable -- changing it replaces the version.
    */
   imageUri?: string;
   /**
    * Base64-encoded plugin configuration delivered through `ON_CONFIGURE`.
-   * Mutually exclusive with `pluginConfigUri`. Immutable — changing it
+   * Mutually exclusive with `pluginConfigUri`. Immutable -- changing it
    * replaces the version.
    */
   pluginConfigData?: string;
   /**
    * Artifact Registry URI of an image that contains `plugin.config`.
-   * Mutually exclusive with `pluginConfigData`. Immutable — changing it
+   * Mutually exclusive with `pluginConfigData`. Immutable -- changing it
    * replaces the version.
    */
   pluginConfigUri?: string;

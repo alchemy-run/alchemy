@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:BatchDetectTargetedSentiment` — analyze entity-level (targeted) sentiment for a batch of up to 25 documents in a single call.
+ * Runtime binding for `comprehend:BatchDetectTargetedSentiment` -- analyze entity-level (targeted) sentiment for a batch of up to 25 documents in a single call.
  *
  * The response carries a `ResultList` (index-aligned with `TextList`) and an
  * `ErrorList` for documents that could not be processed. Like all Comprehend
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  *   TextList: ["I love this product!", "The delivery was late."],
  *   LanguageCode: "en",
  * });
- * // result.ResultList[0].Entities[…].Mentions
+ * // result.ResultList[0].Entities[...].Mentions
  * ```
  *
  * @binding

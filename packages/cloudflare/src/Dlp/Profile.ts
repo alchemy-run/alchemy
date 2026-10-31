@@ -12,7 +12,7 @@ const TypeId = "Cloudflare.Dlp.Profile" as const;
 type TypeId = typeof TypeId;
 
 /**
- * A detection entry defined inline on the profile — a regular expression
+ * A detection entry defined inline on the profile -- a regular expression
  * the DLP engine scans for.
  */
 export interface ProfileEntry {
@@ -85,7 +85,7 @@ export type ProfileAttributes = {
 export type Profile = Resource<TypeId, ProfileProps, ProfileAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust **DLP custom profile** — a named collection of
+ * A Cloudflare Zero Trust **DLP custom profile** -- a named collection of
  * detection entries (regular expressions) that Gateway HTTP policies and
  * CASB integrations reference to detect sensitive data in transit.
  *
@@ -159,7 +159,7 @@ export const ProfileProvider = () =>
         ? yield* observeProfile(accountId, output.profileId)
         : undefined;
 
-      // 2. Ensure — create with the full desired state when missing.
+      // 2. Ensure -- create with the full desired state when missing.
       if (!observed) {
         const created = yield* zeroTrust.createDlpProfileCustom({
           accountId,
@@ -178,7 +178,7 @@ export const ProfileProvider = () =>
         return toAttributes(createdCustom, accountId);
       }
 
-      // 3. Sync — PUT the full desired state when the observed state
+      // 3. Sync -- PUT the full desired state when the observed state
       //    differs. Observed entries are matched to desired entries by
       //    name so existing entry ids are preserved.
       const dirty =
@@ -229,7 +229,7 @@ export const ProfileProvider = () =>
     // Account-scoped collection (pattern b): enumerate every custom DLP
     // profile via the account profiles list, then hydrate each by id into
     // the exact `read` Attributes shape so list items are delete-ready.
-    // The list endpoint also returns predefined / integration profiles —
+    // The list endpoint also returns predefined / integration profiles --
     // only `custom` profiles are modelled by this resource, so the rest
     // are filtered out.
     list: Effect.fn(function* () {

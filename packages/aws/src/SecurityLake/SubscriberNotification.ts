@@ -65,7 +65,7 @@ export interface SubscriberNotification extends Resource<
     /** ID of the subscriber the notification belongs to. */
     subscriberId: string;
     /**
-     * The notification endpoint — the ARN of the AWS-managed SQS queue, or
+     * The notification endpoint -- the ARN of the AWS-managed SQS queue, or
      * the configured HTTPS endpoint.
      */
     subscriberEndpoint: string | undefined;
@@ -75,7 +75,7 @@ export interface SubscriberNotification extends Resource<
 > {}
 
 /**
- * A Security Lake subscriber notification — notifies a data-access
+ * A Security Lake subscriber notification -- notifies a data-access
  * subscriber whenever new objects land in its Security Lake bucket, either
  * via an AWS-managed SQS queue or a custom HTTPS endpoint.
  *
@@ -108,7 +108,7 @@ const SubscriberNotificationResource = Resource<SubscriberNotification>(
 export { SubscriberNotificationResource as SubscriberNotification };
 
 // Build the wire NotificationConfiguration from props. Redacted secrets are
-// passed through intact — distilled's SensitiveString accepts Redacted.
+// passed through intact -- distilled's SensitiveString accepts Redacted.
 const toWireConfiguration = (
   props: SubscriberNotificationProps,
 ): securitylake.NotificationConfiguration =>
@@ -118,7 +118,7 @@ const toWireConfiguration = (
 
 // A comparable, secret-free serialization of the desired configuration used
 // to skip no-op updates (the API does not expose the current configuration,
-// only the resulting endpoint — `olds` is the hint here).
+// only the resulting endpoint -- `olds` is the hint here).
 const configFingerprint = (props: {
   sqs?: boolean;
   httpsNotificationConfiguration?: SubscriberHttpsNotificationConfiguration;
@@ -130,7 +130,7 @@ const configFingerprint = (props: {
         targetRoleArn: https.targetRoleArn,
         authorizationApiKeyName: https.authorizationApiKeyName,
         // `olds` may have round-tripped through persisted state, so the
-        // secret may no longer be a live Redacted — guard before unwrapping.
+        // secret may no longer be a live Redacted -- guard before unwrapping.
         authorizationApiKeyValue:
           https.authorizationApiKeyValue !== undefined
             ? Redacted.isRedacted(https.authorizationApiKeyValue)
@@ -164,7 +164,7 @@ export const SubscriberNotificationProvider = () =>
             ),
           );
           // Notifications carry no tags, so ownership can't be
-          // distinguished — read reports observed state directly.
+          // distinguished -- read reports observed state directly.
           return endpoint === undefined
             ? undefined
             : { subscriberId, subscriberEndpoint: endpoint };
@@ -202,12 +202,12 @@ export const SubscriberNotificationProvider = () =>
         reconcile: Effect.fn(function* ({ news, olds, output, session }) {
           const configuration = toWireConfiguration(news);
 
-          // 1. OBSERVE — the subscriber's current notification endpoint.
+          // 1. OBSERVE -- the subscriber's current notification endpoint.
           const observedEndpoint = yield* getSubscriberEndpoint(news.subscriberId);
 
           let endpoint = observedEndpoint;
           if (observedEndpoint === undefined) {
-            // 2. ENSURE — create when missing. A ConflictException means a
+            // 2. ENSURE -- create when missing. A ConflictException means a
             // concurrent create won the race; converge via update.
             endpoint = yield* securitylake
               .createSubscriberNotification({
@@ -233,7 +233,7 @@ export const SubscriberNotificationProvider = () =>
             olds === undefined ||
             configFingerprint(olds) !== configFingerprint(news)
           ) {
-            // 3. SYNC — the API reports only the endpoint, not the
+            // 3. SYNC -- the API reports only the endpoint, not the
             // configuration, so `olds` is the no-op hint; adoption always
             // converges via an idempotent update.
             endpoint = yield* securitylake

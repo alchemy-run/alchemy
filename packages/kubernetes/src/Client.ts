@@ -225,7 +225,7 @@ const requestJson = Effect.fn(function* ({
         }),
     ),
     // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS,
-    // the per-attempt deadline) are transient — a fresh managed endpoint's
+    // the per-attempt deadline) are transient -- a fresh managed endpoint's
     // load balancer can refuse connections for a short window after the
     // cluster reports ready. Every request here is idempotent (GET / SSA
     // PATCH / DELETE), so retry them. HTTP status errors are classified
@@ -236,7 +236,7 @@ const requestJson = Effect.fn(function* ({
   );
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
-    // Error bodies can echo the request. Scrub only failures —
+    // Error bodies can echo the request. Scrub only failures --
     // a successful dry-run is the object we compare for drift.
     const responseBody = yield* Effect.sync(() => redactJson(response.body, prepared.secrets));
     if (response.statusCode === 404) {
@@ -260,7 +260,7 @@ const requestJson = Effect.fn(function* ({
   });
 });
 
-// ─────────────────────────────────────────────────────── kind discovery ──
+// ------------------------------------------------------- kind discovery --
 
 interface ApiResourceList {
   resources?: {
@@ -345,7 +345,7 @@ const buildPath = Effect.fn(function* ({
   });
 });
 
-// ─────────────────────────────────────────────────────────── object ops ──
+// ----------------------------------------------------------- object ops --
 
 export const readObject = Effect.fn(function* ({
   transport,

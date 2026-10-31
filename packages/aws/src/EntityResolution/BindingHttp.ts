@@ -6,8 +6,8 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 /**
  * Shared scaffolding for Entity Resolution HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeWorkflowHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeWorkflowHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action is boilerplate:
  * all Entity Resolution data-plane operations are scoped to a matching or ID
  * mapping workflow and inject the bound workflow's name as the request's

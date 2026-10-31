@@ -23,12 +23,12 @@ export type DataStoresSchemaProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the schema.
+   * Immutable -- changing it replaces the schema.
    */
   dataStore: string;
   /**
    * Schema id (RFC-1034, max 63 characters). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the schema.
+   * generated. Immutable -- changing it replaces the schema.
    */
   schemaId?: string;
   /**

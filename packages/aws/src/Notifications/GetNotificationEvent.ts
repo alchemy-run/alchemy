@@ -16,7 +16,7 @@ export interface GetNotificationEventRequest extends notifications.GetNotificati
  * ### Reading Notification Events
  * **Example:** Fetch a Notification Event
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getNotificationEvent = yield* AWS.Notifications.GetNotificationEvent();
  *
  * // runtime

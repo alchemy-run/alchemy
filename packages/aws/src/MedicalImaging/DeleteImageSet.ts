@@ -16,7 +16,7 @@ export interface DeleteImageSetRequest extends Omit<
  * Runtime binding for the `DeleteImageSet` operation (IAM action
  * `medical-imaging:DeleteImageSet`), scoped to one {@link Datastore}.
  *
- * Deletes an image set (asynchronously — the response reports
+ * Deletes an image set (asynchronously -- the response reports
  * `imageSetWorkflowStatus: "DELETING"`). A data store must contain no image
  * sets before it can be deleted. Provide the implementation with
  * `Effect.provide(AWS.MedicalImaging.DeleteImageSetHttp)`.

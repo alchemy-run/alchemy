@@ -41,14 +41,14 @@ export interface ZoneResourceTagsProps {
   /**
    * Zone the tagged resource lives in.
    *
-   * Stable — changing the zone triggers replacement.
+   * Stable -- changing the zone triggers replacement.
    */
   zoneId: string;
   /**
    * The type of the zone-level resource the tags attach to (e.g.
    * `dns_record`, `custom_hostname`, or `zone` for the zone itself).
    *
-   * Stable — the `(resourceType, resourceId)` pair is the tag set's
+   * Stable -- the `(resourceType, resourceId)` pair is the tag set's
    * identity, so changing it triggers a replacement. Declared as plain
    * `string` (narrowed to {@link ZoneTagResourceType}) so `diff` can
    * compare without resolving an `Input`.
@@ -58,19 +58,19 @@ export interface ZoneResourceTagsProps {
    * The ID of the resource the tags attach to (e.g. a DNS record ID or
    * the zone ID itself for `resourceType: "zone"`).
    *
-   * Stable — changing it triggers a replacement.
+   * Stable -- changing it triggers a replacement.
    */
   resourceId: string;
   /**
    * Access application identifier. Required when `resourceType` is
    * `access_application_policy`, ignored otherwise.
    *
-   * Stable — changing it triggers a replacement.
+   * Stable -- changing it triggers a replacement.
    */
   accessApplicationId?: string;
   /**
    * Key/value tags to attach to the resource. The PUT API replaces the
-   * full tag set, so this is the complete desired set — keys absent here
+   * full tag set, so this is the complete desired set -- keys absent here
    * are removed from the resource on the next reconcile.
    *
    * An empty record is indistinguishable from "no tags" on Cloudflare's
@@ -167,7 +167,7 @@ export const ZoneResourceTagsProvider = () =>
       // every tagged resource in the account in one paginated call. The
       // zone-scoped variants (the ones this resource manages) are exactly
       // those that carry a `zoneId` in the response union; account-level
-      // variants (worker, kv_namespace, …) lack it and are filtered out.
+      // variants (worker, kv_namespace, ...) lack it and are filtered out.
       return yield* resourceTagging.listResourceTaggings.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
@@ -195,7 +195,7 @@ export const ZoneResourceTagsProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId / resourceId / accessApplicationId are Input<string>; by
-      // diff time persisted olds are concrete strings — compare only when
+      // diff time persisted olds are concrete strings -- compare only when
       // both sides are.
       if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
@@ -237,7 +237,7 @@ export const ZoneResourceTagsProvider = () =>
       if (observed === undefined) return undefined;
       const tags = narrowTags(observed.tags);
       // Cloudflare reports untagged (and unknown) resources as an empty
-      // tag set — that is "gone" for this resource.
+      // tag set -- that is "gone" for this resource.
       if (Object.keys(tags).length === 0) return undefined;
 
       const attrs: ZoneResourceTagsAttributes = {
@@ -261,12 +261,12 @@ export const ZoneResourceTagsProvider = () =>
       const accessApplicationId = news.accessApplicationId as string | undefined;
       const desired = resolveTags(news.tags);
 
-      // Observe — cloud state is authoritative. The GET never 404s for a
+      // Observe -- cloud state is authoritative. The GET never 404s for a
       // valid-but-untagged resource (it returns an empty tag set), so the
       // same call covers greenfield, update, and adoption. It *does* 404
       // (`ZoneTagResourceNotFound`) when the target resource itself isn't
-      // visible yet — a freshly-created DNS record propagates eventually-
-      // consistently to the tag index — so bounded-retry until it appears.
+      // visible yet -- a freshly-created DNS record propagates eventually-
+      // consistently to the tag index -- so bounded-retry until it appears.
       const observed = yield* resourceTagging
         .getZoneTag({
           zoneId,
@@ -276,7 +276,7 @@ export const ZoneResourceTagsProvider = () =>
         })
         .pipe(Effect.retry(targetVisibleRetry));
 
-      // Sync — PUT is a full replace, so the only decision is whether the
+      // Sync -- PUT is a full replace, so the only decision is whether the
       // observed set already equals the desired set (skip the write).
       if (recordsEqual(narrowTags(observed.tags), desired)) {
         return {
@@ -309,7 +309,7 @@ export const ZoneResourceTagsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The DELETE endpoint is idempotent — Cloudflare returns 204 even
+      // The DELETE endpoint is idempotent -- Cloudflare returns 204 even
       // for resources that were never tagged.
       yield* resourceTagging.deleteZoneTag({
         zoneId: output.zoneId,
@@ -321,7 +321,7 @@ export const ZoneResourceTagsProvider = () =>
   });
 
 /**
- * The zone-scoped variants of the `listResourceTaggings` response union —
+ * The zone-scoped variants of the `listResourceTaggings` response union --
  * the items that carry a `zoneId` (dns_record, custom_hostname,
  * custom_certificate, managed_client_certificate, access_application_policy,
  * api_gateway_operation, zone). These are exactly the resources this provider

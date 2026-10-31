@@ -10,11 +10,11 @@ import type * as Effect from "effect/Effect";
 /**
  * Create a Stripe Billing Portal Session over HTTP. The portal is
  * Stripe's hosted page where a customer updates their card, switches
- * plans, downloads invoices, or cancels — so your app never has to build
+ * plans, downloads invoices, or cancels -- so your app never has to build
  * those screens. Create the session for the customer and redirect them to
  * `session.url`.
  *
- * Account-scoped — binds the API key onto the host, not a specific
+ * Account-scoped -- binds the API key onto the host, not a specific
  * resource.
  *
  * ### Letting a customer manage their subscription

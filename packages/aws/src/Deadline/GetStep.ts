@@ -6,14 +6,14 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:GetStep`.
  *
- * Reads a step's detail for a job in the bound {@link Queue} — lifecycle
+ * Reads a step's detail for a job in the bound {@link Queue} -- lifecycle
  * status, task run status counts, dependency counts, parameter space. The
  * queue's `farmId`/`queueId` are injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Deadline.GetStepHttp)`.
  * ### Monitoring Steps
  * **Example:** Inspect A Step
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const getStep = yield* AWS.Deadline.GetStep(queue);
  *
  * // runtime

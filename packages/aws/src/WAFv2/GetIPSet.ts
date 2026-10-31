@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { IPSet } from "./IPSet.ts";
 
 /**
- * Runtime binding for `wafv2:GetIPSet` — read the bound {@link IPSet}'s
+ * Runtime binding for `wafv2:GetIPSet` -- read the bound {@link IPSet}'s
  * current addresses; the name, scope, and id are injected automatically.
  *
  * Provide `WAFv2.GetIPSetHttp` on the hosting Lambda Function to satisfy
@@ -12,7 +12,7 @@ import type { IPSet } from "./IPSet.ts";
  * ### Managing IP Sets at Runtime
  * **Example:** Read the Current Block List
  * ```typescript
- * // init — grants wafv2:GetIPSet on the IP set
+ * // init -- grants wafv2:GetIPSet on the IP set
  * const getIPSet = yield* AWS.WAFv2.GetIPSet(blockList);
  *
  * // runtime

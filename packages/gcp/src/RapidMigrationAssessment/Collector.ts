@@ -37,12 +37,12 @@ export type CollectorProps = {
   /**
    * Collector id (the `{collector}` segment of
    * `projects/{project}/locations/{location}/collectors/{collector}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the collector.
    */
   collectorId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * collector. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */

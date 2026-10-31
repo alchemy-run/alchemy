@@ -6,15 +6,15 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDirectories` operation (IAM action
  * `ds:DescribeDirectories`).
  *
- * Reads directory descriptions at runtime — stage, DNS addresses, VPC
- * settings — for some or all of the account's directories. The action does
+ * Reads directory descriptions at runtime -- stage, DNS addresses, VPC
+ * settings -- for some or all of the account's directories. The action does
  * not support resource-level permissions, so the grant is account-wide.
  * Provide the implementation with
  * `Effect.provide(AWS.DirectoryService.DescribeDirectoriesHttp)`.
  * ### Reading Directories
  * **Example:** Read a Directory's Stage and DNS Servers
  * ```typescript
- * // init — request the account-level capability
+ * // init -- request the account-level capability
  * const describeDirectories = yield* AWS.DirectoryService.DescribeDirectories();
  *
  * // runtime

@@ -1,6 +1,6 @@
 /**
  * Process bootstrap for `GCP.Run.Job` and `GCP.Run.WorkerPool`. No HTTP
- * server — the program's `run` executes, and for a Job the process exits 0
+ * server -- the program's `run` executes, and for a Job the process exits 0
  * once it finishes (Cloud Run marks the task complete on exit). A worker
  * pool's long-running `run` loop keeps its instance alive.
  *

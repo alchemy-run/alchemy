@@ -1,6 +1,6 @@
 /**
  * Shared HTTP-binding scaffolding for the AppIntegrations service.
- * NOT exported from the service barrel — each `{Op}Http.ts` is a thin
+ * NOT exported from the service barrel -- each `{Op}Http.ts` is a thin
  * one-call `Layer.effect(Cap, makeAppIntegrations*HttpBinding({ ... }))`.
  */
 import type { Input } from "alchemy/Input";
@@ -44,7 +44,7 @@ export const makeAppIntegrationsHttpBinding = <
   /**
    * Dependent actions the AppIntegrations service invokes on the caller's
    * behalf (e.g. `appflow:CreateFlow` for data-integration associations).
-   * Granted on `*` in a second statement — these AWS-managed side resources
+   * Granted on `*` in a second statement -- these AWS-managed side resources
    * have no stable ARN at deploy time.
    */
   dependentActions?: string[];

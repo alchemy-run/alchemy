@@ -12,7 +12,7 @@ export interface ListDeviceDiscoveriesRequest extends mi.ListDeviceDiscoveriesRe
  * (account-level).
  *
  * Lists the discovery scans in the account, optionally filtered by type or
- * status — useful for finding a running scan before polling it with
+ * status -- useful for finding a running scan before polling it with
  * {@link GetDeviceDiscovery}. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.ListDeviceDiscoveriesHttp)`.
  *

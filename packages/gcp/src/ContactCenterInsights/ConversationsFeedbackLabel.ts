@@ -42,17 +42,17 @@ export type ConversationsFeedbackLabelProps = {
   /**
    * Parent Conversation resource name
    * (`projects/{project}/locations/{location}/conversations/{conversation}`).
-   * Immutable — changing it replaces the feedback label.
+   * Immutable -- changing it replaces the feedback label.
    */
   parent: string;
   /**
    * Feedback label id (the `{feedback_label}` segment). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the label.
+   * unique id is generated. Immutable -- changing it replaces the label.
    */
   feedbackLabelId?: string;
   /**
    * Topic-modeling string label. Feedback labels have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   label?: string;
@@ -99,7 +99,7 @@ export type ConversationsFeedbackLabel = Resource<
  * A feedback label on a Contact Center Insights conversation.
  *
  * Parent conversation and feedback label id are immutable. Feedback
- * labels have no labels map — Alchemy stamps ownership into the `label`
+ * labels have no labels map -- Alchemy stamps ownership into the `label`
  * string. The label text, labeled resource, and QA answer update in
  * place.
  *

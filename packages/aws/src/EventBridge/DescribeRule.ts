@@ -17,10 +17,10 @@ export interface DescribeRuleRequest extends Omit<
  * ### Describing Rules
  * **Example:** Describe the Bound Rule
  * ```typescript
- * // init — bind the rule (provide AWS.EventBridge.DescribeRuleHttp on the Function)
+ * // init -- bind the rule (provide AWS.EventBridge.DescribeRuleHttp on the Function)
  * const describeRule = yield* AWS.EventBridge.DescribeRule(rule);
  *
- * // runtime — read the rule's state and pattern
+ * // runtime -- read the rule's state and pattern
  * const info = yield* describeRule();
  * console.log(info.State, info.EventPattern);
  * ```

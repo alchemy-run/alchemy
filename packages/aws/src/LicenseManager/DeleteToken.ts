@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface DeleteTokenRequest extends licensemanager.DeleteTokenRequest {}
 
 /**
- * Runtime binding for `license-manager:DeleteToken` — revoke a refresh
+ * Runtime binding for `license-manager:DeleteToken` -- revoke a refresh
  * token minted by `CreateToken`, cutting off further `GetAccessToken`
  * exchanges for it.
  *

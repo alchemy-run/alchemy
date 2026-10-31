@@ -27,12 +27,12 @@ export type NodeTemplateServerBinding = compute.ServerBinding;
 export type NodeTemplateProps = {
   /**
    * Template name (RFC1035, 1-63 characters). If omitted, a unique name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the template.
    */
   nodeTemplateName?: string;
   /**
-   * Region the template lives in. Immutable — changing it replaces the
+   * Region the template lives in. Immutable -- changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -40,43 +40,43 @@ export type NodeTemplateProps = {
   /**
    * Optional description. Node templates have no labels field, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `list` / nuke. Description is set at
-   * create time — changing it replaces the template.
+   * in a `[alchemy ...]` prefix for `list` / nuke. Description is set at
+   * create time -- changing it replaces the template.
    */
   description?: string;
   /**
    * Sole-tenant node type (for example `n2-node-80-640`). Mutually
-   * exclusive with `nodeTypeFlexibility`. Immutable — changing it
+   * exclusive with `nodeTypeFlexibility`. Immutable -- changing it
    * replaces the template.
    */
   nodeType?: string;
   /**
    * Flexible vCPU / memory / local-SSD requirements. Mutually exclusive
-   * with `nodeType`. Immutable — changing it replaces the template.
+   * with `nodeType`. Immutable -- changing it replaces the template.
    */
   nodeTypeFlexibility?: NodeTemplateNodeTypeFlexibility;
   /**
-   * CPU overcommit (`NONE` or `ENABLED`). Immutable — changing it
+   * CPU overcommit (`NONE` or `ENABLED`). Immutable -- changing it
    * replaces the template.
    */
   cpuOvercommitType?: NodeTemplateCpuOvercommitType;
   /**
-   * Node affinity labels used when scheduling instances. Immutable —
+   * Node affinity labels used when scheduling instances. Immutable --
    * changing them replaces the template.
    */
   nodeAffinityLabels?: Record<string, string>;
   /**
-   * Local disks attached to each node. Immutable — changing them
+   * Local disks attached to each node. Immutable -- changing them
    * replaces the template.
    */
   disks?: NodeTemplateLocalDisk[];
   /**
-   * Accelerators attached to each node. Immutable — changing them
+   * Accelerators attached to each node. Immutable -- changing them
    * replaces the template.
    */
   accelerators?: NodeTemplateAccelerator[];
   /**
-   * Physical-server binding. Immutable — changing it replaces the
+   * Physical-server binding. Immutable -- changing it replaces the
    * template.
    */
   serverBinding?: NodeTemplateServerBinding;
@@ -130,8 +130,8 @@ export type NodeTemplate = Resource<
  *
  * Node templates define the properties of sole-tenant nodes created in a
  * node group (node type, CPU overcommit, affinity labels, local disks).
- * There is no in-place update API — changing any property replaces the
- * template. Compute NodeTemplate has no labels field — Alchemy stamps
+ * There is no in-place update API -- changing any property replaces the
+ * template. Compute NodeTemplate has no labels field -- Alchemy stamps
  * ownership into the description so nuke can find leaked templates.
  *
  * ### Creating a Node Template

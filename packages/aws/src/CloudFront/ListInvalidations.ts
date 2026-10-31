@@ -17,7 +17,7 @@ export interface ListInvalidationsRequest extends Omit<
  * ### Inspecting Invalidations
  * **Example:** List Recent Invalidations
  * ```typescript
- * // init — bind the operation to the distribution
+ * // init -- bind the operation to the distribution
  * const listInvalidations = yield* CloudFront.ListInvalidations(distribution);
  *
  * // runtime

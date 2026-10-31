@@ -31,14 +31,14 @@ const bold = paint("1");
 const formatDuration = (ms: number): string =>
   ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 
-// Through the REAL stream — while a run is active, bare process.stdout is
+// Through the REAL stream -- while a run is active, bare process.stdout is
 // diverted into the run log (see StrayOutput.ts).
 const write = (line: string): Effect.Effect<void> =>
   Effect.sync(() => {
     writeDirect(`${line}\n`);
   });
 
-// Captured output is replayed verbatim — no timestamp/level prefixes, no
+// Captured output is replayed verbatim -- no timestamp/level prefixes, no
 // indentation. It should read exactly as it would have on a normal terminal.
 const formatLogs = (logs: ReadonlyArray<LogEntry>): string =>
   logs.map((log) => log.message).join("\n");
@@ -55,7 +55,7 @@ interface ReporterState {
   readonly failedFiles: Set<string>;
   /**
    * Currently-executing work items: tests AND file-level hooks. Hooks must
-   * be tracked too — a `beforeAll` deploy can legitimately run for many
+   * be tracked too -- a `beforeAll` deploy can legitimately run for many
    * minutes with no test starting or finishing, and if the stall report
    * only covered tests, such a run would print nothing at all and read as
    * deadlocked.
@@ -68,14 +68,14 @@ interface ReporterState {
   passed: number;
   failed: number;
   lastEnd: number;
-  /** Running-set fingerprint of the last stall report — dedupes repeats. */
+  /** Running-set fingerprint of the last stall report -- dedupes repeats. */
   lastStallKey: string;
   stallTimer: ReturnType<typeof setInterval> | undefined;
   /** Files discovered for the collection phase. */
   collectTotal: number;
   collectDone: number;
   collectStartedAt: number;
-  /** Last file whose import finished — the next one is what's importing now. */
+  /** Last file whose import finished -- the next one is what's importing now. */
   collectCurrent: string;
   lastCollectRender: number;
   /** An un-terminated in-place progress line is on the terminal. */
@@ -97,7 +97,7 @@ const clearCollectLine = (state: ReporterState): void => {
 
 /**
  * Importing every test file takes tens of seconds on a large suite, and it
- * happens before a single test can be reported — without progress the run is
+ * happens before a single test can be reported -- without progress the run is
  * indistinguishable from a deadlock. On a TTY this repaints one line in place;
  * otherwise it prints a line every few seconds. Either way the current file is
  * shown, so a genuinely stuck import is identifiable by name.
@@ -137,10 +137,10 @@ const finishCollect = (state: ReporterState): void => {
 };
 
 /**
- * `[ 12/240 ✓10 ✗2]` counter prefixed to every result line: how much of the
+ * `[ 12/240 ok10 x2]` counter prefixed to every result line: how much of the
  * run is left, and the running pass/fail tally. Every number is right-aligned
  * on the total's width so the columns after it stay aligned, and each tally is
- * only colored once it is non-zero (a red `✗0` reads as a failure at a glance).
+ * only colored once it is non-zero (a red `x0` reads as a failure at a glance).
  */
 const progress = (state: ReporterState, status: TestResult["status"]): string => {
   state.completed += 1;
@@ -149,8 +149,8 @@ const progress = (state: ReporterState, status: TestResult["status"]): string =>
   const total = Math.max(state.total, state.completed);
   const width = String(total).length;
   const pad = (n: number) => String(n).padStart(width, " ");
-  const pass = `✓${pad(state.passed)}`;
-  const fail = `✗${pad(state.failed)}`;
+  const pass = `\u2713${pad(state.passed)}`;
+  const fail = `\u2717${pad(state.failed)}`;
   return [
     dim(`[${pad(state.completed)}/${total}`),
     state.passed > 0 ? green(pass) : dim(pass),
@@ -164,7 +164,7 @@ const STALL_LIST_MAX = 25;
 /**
  * Print the currently-running tests when nothing has finished for a while.
  * Printed AT MOST ONCE per distinct running set: while the exact same tests
- * stay stuck, nothing is re-printed — the timestamp on the report tells the
+ * stay stuck, nothing is re-printed -- the timestamp on the report tells the
  * reader how long ago it was taken.
  */
 const printStalled = (state: ReporterState): void => {
@@ -177,13 +177,15 @@ const printStalled = (state: ReporterState): void => {
   const timestamp = new Date(now).toTimeString().slice(0, 8);
   const items = [...state.running.values()].sort((a, b) => a.startedAt - b.startedAt);
   const lines = [
-    dim(`⧗ [${timestamp}] no tests finished in the last 10s — ${items.length} still running:`),
+    dim(
+      `\u29d7 [${timestamp}] no tests finished in the last 10s \u2014 ${items.length} still running:`,
+    ),
   ];
   for (const item of items.slice(0, STALL_LIST_MAX)) {
     lines.push(dim(`    ${item.label} (${formatDuration(now - item.startedAt)})`));
   }
   if (items.length > STALL_LIST_MAX) {
-    lines.push(dim(`    … ${items.length - STALL_LIST_MAX} more`));
+    lines.push(dim(`    \u2026 ${items.length - STALL_LIST_MAX} more`));
   }
   writeDirect(`${lines.join("\n")}\n`);
 };
@@ -242,13 +244,13 @@ const onEvent = (event: TestEvent, state: ReporterState): Effect.Effect<void> =>
       const count = progress(state, event.result.status);
       switch (event.result.status) {
         case "pass":
-          return write(`${count} ${green("✓")} ${title} ${duration}${retries}`);
+          return write(`${count} ${green("\u2713")} ${title} ${duration}${retries}`);
         case "fail": {
           state.failedFiles.add(event.test.file);
           // Show the failure's details immediately so it can be inspected
           // while the run continues (passed tests stay silent). The end-of-run
           // Failures section repeats them consolidated, with file hook logs.
-          const lines = [`${count} ${red("✗")} ${title} ${duration}${retries}`];
+          const lines = [`${count} ${red("\u2717")} ${title} ${duration}${retries}`];
           if (event.result.error !== undefined) {
             lines.push(indent(red(event.result.error)));
           }
@@ -260,13 +262,13 @@ const onEvent = (event: TestEvent, state: ReporterState): Effect.Effect<void> =>
           return write(lines.join("\n"));
         }
         case "skip":
-          return write(`${count} ${yellow("↓")} ${title} ${dim("[skipped]")}`);
+          return write(`${count} ${yellow("\u2193")} ${title} ${dim("[skipped]")}`);
         case "todo":
-          // Warning-styled: a todo is unimplemented coverage, not a pass —
+          // Warning-styled: a todo is unimplemented coverage, not a pass --
           // it must not blend in with the dim noise around it.
           return write(
             `${count} ${yellow(
-              `○ ${event.test.file} > ${event.test.titlePath.join(" > ")} ${bold("[todo]")}`,
+              `\u25cb ${event.test.file} > ${event.test.titlePath.join(" > ")} ${bold("[todo]")}`,
             )}`,
           );
       }
@@ -280,7 +282,7 @@ const onEvent = (event: TestEvent, state: ReporterState): Effect.Effect<void> =>
       }
       if (event.error !== undefined) {
         return write(
-          `${red("✗")} ${bold(event.file)} ${red("failed to run")}\n${indent(red(event.error))}` +
+          `${red("\u2717")} ${bold(event.file)} ${red("failed to run")}\n${indent(red(event.error))}` +
             (event.logs.length > 0
               ? `\n${dim("--- file hook output (deploy/destroy) ---")}\n${formatLogs(event.logs)}`
               : ""),
@@ -306,7 +308,7 @@ export const printSummary = (
       const hookLogsPrinted = new Set<string>();
       for (const { meta, result } of summary.failures) {
         yield* write(
-          `${red("✗")} ${bold(meta.file)} ${dim(">")} ${meta.titlePath.join(` ${dim(">")} `)}`,
+          `${red("\u2717")} ${bold(meta.file)} ${dim(">")} ${meta.titlePath.join(` ${dim(">")} `)}`,
         );
         if (result.error !== undefined) {
           yield* write(indent(red(result.error)));
@@ -330,7 +332,7 @@ export const printSummary = (
         yield* write("");
       }
     }
-    // A bare list of what failed, immediately above the counts — the failure
+    // A bare list of what failed, immediately above the counts -- the failure
     // details above are long enough that the names scroll out of reach, and
     // each line here is exactly what `-t` matches for a re-run.
     const failedNames = [
@@ -340,7 +342,7 @@ export const printSummary = (
     if (failedNames.length > 0) {
       yield* write(bold(red(`Failed (${failedNames.length})`)));
       for (const name of failedNames) {
-        yield* write(`  ${red("✗")} ${name}`);
+        yield* write(`  ${red("\u2717")} ${name}`);
       }
     }
     const parts = [

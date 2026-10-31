@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteClusterSnapshot` operation (IAM action
  * `docdb-elastic:DeleteClusterSnapshot`).
  *
- * Deletes a manual elastic-cluster snapshot by ARN — e.g. from a Lambda that
+ * Deletes a manual elastic-cluster snapshot by ARN -- e.g. from a Lambda that
  * prunes on-demand backups past a retention horizon. Provide the
  * implementation with
  * `Effect.provide(AWS.DocDBElastic.DeleteClusterSnapshotHttp)`.
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const deleteSnapshot = yield* DocDBElastic.DeleteClusterSnapshot();
  *
  * const result = yield* deleteSnapshot({ snapshotArn });
- * // result.snapshot.status → "DELETING"
+ * // result.snapshot.status -> "DELETING"
  * ```
  *
  * @binding

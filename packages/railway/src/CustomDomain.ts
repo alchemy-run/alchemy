@@ -160,7 +160,7 @@ export type CustomDomain = Resource<
      * (see [DNS Adapters](/infrastructure-as-code/dns-adapters)).
      */
     dnsRecords: CustomDomainDnsRecord[];
-    /** Observed sync status (`ACTIVE`, `CREATING`, …). */
+    /** Observed sync status (`ACTIVE`, `CREATING`, ...). */
     syncStatus: string | undefined;
     /** `https://{domain}`. */
     url: string;

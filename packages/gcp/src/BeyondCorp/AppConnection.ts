@@ -72,18 +72,18 @@ export type AppConnectionProps = {
    * AppConnection id (the `{appConnection}` segment of
    * `projects/{project}/locations/{location}/appConnections/{appConnection}`).
    * If omitted, a unique RFC1035 name is generated. Must be 4-63
-   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable --
    * changing it replaces the connection.
    */
   appConnectionId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * connection. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Network connectivity type. Immutable — changing it replaces the
+   * Network connectivity type. Immutable -- changing it replaces the
    * connection.
    * @default "TCP_PROXY"
    */
@@ -94,7 +94,7 @@ export type AppConnectionProps = {
   applicationEndpoint: AppConnectionApplicationEndpoint;
   /**
    * Gateway used by the connection. The nested `appGateway` is
-   * immutable — changing it replaces the connection.
+   * immutable -- changing it replaces the connection.
    */
   gateway?: AppConnectionGateway;
   /**
@@ -136,7 +136,7 @@ export type AppConnection = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`CREATED`, `CREATING`, …). */
+    /** Server-reported state (`CREATED`, `CREATING`, ...). */
     state: string | undefined;
     /** Server-generated resource uid. */
     uid: string | undefined;

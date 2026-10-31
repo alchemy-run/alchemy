@@ -24,7 +24,7 @@ interface MigrateInput {
   identity: Record<string, unknown>;
   /** Fingerprint of the Better Auth schema (tables + fields). */
   schema: string;
-  /** Dialect family — part of the input so a dialect swap re-runs. */
+  /** Dialect family -- part of the input so a dialect swap re-runs. */
   provider: string;
 }
 
@@ -39,7 +39,7 @@ export interface RegisterMigrationOptions {
   /** The user's Better Auth options (without `database`). */
   readonly options: BetterAuthOptions;
   readonly db: DatabaseService;
-  /** The user's `migrate` prop — `undefined` means default-on. */
+  /** The user's `migrate` prop -- `undefined` means default-on. */
   readonly migrate: boolean | undefined;
 }
 
@@ -47,8 +47,8 @@ export interface RegisterMigrationOptions {
  * Register the schema-migration Action for a `BetterAuth` instance.
  *
  * Actions run only during `alchemy deploy` (apply), re-run only when their
- * resolved input changes — here: the schema fingerprint, the database
- * identity, or the dialect — and their body gets the ambient stack
+ * resolved input changes -- here: the schema fingerprint, the database
+ * identity, or the dialect -- and their body gets the ambient stack
  * services, so `migrate.connect` can resolve resource Outputs and reach
  * the cloud.
  */
@@ -78,7 +78,7 @@ export const registerMigration = ({
       return;
     }
     // Outside a stack evaluation (unit tests driving BetterAuth directly)
-    // there is nothing to register on — skip silently.
+    // there is nothing to register on -- skip silently.
     const stack = yield* Effect.serviceOption(Stack);
     if (Option.isNone(stack)) {
       return;
@@ -101,14 +101,14 @@ export const registerMigration = ({
       provider: db.provider,
     }).pipe(
       // The Action call's requirements (Stack, the runner's Req) are
-      // ambient during stack evaluation — erase them; presence of Stack
+      // ambient during stack evaluation -- erase them; presence of Stack
       // was checked above.
       (effect) => effect as unknown as Effect.Effect<Output<MigrateOutput>>,
     );
 
     // Bind the migration result into the host environment (when there is a
     // host): the host's env then depends on the Action's output, giving the
-    // engine a Worker/Function → Migration dependency edge so first-deploy
+    // engine a Worker/Function -> Migration dependency edge so first-deploy
     // traffic cannot race the schema.
     const rc = yield* CurrentRuntimeContext;
     if (rc !== undefined) {
@@ -118,7 +118,7 @@ export const registerMigration = ({
 
 /**
  * Connect via the platform layer's `migrate.connect` and apply Better
- * Auth's schema migrations. Additive and idempotent — re-running against
+ * Auth's schema migrations. Additive and idempotent -- re-running against
  * an up-to-date database is a no-op.
  */
 export const applyMigrations = (
@@ -140,7 +140,7 @@ const runMigrationWith = (
       if (typeof database === "function") {
         return yield* Effect.die(
           new Error(
-            "BetterAuth migration: `connect` yielded an adapter factory — " +
+            "BetterAuth migration: `connect` yielded an adapter factory \u2014 " +
               "migrations require a direct (Kysely-resolvable) database.",
           ),
         );

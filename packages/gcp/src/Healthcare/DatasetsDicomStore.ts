@@ -41,7 +41,7 @@ export type DatasetsDicomStoreProps = {
   /**
    * Parent dataset. Full name
    * `projects/{project}/locations/{location}/datasets/{dataset}` or the
-   * dataset id (combined with `location`). Immutable — changing it
+   * dataset id (combined with `location`). Immutable -- changing it
    * replaces the DICOM store.
    */
   dataset: string;
@@ -51,7 +51,7 @@ export type DatasetsDicomStoreProps = {
    */
   location?: string;
   /**
-   * DICOM store id. Any string up to 256 characters. Immutable —
+   * DICOM store id. Any string up to 256 characters. Immutable --
    * changing it replaces the store.
    */
   dicomStoreId?: string;

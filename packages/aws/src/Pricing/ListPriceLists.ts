@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ListPriceListsRequest extends pricing.ListPriceListsRequest {}
 
 /**
- * Runtime binding for `pricing:ListPriceLists` — list the bulk Price List
+ * Runtime binding for `pricing:ListPriceLists` -- list the bulk Price List
  * file references available for a service, currency, and effective date.
  *
  * Each returned reference carries a `PriceListArn` and the `FileFormats`

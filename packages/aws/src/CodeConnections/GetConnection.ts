@@ -7,14 +7,14 @@ import type { Connection } from "./Connection.ts";
  * Runtime binding for `codeconnections:GetConnection`.
  *
  * Bind this operation to a {@link Connection} to read the connection's live
- * state — status (`PENDING`/`AVAILABLE`/`ERROR`), provider type, and owner —
+ * state -- status (`PENDING`/`AVAILABLE`/`ERROR`), provider type, and owner --
  * from inside a function runtime. Useful for workloads that gate work on the
  * connection's OAuth handshake having been completed. Provide the
  * implementation with `Effect.provide(AWS.CodeConnections.GetConnectionHttp)`.
  * ### Inspecting a Connection
  * **Example:** Gate on the Connection Being AVAILABLE
  * ```typescript
- * // init — bind the operation to the connection
+ * // init -- bind the operation to the connection
  * const getConnection = yield* AWS.CodeConnections.GetConnection(connection);
  *
  * // runtime

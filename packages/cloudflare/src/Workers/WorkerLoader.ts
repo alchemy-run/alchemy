@@ -47,8 +47,8 @@ export type WorkerLoader = {
 /**
  * Effect returned by `WorkerLoader(name)`.
  *
- * It is a real `Effect` — `yield* WorkerLoader(name)` inside a Worker init
- * attaches the binding and resolves the runtime handle — but it also carries
+ * It is a real `Effect` -- `yield* WorkerLoader(name)` inside a Worker init
+ * attaches the binding and resolves the runtime handle -- but it also carries
  * the `~alchemy/Kind` marker statically, so when it is declared on a Worker's
  * `env` the binding machinery recognises it as a `worker_loader` binding
  * (`isWorkerLoader`) instead of running it. Every env-resolution site that
@@ -322,7 +322,7 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
  * Convert the Effect-level worker code into the shape the native
  * `env.LOADER.get()` API expects, unwrapping wrapped `Fetcher`s to their raw
  * Cloudflare fetchers. `globalOutbound: null` (disable network access for the
- * dynamic worker) must survive as `null` — `?.raw` alone would coerce it to
+ * dynamic worker) must survive as `null` -- `?.raw` alone would coerce it to
  * `undefined`, which the runtime treats as "default outbound", silently
  * re-enabling network access for workers meant to be sandboxed (#746).
  */

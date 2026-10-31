@@ -8,7 +8,7 @@ import { bundleSource } from "./shared.ts";
 /**
  * Source provider for `props.script` workers: the raw module source is
  * uploaded as a single ESM module (`main.js`), bypassing bundling
- * entirely. The bundle hash is `sha256(script)` — identical to the
+ * entirely. The bundle hash is `sha256(script)` -- identical to the
  * pre-SourceProvider `hashScript` slot, so persisted state diffs cleanly
  * across the refactor.
  */
@@ -21,7 +21,7 @@ export const makeInlineScriptSource = (script: string): SourceProvider => {
   );
   return bundleSource({
     build: () => bundle,
-    // Local dev: a single-element stream — script changes arrive as new
+    // Local dev: a single-element stream -- script changes arrive as new
     // props, which restart the instance via `structuralSignature`.
     watch: () =>
       bundle.pipe(

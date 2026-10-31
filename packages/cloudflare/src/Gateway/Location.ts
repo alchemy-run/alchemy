@@ -44,7 +44,7 @@ export interface LocationProps {
   name?: string;
   /**
    * Whether this location is the default for the account. Cloudflare
-   * rejects demoting the current default directly — promote another
+   * rejects demoting the current default directly -- promote another
    * location instead. Mutable.
    *
    * @default false
@@ -111,7 +111,7 @@ export interface LocationAttributes {
 export type Location = Resource<TypeId, LocationProps, LocationAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust Gateway DNS location — a configured source of
+ * A Cloudflare Zero Trust Gateway DNS location -- a configured source of
  * DNS traffic (an office, a home network, a device fleet) with its own
  * DNS-over-HTTPS endpoint and optional dedicated destination IPs.
  *
@@ -119,7 +119,7 @@ export type Location = Resource<TypeId, LocationProps, LocationAttributes, never
  * network's DoH resolver at
  * `https://<dohSubdomain>.cloudflare-gateway.com/dns-query` and Gateway
  * DNS policies apply to its traffic. All declared properties converge in
- * place — nothing on a location forces a replacement.
+ * place -- nothing on a location forces a replacement.
  * ### Creating a Location
  * **Example:** DoH-only location
  * ```typescript
@@ -161,7 +161,7 @@ export const isLocation = (value: unknown): value is Location =>
  * Right after a location create/update, Cloudflare's edge intermittently
  * answers the write with a 401 `Unauthorized` carrying "This account does
  * not have access to this feature." even though the account is fully
- * entitled — the same transient edge/token-propagation blip the read path
+ * entitled -- the same transient edge/token-propagation blip the read path
  * rides out as a 403 `Forbidden`. It clears within a few hundred ms, so we
  * retry the mutation while we see exactly that message. A genuine
  * entitlement loss carries the same tag, but the bounded retry surfaces it
@@ -212,13 +212,13 @@ export const LocationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached location id.
+      // Owned path -- refresh by the cached location id.
       if (output?.locationId) {
         const observed = yield* getLocation(acct, output.locationId);
         if (observed) return toAttributes(observed, acct);
       }
 
-      // Cold read — locate by deterministic name. Locations carry no
+      // Cold read -- locate by deterministic name. Locations carry no
       // ownership markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
       const match = yield* findByName(acct, name);
@@ -230,7 +230,7 @@ export const LocationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
-      // 1. Observe — the cached id is a hint; fall back to a name scan so
+      // 1. Observe -- the cached id is a hint; fall back to a name scan so
       //    out-of-band deletes / lost state converge.
       let observed = output?.locationId
         ? yield* getLocation(accountId, output.locationId)
@@ -239,7 +239,7 @@ export const LocationProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create with the full desired body when missing. Names
+      // 2. Ensure -- create with the full desired body when missing. Names
       //    are not unique on Cloudflare's side, so there is no
       //    AlreadyExists race to tolerate.
       if (!observed) {
@@ -253,7 +253,7 @@ export const LocationProvider = () =>
             endpoints: news.endpoints,
             networks: news.networks,
           })
-          // See `isTransientFeatureAccessBlip` — ride out the transient
+          // See `isTransientFeatureAccessBlip` -- ride out the transient
           // 401 "does not have access to this feature" edge blip.
           .pipe(
             Effect.retry({
@@ -265,7 +265,7 @@ export const LocationProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — diff observed cloud state against desired; the update
+      // 3. Sync -- diff observed cloud state against desired; the update
       //    API is a PUT of the full mutable state, so send everything but
       //    skip the call entirely on a no-op. Networks compare as an
       //    unordered set; endpoints stringify-compare only when declared.
@@ -297,7 +297,7 @@ export const LocationProvider = () =>
             endpoints: desired.endpoints,
             networks: desired.networks,
           })
-          // See `isTransientFeatureAccessBlip` — ride out the transient
+          // See `isTransientFeatureAccessBlip` -- ride out the transient
           // 401 "does not have access to this feature" edge blip.
           .pipe(
             Effect.retry({

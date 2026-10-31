@@ -20,14 +20,14 @@ export const RAILWAY_CLI_LOGIN_HOST = "https://railway.com";
  *
  * Mirrors `railway login --browserless`: the payload is
  * `wordCode={code}&hostname={hostname}` (URL-safe base64) on
- * `https://railway.com/cli-login?d=…`. The user confirms the pairing code
+ * `https://railway.com/cli-login?d=...`. The user confirms the pairing code
  * in the browser; `loginSessionAuth` is the dashboard-side
  * mutation that marks the session authorized. `loginSessionVerify`
  * is a liveness check (true while the pairing session exists). The CLI then
  * polls `loginSessionConsume` until a token is returned.
  *
- * Alchemy's AuthProvider `method: "oauth"` runs this flow: create → print
- * the pairing URL → poll consume → store the token.
+ * Alchemy's AuthProvider `method: "oauth"` runs this flow: create -> print
+ * the pairing URL -> poll consume -> store the token.
  *
  * ### Pairing URL
  * **Example:** From a session code
@@ -76,7 +76,7 @@ const consumeLoginSession = Query.fn((code: string) => Railway.loginSessionConsu
  * Poll `loginSessionVerify` then
  * `loginSessionConsume` until a token is returned, or 5 minutes
  * elapse. Mirrors `railway login --browserless`: consume is the token source;
- * verify is a liveness check. Does not cancel the session — the caller should
+ * verify is a liveness check. Does not cancel the session -- the caller should
  * cancel on timeout or interrupt.
  *
  * Exhaustion returns `undefined` (not a failure) so the AuthProvider can

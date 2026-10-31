@@ -20,12 +20,12 @@ export interface PutEventsRequest extends Omit<eventbridge.PutEventsRequest, "En
  * ### Publishing Events
  * **Example:** Publish an Event from a Handler
  * ```typescript
- * // init — bind the bus (provide AWS.EventBridge.PutEventsHttp on the Function)
+ * // init -- bind the bus (provide AWS.EventBridge.PutEventsHttp on the Function)
  * const putEvents = yield* AWS.EventBridge.PutEvents(bus);
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // runtime — publish an event
+ *     // runtime -- publish an event
  *     const result = yield* putEvents({
  *       Entries: [
  *         {

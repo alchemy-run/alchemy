@@ -102,7 +102,7 @@ export interface TableEventSourceProps {
   /**
    * The duration of a processing window for tumbling windows, e.g.
    * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
-   * the wire (0–900 seconds).
+   * the wire (0-900 seconds).
    */
   tumblingWindow?: Duration.Input;
 }

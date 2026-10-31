@@ -13,17 +13,17 @@
  *   `main` re-uses the deploy's exact rolldown module graph via
  *   `Bundle.watch`; `context` fs-watches the Docker build context;
  *   registry `image` refs have nothing local to watch.
- * - **Swap mechanism** — every trigger re-runs the LIVE reconcile against
+ * - **Swap mechanism** -- every trigger re-runs the LIVE reconcile against
  *   the emulator: the image pipeline is content-addressed, so a real change
  *   builds and pushes a NEW `<repositoryUri>:<hash>` tag and registers a
  *   new task definition revision (an unchanged hash is a cheap no-op).
- * - **Task restart** lives in the skeleton's `onReconciled` hook — NOT in
- *   the watch loop — so it also fires for engine-driven reconciles.
+ * - **Task restart** lives in the skeleton's `onReconciled` hook -- NOT in
+ *   the watch loop -- so it also fires for engine-driven reconciles.
  *   Prop-only changes (an inline `dockerfile` edit, a new env var) never
  *   produce a file event: before the hook, they registered a new revision
  *   and running tasks kept serving the old one until the next source edit.
  *   RUNNING standalone tasks of the family (launched via `RunTask`) are
- *   stopped and re-run on the new revision — service-managed tasks belong
+ *   stopped and re-run on the new revision -- service-managed tasks belong
  *   to [FlociServiceProvider](./FlociServiceProvider.ts).
  */
 
@@ -64,7 +64,7 @@ export const FlociTaskProvider = () =>
           ? { action: "replace" as const }
           : undefined,
       ),
-    // Fires on every reconcile — watcher-triggered AND engine-driven
+    // Fires on every reconcile -- watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so restarting only from
     // the watch loop left running tasks on the old revision).
     onReconciled: ({ previous, attrs }) =>

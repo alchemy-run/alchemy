@@ -1,8 +1,8 @@
 /**
  * Runtime helpers consumed by generated bundle entrypoints (Cloudflare
- * Workers, Cloudflare Containers, AWS Lambda, …).
+ * Workers, Cloudflare Containers, AWS Lambda, ...).
  *
- * Anything exported here runs *inside* the deployed function — keep the
+ * Anything exported here runs *inside* the deployed function -- keep the
  * surface tiny and dependency-light.
  */
 
@@ -17,7 +17,7 @@ import { asEffect } from "./Util/types.ts";
  * bundled runtime.
  *
  * `entrypoint` may be any of:
- *   - a `Layer` factory (`{ build: (...) => ... }`) — used as-is
+ *   - a `Layer` factory (`{ build: (...) => ... }`) -- used as-is
  *   - an Alchemy `Platform`/`Worker` construct (now a real `Effect`)
  *   - a plain `Effect`
  *
@@ -49,7 +49,7 @@ const parseRedactedMarker = (raw: string): string | undefined => {
       return typeof parsed.value === "string" ? parsed.value : JSON.stringify(parsed.value);
     }
   } catch {
-    // not JSON — plain env value, fall through
+    // not JSON -- plain env value, fall through
   }
   return undefined;
 };
@@ -71,7 +71,7 @@ const reifyEnvString = (raw: string): string => {
         return parsed;
       }
     } catch {
-      // not JSON — plain env value, fall through
+      // not JSON -- plain env value, fall through
     }
   }
   return raw;
@@ -86,7 +86,7 @@ const reifyEnvString = (raw: string): string => {
  * as a secret, serialized as a `{"_tag":"Redacted","value":<source>}`
  * marker. The interceptor's runtime branch reifies those markers for reads
  * during Init, but effects that run later (request handlers, nested
- * layers) resolve `Config` against the raw env-backed provider — without
+ * layers) resolve `Config` against the raw env-backed provider -- without
  * this wrapper, `Config.Number("PORT")` inside a handler sees the marker
  * JSON instead of the source value and fails with a schema error.
  *
@@ -95,7 +95,7 @@ const reifyEnvString = (raw: string): string => {
  *   string before `Config` schemas decode them; everything else passes
  *   through untouched.
  * - On a miss, falls back to the flat `sanitizeKey`-canonicalized key
- *   (`my.key` → `my_key`) that the interceptor bound the value under, so
+ *   (`my.key` -> `my_key`) that the interceptor bound the value under, so
  *   config names with non-alphanumeric characters resolve at runtime too.
  */
 export const reifyBoundConfigProvider = (

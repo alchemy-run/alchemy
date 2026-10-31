@@ -214,7 +214,7 @@ export interface CertificateAuthority extends Resource<
 /**
  * An Amazon Web Services Private CA certificate authority.
  *
- * A newly created CA starts in the `PENDING_CERTIFICATE` state — to
+ * A newly created CA starts in the `PENDING_CERTIFICATE` state -- to
  * activate it you must retrieve its CSR, sign it (self-sign for a root
  * CA), and import the signed certificate. Private CAs bill a monthly fee
  * for as long as they exist, so destroy test CAs promptly. Deletion
@@ -280,7 +280,7 @@ export interface CertificateAuthority extends Resource<
  * ```typescript
  * // ACM PCA emits lifecycle events (certificate issuance, expiry, CRL and
  * // audit-report generation) on the default EventBridge bus under the
- * // `aws.acm-pca` source — consume them with the generic EventBridge
+ * // `aws.acm-pca` source -- consume them with the generic EventBridge
  * // event source; there is no ACM PCA-specific notification config.
  * yield* AWS.EventBridge.consumeBusEvents(
  *   {
@@ -373,8 +373,8 @@ export const CertificateAuthorityProvider = () =>
   Provider.effect(
     CertificateAuthority,
     Effect.gen(function* () {
-      // Describe a CA by ARN; typed not-found → undefined. A CA in the
-      // DELETED state is inside its restoration window — for lifecycle
+      // Describe a CA by ARN; typed not-found -> undefined. A CA in the
+      // DELETED state is inside its restoration window -- for lifecycle
       // purposes it is gone (we never restore automatically).
       const describeCa = Effect.fn(function* (arn: string) {
         return yield* acmpca.describeCertificateAuthority({ CertificateAuthorityArn: arn }).pipe(
@@ -417,7 +417,7 @@ export const CertificateAuthorityProvider = () =>
 
       // Does the live CA's immutable configuration match the desired props?
       // The tag-search fallback below must NOT match a CA whose immutable
-      // config differs — during a replacement the new instance reconciles
+      // config differs -- during a replacement the new instance reconciles
       // with `output === undefined` and the same logical id, and matching
       // the old CA by tags alone would silently re-adopt it instead of
       // creating the replacement.
@@ -529,7 +529,7 @@ export const CertificateAuthorityProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredRevocation = buildRevocationConfiguration(news.revocationConfiguration);
 
-          // 1. OBSERVE — output is only an ARN cache; cloud state is
+          // 1. OBSERVE -- output is only an ARN cache; cloud state is
           // authoritative. Fall back to a tag search so a persistence
           // failure never leaks (and double-bills) a CA.
           let ca =
@@ -540,7 +540,7 @@ export const CertificateAuthorityProvider = () =>
             ca = yield* findManagedCa(id, news);
           }
 
-          // 2. ENSURE — create if missing and wait out the CREATING state.
+          // 2. ENSURE -- create if missing and wait out the CREATING state.
           if (ca?.Arn === undefined || ca.Status === "DELETED") {
             const created = yield* acmpca.createCertificateAuthority({
               CertificateAuthorityConfiguration: {
@@ -563,7 +563,7 @@ export const CertificateAuthorityProvider = () =>
           }
           const arn = ca.Arn!;
 
-          // 3. SYNC revocation configuration — AWS only allows
+          // 3. SYNC revocation configuration -- AWS only allows
           // UpdateCertificateAuthority while the CA is ACTIVE or DISABLED,
           // so a PENDING_CERTIFICATE CA keeps its create-time settings.
           if (
@@ -610,7 +610,7 @@ export const CertificateAuthorityProvider = () =>
             }
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges.
           const currentTags = yield* listCaTags(arn);
           const desiredTags: Record<string, string> = {

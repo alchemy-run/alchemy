@@ -119,12 +119,12 @@ export const ScheduleGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live group; gracefully handle missing.
+          // Observe -- fetch live group; gracefully handle missing.
           let observed = yield* scheduler
             .getScheduleGroup({ Name: scheduleGroupName })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // Ensure — create if missing. Tolerate `ConflictException` as a
+          // Ensure -- create if missing. Tolerate `ConflictException` as a
           // race or adoption case: verify ownership via tags before
           // continuing.
           if (!observed?.Arn) {
@@ -170,7 +170,7 @@ export const ScheduleGroupProvider = () =>
 
           const groupArn = observed.Arn;
 
-          // Sync tags — diff observed cloud tags against desired so
+          // Sync tags -- diff observed cloud tags against desired so
           // adoption rewrites ownership tags.
           const observedTagsResp = yield* scheduler
             .listTagsForResource({ ResourceArn: groupArn })

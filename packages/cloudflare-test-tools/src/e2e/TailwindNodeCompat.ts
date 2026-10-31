@@ -20,7 +20,7 @@ export const installTailwindNodeCompat = (): void => {
     if (String(specifier).includes("esm-cache")) return;
     return (originalRegister as (...args: Array<unknown>) => unknown)(specifier, ...rest);
   }) as typeof Module.register;
-  // Propagate the patched `register` into the `node:module` ESM namespace —
+  // Propagate the patched `register` into the `node:module` ESM namespace --
   // tailwind calls it through an ESM named-import binding, which snapshots
   // builtin exports at namespace creation.
   Module.syncBuiltinESMExports();

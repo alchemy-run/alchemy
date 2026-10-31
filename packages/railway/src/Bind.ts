@@ -140,7 +140,7 @@ const bindRpc = <Shape, Req = never>(
 /**
  * Bind a {@link Function} and return a typed schemaless RPC stub.
  * Calls go to `{dnsName}:{port}/__rpc__/{method}` on the private mesh
- * with a shared token — not the public `*.up.railway.app` URL.
+ * with a shared token -- not the public `*.up.railway.app` URL.
  *
  * @example
  * ```typescript

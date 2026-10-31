@@ -227,7 +227,7 @@ export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSourc
 export interface ImageTaskProps extends TaskPropsBase, RegistryImageSource {}
 
 /**
- * Task props — the image comes from exactly one of three sources, flat on
+ * Task props -- the image comes from exactly one of three sources, flat on
  * the props: `main` (bundled Effect program), `context` (user Dockerfile),
  * or `image` (registry reference).
  */
@@ -301,17 +301,17 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * A Fargate task definition with a container image from one of three
  * sources, declared flat on the props:
  *
- * - `main` — bundle an inline Effect program into a generated image
+ * - `main` -- bundle an inline Effect program into a generated image
  *   (compose with `image` or an inline `dockerfile` to pick the
  *   environment; defaults to `oven/bun:1`).
- * - `context` — build your own Dockerfile (`dockerfile` is a path relative
+ * - `context` -- build your own Dockerfile (`dockerfile` is a path relative
  *   to the cwd, defaulting to `${context}/Dockerfile`).
- * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `image` -- run a pre-built registry image, mirrored into ECR.
  *
  * `Task` provisions task + execution IAM roles, a CloudWatch log group, and
  * an ECR repository holding the built (or mirrored) image, then registers a
  * Fargate task definition. Each reconcile registers a new immutable
- * revision. A launched task runs until its process exits — it is the target
+ * revision. A launched task runs until its process exits -- it is the target
  * of `AWS.ECS.RunTask` / `StopTask` bindings and `AWS.ECS.Schedule`;
  * effectful impls return `{ run }`, executed to completion when the
  * container starts.
@@ -653,7 +653,7 @@ export const attachTaskBindings = Effect.fn(function* ({
   );
 
   // Volumes/mount points requested through the binding channel (e.g.
-  // `EFS.Mount`) — deduped by volume name / container path; merged
+  // `EFS.Mount`) -- deduped by volume name / container path; merged
   // with the `volumes` prop and primary container in `reconcile`.
   const volumes = [
     ...new Map(
@@ -828,7 +828,7 @@ export const syncTaskDefinitionTags = Effect.fn(function* ({
   }
 });
 
-/** The family segment of a task definition revision ARN (`…:task-definition/<family>:<revision>`). */
+/** The family segment of a task definition revision ARN (`...:task-definition/<family>:<revision>`). */
 const taskFamilyOfArn = (arn: string) => arn.split("/").pop()?.split(":")[0];
 
 /**
@@ -837,7 +837,7 @@ const taskFamilyOfArn = (arn: string) => arn.split("/").pop()?.split(":")[0];
  * the previous revision ACTIVE forever. Deregister + hard-delete the prior
  * revision once the new one is registered.
  *
- * Guarded to the same family — `previousArn` can reference a foreign task
+ * Guarded to the same family -- `previousArn` can reference a foreign task
  * definition this resource does not own (e.g. an `ECS.Service` switched from
  * a BYO `task:` reference to the image-owning form), which must be left
  * untouched. Idempotent: both calls tolerate "already gone", and a revision
@@ -871,14 +871,14 @@ export const reapSupersededTaskDefinitionRevision = Effect.fn(function* ({
 /**
  * Tear down the infrastructure a task definition owns: every remaining
  * revision of the family (deregister + hard delete), the ECR repository, the
- * log group, and the task/execution roles. Idempotent — every step tolerates
+ * log group, and the task/execution roles. Idempotent -- every step tolerates
  * "already gone".
  */
 export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
   taskDefinitionArn: string;
   /**
    * The family owned by this resource. When present, EVERY remaining ACTIVE
-   * revision is swept — state rows written before reconcile-time revision
+   * revision is swept -- state rows written before reconcile-time revision
    * reaping can have superseded revisions beyond the recorded one.
    */
   taskFamily?: string;
@@ -894,10 +894,10 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
           status: "ACTIVE",
         })
         .pipe(
-          // `familyPrefix` is a prefix match — filter to the exact family so
+          // `familyPrefix` is a prefix match -- filter to the exact family so
           // a family that happens to prefix another resource's is untouched.
           // A nonexistent family is an empty list, not an error, so nothing
-          // is caught here: a real list failure must propagate — swallowing
+          // is caught here: a real list failure must propagate -- swallowing
           // it would silently skip the sweep and leak the revisions.
           Stream.filter((arn) => taskFamilyOfArn(arn) === output.taskFamily),
           Stream.runCollect,
@@ -912,7 +912,7 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
       .pipe(Effect.catchTag("ClientException", () => Effect.void));
   }
 
-  // Deregistering only flips the revisions to INACTIVE — they still
+  // Deregistering only flips the revisions to INACTIVE -- they still
   // exist (and show up in `listTaskDefinitions --status INACTIVE`)
   // forever. Hard-delete them so destroying a Task leaves zero
   // task-definition leftovers. `deleteTaskDefinitions` accepts at most
@@ -939,7 +939,7 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
     .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
   for (const roleName of [output.taskRoleName, output.executionRoleName]) {
-    // Delete inline policies on BOTH roles — the task role carries the
+    // Delete inline policies on BOTH roles -- the task role carries the
     // bindings policy, and the execution role can carry inline policies too
     // (e.g. the Service's secrets-read policy). A role with any inline
     // policy left rejects `deleteRole` with `DeleteConflictException`.
@@ -957,7 +957,7 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
         ),
         Stream.runDrain,
-        // The role may already be gone (delete re-run / race) — treat a
+        // The role may already be gone (delete re-run / race) -- treat a
         // missing role as "no policies to delete" so delete is idempotent.
         Effect.catchTag("NoSuchEntityException", () => Effect.void),
       );
@@ -1104,7 +1104,7 @@ export const TaskProvider = () =>
             return { action: "replace" } as const;
           }
           // Content drift: the props don't change when files under a
-          // `context` path (or the mirrored `image` ref's meaning) change —
+          // `context` path (or the mirrored `image` ref's meaning) change --
           // nor, for `main` sources, when the user's program or the
           // generated bootstrap template changes. Hash the source (running
           // the bundler for `main`, so the hash covers the bootstrap entry)
@@ -1213,7 +1213,7 @@ export const TaskProvider = () =>
           // declare (`main` | `context` | `image`), building/mirroring and
           // pushing into the task's ECR repository, then register a new
           // task definition revision. Task definitions are versioned in
-          // AWS, so registering a new revision is the unit of "update" —
+          // AWS, so registering a new revision is the unit of "update" --
           // the superseded revision is reaped after registration below.
           const resolved = yield* imageSource.resolve({
             ...taskImageInput(news),
@@ -1246,7 +1246,7 @@ export const TaskProvider = () =>
             bindingMountPoints,
           });
 
-          // Sync tags — task definition revisions carry tags at register
+          // Sync tags -- task definition revisions carry tags at register
           // time, but tags are mutable on the revision ARN. Diff the observed
           // revision tags against desired so tag-only updates converge.
           yield* syncTaskDefinitionTags({
@@ -1255,7 +1255,7 @@ export const TaskProvider = () =>
           });
 
           // The registration above superseded the previously-recorded
-          // revision — reap it so revisions don't accumulate ACTIVE forever.
+          // revision -- reap it so revisions don't accumulate ACTIVE forever.
           yield* reapSupersededTaskDefinitionRevision({
             previousArn: output?.taskDefinitionArn,
             nextArn: taskDefinition.taskDefinitionArn!,

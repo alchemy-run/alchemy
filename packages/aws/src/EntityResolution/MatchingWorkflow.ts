@@ -76,7 +76,7 @@ export interface MatchingWorkflow extends Resource<
 > {}
 
 /**
- * An AWS Entity Resolution matching workflow — a data-processing job
+ * An AWS Entity Resolution matching workflow -- a data-processing job
  * definition that matches and deduplicates records across Glue table input
  * sources using rule-based or ML-powered matching, writing matched record
  * groups to S3.
@@ -142,7 +142,7 @@ export const MatchingWorkflowProvider = () =>
         return props.workflowName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
-      /** Get a workflow by name; typed not-found → undefined. */
+      /** Get a workflow by name; typed not-found -> undefined. */
       const getByName = Effect.fn(function* (workflowName: string) {
         return yield* entityresolution
           .getMatchingWorkflow({ workflowName })
@@ -160,7 +160,7 @@ export const MatchingWorkflowProvider = () =>
             workflowName: workflow.workflowName,
             workflowArn: workflow.workflowArn,
           };
-          // getMatchingWorkflow does not return tags — read them via
+          // getMatchingWorkflow does not return tags -- read them via
           // listTagsForResource for the ownership check.
           const tags = yield* readEntityResolutionTags(workflow.workflowArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -180,10 +180,10 @@ export const MatchingWorkflowProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — names are unique, so the name IS the identity.
+          // 1. Observe -- names are unique, so the name IS the identity.
           let workflow = yield* getByName(name);
 
-          // 2. Ensure — create when missing. A freshly-created IAM role is
+          // 2. Ensure -- create when missing. A freshly-created IAM role is
           //    transiently rejected while IAM propagates, so retry that
           //    typed AccessDeniedException on a bounded schedule; tolerate
           //    the concurrent-create race, then re-observe: the create
@@ -210,7 +210,7 @@ export const MatchingWorkflowProvider = () =>
             });
           }
 
-          // 3. Sync — everything except the name updates in place via a
+          // 3. Sync -- everything except the name updates in place via a
           //    full-PUT update. Only call the API on an actual delta
           //    between OBSERVED and desired configuration.
           const desired = {
@@ -256,7 +256,7 @@ export const MatchingWorkflowProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // deleteMatchingWorkflow succeeds even when the workflow is
-          // already gone; a running matching job conflicts — retry briefly.
+          // already gone; a running matching job conflicts -- retry briefly.
           yield* entityresolution
             .deleteMatchingWorkflow({ workflowName: output.workflowName })
             .pipe(

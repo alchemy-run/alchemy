@@ -29,7 +29,7 @@ export interface ExperimentTemplateTargetFilter {
 }
 
 /**
- * A target definition for an experiment template — the set of resources an
+ * A target definition for an experiment template -- the set of resources an
  * action is applied to.
  */
 export interface ExperimentTemplateTarget {
@@ -239,11 +239,11 @@ export interface ExperimentTemplateProps {
   stopConditions?: ExperimentTemplateStopCondition[];
   /**
    * Experiment log delivery configuration. Once configured, log delivery
-   * cannot be fully removed via the API — only changed.
+   * cannot be fully removed via the API -- only changed.
    */
   logConfiguration?: ExperimentTemplateLogConfiguration;
   /**
-   * Experiment options. `accountTargeting` is create-only — changing it
+   * Experiment options. `accountTargeting` is create-only -- changing it
    * replaces the template.
    */
   experimentOptions?: ExperimentTemplateExperimentOptions;
@@ -280,12 +280,12 @@ export interface ExperimentTemplate extends Resource<
 > {}
 
 /**
- * An AWS Fault Injection Service (FIS) experiment template — a reusable
+ * An AWS Fault Injection Service (FIS) experiment template -- a reusable
  * definition of a chaos-engineering experiment: the targets to disrupt, the
  * fault actions to run against them, and the stop conditions that abort a
  * runaway experiment.
  *
- * Creating a template is free and does not disrupt any resources — faults
+ * Creating a template is free and does not disrupt any resources -- faults
  * are only injected when an experiment is explicitly started from the
  * template.
  * ### Creating Experiment Templates
@@ -427,7 +427,7 @@ export const ExperimentTemplateProvider = () =>
       // internal Alchemy tags carried on the list summaries. The match is
       // scoped to the INSTANCE id (not just stack/stage/logical id): during a
       // replacement the new instance must not "recover" the old physical
-      // template — it has to create a fresh one.
+      // template -- it has to create a fresh one.
       const findByTags = Effect.fn(function* (id: string, instanceId: string) {
         const summaries = yield* fis.listExperimentTemplates.items({}).pipe(
           Stream.runCollect,
@@ -554,7 +554,7 @@ export const ExperimentTemplateProvider = () =>
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
-          // accountTargeting is create-only — changing it replaces. Other
+          // accountTargeting is create-only -- changing it replaces. Other
           // props (commonly roleArn) are unresolved Outputs during plan, so
           // narrow only the field replacement detection needs rather than
           // requiring the whole props object to be resolved.
@@ -571,7 +571,7 @@ export const ExperimentTemplateProvider = () =>
           if (oldTargeting !== newTargeting) {
             return { action: "replace" } as const;
           }
-          // fall through: undefined → default update
+          // fall through: undefined -> default update
         }),
 
         reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
@@ -583,7 +583,7 @@ export const ExperimentTemplateProvider = () =>
           };
           const desired = projectDesired(id, news);
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           // cache. Fall back to instance-scoped tag recovery when the id is
           // unknown (state persistence failure).
           let observed = output?.id ? yield* getTemplate(output.id) : undefined;
@@ -591,7 +591,7 @@ export const ExperimentTemplateProvider = () =>
             observed = yield* findByTags(id, instanceId);
           }
 
-          // 2. Ensure — create if missing. The clientToken is a per-request
+          // 2. Ensure -- create if missing. The clientToken is a per-request
           // idempotency token, not a physical name.
           if (observed === undefined) {
             const clientToken = yield* Effect.sync(() => crypto.randomUUID());
@@ -610,7 +610,7 @@ export const ExperimentTemplateProvider = () =>
               }),
             ).pipe(Effect.map((r) => r.experimentTemplate!));
           } else if (
-            // 3a. Sync definition — compare the observed template against the
+            // 3a. Sync definition -- compare the observed template against the
             // desired projection and apply a single update on any delta
             // (UpdateExperimentTemplate replaces the provided aspects
             // wholesale). Skip the API entirely on no-op.
@@ -635,7 +635,7 @@ export const ExperimentTemplateProvider = () =>
             ).pipe(Effect.map((r) => r.experimentTemplate!));
           }
 
-          // 3b. Sync tags — diff against the OBSERVED cloud tags (the create
+          // 3b. Sync tags -- diff against the OBSERVED cloud tags (the create
           // path already landed them, so this is a no-op there; adoption and
           // out-of-band drift converge here).
           const arn = observed.arn!;

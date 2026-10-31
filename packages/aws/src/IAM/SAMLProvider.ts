@@ -167,13 +167,13 @@ export const SAMLProviderProvider = () =>
       const samlProviderArn =
         output?.samlProviderArn ?? `arn:aws:iam::${accountId}:saml-provider/${name}`;
 
-      // Observe — `getSAMLProvider` returns the metadata, encryption
+      // Observe -- `getSAMLProvider` returns the metadata, encryption
       // mode, and UUID; absence is `NoSuchEntityException`.
       let observed = yield* iam
         .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
-      // Ensure — create when missing. Race with a peer is recovered by
+      // Ensure -- create when missing. Race with a peer is recovered by
       // verifying alchemy ownership tags on the existing provider.
       if (!observed) {
         const created = yield* iam
@@ -206,8 +206,8 @@ export const SAMLProviderProvider = () =>
           SAMLProviderArn: created.SAMLProviderArn ?? samlProviderArn,
         });
       } else {
-        // Sync metadata / encryption mode — `updateSAMLProvider` rejects
-        // a call with no fields set ("No updates are defined…"). Only
+        // Sync metadata / encryption mode -- `updateSAMLProvider` rejects
+        // a call with no fields set ("No updates are defined..."). Only
         // send fields that actually changed; skip the API on a no-op
         // (greenfield adopt of a leftover provider, or a tags-only
         // reconcile).

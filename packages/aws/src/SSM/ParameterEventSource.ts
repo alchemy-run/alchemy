@@ -65,10 +65,10 @@ export interface ParameterEventSourceProps extends EventRouteProps {
  * Systems Manager publishes every parameter create/update/delete (and
  * parameter-policy action, e.g. expiration) to the account's default
  * EventBridge bus (source `aws.ssm`); this subscribes the host Function to
- * those events so it can react to configuration changes — refresh caches,
+ * those events so it can react to configuration changes -- refresh caches,
  * fan out notifications, or audit secret rotation.
  *
- * Parameter Store publishes to EventBridge automatically — no additional
+ * Parameter Store publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

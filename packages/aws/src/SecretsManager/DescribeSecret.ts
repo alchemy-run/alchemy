@@ -13,10 +13,10 @@ import type { Secret } from "./Secret.ts";
  * ### Inspecting Secrets
  * **Example:** Read a Secret's Metadata
  * ```typescript
- * // init — bind the operation to the secret
+ * // init -- bind the operation to the secret
  * const describeSecret = yield* AWS.SecretsManager.DescribeSecret(secret);
  *
- * // runtime — metadata only, no secret value in the response
+ * // runtime -- metadata only, no secret value in the response
  * const info = yield* describeSecret();
  * const arn = info.ARN;
  * const description = info.Description;

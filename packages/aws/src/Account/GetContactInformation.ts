@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `account:GetContactInformation`.
  *
- * Reads the calling account's primary contact — full name, address, phone
+ * Reads the calling account's primary contact -- full name, address, phone
  * number, and company. The contact fields are marked sensitive at the wire
  * level, so distilled returns them as `string | Redacted<string>`. Account
  * Management is an account singleton, so the binding takes no resource
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Account Settings
  * **Example:** Read the Primary Contact
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getContactInformation = yield* AWS.Account.GetContactInformation();
  *
  * // runtime

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ApplyPendingMaintenanceAction` operation (IAM
  * action `docdb-elastic:ApplyPendingMaintenanceAction`).
  *
- * Opts a resource in to (or out of) a pending maintenance action — apply an
+ * Opts a resource in to (or out of) a pending maintenance action -- apply an
  * engine update immediately, at the next maintenance window, or undo an
  * earlier opt-in. Provide the implementation with
  * `Effect.provide(AWS.DocDBElastic.ApplyPendingMaintenanceActionHttp)`.

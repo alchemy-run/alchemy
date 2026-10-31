@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetSensitiveDataOccurrencesAvailability`.
  *
  * Checks whether occurrences of sensitive data can be retrieved for a finding.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetSensitiveDataOccurrencesAvailabilityHttp)`.
  * ### Retrieving Sensitive Data Samples
  * **Example:** Check Sample Availability
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSensitiveDataOccurrencesAvailability = yield* AWS.Macie2.GetSensitiveDataOccurrencesAvailability();
  *
  * // runtime

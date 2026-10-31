@@ -46,7 +46,7 @@ export type ClustersAclProps = {
   /**
    * Parent cluster. Full name
    * `projects/{project}/locations/{location}/clusters/{cluster}` or the
-   * cluster id (combined with `location`). Immutable — changing it
+   * cluster id (combined with `location`). Immutable -- changing it
    * replaces the ACL.
    */
   cluster: string;
@@ -60,7 +60,7 @@ export type ClustersAclProps = {
    * `cluster`, `topic/{name}`, `consumerGroup/{name}`,
    * `transactionalId/{name}`, `topicPrefixed/{name}`, `allTopics`,
    * `allConsumerGroups`, `allTransactionalIds`. If omitted, a topic
-   * pattern is generated from the logical id. Immutable — changing it
+   * pattern is generated from the logical id. Immutable -- changing it
    * replaces the ACL.
    */
   aclId?: string;

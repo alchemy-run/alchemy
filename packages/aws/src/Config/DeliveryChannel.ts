@@ -63,7 +63,7 @@ export interface DeliveryChannel extends Resource<
  * configuration history to an S3 bucket (and optionally notifies an SNS
  * topic).
  *
- * AWS allows only **one** delivery channel per account per region — treat
+ * AWS allows only **one** delivery channel per account per region -- treat
  * this resource as an account-region singleton. A configuration recorder
  * must exist before the channel can be created (see
  * `AWS.Config.ConfigurationRecorder`).
@@ -95,7 +95,7 @@ export const DeliveryChannel = Resource<DeliveryChannel>("AWS.Config.DeliveryCha
  * policy at call time. A recorder or bucket policy created in the same
  * deploy can take a few seconds to become visible, surfacing as
  * `NoAvailableConfigurationRecorderException` /
- * `InsufficientDeliveryPolicyException` / `NoSuchBucketException` — retry
+ * `InsufficientDeliveryPolicyException` / `NoSuchBucketException` -- retry
  * on a bounded schedule (~40s).
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -118,7 +118,7 @@ const retryChannelPut = <A, E extends { readonly _tag: string }, R>(
 /**
  * Deleting the channel while the recorder is still running (or while the
  * recorder is being stopped/deleted concurrently by the same destroy)
- * rejects with `LastDeliveryChannelDeleteFailedException` — a dependency
+ * rejects with `LastDeliveryChannelDeleteFailedException` -- a dependency
  * violation, retried on a bounded schedule (~40s).
  * @internal
  */
@@ -185,7 +185,7 @@ export const DeliveryChannelProvider = () =>
             ),
           ),
         // Delivery channels are not taggable, so there is no ownership
-        // marker to check — an existing channel with our derived name is
+        // marker to check -- an existing channel with our derived name is
         // treated as ours.
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.deliveryChannelName ?? (yield* createChannelName(id, olds ?? {}));
@@ -209,10 +209,10 @@ export const DeliveryChannelProvider = () =>
           const name = output?.deliveryChannelName ?? (yield* createChannelName(id, news));
           const desired = toWireChannel(name, news);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeChannel(name);
 
-          // 2+3. ENSURE + SYNC — PutDeliveryChannel is a full upsert; apply
+          // 2+3. ENSURE + SYNC -- PutDeliveryChannel is a full upsert; apply
           //    when missing or when any declared aspect drifted. Comparing
           //    the full wire shape is safe here: AWS echoes exactly the
           //    members that were put (no server-side defaults).

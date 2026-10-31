@@ -155,9 +155,9 @@ export const TransformerProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // An ACTIVE transformer rejects every update — including a
+          // An ACTIVE transformer rejects every update -- including a
           // status-only deactivation ("An active Transformer cannot be
-          // updated", verified live) — so any change away from a deployed
+          // updated", verified live) -- so any change away from a deployed
           // active state forces a replacement. Delete-first: transformer
           // names are how lost state is recovered (findByName), so the old
           // instance must be gone before the new one is created.
@@ -211,17 +211,17 @@ export const TransformerProvider = () =>
             });
           }
 
-          // 3. Sync — converge name/config while the transformer is still
+          // 3. Sync -- converge name/config while the transformer is still
           // inactive, then activate last. An ACTIVE transformer rejects every
           // update (including a status-only deactivation), so drift against
-          // an active transformer cannot be converged in place — `diff`
+          // an active transformer cannot be converged in place -- `diff`
           // reports those changes as a delete-first replacement.
           const configDrift = spec(live) !== spec(news);
           const nameDrift = live.name !== news.name;
           const statusDrift = live.status !== desiredStatus;
           if (live.status === "active" && (configDrift || nameDrift)) {
             return yield* new TransformerInvalidProps({
-              message: `Transformer '${live.transformerId}' is active and cannot be updated in place — B2BI rejects every update to an active transformer. Replace it instead.`,
+              message: `Transformer '${live.transformerId}' is active and cannot be updated in place \u2014 B2BI rejects every update to an active transformer. Replace it instead.`,
             });
           }
           if (configDrift || nameDrift) {
@@ -254,7 +254,7 @@ export const TransformerProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // deleteTransformer works on both active and inactive transformers
-          // (verified live) — no deactivation step is needed (nor possible:
+          // (verified live) -- no deactivation step is needed (nor possible:
           // an active transformer rejects all updates).
           yield* b2bi
             .deleteTransformer({ transformerId: output.transformerId })

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:BatchGetCommandExecutions` — reads the
+ * Runtime binding for `codebuild:BatchGetCommandExecutions` -- reads the
  * status and output of sandbox command executions of the bound project.
  * ### Sandboxes
  * **Example:** Poll a Command Execution

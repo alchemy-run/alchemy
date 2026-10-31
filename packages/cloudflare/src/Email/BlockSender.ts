@@ -15,7 +15,7 @@ type EmailSecurityBlockSenderTypeId = typeof EmailSecurityBlockSenderTypeId;
 export interface BlockSenderProps {
   /**
    * The email address, domain, IP, or regular expression to block.
-   * The pattern is the entry's identity for cold-state recovery — a
+   * The pattern is the entry's identity for cold-state recovery -- a
    * pre-existing entry with the same pattern is reported as unowned and
    * only taken over when adoption is enabled.
    */
@@ -63,7 +63,7 @@ export type BlockSender = Resource<
 >;
 
 /**
- * A Cloudflare Email Security (Area 1) blocked sender — messages matching
+ * A Cloudflare Email Security (Area 1) blocked sender -- messages matching
  * the pattern are blocked before delivery.
  *
  * All fields are mutable in place. Requires the Email Security enterprise
@@ -139,7 +139,7 @@ export const BlockSenderProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — id hint first, then pattern scan.
+      // 1. Observe -- id hint first, then pattern scan.
       let observed = output?.blockSenderId
         ? yield* getBlockSender(accountId, output.blockSenderId)
         : undefined;
@@ -147,7 +147,7 @@ export const BlockSenderProvider = () =>
         observed = yield* findByPattern(accountId, news.pattern);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* emailSecurity.createSettingBlockSender({
           accountId,
@@ -159,7 +159,7 @@ export const BlockSenderProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — patch only on a delta.
+      // 3. Sync -- patch only on a delta.
       const dirty =
         (observed.pattern ?? "") !== news.pattern ||
         (observed.patternType ?? "") !== news.patternType ||

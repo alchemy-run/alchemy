@@ -6,7 +6,7 @@ import type { Rotation } from "./Rotation.ts";
 /**
  * Runtime binding for `ssm-contacts:ListRotationShifts`.
  *
- * List the bound rotation's shifts in a time window — who is (or will
+ * List the bound rotation's shifts in a time window -- who is (or will
  * be) on call and when. The rotation's ARN is injected as `RotationId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListRotationShiftsHttp)`.

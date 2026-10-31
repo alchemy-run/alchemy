@@ -24,7 +24,7 @@ export type TargetSslProxyProps = {
    */
   targetSslProxyName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute TargetSslProxy
    * has no labels field and no update API for description). Changing it
    * replaces the resource.
@@ -104,7 +104,7 @@ export type TargetSslProxy = Resource<
  * a Certificate Manager map).
  *
  * This resource maps to the global `targetSslProxies` collection. Compute
- * TargetSslProxy has no labels field — Alchemy ownership is stored in the
+ * TargetSslProxy has no labels field -- Alchemy ownership is stored in the
  * description so nuke can find leaked proxies. Description is immutable
  * after create.
  *

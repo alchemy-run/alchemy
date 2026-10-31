@@ -16,7 +16,7 @@ import { stronglyConnectedComponents } from "./Util/scc.ts";
 
 // Account-wide teardown: enumerate everything the registered providers can see
 // and delete it, ignoring stack state entirely. This is the engine behind
-// `alchemy nuke` — a blunt instrument for cleaning a test account, not part of
+// `alchemy nuke` -- a blunt instrument for cleaning a test account, not part of
 // any stack's lifecycle.
 
 /** A provider call that failed. These are collected into results, never thrown. */
@@ -45,7 +45,7 @@ export interface DiscoverOptions {
 }
 
 export interface ListOptions extends DiscoverOptions {
-  /** The built provider context — what a stack's `providers` layer produced. */
+  /** The built provider context -- what a stack's `providers` layer produced. */
   readonly context: Context.Context<never>;
   readonly concurrency?: number | "unbounded";
   readonly timeoutSeconds?: number;
@@ -107,7 +107,7 @@ const silent = {
  *
  * Dual registrations (`ProviderLayer.dual`) build nothing until asked and
  * keep their `nuke` metadata on the variants, so each provider is resolved
- * to the scan mode's variant first — mode-agnostic providers resolve to
+ * to the scan mode's variant first -- mode-agnostic providers resolve to
  * themselves in a live scan and are not part of a local one.
  */
 const discover = Effect.fn(function* (
@@ -280,7 +280,7 @@ export const destroy = ({
     const held: Array<Result["held"][number]> = [];
     let passes = 0;
     // Account-wide scans have no state rows: delete must derive identity from
-    // `output` alone — `olds` just mirrors it and `instanceId` is unavailable.
+    // `output` alone -- `olds` just mirrors it and `instanceId` is unavailable.
     const attempt = (resource: Target) =>
       Effect.gen(function* () {
         yield* status(resource, "deleting");

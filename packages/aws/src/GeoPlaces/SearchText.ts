@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:SearchText` — free-form place search that
+ * Runtime binding for `geo-places:SearchText` -- free-form place search that
  * returns ranked results (POIs, addresses, streets) for a text query.
  *
  * geo-places is a standalone, pay-per-call Amazon Location API with no

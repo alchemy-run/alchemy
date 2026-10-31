@@ -17,7 +17,7 @@ export interface DescribeFHIRImportJobRequest extends Omit<
  * `healthlake:DescribeFHIRImportJob`), scoped to one {@link FHIRDatastore}.
  *
  * Reads the properties and progress report of a bulk FHIR import job started
- * with {@link StartFHIRImportJob} — poll `ImportJobProperties.JobStatus`
+ * with {@link StartFHIRImportJob} -- poll `ImportJobProperties.JobStatus`
  * until `COMPLETED` (or a failure status). Provide the implementation with
  * `Effect.provide(AWS.HealthLake.DescribeFHIRImportJobHttp)`.
  *

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectTargetedSentiment` — analyze the
+ * Runtime binding for `comprehend:DetectTargetedSentiment` -- analyze the
  * sentiment expressed toward each entity mentioned in the input text
  * (entity-level sentiment rather than whole-document sentiment).
  *
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "The screen is gorgeous but the battery life is disappointing.",
  *   LanguageCode: "en",
  * });
- * // result.Entities[…].Mentions[…].MentionSentiment.Sentiment
+ * // result.Entities[...].Mentions[...].MentionSentiment.Sentiment
  * ```
  *
  * @binding

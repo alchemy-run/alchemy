@@ -67,7 +67,7 @@ export type McpServerCapability = Record<string, unknown>;
 
 export interface McpServerProps {
   /**
-   * The client-supplied server identifier. Immutable — changing it
+   * The client-supplied server identifier. Immutable -- changing it
    * triggers a replacement. If omitted, a deterministic id is generated
    * from the stack, stage, logical ID, and resource instance, capped at
    * the API's 32-character limit.
@@ -94,13 +94,13 @@ export interface McpServerProps {
    * raw token (sent as `Authorization: Bearer <token>`) or a JSON-encoded
    * `{"headers":{...}}` object for custom or multiple static headers, e.g.
    * a Cloudflare Access service token. For `oauth`, the JSON-encoded OAuth
-   * configuration. Write-only — the API never returns it, so rotation is
+   * configuration. Write-only -- the API never returns it, so rotation is
    * detected by comparing against the previously deployed value.
    */
   authCredentials?: Redacted.Redacted<string>;
   /**
    * Pre-registered OAuth `client_secret` for manually configured OAuth
-   * servers. Write-only — never returned by the API.
+   * servers. Write-only -- never returned by the API.
    */
   clientSecret?: Redacted.Redacted<string>;
   /**
@@ -185,7 +185,7 @@ export type McpServerAttributes = {
 export type McpServer = Resource<TypeId, McpServerProps, McpServerAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust **AI Controls MCP server** — an upstream MCP
+ * A Cloudflare Zero Trust **AI Controls MCP server** -- an upstream MCP
  * endpoint registered on the account so its tools and prompts can be
  * discovered, governed, and exposed to users through an MCP portal.
  *
@@ -195,7 +195,7 @@ export type McpServer = Resource<TypeId, McpServerProps, McpServerAttributes, ne
  * The product surface is in beta and requires the AI Controls
  * entitlement; accounts without it receive the typed `Forbidden` error
  * on all writes. The upstream `hostname` and `authType` are create-only
- * on the API — changing either triggers a delete-first replacement.
+ * on the API -- changing either triggers a delete-first replacement.
  * Credentials are write-only: the API never returns them, so a rotation
  * is detected by comparing against the previously deployed value.
  * Existing servers without saved stack state require explicit adoption;
@@ -297,7 +297,7 @@ export const McpServerProvider = () =>
       // Account-scoped collection; exhaustively paginate. The list rows
       // carry the full server shape, so each maps directly into the same
       // Attributes `read` returns. Accounts without the AI Controls
-      // entitlement reject the route with the typed `Forbidden` — treat
+      // entitlement reject the route with the typed `Forbidden` -- treat
       // them as having no servers.
       return yield* zeroTrust.listAccessAiControlMcpServers.pages({ accountId }).pipe(
         Stream.runCollect,
@@ -316,7 +316,7 @@ export const McpServerProvider = () =>
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      // The server id is the API identity — changing it is a replacement.
+      // The server id is the API identity -- changing it is a replacement.
       const oldId = output?.serverId ?? olds?.serverId;
       if (news.serverId !== undefined && oldId !== undefined && oldId !== news.serverId) {
         return { action: "replace" } as const;
@@ -359,7 +359,7 @@ export const McpServerProvider = () =>
       // 1. Observe.
       let observed = yield* observeServer(accountId, serverId);
 
-      // 2. Ensure — immutable changes are handled by engine replacement.
+      // 2. Ensure -- immutable changes are handled by engine replacement.
       let changed = false;
       if (observed === undefined) {
         observed = yield* zeroTrust.createAccessAiControlMcpServer({
@@ -371,7 +371,7 @@ export const McpServerProvider = () =>
         });
         changed = true;
       } else {
-        // 3. Sync — update only when the observed state differs. Unset
+        // 3. Sync -- update only when the observed state differs. Unset
         //    optional props mean "keep the observed value". Credentials are
         //    write-only, so a rotation is detected against the previously
         //    deployed props rather than the cloud.
@@ -400,7 +400,7 @@ export const McpServerProvider = () =>
         }
       }
 
-      // 4. Capability sync — best effort after a configuration change or
+      // 4. Capability sync -- best effort after a configuration change or
       //    when sync is enabled, and never while an administrator still
       //    has to complete the OAuth flow.
       //    Upstream discovery problems come back in the response body
@@ -417,7 +417,7 @@ export const McpServerProvider = () =>
               Effect.logDebug(`capability sync for MCP server ${serverId} failed`, error.body),
             ),
           );
-        // 5. Return — re-read so the discovered capabilities are reported.
+        // 5. Return -- re-read so the discovered capabilities are reported.
         observed = (yield* observeServer(accountId, serverId)) ?? observed;
       }
 

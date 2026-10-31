@@ -27,10 +27,10 @@ export interface StartQueryRequest extends Omit<cloudtrail.StartQueryRequest, "Q
  * ### Querying CloudTrail Lake
  * **Example:** Start a Lake Query
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const startQuery = yield* AWS.CloudTrail.StartQuery(store);
  *
- * // runtime — the callback receives the store's ID for the FROM clause
+ * // runtime -- the callback receives the store's ID for the FROM clause
  * const { QueryId } = yield* startQuery({
  *   QueryStatement: (id) =>
  *     `SELECT eventID, eventName FROM ${id} LIMIT 10`,

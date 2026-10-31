@@ -148,7 +148,7 @@ export interface Budget extends Resource<
 > {}
 
 /**
- * An AWS Deadline Cloud budget — tracks a queue's approximate render spend
+ * An AWS Deadline Cloud budget -- tracks a queue's approximate render spend
  * over a fixed window and stops scheduling when thresholds are crossed.
  *
  * ### Creating Budgets
@@ -266,7 +266,7 @@ export const BudgetProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["farmId", "budgetId", "budgetArn", "queueId"],
-        // Keyed by a parent farm — sub-resource list() convention.
+        // Keyed by a parent farm -- sub-resource list() convention.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
@@ -331,7 +331,7 @@ export const BudgetProvider = () =>
             }
           }
 
-          // Sync mutable settings — compute action/schedule deltas from
+          // Sync mutable settings -- compute action/schedule deltas from
           // OBSERVED state.
           const described = state.described;
           const observedActions = described.actions.map((action) => ({
@@ -348,7 +348,7 @@ export const BudgetProvider = () =>
           );
           const observedSchedule = described.schedule.fixed;
           // Deadline clamps a startTime in the past to the creation instant,
-          // so a past desired startTime can never converge — only compare it
+          // so a past desired startTime can never converge -- only compare it
           // while it is still in the future.
           const now = yield* Effect.sync(() => Date.now());
           const desiredStart = desiredSchedule.fixed.startTime.getTime();
@@ -382,7 +382,7 @@ export const BudgetProvider = () =>
             yield* session.note(`Updated budget ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncDeadlineTags(state.attrs.budgetArn, desiredTags);
 
           yield* session.note(state.attrs.budgetArn);

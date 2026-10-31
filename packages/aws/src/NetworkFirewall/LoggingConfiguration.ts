@@ -32,7 +32,7 @@ export interface LoggingConfiguration extends Resource<
 > {}
 
 /**
- * The logging configuration of an AWS Network Firewall {@link Firewall} —
+ * The logging configuration of an AWS Network Firewall {@link Firewall} --
  * routes the firewall's `ALERT`, `FLOW`, and `TLS` logs to S3, CloudWatch
  * Logs, or Kinesis Data Firehose destinations.
  *
@@ -137,7 +137,7 @@ export const LoggingConfigurationProvider = () =>
       return LoggingConfiguration.Provider.of({
         stables: ["firewallArn"],
 
-        // Keyed by its parent firewall — not independently enumerable in a
+        // Keyed by its parent firewall -- not independently enumerable in a
         // useful way (it is a singleton setting, not a discrete resource).
         list: () => Effect.succeed([]),
 
@@ -167,7 +167,7 @@ export const LoggingConfigurationProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Reset to no logging, removing one destination per call. The
-          // firewall itself may already be gone — that is success.
+          // firewall itself may already be gone -- that is success.
           yield* converge(output.firewallArn, []).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );

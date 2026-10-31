@@ -15,7 +15,7 @@ export interface ListPoliciesRequest extends fms.ListPoliciesRequest {}
  * ### Reading Policies
  * **Example:** List Policies
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listPolicies = yield* AWS.FMS.ListPolicies();
  *
  * // runtime

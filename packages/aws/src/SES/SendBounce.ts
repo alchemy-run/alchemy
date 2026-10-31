@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ses:SendBounce` (classic SES).
  *
  * Generates and sends a bounce message to the sender of an email you received
- * through SES receiving — the data-plane counterpart to `SES.ReceiptRule`
+ * through SES receiving -- the data-plane counterpart to `SES.ReceiptRule`
  * inbound processing. You can only bounce a message within 24 hours of
  * receiving it, and only for mail SES actually received.
  *
@@ -15,10 +15,10 @@ import type * as Effect from "effect/Effect";
  * ### Bouncing Inbound Mail
  * **Example:** Bounce a Received Message
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const sendBounce = yield* SES.SendBounce();
  *
- * // runtime — inside the Lambda that a ReceiptRule invokes
+ * // runtime -- inside the Lambda that a ReceiptRule invokes
  * yield* sendBounce({
  *   OriginalMessageId: messageId,
  *   BounceSender: "mailer-daemon@example.com",

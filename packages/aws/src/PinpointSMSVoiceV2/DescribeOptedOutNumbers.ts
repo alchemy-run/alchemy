@@ -16,7 +16,7 @@ export interface DescribeOptedOutNumbersRequest extends Omit<
  * Runtime binding for `sms-voice:DescribeOptedOutNumbers`.
  *
  * Lists the opted-out destination numbers in the bound opt-out list (one
- * page per call — pass `NextToken` from the previous response to
+ * page per call -- pass `NextToken` from the previous response to
  * continue). Use it to check whether a number opted out before sending.
  * The deploy-time half grants `sms-voice:DescribeOptedOutNumbers` on the
  * list. Provide the implementation with

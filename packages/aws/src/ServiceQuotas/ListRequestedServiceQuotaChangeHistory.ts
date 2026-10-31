@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for
- * `servicequotas:ListRequestedServiceQuotaChangeHistory` — list quota
+ * `servicequotas:ListRequestedServiceQuotaChangeHistory` -- list quota
  * increase requests in the account's 90-day request history from inside a
  * Function, optionally filtered by service or status.
  *

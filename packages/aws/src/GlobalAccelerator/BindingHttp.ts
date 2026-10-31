@@ -8,13 +8,13 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
 /**
  * Shared scaffolding for AWS Global Accelerator HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * The Global Accelerator control-plane API only exists in us-west-2, so the
- * operation is resolved under {@link withGaRegion} — the binding works no
+ * operation is resolved under {@link withGaRegion} -- the binding works no
  * matter which region the host Function is deployed to.
  */
 
@@ -59,7 +59,7 @@ export const makeGaAcceleratorHttpBinding = <
       ) {
         const acceleratorArn = yield* AcceleratorArn;
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* withGaRegion(op({ ...request, AcceleratorArn: acceleratorArn } as I));
       });
@@ -114,7 +114,7 @@ export const makeGaEndpointGroupHttpBinding = <
         request: Omit<I, "EndpointGroupArn">,
       ) {
         const endpointGroupArn = yield* EndpointGroupArn;
-        // Call-site region pin — see makeGaAcceleratorHttpBinding above.
+        // Call-site region pin -- see makeGaAcceleratorHttpBinding above.
         return yield* withGaRegion(
           op({
             ...request,

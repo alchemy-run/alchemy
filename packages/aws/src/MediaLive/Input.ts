@@ -42,7 +42,7 @@ type IdentifiedInput = ObservedInput & { Id: string; Arn: string };
 export interface InputProps {
   /**
    * Name of the input. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Names are mutable — changing the name updates the
+   * stage, and logical ID. Names are mutable -- changing the name updates the
    * input in place.
    */
   name?: string;
@@ -52,7 +52,7 @@ export interface InputProps {
    */
   type: medialive.InputType;
   /**
-   * Destination settings for PUSH-type inputs — e.g. the application/stream
+   * Destination settings for PUSH-type inputs -- e.g. the application/stream
    * name pair for `RTMP_PUSH` (`{ StreamName: "live/stream" }`).
    */
   destinations?: medialive.InputDestinationRequest[];
@@ -113,7 +113,7 @@ export interface Input extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaLive input — the ingest endpoint or source locator a
+ * An AWS Elemental MediaLive input -- the ingest endpoint or source locator a
  * channel reads live content from (RTMP/RTP push, HLS/MP4 pull,
  * MediaConnect flow, ...).
  *
@@ -177,7 +177,7 @@ export const InputProvider = () =>
       const isGone = (state: medialive.InputState | undefined) =>
         state === "DELETED" || state === "DELETING";
 
-      /** Describe by id; typed not-found (or tombstone state) → undefined. */
+      /** Describe by id; typed not-found (or tombstone state) -> undefined. */
       const getInput = Effect.fn(function* (inputId: string) {
         const input = yield* medialive
           .describeInput({ InputId: inputId })
@@ -258,9 +258,9 @@ export const InputProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = yield* createName(id, news);
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           // MediaLive input names are not unique, so a name match is only
-          // trusted when its immutable type agrees with the desired state —
+          // trusted when its immutable type agrees with the desired state --
           // during a replacement the same-named survivor is the doomed old
           // instance, not this one.
           let input: IdentifiedInput | undefined;
@@ -271,7 +271,7 @@ export const InputProvider = () =>
             input = found !== undefined && found.Type === news.type ? found : undefined;
           }
 
-          // 2. Ensure — create if missing, then wait for CREATING to settle.
+          // 2. Ensure -- create if missing, then wait for CREATING to settle.
           if (input === undefined) {
             const created = yield* medialive.createInput({
               Name: name,
@@ -287,7 +287,7 @@ export const InputProvider = () =>
             const fresh = yield* ensureIdentified(created.Input, "CreateInput Input Id/Arn");
             input = yield* awaitActive(fresh.Id);
           } else {
-            // 3. Sync — apply the in-place-updatable aspects only on drift.
+            // 3. Sync -- apply the in-place-updatable aspects only on drift.
             // Destination stream names are not echoed back by Describe (the
             // API returns resolved URLs), so `olds` is the no-op hint there.
             const sameStringSet = (
@@ -336,7 +336,7 @@ export const InputProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMlTags(input.Arn, desiredTags);
 
           yield* session.note(input.Id);
@@ -345,7 +345,7 @@ export const InputProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // An input attached to a still-deleting channel transiently
-          // rejects deletion; deletion itself is async (DELETING → DELETED),
+          // rejects deletion; deletion itself is async (DELETING -> DELETED),
           // which `read` treats as gone.
           yield* medialive.deleteInput({ InputId: output.inputId }).pipe(
             retryWhileConflict,

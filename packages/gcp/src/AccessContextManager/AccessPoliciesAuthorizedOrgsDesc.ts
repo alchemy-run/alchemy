@@ -27,31 +27,31 @@ export type AuthorizedOrgsDescAuthorizationType = acm.AuthorizedOrgsDescAuthoriz
 export type AccessPoliciesAuthorizedOrgsDescProps = {
   /**
    * Parent access policy (`accessPolicies/{policy}` or the policy id).
-   * Immutable — changing it replaces the descriptor.
+   * Immutable -- changing it replaces the descriptor.
    */
   policy: string;
   /**
    * Authorized-orgs descriptor id (the `{authorized_orgs_desc}`
    * segment). If omitted, a unique name is generated from the stack,
    * stage, and logical id. Must begin with a letter, then alphanumeric
-   * or `_`. Immutable — changing it replaces the descriptor.
+   * or `_`. Immutable -- changing it replaces the descriptor.
    */
   authorizedOrgsDescId?: string;
   /**
    * Direction of the authorization relationship.
    * `AUTHORIZATION_DIRECTION_FROM` lets this organization evaluate
    * traffic in `orgs`. `AUTHORIZATION_DIRECTION_TO` lets `orgs` evaluate
-   * traffic in this organization. Immutable — changing it replaces the
+   * traffic in this organization. Immutable -- changing it replaces the
    * descriptor.
    */
   authorizationDirection: AuthorizedOrgsDescDirection | (string & {});
   /**
-   * Asset type. Immutable — changing it replaces the descriptor.
+   * Asset type. Immutable -- changing it replaces the descriptor.
    */
   assetType: AuthorizedOrgsDescAssetType | (string & {});
   /**
    * Authorization type. Currently only `AUTHORIZATION_TYPE_TRUST`.
-   * Immutable — changing it replaces the descriptor.
+   * Immutable -- changing it replaces the descriptor.
    */
   authorizationType: AuthorizedOrgsDescAuthorizationType | (string & {});
   /**
@@ -89,7 +89,7 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
  *
  * Authorized-orgs descriptors configure cross-organization authorization
  * for device or credential-strength evaluation. They live under an
- * {@link AccessPolicy}. The API has no labels or description field —
+ * {@link AccessPolicy}. The API has no labels or description field --
  * Alchemy uses the generated resource id as identity, and `list` returns
  * descriptors under Alchemy-owned access policies so `pnpm nuke:gcp`
  * can find them.

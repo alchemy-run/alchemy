@@ -10,7 +10,7 @@
  * data.
  *
  * A single `secrets-store` service hosts every store. The store id arrives
- * either on the designator props (`ctx.props.storeId` — the admin/seeding
+ * either on the designator props (`ctx.props.storeId` -- the admin/seeding
  * path binds a store as a raw KV namespace) or, for the secret entrypoint
  * service's plain `STORE` service binding (whose designator carries no
  * props), on the namespace header the entrypoint sets itself.

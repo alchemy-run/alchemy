@@ -77,7 +77,7 @@ export interface ObjectLambdaAccessPoint extends Resource<
 > {}
 
 /**
- * An S3 Object Lambda Access Point — intercepts S3 `GetObject` /
+ * An S3 Object Lambda Access Point -- intercepts S3 `GetObject` /
  * `HeadObject` / `ListObjects` requests through a supporting access point
  * and transforms responses with a Lambda function (redaction, resizing,
  * format conversion, ...).
@@ -130,7 +130,7 @@ export const ObjectLambdaAccessPoint = Resource<ObjectLambdaAccessPoint>(
  * Retry while a freshly-created Object Lambda Access Point has not
  * propagated to reads yet.
  *
- * Explicitly typed at module scope — inlining `Effect.retry` in a lifecycle
+ * Explicitly typed at module scope -- inlining `Effect.retry` in a lifecycle
  * op leaks `Retry.Return`'s conditional type into declaration emit, widening
  * the provider layer to `unknown` and poisoning `AWS.providers()`.
  */
@@ -242,10 +242,10 @@ export const ObjectLambdaAccessPointProvider = () =>
           const name = output?.objectLambdaAccessPointName ?? (yield* createName(id, news));
           const desired = desiredConfiguration(news);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeAccessPoint(accountId, name);
 
-          // 2. ENSURE — create when missing; tolerate the AlreadyOwnedByYou
+          // 2. ENSURE -- create when missing; tolerate the AlreadyOwnedByYou
           //    race and wait out read propagation.
           if (live === undefined) {
             yield* s3control
@@ -263,7 +263,7 @@ export const ObjectLambdaAccessPointProvider = () =>
             );
           }
 
-          // 3. SYNC — diff the OBSERVED configuration against the desired
+          // 3. SYNC -- diff the OBSERVED configuration against the desired
           //    one; apply only on drift.
           const observedConfig = yield* retryWhileObjectLambdaPropagates(
             s3control.getAccessPointConfigurationForObjectLambda({
@@ -299,7 +299,7 @@ export const ObjectLambdaAccessPointProvider = () =>
               Name: output.objectLambdaAccessPointName,
             })
             .pipe(
-              // Idempotent delete — already gone is success.
+              // Idempotent delete -- already gone is success.
               Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
             );
         }),

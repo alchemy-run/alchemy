@@ -19,7 +19,7 @@ export type TotalTlsCertificateAuthority = "google" | "lets_encrypt" | "ssl_com"
 
 export interface TotalTlsProps {
   /**
-   * Zone whose Total TLS setting is managed. Stable — changing the zone
+   * Zone whose Total TLS setting is managed. Stable -- changing the zone
    * triggers a replacement (the old zone's setting is restored to the
    * state it had before Alchemy managed it).
    */
@@ -27,19 +27,19 @@ export interface TotalTlsProps {
   /**
    * Whether Total TLS is enabled. When enabled, Cloudflare orders a
    * hostname-specific TLS certificate for every proxied A, AAAA, or CNAME
-   * record in the zone. Mutable — updated in place.
+   * record in the zone. Mutable -- updated in place.
    */
   enabled: boolean;
   /**
    * The Certificate Authority that Total TLS certificates will be issued
-   * through. When omitted, Cloudflare picks one. Mutable — updated in
+   * through. When omitted, Cloudflare picks one. Mutable -- updated in
    * place.
    */
   certificateAuthority?: TotalTlsCertificateAuthority;
 }
 
 export interface TotalTlsAttributes {
-  /** Zone the setting belongs to — this is the singleton's identity. */
+  /** Zone the setting belongs to -- this is the singleton's identity. */
   zoneId: string;
   /** Whether Total TLS is currently enabled on the zone. */
   enabled: boolean;
@@ -75,7 +75,7 @@ export type TotalTls = Resource<TypeId, TotalTlsProps, TotalTlsAttributes, never
  * Total TLS orders a hostname-specific TLS certificate for every proxied
  * A, AAAA, or CNAME record in the zone, covering deep subdomains that the
  * universal certificate's single-level wildcard cannot. The setting is a
- * zone **singleton** — it always exists (default disabled), so this
+ * zone **singleton** -- it always exists (default disabled), so this
  * resource never creates or deletes anything physical. Reconcile posts the
  * setting when the observed state differs from the desired one; destroy
  * restores the state the zone had before Alchemy first managed it
@@ -86,7 +86,7 @@ export type TotalTls = Resource<TypeId, TotalTlsProps, TotalTlsAttributes, never
  * with the typed `AdvancedCertificateManagerRequired` (code 1450) error
  * (reads succeed and report `enabled: false`).
  *
- * Only one `TotalTls` resource per zone makes sense — two instances
+ * Only one `TotalTls` resource per zone makes sense -- two instances
  * managing the same zone would fight over the singleton.
  * ### Managing Total TLS
  * **Example:** Enable Total TLS on a zone
@@ -129,7 +129,7 @@ export const TotalTlsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one,
       // defaulting to disabled; reads succeed even without the ACM
       // entitlement).
@@ -164,12 +164,12 @@ export const TotalTlsProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* acm.getTotalTl({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed state at adoption time becomes the
       // initial state restored on destroy.
       return toAttributes(zoneId, observed, initialStateOf(output, observed));
@@ -179,17 +179,17 @@ export const TotalTlsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists; read its live state.
+      // 1. Observe -- the setting always exists; read its live state.
       //    (Reads succeed even on zones without the ACM entitlement.)
       const observed = yield* acm.getTotalTl({ zoneId });
 
-      // 2. Capture — the pre-management state, restored on destroy.
+      // 2. Capture -- the pre-management state, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed state is
       //    the zone's original.
       const initial = initialStateOf(output, observed);
 
-      // 3. Sync — post only when the observed state differs. Zones
+      // 3. Sync -- post only when the observed state differs. Zones
       //    without the ACM entitlement fail here with the typed
       //    `AdvancedCertificateManagerRequired` error.
       if (matchesDesired(observed, news)) {
@@ -202,7 +202,7 @@ export const TotalTlsProvider = () =>
           certificateAuthority: news.certificateAuthority,
         })
         .pipe(
-          // A concurrent actor already applied the same state — converge
+          // A concurrent actor already applied the same state -- converge
           // by re-reading instead of failing.
           Effect.catchTag("NoStateChange", () => acm.getTotalTl({ zoneId })),
           // Cloudflare serializes Total TLS jobs per zone; ride out a
@@ -218,7 +218,7 @@ export const TotalTlsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialEnabled, initialCertificateAuthority } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* acm
         .getTotalTl({ zoneId })
         .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
@@ -245,7 +245,7 @@ export const TotalTlsProvider = () =>
             InvalidObjectIdentifier: () => Effect.void,
             NoStateChange: () => Effect.void,
           }),
-          // The zone lost its ACM entitlement since we configured it —
+          // The zone lost its ACM entitlement since we configured it --
           // Cloudflare already refuses Total TLS writes, so there is
           // nothing left to restore.
           Effect.catchTag("AdvancedCertificateManagerRequired", () => Effect.void),
@@ -284,7 +284,7 @@ const initialStateOf = (
       };
 
 /**
- * Whether the observed setting already matches the desired props — the
+ * Whether the observed setting already matches the desired props -- the
  * certificate authority only participates when explicitly requested
  * (Cloudflare picks one otherwise).
  */

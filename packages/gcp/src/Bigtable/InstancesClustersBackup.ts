@@ -27,26 +27,26 @@ const DEFAULT_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000;
 export type InstancesClustersBackupProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the backup.
+   * or the instance id. Immutable -- changing it replaces the backup.
    */
   instance: string;
   /**
    * Cluster that stores the backup. Full name
    * `projects/{project}/instances/{instance}/clusters/{cluster}` or the
-   * cluster id. Immutable — changing it replaces the backup.
+   * cluster id. Immutable -- changing it replaces the backup.
    */
   cluster: string;
   /**
    * Source table. Full name
    * `projects/{project}/instances/{instance}/tables/{table}` or the table
-   * id. Immutable — changing it replaces the backup.
+   * id. Immutable -- changing it replaces the backup.
    */
   sourceTable: string;
   /**
    * Backup id (the `{backup}` segment of
    * `.../clusters/{cluster}/backups/{backup}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must be 1-50
-   * characters. Immutable — changing it replaces the backup.
+   * characters. Immutable -- changing it replaces the backup.
    */
   backupId?: string;
   /**
@@ -56,7 +56,7 @@ export type InstancesClustersBackupProps = {
    */
   expireTime?: string;
   /**
-   * Backup type (`STANDARD` or `HOT`). Immutable — changing it replaces
+   * Backup type (`STANDARD` or `HOT`). Immutable -- changing it replaces
    * the backup.
    */
   backupType?: bigtable.BackupBackupTypeEnum | (string & {});

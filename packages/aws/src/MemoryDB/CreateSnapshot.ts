@@ -8,7 +8,7 @@ import type { Cluster } from "./Cluster.ts";
  * `memorydb:CreateSnapshot` + `memorydb:TagResource`), scoped to one
  * {@link Cluster}.
  *
- * Takes an on-demand snapshot of the bound cluster — e.g. a pre-migration
+ * Takes an on-demand snapshot of the bound cluster -- e.g. a pre-migration
  * backup from an operational Lambda. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.CreateSnapshotHttp)`.
  * ### Managing Snapshots
@@ -17,7 +17,7 @@ import type { Cluster } from "./Cluster.ts";
  * const createSnapshot = yield* MemoryDB.CreateSnapshot(cluster);
  *
  * const result = yield* createSnapshot({ SnapshotName: "pre-migration" });
- * // result.Snapshot.Status → "creating"
+ * // result.Snapshot.Status -> "creating"
  * ```
  *
  * @binding

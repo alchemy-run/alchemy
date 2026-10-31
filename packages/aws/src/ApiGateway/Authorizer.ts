@@ -148,7 +148,7 @@ export const AuthorizerProvider = () =>
           const name = yield* generatedName(id, news);
           const restApiId = (output?.restApiId ?? news.restApiId) as string;
 
-          // Observe — fetch the live authorizer if we have a cached id.
+          // Observe -- fetch the live authorizer if we have a cached id.
           // The cached id is the only way to find the resource; on a stale
           // delete out of band we re-create.
           let observed = output?.authorizerId
@@ -160,7 +160,7 @@ export const AuthorizerProvider = () =>
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!observed?.id) {
             const created = yield* ag.createAuthorizer({
               restApiId: news.restApiId as string,
@@ -184,7 +184,7 @@ export const AuthorizerProvider = () =>
 
           const authorizerId = observed.id!;
 
-          // Sync mutable fields — diff observed cloud state against desired.
+          // Sync mutable fields -- diff observed cloud state against desired.
           const patches: ag.PatchOperation[] = [];
           if (news.authorizerUri !== observed.authorizerUri) {
             patches.push({

@@ -35,7 +35,7 @@ export type McpTool = {
 
 export type SemanticGovernancePolicyProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * policy.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -51,7 +51,7 @@ export type SemanticGovernancePolicyProps = {
   displayName?: string;
   /**
    * Human-readable description. SemanticGovernancePolicy has no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix.
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix.
    */
   description?: string;
   /**
@@ -104,7 +104,7 @@ export type SemanticGovernancePolicy = Resource<
 /**
  * A Vertex AI SemanticGovernancePolicy constraining an Agent's tools.
  *
- * Policies have no labels field — Alchemy stamps ownership into the
+ * Policies have no labels field -- Alchemy stamps ownership into the
  * description. Location and policy id are immutable.
  *
  * ### Creating a Policy

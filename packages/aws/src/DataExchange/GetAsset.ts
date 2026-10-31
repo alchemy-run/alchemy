@@ -6,8 +6,8 @@ import type { Revision } from "./Revision.ts";
 /**
  * Runtime binding for `dataexchange:GetAsset`.
  *
- * Reads one asset of the bound revision — name, type-specific details
- * (S3 snapshot size, API Gateway endpoint, …), and timestamps. The data
+ * Reads one asset of the bound revision -- name, type-specific details
+ * (S3 snapshot size, API Gateway endpoint, ...), and timestamps. The data
  * set and revision ids are injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.GetAssetHttp)`.

@@ -39,7 +39,7 @@ export type ProductsReferenceImageProps = {
   /**
    * Parent product resource name
    * `projects/{project}/locations/{location}/products/{product}` or a
-   * product id (combined with `location`). Immutable — changing it
+   * product id (combined with `location`). Immutable -- changing it
    * replaces the image.
    */
   parent: string;
@@ -51,18 +51,18 @@ export type ProductsReferenceImageProps = {
   location?: string;
   /**
    * Reference image id. If omitted, a unique id is generated. Immutable
-   * — changing it replaces the image. At most 128 characters; cannot
+   * -- changing it replaces the image. At most 128 characters; cannot
    * contain `/`.
    */
   referenceImageId?: string;
   /**
    * Google Cloud Storage URI of the image. Must start with `gs://`.
-   * Immutable — changing it replaces the image.
+   * Immutable -- changing it replaces the image.
    */
   uri: string;
   /**
    * Optional bounding polygons around areas of interest. At most 10.
-   * Immutable — changing them replaces the image (no update API).
+   * Immutable -- changing them replaces the image (no update API).
    */
   boundingPolys?: BoundingPoly[];
 };
@@ -96,7 +96,7 @@ export type ProductsReferenceImage = Resource<
  * Reference images have no labels or description, so ownership rests on
  * the deterministic image id: an image found without prior state is
  * reported as unowned and only taken over with `--adopt`. Parent, image
- * id, URI, and bounding polygons are identity — there is no update API, so
+ * id, URI, and bounding polygons are identity -- there is no update API, so
  * changing any of them replaces the image.
  *
  * ### Creating a Reference Image

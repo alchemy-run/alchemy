@@ -44,7 +44,7 @@ export interface MySQLDatabaseProps extends BaseDatabaseProps {
    * Desired total number of replicas for the database's default keyspace.
    * Each cluster size includes a fixed number of replicas (2 for
    * production `PS_*` sizes); higher values add extra replicas. Changes
-   * are reconciled in place via PlanetScale's keyspace resize lifecycle —
+   * are reconciled in place via PlanetScale's keyspace resize lifecycle --
    * never by replacing the database.
    * @see https://planetscale.com/docs/vitess/sharding/keyspaces
    */
@@ -194,7 +194,7 @@ export const MySQLDatabaseProvider = () =>
 
       // Database names are rename-mutable (reconcile folds `new_name`
       // into the settings sync), so `name` cannot live in the
-      // provider-level stables. Almost no update is a rename though —
+      // provider-level stables. Almost no update is a rename though --
       // for those, advertise `name` as stable on the update so
       // downstream consumers (branches, passwords) still resolve
       // `database.name` at plan time instead of seeing `undefined` and
@@ -214,7 +214,7 @@ export const MySQLDatabaseProvider = () =>
       ) {
         return yield* replaceDatabase(news, output, "region");
       }
-      // Replicas reconcile in place via a keyspace resize — never a
+      // Replicas reconcile in place via a keyspace resize -- never a
       // replacement. Diff against the observed keyspace replica count so
       // an adopted database whose live state already matches plans no-op.
       if (news.replicas !== undefined && news.replicas !== (output?.replicas ?? olds.replicas)) {
@@ -229,10 +229,10 @@ export const MySQLDatabaseProvider = () =>
           return { action: "update", stables } as const;
         }
       }
-      // Remaining prop changes (rename, settings, clusterSize, …) are
+      // Remaining prop changes (rename, settings, clusterSize, ...) are
       // in-place updates. Decide them here instead of falling back to
       // the engine's default deep-compare so the conditional `name`
-      // stable above is attached — the default path uses the
+      // stable above is attached -- the default path uses the
       // provider-level stables, which strip `name` from downstream plan
       // resolution.
       if (havePropsChanged(olds, news)) {
@@ -312,10 +312,10 @@ export const MySQLDatabaseProvider = () =>
       const newName = yield* createDatabaseName(id, news.name);
       const clusterSize = news.clusterSize;
 
-      // Observe — read live state under either the cached name (rename
+      // Observe -- read live state under either the cached name (rename
       // / refresh) or the freshly-derived name (greenfield). Observing
       // unconditionally absorbs the race between `read` and `reconcile`
-      // — if a foreign actor (or a previously-failed-to-persist
+      // -- if a foreign actor (or a previously-failed-to-persist
       // create) produced a database under the desired name in the
       // meantime, we'll find it here and skip the duplicate create.
       // Adoption routing has already been gated by `read` returning
@@ -329,7 +329,7 @@ export const MySQLDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-      // Ensure — if missing, create.
+      // Ensure -- if missing, create.
       if (!observed) {
         yield* session.note("Creating database...");
         // Note: the API rejects the `replicas` param for mysql databases;
@@ -359,7 +359,7 @@ export const MySQLDatabaseProvider = () =>
         });
       }
 
-      // Sync — ensure a non-`main` default branch exists before
+      // Sync -- ensure a non-`main` default branch exists before
       // referencing it via `default_branch`. The branch is created
       // empty (no cluster size yet); we'll size it below.
       if (news.defaultBranch && news.defaultBranch !== "main") {
@@ -386,7 +386,7 @@ export const MySQLDatabaseProvider = () =>
         }
       }
 
-      // Sync settings — `updateSettings` is upsert-shaped, so we can
+      // Sync settings -- `updateSettings` is upsert-shaped, so we can
       // call it with the full desired payload on every reconcile.
       const updated = yield* planetscale.updateDatabaseSettings({
         organization,
@@ -405,7 +405,7 @@ export const MySQLDatabaseProvider = () =>
         default_branch: news.defaultBranch,
       });
 
-      // Sync cluster size and replicas on the active default branch —
+      // Sync cluster size and replicas on the active default branch --
       // both converge in place via PlanetScale's keyspace resize
       // lifecycle, diffed against the observed default keyspace.
       const branch = news.defaultBranch ?? updated.default_branch ?? "main";

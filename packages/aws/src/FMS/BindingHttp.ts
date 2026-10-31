@@ -5,8 +5,8 @@ import { pinFms } from "./AdminAccount.ts";
 /**
  * Shared HTTP scaffolding for the AWS Firewall Manager runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeFmsHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeFmsHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action is boilerplate.
  *
  * All Firewall Manager operations are account-level: they act on the
@@ -34,7 +34,7 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
   /** The distilled operation implementing the capability. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /**
-   * Pin the operation to the us-east-1 endpoint — set for the
+   * Pin the operation to the us-east-1 endpoint -- set for the
    * organization-level administrator-management operations, which are
    * served from the global admin-account endpoint like the
    * {@link AdminAccount} resource APIs.
@@ -61,7 +61,7 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
       }
       return Effect.fn(`AWS.FMS.${options.capability}`)(function* (request?: I) {
         // The admin-region pin must also be applied at the call site: the
-        // yield-time snapshot is only a fallback — the calling fiber's
+        // yield-time snapshot is only a fallback -- the calling fiber's
         // ambient Region (the host Function's own region) wins over it.
         const call = op((request ?? {}) as I);
         return yield* options.pinToAdminRegion ? pinFms(call) : call;

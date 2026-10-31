@@ -184,7 +184,7 @@ export interface MySQLProps {
   image?: string;
   /**
    * Region for the service instance and volume (`us-west2`, `us-east4`,
-   * …). If omitted, Railway picks the default. Changing it replaces
+   * ...). If omitted, Railway picks the default. Changing it replaces
    * MySQL.
    */
   region?: string;
@@ -259,7 +259,7 @@ export type MySQL = Resource<
     publicConnectionUri: string;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
   },
   never,
@@ -1111,7 +1111,7 @@ export const MySQLProvider = () =>
 
       instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
       let finalStatus = instance?.latestDeployment?.status;
-      // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
+      // A deployment can wedge in DEPLOYING and never reach SUCCESS -- the
       // container may serve, but Railway keeps its per-environment operation
       // lock and the TCP proxy's routing is not committed. Converge: cancel
       // the wedged deployment, redeploy once, and insist on SUCCESS.
@@ -1170,7 +1170,7 @@ export const MySQLProvider = () =>
           );
         }
       }
-      // Delete the SERVICE next — its teardown cascades onto the proxies.
+      // Delete the SERVICE next -- its teardown cascades onto the proxies.
       if (serviceId.length > 0) {
         yield* serviceDelete({ id: serviceId }).pipe(
           Effect.catchTag("RailwayNotFound", () => Effect.void),

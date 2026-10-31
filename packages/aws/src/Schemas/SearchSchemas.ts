@@ -6,14 +6,14 @@ import type { Registry } from "./Registry.ts";
 /**
  * Runtime binding for `schemas:SearchSchemas`.
  *
- * Searches the bound {@link Registry}'s schemas by keyword — matching both
- * schema names and content — so a function can discover event contracts at
+ * Searches the bound {@link Registry}'s schemas by keyword -- matching both
+ * schema names and content -- so a function can discover event contracts at
  * runtime. The registry name is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Schemas.SearchSchemasHttp)`.
  * ### Searching a Registry
  * **Example:** Find Schemas By Keyword
  * ```typescript
- * // init — bind the operation to the registry
+ * // init -- bind the operation to the registry
  * const searchSchemas = yield* AWS.Schemas.SearchSchemas(registry);
  *
  * // runtime

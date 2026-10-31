@@ -49,7 +49,7 @@ export type PlaybookInstruction = {
 export type PlaybookParameterDefinition = {
   /** Parameter name. */
   name?: string;
-  /** Parameter type (`STRING`, `NUMBER`, …). */
+  /** Parameter type (`STRING`, `NUMBER`, ...). */
   type?: string;
   /** Human-readable description. */
   description?: string;
@@ -66,17 +66,17 @@ export type AgentsPlaybookProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}`.
-   * Immutable — changing it replaces the playbook.
+   * Immutable -- changing it replaces the playbook.
    */
   agent: string;
   /**
    * Playbook id (the `{playbook}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the playbook.
+   * Immutable -- changing it replaces the playbook.
    */
   playbookId?: string;
   /**
    * Location used when `agent` is an id rather than a resource name.
-   * Immutable — changing it replaces the playbook.
+   * Immutable -- changing it replaces the playbook.
    * @default "global"
    */
   location?: string;
@@ -157,7 +157,7 @@ export type AgentsPlaybook = Resource<
 /**
  * A Dialogflow CX playbook (goal-driven LLM workflow).
  *
- * Playbooks have no labels field — Alchemy stamps ownership into
+ * Playbooks have no labels field -- Alchemy stamps ownership into
  * `displayName` so `list` / nuke can find them. Parent agent and id are
  * immutable. Display name, goal, instruction, type, references, and LLM
  * settings update in place.

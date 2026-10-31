@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link DeletePackage} — `domain`, `domainOwner`, and
+ * Request for {@link DeletePackage} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface DeletePackageRequest extends Omit<

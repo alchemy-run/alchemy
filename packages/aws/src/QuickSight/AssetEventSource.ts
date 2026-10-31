@@ -55,7 +55,7 @@ export interface AssetEventSourceProps extends EventRouteProps {
  * Successful`); this subscribes the host Function to those events so it can
  * drive continuous-deployment, replication, or backup automation.
  *
- * QuickSight publishes to EventBridge automatically — no additional resource
+ * QuickSight publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. When
  * `detailTypes` is omitted, the rule excludes `AWS Service Event via
  * CloudTrail` so only the native asset events are delivered. Provide the

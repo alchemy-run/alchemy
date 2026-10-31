@@ -97,8 +97,8 @@ export type BackendBucket = Resource<
  * bucket for HTTP(S) load balancing.
  *
  * Compute Engine backend buckets have no labels field, so Alchemy
- * stamps ownership into the description (`[alchemy alchemy-stack=…
- * alchemy-stage=… alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find
+ * stamps ownership into the description (`[alchemy alchemy-stack=...
+ * alchemy-stage=... alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find
  * them.
  *
  * ### Creating a Backend Bucket

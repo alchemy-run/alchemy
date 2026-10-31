@@ -74,7 +74,7 @@ export interface TopicRule extends Resource<
 > {}
 
 /**
- * An AWS IoT topic rule — evaluates an SQL statement against messages
+ * An AWS IoT topic rule -- evaluates an SQL statement against messages
  * published to MQTT topics and routes matching messages to one or more
  * actions (invoke a Lambda, enqueue to SQS, republish, etc.).
  *
@@ -160,7 +160,7 @@ export const TopicRuleProvider = () =>
             .getTopicRule({ ruleName })
             .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.undefined));
 
-          // ENSURE / SYNC — createTopicRule for a new rule, replaceTopicRule
+          // ENSURE / SYNC -- createTopicRule for a new rule, replaceTopicRule
           // (a full upsert of the payload) for an existing one.
           if (live === undefined) {
             yield* iot

@@ -29,14 +29,14 @@ export type RegionSslPolicyProps = {
    */
   sslPolicyName?: string;
   /**
-   * Region the policy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the policy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute SslPolicy has no
    * labels field).
    */
@@ -110,7 +110,7 @@ export type RegionSslPolicy = Resource<
  * regional Application Load Balancers and proxy Network Load Balancers.
  * This resource maps to the `regionSslPolicies` collection (the global
  * `sslPolicies` collection is `GCP.Compute.SslPolicy`). Compute SslPolicy
- * has no labels field — Alchemy ownership is stored in the description
+ * has no labels field -- Alchemy ownership is stored in the description
  * so nuke can find leaked policies.
  *
  * ### Creating a Regional SSL Policy

@@ -5,8 +5,8 @@ import type { Profile } from "./Profile.ts";
 /**
  * Shared scaffolding for Route 53 Profiles HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeProfilesHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeProfilesHttpBinding({ ... }))` over the builder
  * below. Everything except the operation, the IAM action list, and the grant
  * scope is boilerplate.
  */
@@ -16,7 +16,7 @@ import type { Profile } from "./Profile.ts";
  * {@link Profile}: the deploy-time half grants `actions`, and the runtime
  * half injects the profile's `ProfileId` into every request.
  *
- * The grant is on `*` — the Route 53 Profiles list actions follow the
+ * The grant is on `*` -- the Route 53 Profiles list actions follow the
  * common AWS List-action pattern of not supporting resource-level
  * permissions (a profile-ARN-scoped grant is rejected with AccessDenied).
  */

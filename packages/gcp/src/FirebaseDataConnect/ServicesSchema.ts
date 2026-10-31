@@ -99,7 +99,7 @@ export type ServicesSchemaProps = {
   /**
    * Parent Data Connect service. Full name
    * `projects/{project}/locations/{location}/services/{service}` or the
-   * service id (combined with `location`). Immutable — changing it
+   * service id (combined with `location`). Immutable -- changing it
    * replaces the schema.
    */
   service: string;
@@ -109,7 +109,7 @@ export type ServicesSchemaProps = {
    */
   location?: string;
   /**
-   * Schema id. The API currently only accepts `main`. Immutable —
+   * Schema id. The API currently only accepts `main`. Immutable --
    * changing it replaces the schema.
    * @default "main"
    */
@@ -181,7 +181,7 @@ export type ServicesSchema = Resource<
 
 /**
  * The application schema of a Firebase Data Connect service. Only
- * `schemas/main` is supported — one schema per service.
+ * `schemas/main` is supported -- one schema per service.
  *
  * Changing `service`, `location`, or `schemaId` replaces the schema.
  * Source, datasources, display name, labels, and annotations update in

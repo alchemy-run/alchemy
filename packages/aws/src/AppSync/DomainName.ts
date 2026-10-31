@@ -63,7 +63,7 @@ export interface AppSyncDomainName extends Resource<
  *   certificateArn: usEast1Cert.certificateArn,
  * });
  * yield* AppSync.ApiAssociation("Assoc", { domain, api });
- * // CNAME api.example.com → domain.appsyncDomainName
+ * // CNAME api.example.com -> domain.appsyncDomainName
  * ```
  *
  * @resource
@@ -148,7 +148,7 @@ export const DomainNameProvider = () =>
             yield* session.note(`Updated domain ${news.domainName}`);
           }
 
-          // 3b. SYNC TAGS — against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- against OBSERVED cloud tags.
           if (observed.domainNameArn !== undefined) {
             yield* syncAppSyncTags({
               resourceArn: observed.domainNameArn,
@@ -164,7 +164,7 @@ export const DomainNameProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A domain with a live association cannot be deleted; the
           // association resource is destroyed first (dependency order),
-          // but the detach itself is eventually consistent — the
+          // but the detach itself is eventually consistent -- the
           // ConcurrentModification retry rides that out.
           yield* retryConcurrentModification(
             appsync

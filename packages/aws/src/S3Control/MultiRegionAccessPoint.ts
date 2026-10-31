@@ -83,7 +83,7 @@ export interface MultiRegionAccessPoint extends Resource<
 > {}
 
 /**
- * An Amazon S3 Multi-Region Access Point — a single global endpoint that
+ * An Amazon S3 Multi-Region Access Point -- a single global endpoint that
  * routes requests to buckets in multiple regions over the AWS global
  * network.
  *
@@ -118,7 +118,7 @@ export const MultiRegionAccessPoint = Resource<MultiRegionAccessPoint>(
 );
 
 /**
- * Raised while a Multi-Region Access Point is still provisioning — retried
+ * Raised while a Multi-Region Access Point is still provisioning -- retried
  * by {@link retryWhileMrapTransitions} until it reaches `READY`.
  */
 export class MultiRegionAccessPointNotReady extends Data.TaggedError(
@@ -126,7 +126,7 @@ export class MultiRegionAccessPointNotReady extends Data.TaggedError(
 )<{ resourceName: string; status: string | undefined }> {}
 
 /**
- * Raised while a Multi-Region Access Point deletion is still in flight —
+ * Raised while a Multi-Region Access Point deletion is still in flight --
  * retried by {@link retryWhileMrapTransitions} until the report disappears.
  */
 export class MultiRegionAccessPointNotDeleted extends Data.TaggedError(
@@ -135,9 +135,9 @@ export class MultiRegionAccessPointNotDeleted extends Data.TaggedError(
 
 /**
  * Multi-Region Access Point provisioning/deletion legitimately takes
- * several minutes — poll every 15 seconds for up to ~20 minutes.
+ * several minutes -- poll every 15 seconds for up to ~20 minutes.
  *
- * Explicitly typed at module scope — inlining `Effect.retry` in a lifecycle
+ * Explicitly typed at module scope -- inlining `Effect.retry` in a lifecycle
  * op leaks `Retry.Return`'s conditional type into declaration emit, widening
  * the provider layer to `unknown` and poisoning `AWS.providers()`.
  */
@@ -289,10 +289,10 @@ export const MultiRegionAccessPointProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const report = yield* observeMrap(accountId, name);
 
-          // 2. ENSURE — submit the async create when missing. The client
+          // 2. ENSURE -- submit the async create when missing. The client
           //    token only needs to be unique per submission; idempotency
           //    across crashed runs comes from observing before creating.
           if (report === undefined) {
@@ -323,7 +323,7 @@ export const MultiRegionAccessPointProvider = () =>
             );
           }
 
-          // 3. WAIT — converge to READY (also covers resuming a reconcile
+          // 3. WAIT -- converge to READY (also covers resuming a reconcile
           //    that crashed while a previous create was still in flight).
           const ready = yield* awaitReady(accountId, name);
 

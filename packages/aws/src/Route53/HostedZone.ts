@@ -115,7 +115,7 @@ export const HostedZoneProvider = () =>
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
       // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
-      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // accepts the bare id -- the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
         return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
@@ -233,7 +233,7 @@ export const HostedZoneProvider = () =>
           ),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // Name change → replace, but only when the old name is known — a
+          // Name change -> replace, but only when the old name is known -- a
           // half-created state row can't round-trip an Output-valued `name`
           // (it deserializes as `undefined`), and an unknown old name must
           // fall through to the create/update recovery path.
@@ -250,7 +250,7 @@ export const HostedZoneProvider = () =>
           // Resolve the zone id: prefer the stored output, else look up by name
           // (adoption / state-loss recovery). The persisted `name` may be
           // `undefined` when a `creating` row was written before upstream
-          // Outputs resolved — report "not found" and let the engine
+          // Outputs resolved -- report "not found" and let the engine
           // re-drive the create.
           const zoneId =
             output?.id ??
@@ -360,7 +360,7 @@ export const HostedZoneProvider = () =>
             Effect.asVoid,
             Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             // A still-non-empty zone (without forceDestroy) is retried briefly
-            // in case a referencing record's delete is still propagating —
+            // in case a referencing record's delete is still propagating --
             // records looked up by zone NAME (e.g. `ECS.Service`'s `domain`)
             // have no dependency edge on the zone, so their deletes run
             // concurrently with ours (a classic Dependency Violation).

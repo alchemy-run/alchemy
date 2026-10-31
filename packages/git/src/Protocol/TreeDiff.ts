@@ -1,12 +1,12 @@
 /**
  * Pure recursive tree diff (the server-side diff surface, DESIGN.md §5).
  *
- * Compares two trees keyed by entry **name** (NOT a two-pointer merge —
+ * Compares two trees keyed by entry **name** (NOT a two-pointer merge --
  * git's canonical sort treats directories as `name/`, so a name that is a
  * blob in one tree and a tree in the other would mis-pair). Only descends
  * into subtree pairs whose oids differ; identical oids (with identical
  * modes) are skipped without reading the subtree at all. That pruning is
- * what makes a 12k-file tree cost O(changed) — a commit touching k files
+ * what makes a 12k-file tree cost O(changed) -- a commit touching k files
  * opens only the ~k·depth trees on the changed root-to-leaf paths (each a
  * single SQLite row read + inflate of a few KB).
  *
@@ -60,7 +60,7 @@ export interface TreeDiffResult {
 }
 
 /**
- * The read surface {@link diffTrees} needs — a structural subset of
+ * The read surface {@link diffTrees} needs -- a structural subset of
  * `ObjectStore` (`readContent` + `getMetaBatch`).
  */
 export interface TreeDiffObjects {
@@ -78,10 +78,10 @@ export interface TreeDiffObjects {
  * `undefined` and every file comes out `added`).
  *
  * Mode-only changes (same blob oid, different mode) still report
- * `modified`. Kind changes (blob↔tree, gitlink↔tree) emit the removal of
+ * `modified`. Kind changes (blob<->tree, gitlink<->tree) emit the removal of
  * everything on the old side and the addition of everything on the new
  * side. Gitlink (mode `160000`) entries are leaves whose oids are commit
- * oids — they carry no sizes.
+ * oids -- they carry no sizes.
  */
 export const diffTrees = (
   objects: TreeDiffObjects,
@@ -130,7 +130,7 @@ export const diffTrees = (
             yield* emitAll(e.oid, `${path}/`, side);
             continue;
           }
-          // blob or gitlink — a leaf either way
+          // blob or gitlink -- a leaf either way
           emit(
             side === "added"
               ? { path, status: "added", newOid: e.oid, newMode: e.mode }
@@ -182,13 +182,13 @@ export const diffTrees = (
             }
             continue;
           }
-          if (o.oid === n.oid && o.mode === n.mode) continue; // untouched — prune
+          if (o.oid === n.oid && o.mode === n.mode) continue; // untouched -- prune
           const oKind = treeEntryKind(o.mode);
           const nKind = treeEntryKind(n.mode);
           if (oKind === "tree" && nKind === "tree") {
             yield* walk(o.oid, n.oid, `${path}/`); // descend: oids differ
           } else if (oKind === "tree" || nKind === "tree") {
-            // kind change (blob↔tree, gitlink↔tree): removed + added
+            // kind change (blob<->tree, gitlink<->tree): removed + added
             if (oKind === "tree") yield* emitAll(o.oid, `${path}/`, "removed");
             else {
               emit({ path, status: "removed", oldOid: o.oid, oldMode: o.mode });
@@ -235,9 +235,9 @@ export const diffTrees = (
     return { files: sized, truncated };
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// conflictingPaths — the trivial-merge admissibility test
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// conflictingPaths -- the trivial-merge admissibility test
+// -----------------------------------------------------------------------------
 
 /** `true` when both sides made the identical change (same result). */
 const identicalChange = (a: DiffEntryData, b: DiffEntryData): boolean =>
@@ -246,7 +246,7 @@ const identicalChange = (a: DiffEntryData, b: DiffEntryData): boolean =>
 /**
  * The paths that make a three-way merge non-trivial: changed on **both**
  * sides relative to the merge base (minus paths where both sides made the
- * identical change — same new oid+mode, or both deleted), plus
+ * identical change -- same new oid+mode, or both deleted), plus
  * directory/file collisions where a leaf now occupies `p` on one side
  * while the other side changed something under `p/`. Sorted.
  */
@@ -264,7 +264,7 @@ export const conflictingPaths = (
     }
   }
   // Directory/file collision: one side's add/modify puts a *leaf* at `dir`
-  // while the other side changes a path under `dir/` — the leaf and the
+  // while the other side changes a path under `dir/` -- the leaf and the
   // directory cannot both exist. (A `removed` ancestor never collides: at
   // the merge base a name is either a leaf or a directory, never both.)
   const addAncestorConflicts = (
@@ -288,9 +288,9 @@ export const conflictingPaths = (
   return Array.from(conflicts).sort();
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// applyTreeChanges — the trivial-merge tree builder
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// applyTreeChanges -- the trivial-merge tree builder
+// -----------------------------------------------------------------------------
 
 /** A tree object created by {@link applyTreeChanges} (bottom-up order). */
 export interface NewTreeObject {
@@ -304,7 +304,7 @@ export interface ApplyTreeChangesResult {
   readonly root: Oid;
   /**
    * Every tree object whose content was (re)built, bottom-up. Some may
-   * already exist in the store — staging is idempotent, so callers just
+   * already exist in the store -- staging is idempotent, so callers just
    * stage them all.
    */
   readonly newTrees: ReadonlyArray<NewTreeObject>;
@@ -320,17 +320,17 @@ interface ChangeNode {
 
 /**
  * Applies leaf-level changes (a {@link diffTrees} file list, e.g. the
- * mergeBase→head changes of a trivial three-way merge) onto `baseTree`,
+ * mergeBase->head changes of a trivial three-way merge) onto `baseTree`,
  * rebuilding every touched directory bottom-up with the canonical
  * {@link encodeTree}. Directories that become empty are dropped from their
  * parent (git has no empty trees in practice).
  *
  * Kind changes compose from the diff's leaf pairs without special cases:
- * dir→file arrives as deletions under `p/` plus a leaf add at `p` (the
- * emptied subtree is dropped, then the blob wins); file→dir is the mirror
+ * dir->file arrives as deletions under `p/` plus a leaf add at `p` (the
+ * emptied subtree is dropped, then the blob wins); file->dir is the mirror
  * (the rebuilt subtree replaces the removed blob).
  *
- * **No blob is ever created** — every blob/gitlink oid referenced by an
+ * **No blob is ever created** -- every blob/gitlink oid referenced by an
  * add/modify must already exist in the store (it came in with the head
  * push). Gitlink oids are commit oids and are exempt from the existence
  * assertion; any missing *blob* fails with {@link StoreError} (connectivity
@@ -419,14 +419,14 @@ export const applyTreeChanges = (
             node.leaf.newOid !== undefined &&
             node.leaf.newMode !== undefined
           ) {
-            // added/modified blob or gitlink — the leaf wins.
+            // added/modified blob or gitlink -- the leaf wins.
             byName.set(name, {
               mode: node.leaf.newMode,
               name,
               oid: node.leaf.newOid,
             });
           } else if (node.children !== undefined) {
-            // subtree result (also covers file→dir: the removed blob is
+            // subtree result (also covers file->dir: the removed blob is
             // replaced by the rebuilt subtree, or dropped when empty).
             if (subtree === undefined) byName.delete(name);
             else byName.set(name, { mode: TREE_MODE, name, oid: subtree });

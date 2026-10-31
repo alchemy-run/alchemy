@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `shield:GetSubscriptionState`.
  *
  * Returns whether the account's Shield Advanced subscription is `ACTIVE` or
- * `INACTIVE` — available to every account, subscribed or not, so a handler
+ * `INACTIVE` -- available to every account, subscribed or not, so a handler
  * can branch on Shield Advanced availability before calling gated operations.
  * Provide the implementation with
  * `Effect.provide(AWS.Shield.GetSubscriptionStateHttp)`.
  * ### Subscription Visibility
  * **Example:** Check Shield Advanced Availability
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSubscriptionState = yield* AWS.Shield.GetSubscriptionState();
  *
  * // runtime

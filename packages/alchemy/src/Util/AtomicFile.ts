@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError";
  * Write `contents` to `filePath` via a same-directory temp file + rename.
  *
  * A plain `writeFileString` truncates the target before writing, so a crash
- * mid-write (or a concurrent reader — another CLI process, the RPC sidecar)
+ * mid-write (or a concurrent reader -- another CLI process, the RPC sidecar)
  * can observe empty/partial JSON. rename(2) is atomic on the same
  * filesystem, so readers see either the old contents or the new, never a
  * torn write. When `mode` is given it is applied to the temp file *before*

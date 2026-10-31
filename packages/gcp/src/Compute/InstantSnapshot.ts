@@ -32,19 +32,19 @@ export type InstantSnapshotProps = {
   instantSnapshotName?: string;
   /**
    * Zone of the snapshot and its source disk (e.g. `us-central1-a`).
-   * Immutable — changing it replaces the snapshot. Inferred from
+   * Immutable -- changing it replaces the snapshot. Inferred from
    * `sourceDisk` when omitted.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
    * Source disk URL or relative path
-   * (`projects/{project}/zones/{zone}/disks/{disk}`). Immutable —
+   * (`projects/{project}/zones/{zone}/disks/{disk}`). Immutable --
    * changing it replaces the snapshot.
    */
   sourceDisk: string;
   /**
-   * Optional description. Immutable — changing it replaces the snapshot.
+   * Optional description. Immutable -- changing it replaces the snapshot.
    */
   description?: string;
   /**
@@ -72,7 +72,7 @@ export type InstantSnapshot = Resource<
     sourceDiskId: string | undefined;
     /** Optional description. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** Size of the source disk in GB. */
     diskSizeGb: string | undefined;
@@ -94,7 +94,7 @@ export type InstantSnapshot = Resource<
  *
  * Instant snapshots capture a disk's point-in-time state in the same zone
  * (Hyperdisk and some persistent-disk types). Name, zone, source disk, and
- * description are immutable — changing them replaces the snapshot. Labels
+ * description are immutable -- changing them replaces the snapshot. Labels
  * update in place via `instantSnapshots.setLabels`.
  *
  * ### Creating an Instant Snapshot
@@ -376,7 +376,7 @@ export const InstantSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        // "The previous instant snapshot is too recent" — one instant snapshot
+        // "The previous instant snapshot is too recent" -- one instant snapshot
         // per disk every 30 seconds.
         const tooRecent = (error: { readonly _tag: string }) =>
           error instanceof OperationFailed && error.reason === "UNSUPPORTED_OPERATION";

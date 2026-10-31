@@ -894,7 +894,7 @@ export class Context extends RpcTarget {
               // delay function so a crash while the function is in flight
               // still reschedules the step. The PQ table is append-only
               // with a UNIQUE(action, entryType, hash) constraint, so this
-              // exact entry is reused as the retry entry below — it is
+              // exact entry is reused as the retry entry below -- it is
               // never removed and re-added (that would violate UNIQUE).
               // @ts-expect-error priorityQueue is initiated in init
               await this.#engine.priorityQueue.add({
@@ -968,7 +968,7 @@ export class Context extends RpcTarget {
           //
           // Known trade-off: for a dynamic delay the parked entry keeps the
           // DEFAULT_RETRY_DELAY_MS placeholder timestamp set before the delay
-          // function ran (see the add above) — the UNIQUE(action, entryType,
+          // function ran (see the add above) -- the UNIQUE(action, entryType,
           // hash) constraint means it can't be overwritten in place with the
           // computed value without a remove+re-add that would violate the
           // constraint. So if the engine crashes mid-wait, recovery resumes
@@ -1362,7 +1362,7 @@ export class Context extends RpcTarget {
         throw error;
       });
 
-      // Pause signal won the race — throw to stop the workflow
+      // Pause signal won the race -- throw to stop the workflow
       if (raceResult.aborted) {
         throw new Error(ABORT_REASONS.USER_PAUSE);
       }

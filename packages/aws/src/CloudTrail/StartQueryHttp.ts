@@ -7,7 +7,7 @@ import { StartQuery, type StartQueryRequest } from "./StartQuery.ts";
 
 /**
  * Bespoke (not scaffolded): the runtime callable resolves the bound store's
- * ID out of its ARN and threads it through a `QueryStatement` callback —
+ * ID out of its ARN and threads it through a `QueryStatement` callback --
  * CloudTrail Lake SQL references the store by ID in the `FROM` clause rather
  * than as a request field.
  */

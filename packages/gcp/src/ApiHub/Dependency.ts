@@ -42,28 +42,28 @@ export type DependencyProps = {
   /**
    * Dependency id (the `{dependency}` segment of
    * `projects/{project}/locations/{location}/dependencies/{dependency}`).
-   * If omitted, a unique id is generated. Immutable — changing it
+   * If omitted, a unique id is generated. Immutable -- changing it
    * replaces the dependency.
    */
   dependencyId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * dependency.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Human-readable description. Dependencies have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
   /**
-   * Consumer entity. Immutable — changing it replaces the dependency.
+   * Consumer entity. Immutable -- changing it replaces the dependency.
    */
   consumer: DependencyEntity;
   /**
-   * Supplier entity. Immutable — changing it replaces the dependency.
+   * Supplier entity. Immutable -- changing it replaces the dependency.
    */
   supplier: DependencyEntity;
   /**
@@ -112,7 +112,7 @@ export type Dependency = Resource<
  * API) to a supplier operation (or external API).
  *
  * Location, id, consumer, and supplier are immutable. Description updates
- * in place. Dependencies have no labels field — Alchemy stamps ownership
+ * in place. Dependencies have no labels field -- Alchemy stamps ownership
  * into the description.
  *
  * ### Creating a Dependency

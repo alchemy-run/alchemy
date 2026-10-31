@@ -81,7 +81,7 @@ export interface Framework extends Resource<
      */
     name: string;
     /**
-     * The framework's type — always `Custom` for frameworks Alchemy creates.
+     * The framework's type -- always `Custom` for frameworks Alchemy creates.
      */
     type: auditmanager.FrameworkType | undefined;
     /**
@@ -94,7 +94,7 @@ export interface Framework extends Resource<
 > {}
 
 /**
- * A custom assessment framework in AWS Audit Manager — a named collection
+ * A custom assessment framework in AWS Audit Manager -- a named collection
  * of control sets that assessments are created from.
  *
  * :::note
@@ -157,7 +157,7 @@ const findFrameworkByName = Effect.fn(function* (name: string) {
 });
 
 /**
- * Projection used for drift detection — control set names with their sorted
+ * Projection used for drift detection -- control set names with their sorted
  * control ids.
  */
 const projectControlSets = (
@@ -207,13 +207,13 @@ export const FrameworkProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let framework = output?.frameworkId
             ? yield* readFrameworkById(output.frameworkId)
             : yield* findFrameworkByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (framework === undefined) {
             const created = yield* auditmanager.createAssessmentFramework({
               name,
@@ -231,7 +231,7 @@ export const FrameworkProvider = () =>
             yield* session.note(`Created framework ${name} (${framework.id})`);
           }
 
-          // Sync — diff observed against desired; update on drift.
+          // Sync -- diff observed against desired; update on drift.
           const drifted =
             (framework.name ?? "") !== name ||
             (framework.description ?? "") !== (news.description ?? "") ||
@@ -259,7 +259,7 @@ export const FrameworkProvider = () =>
             yield* session.note(`Updated framework ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const attrs = toAttributes(framework);
           const { removed, upsert } = diffTags(attrs.tags, desiredTags);
           if (removed.length > 0) {

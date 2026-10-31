@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:GetSecurityControlDefinition`.
  *
  * Returns the definition (title, description, parameters, severity) of a single security control.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetSecurityControlDefinitionHttp)`.
  * ### Standards & Controls
  * **Example:** Read a Control Definition
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSecurityControlDefinition = yield* AWS.SecurityHub.GetSecurityControlDefinition();
  *
  * // runtime

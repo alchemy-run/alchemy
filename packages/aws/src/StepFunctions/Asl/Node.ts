@@ -3,8 +3,8 @@ import type * as Output from "alchemy/Output";
  * The Step Functions program AST.
  *
  * Every {@link SfnEffect} wraps exactly one of these nodes. The AST is plain
- * data with two interpreters: `compile.ts` (→ ASL definition +
- * policy statements) and `simulate.ts` (→ an in-process `Effect`).
+ * data with two interpreters: `compile.ts` (-> ASL definition +
+ * policy statements) and `simulate.ts` (-> an in-process `Effect`).
  */
 import type * as Duration from "effect/Duration";
 import type { PolicyStatement } from "../../IAM/Policy.ts";
@@ -47,7 +47,7 @@ export interface IntegrationOptions {
   timeout?: Duration.Input;
 }
 
-/** Options for `Sfn.retry` — mirrors the `Schedule.exponential` vocabulary. */
+/** Options for `Sfn.retry` -- mirrors the `Schedule.exponential` vocabulary. */
 export interface RetryOptions {
   /**
    * Error names (tags) that are retried, mirroring `Effect.retry`'s `while`.
@@ -75,7 +75,7 @@ export interface ForEachOptions {
 export interface GenNode {
   readonly kind: "gen";
   /**
-   * The user's generator. Re-invoked on every compile/simulate pass — each
+   * The user's generator. Re-invoked on every compile/simulate pass -- each
    * `yield*` is fed a typed variable reference by the tracer.
    */
   readonly body: (input: Expr<any>) => Generator<SfnEffect<any, any>, any, any>;
@@ -148,7 +148,7 @@ export interface RetryNode {
 export interface CatchNode {
   readonly kind: "catch";
   readonly inner: SfnEffect<any, any>;
-  /** Error names to catch — `["States.ALL"]` for `catchAll`. */
+  /** Error names to catch -- `["States.ALL"]` for `catchAll`. */
   readonly tags: readonly string[];
   /** Handler over the ASL error output (`{ Error, Cause }`). */
   readonly handler: (error: Expr<ErrorOutput>) => SfnEffect<any, any>;

@@ -71,7 +71,7 @@ export interface StreamEventSourceProps {
   /**
    * The duration of a processing window for tumbling windows, e.g.
    * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
-   * the wire (0–900 seconds).
+   * the wire (0-900 seconds).
    */
   tumblingWindow?: Duration.Input;
   /**
@@ -112,7 +112,7 @@ export interface StreamEventSourceProps {
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.Kinesis.Stream("OrdersStream");
  *
- *     // init — registers the event source mapping and the record handler
+ *     // init -- registers the event source mapping and the record handler
  *     yield* AWS.Kinesis.consumeStreamRecords(
  *       stream,
  *       { startingPosition: "LATEST", batchSize: 10 },

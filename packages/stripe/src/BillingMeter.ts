@@ -70,7 +70,7 @@ export interface BillingMeterProps {
   /**
    * Name of the meter event used to record usage. Corresponds with the
    * `event_name` field on meter events. If omitted, a unique name is
-   * generated. Create-only — changing it replaces the meter. Stripe
+   * generated. Create-only -- changing it replaces the meter. Stripe
    * event names are unique per account, including deactivated meters.
    */
   eventName?: string;
@@ -103,7 +103,7 @@ export type BillingMeter = Resource<
   "Stripe.BillingMeter",
   BillingMeterProps,
   {
-    /** Stripe billing meter id (`mtr_…`). */
+    /** Stripe billing meter id (`mtr_...`). */
     id: string;
     /** The meter's name. Not visible to the customer. */
     displayName: string;
@@ -131,7 +131,7 @@ export type BillingMeter = Resource<
 >;
 
 /**
- * A Stripe Billing Meter — how usage events are aggregated over a billing
+ * A Stripe Billing Meter -- how usage events are aggregated over a billing
  * period for usage-based prices. `eventName`, `defaultAggregation`,
  * `customerMapping`, `eventTimeWindow`, and `valueSettings` are immutable.
  * Changing `eventName` replaces the meter. Display name updates in place;

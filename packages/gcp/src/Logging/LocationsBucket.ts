@@ -44,7 +44,7 @@ export type LocationsBucketProps = {
   /**
    * Parent resource (`projects/{project}`, `folders/{folder}`,
    * `organizations/{organization}`, or `billingAccounts/{account}`).
-   * Defaults to the stack project. Immutable — changing it replaces the
+   * Defaults to the stack project. Immutable -- changing it replaces the
    * bucket.
    */
   parent?: string;
@@ -53,19 +53,19 @@ export type LocationsBucketProps = {
    * `{parent}/locations/{location}/buckets/{bucket}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Limited to
    * 100 characters: letters, digits, underscores, hyphens, periods; first
-   * character must be alphanumeric. Immutable — changing it replaces the
+   * character must be alphanumeric. Immutable -- changing it replaces the
    * bucket.
    */
   bucketId?: string;
   /**
    * Location that stores log entries. `global` leaves placement unspecified.
-   * Immutable after create — changing it replaces the bucket.
+   * Immutable after create -- changing it replaces the bucket.
    * @default "global"
    */
   location?: string;
   /**
    * Human-readable description. Log buckets have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -111,7 +111,7 @@ export type LocationsBucket = Resource<
     name: string;
     /** Bucket id (last path segment). */
     bucketId: string;
-    /** Parent resource (`projects/{project}`, `folders/{folder}`, …). */
+    /** Parent resource (`projects/{project}`, `folders/{folder}`, ...). */
     parent: string;
     /** Location that stores log entries. */
     location: string;
@@ -129,7 +129,7 @@ export type LocationsBucket = Resource<
     indexConfigs: LocationsBucketIndexConfig[];
     /** CMEK key name, if configured. */
     cmekSettings: LocationsBucketCmekSettings | undefined;
-    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, …). */
+    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. Unset on GCP default buckets. */
     createTime: string | undefined;
@@ -146,7 +146,7 @@ export type LocationsBucket = Resource<
  * Uses `createLocationsBuckets` / `getLocationsBuckets` / `deleteLocationsBuckets`.
  * Log buckets have no labels field, so Alchemy stamps ownership into the
  * description for `list` / nuke. `parent`, `bucketId`, and `location` are
- * identity — changing any of them replaces the bucket. Delete marks the
+ * identity -- changing any of them replaces the bucket. Delete marks the
  * bucket `DELETE_REQUESTED`; GCP purges it after 7 days.
  *
  * ### Creating a Locations Bucket

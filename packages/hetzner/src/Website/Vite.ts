@@ -29,12 +29,12 @@ export interface ViteProps extends FrameworkSiteProps {
 /**
  * Deploy a plain [Vite](https://vite.dev) application to a Hetzner Cloud
  * Server: `vite build` output served by a static-file systemd unit on
- * port 3000. For client-only projects — React/Vue/Solid SPAs,
- * `index.html` multi-page apps — whose entire deployable output is
+ * port 3000. For client-only projects -- React/Vue/Solid SPAs,
+ * `index.html` multi-page apps -- whose entire deployable output is
  * static assets.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/vite` with the
- * `@alchemy.run/frontend-frameworks/vite/node` deploy target — the package
+ * `@alchemy.run/frontend-frameworks/vite/node` deploy target -- the package
  * must be installed in your project. During `alchemy dev` the site is
  * Vite's own dev server and no cloud resources are created.
  *

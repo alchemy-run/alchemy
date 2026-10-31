@@ -33,7 +33,7 @@ export type TableField = {
   name: string;
   /**
    * Field type (`STRING`, `INTEGER`/`INT64`, `FLOAT`/`FLOAT64`,
-   * `BOOLEAN`/`BOOL`, `TIMESTAMP`, `DATE`, `RECORD`/`STRUCT`, …).
+   * `BOOLEAN`/`BOOL`, `TIMESTAMP`, `DATE`, `RECORD`/`STRUCT`, ...).
    */
   type: string;
   /**
@@ -59,13 +59,13 @@ export type TableField = {
 
 export type TableTimePartitioning = {
   /**
-   * Partition granularity (`DAY`, `HOUR`, `MONTH`, `YEAR`). Immutable —
+   * Partition granularity (`DAY`, `HOUR`, `MONTH`, `YEAR`). Immutable --
    * changing it replaces the table.
    */
   type: string;
   /**
    * Partitioning column (`TIMESTAMP` or `DATE`). Omit to use
-   * `_PARTITIONTIME`. Immutable — changing it replaces the table.
+   * `_PARTITIONTIME`. Immutable -- changing it replaces the table.
    */
   field?: string;
   /** Partition expiration in milliseconds. */
@@ -113,7 +113,7 @@ export type TableExternalDataConfiguration = {
   sourceUris: string[];
   /**
    * Source format: `PARQUET`, `NEWLINE_DELIMITED_JSON`, `CSV`, `AVRO`,
-   * `ORC`, …
+   * `ORC`, ...
    */
   sourceFormat: string;
   /**
@@ -129,7 +129,7 @@ export type TableProps = {
   /**
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/datasets/{dataset}`) or a full dataset resource
-   * name. Immutable — changing it replaces the table.
+   * name. Immutable -- changing it replaces the table.
    */
   datasetId: string;
   /**
@@ -137,7 +137,7 @@ export type TableProps = {
    * `projects/{project}/datasets/{dataset}/tables/{table}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    * Must contain only letters, numbers, and underscores; max 1,024
-   * characters. Immutable — changing it replaces the table.
+   * characters. Immutable -- changing it replaces the table.
    */
   tableId?: string;
   /**
@@ -175,7 +175,7 @@ export type TableProps = {
   /**
    * Cloud KMS key used to encrypt table data, as
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Immutable — changing it replaces the table.
+   * Immutable -- changing it replaces the table.
    */
   kmsKeyName?: string;
   /**
@@ -208,7 +208,7 @@ export type Table = Resource<
     datasetId: string;
     /** Project id. */
     project: string;
-    /** Table type (`TABLE`, `VIEW`, `EXTERNAL`, …). */
+    /** Table type (`TABLE`, `VIEW`, `EXTERNAL`, ...). */
     type: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -220,7 +220,7 @@ export type Table = Resource<
     friendlyName: string | undefined;
     /** Expiration time in milliseconds since epoch, if set. */
     expirationTime: string | undefined;
-    /** Dataset location (`US`, `us-central1`, …). */
+    /** Dataset location (`US`, `us-central1`, ...). */
     location: string | undefined;
     /** Time partitioning, if configured. */
     timePartitioning: TableTimePartitioning | undefined;

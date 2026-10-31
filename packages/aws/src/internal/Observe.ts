@@ -56,7 +56,7 @@ const toPlain = (value: unknown): unknown => {
 };
 
 /**
- * A tag list whose `Key`/`Value` are optional on the wire (EC2, ELBv2, …)
+ * A tag list whose `Key`/`Value` are optional on the wire (EC2, ELBv2, ...)
  * as a record. Entries without a key are dropped.
  */
 export const tagListRecord = (

@@ -18,7 +18,7 @@ export interface ListManagedNotificationEventsRequest
  * ### Reading AWS-Managed Notifications
  * **Example:** List Recent Managed Notification Events
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listManagedNotificationEvents =
  *   yield* AWS.Notifications.ListManagedNotificationEvents();
  *

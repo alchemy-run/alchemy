@@ -53,11 +53,11 @@ export type AutomatedDnsRecordProps = {
    * AutomatedDnsRecord id (the `{automated_dns_record}` segment of
    * `projects/{project}/locations/{location}/automatedDnsRecords/{automated_dns_record}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the record.
+   * logical id. Immutable -- changing it replaces the record.
    */
   automatedDnsRecordId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * record. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -65,39 +65,39 @@ export type AutomatedDnsRecordProps = {
   location?: string;
   /**
    * Service class that authorizes this record. Callers need
-   * `networkconnectivity.serviceClasses.use` on the class. Immutable —
+   * `networkconnectivity.serviceClasses.use` on the class. Immutable --
    * changing it replaces the record.
    */
   serviceClass: string;
   /**
-   * Creation mode. Immutable — changing it replaces the record.
+   * Creation mode. Immutable -- changing it replaces the record.
    */
   creationMode: AutomatedDnsRecordCreationMode;
   /**
-   * DNS record type (`A`, `AAAA`, `TXT`, `CNAME`). Immutable — changing
+   * DNS record type (`A`, `AAAA`, `TXT`, `CNAME`). Immutable -- changing
    * it replaces the record.
    */
   recordType: AutomatedDnsRecordRecordType;
   /**
    * Hostname prepended to `dnsSuffix` to form the FQDN. Do not include a
-   * trailing dot. Immutable — changing it replaces the record.
+   * trailing dot. Immutable -- changing it replaces the record.
    */
   hostname: string;
   /**
    * DNS suffix used for longest-suffix matching. Requires a trailing
-   * dot, e.g. `"example.com."`. Immutable — changing it replaces the
+   * dot, e.g. `"example.com."`. Immutable -- changing it replaces the
    * record.
    */
   dnsSuffix: string;
   /**
-   * Producer-specified TTL and rrdata. Immutable — changing it replaces
+   * Producer-specified TTL and rrdata. Immutable -- changing it replaces
    * the record.
    */
   originalConfig: DnsRecordConfig;
   /**
    * Consumer VPC this record is visible to
    * (`projects/{project}/global/networks/{network}` or a Compute
-   * self-link). Immutable — changing it replaces the record.
+   * self-link). Immutable -- changing it replaces the record.
    */
   consumerNetwork: string;
   /**
@@ -155,7 +155,7 @@ export type AutomatedDnsRecord = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`PROGRAMMED`, `CREATING`, …). */
+    /** Server-reported state (`PROGRAMMED`, `CREATING`, ...). */
     state: string | undefined;
     /** Extra state context, if any. */
     stateDetails: string | undefined;

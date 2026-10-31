@@ -88,8 +88,8 @@ interface PipeBuilderState {
 /**
  * Start building an EventBridge Pipe from a source resource. The terminal
  * `.toLambda(...)` / `.toQueue(...)` call synthesizes the
- * `pipes.amazonaws.com` execution role — source-read plus target-invoke
- * (plus enrichment-invoke) policies scoped to the exact resource ARNs —
+ * `pipes.amazonaws.com` execution role -- source-read plus target-invoke
+ * (plus enrichment-invoke) policies scoped to the exact resource ARNs --
  * and yields the {@link Pipe}.
  *
  * ```typescript

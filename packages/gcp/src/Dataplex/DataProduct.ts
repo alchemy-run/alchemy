@@ -35,12 +35,12 @@ export type DataProductAccessApprovalConfig =
 export type DataProductProps = {
   /**
    * Data product id. If omitted, a unique name is generated. Must match
-   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable — changing it
+   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable -- changing it
    * replaces the product.
    */
   dataProductId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * product.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -117,7 +117,7 @@ export type DataProduct = Resource<
 >;
 
 /**
- * A Dataplex Data Product — a curated collection of data assets packaged
+ * A Dataplex Data Product -- a curated collection of data assets packaged
  * for a use case.
  *
  * Location and product id are immutable. Display name, description,

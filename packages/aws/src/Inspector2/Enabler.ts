@@ -48,7 +48,7 @@ export interface Enabler extends Resource<
 > {}
 
 /**
- * Amazon Inspector account enablement — an account/region singleton that turns
+ * Amazon Inspector account enablement -- an account/region singleton that turns
  * on continuous vulnerability scanning for the selected resource types (EC2,
  * ECR, Lambda). Inspector exposes no tagging, so ownership is tracked by the
  * set of scan types this resource enabled; destroy only disables those types
@@ -215,7 +215,7 @@ export const EnablerProvider = () =>
           const account = yield* getAccount(accountId);
           const currentlyEnabled = enabledTypes(account?.resourceState);
 
-          // 2. ENSURE — enable any desired type not yet enabled.
+          // 2. ENSURE -- enable any desired type not yet enabled.
           const toEnable = desired.filter(
             (type) =>
               !currentlyEnabled.includes(type) &&
@@ -229,13 +229,13 @@ export const EnablerProvider = () =>
           }
 
           // Wait for the desired types to reach the terminal ENABLED state
-          // before returning — otherwise a follow-up destroy would be rejected
+          // before returning -- otherwise a follow-up destroy would be rejected
           // with ENABLE_IN_PROGRESS.
           if (desired.some((type) => !currentlyEnabled.includes(type))) {
             yield* waitUntilEnabled(accountId, desired);
           }
 
-          // 3. SYNC — disable any type we previously managed but no longer want.
+          // 3. SYNC -- disable any type we previously managed but no longer want.
           // Disable teardown is slow (minutes); fire it and do not block, the
           // account converges to the desired set asynchronously.
           const previouslyManaged = output?.resourceTypes ?? [];

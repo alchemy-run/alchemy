@@ -70,7 +70,7 @@ export interface QueryStateChangesProps extends EventRouteProps {
  * State Change`); this subscribes the host Function to those events so it can
  * react to completed or failed queries without polling.
  *
- * Athena publishes to EventBridge automatically — no additional resource is
+ * Athena publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
@@ -88,7 +88,7 @@ export interface QueryStateChangesProps extends EventRouteProps {
  *       (events) =>
  *         Stream.runForEach(events, (event) =>
  *           Effect.log(
- *             `query ${event.detail.queryExecutionId} → ${event.detail.currentState}`,
+ *             `query ${event.detail.queryExecutionId} -> ${event.detail.currentState}`,
  *           ),
  *         ),
  *     );

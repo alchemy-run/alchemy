@@ -26,7 +26,7 @@ export interface AgentGuardrailConfiguration {
 }
 
 /**
- * Long-term memory configuration for an agent — lets the agent retain
+ * Long-term memory configuration for an agent -- lets the agent retain
  * conversational context across sessions as asynchronously generated
  * session summaries, readable at runtime via the `GetAgentMemory` binding.
  */
@@ -62,7 +62,7 @@ export interface AgentProps {
   agentName?: string;
   /**
    * The foundation model or inference-profile id the agent uses for
-   * orchestration — a foundation-model id
+   * orchestration -- a foundation-model id
    * (`anthropic.claude-3-5-sonnet-20240620-v1:0`), a cross-region inference
    * profile id (`us.anthropic.claude-3-5-sonnet-20240620-v1:0`), or a full
    * Bedrock ARN. Model access must be enabled in the account.
@@ -150,7 +150,7 @@ export interface Agent extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock agent — a foundation model driven by natural-language
+ * An Amazon Bedrock agent -- a foundation model driven by natural-language
  * instructions that can orchestrate multi-step tasks.
  *
  * `Agent` owns the lifecycle of the agent's DRAFT version. An IAM execution
@@ -405,7 +405,7 @@ export const AgentProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Ensure the execution role first — the agent cannot exist without
+          // Ensure the execution role first -- the agent cannot exist without
           // one. Managed unless an explicit agentResourceRoleArn is provided.
           let roleArn = news.agentResourceRoleArn;
           let roleName = output?.roleName;
@@ -420,7 +420,7 @@ export const AgentProvider = () =>
             });
           }
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
           let agent = output?.agentId ? yield* getAgentOrUndefined(output.agentId) : undefined;
           if (agent === undefined) {
@@ -431,7 +431,7 @@ export const AgentProvider = () =>
           }
 
           if (agent === undefined) {
-            // 2. ENSURE — create.
+            // 2. ENSURE -- create.
             const created = yield* retryWhileRoleAssumeFails(
               bedrock.createAgent({
                 agentName: name,
@@ -449,7 +449,7 @@ export const AgentProvider = () =>
             agent = created.agent;
             agent = (yield* waitForSettled(agent.agentId)) ?? agent;
           } else {
-            // 3. SYNC — wait for any in-flight transition, then update.
+            // 3. SYNC -- wait for any in-flight transition, then update.
             agent = (yield* waitForSettled(agent.agentId)) ?? agent;
             yield* bedrock.updateAgent({
               agentId: agent.agentId,
@@ -469,7 +469,7 @@ export const AgentProvider = () =>
           const agentId = agent.agentId;
           const agentArn = agent.agentArn;
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags (create-time tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags (create-time tags
           //     only apply on first create; adoption may carry foreign tags).
           const observedTags = yield* fetchObservedTags(agentArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -486,7 +486,7 @@ export const AgentProvider = () =>
             });
           }
 
-          // 4. PREPARE — compile the DRAFT so the agent is invocable and can
+          // 4. PREPARE -- compile the DRAFT so the agent is invocable and can
           //    back an alias. Bounded poll to PREPARED/FAILED.
           if (news.prepare !== false) {
             yield* bedrock.prepareAgent({ agentId });

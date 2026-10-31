@@ -9,7 +9,7 @@ export const BatchGetServiceLevelObjectiveBudgetReportHttp = Layer.effect(
     tag: "AWS.ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReport",
     operation: appsignals.batchGetServiceLevelObjectiveBudgetReport,
     actions: ["application-signals:BatchGetServiceLevelObjectiveBudgetReport"],
-    // Budget reports evaluate the SLI with the CALLER's credentials —
+    // Budget reports evaluate the SLI with the CALLER's credentials --
     // verified live: without cloudwatch:GetMetricData the operation fails
     // with AccessDeniedException (empty message).
     accountActions: ["cloudwatch:GetMetricData"],

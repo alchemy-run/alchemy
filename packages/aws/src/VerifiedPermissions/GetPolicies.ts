@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { PolicyStore } from "./PolicyStore.ts";
 
 /**
- * A batch policy-retrieval request scoped to the bound policy store — the
+ * A batch policy-retrieval request scoped to the bound policy store -- the
  * store's `policyStoreId` is injected into every item.
  */
 export interface GetPoliciesRequest {
@@ -29,7 +29,7 @@ export interface GetPoliciesClient {
 }
 
 /**
- * Runtime binding for bulk policy retrieval — bind it to a `PolicyStore`
+ * Runtime binding for bulk policy retrieval -- bind it to a `PolicyStore`
  * inside a function runtime to fetch policy definitions (e.g. for admin /
  * audit surfaces) without granting mutation rights.
  * ### Reading Policies at Runtime

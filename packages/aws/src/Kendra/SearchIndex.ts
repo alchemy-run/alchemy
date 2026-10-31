@@ -143,12 +143,12 @@ export interface Index extends Resource<
 > {}
 
 /**
- * An Amazon Kendra index — a machine-learning powered enterprise search
+ * An Amazon Kendra index -- a machine-learning powered enterprise search
  * index that data sources (S3, SharePoint, databases, ...) sync documents
  * into and that applications query with natural language.
  *
  * :::caution
- * Provisioning an index takes ~20–30 minutes and bills hourly from the
+ * Provisioning an index takes ~20-30 minutes and bills hourly from the
  * moment the index becomes `ACTIVE` (including the Developer edition's
  * free-tier-exhausted rate). Destroy indexes promptly.
  * :::
@@ -243,7 +243,7 @@ const findIndexByName = Effect.fn(function* (name: string, arnOf: (indexId: stri
 });
 
 /**
- * An index still transitioning toward the awaited status — retried by
+ * An index still transitioning toward the awaited status -- retried by
  * {@link waitForIndexStatus}'s bounded schedule.
  */
 class IndexNotReady extends Data.TaggedError("IndexNotReady")<{
@@ -260,7 +260,7 @@ export class IndexProvisioningFailed extends Data.TaggedError("IndexProvisioning
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -269,7 +269,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "IndexNotReady",
-    // Index provisioning is slow (~20–30 min); poll every 20s up to ~40 min.
+    // Index provisioning is slow (~20-30 min); poll every 20s up to ~40 min.
     schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(120)]),
   });
 
@@ -362,13 +362,13 @@ export const IndexProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.id
             ? yield* readIndexById(output.id, arnOf)
             : yield* findIndexByName(name, arnOf);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* retryThroughIamPropagation(
               kendra.createIndex({
@@ -403,7 +403,7 @@ export const IndexProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateIndex — only send drifted fields.
+          // Sync mutable settings via UpdateIndex -- only send drifted fields.
           const described = state.described;
           const desiredCapacity = news.capacityUnits
             ? {
@@ -442,7 +442,7 @@ export const IndexProvider = () =>
             yield* session.note(`Updated index ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* kendra.untagResource({

@@ -43,7 +43,7 @@ export type InboundOidcSsoProfileRpConfig = {
 export type InboundOidcSsoProfileProps = {
   /**
    * Customer (`customers/C0123abc` or `customers/my_customer`).
-   * Immutable — changing it replaces the profile.
+   * Immutable -- changing it replaces the profile.
    * @default "customers/my_customer"
    */
   customer?: string;

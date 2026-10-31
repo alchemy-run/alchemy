@@ -99,7 +99,7 @@ export async function handlePrerenderRequest(
   try {
     // `renderForPrerender` buffers the body (so streaming errors surface
     // here) and collects the content entries and image transforms resolved
-    // during this render — scoped to this request's async context, so
+    // during this render -- scoped to this request's async context, so
     // concurrent prerender requests attribute correctly. A length-prefixed
     // JSON header carries the metadata before the raw response bytes.
     const { response, metadata } = await renderForPrerender(app, prerenderRequest, {

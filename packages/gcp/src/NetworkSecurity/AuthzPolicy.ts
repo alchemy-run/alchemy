@@ -113,13 +113,13 @@ export type AuthzPolicyCustomProvider = {
 export type AuthzPolicyProps = {
   /**
    * Authz policy id. If omitted, a unique RFC1035 name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the policy.
    */
   authzPolicyId?: string;
   /**
-   * Location (`us-central1`, `global`, …). Must match the targeted
-   * forwarding rules. Immutable — changing it replaces the policy.
+   * Location (`us-central1`, `global`, ...). Must match the targeted
+   * forwarding rules. Immutable -- changing it replaces the policy.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
@@ -144,7 +144,7 @@ export type AuthzPolicyProps = {
    */
   networkRules?: AuthzPolicyRule[];
   /**
-   * Authorization profile. Immutable — changing it replaces the policy.
+   * Authorization profile. Immutable -- changing it replaces the policy.
    * @default "REQUEST_AUTHZ"
    */
   policyProfile?: AuthzPolicyProfile;

@@ -2,7 +2,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 /**
- * `@alchemy.run/frontend-frameworks/sveltekit/source` — alchemy Worker source provider for
+ * `@alchemy.run/frontend-frameworks/sveltekit/source` -- alchemy Worker source provider for
  * SvelteKit projects.
  *
  * The default export satisfies alchemy's `WorkerSourceModule` contract
@@ -18,10 +18,10 @@ import { fileURLToPath } from "node:url";
  * - `build()` runs the SvelteKit Framework service (programmatic Vite build
  *   with the wrangler-free in-memory Cloudflare adapter + workerd rolldown
  *   re-bundle) and maps its `BuildOutput` onto the source contract:
- *   `serverModules` (entry first) → bundle files, `clientDirectory` →
+ *   `serverModules` (entry first) -> bundle files, `clientDirectory` ->
  *   assets (manifest-hashed, honoring `.assetsignore` / `_headers` /
- *   `_redirects`), project-tree hash → the `input` hash slot.
- * - `hash()` recomputes the `input` hash **without building** — a memo hash
+ *   `_redirects`), project-tree hash -> the `input` hash slot.
+ * - `hash()` recomputes the `input` hash **without building** -- a memo hash
  *   over the project tree (gitignore-aware by default, narrowable via
  *   `memo.include`/`memo.exclude`), the discovered external workspaces, the
  *   lockfile, this package's version, and the build-affecting options.
@@ -51,11 +51,11 @@ import {
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/sveltekit/source";
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Structural mirror of alchemy's Worker source contract
 // (packages/cloudflare/src/Workers/Source.ts). Do not import
-// alchemy here — the contract is structural by design.
-// ─────────────────────────────────────────────────────────────────────
+// alchemy here -- the contract is structural by design.
+// ---------------------------------------------------------------------
 
 /** Mirror of alchemy's `SourceHash`. */
 export interface SourceHash {
@@ -111,7 +111,7 @@ export interface SourceContext {
 export interface SourceDevContext extends SourceContext {
   /**
    * Runtime wiring derived by alchemy's LocalWorkerProvider. `bindings` are
-   * cloudflare-runtime `BindingHook`s — typed opaquely here to keep this
+   * cloudflare-runtime `BindingHook`s -- typed opaquely here to keep this
    * module free of an alchemy/cloudflare-runtime type dependency; they are
    * fed to the dev platform proxy as-is.
    */
@@ -169,10 +169,10 @@ export interface SourceProvider {
   ) => Effect.Effect<SourceDevHandle, SourceError, SourceServices | Scope.Scope>;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Descriptor options (JSON-serializable — they persist in alchemy state
+// ---------------------------------------------------------------------
+// Descriptor options (JSON-serializable -- they persist in alchemy state
 // and participate in the Worker's metadata hash)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 export interface SvelteKitMemoOptions {
   /** Glob patterns of files to hash, relative to `rootDir`. @default all non-gitignored files */
@@ -199,17 +199,17 @@ export interface SvelteKitSourceOptions {
    * `vite.config.*` (loaded natively), these merge over the options of the
    * user's own `sveltekit(...)` call (integration wins); without one they
    * are passed to `sveltekit(config)` wholesale. Must be JSON-serializable
-   * — it persists in state.
+   * -- it persists in state.
    */
   readonly kit?: Record<string, unknown> | undefined;
   /** Options for the wrangler-free Cloudflare adapter. */
   readonly adapter?: SvelteKitAdapterOptions | undefined;
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Hashing (mirrors alchemy's Command/Memo.ts + Util/sha256.ts semantics:
-// machine-independent — only relative paths and file bytes are hashed)
-// ─────────────────────────────────────────────────────────────────────
+// machine-independent -- only relative paths and file bytes are hashed)
+// ---------------------------------------------------------------------
 
 const sha256Hex = (input: string | Uint8Array): Effect.Effect<string> =>
   Effect.sync(() => NodeCrypto.createHash("sha256").update(input).digest("hex"));
@@ -234,7 +234,7 @@ const sha256Stable = (input: unknown): Effect.Effect<string> =>
   sha256Hex(JSON.stringify(stableValue(input) ?? null));
 
 /**
- * Convert gitignore-style rules into glob `ignore` patterns — a copy of
+ * Convert gitignore-style rules into glob `ignore` patterns -- a copy of
  * alchemy's `Util/gitignore-rules-to-globs.ts` (common cases only).
  */
 const gitignoreRulesToGlobs = (rules: ReadonlyArray<string>): Array<string> => {
@@ -308,7 +308,7 @@ const readGitIgnoreRules = (
   });
 
 /**
- * Deterministic content hash of the files in `cwd` matched by `memo` —
+ * Deterministic content hash of the files in `cwd` matched by `memo` --
  * mirror of alchemy's `hashDirectory` (`Command/Memo.ts`).
  */
 const hashDirectory = Effect.fnUntraced(function* (
@@ -363,7 +363,7 @@ const hashDirectory = Effect.fnUntraced(function* (
   return yield* sha256Stable(hashes);
 });
 
-/** This package's version — part of the `input` hash so an adapter upgrade busts the memo. */
+/** This package's version -- part of the `input` hash so an adapter upgrade busts the memo. */
 const packageVersion = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const dir = NodePath.dirname(fileURLToPath(import.meta.url));
@@ -374,7 +374,7 @@ const packageVersion = Effect.gen(function* () {
 /**
  * The rebuild-free `input` hash: project tree + external workspaces +
  * package version + build-affecting options. Mirrors alchemy's
- * `hashViteInput` semantics (`Workers/Sources/Vite.ts`) — never hashes
+ * `hashViteInput` semantics (`Workers/Sources/Vite.ts`) -- never hashes
  * absolute paths, so relocating an identical tree is a no-op.
  */
 const hashSvelteKitInput = Effect.fnUntraced(function* (
@@ -408,12 +408,12 @@ const hashSvelteKitInput = Effect.fnUntraced(function* (
   };
 });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Assets (mirror of alchemy's `readAssets` in `Workers/Assets.ts`:
 // manifest of 32-hex content hashes, honoring `.assetsignore`,
 // `_headers`, `_redirects`; the overall hash excludes the directory
 // path so identical bytes hash identically across machines)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB (Cloudflare limit)
 const MAX_ASSET_COUNT = 20_000;
@@ -485,9 +485,9 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
   } satisfies SourceAssetReadResult;
 });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // The provider
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const wrapFrameworkError = (error: { readonly message: string; readonly cause?: unknown }) =>
   new SourceProviderError({
@@ -507,7 +507,7 @@ const assetsConfig = (assets: SourceContext["assets"]): Record<string, unknown> 
 /**
  * Resolve the Worker's literal env values as dev `platform.env` overrides:
  * strings pass through, `Redacted<string>`s are unwrapped, everything else
- * (Effects, resource bindings) is skipped — those are delivered as real
+ * (Effects, resource bindings) is skipped -- those are delivered as real
  * bindings through the platform proxy via `ctx.worker.bindings`. A
  * same-named literal wins over the proxied value.
  */
@@ -527,11 +527,11 @@ const resolveDevEnvOverrides = (
 
 /**
  * SvelteKit resolves its config (and the postbuild analyse/prerender worker
- * threads re-derive `outDir`) relative to `process.cwd()` — with the
+ * threads re-derive `outDir`) relative to `process.cwd()` -- with the
  * in-memory config there is no `vite.config` file for the workers to
  * re-load, so their fallback resolves against the cwd. The build therefore
  * runs in a disposable child process whose working directory IS the project
- * root (see `core/BuildChild.ts`) — no in-process `chdir`, no process-level
+ * root (see `core/BuildChild.ts`) -- no in-process `chdir`, no process-level
  * lock, unbounded build concurrency. The shared `core/BuildChildRunner`
  * entry imports this module in the child and calls the exported
  * {@link buildInChild}.
@@ -645,7 +645,7 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
         frameworkOptions(ctx, {
           env: resolveDevEnvOverrides(ctx.env),
           bindings: ctx.worker.bindings,
-          // The host's runtime stack (includes remote-bindings support) —
+          // The host's runtime stack (includes remote-bindings support) --
           // the dev platform proxy is hosted in it instead of the
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.

@@ -23,12 +23,12 @@ import {
 export type BuyersClientsUserProps = {
   /**
    * Parent client, as `buyers/{buyer}/clients/{client}` or
-   * `{buyer}/clients/{client}`. Immutable — changing it replaces the
+   * `{buyer}/clients/{client}`. Immutable -- changing it replaces the
    * client user.
    */
   parent: string;
   /**
-   * Invitee email. Unique per client. Immutable — changing it replaces
+   * Invitee email. Unique per client. Immutable -- changing it replaces
    * the user. If omitted, a unique `example.com` address is generated.
    * The invite goes to this exact address; client users have no labels,
    * so Alchemy tracks the user by its resource name.
@@ -36,7 +36,7 @@ export type BuyersClientsUserProps = {
   email?: string;
   /**
    * Server-assigned user id (last path segment). Omit on create; pass
-   * the observed id to keep the same user. Immutable — changing it
+   * the observed id to keep the same user. Immutable -- changing it
    * replaces the user.
    */
   userId?: string;
@@ -73,7 +73,7 @@ export type BuyersClientsUser = Resource<
  * An Authorized Buyers Marketplace client user
  * (`buyers/{buyer}/clients/{client}/users/{user}`).
  *
- * Client users have no labels or description — Alchemy stamps ownership
+ * Client users have no labels or description -- Alchemy stamps ownership
  * into the email plus-tag so `list` / nuke can find them. Parent and
  * email are identity; changing either replaces the user. Create sends an
  * invitation (`INVITED`). Activate and deactivate only apply after the

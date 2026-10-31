@@ -65,25 +65,25 @@ export type ManagementServerProps = {
    * Management server id (the `{managementServer}` segment of
    * `projects/{project}/locations/{location}/managementServers/{managementServer}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the server.
+   * and logical id. Immutable -- changing it replaces the server.
    */
   managementServerId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the server. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
-   * Instance type. Immutable — changing it replaces the server.
+   * Instance type. Immutable -- changing it replaces the server.
    * @default "BACKUP_RESTORE"
    */
   type?: backupdr.ManagementServerTypeEnum | (string & {});
   /**
    * VPC networks the server is connected to. Only a single network is
    * supported. Optional when created without Private Service Access.
-   * Immutable — changing it replaces the server.
+   * Immutable -- changing it replaces the server.
    */
   networks?: NetworkConfig[];
   /**
@@ -147,7 +147,7 @@ export type ManagementServer = Resource<
  * A Backup and DR management console (ManagementServer). Provisioning is
  * slow (tens of minutes) and typically limited to one console per region.
  *
- * There is no patch API — labels, description, type, and networks are
+ * There is no patch API -- labels, description, type, and networks are
  * set at create. Changing `managementServerId`, `location`, `type`, or
  * `networks` replaces the server.
  *

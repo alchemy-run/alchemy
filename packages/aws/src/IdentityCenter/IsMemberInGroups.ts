@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `IsMemberInGroups` operation (IAM action
  * `identitystore:IsMemberInGroups`), scoped to one {@link Instance}.
  *
- * Checks whether a user belongs to any of up to 100 groups in one call — the fast authorization primitive for group-gated routes. The instance's
+ * Checks whether a user belongs to any of up to 100 groups in one call -- the fast authorization primitive for group-gated routes. The instance's
  * `IdentityStoreId` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.IsMemberInGroupsHttp)`.
  * ### Querying Group Memberships
  * **Example:** Gate a Route on Group Membership
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const isMemberInGroups = yield* AWS.IdentityCenter.IsMemberInGroups(instance);
  *
  * // runtime

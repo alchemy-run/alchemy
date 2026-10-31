@@ -7,15 +7,15 @@ import type { DBCluster } from "./DBCluster.ts";
  * Runtime binding for the `StopDBCluster` operation (IAM action
  * `rds:StopDBCluster`).
  *
- * Stops the bound {@link DBCluster} — compute billing pauses while storage
- * is retained (up to 7 days, after which DocumentDB starts it back up) —
+ * Stops the bound {@link DBCluster} -- compute billing pauses while storage
+ * is retained (up to 7 days, after which DocumentDB starts it back up) --
  * e.g. an ops function that parks a development cluster overnight. The
  * cluster identifier is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.DocDB.StopDBClusterHttp)`.
  * ### Operating a Cluster
  * **Example:** Stop a Running Cluster
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const stopDBCluster = yield* AWS.DocDB.StopDBCluster(cluster);
  *
  * // runtime

@@ -129,7 +129,7 @@ const encodeWorkerValue = (value: unknown): EncodedValue | undefined => {
     };
   }
   if (isR2ObjectLike(value)) {
-    // Bodyless here (nested positions — e.g. the objects of a `list`
+    // Bodyless here (nested positions -- e.g. the objects of a `list`
     // result). A top-level `get` result's body is captured by the async
     // pre-pass in `encodeResult`.
     return encodeR2Object(value);
@@ -166,7 +166,7 @@ const isR2ObjectLike = (value: unknown): value is R2ObjectLike =>
   typeof (value as R2ObjectLike).httpEtag === "string" &&
   typeof (value as R2ObjectLike).writeHttpMetadata === "function";
 
-/** `R2Objects` — the container a `list` call returns. */
+/** `R2Objects` -- the container a `list` call returns. */
 const isR2ObjectsLike = (
   value: unknown,
 ): value is {
@@ -249,7 +249,7 @@ const evaluateChain = async (
     // Reflect.apply (never `method.apply`): property access on workers RPC
     // method stubs turns "apply" into an RPC path segment instead of calling.
     target = await Reflect.apply(method as (...args: Array<unknown>) => unknown, target, args);
-    path += `.${segment.method}(…)`;
+    path += `.${segment.method}(\u2026)`;
   }
   return target;
 };
@@ -263,7 +263,7 @@ const encodeResult = async (result: unknown): Promise<Response> => {
   if (result instanceof ReadableStream) {
     return new Response(result, { headers: resultHeaders("stream") });
   }
-  // R2 rich objects: a `get` result carries a one-shot body — buffer it
+  // R2 rich objects: a `get` result carries a one-shot body -- buffer it
   // here (async) so the sync encoder can ship it; bodyless heads/lists
   // fall through to the generic path via `encodeWorkerValue`.
   if (isR2ObjectLike(result) && result.body !== undefined && result.arrayBuffer !== undefined) {
@@ -274,7 +274,7 @@ const encodeResult = async (result: unknown): Promise<Response> => {
     );
   }
   if (isR2ObjectsLike(result)) {
-    // The container is itself a class instance — encode it field-wise.
+    // The container is itself a class instance -- encode it field-wise.
     const encoded: Record<string, EncodedValue> = {
       objects: encodeValue(result.objects, encodeWorkerValue),
       truncated: encodeValue(result.truncated),

@@ -25,7 +25,7 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * How often the sweep runs. Every process on the machine opens the cache,
- * and a sweep stats every entry — thousands of files — so a marker file's
+ * and a sweep stats every entry -- thousands of files -- so a marker file's
  * mtime limits it to once per interval.
  */
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -74,7 +74,7 @@ export interface CachedTransform {
 
 /**
  * On-disk cache of Oxc transform output shared by every process on the
- * machine — the `alchemy` CLI, its dev exec child, the local-provider
+ * machine -- the `alchemy` CLI, its dev exec child, the local-provider
  * sidecars and dev-server runners all load the same source files, and
  * without this each of them transpiles the whole graph again.
  *
@@ -86,7 +86,7 @@ export interface CachedTransform {
  *
  * An entry is two files: `<key>.code` with the code behind a short header,
  * and `<key>.map` with the source map. The map stays on disk and is referenced from the module
- * by path rather than inlined — an inline `data:` map is part of the
+ * by path rather than inlined -- an inline `data:` map is part of the
  * script's source text, which V8 keeps for the process lifetime; for a
  * graph the size of alchemy's that is hundreds of megabytes per process.
  * Node reads the referenced file synchronously as it compiles the module,
@@ -142,7 +142,7 @@ export class TransformCache {
 
   /**
    * Stores one transform. Returns the map file's path once it is on disk,
-   * or `undefined` when there is no map or it could not be written — the
+   * or `undefined` when there is no map or it could not be written -- the
    * caller then falls back to inlining it.
    */
   set(key: string, entry: TransformCacheEntry): string | undefined {

@@ -16,14 +16,14 @@ import {
 
 export type BucketAccessControlProps = {
   /**
-   * Name of the bucket this ACL entry is attached to. Immutable —
+   * Name of the bucket this ACL entry is attached to. Immutable --
    * changing it replaces the entry.
    */
   bucketName: string;
   /**
    * Principal granted the role. Forms include `user-{email}`,
    * `group-{email}`, `domain-{domain}`, `allUsers`, and
-   * `allAuthenticatedUsers`. Immutable — changing it replaces the entry.
+   * `allAuthenticatedUsers`. Immutable -- changing it replaces the entry.
    */
   entity: string;
   /**

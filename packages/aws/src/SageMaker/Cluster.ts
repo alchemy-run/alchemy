@@ -38,7 +38,7 @@ export const HYPERPOD_INSTANCE_GROUP_LABEL = "sagemaker.amazonaws.com/instance-g
 export const HYPERPOD_NODE_HEALTH_LABEL = "sagemaker.amazonaws.com/node-health-status";
 
 /**
- * An instance group surfaced on the cluster's attributes — Kubernetes
+ * An instance group surfaced on the cluster's attributes -- Kubernetes
  * workloads pin themselves to the group by referencing its
  * {@link ClusterInstanceGroupRef.nodeSelector}.
  */
@@ -53,7 +53,7 @@ export interface ClusterInstanceGroupRef {
   TargetCount: number | undefined;
   /**
    * A Kubernetes node selector pinning pods onto this group's
-   * health-checked nodes — pass it to a `Kubernetes.Job` /
+   * health-checked nodes -- pass it to a `Kubernetes.Job` /
    * `Kubernetes.Deployment` through the `podTemplate` escape hatch:
    *
    * ```ts
@@ -66,7 +66,7 @@ export interface ClusterInstanceGroupRef {
 }
 
 /**
- * One instance group's specification, sans name — the group's name is the
+ * One instance group's specification, sans name -- the group's name is the
  * key in {@link ClusterProps.instanceGroups}.
  */
 export type ClusterInstanceGroup = Omit<
@@ -75,7 +75,7 @@ export type ClusterInstanceGroup = Omit<
 >;
 
 /**
- * One restricted instance group's specification, sans name — the group's
+ * One restricted instance group's specification, sans name -- the group's
  * name is the key in {@link ClusterProps.restrictedInstanceGroups}.
  */
 export type ClusterRestrictedInstanceGroup = Omit<
@@ -188,7 +188,7 @@ export interface Cluster extends Resource<
 const ClusterResource = Resource<Cluster>("AWS.SageMaker.Cluster");
 
 /**
- * A `Cluster` narrowed to the instance-group keys declared in its props —
+ * A `Cluster` narrowed to the instance-group keys declared in its props --
  * `hyperpod.instanceGroups.workers` is typed per key, and a typo'd key is
  * a compile error.
  */
@@ -197,11 +197,11 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
 };
 
 /**
- * An Amazon SageMaker HyperPod cluster — a resilient, persistent cluster of
+ * An Amazon SageMaker HyperPod cluster -- a resilient, persistent cluster of
  * ML compute for distributed training and inference, orchestrated by Slurm
  * or EKS, with automatic faulty-node recovery and deep health checks.
  *
- * Provisioning a HyperPod cluster takes 10–25 minutes; instance groups are
+ * Provisioning a HyperPod cluster takes 10-25 minutes; instance groups are
  * updated in place and removing a group from `instanceGroups` deletes it
  * from the cluster.
  * ### Creating Clusters
@@ -230,7 +230,7 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  * **Example:** EKS-Orchestrated Cluster
  * ```typescript
  * // The EKS cluster must use the `API` (or `API_AND_CONFIG_MAP`)
- * // authentication mode — pass `accessConfig` explicitly, EKS's own
+ * // authentication mode -- pass `accessConfig` explicitly, EKS's own
  * // CONFIG_MAP default is rejected. LifeCycleConfig is required for
  * // EKS-orchestrated instance groups too.
  * const hyperpod = yield* AWS.SageMaker.Cluster("EksHyperPod", {
@@ -253,7 +253,7 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *   nodeRecovery: "Automatic",
  * });
  *
- * // The keys carry through to the attributes — typed per key:
+ * // The keys carry through to the attributes -- typed per key:
  * const workers = hyperpod.instanceGroups.workers;
  * ```
  *
@@ -272,7 +272,7 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  * ### Running Workloads (EKS)
  * **Example:** Low level: apply any Kubernetes manifest to the orchestrator
  * ```typescript
- * // HyperPod nodes are ordinary EKS nodes — target them from a raw
+ * // HyperPod nodes are ordinary EKS nodes -- target them from a raw
  * // manifest (a PyTorchJob CRD, a batch/v1 Job, ...) with the well-known
  * // node labels.
  * const job = yield* AWS.EKS.Manifest("RawTrainJob", {
@@ -300,7 +300,7 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  * **Example:** High level: an effectful Job pinned to HyperPod nodes
  * ```typescript
  * // Kubernetes.Job / Kubernetes.Deployment run on HyperPod via the
- * // orchestrating EKS cluster in plain Kubernetes vocabulary — the
+ * // orchestrating EKS cluster in plain Kubernetes vocabulary -- the
  * // HyperPod resources expose the derived values as attributes: the
  * // group's `nodeSelector`, the quota's governed `namespace` and Kueue
  * // `queueName`.
@@ -343,7 +343,7 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *   },
  * });
  *
- * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue —
+ * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue --
  * // exposed as `quota.namespace` / `quota.queueName` for governed
  * // Kubernetes workloads to reference.
  * const quota = yield* AWS.SageMaker.ComputeQuota("ResearchQuota", {
@@ -418,7 +418,7 @@ const toAttrs = (described: sagemaker.DescribeClusterResponse): Cluster["Attribu
 });
 
 /**
- * The cluster is still transitioning toward the awaited state — retried by
+ * The cluster is still transitioning toward the awaited state -- retried by
  * the bounded wait schedule.
  */
 class ClusterNotReady extends Data.TaggedError("ClusterNotReady")<{
@@ -436,7 +436,7 @@ export class ClusterFailed extends Data.TaggedError("ClusterFailed")<{
 
 /**
  * The cluster is stuck in `Deleting` because SageMaker's internal teardown
- * cannot proceed — e.g. the instance group's execution role (which HyperPod
+ * cannot proceed -- e.g. the instance group's execution role (which HyperPod
  * assumes to delete node ENIs) was deleted or lost its
  * `ec2:DeleteNetworkInterface` / `ec2:DeleteNetworkInterfacePermission`
  * permissions mid-teardown. Retrying `deleteCluster` can never fix this;
@@ -448,7 +448,7 @@ export class ClusterTeardownBlocked extends Data.TaggedError("ClusterTeardownBlo
   readonly message: string;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -457,13 +457,13 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ClusterNotReady",
-    // HyperPod cluster provisioning routinely takes 10–25 minutes.
+    // HyperPod cluster provisioning routinely takes 10-25 minutes.
     // Poll 15s up to ~35 min.
     schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(140)]),
   });
 
 // A freshly created execution role isn't assumable by SageMaker for a few
-// seconds (IAM propagation) — createCluster rejects it with a
+// seconds (IAM propagation) -- createCluster rejects it with a
 // ValidationException until it is.
 const retryWhileRoleUnassumable = <
   A,
@@ -488,7 +488,7 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
         // SageMaker's internal teardown deletes node ENIs by assuming the
         // instance group's execution role. If that role (or its EC2
         // permissions) was deleted mid-teardown, every internal retry
-        // fails and the cluster stays `Deleting` forever — surface the
+        // fails and the cluster stays `Deleting` forever -- surface the
         // node's permission failure immediately instead of polling the
         // full wait budget on a delete that can never finish.
         const nodes = yield* sagemaker
@@ -524,7 +524,7 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
 
 /**
  * The subset of an instance group's specification that `updateCluster`
- * can change and `describeCluster` reports back — used to diff desired
+ * can change and `describeCluster` reports back -- used to diff desired
  * groups against observed groups.
  */
 const observedGroupIdentity = (
@@ -554,7 +554,7 @@ export const ClusterProvider = () =>
       return {
         stables: ["clusterName", "clusterArn"],
         // HyperPod's internal teardown deletes node ENIs by assuming the
-        // instance group's execution role inside the cluster's VPC —
+        // instance group's execution role inside the cluster's VPC --
         // deleting the role or network mid-teardown wedges the cluster in
         // `Deleting` permanently, so nuke must fully delete clusters
         // before touching these types.
@@ -605,7 +605,7 @@ export const ClusterProvider = () =>
           if (olds === undefined) return;
           const oldName = yield* createClusterName(id, olds);
           const newName = yield* createClusterName(id, news);
-          // The VPC is fixed at creation — changing it (or the name)
+          // The VPC is fixed at creation -- changing it (or the name)
           // replaces the cluster. Everything else updates in place.
           if (
             oldName !== newName ||
@@ -627,7 +627,7 @@ export const ClusterProvider = () =>
           // Observe.
           let described = yield* describeClusterOrUndefined(name);
 
-          // Ensure — create if missing; tolerate the already-exists race.
+          // Ensure -- create if missing; tolerate the already-exists race.
           if (described === undefined) {
             yield* sagemaker
               .createCluster({
@@ -653,7 +653,7 @@ export const ClusterProvider = () =>
               );
             yield* session.note(`Creating HyperPod cluster ${name} (typically 10-25 minutes)...`);
           } else {
-            // Sync — diff observed instance groups + mutable settings
+            // Sync -- diff observed instance groups + mutable settings
             // against desired and apply one update call for the delta.
             const observedGroups = new Map(
               (described.InstanceGroups ?? []).flatMap((g) =>
@@ -716,7 +716,7 @@ export const ClusterProvider = () =>
           }
           const attrs = toAttrs(described);
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchClusterTags(attrs.clusterArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
@@ -738,7 +738,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const described = yield* describeClusterOrUndefined(output.clusterName);
           if (described === undefined) return;
-          // A cluster mid-create/update rejects deletion with a Conflict —
+          // A cluster mid-create/update rejects deletion with a Conflict --
           // wait for it to settle first, then delete. A cluster stuck in
           // `Failed` (or one that never converges) is still deletable. One
           // already `Deleting` (a previous attempt) skips straight to the

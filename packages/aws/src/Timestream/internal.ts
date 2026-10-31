@@ -29,7 +29,7 @@ const cache = new Map<Kind, CachedEndpoint>();
 /**
  * Discover (and cache) the cell-specific endpoint for `kind`, using the given
  * `DescribeEndpoints` effect. Parameterized over the discovery effect so each
- * caller carries only its own service module's error union — and so binding
+ * caller carries only its own service module's error union -- and so binding
  * layers can pass an operation captured via yield-first (`yield* op`) whose
  * calls are requirement-free.
  */

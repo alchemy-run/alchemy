@@ -100,7 +100,7 @@ export const AccountNameProvider = () =>
           // putAccountName is eventually consistent: getAccountInformation
           // can keep returning the previous name for ~20 seconds. Poll
           // (bounded) until the rename is observable; if it is still stale
-          // after the budget, report the desired name — the put succeeded,
+          // after the budget, report the desired name -- the put succeeded,
           // so it is authoritative.
           const observed = yield* observe(news.accountId).pipe(
             Effect.repeat({
@@ -116,7 +116,7 @@ export const AccountNameProvider = () =>
         }),
         // Account-global singleton: the one name always exists.
         list: () => observe(undefined).pipe(Effect.map((observed) => [observed])),
-        // An AWS account always has a name — there is nothing to delete.
+        // An AWS account always has a name -- there is nothing to delete.
         // Destroy just stops managing it, mirroring the console behavior.
         delete: Effect.fn(function* () {}),
       };

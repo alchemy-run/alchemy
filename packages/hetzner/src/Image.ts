@@ -55,7 +55,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 /**
  * Server identity an Image is snapshotted from. Accepts a `Hetzner.Server`
  * resource or a `{ serverId }` stub. Stock (system/app) Images are not
- * managed here — look those up with `Hetzner.findImage`.
+ * managed here -- look those up with `Hetzner.findImage`.
  */
 export type ImageServer = {
   readonly serverId: number;
@@ -78,7 +78,7 @@ export interface ImageProps {
    * Image type. Snapshots are independent of the source Server and billed
    * per GB. Backups are bound to the Server (and deleted with it) and
    * require backups to be enabled. Convert a backup to a snapshot in
-   * place; snapshot → backup replaces.
+   * place; snapshot -> backup replaces.
    *
    * @default "snapshot"
    */
@@ -108,7 +108,7 @@ export type Image = Resource<
     /** Image status. */
     status: ImageStatus;
     /**
-     * Unique identifier. Only set for system Images — snapshots and
+     * Unique identifier. Only set for system Images -- snapshots and
      * backups are `null`.
      */
     name: string | null;
@@ -151,13 +151,13 @@ export type Image = Resource<
 >;
 
 /**
- * A Hetzner Cloud custom Image — a snapshot (or backup) of a Server's
- * disk. Stock system/app Images (`ubuntu-24.04`, …) are Catalog lookups
+ * A Hetzner Cloud custom Image -- a snapshot (or backup) of a Server's
+ * disk. Stock system/app Images (`ubuntu-24.04`, ...) are Catalog lookups
  * via `Hetzner.findImage`, not this resource.
  *
  * Snapshots are created with `POST /servers/{id}/actions/create_image`
  * and billed per GB. Description, labels, delete protection, and
- * backup→snapshot conversion update in place. Changing the source Server
+ * backup->snapshot conversion update in place. Changing the source Server
  * replaces the Image.
  *
  * @see https://docs.hetzner.cloud/reference/cloud#images
@@ -427,7 +427,7 @@ export const ImageProvider = () =>
       const desiredProtection = news.deleteProtection ?? false;
       const desiredServerId = serverIdOf(news.server);
 
-      // Observe by id only. Do not fall back to ownership labels — a
+      // Observe by id only. Do not fall back to ownership labels -- a
       // create-first replacement still has the old generation live under
       // the same logical id, and snapshots are not uniquely named.
       let current = output?.id !== undefined ? yield* getById(output.id) : undefined;

@@ -9,7 +9,7 @@ export interface UpdateEndpointWeightsAndCapacitiesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `sagemaker:UpdateEndpointWeightsAndCapacities` — shift
+ * Runtime binding for `sagemaker:UpdateEndpointWeightsAndCapacities` -- shift
  * traffic between an endpoint's production variants (or resize one variant)
  * without redeploying.
  *

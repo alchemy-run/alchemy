@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:AcceptInvitation`.
  *
  * Accepts an Amazon Macie membership invitation that was received from a specific account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.AcceptInvitationHttp)`.
  * ### Administrator & Invitations
  * **Example:** Accept an Administrator's Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const acceptInvitation = yield* AWS.Macie2.AcceptInvitation();
  *
  * // runtime

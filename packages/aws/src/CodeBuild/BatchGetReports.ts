@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:BatchGetReports` — reads one or more
+ * Runtime binding for `codebuild:BatchGetReports` -- reads one or more
  * reports of the bound report group by report ARN.
  * ### Reading Reports
  * **Example:** Read Report Summaries

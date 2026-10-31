@@ -9,7 +9,7 @@ export const BatchWriteRecordHttp = Layer.effect(
     tag: "AWS.SageMaker.BatchWriteRecord",
     operation: featurestore.batchWriteRecord,
     actions: ["sagemaker:BatchWriteRecord"],
-    // The wire request identifies the feature group per entry — scope every
+    // The wire request identifies the feature group per entry -- scope every
     // entry to the bound feature group.
     prepare: (request: BatchWriteRecordRequest, featureGroupName) => ({
       Entries: request.Entries.map((entry) => ({

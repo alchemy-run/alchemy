@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:DeleteSuppressedDestination`.
  *
- * Removes an email address from the account-level suppression list — e.g.
+ * Removes an email address from the account-level suppression list -- e.g.
  * after a recipient re-subscribes or a bounce is resolved. Fails with the
  * typed `NotFoundException` tag when the address is not on the list.
  * Account-level operation. Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Suppression List
  * **Example:** Unsuppress an Address
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const unsuppress = yield* SES.DeleteSuppressedDestination();
  *
  * // runtime

@@ -7,7 +7,7 @@ export interface ListTopicsRequest extends sns.ListTopicsInput {}
 /**
  * Runtime binding for `sns:ListTopics`.
  *
- * An account-scoped operation — bind it with no arguments to page through
+ * An account-scoped operation -- bind it with no arguments to page through
  * all topic ARNs in the account/region. The binding grants the host function
  * `sns:ListTopics`. Provide the `ListTopicsHttp` layer on the Function to
  * implement the binding.

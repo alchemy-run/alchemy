@@ -35,7 +35,7 @@ export type TurnKeyAttributes = {
   accountId: string;
   /**
    * TURN key secret (bearer token) used to mint short-lived TURN
-   * credentials. Returned only at creation time and never re-readable —
+   * credentials. Returned only at creation time and never re-readable --
    * Alchemy persists it in state and carries it forward across updates.
    */
   key: Redacted.Redacted<string>;
@@ -79,10 +79,10 @@ export type TurnKey = Resource<TypeId, TurnKeyProps, TurnKeyAttributes, never, P
  * ### Using the key
  * **Example:** Minting TURN credentials server-side
  * ```typescript
- * // keyId is public — it appears in the credential-minting URL:
+ * // keyId is public -- it appears in the credential-minting URL:
  * const keyId = turnKey.keyId;
  *
- * // The key is redacted — POST it as a bearer token to
+ * // The key is redacted -- POST it as a bearer token to
  * // https://rtc.live.cloudflare.com/v1/turn/keys/{keyId}/credentials/generate
  * const apiToken = turnKey.key; // Redacted<string>
  * ```
@@ -113,7 +113,7 @@ export const TurnKeyProvider = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       // The TURN key secret is returned only at creation time, so a key
-      // cannot be re-hydrated without prior state — no cold read /
+      // cannot be re-hydrated without prior state -- no cold read /
       // adoption path.
       if (!output?.keyId) return undefined;
       const observed = yield* getTurnKey(output.accountId, output.keyId);
@@ -123,7 +123,7 @@ export const TurnKeyProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Account-scoped collection: paginate the TURN keys list exhaustively.
       // The list response carries every readable field (uid/name/created/
-      // modified) — the bearer `key` is returned only at creation and is
+      // modified) -- the bearer `key` is returned only at creation and is
       // never re-readable, so we hydrate it as an empty redacted value to
       // match exactly what `read` would produce on a cold (stateless) read.
       return yield* calls.listTurns.pages({ accountId }).pipe(
@@ -141,21 +141,21 @@ export const TurnKeyProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createTurnKeyName(id, news.name);
 
-      // Observe — the keyId cached on `output` is a hint, not a guarantee:
+      // Observe -- the keyId cached on `output` is a hint, not a guarantee:
       // a missing key (code 20008) falls through and we recreate.
       const observed = output?.keyId
         ? yield* getTurnKey(output.accountId ?? accountId, output.keyId)
         : undefined;
 
       if (!observed || !output) {
-        // Ensure — greenfield (or out-of-band delete): create and capture
+        // Ensure -- greenfield (or out-of-band delete): create and capture
         // the create-only key. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createTurn({ accountId, name });
         return toAttributes(created, accountId, Redacted.make(created.key ?? ""));
       }
 
-      // Sync — the only mutable aspect is `name`; diff observed cloud
+      // Sync -- the only mutable aspect is `name`; diff observed cloud
       // state against desired and skip the PUT entirely on a no-op.
       if (observed.name === name) {
         return toAttributes(observed, output.accountId, output.key);

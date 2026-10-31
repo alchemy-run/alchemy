@@ -2,8 +2,8 @@
  * The ACME issuance flow shared by the `Certificate` resource (deploy time)
  * and the `IssueCertificate` binding (runtime):
  *
- *   order → DNS-01 per authorization (present → propagated → respond →
- *   poll) → finalize with a fresh key's CSR → download → parse.
+ *   order -> DNS-01 per authorization (present -> propagated -> respond ->
+ *   poll) -> finalize with a fresh key's CSR -> download -> parse.
  *
  * The wire is `@distilled.cloud/acme`; this file only sequences it.
  */

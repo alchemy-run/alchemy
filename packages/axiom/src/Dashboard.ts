@@ -26,12 +26,12 @@ export type Dashboard = Resource<
 >;
 
 /**
- * An Axiom dashboard — a named, layout-driven collection of charts. Each
+ * An Axiom dashboard -- a named, layout-driven collection of charts. Each
  * dashboard takes a full document (`charts` + `layout` array of grid cells +
  * `timeWindow` + `refreshTime`) at version `schemaVersion: 2`.
  *
  * Charts are typed via {@link Chart} (a discriminated union over the
- * Axiom-validated chart kinds — `TimeSeries`, `Table`, `Pie`, `Statistic`,
+ * Axiom-validated chart kinds -- `TimeSeries`, `Table`, `Pie`, `Statistic`,
  * `Heatmap`, `LogStream`, `Note`). The `id` on each chart is a free-form
  * string the author picks; layout cells join via `LayoutCell.i`.
  *
@@ -151,7 +151,7 @@ export const DashboardProvider = () =>
       return {
         stables: ["uid", "id", "createdAt", "createdBy"],
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — `uid` is server-assigned at create time. We probe
+          // Observe -- `uid` is server-assigned at create time. We probe
           // Axiom for the dashboard via the cached uid; treat NotFound
           // (deleted out-of-band) as "no observed state" so we converge
           // by re-creating.
@@ -161,12 +161,12 @@ export const DashboardProvider = () =>
               )
             : undefined;
 
-          // Ensure — POST mints a new dashboard with a fresh uid.
+          // Ensure -- POST mints a new dashboard with a fresh uid.
           if (observed === undefined) {
             return toAttrsFromCreate(yield* create(news));
           }
 
-          // Sync — `overwrite: true` short-circuits Axiom's optimistic-
+          // Sync -- `overwrite: true` short-circuits Axiom's optimistic-
           // concurrency check (otherwise the API requires the caller to
           // echo back the server-side `version`, which we don't track).
           return toAttrsFromCreate(yield* update({ ...news, uid: observed.uid, overwrite: true }));

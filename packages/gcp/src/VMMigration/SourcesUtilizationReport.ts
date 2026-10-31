@@ -35,7 +35,7 @@ export type SourcesUtilizationReportProps = {
   /**
    * Parent source. Full name
    * `projects/{project}/locations/{location}/sources/{source}` or the
-   * source id (combined with `location`). Immutable — changing it
+   * source id (combined with `location`). Immutable -- changing it
    * replaces the report.
    */
   source: string;
@@ -46,12 +46,12 @@ export type SourcesUtilizationReportProps = {
   location?: string;
   /**
    * Utilization report id. If omitted, a unique RFC1035 name is
-   * generated. Immutable — changing it replaces the report.
+   * generated. Immutable -- changing it replaces the report.
    */
   utilizationReportId?: string;
   /**
    * User-friendly display name. Reports have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   displayName?: string;
@@ -104,7 +104,7 @@ export type SourcesUtilizationReport = Resource<
  * A VM Migration utilization report for selected VMs in a source
  * environment (CPU, memory, disk, network).
  *
- * Reports have no labels field — Alchemy stamps ownership into the
+ * Reports have no labels field -- Alchemy stamps ownership into the
  * display name so `list` / nuke can find them. The API has no patch
  * method; changing time frame, VMs, or display name replaces the
  * report.

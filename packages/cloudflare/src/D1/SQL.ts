@@ -25,8 +25,8 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
 /**
  * Open an `@effect/sql-d1` client over a Cloudflare D1 binding.
  *
- * Accepts the client returned by `Cloudflare.D1.QueryDatabase(db)` — or its
- * `raw` effect directly — and returns a `D1Client` (which implements the
+ * Accepts the client returned by `Cloudflare.D1.QueryDatabase(db)` -- or its
+ * `raw` effect directly -- and returns a `D1Client` (which implements the
  * generic `SqlClient` interface) wrapped in a chainable Proxy, so it can be
  * resolved once at Worker init and used from any handler:
  *
@@ -44,8 +44,8 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  * The client build is deferred until the first query and memoized on the
  * current execution's `Scope` (via {@link makeExecutionMemo}), so the
  * `D1Client` (and its prepared-statement cache) is built at most once per
- * execution — a Worker `fetch`/`queue`/`scheduled` event, a Durable Object
- * call, or a Workflow run — and torn down when the event settles. Deploy /
+ * execution -- a Worker `fetch`/`queue`/`scheduled` event, a Durable Object
+ * call, or a Workflow run -- and torn down when the event settles. Deploy /
  * plan-time invocations never touch D1.
  *
  * @binding

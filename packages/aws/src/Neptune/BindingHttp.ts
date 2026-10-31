@@ -7,20 +7,20 @@ import type { DBInstance } from "./DBInstance.ts";
 /**
  * Shared scaffolding for Amazon Neptune HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier resolver, and the
  * IAM action list is boilerplate.
  *
  * Neptune shares the RDS control plane, so its management IAM actions live
  * under the `rds:` service prefix (`rds:FailoverDBCluster`,
- * `rds:DescribeDBClusters`, …) and its ARNs use the `rds` service segment.
+ * `rds:DescribeDBClusters`, ...) and its ARNs use the `rds` service segment.
  */
 
 /**
  * Build the impl Effect for an account-level operation (cluster discovery,
  * event history, snapshot administration). The deploy-time half grants
- * `actions` on `*` — these operations span every cluster in the account and
+ * `actions` on `*` -- these operations span every cluster in the account and
  * the identifiers they filter on are runtime data.
  */
 export const makeNeptuneAccountHttpBinding = <I, A, E, R>(options: {

@@ -41,7 +41,7 @@ export type PrivateCloudsLoggingServerProps = {
   /**
    * Parent PrivateCloud resource name
    * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
-   * or the cloud id. Immutable — changing it replaces the logging server.
+   * or the cloud id. Immutable -- changing it replaces the logging server.
    */
   privateCloud: string;
   /**
@@ -115,7 +115,7 @@ export type PrivateCloudsLoggingServer = Resource<
  * Engine private cloud.
  *
  * Logging servers have no labels or description field, so Alchemy treats
- * servers whose parent private cloud carries the `[alchemy …]` ownership
+ * servers whose parent private cloud carries the `[alchemy ...]` ownership
  * marker as owned for `list` / nuke. Changing the parent cloud, server
  * id, or location replaces the server. Hostname, port, protocol, and
  * source type update in place.

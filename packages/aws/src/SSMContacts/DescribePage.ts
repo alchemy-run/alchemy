@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-contacts:DescribePage`.
  *
- * Read the details of a page — the engagement it belongs to, its subject
+ * Read the details of a page -- the engagement it belongs to, its subject
  * and content, and delivery/read timestamps.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.DescribePageHttp)`.

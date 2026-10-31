@@ -44,7 +44,7 @@ export interface IndexProps {
    */
   description?: string;
   /**
-   * The index tier — `STARTER` (single AZ) or `ENTERPRISE` (multi AZ).
+   * The index tier -- `STARTER` (single AZ) or `ENTERPRISE` (multi AZ).
    * Changing it replaces the index.
    * @default "STARTER"
    */
@@ -104,7 +104,7 @@ export interface Index extends Resource<
 > {}
 
 /**
- * An Amazon Q Business index — the document store that data sources sync
+ * An Amazon Q Business index -- the document store that data sources sync
  * content into and retrievers query.
  *
  * :::caution
@@ -188,7 +188,7 @@ const findIndexByName = Effect.fn(function* (applicationId: string, displayName:
 });
 
 /**
- * An index still transitioning toward the awaited status — retried by
+ * An index still transitioning toward the awaited status -- retried by
  * {@link waitForIndexStatus}'s bounded schedule.
  */
 class IndexNotReady extends Data.TaggedError("QBusinessIndexNotReady")<{
@@ -205,7 +205,7 @@ export class IndexProvisioningFailed extends Data.TaggedError("QBusinessIndexPro
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -246,7 +246,7 @@ export const IndexProvider = () =>
       return {
         stables: ["indexId", "applicationId", "indexArn"],
         // Keyed by a parent application; cannot be enumerated account-wide
-        // without iterating every application — treated as a sub-resource per
+        // without iterating every application -- treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -282,13 +282,13 @@ export const IndexProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.indexId
             ? yield* readIndexById(applicationId, output.indexId)
             : yield* findIndexByName(applicationId, displayName);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* qbusiness.createIndex({
               applicationId,
@@ -316,7 +316,7 @@ export const IndexProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateIndex — only when drifted.
+          // Sync mutable settings via UpdateIndex -- only when drifted.
           const described = state.described;
           const desiredUnits = news.capacityConfiguration?.units;
           const needsUpdate =
@@ -338,7 +338,7 @@ export const IndexProvider = () =>
             yield* session.note(`Updated index ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* qbusiness.untagResource({

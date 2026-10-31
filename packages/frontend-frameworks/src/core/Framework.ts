@@ -37,7 +37,7 @@ export interface FrameworkDevServer {
 }
 
 /**
- * The common contract every framework integration implements — the shape the
+ * The common contract every framework integration implements -- the shape the
  * e2e harness drives and the alchemy-side `SourceProvider` adapters wrap.
  *
  * Each framework package exports a concrete `Layer<Framework>` (and may expose
@@ -48,16 +48,16 @@ export interface FrameworkDevServer {
  *
  * - `build` runs the framework's production build and returns the
  *   {@link BuildOutput} contract (`serverModules` entry-first) purely
- *   in-memory — implementations write nothing beyond the framework's own
+ *   in-memory -- implementations write nothing beyond the framework's own
  *   build output. Callers that need persistence (e.g. the e2e harness's
  *   `dist/build.json`) use the standalone `writeBuildOutput` /
  *   `readBuildOutput` helpers themselves.
- * - `dev` starts the framework's dev server; it is scoped — closing the Scope
+ * - `dev` starts the framework's dev server; it is scoped -- closing the Scope
  *   stops the server.
  *
  * A `SourceProvider` adapter maps `build` onto its own output shape
- * (`clientDirectory` → assets read, `serverModules` → bundle files entry-first,
- * `externalWorkspaces` → additional watched workspaces) and `dev` onto a
+ * (`clientDirectory` -> assets read, `serverModules` -> bundle files entry-first,
+ * `externalWorkspaces` -> additional watched workspaces) and `dev` onto a
  * server-mode dev handle.
  */
 export class Framework extends Context.Service<

@@ -21,8 +21,8 @@ export interface DBInstanceProps {
    */
   dbInstanceIdentifier?: string;
   /**
-   * Neptune cluster the instance belongs to. Required — every Neptune
-   * instance is a cluster member. Immutable — forces replacement.
+   * Neptune cluster the instance belongs to. Required -- every Neptune
+   * instance is a cluster member. Immutable -- forces replacement.
    */
   dbClusterIdentifier: string;
   /**
@@ -38,7 +38,7 @@ export interface DBInstanceProps {
    */
   engine?: string;
   /**
-   * Availability zone. Immutable — forces replacement.
+   * Availability zone. Immutable -- forces replacement.
    */
   availabilityZone?: string;
   /**
@@ -109,7 +109,7 @@ export interface DBInstance extends Resource<
 > {}
 
 /**
- * An Amazon Neptune instance — a compute member of a Neptune
+ * An Amazon Neptune instance -- a compute member of a Neptune
  * {@link DBCluster}. Storage, backup, and endpoints are managed at the
  * cluster level; the instance contributes CPU/RAM and can serve as a writer
  * or reader. Provisioning takes several minutes.
@@ -238,7 +238,7 @@ export const DBInstanceProvider = () =>
         stables: ["dbInstanceArn", "dbInstanceIdentifier"],
         // AWS account/region collection: the RDS-family control plane serves
         // instances for every engine, so filter to `engine = neptune`. Tags
-        // are not surfaced inline — emit an empty tag map rather than a
+        // are not surfaced inline -- emit an empty tag map rather than a
         // per-item `listTagsForResource` fan-out.
         list: () =>
           neptune.describeDBInstances
@@ -270,7 +270,7 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh instance.
+          // Immutable props -- any change forces a fresh instance.
           if (
             olds !== undefined &&
             ((olds.engine ?? "neptune") !== (news.engine ?? "neptune") ||
@@ -303,10 +303,10 @@ export const DBInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live instance state.
+          // Observe -- fetch live instance state.
           let observed = yield* readInstance(identifier);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
           if (!observed?.DBInstanceArn) {
             yield* neptune
@@ -333,7 +333,7 @@ export const DBInstanceProvider = () =>
             // doesn't hit `InvalidDBInstanceStateFault`.
             observed = yield* waitForInstance(identifier);
 
-            // syncCoreSettings — single `modifyDBInstance` carrying scalar
+            // syncCoreSettings -- single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
             // from the observed cloud state.
             const core: neptune.ModifyDBInstanceMessage = {
@@ -364,7 +364,7 @@ export const DBInstanceProvider = () =>
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(dbInstanceArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbInstanceArn) {

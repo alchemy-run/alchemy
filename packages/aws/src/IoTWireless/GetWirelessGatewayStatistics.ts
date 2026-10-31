@@ -13,7 +13,7 @@ export interface GetWirelessGatewayStatisticsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotwireless:GetWirelessGatewayStatistics` — read the
+ * Runtime binding for `iotwireless:GetWirelessGatewayStatistics` -- read the
  * bound wireless gateway's operating information (connection status, last
  * uplink time) from a deployed Lambda or Task.
  *

@@ -35,7 +35,7 @@ export interface BucketProps {
   project: string | Project;
   /**
    * Bucket display name. Prisma generates a name when omitted. The display
-   * name is not the provider-side S3 bucket name — S3 clients must use the
+   * name is not the provider-side S3 bucket name -- S3 clients must use the
    * `bucketName` attribute of `Prisma.BucketAccessKey`.
    */
   name?: string;
@@ -94,7 +94,7 @@ export interface Bucket extends Resource<
  * changes update it in place; the display name is a label only, so the
  * provider-side bucket name, its objects, and its access keys stay the same.
  * Destroying this resource deletes the bucket, its objects, and any remaining
- * access keys — the Management API cascades the deletion server-side.
+ * access keys -- the Management API cascades the deletion server-side.
  *
  * ### Creating a Bucket
  * **Example:** Bucket in a project

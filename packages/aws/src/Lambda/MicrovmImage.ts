@@ -94,7 +94,7 @@ export interface MicrovmImageProps {
   build?: Bundle.BundleConfig;
 
   /**
-   * The base MicroVM image to build on top of — either its ARN or another
+   * The base MicroVM image to build on top of -- either its ARN or another
    * {@link MicrovmImage} instance. If omitted, the latest AWS-managed `al2023`
    * base is used (discover bases with {@link microvms.listManagedMicrovmImages}).
    */
@@ -107,7 +107,7 @@ export interface MicrovmImageProps {
 
   /**
    * The IAM role Lambda assumes to build the image (read the code artifact,
-   * write build logs) — either its ARN or an {@link Role} instance. When you
+   * write build logs) -- either its ARN or an {@link Role} instance. When you
    * pass a `Role`, the required S3 (Assets bucket) and CloudWatch-logs
    * permissions are granted to it automatically via a binding, so you don't
    * have to write the inline policy yourself. Required for all builds.
@@ -218,7 +218,7 @@ export type MicrovmImageServices = Credentials | Region;
 export type MicrovmImageShape = Main<MicrovmImageServices>;
 
 /**
- * A Lambda **MicroVM image** — a Firecracker snapshot that boots a fully
+ * A Lambda **MicroVM image** -- a Firecracker snapshot that boots a fully
  * initialized application in milliseconds. The model is *image-then-launch*:
  * you create an image once (this resource), then launch isolated, stateful
  * MicroVM instances from it at runtime (one per end-user/session) with the
@@ -226,7 +226,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  *
  * ### How the build works <!-- api-prose -->
  *
- * The build runs **server-side on AWS** — there is no local Docker. You supply
+ * The build runs **server-side on AWS** -- there is no local Docker. You supply
  * a *code artifact* (a zip of a Dockerfile + your code) and a *base image*
  * (`baseImage`); AWS runs your Dockerfile on top of the base, initializes
  * the app, and takes a Firecracker snapshot. The build is asynchronous: the
@@ -235,7 +235,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * failure). Build logs stream to CloudWatch at `/aws/lambda/microvms/<name>`.
  *
  * Alchemy produces the code artifact for you in three ways, selected by which
- * prop you set (`main` → `context` → `codeArtifact.uri`):
+ * prop you set (`main` -> `context` -> `codeArtifact.uri`):
  *
  * - **Effectful** (`main`): write the in-VM HTTP server in TypeScript as an
  *   Effect. Alchemy bundles it (with its capability bindings), generates a
@@ -252,7 +252,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  *
  * - A **build role** (`buildRole`) Lambda assumes to read the code artifact and
  *   write build logs. Pass a {@link Role} instance and the required permissions
- *   are granted automatically — see the example below.
+ *   are granted automatically -- see the example below.
  * - A **bootstrapped Assets bucket** (`alchemy provider aws bootstrap`) for effectful /
  *   external modes, which upload the artifact to S3.
  * - The account must be **onboarded to the Lambda MicroVM preview**.
@@ -322,10 +322,10 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * the class (a typed handle) and the `.make()` runtime in separate files so the
  * orchestrator's bundle doesn't pull in the VM's runtime deps.
  * ```typescript
- * // sandbox.ts — imported by the orchestrator
+ * // sandbox.ts -- imported by the orchestrator
  * export class Sandbox extends AWS.Lambda.MicrovmImage<Sandbox>()("Sandbox") {}
  *
- * // sandbox.live.ts — provided on the Stack; bundled into the image.
+ * // sandbox.live.ts -- provided on the Stack; bundled into the image.
  * // Must be the `default` export: the bundler resolves the image entrypoint
  * // from the code artifact's default export.
  * export default Sandbox.make(
@@ -347,20 +347,20 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * value methods `yield*` as `Effect`s, streaming methods pipe as `Stream`s.
  * **Example:** Define a tagged-RPC image (RPC + fetch)
  * ```typescript
- * // sandbox.ts — the typed handle imported by the orchestrator Lambda
+ * // sandbox.ts -- the typed handle imported by the orchestrator Lambda
  * export class Sandbox extends AWS.Lambda.MicrovmImage<
  *   Sandbox,
  *   { hello: (message: string) => Effect.Effect<string> }
  * >()("Sandbox") {}
  *
- * // sandbox.live.ts — provided on the Stack; bundled into the image (default export)
+ * // sandbox.live.ts -- provided on the Stack; bundled into the image (default export)
  * export default Sandbox.make(
  *   { main: import.meta.filename, buildRole },
  *   Effect.gen(function* () {
  *     return {
- *       // RPC method — reached with `connectMicrovm` below
+ *       // RPC method -- reached with `connectMicrovm` below
  *       hello: (message: string) => Effect.succeed(`hello, ${message}!`),
- *       // raw HTTP route — reached with a plain HTTPS request to the endpoint
+ *       // raw HTTP route -- reached with a plain HTTPS request to the endpoint
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
  *         const url = new URL(request.url, "http://microvm");
@@ -504,10 +504,10 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * ### Launching MicroVMs
  * The image is just the template. Launch and drive instances from a Lambda
  * Function using the per-operation bindings ({@link RunMicrovm},
- * {@link GetMicrovm}, {@link CreateAuthToken}, {@link TerminateMicrovm}, …).
+ * {@link GetMicrovm}, {@link CreateAuthToken}, {@link TerminateMicrovm}, ...).
  * Each binding's IAM policy is scoped to this image automatically.
  * **Example:** Run a MicroVM, call its RPC, and tear it down
- * Always terminate the MicroVM you launched — wrap the work in
+ * Always terminate the MicroVM you launched -- wrap the work in
  * `Effect.ensuring` so a failure (or a client retry) never leaks a running
  * MicroVM against your account's memory quota. Give the Function a generous
  * `timeout` since it waits for the MicroVM to reach RUNNING in-line.
@@ -551,7 +551,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  *           const reply = yield* sandbox.hello("world");
  *           return yield* HttpServerResponse.json({ reply });
  *         }).pipe(
- *           // terminate on success OR failure — never leak a running MicroVM
+ *           // terminate on success OR failure -- never leak a running MicroVM
  *           Effect.ensuring(
  *             terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
  *               Effect.ignore,

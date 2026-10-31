@@ -44,13 +44,13 @@ export type NluSettings = {
 export type AgentsFlowProps = {
   /**
    * Parent agent resource name
-   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable —
+   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable --
    * changing it replaces the flow.
    */
   agent: string;
   /**
    * Flow id (the `{flow}` segment). Server-assigned on create. Immutable
-   * — changing it replaces the flow.
+   * -- changing it replaces the flow.
    */
   flowId?: string;
   /**

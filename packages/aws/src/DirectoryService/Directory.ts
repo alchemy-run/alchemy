@@ -23,7 +23,7 @@ export type DirectoryFlavor = "SimpleAD" | "MicrosoftAD";
 
 export interface DirectoryProps {
   /**
-   * Which managed directory to launch — a Samba-based `"SimpleAD"` or an
+   * Which managed directory to launch -- a Samba-based `"SimpleAD"` or an
    * actual `"MicrosoftAD"` (AWS Managed Microsoft AD). Changing the flavor
    * replaces the directory.
    * @default "SimpleAD"
@@ -53,14 +53,14 @@ export interface DirectoryProps {
    */
   description?: string;
   /**
-   * Size of a Simple AD directory — `"Small"` (up to ~500 users) or
+   * Size of a Simple AD directory -- `"Small"` (up to ~500 users) or
    * `"Large"` (up to ~5000 users). Ignored for Microsoft AD. Changing the
    * size replaces the directory.
    * @default "Small"
    */
   size?: ds.DirectorySize;
   /**
-   * Edition of a Microsoft AD directory — `"Standard"` or `"Enterprise"`.
+   * Edition of a Microsoft AD directory -- `"Standard"` or `"Enterprise"`.
    * Ignored for Simple AD. Changing the edition replaces the directory.
    * @default "Standard"
    */
@@ -71,7 +71,7 @@ export interface DirectoryProps {
    */
   vpcId: string;
   /**
-   * Exactly two subnets in DIFFERENT Availability Zones of `vpcId` — one
+   * Exactly two subnets in DIFFERENT Availability Zones of `vpcId` -- one
    * domain controller is launched into each. Changing the subnets replaces
    * the directory.
    */
@@ -122,7 +122,7 @@ export interface Directory extends Resource<
 > {}
 
 /**
- * An AWS Directory Service managed directory — either Simple AD (Samba) or
+ * An AWS Directory Service managed directory -- either Simple AD (Samba) or
  * AWS Managed Microsoft AD.
  *
  * Directories are VPC-only and require two subnets in different Availability
@@ -186,7 +186,7 @@ class DirectoryProvisioningFailed extends Data.TaggedError("DirectoryProvisionin
 
 // Directory provisioning is slow (Simple AD ~10 min, Microsoft AD 20-40
 // min); poll every 30s with a ~50 min budget. Only DirectoryNotReady is
-// retried — a Failed/Deleted stage aborts immediately.
+// retried -- a Failed/Deleted stage aborts immediately.
 const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -306,7 +306,7 @@ export const DirectoryProvider = () =>
           const n = news;
           const o = olds;
           if (o === undefined || n === undefined) return undefined;
-          // Every launch property is create-only — there is no update API
+          // Every launch property is create-only -- there is no update API
           // for the directory itself; only tags mutate in place.
           const type = (p: DirectoryProps) => p.type ?? "SimpleAD";
           if (type(n) !== type(o)) return { action: "replace" } as const;
@@ -348,11 +348,11 @@ export const DirectoryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output only caches
+          // 1. Observe -- cloud state is authoritative; output only caches
           //    the directory id.
           const observed = yield* observe(output?.directoryId, props.name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           let directoryId = observed?.DirectoryId;
           if (directoryId === undefined) {
             const tagList = Object.entries(desiredTags).map(([Key, Value]) => ({
@@ -398,7 +398,7 @@ export const DirectoryProvider = () =>
           // returned attributes (DNS addresses, security group) are real.
           const active = yield* waitForActive(directoryId);
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readDirectoryTags(directoryId);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -420,7 +420,7 @@ export const DirectoryProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           const directoryId = output.directoryId;
-          // A directory mid-create rejects deletion — wait (bounded) for it
+          // A directory mid-create rejects deletion -- wait (bounded) for it
           // to settle first. Already deleting (or gone) is success.
           const settled = yield* waitUntilSettled(directoryId).pipe(
             Effect.orElseSucceed(() => undefined),

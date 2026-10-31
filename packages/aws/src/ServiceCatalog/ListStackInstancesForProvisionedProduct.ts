@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the CloudFormation stack instances (account/region pairs) of a StackSet-backed provisioned product.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.ListStackInstancesForProvisionedProductHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** List a StackSet Product's Stack Instances
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listStackInstancesForProvisionedProduct = yield* AWS.ServiceCatalog.ListStackInstancesForProvisionedProduct();
  *
  * // runtime

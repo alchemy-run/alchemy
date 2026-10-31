@@ -7,10 +7,10 @@ import type { Broker } from "./Broker.ts";
  * Runtime binding for the `CreateUser` operation (IAM action
  * `mq:CreateUser`), scoped to one {@link Broker}.
  *
- * Creates a broker user — e.g. provisioning per-tenant credentials at
+ * Creates a broker user -- e.g. provisioning per-tenant credentials at
  * runtime. On ActiveMQ the change is staged and applied at the next broker
  * reboot or maintenance window; on RabbitMQ it takes effect immediately.
- * The password is marked sensitive — pass a `Redacted` value and it stays
+ * The password is marked sensitive -- pass a `Redacted` value and it stays
  * redacted until wire encoding. Provide the implementation with
  * `Effect.provide(AWS.MQ.CreateUserHttp)`.
  * ### Managing Users

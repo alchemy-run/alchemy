@@ -36,11 +36,11 @@ export type HostGroupProps = {
    * Host group id (the `{hostGroup}` segment of
    * `projects/{project}/locations/{location}/hostGroups/{hostGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   hostGroupId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -51,12 +51,12 @@ export type HostGroupProps = {
    */
   hosts: string[];
   /**
-   * Host group type. Immutable — changing it replaces the group.
+   * Host group type. Immutable -- changing it replaces the group.
    * @default "ISCSI_INITIATOR"
    */
   type?: netapp.HostGroupTypeEnum | (string & {});
   /**
-   * OS type shared by every host. Immutable — changing it replaces the
+   * OS type shared by every host. Immutable -- changing it replaces the
    * group.
    * @default "LINUX"
    */
@@ -103,7 +103,7 @@ export type HostGroup = Resource<
 >;
 
 /**
- * A Cloud NetApp Volumes host group — a set of iSCSI initiators that can
+ * A Cloud NetApp Volumes host group -- a set of iSCSI initiators that can
  * mount a block volume.
  *
  * Changing `hostGroupId`, `location`, `type`, or `osType` replaces the

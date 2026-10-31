@@ -130,7 +130,7 @@ export const jumpSkippingDisabled = (
   return cursor;
 };
 
-/** "↑ N more" / "↓ N more" indicator row shared by windowed prompt lists. */
+/** "^ N more" / "v N more" indicator row shared by windowed prompt lists. */
 function OverflowRow({
   direction,
   count,
@@ -175,7 +175,7 @@ const focusedLabelColor = (focused: boolean): string | undefined =>
  * Width of the label column when descriptions sit beside labels: the widest
  * label plus one cell, so every description starts in the same column
  * (labels and descriptions read as two columns rather than a ragged sentence).
- * Sticky/heading rows are excluded — they never carry a description.
+ * Sticky/heading rows are excluded -- they never carry a description.
  */
 const labelColumnWidth = (
   labels: ReadonlyArray<{ readonly label: string; readonly sticky?: boolean }>,
@@ -394,7 +394,7 @@ export function TextField({
   ariaLabel,
 }: TextFieldProps) {
   // Prompts are serialized by the Sigil renderer, so an enabled field owns
-  // the input stream outright — no Sigil focus negotiation. (Coupling this to
+  // the input stream outright -- no Sigil focus negotiation. (Coupling this to
   // useFocus({autoFocus}) silently disabled the field whenever any other
   // focusable was already mounted.)
   const inputActive = active ?? true;
@@ -486,7 +486,7 @@ export function TextField({
   // effect, which runs BEFORE layout effects in the same commit. Setting the
   // position from a layout effect therefore paints every frame with the
   // previous keystroke's cursor (off by one while typing and erasing). The
-  // ref write is render-safe — propagation is commit-gated, so abandoned
+  // ref write is render-safe -- propagation is commit-gated, so abandoned
   // concurrent renders never reach the terminal.
   setCursorPosition(
     inputActive && metrics.measured
@@ -536,7 +536,7 @@ export function CycleList<State>({
   const glyphs = useGlyphs();
   const { start, end } = overflowListWindow(choices.length, cursor, visibleCount);
   const labelWidth = labelColumnWidth(choices);
-  // The state word ("add", "remove", …) gets its own column too, so the
+  // The state word ("add", "remove", ...) gets its own column too, so the
   // descriptions line up whether or not a row's current state carries one.
   const stateWidth = Math.max(
     0,
@@ -888,8 +888,8 @@ export function PromptFrame({
   keys,
 }: PromptFrameProps) {
   const glyphs = useGlyphs();
-  // The active-step glyph shares the heading's brand colour: `◆ question` is
-  // the step being answered, `✓ question` (AnsweredPrompt) one that is done.
+  // The active-step glyph shares the heading's brand colour: `\u25c6 question` is
+  // the step being answered, `\u2713 question` (AnsweredPrompt) one that is done.
   const heading = (suffix = "") => (
     <Text>
       <Text bold color={theme.color.brand}>

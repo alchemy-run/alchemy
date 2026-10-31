@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { VerifyMac } from "./VerifyMac.ts";
 
 /**
- * HTTP implementation of {@link VerifyMac} — grants the host Function
+ * HTTP implementation of {@link VerifyMac} -- grants the host Function
  * `payment-cryptography:VerifyMac` on the key and calls the
  * Payment Cryptography Data API at runtime. A MAC mismatch fails with the
  * typed `VerificationFailedException`.

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ModifyInstanceFleet` — retargets the bound cluster's instance fleet (on-demand/spot capacities, resize specifications).
+ * Runtime binding for `elasticmapreduce:ModifyInstanceFleet` -- retargets the bound cluster's instance fleet (on-demand/spot capacities, resize specifications).
  * ### Scaling the Cluster
  * **Example:** Retarget a Fleet
  * ```typescript

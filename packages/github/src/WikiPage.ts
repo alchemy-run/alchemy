@@ -51,7 +51,7 @@ export interface WikiPageProps {
 
   /**
    * Page format/markup language. The format is appended to the page name as
-   * an extension (e.g. `markdown` → `Page.md`, `asciidoc` → `Page.asciidoc`).
+   * an extension (e.g. `markdown` -> `Page.md`, `asciidoc` -> `Page.asciidoc`).
    * @default "markdown"
    */
   format?: "markdown" | "asciidoc" | "mediawiki" | "org" | "pod" | "rdoc" | "rest" | "textile";
@@ -67,7 +67,7 @@ export interface WikiPageProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource. Authenticated
    * wiki Git operations require HTTPS.
    */
@@ -108,7 +108,7 @@ export interface WikiPage extends Resource<
  * `WikiPage` manages the lifecycle of a page in a repository's wiki. Wiki
  * pages are created on first deploy and updated in place on subsequent
  * deploys when the `content` changes. By default, pages are never deleted to
- * preserve documentation history — set `allowDelete: true` to opt in.
+ * preserve documentation history -- set `allowDelete: true` to opt in.
  *
  * The repository's wiki must be enabled (`hasWiki: true` on the Repository
  * resource) and initialized by creating its first page in the GitHub web UI.
@@ -291,8 +291,8 @@ export const wikiRepository = Effect.fn(function* (props: WikiPageProps) {
   const baseUrl = yield* effectiveGitHubBaseUrl(props.baseUrl);
   const origin = yield* Effect.sync(() => {
     const url = new URL(baseUrl);
-    // The API host's Git host: api.github.com → github.com, and
-    // api.<tenant>.ghe.com → <tenant>.ghe.com (data residency).
+    // The API host's Git host: api.github.com -> github.com, and
+    // api.<tenant>.ghe.com -> <tenant>.ghe.com (data residency).
     if (
       url.hostname === "api.github.com" ||
       (url.hostname.startsWith("api.") && url.hostname.endsWith(".ghe.com"))

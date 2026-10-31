@@ -28,14 +28,14 @@ export type FloatingIpType = "ipv4" | "ipv6";
 
 export interface FloatingIpProps {
   /**
-   * Address family of the Floating IP. Cannot be changed after creation —
+   * Address family of the Floating IP. Cannot be changed after creation --
    * changing it triggers a replacement.
    */
   type: FloatingIpType;
   /**
-   * Home Location for the Floating IP (`nbg1`, `fsn1`, `hel1`, …) or the
+   * Home Location for the Floating IP (`nbg1`, `fsn1`, `hel1`, ...) or the
    * Location's numeric id. Routing is optimized for this Location. Cannot
-   * be changed after creation — changing it triggers a replacement.
+   * be changed after creation -- changing it triggers a replacement.
    */
   homeLocation: string | number;
   /**
@@ -81,7 +81,7 @@ export type FloatingIp = Resource<
      */
     ip: string;
     /**
-     * Home Location name (`nbg1`, `fsn1`, …).
+     * Home Location name (`nbg1`, `fsn1`, ...).
      */
     homeLocation: string;
     /**
@@ -123,7 +123,7 @@ export type FloatingIp = Resource<
  * `homeLocation`; Alchemy generates a unique name unless you set `name`.
  * Assignment to a Server is a separate `FloatingIpAssignment` resource.
  *
- * `type` and `homeLocation` are immutable — changing either replaces the
+ * `type` and `homeLocation` are immutable -- changing either replaces the
  * Floating IP (new address). `name`, `description`, `labels`, and
  * `deleteProtection` update in place.
  *
@@ -311,11 +311,11 @@ export const FloatingIpProvider = () =>
       const desiredDescription = news.description ?? null;
       const desiredProtection = news.deleteProtection ?? false;
 
-      // Observe — cloud state is authoritative. `output.id` is a cache
+      // Observe -- cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
       let current: CloudFloatingIp | undefined = yield* observe({ id, name, outputId: output?.id });
       // A previous generation found via ownership labels (same logical id,
-      // different type/location) is the resource being replaced — do not
+      // different type/location) is the resource being replaced -- do not
       // take it over; create a new Floating IP instead.
       if (
         current !== undefined &&
@@ -325,7 +325,7 @@ export const FloatingIpProvider = () =>
         current = undefined;
       }
 
-      // Ensure — create only when missing. A Conflict is a race with a
+      // Ensure -- create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
         const created = yield* Hetzner.floatingIps
@@ -354,7 +354,7 @@ export const FloatingIpProvider = () =>
         return yield* new FloatingIpNotCreated({ resourceName: name });
       }
 
-      // Sync — name / description / labels via PUT (labels overwrite the
+      // Sync -- name / description / labels via PUT (labels overwrite the
       // full set). Protection is a separate Action.
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);

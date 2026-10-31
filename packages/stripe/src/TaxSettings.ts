@@ -67,12 +67,12 @@ export interface TaxSettingsDefaults {
  */
 export interface TaxSettingsProps {
   /**
-   * Default tax behavior and tax code used in calculations. Mutable —
+   * Default tax behavior and tax code used in calculations. Mutable --
    * posted in place. Fields Stripe has already set cannot be removed.
    */
   defaults?: TaxSettingsDefaults;
   /**
-   * The place where the business is located. Mutable — posted in place.
+   * The place where the business is located. Mutable -- posted in place.
    * Once set, Stripe will not remove the head office.
    */
   headOffice?: TaxSettingsHeadOffice;
@@ -99,7 +99,7 @@ export type TaxSettings = Resource<
   TaxSettingsProps,
   {
     /**
-     * Stripe object type. Always `"tax.settings"` — this resource is the
+     * Stripe object type. Always `"tax.settings"` -- this resource is the
      * account-level singleton.
      */
     object: "tax.settings";
@@ -132,7 +132,7 @@ export type TaxSettings = Resource<
 >;
 
 /**
- * Account-level Stripe Tax Settings — default tax behavior, default tax
+ * Account-level Stripe Tax Settings -- default tax behavior, default tax
  * code, and head-office address used by Stripe Tax calculations.
  *
  * This is an account singleton: `GET /v1/tax/settings` always returns the
@@ -299,7 +299,7 @@ const restoreBody = (
   const current = toSnapshot(observed);
   const body: CreateTaxSettingsRequest = {};
   const defaults: CreateTaxSettingsRequestDefaults = {};
-  // Stripe will not unset a field that was originally null — only restore
+  // Stripe will not unset a field that was originally null -- only restore
   // values that were already set when Alchemy first captured the snapshot.
   if (initial.taxBehavior !== undefined && current.taxBehavior !== initial.taxBehavior) {
     defaults.tax_behavior = initial.taxBehavior;
@@ -331,7 +331,7 @@ export const TaxSettingsProvider = () =>
 
     read: Effect.fn(function* ({ output }) {
       const observed = yield* observe;
-      // Always-present singleton — nothing to own, so a cold read adopts
+      // Always-present singleton -- nothing to own, so a cold read adopts
       // freely (never `Unowned`). The observed snapshot at adoption time
       // becomes the baseline restored on destroy.
       return toAttrs(observed, output?.initialSettings ?? toSnapshot(observed));
@@ -348,13 +348,13 @@ export const TaxSettingsProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      // 1. Observe — the singleton always exists.
+      // 1. Observe -- the singleton always exists.
       let observed = yield* observe;
 
-      // 2. Capture — the pre-management snapshot, restored on destroy.
+      // 2. Capture -- the pre-management snapshot, restored on destroy.
       const initialSettings = output?.initialSettings ?? toSnapshot(observed);
 
-      // 3. Sync — POST only the declared fields whose observed value
+      // 3. Sync -- POST only the declared fields whose observed value
       //    differs. Skip the API on no delta.
       const body = syncBody(news, observed);
       if (body !== undefined) {

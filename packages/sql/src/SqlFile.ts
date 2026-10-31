@@ -213,7 +213,7 @@ const SQLITE_TRANSITIONS: Record<SqliteState, Record<SqliteToken, SqliteState>> 
   },
 };
 
-const SQLITE_IDENTIFIER_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
+const SQLITE_IDENTIFIER_CHAR = /[A-Za-z0-9_$\u0080-\uffff]/;
 
 const classifySqliteIdentifier = (identifier: string): SqliteToken => {
   switch (identifier.toLowerCase()) {
@@ -235,7 +235,7 @@ const classifySqliteIdentifier = (identifier: string): SqliteToken => {
 
 /**
  * Split a SQLite script into its statements, without their terminating `;`.
- * Semicolons inside quoted strings, identifiers (`"…"`, `` `…` ``, `[…]`),
+ * Semicolons inside quoted strings, identifiers (`"..."`, `` `...` ``, `[...]`),
  * comments, and trigger bodies don't split. Comments before a statement stay
  * with it, and comment-only segments are dropped. Matches how
  * `wrangler d1 execute --file` splits a file.

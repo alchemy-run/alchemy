@@ -4,15 +4,15 @@
  *
  * 1. Validate `PACK`, version 2, count.
  * 2. Per entry: parse the type/size varint header. Non-delta entries are
- *    streaming-inflated (`Zlib.inflateEntry` — `bytesWritten` gives the exact
+ *    streaming-inflated (`Zlib.inflateEntry` -- `bytesWritten` gives the exact
  *    compressed span), hashed as `sha1("<type> <size>\0" + content)`, and the
- *    **compressed span is kept verbatim as `zdata`** — no recompression.
+ *    **compressed span is kept verbatim as `zdata`** -- no recompression.
  *    Deltas (OFS with the +1-bias offset decoding, REF with a 20-byte base
  *    id) resolve their base from (a) already-ingested entries via a bounded
  *    LRU of resolved contents, (b) re-inflation from the pack on cache miss,
- *    or (c) the object store for thin bases (REF_DELTA to a prior push — the
+ *    or (c) the object store for thin bases (REF_DELTA to a prior push -- the
  *    normal case). The copy/insert instruction stream is applied
- *    (`size==0 ⇒ 0x10000`), the result size verified, the result hashed and
+ *    (`size==0 => 0x10000`), the result size verified, the result hashed and
  *    `deflate`d (level 6) for storage.
  * 3. The trailing pack SHA-1 is verified.
  *
@@ -43,9 +43,9 @@ import {
 import { type StoreError } from "./Store.ts";
 import { deflate, inflate, inflateEntry, inflateEntrySync, ZlibError } from "./Zlib.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // RandomAccess
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Random access over a pack's raw bytes. v1 backs this with the buffered
@@ -54,15 +54,15 @@ import { deflate, inflate, inflateEntry, inflateEntrySync, ZlibError } from "./Z
  */
 export interface RandomAccess {
   /**
-   * Synchronous read when the range needs no I/O — a view into an
-   * in-memory buffer or an already-cached window — else `undefined`. The
+   * Synchronous read when the range needs no I/O -- a view into an
+   * in-memory buffer or an already-cached window -- else `undefined`. The
    * parser's inner loop uses it to stay synchronous between I/O points
    * (DESIGN §22.5).
    */
   readonly readSync?: ((offset: number, length: number) => Uint8Array | undefined) | undefined;
   /**
    * For sources whose total size is not known up front (`size` is
-   * `Infinity` while a body is still arriving — DESIGN §22.6): resolves
+   * `Infinity` while a body is still arriving -- DESIGN §22.6): resolves
    * with the final size once the body has ended.
    */
   readonly awaitEnd?: Effect.Effect<number, StoreError> | undefined;
@@ -96,9 +96,9 @@ export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
   awaitEnd: Effect.succeed(buf.length),
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Errors
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Error raised on malformed pack structure: bad magic/version, truncated
@@ -120,7 +120,7 @@ export class PackChecksumMismatch extends Schema.TaggedError<PackChecksumMismatc
 
 /**
  * Error raised when an object (or a delta result) exceeds the per-object
- * uncompressed size cap (64 MiB in v1 — DESIGN §3.3).
+ * uncompressed size cap (64 MiB in v1 -- DESIGN §3.3).
  */
 export class ObjectTooLargeError extends Schema.TaggedError<ObjectTooLargeError>()(
   "ObjectTooLargeError",
@@ -163,14 +163,14 @@ export type PackIngestError =
   | StoreError
   | BaseEvictedError;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Resolved entries / options
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * One fully resolved object produced by pack ingestion.
  *
- * `zdata` is `zlib(content)` **without** the loose header — for non-delta
+ * `zdata` is `zlib(content)` **without** the loose header -- for non-delta
  * entries it is the pack's compressed span verbatim; for delta-resolved
  * entries it is a fresh `deflate(content)` at level 6.
  */
@@ -186,7 +186,7 @@ export interface ResolvedEntry {
   /**
    * Byte offset of `zdata` within the pack SOURCE for non-delta entries
    * (the compressed span is the pack's bytes verbatim, so a store may
-   * reference it in place — DESIGN §22.5); `-1` for delta-resolved entries,
+   * reference it in place -- DESIGN §22.5); `-1` for delta-resolved entries,
    * whose `zdata` is a fresh deflate that exists nowhere in the pack.
    */
   readonly dataOffset: number;
@@ -219,17 +219,17 @@ const MAX_CACHE_ENTRY_BYTES = 10 * 1024 * 1024;
 
 /**
  * Bytes read per entry before growing (see the read in the main pass).
- * Sized so virtually every git object — a few KiB — is covered by one read,
+ * Sized so virtually every git object -- a few KiB -- is covered by one read,
  * which is what keeps ingest from a remote source proportional to the pack
  * size rather than to entries × pack size.
  */
 /**
  * Bytes probed per entry before inflating. In-window reads are views on
- * both sources, so the probe's size costs nothing — except when it crosses
+ * both sources, so the probe's size costs nothing -- except when it crosses
  * a window edge on the spilled (blob-backed) source, where the reader must
  * assemble a copy. 64 KiB keeps such crossings rare (only entries within
  * 64 KiB of a 4 MiB edge) and small; the rare larger entry grows the
- * window on demand (DESIGN §22.4 — 512 KiB here was ~1 GB of copies per
+ * window on demand (DESIGN §22.4 -- 512 KiB here was ~1 GB of copies per
  * 15k-object spilled push).
  */
 const ENTRY_WINDOW_BYTES = 64 * 1024;
@@ -279,9 +279,9 @@ export interface IngestPackOptions<E, R> {
   readonly cacheBytes?: number | undefined;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Internals
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 interface CachedContent {
   readonly type: ObjectType;
@@ -375,9 +375,9 @@ export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
   return { version, count };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Ingest
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Ingests a complete pack: parses every entry, resolves OFS/REF deltas
@@ -385,7 +385,7 @@ export const readPackHeader = Effect.fn(function* (source: RandomAccess) {
  * and emits each resolved object to `options.sink`.
  *
  * Entries are emitted in pack order, except REF_DELTA entries whose base
- * appears *later* in the pack (legal but rare) — those are deferred and
+ * appears *later* in the pack (legal but rare) -- those are deferred and
  * emitted after the main pass.
  *
  * Memory: the resolved-content LRU is bounded by `cacheBytes`; cache misses
@@ -427,7 +427,7 @@ export const ingestPack = <E, R>(
     trailerSha.update(yield* source.read(0, 12));
 
     const byOffset = new Map<number, IndexedEntry>();
-    /** oid → entry offset, for in-pack REF_DELTA base lookup. */
+    /** oid -> entry offset, for in-pack REF_DELTA base lookup. */
     const offsetByOid = new Map<Oid, number>();
     const oids: Array<Oid> = [];
     const deferred: Array<IndexedEntry> = [];
@@ -528,13 +528,13 @@ export const ingestPack = <E, R>(
         );
       });
 
-    // ── main pass: index + resolve in pack order ─────────────────────────────
+    // -- main pass: index + resolve in pack order -----------------------------
     const sinkBatch = options.sinkBatch;
     let pendingSink: Array<ResolvedEntry> = [];
     // On a streaming source the body arrives through the event loop, and
     // a synchronous batch monopolizes the isolate: without a real
     // (macrotask) yield between batches, receive and parse alternate
-    // instead of overlapping (DESIGN §22.6). Fiber yields are not enough —
+    // instead of overlapping (DESIGN §22.6). Fiber yields are not enough --
     // they stay within the same task.
     const streaming = !Number.isFinite(source.size);
     const breathe = streaming
@@ -759,7 +759,7 @@ export const ingestPack = <E, R>(
       if (!isDeltaType(header.type)) {
         const type = header.type as ObjectType;
         const oid = yield* timed("hash", hashObject(type, content));
-        // keep the compressed span verbatim — copy it out of the shared buffer
+        // keep the compressed span verbatim -- copy it out of the shared buffer
         const zview = yield* source.read(dataOffset, bytesConsumed);
         const zdata = yield* timed(
           "copy",
@@ -811,9 +811,9 @@ export const ingestPack = <E, R>(
       }
       dataEnd = (yield* source.awaitEnd) - 20;
     }
-    // ── deferred deltas: fixpoint passes AFTER the end ───────────────────────
+    // -- deferred deltas: fixpoint passes AFTER the end -----------------------
     // REF_DELTAs whose base came later in the pack, and (streaming) deltas
-    // whose base had been evicted before the body ended — readable now
+    // whose base had been evicted before the body ended -- readable now
     // through the spilled object.
     let pending = deferred;
     while (pending.length > 0) {
@@ -835,7 +835,7 @@ export const ingestPack = <E, R>(
         }
       }
       if (next.length === pending.length) {
-        // no progress — the base genuinely does not exist anywhere
+        // no progress -- the base genuinely does not exist anywhere
         return yield* firstMissing!;
       }
       pending = next;
@@ -846,7 +846,7 @@ export const ingestPack = <E, R>(
       });
     }
 
-    // ── trailer verification ─────────────────────────────────────────────────
+    // -- trailer verification -------------------------------------------------
     const trailer = yield* source.read(dataEnd, 20);
     if (trailer.length < 20) {
       return yield* PackFormatError.make({ reason: "truncated pack trailer" });

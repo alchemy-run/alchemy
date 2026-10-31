@@ -8,7 +8,7 @@ import {
 } from "../EventBridge/EventSource.ts";
 
 /**
- * The `detail` payload Security Hub delivers to EventBridge — a batch of
+ * The `detail` payload Security Hub delivers to EventBridge -- a batch of
  * findings in AWS Security Finding Format (ASFF).
  */
 export interface FindingEventDetail {
@@ -22,7 +22,7 @@ export interface FindingEventDetail {
 export type FindingEvent = EventRecord<FindingEventDetail>;
 
 /**
- * The `detail` payload of a `Security Hub Findings - Custom Action` event —
+ * The `detail` payload of a `Security Hub Findings - Custom Action` event --
  * the action that was invoked plus the findings it was invoked on.
  */
 export interface CustomActionEventDetail extends FindingEventDetail {
@@ -60,7 +60,7 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * `Security Hub Findings - Imported`); this subscribes the host Function to
  * those events so it can triage, notify, or auto-remediate.
  *
- * Security Hub publishes to EventBridge automatically — no additional
+ * Security Hub publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

@@ -35,34 +35,34 @@ export type SnapshotProps = {
   /**
    * Source disk URL or relative path used to create the snapshot
    * (`projects/{project}/zones/{zone}/disks/{disk}`,
-   * `zones/{zone}/disks/{disk}`, or a full self-link). Immutable —
+   * `zones/{zone}/disks/{disk}`, or a full self-link). Immutable --
    * changing it replaces the snapshot.
    */
   sourceDisk: string;
   /**
-   * Source instant snapshot URL. Immutable — changing it replaces the
+   * Source instant snapshot URL. Immutable -- changing it replaces the
    * snapshot. Mutually exclusive with creating from a different source
    * disk.
    */
   sourceInstantSnapshot?: string;
   /**
-   * Optional description. Immutable — changing it replaces the snapshot.
+   * Optional description. Immutable -- changing it replaces the snapshot.
    */
   description?: string;
   /**
-   * Snapshot type (`STANDARD` or `ARCHIVE`). Immutable — changing it
+   * Snapshot type (`STANDARD` or `ARCHIVE`). Immutable -- changing it
    * replaces the snapshot.
    * @default "STANDARD"
    */
   snapshotType?: compute.SnapshotSnapshotTypeEnum | (string & {});
   /**
    * Cloud Storage locations to store the snapshot (regional or
-   * multi-regional codes such as `us-central1` or `us`). Immutable —
+   * multi-regional codes such as `us-central1` or `us`). Immutable --
    * changing it replaces the snapshot.
    */
   storageLocations?: string[];
   /**
-   * Snapshot chain name for advanced chargeback tracking. Immutable —
+   * Snapshot chain name for advanced chargeback tracking. Immutable --
    * changing it replaces the snapshot.
    */
   chainName?: string;
@@ -101,7 +101,7 @@ export type Snapshot = Resource<
     chainName: string | undefined;
     /** Optional description. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** Size of the source disk in GB. */
     diskSizeGb: string | undefined;
@@ -123,7 +123,7 @@ export type Snapshot = Resource<
  *
  * Snapshots are created from a source disk (or instant snapshot). Name,
  * source, type, storage locations, chain name, and description are
- * immutable — changing them replaces the snapshot. Labels are updated
+ * immutable -- changing them replaces the snapshot. Labels are updated
  * in place via `snapshots.setLabels`.
  *
  * ### Creating a Snapshot

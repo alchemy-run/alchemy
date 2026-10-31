@@ -57,7 +57,7 @@ export type Ruleset = Resource<
     rulesetId: string;
     /**
      * Zone the ruleset phase entrypoint belongs to. Alchemy-flattened
-     * identifier — not part of Cloudflare's phase-entrypoint response.
+     * identifier -- not part of Cloudflare's phase-entrypoint response.
      */
     zoneId: string;
     /** The kind of the ruleset. */
@@ -166,7 +166,7 @@ export const RulesetProvider = () =>
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       // Remove only the rules this resource deployed. The entrypoint is the
-      // zone's shared WAF phase — rules added elsewhere must survive.
+      // zone's shared WAF phase -- rules added elsewhere must survive.
       const entrypoint = yield* rulesets
         .getPhasForZone({
           zoneId: output.zoneId,
@@ -238,7 +238,7 @@ export const RulesetProvider = () =>
             Effect.map((items) =>
               items.filter(
                 (item): item is Ruleset["Attributes"] =>
-                  // An entrypoint with zero rules is inert — it's what other
+                  // An entrypoint with zero rules is inert -- it's what other
                   // owners (e.g. Worker redirect cleanup) leave behind after
                   // removing their rules. Don't surface it as a resource.
                   item !== undefined && item.rules.length > 0,
@@ -278,8 +278,8 @@ export const toRulesetAttributes = (
 // A `Zone` prop is resolved to its attributes before a lifecycle op runs, so
 // `zone.zoneId` is normally a plain string even though the `Zone` resource
 // type statically exposes it as an `Output`. During `diff` (plan time) the
-// zone can still be unresolved — e.g. when it's being created in the same
-// deploy — in which case `zoneId` is not yet a string. Callers must treat a
+// zone can still be unresolved -- e.g. when it's being created in the same
+// deploy -- in which case `zoneId` is not yet a string. Callers must treat a
 // non-string result as "not resolved yet". May also receive `undefined`:
 // an Output-valued `zone` doesn't survive a `creating`-state round-trip
 // (it deserializes as `undefined`), and recovery paths hand those props

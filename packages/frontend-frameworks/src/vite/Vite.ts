@@ -17,7 +17,7 @@ export interface ViteModule {
   readonly build: (config: Record<string, unknown>) => Promise<unknown>;
   readonly createServer: (config: Record<string, unknown>) => Promise<ViteDevServer>;
   /**
-   * `vite.resolveConfig` — used to read the project's resolved `build.outDir`
+   * `vite.resolveConfig` -- used to read the project's resolved `build.outDir`
    * (and root) without duplicating vite's config-file discovery. Optional in
    * the slice: ancient vite versions without it fall back to `dist`.
    */
@@ -88,7 +88,7 @@ export interface ViteTargetConfig {
 /**
  * A deploy target for plain Vite: just the generic `DeployTarget` seams.
  * A client-only Vite build has no server output, so targets have nothing
- * framework-specific to hook — the AWS target only uses the wholesale
+ * framework-specific to hook -- the AWS target only uses the wholesale
  * `build` seam to move the build into a child process.
  */
 export interface ViteTarget extends DeployTarget<ViteTargetConfig> {}
@@ -99,7 +99,7 @@ export type ViteTargetInput = DeployTargetInput<ViteTarget, ViteTargetConfig>;
 /**
  * The default deploy target: this package's AWS static-site target module,
  * loaded from the project's dependency tree. (Cloudflare deploys plain Vite
- * projects through its native Vite plugin — `Cloudflare.Website.Vite` —
+ * projects through its native Vite plugin -- `Cloudflare.Website.Vite` --
  * so no Cloudflare target exists here.)
  */
 export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vite/aws";
@@ -136,7 +136,7 @@ const fail = (message: string, cause?: unknown) =>
   new FrameworkError({ framework: "vite", message, cause });
 
 /**
- * Build the `Framework` service implementation for a plain Vite project —
+ * Build the `Framework` service implementation for a plain Vite project --
  * a client-only site (React/Vue/Solid SPA, an `index.html` multi-page app,
  * a Foldkit app, ...) whose entire deployable output is static assets.
  *
@@ -146,7 +146,7 @@ const fail = (message: string, cause?: unknown) =>
  *   `BuildOutput` is assets-only: `clientDirectory` = the resolved
  *   `build.outDir`, `serverModules: undefined`.
  * - `dev` runs the project's own Vite dev server programmatically (native
- *   HMR), scoped — closing the Scope closes the server.
+ *   HMR), scoped -- closing the Scope closes the server.
  *
  * Frameworks that wrap Vite with a server half (Octane, SvelteKit, Astro,
  * ...) have their own integrations; Octane's fails actionably when pointed
@@ -222,7 +222,7 @@ export const make: (
       const targetContext = { root, framework: "vite", env: buildOptions?.env };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
-      // build in a disposable child process — vite.config.* executes user
+      // build in a disposable child process -- vite.config.* executes user
       // plugins that must not touch the engine process).
       if (target.build !== undefined) {
         return yield* target.build(targetContext).pipe(
@@ -254,7 +254,7 @@ export const make: (
       const root = devOptions?.root ?? baseRoot;
       const vite = yield* loadVite(root);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-      // on older Vite — see `resolveViteDevPort`.
+      // on older Vite -- see `resolveViteDevPort`.
       const port = yield* FrameworkCore.resolveViteDevPort(
         vite.version,
         devOptions?.port ?? options?.dev?.port,
@@ -317,7 +317,7 @@ export const make: (
 
 /**
  * Map a plain Vite build's on-disk output onto the `BuildOutput` contract:
- * assets-only — the whole `outDir` is the client directory, there are no
+ * assets-only -- the whole `outDir` is the client directory, there are no
  * server modules, and no external workspace roots (vite bundles workspace
  * imports into the client assets).
  */
@@ -341,7 +341,7 @@ export const readViteOutput = (options: {
 
 /**
  * A `Layer` providing framework-core's `Framework` service for a plain Vite
- * project — the fully-typed entrypoint for `e2e.config.ts` and alchemy's
+ * project -- the fully-typed entrypoint for `e2e.config.ts` and alchemy's
  * `AWS.Website.Vite` composite.
  */
 export const layer = (

@@ -14,7 +14,7 @@ import {
 export interface FileTransferEventDetail {
   /** The user that performed the transfer. */
   username?: string;
-  /** The ID of the server the transfer went through (e.g. `s-…`). */
+  /** The ID of the server the transfer went through (e.g. `s-...`). */
   "server-id"?: string;
   /** Session identifier of the client connection. */
   "session-id"?: string;
@@ -73,7 +73,7 @@ export interface FileTransferEventSourceProps extends EventRouteProps {
  * `aws.transfer`); this subscribes the host Function to those events so it
  * can react the moment a partner drops a file on the SFTP endpoint.
  *
- * Transfer Family publishes to EventBridge automatically — no additional
+ * Transfer Family publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

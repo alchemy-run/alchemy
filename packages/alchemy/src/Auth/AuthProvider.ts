@@ -30,7 +30,7 @@ export const AUTH_ERROR_URL = `${AUTH_LANDING_HOST}/auth/error`;
  * Methods that may drive an interactive flow (prompts, browser-based
  * OAuth, etc.). A process-wide mutex serializes these across providers
  * so that, e.g., Cloudflare's `configure` finishes its prompt sequence
- * before Planetscale's begins — even when the two auth provider Layers
+ * before Planetscale's begins -- even when the two auth provider Layers
  * are built in parallel as part of a single `providers()` Layer.
  *
  * The interactive renderer enforces per-prompt serialization; this mutex
@@ -51,7 +51,7 @@ export class AuthError extends Schema.TaggedError<AuthError>()("AuthError", {
  * user re-authenticates: missing values, an expired/rotated
  * token, or a session the provider can no longer refresh silently. The
  * profile UI renders this as "needs re-login" instead of a generic error,
- * and callers match it with `Effect.catchTag("NeedsReauth", ...)` — never
+ * and callers match it with `Effect.catchTag("NeedsReauth", ...)` -- never
  * by inspecting the message.
  */
 export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()("NeedsReauth", {
@@ -65,7 +65,7 @@ export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()("NeedsReauth"
 
 /**
  * Standard remediation hint appended to stored-credential errors
- * ("credentials not found", "refresh failed", ...). Deliberately generic —
+ * ("credentials not found", "refresh failed", ...). Deliberately generic --
  * the explicit command is correct from any surface, including inside the
  * profile dashboard (where `r` is merely the shortcut for it). Centralized
  * so the phrasing lives in one place; surface-aware wording can layer on
@@ -82,8 +82,8 @@ export { AuthProviders, AuthProvidersLive } from "./Registry.ts";
 
 /**
  * Declares one environment variable a provider's {@link AuthProviderImpl.readEnvironment}
- * consumes. Profiles are not available in CI — environment variables are the
- * only CI credential source — so this metadata is the machine-readable
+ * consumes. Profiles are not available in CI -- environment variables are the
+ * only CI credential source -- so this metadata is the machine-readable
  * contract for "what must CI set": rendered in docs, surfaced by the CLI,
  * and available to tooling through the {@link AuthProviders} registry.
  */
@@ -98,7 +98,7 @@ export const EnvironmentVariable = Schema.Struct({
    * conditional requirements (e.g. "required unless X is set").
    */
   required: Schema.Boolean,
-  /** Holds a secret — display surfaces must redact its value. */
+  /** Holds a secret -- display surfaces must redact its value. */
   secret: Schema.optional(Schema.Boolean),
   /**
    * Alternative variable names that satisfy the same requirement, in
@@ -125,7 +125,7 @@ export const describeEnvironment = (environment: ReadonlyArray<EnvironmentVariab
  * The variable names a provider's environment resolution would consume, or
  * `undefined` when the declared contract is not fully satisfied (some
  * required variable has no non-empty value). Reads through the ambient
- * `ConfigProvider` — the process environment plus `.env` / `--env-file` —
+ * `ConfigProvider` -- the process environment plus `.env` / `--env-file` --
  * so it sees exactly what `readEnvironment` will. Environment credentials
  * take precedence over any profile, CI or not; the returned names tell the
  * user exactly which keys won.
@@ -150,7 +150,7 @@ export const presentEnvironment = (environment: ReadonlyArray<EnvironmentVariabl
 
 /**
  * One rendered line of a provider's credential details: `key: value`.
- * Values must arrive pre-redacted (see `displayRedacted`) — the display
+ * Values must arrive pre-redacted (see `displayRedacted`) -- the display
  * layer renders them verbatim.
  */
 export interface ProviderDetailLine {
@@ -159,7 +159,7 @@ export interface ProviderDetailLine {
 }
 
 /**
- * Structured result of {@link AuthProviderImpl.details} — what
+ * Structured result of {@link AuthProviderImpl.details} -- what
  * `alchemy profile show` and the dashboard render for a connected
  * provider. Replaces the old `prettyPrint` Console-capture contract.
  */
@@ -169,7 +169,7 @@ export interface ProviderDetails {
 
 /**
  * One input a provider's flag-driven (non-interactive) configuration
- * accepts — the machine-readable half of `alchemy profile edit --add
+ * accepts -- the machine-readable half of `alchemy profile edit --add
  * <provider> --method <m> --set <name>=<value>`.
  */
 export interface ConfigureField {
@@ -213,7 +213,7 @@ export interface AuthProviderImpl<
   /**
    * Schema for the provider-owned `values` object ({@link Config}). Stored
    * entries are user-editable JSON that may also come from a newer or
-   * older alchemy, so every load decodes against this schema — an invalid
+   * older alchemy, so every load decodes against this schema -- an invalid
    * entry fails with a reconfigure hint instead of reaching provider code
    * that matches exhaustively on `method`.
    */
@@ -227,7 +227,7 @@ export interface AuthProviderImpl<
   /**
    * Flag-driven configuration for scripts and agents: validated `--set`
    * values for one of the methods declared in {@link configureMethods}.
-   * Optional — interactive-only providers omit it.
+   * Optional -- interactive-only providers omit it.
    */
   configureWith?(
     profileName: string,
@@ -275,7 +275,7 @@ export interface AuthProviderImpl<
 
   /**
    * Resolve credentials from the profile values, silently refreshing when the
-   * provider supports it. MUST be non-interactive — this is the only method
+   * provider supports it. MUST be non-interactive -- this is the only method
    * (with {@link readEnvironment}) that child processes exercise, and their
    * graphs carry no interaction services. When re-authentication is needed,
    * fail with {@link NeedsReauth} instead of prompting.
@@ -294,7 +294,7 @@ export interface AuthProviderImpl<
 
   /**
    * The environment variables {@link readEnvironment} consumes. Required
-   * whenever `readEnvironment` is implemented — profiles do not exist in CI,
+   * whenever `readEnvironment` is implemented -- profiles do not exist in CI,
    * so this list is the provider's entire CI configuration contract. Names
    * only, never values.
    */
@@ -356,15 +356,15 @@ export const AuthProvider =
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
       // parameter only narrows the type), and `Effect.provideContext` makes
-      // the provided side win — so an Interaction that happens to be
+      // the provided side win -- so an Interaction that happens to be
       // ambient at REGISTRATION would silently shadow whatever the caller
       // provides at call time, making the interactive methods' declared
       // `Interaction` requirement a dead letter. Omit it from the snapshot:
       // interactive flows resolve Interaction from the caller, exactly as
       // their signatures promise (a scripted test Interaction, a
       // browser-driven Alchemist login).
-      // SAFETY: the assertion restores the pre-omit type — tsc cannot reduce
-      // `Exclude<R, … Exclude<R, Interaction>>` over the generic R. It only
+      // SAFETY: the assertion restores the pre-omit type -- tsc cannot reduce
+      // `Exclude<R, ... Exclude<R, Interaction>>` over the generic R. It only
       // over-promises Interaction, which every registered method signature
       // re-declares as a requirement anyway, so no call site can rely on the
       // capture satisfying it.
@@ -419,7 +419,7 @@ export const AuthProvider =
         kind: "AuthProvider",
         name,
         // configure/login can wait minutes on a browser grant, so they hold
-        // only the process-level interactive mutex — never the per-profile
+        // only the process-level interactive mutex -- never the per-profile
         // credentials lock, which would starve every concurrent `read` (its
         // waiters time out at ~120s). Providers whose login path performs a
         // rotate-on-use silent refresh wrap that read-refresh-persist

@@ -120,11 +120,11 @@ export type JobProps = PlatformProps & {
    * Job id (the `{job}` segment of
    * `projects/{project}/locations/{location}/jobs/{job}`). If omitted, a
    * unique RFC1035 name is generated. 1-49 characters, lowercase letter
-   * first. Immutable — changing it replaces the job.
+   * first. Immutable -- changing it replaces the job.
    */
   jobId?: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
+   * Region (`us-central1`, `europe-west1`, ...). Immutable -- changing it
    * replaces the job. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -229,7 +229,7 @@ export type Job = Resource<
     jobId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -247,7 +247,7 @@ export type Job = Resource<
     updateTime: string | undefined;
     /** Number of executions created for this job. */
     executionCount: number | undefined;
-    /** Terminal condition state (`CONDITION_SUCCEEDED`, …). */
+    /** Terminal condition state (`CONDITION_SUCCEEDED`, ...). */
     terminalConditionState: string | undefined;
     /** Latest created execution name, if any. */
     latestCreatedExecutionName: string | undefined;
@@ -293,7 +293,7 @@ export type JobShape =
     });
 
 /**
- * A Cloud Run Job — a container that runs to completion.
+ * A Cloud Run Job -- a container that runs to completion.
  *
  * Changing `jobId` or `location` replaces the job.
  *

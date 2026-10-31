@@ -38,7 +38,7 @@ export interface StartDICOMImportJobRequest extends Omit<
  * ### Importing DICOM Data
  * **Example:** Start a Bulk DICOM Import Job
  * ```typescript
- * // deploy time — bind the data store and the HealthImaging data-access role
+ * // deploy time -- bind the data store and the HealthImaging data-access role
  * const startImport = yield* MedicalImaging.StartDICOMImportJob(datastore, dataAccessRole);
  *
  * // runtime

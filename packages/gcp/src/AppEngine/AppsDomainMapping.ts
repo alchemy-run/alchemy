@@ -48,12 +48,12 @@ export type AppsDomainMappingResourceRecord = {
 export type AppsDomainMappingProps = {
   /**
    * App Engine application id. Defaults to the current GCP project.
-   * Immutable — changing it replaces the mapping.
+   * Immutable -- changing it replaces the mapping.
    */
   appsId?: string;
   /**
    * Domain name served by the application (for example `www.example.com`).
-   * Immutable — changing it replaces the mapping. Domain mappings have
+   * Immutable -- changing it replaces the mapping. Domain mappings have
    * no labels field; `list` / nuke discover owned mappings by joining
    * `sslSettings.certificateId` to an Alchemy-owned AuthorizedCertificate,
    * or a domain that starts with `alchemy-`.
@@ -101,7 +101,7 @@ export type AppsDomainMapping = Resource<
  * Domain mappings have no labels field. `list` / nuke discover owned
  * mappings by joining `sslSettings.certificateId` to an Alchemy-owned
  * AuthorizedCertificate, or a domain that starts with `alchemy-`. The
- * application id and domain are identity — changing either replaces the
+ * application id and domain are identity -- changing either replaces the
  * mapping. SSL settings update in place.
  *
  * ### Creating a Domain Mapping

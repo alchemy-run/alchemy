@@ -16,7 +16,7 @@ export interface DeriveSharedSecretRequest extends Omit<kms.DeriveSharedSecretRe
  * key-derivation function.
  *
  * The `SharedSecret` in the response is wrapped in `Redacted` so it never
- * leaks into logs — unwrap with `Redacted.value(...)` at the point of use.
+ * leaks into logs -- unwrap with `Redacted.value(...)` at the point of use.
  *
  * ### Key Agreement
  * **Example:** Derive a Shared Secret

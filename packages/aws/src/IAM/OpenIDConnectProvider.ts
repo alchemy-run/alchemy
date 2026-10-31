@@ -20,7 +20,7 @@ export interface OpenIDConnectProviderProps {
   clientIDList?: [string, ...string[]];
   /**
    * Certificate thumbprints for the provider. AWS auto-manages thumbprints
-   * for well-known IdPs (e.g. GitHub Actions), so this is optional — but
+   * for well-known IdPs (e.g. GitHub Actions), so this is optional -- but
    * `iam.updateOpenIDConnectProviderThumbprint` rejects an empty list, so
    * the prop is typed as a non-empty tuple when supplied.
    */
@@ -42,7 +42,7 @@ export interface OpenIDConnectProvider extends Resource<
     /** The client IDs (audiences) registered with the provider. */
     clientIDList: string[];
     /**
-     * Reflects the desired state — `undefined` when the user opted out of
+     * Reflects the desired state -- `undefined` when the user opted out of
      * managing thumbprints (AWS auto-manages them for well-known IdPs).
      */
     thumbprintList: string[] | undefined;
@@ -113,7 +113,7 @@ export const OpenIDConnectProviderProvider = () =>
           };
         }).pipe(
           // A peer test may delete a provider between
-          // `listOpenIDConnectProviders` and hydrating its tags — skip the
+          // `listOpenIDConnectProviders` and hydrating its tags -- skip the
           // vanished entry rather than failing the whole enumeration.
           Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
         );
@@ -148,7 +148,7 @@ export const OpenIDConnectProviderProvider = () =>
             (olds?.url !== undefined ? yield* oidcArnFromUrl(olds.url) : undefined);
           if (providerArn === undefined) {
             // An Output-valued `url` doesn't survive a `creating`-state
-            // round-trip (it deserializes as `undefined`) — report "not
+            // round-trip (it deserializes as `undefined`) -- report "not
             // found" so the engine re-drives the create.
             return undefined;
           }
@@ -172,7 +172,7 @@ export const OpenIDConnectProviderProvider = () =>
           // can observe with or without prior output.
           const providerArn = output?.openIDConnectProviderArn ?? (yield* oidcArnFromUrl(news.url));
 
-          // Observe — read the live provider; absent when missing.
+          // Observe -- read the live provider; absent when missing.
           let observed = yield* readProvider(providerArn);
           let observedClientIds: string[] = [];
           let observedThumbprints: string[] = [];
@@ -187,7 +187,7 @@ export const OpenIDConnectProviderProvider = () =>
             observedTags = toTagRecord(tagsResp.Tags);
           }
 
-          // Ensure — create the provider when it is missing. The API does
+          // Ensure -- create the provider when it is missing. The API does
           // not return idempotently for OIDC, but the deterministic ARN
           // means a race manifests as `EntityAlreadyExistsException`.
           if (!observed?.Url) {
@@ -232,7 +232,7 @@ export const OpenIDConnectProviderProvider = () =>
             }
           }
 
-          // Sync thumbprints — `updateOpenIDConnectProviderThumbprint`
+          // Sync thumbprints -- `updateOpenIDConnectProviderThumbprint`
           // replaces the entire list, so call it whenever the set differs.
           // When the user didn't request a list we leave the cloud-managed
           // thumbprints alone (AWS auto-manages for well-known IdPs).

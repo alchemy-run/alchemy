@@ -26,13 +26,13 @@ export type Topic = {
 
 export type CustomTopicsProps = {
   /**
-   * Zone the custom topics belong to. Stable — changing the zone
+   * Zone the custom topics belong to. Stable -- changing the zone
    * triggers a replacement (the old zone's topic list is restored to
    * the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * The full list of custom topic categories. Mutable — the PUT
+   * The full list of custom topic categories. Mutable -- the PUT
    * replaces the entire list, so reconcile syncs the list as a whole.
    */
   topics: Topic[];
@@ -64,12 +64,12 @@ export type CustomTopics = Resource<
  * content detection on a Cloudflare zone
  * (`/zones/{zone_id}/ai-security/custom-topics`).
  *
- * The topic list is a zone singleton — it always exists (defaulting to
+ * The topic list is a zone singleton -- it always exists (defaulting to
  * empty) and is never created or deleted, only replaced wholesale via
  * PUT. Reconcile PUTs the desired list when the observed list differs;
  * destroy restores the list the zone had before Alchemy first managed it.
  *
- * Declare at most one `CustomTopics` per zone — two instances
+ * Declare at most one `CustomTopics` per zone -- two instances
  * managing the same zone would fight over the single underlying list.
  *
  * AI Security for Apps is entitlement-gated: on accounts without the
@@ -117,7 +117,7 @@ export const CustomTopicsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its custom-topics list (the list
       // always exists, defaulting to empty, on every entitled zone).
       const allZones = yield* listAllZones(accountId);
@@ -136,7 +136,7 @@ export const CustomTopicsProvider = () =>
               };
             }),
             // AI Security is entitlement-gated and zones may be partial
-            // or deleted out-of-band — skip any zone we can't read.
+            // or deleted out-of-band -- skip any zone we can't read.
             Effect.catchTag(
               ["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"],
               () => Effect.undefined,
@@ -162,11 +162,11 @@ export const CustomTopicsProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
-        // Zone deleted out-of-band — the singleton is gone with it.
+        // Zone deleted out-of-band -- the singleton is gone with it.
         Effect.catchTag("ZoneNotAuthorized", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
-      // The list is a singleton that always exists (default empty) —
+      // The list is a singleton that always exists (default empty) --
       // there is nothing to "own", so a cold read adopts freely (never
       // `Unowned`). The observed list at adoption time becomes the
       // `initialTopics` restored on destroy.
@@ -180,17 +180,17 @@ export const CustomTopicsProvider = () =>
       const zoneId = news.zoneId as string;
       const desired = news.topics;
 
-      // 1. Observe — the singleton always exists; read the live list.
+      // 1. Observe -- the singleton always exists; read the live list.
       const observed = yield* aiSecurity.getCustomTopic({ zoneId });
       const observedTopics = normalizeTopics(observed.topics);
 
-      // 2. Capture — the pre-management list, restored on destroy.
+      // 2. Capture -- the pre-management list, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed list is
       //    the zone's original.
       const initialTopics = output !== undefined ? output.initialTopics : observedTopics;
 
-      // 3. Sync — PUT the full desired list only when it differs.
+      // 3. Sync -- PUT the full desired list only when it differs.
       if (topicsEqual(observedTopics, desired)) {
         return { zoneId, topics: observedTopics, initialTopics };
       }
@@ -207,7 +207,7 @@ export const CustomTopicsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialTopics } = output;
-      // Observe — if the zone itself is gone, so is the list; if the
+      // Observe -- if the zone itself is gone, so is the list; if the
       // entitlement was revoked, the list is unreachable and there is
       // nothing we can restore.
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
@@ -233,7 +233,7 @@ const normalizeTopics = (topics: readonly Topic[] | null | undefined): Topic[] =
   (topics ?? []).map((t) => ({ ...t }));
 
 /**
- * Order-insensitive structural equality on the `topic` key — the PUT
+ * Order-insensitive structural equality on the `topic` key -- the PUT
  * replaces the whole list, so two lists are equal when they contain the
  * same `{ label, topic }` pairs regardless of order.
  */

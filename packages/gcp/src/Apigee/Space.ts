@@ -27,18 +27,18 @@ export type SpaceProps = {
    * Space id (the `{space}` segment of `organizations/{org}/spaces/{space}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-z][a-z0-9-]*`. Immutable — changing it replaces the space.
+   * `[a-z][a-z0-9-]*`. Immutable -- changing it replaces the space.
    */
   spaceId?: string;
   /**
-   * Apigee organization id. Defaults to the stack GCP project. Immutable —
+   * Apigee organization id. Defaults to the stack GCP project. Immutable --
    * changing it replaces the space.
    */
   organization?: string;
   /**
    * Human-readable display name. Spaces have no labels field, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `list` / nuke.
+   * in a `[alchemy ...]` prefix for `list` / nuke.
    */
   displayName?: string;
 };
@@ -70,7 +70,7 @@ export type Space = Resource<
  *
  * Spaces have no labels field, so Alchemy stamps ownership into
  * `displayName` for `list` / nuke. `spaceId` and `organization` are
- * identity — changing either replaces the space. `displayName` updates
+ * identity -- changing either replaces the space. `displayName` updates
  * in place.
  *
  * ### Creating a Space

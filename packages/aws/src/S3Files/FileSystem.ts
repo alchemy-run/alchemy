@@ -100,7 +100,7 @@ export interface FileSystem extends Resource<
 > {}
 
 /**
- * An Amazon S3 File System — POSIX-style file system access over an S3
+ * An Amazon S3 File System -- POSIX-style file system access over an S3
  * general purpose bucket (mountable from EC2/ECS via mount targets, with
  * application-scoped access via {@link AccessPoint}s).
  *
@@ -308,7 +308,7 @@ export const FileSystemProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // There is no UpdateFileSystem API — bucket, prefix, role, and
+          // There is no UpdateFileSystem API -- bucket, prefix, role, and
           // encryption are all fixed at create time. Only tags and the
           // resource policy are mutable in place.
           if (replacementKey(olds ?? {}) !== replacementKey(news ?? {})) {
@@ -321,16 +321,16 @@ export const FileSystemProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output only caches
+          // 1. OBSERVE -- cloud state is authoritative; output only caches
           //    the server-assigned file system id.
           let live =
             output?.fileSystemId !== undefined
               ? yield* observe(output.fileSystemId)
               : yield* findByAlchemyTags(id, news.bucket);
 
-          // 2. ENSURE — create when missing. A ConflictException means a
+          // 2. ENSURE -- create when missing. A ConflictException means a
           //    file system already exists for this bucket/prefix (possibly a
-          //    concurrent create) — re-find it by our tags and only fail if
+          //    concurrent create) -- re-find it by our tags and only fail if
           //    it is not ours.
           if (live === undefined) {
             const created = yield* s3files
@@ -369,7 +369,7 @@ export const FileSystemProvider = () =>
             });
           }
 
-          // 3. SYNC — tags against observed cloud tags; policy against the
+          // 3. SYNC -- tags against observed cloud tags; policy against the
           //    observed resource policy.
           yield* syncTags(fileSystemId, desiredTags);
           yield* syncPolicy(fileSystemId, news.policy);

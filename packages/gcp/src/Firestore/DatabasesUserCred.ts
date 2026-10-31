@@ -20,7 +20,7 @@ export type DatabasesUserCredProps = {
   /**
    * Parent database. Full name `projects/{project}/databases/{database}`
    * or the database id. User creds require an Enterprise edition
-   * database with MongoDB-compatible API access enabled. Immutable —
+   * database with MongoDB-compatible API access enabled. Immutable --
    * changing it replaces the creds.
    */
   database: string;
@@ -29,7 +29,7 @@ export type DatabasesUserCredProps = {
    * `.../databases/{database}/userCreds/{user_creds}`). If omitted, a
    * unique name is generated. Must be 4-63 characters, match
    * `[a-z][a-z0-9-]*[a-z0-9]`, and must not look like a UUID.
-   * Immutable — changing it replaces the creds.
+   * Immutable -- changing it replaces the creds.
    */
   userCredsId?: string;
   /**

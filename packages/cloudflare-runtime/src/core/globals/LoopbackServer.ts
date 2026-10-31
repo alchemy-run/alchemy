@@ -109,7 +109,7 @@ export const LoopbackServerLive = Layer.effect(
     // workerd re-connects for every loopback subrequest once its pooled
     // connection is closed. Node's default `keepAliveTimeout` of 5s closes
     // idle sockets between test/request bursts, producing per-burst TCP churn
-    // that piles up TIME_WAIT sockets — on Windows CI this exhausts ephemeral
+    // that piles up TIME_WAIT sockets -- on Windows CI this exhausts ephemeral
     // ports/AFD buffers (WSAENOBUFS #10055, ConnectEx ERROR_DUP_NAME #52).
     // Keep idle connections around for a minute so they actually get reused.
     server.keepAliveTimeout = 60_000;

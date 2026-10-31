@@ -12,7 +12,7 @@ import {
 } from "./ReadFlags.ts";
 
 // Shared HTTP scaffolding for the Flagship `ReadFlags` binding. NOT
-// re-exported from `index.ts` — only the contract and the impl layers are
+// re-exported from `index.ts` -- only the contract and the impl layers are
 // public. A future token-scoped `ReadFlagsHttp` layer reuses this builder with
 // an auth minted from an `AccountApiToken`; `ReadFlagsLocal` builds the auth
 // from the ambient current-credentials context.
@@ -44,10 +44,10 @@ const targetingKeyOf = (context: EvaluationContext | undefined): string | undefi
  * Build a {@link ReadFlagsClient} over the Flagship HTTP evaluate endpoint
  * (`GET .../flagship/apps/{appId}/evaluate`).
  *
- * `appId` is an Effect so the resolution stays deferred to each call — inside
+ * `appId` is an Effect so the resolution stays deferred to each call -- inside
  * an Action it resolves through the apply-time RuntimeContext. Mirrors the
  * Worker binding's fall-back-to-default semantics: evaluation never fails the
- * effect — an HTTP error or a value whose type does not match the requested
+ * effect -- an HTTP error or a value whose type does not match the requested
  * method resolves to `defaultValue` instead. The `raw` runtime binding has no
  * HTTP equivalent and dies if used.
  */

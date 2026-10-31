@@ -6,7 +6,7 @@ import type * as Sink from "effect/Sink";
 import type { Table } from "./Table.ts";
 
 /**
- * A raw distilled `WriteRequest` — exactly one of `PutRequest` or
+ * A raw distilled `WriteRequest` -- exactly one of `PutRequest` or
  * `DeleteRequest`. Entries are NOT auto-marshalled: callers construct the
  * `AttributeValue` maps themselves, keeping full control over item shape,
  * ordering, and partitioning.

@@ -20,7 +20,7 @@ export interface DomainNameProps {
   certificateBody?: string;
   /**
    * The private key of the server certificate (self-managed certificates).
-   * Secret key material — wrap with `Redacted.make` so state encoding
+   * Secret key material -- wrap with `Redacted.make` so state encoding
    * preserves redaction.
    */
   certificatePrivateKey?: Redacted.Redacted<string>;
@@ -225,7 +225,7 @@ export const DomainNameProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — fetch the live domain name. Domain names are
+          // Observe -- fetch the live domain name. Domain names are
           // user-supplied physical names so the lookup key is stable; we
           // never trust `output.tags`/`output.securityPolicy` etc. for
           // diffing, only re-read the cloud state.
@@ -233,7 +233,7 @@ export const DomainNameProvider = () =>
             .getDomainName({ domainName })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
-          // Ensure — create the domain name if it's missing.
+          // Ensure -- create the domain name if it's missing.
           if (!observed?.domainName) {
             yield* ag.createDomainName({
               domainName: news.domainName,
@@ -257,7 +257,7 @@ export const DomainNameProvider = () =>
             observed = yield* ag.getDomainName({ domainName });
           }
 
-          // Sync mutable scalar fields — observed ↔ desired patch list.
+          // Sync mutable scalar fields -- observed <-> desired patch list.
           const patches: ag.PatchOperation[] = [];
           if (news.securityPolicy !== observed.securityPolicy) {
             patches.push({
@@ -329,7 +329,7 @@ export const DomainNameProvider = () =>
               .pipe(retryDomainNameMutation);
           }
 
-          // Sync tags — diff observed cloud tags against desired so adoption
+          // Sync tags -- diff observed cloud tags against desired so adoption
           // converges without fighting whatever was already there.
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags) && observed.domainNameArn) {

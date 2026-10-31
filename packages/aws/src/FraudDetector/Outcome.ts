@@ -40,7 +40,7 @@ export interface Outcome extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector outcome — the result a rule produces when it matches
+ * An Amazon Fraud Detector outcome -- the result a rule produces when it matches
  * (e.g. `approve`, `review`, `block`). Detector rules reference outcomes; they
  * are cheap metadata objects.
  *
@@ -65,7 +65,7 @@ export const OutcomeProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
-      /** Look an outcome up by name; typed not-found → undefined. */
+      /** Look an outcome up by name; typed not-found -> undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getOutcomes({ name })
@@ -104,7 +104,7 @@ export const OutcomeProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // putOutcome is an idempotent upsert — call it to converge whether
+          // putOutcome is an idempotent upsert -- call it to converge whether
           // creating or updating the description.
           yield* frauddetector.putOutcome({
             name,
@@ -112,7 +112,7 @@ export const OutcomeProvider = () =>
           });
 
           const outcome = yield* get(name);
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(outcome!.arn!, desiredTags);
 
           yield* session.note(name);

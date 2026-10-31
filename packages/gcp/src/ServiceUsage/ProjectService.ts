@@ -46,7 +46,7 @@ export type ProjectService = Resource<
 >;
 
 /**
- * Enables a Google Cloud API for a project — the GCP analog of a
+ * Enables a Google Cloud API for a project -- the GCP analog of a
  * Terraform `google_project_service`.
  *
  * Service Usage has no per-caller ownership marker, so an API that is
@@ -159,7 +159,7 @@ export const ProjectServiceProvider = () =>
       // Observe
       let current = yield* getService(project, service);
 
-      // Ensure — enabling an already-enabled API is a no-op, so skip it.
+      // Ensure -- enabling an already-enabled API is a no-op, so skip it.
       if (current?.state !== "ENABLED") {
         const operation = yield* serviceusage.enableServices({
           name: serviceName(project, service),

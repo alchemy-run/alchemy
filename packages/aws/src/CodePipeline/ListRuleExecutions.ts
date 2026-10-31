@@ -9,7 +9,7 @@ export interface ListRuleExecutionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:ListRuleExecutions` — enumerates the
+ * Runtime binding for `codepipeline:ListRuleExecutions` -- enumerates the
  * execution history of stage-condition rules (V2 pipelines).
  * ### Observing Pipelines
  * **Example:** List Rule Executions

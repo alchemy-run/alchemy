@@ -16,7 +16,7 @@ const DEFAULT_STATE: HmacKeyState = "ACTIVE";
 
 export type HmacKeyProps = {
   /**
-   * Email of the service account this HMAC key authenticates. Immutable —
+   * Email of the service account this HMAC key authenticates. Immutable --
    * changing it replaces the key. The service account must belong to the
    * same project.
    */

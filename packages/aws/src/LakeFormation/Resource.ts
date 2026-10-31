@@ -113,7 +113,7 @@ export const ResourceProvider = () =>
           if (resourceArn === undefined) return undefined;
           const info = yield* observe(resourceArn);
           if (info === undefined) return undefined;
-          // Registrations are not taggable, so ownership cannot be verified —
+          // Registrations are not taggable, so ownership cannot be verified --
           // return the attributes directly.
           return {
             resourceArn,
@@ -128,7 +128,7 @@ export const ResourceProvider = () =>
           if (news.resourceArn !== olds.resourceArn) {
             return { action: "replace" } as const;
           }
-          // roleArn / withFederation / hybridAccessEnabled → update
+          // roleArn / withFederation / hybridAccessEnabled -> update
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -150,7 +150,7 @@ export const ResourceProvider = () =>
             yield* register.pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
             info = yield* observe(resourceArn);
           } else {
-            // 3. SYNC — role and registration flags, observed vs desired.
+            // 3. SYNC -- role and registration flags, observed vs desired.
             const desiredRole = news.roleArn;
             const roleDrift = desiredRole !== undefined && desiredRole !== info.RoleArn;
             const hybridDrift =
@@ -165,11 +165,11 @@ export const ResourceProvider = () =>
               if (slrManaged) {
                 // UpdateResource rejects registrations held by the
                 // service-linked role ("Resource managed by Service Linked
-                // Role") — recreate the registration in place instead.
+                // Role") -- recreate the registration in place instead.
                 yield* lf.deregisterResource({ ResourceArn: resourceArn }).pipe(
                   Effect.catchTags({
                     EntityNotFoundException: () => Effect.void,
-                    // spurious error on the last SLR location — the
+                    // spurious error on the last SLR location -- the
                     // deregistration still succeeds (see delete below)
                     LastServiceLinkedRoleRegistration: () => Effect.void,
                   }),

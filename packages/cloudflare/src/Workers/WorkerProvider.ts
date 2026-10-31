@@ -69,7 +69,7 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
 
 /**
  * A Durable Object class is being dropped from this Worker while a binding in
- * the same deploy still references it on another script — the class moved
+ * the same deploy still references it on another script -- the class moved
  * cross-script, but its namespace (and every stored object in it) still lives
  * on this Worker. Cloudflare rejects a single upload that both deletes the
  * class and ships a binding referencing it, and silently deleting would
@@ -77,8 +77,8 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
  * upload.
  *
  * Moving a Durable Object class between Workers is always declared: set
- * `transferredFrom` on the Durable Object at its **new host** — naming the
- * former host by Worker logical id (same stack) or physical script name — and
+ * `transferredFrom` on the Durable Object at its **new host** -- naming the
+ * former host by Worker logical id (same stack) or physical script name -- and
  * Alchemy moves the namespace, with its data, on the new host's deploy; this
  * deploy then converges on its own. To abandon the
  * data instead, remove the binding entirely in one deploy (which deletes the
@@ -103,7 +103,7 @@ export class DurableObjectTransferRequired extends Data.TaggedError(
  * Object (e.g. an orphaned script left behind by a `name` prop change still
  * carries the same alchemy tags, or the host history lists several scripts
  * that each still hold a same-class namespace). Alchemy refuses to guess
- * which namespace's data to move — narrow the declaration to the exact
+ * which namespace's data to move -- narrow the declaration to the exact
  * physical script name that holds the data.
  */
 export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
@@ -136,8 +136,8 @@ export const resolveNamespaceName = (namespace: unknown): string | undefined => 
  * Resolve a Worker's `tailConsumers` / `streamingTailConsumers` prop into
  * the wire-shape consumer list
  * (`[{ service }]`). The engine resolves a passed {@link Worker} to its
- * Attributes object — possibly stables-only during planning, but
- * `workerName` is always a stable — so each entry is either a script-name
+ * Attributes object -- possibly stables-only during planning, but
+ * `workerName` is always a stable -- so each entry is either a script-name
  * string or that attributes object. Whole-resource entries are reduced to
  * the script name alone so hashing/diffing never sees the consumer's
  * per-deploy fields (`hash`, `url`, ...), mirroring
@@ -164,7 +164,7 @@ export const resolveTailConsumers = (
 };
 
 /**
- * A Worker's `version` configuration is invalid — a prop that can't be
+ * A Worker's `version` configuration is invalid -- a prop that can't be
  * combined with `version.parent` (script-level settings belong to the
  * parent), a locally-hosted Durable Object / Workflow class on a version
  * worker, an out-of-range `traffic`, or a gradual rollout that requires
@@ -177,8 +177,8 @@ export class WorkerVersionConfigError extends Data.TaggedError("WorkerVersionCon
 /**
  * Resolve the parent script *name* from a resolved `version.parent` prop or
  * persisted props. The engine resolves a passed {@link Worker} (or
- * `Worker.ref(...)`) to its Attributes object — possibly stables-only during
- * planning, but `workerName` is always a stable — so the value is either the
+ * `Worker.ref(...)`) to its Attributes object -- possibly stables-only during
+ * planning, but `workerName` is always a stable -- so the value is either the
  * script name string, that attributes object, or `undefined`.
  *
  * @internal
@@ -192,7 +192,7 @@ export const resolveVersionParentName = (version: WorkerProps["version"]): strin
 };
 
 /**
- * A Worker's `preview` configuration is invalid — combined with
+ * A Worker's `preview` configuration is invalid -- combined with
  * `version.parent`, missing `preview.of`, a bad Preview name, or a
  * script-level setting that belongs to the parent.
  */
@@ -249,7 +249,7 @@ const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown
 /**
  * The traffic percentage a *self-owned* Worker's new version should receive,
  * or `undefined` for the default full cutover. Only a `version` prop without
- * a `parent` participates — version workers handle traffic separately.
+ * a `parent` participates -- version workers handle traffic separately.
  *
  * @internal
  */
@@ -286,7 +286,7 @@ export interface ResolvedVersionAffinity {
 }
 
 // Cookie / header names are interpolated into a double-quoted Rules-language
-// string literal — restrict them to the token characters real-world names
+// string literal -- restrict them to the token characters real-world names
 // use so a name can never terminate the literal or smuggle expression text.
 const AFFINITY_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
@@ -320,7 +320,7 @@ export const resolveVersionAffinity = (
     if (affinity.key !== undefined && affinity.ip === true) {
       return yield* new WorkerVersionConfigError({
         message:
-          "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
+          "version.affinity: `ip` is the fallback for an absent `cookie`/`header` \u2014 a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
       });
     }
     for (const [prop, name] of [
@@ -357,8 +357,8 @@ interface AffinityZoneHost {
 
 /**
  * The `http.host` clause scoping a zone's affinity rules to the Worker's
- * own hostnames, so unrelated zone traffic — and other Workers' rollouts
- * on the same zone — never get this Worker's version key.
+ * own hostnames, so unrelated zone traffic -- and other Workers' rollouts
+ * on the same zone -- never get this Worker's version key.
  *
  * @internal exported for unit testing.
  */
@@ -388,8 +388,8 @@ const affinityRulePrefix = (scriptName: string) => `alchemy:worker:${scriptName}
 
 /**
  * The transform rules pinning one zone's traffic: a primary rule filling
- * the version-key header from the configured source, plus — for
- * `cookie`/`header` sources with `ip: true` — a fallback rule keying
+ * the version-key header from the configured source, plus -- for
+ * `cookie`/`header` sources with `ip: true` -- a fallback rule keying
  * requests that lack the source by client IP.
  *
  * @internal exported for unit testing.
@@ -425,9 +425,9 @@ export const buildAffinityZoneRules = (
       ? [
           {
             // An absent cookie/header is a *missing* value in the Rules
-            // language, and every comparison on missing evaluates false —
+            // language, and every comparison on missing evaluates false --
             // `len(field) == 0` can never match. `not (len(field) > 0)`
-            // is the complement that does: missing → false → `not` → true.
+            // is the complement that does: missing -> false -> `not` -> true.
             description: `${prefix}:ip`,
             expression: `${hostExpr} and not (len(${field}) > 0)`,
             value: "to_string(ip.src)",
@@ -438,7 +438,7 @@ export const buildAffinityZoneRules = (
 };
 
 /**
- * A Worker's `domain` configuration is invalid — a hostname appears in more
+ * A Worker's `domain` configuration is invalid -- a hostname appears in more
  * than one role (name/aliases/redirects), or a redirect targets itself.
  */
 export class WorkerDomainConfigError extends Data.TaggedError("WorkerDomainConfigError")<{
@@ -533,7 +533,7 @@ const workerDomainConflictSchedule = Schedule.max([
 
 // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
 // Cloudflare API receives the form it stores domains in. `new URL(...)`
-// does IDNA via WHATWG URL parsing — `📦.alchemy.run` → `xn--5z8h.alchemy.run`.
+// does IDNA via WHATWG URL parsing -- `\u{1F4E6}.alchemy.run` -> `xn--5z8h.alchemy.run`.
 const toPunycode = (hostname: string): string => {
   try {
     return new URL(`https://${hostname}`).hostname;
@@ -543,7 +543,7 @@ const toPunycode = (hostname: string): string => {
 };
 
 /**
- * Resolve the `domain` prop to its full shape — a bare string is shorthand
+ * Resolve the `domain` prop to its full shape -- a bare string is shorthand
  * for `{ name }`. Hostnames are punycode-normalized and de-duplicated;
  * a hostname may only play one role, so aliases/redirects that repeat the
  * canonical name (or each other) fail with a typed error.
@@ -551,7 +551,7 @@ const toPunycode = (hostname: string): string => {
  * @internal exported for unit testing.
  */
 export const resolveWorkerDomain = (
-  // `string[]` is the pre-redesign prop shape — it can still reach us from
+  // `string[]` is the pre-redesign prop shape -- it can still reach us from
   // persisted `olds` written by older providers (read's classification).
   domain: WorkerProps["domain"] | string[],
 ): Effect.Effect<ResolvedWorkerDomain | undefined, WorkerDomainConfigError> =>
@@ -559,7 +559,7 @@ export const resolveWorkerDomain = (
     if (domain === undefined || domain === null) return undefined;
     // Legacy array form: the first hostname was the primary custom domain
     // (`url = domains[0]` back then), the rest map to aliases. A legacy
-    // empty array was the explicit detach-all — no domain.
+    // empty array was the explicit detach-all -- no domain.
     const config =
       typeof domain === "string"
         ? { name: domain }
@@ -631,7 +631,7 @@ type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
 
 /**
  * The *custom domain* hostnames recorded in a Worker's persisted legacy
- * `domains` state — minus the workers.dev (stable or preview) and local-dev
+ * `domains` state -- minus the workers.dev (stable or preview) and local-dev
  * entries that shared the list in older formats.
  *
  * @internal exported for unit testing.
@@ -740,10 +740,10 @@ const findDispatchNamespaceScript = (
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
  * its own typed not-found error, verified against the live API).
- * Every bound resource is provisioned before the Worker deploys —
+ * Every bound resource is provisioned before the Worker deploys --
  * dependency order for KV/R2/D1/queues/etc., a pre-created stub
  * (which exports the Durable Object classes) for circular
- * Worker↔Worker references — so a not-found here is either
+ * Worker<->Worker references -- so a not-found here is either
  * propagation lag on a just-created resource (a Secrets Store secret
  * still `pending`, a stub script not yet in the registry) that
  * retrying converges, or a genuine misconfiguration that keeps
@@ -773,7 +773,7 @@ const bindingTargetNotFoundRetrySchedule = () =>
 
 /**
  * Script PUT is an idempotent upsert, so a pure transport failure (the
- * request died before any response — e.g. Cloudflare closing a keep-alive
+ * request died before any response -- e.g. Cloudflare closing a keep-alive
  * socket that idled while slow upstream resources provisioned earlier in the
  * deploy) is safe to replay. Errors that carry a response are real API
  * verdicts and are NOT retried here.
@@ -793,7 +793,7 @@ const retryableScriptPut = (e: Parameters<typeof isBindingTargetNotFound>[0]): b
  * @internal
  */
 /**
- * A cached `workerId` attribute usable as the immutable script ID — rules
+ * A cached `workerId` attribute usable as the immutable script ID -- rules
  * out the legacy shape (older releases persisted the script *name*), the
  * `dev:`-marked local identity, and the precreate stub's provisional `""`.
  */
@@ -806,8 +806,8 @@ const cachedWorkerId = (value: string | undefined, scriptName: string): string |
  * Whether `output` is a precreate stub that uploaded nothing: a version,
  * preview, or dispatch-namespace worker's provisional row (`workerId: ""`).
  * Its `workerName` names no script this resource wrote. Without a recorded
- * namespace it can't even say which endpoint the attempt targeted — a
- * dispatch stub's namespace may still have been unresolved — so the
+ * namespace it can't even say which endpoint the attempt targeted -- a
+ * dispatch stub's namespace may still have been unresolved -- so the
  * account-level script of that name proves nothing (#2533).
  */
 const isUnscopedStub = (output: Worker["Attributes"]): boolean =>
@@ -941,7 +941,7 @@ const deleteWorkerScript = (
       // but state loss (e.g. a consumer row rewritten by a pre-stamping
       // dev run) can strand a live consumer pointing at this script with
       // nothing left to delete it. The script is going away, so any
-      // consumer wiring pointing at it is dead — detach and retry.
+      // consumer wiring pointing at it is dead -- detach and retry.
       Effect.catchTag("QueueConsumerConflict", () =>
         detachQueueConsumersOfScript(accountId, scriptName).pipe(
           Effect.andThen(workers.deleteScript({ accountId, scriptName, force: true })),
@@ -979,7 +979,7 @@ export const normalizeStateDomains = (domains: readonly unknown[] | undefined): 
   });
 
 /**
- * Custom domains Alchemy is responsible for on this Worker — either declared
+ * Custom domains Alchemy is responsible for on this Worker -- either declared
  * on props (`domain`) or already persisted as non-`workers.dev` URLs in state.
  * Used by `read` to skip `listDomains` when the surface is unmanaged (#926).
  *
@@ -1255,7 +1255,7 @@ export const LiveWorkerProvider = () =>
       // const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
 
-      // Account subdomain is invariant for the life of a provider layer —
+      // Account subdomain is invariant for the life of a provider layer --
       // memoize so N Workers (or repeated plan/deploy reads) don't each hit
       // GET /accounts/{id}/workers/subdomain and trip Cloudflare's 429/971
       // throttle (#926). `CLOUDFLARE_WORKERS_SUBDOMAIN` bypasses the lookup
@@ -1299,9 +1299,9 @@ export const LiveWorkerProvider = () =>
       const hasSelfUrlBinding = (bindings: readonly ResourceBinding<Worker["Binding"]>[]) =>
         bindings.some((b) => (b.data.bindings ?? []).some((item) => item.type === "self_url"));
 
-      // Resolve the URL this Worker will be served at — the same formula that
+      // Resolve the URL this Worker will be served at -- the same formula that
       // produces the `url` attribute (first custom domain in user order, else
-      // the workers.dev URL) — usable BEFORE the script upload, so `Worker.URL`
+      // the workers.dev URL) -- usable BEFORE the script upload, so `Worker.URL`
       // bindings can be lowered into plain_text bindings and VITE_*-prefixed
       // env entries can be inlined into the client bundle at build time.
       const resolveSelfUrl = Effect.fn(function* (
@@ -1369,7 +1369,7 @@ export const LiveWorkerProvider = () =>
        * Resolve a hostname to a Cloudflare zone id. An explicit pin
        * (`zoneId` / zone name / `{ zoneId }`) wins. Otherwise look the
        * hostname up with {@link resolveZoneId} (`GET /zones?name=` per
-       * parent label) — never by listing the account's first page of zones.
+       * parent label) -- never by listing the account's first page of zones.
        */
       const inferZoneIdForHostname = (
         hostname: string,
@@ -1442,7 +1442,7 @@ export const LiveWorkerProvider = () =>
           const zoneCache = new Map<string, string>();
 
           // Attach `hostname` to this Worker. Skip the PUT entirely if
-          // the hostname is already attached to *this* Worker — that's a
+          // the hostname is already attached to *this* Worker -- that's a
           // no-op for Cloudflare and avoids the "already in use" 409.
           // If it's attached to a *different* Worker, refuse with a
           // clear message rather than silently re-routing traffic.
@@ -1469,7 +1469,7 @@ export const LiveWorkerProvider = () =>
                 .pipe(Effect.catchTag("DomainNotFound", () => Effect.void));
             }
 
-            // Not attached to this Worker — but it could still belong
+            // Not attached to this Worker -- but it could still belong
             // to another Worker. Check before we try to PUT so we can
             // emit a helpful error instead of the raw 409.
             const otherOwner = yield* workers.listDomains({ accountId, hostname }).pipe(
@@ -1499,7 +1499,7 @@ export const LiveWorkerProvider = () =>
                 hostname,
                 service: scriptName,
                 zoneId,
-                // Private-beta field — only send it when the user opted
+                // Private-beta field -- only send it when the user opted
                 // into custom-domain Previews. Omitting it keeps the
                 // public PUT /workers/domains body unchanged for everyone
                 // else.
@@ -1528,7 +1528,7 @@ export const LiveWorkerProvider = () =>
       // `https://<version-prefix>-<name>.<subdomain>.workers.dev`, where the
       // prefix is the first 8 characters of the version id (read from the
       // latest deployment's majority version). Resolves to `undefined` when
-      // no deployment is visible yet — callers treat the preview URL as
+      // no deployment is visible yet -- callers treat the preview URL as
       // best-effort. Only consulted in previews-only mode
       // (`workersDev: { enabled: false, previewsEnabled: true }`), where it
       // is the Worker's only workers.dev surface.
@@ -1571,17 +1571,17 @@ export const LiveWorkerProvider = () =>
 
       /**
        * Assemble every URL a deployed, script-owning Worker serves at, most
-       * significant first — the first entry becomes the `url` attribute:
+       * significant first -- the first entry becomes the `url` attribute:
        *
-       * 1. `https://<domain.name>` — the canonical custom domain
+       * 1. `https://<domain.name>` -- the canonical custom domain
        * 2. aliases, in declared order
        * 3. the stable workers.dev URL (`workersDev.enabled`)
        * 4. preview URLs of the version this deploy uploaded (gradual
-       *    rollouts), or — in previews-only mode — the current version's
+       *    rollouts), or -- in previews-only mode -- the current version's
        *    preview URL, which is then the only workers.dev surface
        *
        * Redirect hostnames never appear: they don't serve the Worker.
-       * (Version workers don't use this — their `urls` are their preview
+       * (Version workers don't use this -- their `urls` are their preview
        * URLs, assembled in `putWorkerVersion`.)
        */
       const computeWorkerUrls = Effect.fn(function* (params: {
@@ -1620,7 +1620,7 @@ export const LiveWorkerProvider = () =>
        * each affected zone's `http_request_dynamic_redirect` phase
        * entrypoint. Rules are identified by a
        * `alchemy:worker:<script>:redirect:<host>` description; only our own
-       * rules are added/removed — every other rule in the shared entrypoint
+       * rules are added/removed -- every other rule in the shared entrypoint
        * ruleset passes through untouched. Zones that previously held our
        * rules but no longer should (removed redirects, removed domain) are
        * cleaned the same way.
@@ -1628,7 +1628,7 @@ export const LiveWorkerProvider = () =>
       const reconcileRedirectRules = Effect.fn(function* (params: {
         scriptName: string;
         domain: ResolvedWorkerDomain | undefined;
-        /** hostname → zoneId for every currently-attached custom domain */
+        /** hostname -> zoneId for every currently-attached custom domain */
         zoneIdByHostname: ReadonlyMap<string, string>;
         /** redirect hostnames from previous state (for zone cleanup) */
         previousRedirects: readonly string[];
@@ -1639,7 +1639,7 @@ export const LiveWorkerProvider = () =>
         // Zones to touch: every zone hosting a desired redirect, plus every
         // zone that hosted one before (so removals converge). Hostnames
         // whose zone we can't resolve (e.g. the domain was already
-        // detached) are skipped — their rules become unreachable dead
+        // detached) are skipped -- their rules become unreachable dead
         // config at worst, never a failed destroy.
         const zoneIds = new Set<string>();
         for (const hostname of [...desired, ...params.previousRedirects]) {
@@ -1725,7 +1725,7 @@ export const LiveWorkerProvider = () =>
        * `Cloudflare-Workers-Version-Key` header from the configured source,
        * scoped to the Worker's hostnames in that zone. Rules are identified
        * by an `alchemy:worker:<script>:affinity` description prefix; only
-       * our own rules are added/updated/removed — every other rule in the
+       * our own rules are added/updated/removed -- every other rule in the
        * shared entrypoint passes through untouched. Zones that previously
        * held our rules but no longer should (affinity removed, zone no
        * longer served) are cleaned the same way. Returns the zone ids now
@@ -1827,7 +1827,7 @@ export const LiveWorkerProvider = () =>
 
       // Derive a concrete hostname inside the zone from a route pattern so
       // zone inference can walk the DNS label hierarchy. A wildcard label
-      // (`*.example.com/*`) is replaced with a stand-in label — only the
+      // (`*.example.com/*`) is replaced with a stand-in label -- only the
       // parent labels matter for finding the zone.
       const hostnameFromPattern = (pattern: string): string => {
         const hostPart = pattern.split("/")[0] ?? pattern;
@@ -1837,7 +1837,7 @@ export const LiveWorkerProvider = () =>
       // Resolve each route's zone to a concrete zone id: an explicit
       // `zoneId` wins, then `zone` / `zoneName` via `resolveZoneId`, and
       // finally inference from the pattern's hostname. Duplicate
-      // `(zoneId, pattern)` pairs are dropped — Cloudflare enforces one
+      // `(zoneId, pattern)` pairs are dropped -- Cloudflare enforces one
       // route per pattern per zone.
       const normalizeRoutes = (routes: WorkerRouteConfig[] | undefined) =>
         Effect.gen(function* () {
@@ -1909,16 +1909,16 @@ export const LiveWorkerProvider = () =>
       //
       // This used to enumerate every zone on the account and then list routes
       // in each one. Routes are zone-scoped with no account-level enumeration
-      // API, so that costs O(zones) requests on *every* Worker read — on an
+      // API, so that costs O(zones) requests on *every* Worker read -- on an
       // account with a few hundred zones a couple of plan/deploy cycles
       // exhausts Cloudflare's per-user API budget and unrelated calls start
       // coming back 429 / code 971 (#926).
       //
       // `reconcileRoutes` already scopes itself to the zones implied by
-      // `desired ∪ previous` rather than sweeping the account, so `read` now
+      // `desired U previous` rather than sweeping the account, so `read` now
       // uses the same bounded zone set: the zones of the routes already
-      // recorded in state. The blind spot this introduces — a route added out
-      // of band in a zone this Worker has never had a route in — is the one
+      // recorded in state. The blind spot this introduces -- a route added out
+      // of band in a zone this Worker has never had a route in -- is the one
       // `reconcileRoutes` already has.
       const readWorkerRoutes = (
         scriptName: string,
@@ -1930,7 +1930,7 @@ export const LiveWorkerProvider = () =>
         ).pipe(Effect.map((routes) => orderObservedWorkerRoutes(routes, knownRoutes)));
 
       // Converge the zone routes attached to `scriptName` to `desired`.
-      // Observed cloud state (not `previous`) is the diff baseline —
+      // Observed cloud state (not `previous`) is the diff baseline --
       // `previous` only contributes zone ids so routes moved out of a zone
       // are still cleaned up after state loss or an interrupted apply.
       const reconcileRoutes = (
@@ -1987,14 +1987,14 @@ export const LiveWorkerProvider = () =>
 
             // A duplicate-pattern failure means another actor (or a crashed
             // previous reconcile) created the route between our observation
-            // and now — re-list and converge if it points at this script.
+            // and now -- re-list and converge if it points at this script.
             const created = yield* workers
               .createRoute({ zoneId: route.zoneId, pattern: route.pattern, script: scriptName })
               .pipe(
                 // Same eventual-consistency window as `putDomain`: creating
                 // a route right after `putScript` can race Cloudflare's
                 // script registry, which rejects with code 10019 ("Cannot
-                // configure a route for a Worker which does not exist") —
+                // configure a route for a Worker which does not exist") --
                 // typed as `RouteScriptNotFound` via the createRoute patch.
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
@@ -2049,7 +2049,7 @@ export const LiveWorkerProvider = () =>
        * The namespace is transferred from whichever listed host currently
        * holds a same-class namespace; when none does (fresh stage, or every
        * transfer already completed) this returns `undefined` and the caller
-       * creates the class fresh — the declaration is inert and safe to keep.
+       * creates the class fresh -- the declaration is inert and safe to keep.
        * More than one match (e.g. an orphaned script from a `name` change)
        * fails with {@link AmbiguousDurableObjectTransfer} rather than
        * guessing whose data to move.
@@ -2065,7 +2065,7 @@ export const LiveWorkerProvider = () =>
         if (params.sources.length === 0) {
           return undefined;
         }
-        // The class already lives here — e.g. a transfer committed by an
+        // The class already lives here -- e.g. a transfer committed by an
         // earlier deploy that stopped before its final upload. Nothing to
         // move.
         if (
@@ -2165,7 +2165,7 @@ export const LiveWorkerProvider = () =>
               // host's local binding to a className-less reference to the moved
               // namespace (left dangling once the new host is deleted), but the
               // former host's tags are only rewritten on its next deploy. Such a
-              // script no longer hosts the class — it is not a transfer source.
+              // script no longer hosts the class -- it is not a transfer source.
               // Under `exports` the binding keeps its class name and is
               // repointed at the new host instead.
               Effect.catchTag("MissingDurableObjects", (error) =>
@@ -2256,7 +2256,7 @@ export const LiveWorkerProvider = () =>
             // `MissingDurableObjects`: the DO bindings haven't
             // surfaced in the version settings yet. `WorkerHasNoVersions` /
             // `WorkerNotFound`: right after the first `putScript`, the
-            // version-settings read can race the script registry — under a
+            // version-settings read can race the script registry -- under a
             // busy account this read can briefly 404 with "has no versions"
             // (or the worker itself as not-yet-found) before the upload
             // propagates. All three are eventual-consistency blips.
@@ -2299,7 +2299,7 @@ export const LiveWorkerProvider = () =>
       ) =>
         Effect.gen(function* () {
           // Assets-only Worker: no entry module at all. The script PUT goes
-          // out with no modules and no main_module — Cloudflare's asset
+          // out with no modules and no main_module -- Cloudflare's asset
           // layer serves every request and applies `notFoundHandling`
           // (including SPA fallback) itself, exactly like Wrangler's
           // assets-only deploys.
@@ -2375,7 +2375,7 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
-        // the hash-less shape, not a supplied hash — the same rule
+        // the hash-less shape, not a supplied hash -- the same rule
         // `assetsChanged` applies during diff. Without the `undefined` check
         // a greenfield create (`output === undefined`) compares `undefined
         // === undefined`, sets `skip`, and uploads a Worker with no assets.
@@ -2432,8 +2432,8 @@ export const LiveWorkerProvider = () =>
 
       /**
        * Append the standard Alchemy runtime bindings plus the user's `env`
-       * entries (routed by shape: `Redacted` → secret_text, string →
-       * plain_text, everything else → json) to a metadata binding list.
+       * entries (routed by shape: `Redacted` -> secret_text, string ->
+       * plain_text, everything else -> json) to a metadata binding list.
        * Shared between the full script upload and the version upload.
        */
       const appendAlchemyAndEnvBindings = (
@@ -2470,8 +2470,8 @@ export const LiveWorkerProvider = () =>
        * Create a deployment routing `traffic`% to `versionId`, with the
        * remainder staying on the currently-live version (the
        * highest-percentage version of the script's latest deployment).
-       * `traffic >= 100` — or a script with no other live version to split
-       * against — deploys the new version at 100%.
+       * `traffic >= 100` -- or a script with no other live version to split
+       * against -- deploys the new version at 100%.
        */
       const deployVersionTraffic = Effect.fn(function* (params: {
         accountId: string;
@@ -2517,7 +2517,7 @@ export const LiveWorkerProvider = () =>
        * Resolve the preview-URL alias for a version worker: the
        * user-provided `version.alias` (validated against Cloudflare's
        * naming rules), or an alias derived from the stack, stage, and
-       * logical id — stable across deploys, so the aliased preview URL
+       * logical id -- stable across deploys, so the aliased preview URL
        * (`<alias>-<script>.<subdomain>.workers.dev`) is a durable link
        * that always points at the latest uploaded version. Returns
        * `undefined` when the parent's script name leaves no room in the
@@ -2528,7 +2528,7 @@ export const LiveWorkerProvider = () =>
         news: WorkerProps,
         parentName: string,
       ) {
-        // `<alias>-<script name>` is a single DNS label (≤ 63 chars).
+        // `<alias>-<script name>` is a single DNS label (<= 63 chars).
         const budget = 63 - parentName.length - 1;
         const userAlias = news.version?.alias;
         if (userAlias !== undefined) {
@@ -2547,7 +2547,7 @@ export const LiveWorkerProvider = () =>
         if (budget < 4) {
           return undefined;
         }
-        // Deterministic per (stack, stage, id) — survives updates AND
+        // Deterministic per (stack, stage, id) -- survives updates AND
         // replacements so the aliased preview URL never moves. A short
         // hash disambiguates different stacks/stages whose readable
         // prefixes collide after truncation.
@@ -2625,7 +2625,7 @@ export const LiveWorkerProvider = () =>
         if (forbidden.length > 0) {
           return yield* new WorkerVersionConfigError({
             message:
-              `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `version.parent uploads a version of '${parentName}' \u2014 script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
               `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
           });
         }
@@ -2638,7 +2638,7 @@ export const LiveWorkerProvider = () =>
         }
         // Any locally-hosted DO class (a durable_object_namespace binding
         // without a foreign scriptName) or DO/Workflow export would require
-        // migrations, which the versions API can't carry — and which would
+        // migrations, which the versions API can't carry -- and which would
         // mutate the parent's namespaces.
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
         const exportedClasses = Object.keys(news.exports ?? {});
@@ -2659,7 +2659,7 @@ export const LiveWorkerProvider = () =>
        * own), then optionally shift `version.traffic`% of the parent's
        * traffic to it. Idempotent in the reconciler sense: every run
        * converges cloud state to "the parent's script has a version with
-       * exactly this content, receiving exactly this traffic" — re-running
+       * exactly this content, receiving exactly this traffic" -- re-running
        * with changed content simply uploads the next immutable version.
        */
       const putWorkerVersion = Effect.fn(function* (
@@ -2683,8 +2683,8 @@ export const LiveWorkerProvider = () =>
         const traffic = version.traffic ?? 0;
         // Resolve the alias and preview context BEFORE the upload: the
         // aliased preview URL (`<alias>-<script>.<subdomain>.workers.dev`)
-        // is deterministic ahead of time — unlike the versioned URL, whose
-        // prefix comes from the server-assigned version id — which is what
+        // is deterministic ahead of time -- unlike the versioned URL, whose
+        // prefix comes from the server-assigned version id -- which is what
         // lets a `Worker.URL` (self_url) binding be baked into the
         // version's own bindings.
         const alias = yield* resolveVersionAlias(id, news, parentName);
@@ -2701,7 +2701,7 @@ export const LiveWorkerProvider = () =>
           return yield* new WorkerVersionConfigError({
             message: previewsEnabled
               ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
-              : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
+              : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled \u2014 a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
           });
         }
         yield* Effect.logInfo(
@@ -2723,7 +2723,7 @@ export const LiveWorkerProvider = () =>
           ...preparedHash,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        // Lower the `Worker.URL` sentinel into the aliased preview URL —
+        // Lower the `Worker.URL` sentinel into the aliased preview URL --
         // same lowering `putWorker` performs, with the alias standing in
         // for the script's own URL. `Worker.Self` lowers to a
         // service binding on the parent script (versions have no name of
@@ -2823,7 +2823,7 @@ export const LiveWorkerProvider = () =>
         }
         // Version-affinity transform rules (`version.affinity`): a canary
         // rides the *parent's* zone traffic, so the rules land on the
-        // parent's zones — observed custom-domain attachments plus, when
+        // parent's zones -- observed custom-domain attachments plus, when
         // `parent` was passed as a Worker resource, its recorded routes.
         const previousAffinityZoneIds = output?.affinityZoneIds ?? [];
         let affinityZoneIds: string[] | undefined;
@@ -2842,7 +2842,7 @@ export const LiveWorkerProvider = () =>
             };
             // A `version.parent` passed as a Worker resource resolves to
             // the parent's Attributes at reconcile time (see
-            // resolveVersionParentName) — its recorded routes and domain
+            // resolveVersionParentName) -- its recorded routes and domain
             // tell us the zones the parent serves on.
             const parentAttrs =
               typeof version.parent === "object" && version.parent !== null
@@ -2866,7 +2866,7 @@ export const LiveWorkerProvider = () =>
             if (hostsByZone.size === 0) {
               return yield* new WorkerVersionConfigError({
                 message:
-                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic \u2014 the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
                   `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
               });
             }
@@ -2890,7 +2890,7 @@ export const LiveWorkerProvider = () =>
           : undefined;
         const urls = [...(aliasedUrl ? [aliasedUrl] : []), ...(versionedUrl ? [versionedUrl] : [])];
         return {
-          // A version worker never owns a script — carry the *parent*
+          // A version worker never owns a script -- carry the *parent*
           // script's immutable ID (its preview URLs are protected through
           // the parent).
           workerId:
@@ -2959,7 +2959,7 @@ export const LiveWorkerProvider = () =>
         if (forbidden.length > 0) {
           return yield* new WorkerPreviewConfigError({
             message:
-              `preview.of creates a Preview of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `preview.of creates a Preview of '${parentName}' \u2014 script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
               `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
           });
         }
@@ -3230,7 +3230,7 @@ export const LiveWorkerProvider = () =>
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
           return yield* new WorkerVersionConfigError({
-            message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
+            message: `Workers for Platforms user workers do not support versions or gradual deployments \u2014 remove the version prop from '${name}'.`,
           });
         }
         // Resolve the Worker's own URL up front when a `Worker.URL` binding
@@ -3281,12 +3281,12 @@ export const LiveWorkerProvider = () =>
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
         // `transferredFrom` is alchemy-only transfer metadata on
-        // durable_object_namespace bindings — it drives the
+        // durable_object_namespace bindings -- it drives the
         // `transferred_classes` migration below and must be stripped from the
         // wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
           withoutDevOnlyBindings(b.data.bindings ?? []).map((item): WireWorkerBinding => {
-            // Lower the `Worker.URL` sentinel into the resolved URL —
+            // Lower the `Worker.URL` sentinel into the resolved URL --
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
               return { type: "plain_text", name: item.name, text: selfUrl! };
@@ -3310,7 +3310,7 @@ export const LiveWorkerProvider = () =>
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
-            // producer) are alchemy-only metadata on queue bindings — strip
+            // producer) are alchemy-only metadata on queue bindings -- strip
             // them from the wire shape.
             if (item.type === "queue" && (item.queueId !== undefined || item.shim !== undefined)) {
               const { queueId: _, shim: __, ...rest } = item;
@@ -3332,7 +3332,7 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          // `keepAssets` only preserves the uploaded files — the PUT
+          // `keepAssets` only preserves the uploaded files -- the PUT
           // replaces the asset config wholesale. The skip path never
           // walked the directory, so read just `_headers`/`_redirects`
           // here or a no-op deploy would wipe their rules.
@@ -3349,7 +3349,7 @@ export const LiveWorkerProvider = () =>
           // legacy `string` / `AssetsProps` shapes that don't carry a
           // precomputed hash, or a precomputed hash that disagreed with
           // disk). In that case still keep the existing manifest and
-          // skip the upload session — Cloudflare's content-addressed
+          // skip the upload session -- Cloudflare's content-addressed
           // session would no-op on every byte anyway.
           if (assets.hash === prebuiltAssets?.hash) {
             yield* Effect.logInfo(
@@ -3359,7 +3359,7 @@ export const LiveWorkerProvider = () =>
             // Fold the build-emitted `_headers`/`_redirects` into the PUT
             // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
             // files and carry them on the read result, but only `readAssets`
-            // pre-merges them — without this, framework header/redirect
+            // pre-merges them -- without this, framework header/redirect
             // rules never reach Cloudflare. Idempotent for pre-merged
             // configs (explicit config wins).
             metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
@@ -3406,7 +3406,7 @@ export const LiveWorkerProvider = () =>
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
 
-        // Parse the DO logical-id→class mapping from script tags (packed
+        // Parse the DO logical-id->class mapping from script tags (packed
         // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
@@ -3415,7 +3415,7 @@ export const LiveWorkerProvider = () =>
         );
 
         // Compute delete-class candidates. Candidates are validated against
-        // observed namespace ownership below — a class may already have been
+        // observed namespace ownership below -- a class may already have been
         // transferred to another script by its new host's deploy.
         // Several bindings may name one class (e.g. two Containers sharing a
         // Durable Object class): a class stays while any binding hosts it.
@@ -3434,7 +3434,7 @@ export const LiveWorkerProvider = () =>
         // Backward compatibility for old workers that have DO bindings but no
         // alchemy:do tags yet. Cross-script bindings (`scriptName` set to
         // anything other than this worker) are NEVER candidates for
-        // delete-class migrations — the class lives on the foreign script
+        // delete-class migrations -- the class lives on the foreign script
         // and we don't own its lifecycle.
         if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
           for (const oldBinding of oldBindings) {
@@ -3455,7 +3455,7 @@ export const LiveWorkerProvider = () =>
 
         // Class names the current deploy references *cross-script* (mapped to
         // the foreign script). A class that both leaves the "hosted here" set
-        // and shows up here has moved to another Worker — Cloudflare rejects
+        // and shows up here has moved to another Worker -- Cloudflare rejects
         // deleting a class while any binding in the upload references its
         // class name, and deleting would destroy the namespace's data.
         const crossScriptClassTargets = new Map<string, string>();
@@ -3476,7 +3476,7 @@ export const LiveWorkerProvider = () =>
         // transfer checks the source still hosts the class, and the former
         // host checks whether a to-be-deleted class was already transferred
         // away. Dispatch-namespace user workers keep the legacy `migrations`
-        // flow — their namespaces don't surface on the account-level list.
+        // flow -- their namespaces don't surface on the account-level list.
         const mayTransferIn = currentDoBindings.some(
           (binding) =>
             !oldDoClassNameByLogicalId[binding.logicalId] && binding.transferredFrom !== undefined,
@@ -3571,7 +3571,7 @@ export const LiveWorkerProvider = () =>
           if (transferred(namespaces)) {
             continue;
           }
-          // local → cross-script transition without a transfer. Fail before
+          // local -> cross-script transition without a transfer. Fail before
           // any upload: Cloudflare would reject the combined delete + binding
           // anyway, and silently deleting would destroy the namespace's
           // data. See the error's docs for the two ways out
@@ -3617,7 +3617,7 @@ export const LiveWorkerProvider = () =>
         for (const binding of currentDoBindings) {
           let previousClassName: string | undefined = oldDoClassNameByLogicalId[binding.logicalId];
           if (!previousClassName) {
-            // No DO metadata tag maps this logical id to a class — the
+            // No DO metadata tag maps this logical id to a class -- the
             // worker was created outside Alchemy (raw API / Wrangler) or
             // before these tags existed. Fall back to matching the observed
             // cloud binding by binding name so adoption reuses the existing
@@ -3631,9 +3631,9 @@ export const LiveWorkerProvider = () =>
                 "className" in old &&
                 old.className &&
                 // Only a *locally-owned* binding proves the class exists on
-                // this script. A cross-script binding under the same name —
+                // this script. A cross-script binding under the same name --
                 // e.g. this worker previously referenced another host's
-                // class and now hosts its own — points at a foreign
+                // class and now hosts its own -- points at a foreign
                 // namespace and must not suppress the create migration
                 // (Cloudflare rejects a local binding for a class the
                 // script isn't configured to implement).
@@ -3666,7 +3666,7 @@ export const LiveWorkerProvider = () =>
           }
           if (!previousClassName) {
             // A class new to this script is a host move when the declaration
-            // says so: `transferredFrom` lists the former host(s) — moves
+            // says so: `transferredFrom` lists the former host(s) -- moves
             // are always declared, never inferred, because a class deleted
             // on one worker and created on another is otherwise ambiguous
             // between "move the data" and "delete + fresh namespace". The
@@ -3722,8 +3722,8 @@ export const LiveWorkerProvider = () =>
           })}`,
         );
 
-        // Pack every DO logical-id→class mapping into as few `alchemy:dos:`
-        // tags as possible — one tag per DO blows Cloudflare's 10-tag limit
+        // Pack every DO logical-id->class mapping into as few `alchemy:dos:`
+        // tags as possible -- one tag per DO blows Cloudflare's 10-tag limit
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
@@ -3734,7 +3734,7 @@ export const LiveWorkerProvider = () =>
         // Cloudflare's declarative `exports` map: the complete Durable Object
         // lifecycle of this script. Every namespace Cloudflare reports for
         // this script stays declared with its observed storage backend
-        // (adopted classes Alchemy never bound included — an undeclared
+        // (adopted classes Alchemy never bound included -- an undeclared
         // namespace is rejected, never silently deleted), then this deploy's
         // creates, renames, deletes and incoming transfers are applied on top.
         const exportsMap = buildDurableObjectExports({
@@ -3800,7 +3800,7 @@ export const LiveWorkerProvider = () =>
         // versions API instead of the full-cutover script PUT. That's only
         // possible when the script already has a live deployment to split
         // traffic against (otherwise the first deploy takes 100%), and only
-        // for changes a version can carry — code, bindings, compatibility
+        // for changes a version can carry -- code, bindings, compatibility
         // settings, cache. Script-level settings in the upload metadata
         // (tags, observability, limits, placement, logpush) keep their live
         // values until the next full deploy, matching
@@ -3825,7 +3825,7 @@ export const LiveWorkerProvider = () =>
           }
           if (rolloutTraffic > 0) {
             // Cloudflare rejects a split between versions that declare
-            // different `exports` — including the first deploy after a
+            // different `exports` -- including the first deploy after a
             // Worker moves from `migrations` to `exports`.
             const liveExports = yield* getLiveDurableObjectExports(accountId, name);
             if (!sameDurableObjectExports(metadata.exports, liveExports)) {
@@ -3895,7 +3895,7 @@ export const LiveWorkerProvider = () =>
         } else {
           if (rolloutTraffic !== undefined) {
             // First deploy of this script (or a pre-create placeholder is
-            // the only thing live) — there is no previous version worth
+            // the only thing live) -- there is no previous version worth
             // splitting traffic with, so this deploy takes 100%.
             yield* Effect.logInfo(
               `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
@@ -3905,7 +3905,7 @@ export const LiveWorkerProvider = () =>
             // A transfer is two-phase under `exports`: this Worker first
             // declares the class `expecting-transfer` (Cloudflare rejects a
             // binding to it until the namespace arrives, so that binding is
-            // held back, and its `alchemy:dos` tag too — a crash before the
+            // held back, and its `alchemy:dos` tag too -- a crash before the
             // commit then re-plans the transfer instead of creating a fresh
             // namespace), then the former host commits with a `transferred`
             // tombstone, then the full upload below binds the moved class.
@@ -3966,7 +3966,7 @@ export const LiveWorkerProvider = () =>
           dispatchNamespace,
         );
         // Workers for Platforms user workers are invoked via dynamic dispatch,
-        // never routed directly — they have no workers.dev subdomain, custom
+        // never routed directly -- they have no workers.dev subdomain, custom
         // domains, zone routes, or cron triggers. Skip all of that
         // reconciliation.
         if (dispatchNamespace) {
@@ -4074,7 +4074,7 @@ export const LiveWorkerProvider = () =>
         }
         // Reconcile the workers.dev settings against observed cloud state.
         // We can't diff `news.workersDev` against `olds.workersDev` here
-        // because both default to `undefined` (meaning "enable") — that
+        // because both default to `undefined` (meaning "enable") -- that
         // comparison would skip the API call on every deploy where the user
         // never set the prop, leaving the subdomain in whatever state
         // Cloudflare currently has it (disabled by default, or whatever
@@ -4096,7 +4096,7 @@ export const LiveWorkerProvider = () =>
             `${workersDev.enabled || workersDev.previewsEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
             { kind: "status" },
           );
-          // Cloudflare's script registry is eventually consistent — for the
+          // Cloudflare's script registry is eventually consistent -- for the
           // first few hundred ms after `putScript` returns, POST /subdomain
           // can still get back `WorkerNotFound` (a generic "unknown error"
           // body), or a bare 500 surfaced as `InternalServerError` /
@@ -4115,9 +4115,9 @@ export const LiveWorkerProvider = () =>
           );
         }
         // Custom domains are managed only when `domain` is declared on props
-        // (#942): an omitted `domain` leaves live attachments alone — and
+        // (#942): an omitted `domain` leaves live attachments alone -- and
         // spares a plain workers.dev Worker the listDomains call on every
-        // deploy (#926) — while `domain: null` explicitly detaches
+        // deploy (#926) -- while `domain: null` explicitly detaches
         // everything. When managed, the canonical name + aliases + redirect
         // hostnames are all attached (DNS + edge certificate); redirect
         // hostnames additionally get a redirect rule, which runs before the
@@ -4129,7 +4129,7 @@ export const LiveWorkerProvider = () =>
         let effectiveDomain = manageCustomDomains ? domainConfig : previousDomain;
         if (!manageCustomDomains && previousDomain !== undefined) {
           // Unmanaged, but state remembers domains: observe which of them
-          // are actually still attached and carry only those forward —
+          // are actually still attached and carry only those forward --
           // stale state entries (e.g. legacy records whose attach never
           // happened, or hostnames detached out-of-band) must not
           // resurface in `urls`. Plain workers.dev Workers (no persisted
@@ -4160,8 +4160,8 @@ export const LiveWorkerProvider = () =>
           yield* session.note(`Reconciling custom domains (${desiredHostnames.length}) ...`, {
             kind: "status",
           });
-          // Capture hostname → zone for *currently attached* domains before
-          // reconcile detaches removed ones — a removed redirect hostname's
+          // Capture hostname -> zone for *currently attached* domains before
+          // reconcile detaches removed ones -- a removed redirect hostname's
           // zone is otherwise unresolvable and its rule couldn't be cleaned.
           const liveBeforeReconcile = yield* workers.listDomains({ accountId, service: name }).pipe(
             Effect.map((r) =>
@@ -4245,7 +4245,7 @@ export const LiveWorkerProvider = () =>
             if (hostsByZone.size === 0) {
               return yield* new WorkerVersionConfigError({
                 message:
-                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic \u2014 give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
                   `On the bare workers.dev URL, clients must send the header themselves.`,
               });
             }
@@ -4281,7 +4281,7 @@ export const LiveWorkerProvider = () =>
         return {
           // The immutable script ID. The gradual-rollout branch deploys via
           // the versions API (no script PUT response), and rows persisted by
-          // older releases carried the script *name* here — both fall back
+          // older releases carried the script *name* here -- both fall back
           // to a lazy listing lookup.
           workerId:
             worker.tag ??
@@ -4322,7 +4322,7 @@ export const LiveWorkerProvider = () =>
       // Compare the desired assets against the deployed asset-content hash.
       //
       // For `AssetsWithHash` (the documented `Command.Build` contract) the
-      // upstream build already produced an authoritative hash — compare
+      // upstream build already produced an authoritative hash -- compare
       // strings without touching the filesystem. Reading the directory here
       // would crash when the prior state was written on a different machine
       // and the path doesn't exist locally, blocking any local reapply even
@@ -4330,14 +4330,14 @@ export const LiveWorkerProvider = () =>
       //
       // For the plain `string` / `AssetsProps` shapes there is no hash in
       // props, so read + hash the directory exactly like the apply path does
-      // (`readAssets`) and compare against the stored content hash — an
+      // (`readAssets`) and compare against the stored content hash -- an
       // unchanged tree converges to a noop plan instead of a forever-dirty
       // conservative update. The overall read cost is unchanged: previously
       // every plan reported "changed" and `putWorker` read the tree during
       // apply only to discover nothing changed (`keepAssets`); now the diff
       // reads it and a match skips reconcile entirely. A directory that is
       // missing or invalid at plan time (e.g. produced by an upstream build
-      // step that only runs during apply) degrades to "changed" — apply
+      // step that only runs during apply) degrades to "changed" -- apply
       // reads it once and either uploads or surfaces the real typed error.
       const assetsChanged = Effect.fn(function* (
         assets: WorkerProps["assets"],
@@ -4347,7 +4347,7 @@ export const LiveWorkerProvider = () =>
           return false;
         }
         // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
-        // the hash-less shape, not a supplied hash — fall through to the
+        // the hash-less shape, not a supplied hash -- fall through to the
         // directory read instead of comparing undefined forever-dirty.
         if (Predicate.hasProperty(assets, "hash") && assets.hash !== undefined) {
           return assets.hash !== output.hash?.assets;
@@ -4377,7 +4377,7 @@ export const LiveWorkerProvider = () =>
         // the eventual apply stores it once bindings resolve.
         if (bindings) {
           // For a version worker, `Worker.URL` resolves to the *aliased
-          // preview URL* (see `putWorkerVersion`) — recompute the same
+          // preview URL* (see `putWorkerVersion`) -- recompute the same
           // value here so the metadata hash matches what the apply stored
           // and unchanged deploys stay noops.
           const versionParent =
@@ -4412,14 +4412,14 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
-        // Assets-only Worker — there is no bundle to hash. A stored bundle
+        // Assets-only Worker -- there is no bundle to hash. A stored bundle
         // hash means the Worker previously had a script and is being
         // converted to assets-only, which must deploy.
         if (isAssetsOnly(props)) {
           if (output.hash?.bundle !== undefined) {
             return true;
           }
-          // No assets either — the config is invalid; report "changed" so
+          // No assets either -- the config is invalid; report "changed" so
           // the apply runs and surfaces the descriptive error.
           if (!props.assets) {
             return true;
@@ -4477,7 +4477,7 @@ export const LiveWorkerProvider = () =>
             // settings, domains, schedule) to fully hydrate
             // url/durableObjectNamespaces/domains/crons. Doing that for
             // every script on the account is both expensive (4 calls × N)
-            // and fragile — a single script with a binding shape the
+            // and fragile -- a single script with a binding shape the
             // settings schema doesn't know about would break the whole
             // listing (the same reason `read` deliberately avoids
             // `listScripts`). For `list()` we hydrate the core identifying
@@ -4527,12 +4527,12 @@ export const LiveWorkerProvider = () =>
         diff: Effect.fn(function* ({ id, fqn, news: desired, olds, output, newBindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Effect-valued `env` entries (tagged Worker classes / resource
-          // Effects — the circular-bindings pattern) never resolve at plan
+          // Effects -- the circular-bindings pattern) never resolve at plan
           // time and are dropped from persisted props by `stripUnresolved`
           // at the commit boundary. Their deploy-time identity is carried by
           // the resolved binding data, which the metadata hash below covers.
           // Strip them before the resolution check so a tag in `env` doesn't
-          // force the raw-props fallback — which compares the Effect's JSON
+          // force the raw-props fallback -- which compares the Effect's JSON
           // form against the stripped stored props and re-plans an update
           // forever (#874).
           const news = stripEffects(desired);
@@ -4550,7 +4550,7 @@ export const LiveWorkerProvider = () =>
           }
           // A version worker (version.parent), a Preview Worker
           // (preview.of), and a script-owning Worker are distinct cloud
-          // resources — switching mode or parent is a replacement.
+          // resources -- switching mode or parent is a replacement.
           const newIsVersion = news.version?.parent != null;
           const oldIsVersion = output?.versionOf !== undefined || olds?.version?.parent != null;
           if (newIsVersion !== oldIsVersion) {
@@ -4588,8 +4588,8 @@ export const LiveWorkerProvider = () =>
           if (!output) {
             return;
           }
-          // Compare the full domain config — name, aliases (ordered: they
-          // drive `urls` order), and redirects — against persisted state
+          // Compare the full domain config -- name, aliases (ordered: they
+          // drive `urls` order), and redirects -- against persisted state
           // (with legacy `domains`-list state migrated on the fly).
           const newDomainConfig = yield* resolveWorkerDomain(news.domain);
           const oldDomainConfig = stateWorkerDomain(output);
@@ -4633,9 +4633,9 @@ export const LiveWorkerProvider = () =>
           // then, so downstream resources that reference `worker.url`
           // (e.g. a GitHub Webhook delivery URL built via
           // `Output.interpolate`) resolve it to a concrete value during
-          // planning instead of an unresolved Output — otherwise every
+          // planning instead of an unresolved Output -- otherwise every
           // worker update spuriously re-updates them. Previews-only mode
-          // and version workers derive `url` from version preview URLs —
+          // and version workers derive `url` from version preview URLs --
           // never assumed stable here.
           const newWorkersDev = resolveWorkersDev(news.workersDev);
           const effectiveDomainConfig =
@@ -4655,7 +4655,7 @@ export const LiveWorkerProvider = () =>
           // `durableObjectNamespaces` maps each hosted DO class name to the
           // namespace id Cloudflare assigned it. Those ids are permanent for
           // the lifetime of a (worker, class) pair, so the map only changes
-          // when a class is added or removed — never on a plain code/config
+          // when a class is added or removed -- never on a plain code/config
           // update. Carry it forward as a stable whenever the set of local DO
           // class names is unchanged, for the same reason as `url` above:
           // downstream resources that bind a DO namespace via
@@ -4700,7 +4700,7 @@ export const LiveWorkerProvider = () =>
               accountId,
             ))
           ) {
-            // The immutable script ID is always stable across an update —
+            // The immutable script ID is always stable across an update --
             // except the healing update above, where its value is about to
             // change from the legacy shape to the real ID (downstream
             // consumers must see the fresh value).
@@ -4786,7 +4786,7 @@ export const LiveWorkerProvider = () =>
           // resource's own generated name would leave a stray script behind.
           // Version workers can't host Durable Object / Workflow classes, so
           // no placeholder is needed for circular bindings either. (`news`
-          // is raw here — `version.parent` may be an unresolved ref, but its
+          // is raw here -- `version.parent` may be an unresolved ref, but its
           // *presence* is statically known.)
           if (news.version?.parent != null || news.preview?.of != null) {
             yield* Effect.logInfo(
@@ -4794,7 +4794,7 @@ export const LiveWorkerProvider = () =>
             );
             return {
               // Provisional: a version worker resolves its parent's
-              // immutable ID at reconcile — nothing observes this stub row
+              // immutable ID at reconcile -- nothing observes this stub row
               // (version workers have no circular bindings).
               workerId: "",
               workerName: name,
@@ -4815,7 +4815,7 @@ export const LiveWorkerProvider = () =>
           // can signal early), meaning a `namespace` that references the
           // namespace resource is still an unresolved Output here, and the
           // namespace itself may not be deployed yet. There's also nothing to
-          // pre-create — a user worker is dispatched to by name, never bound to
+          // pre-create -- a user worker is dispatched to by name, never bound to
           // circularly. Return a stub; `reconcile` performs the real upload
           // once props resolve and the namespace exists.
           if (news.namespace != null) {
@@ -4824,7 +4824,7 @@ export const LiveWorkerProvider = () =>
             );
             return {
               // Provisional: reconcile records the real immutable ID from
-              // the dispatch upload — nothing observes this stub row (user
+              // the dispatch upload -- nothing observes this stub row (user
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
@@ -4848,13 +4848,13 @@ export const LiveWorkerProvider = () =>
           const exportMap = news.exports ?? {};
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
-          // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
+          // DO *bindings* declared in `env` -- e.g. a bare `Cloudflare.DurableObject`
           // that fronts a Container image. The placeholder must declare *every*
           // hosted class so each namespace is created here. A class that exists
           // only as a binding (a container-fronted DO) is otherwise absent from
           // this stub, and a resource caught in a worker<->container dependency
-          // cycle — which resolves `worker.durableObjectNamespaces[className]`
-          // against the precreate stub rather than the final reconcile output —
+          // cycle -- which resolves `worker.durableObjectNamespaces[className]`
+          // against the precreate stub rather than the final reconcile output --
           // fails because the namespace id it needs never surfaced.
           const exportDerived = Object.keys(exportMap)
             .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
@@ -4864,7 +4864,7 @@ export const LiveWorkerProvider = () =>
           // creating the destination class of a `transferred_classes`
           // migration ahead of the transfer, so `reconcile` must perform it
           // with the real upload. (`transferredFrom` may still be an
-          // unresolved Output here — precreate runs on raw props — but only
+          // unresolved Output here -- precreate runs on raw props -- but only
           // its presence matters.)
           const durableObjects = mergeDurableObjectClasses(
             exportDerived,
@@ -4896,7 +4896,7 @@ export const LiveWorkerProvider = () =>
             dispatchNamespace,
           ).pipe(
             // A freshly pre-created stub can briefly report "has no
-            // versions" before its first version registers — treat it the
+            // versions" before its first version registers -- treat it the
             // same as a missing worker (nothing to adopt yet). For a user
             // worker the dispatch-namespace endpoints report a missing
             // script as `DispatchNamespaceScriptNotFound` (and a missing
@@ -4936,7 +4936,7 @@ export const LiveWorkerProvider = () =>
                       }))
                     : undefined,
                 // Spreading `getCompatibility` here would set `date`/`flags`,
-                // which are not metadata keys — the placeholder would upload
+                // which are not metadata keys -- the placeholder would upload
                 // with no compatibility date or flags at all.
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
@@ -5035,7 +5035,7 @@ export const LiveWorkerProvider = () =>
         read: Effect.fn(
           function* ({ id, output, olds }) {
             const { accountId } = yield* yield* CloudflareEnvironment;
-            // Version workers don't own a script — their `workerName` is the
+            // Version workers don't own a script -- their `workerName` is the
             // *parent's* script, so the normal read below would hydrate (and
             // potentially brand as adoptable) a resource we don't own. The
             // version itself is immutable; all we verify is that it still
@@ -5043,7 +5043,7 @@ export const LiveWorkerProvider = () =>
             if (output?.versionOf !== undefined || olds?.version?.parent != null) {
               if (output?.versionOf === undefined || !output.versionId) {
                 // No recorded version (e.g. state was written before the
-                // upload completed) — nothing to observe; reconcile will
+                // upload completed) -- nothing to observe; reconcile will
                 // upload a fresh version.
                 return undefined;
               }
@@ -5071,7 +5071,7 @@ export const LiveWorkerProvider = () =>
             }
             if (output !== undefined && isUnscopedStub(output)) {
               // Nothing was uploaded, and the endpoint it would have been
-              // uploaded to is unknown — there is nothing to observe.
+              // uploaded to is unknown -- there is nothing to observe.
               return undefined;
             }
             const workerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
@@ -5079,7 +5079,7 @@ export const LiveWorkerProvider = () =>
             yield* Effect.logInfo(`Cloudflare Worker read: checking ${workerName}`);
 
             // Workers for Platforms user workers have no subdomain, custom
-            // domains, or cron triggers — read only the script settings from
+            // domains, or cron triggers -- read only the script settings from
             // the dispatch-namespace endpoint.
             if (dispatchNamespace) {
               const script = yield* findDispatchNamespaceScript(
@@ -5095,7 +5095,7 @@ export const LiveWorkerProvider = () =>
               const attrs = {
                 accountId,
                 // Rows persisted by older releases carried the script name
-                // here — treat those as unknown and fetch the real ID from
+                // here -- treat those as unknown and fetch the real ID from
                 // the dispatch-namespace script endpoint.
                 workerId:
                   cachedWorkerId(output?.workerId, workerName) ??
@@ -5133,7 +5133,7 @@ export const LiveWorkerProvider = () =>
             // know about (e.g. `placement_mode: "targeted"`) breaks the
             // entire read. `getScriptSettings` already fails with
             // `WorkerNotFound` if the script doesn't exist, which the
-            // surrounding `Effect.catchTag` turns into `undefined` — that's
+            // surrounding `Effect.catchTag` turns into `undefined` -- that's
             // all the existence check we need.
             //
             // Domain / route / cron observation is gated on whether Alchemy
@@ -5141,7 +5141,7 @@ export const LiveWorkerProvider = () =>
             // Worker otherwise pays for listDomains + zone route listings +
             // getScriptSchedule on every plan/deploy read. Route observation
             // is additionally scoped to the zones state already associates
-            // with this Worker — see readWorkerRoutes. Empty-array props
+            // with this Worker -- see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
             // The version recorded by the last deploy (the live version of a
@@ -5246,7 +5246,7 @@ export const LiveWorkerProvider = () =>
               secretNames: output?.secretNames,
               versionId: uploadedVersionId,
               // The deployment that put the recorded version live, carried
-              // forward while that version still exists — re-listing
+              // forward while that version still exists -- re-listing
               // deployments on every read only to echo state back would
               // cost a request per Worker per plan.
               deploymentId: uploadedVersionId ? output?.deploymentId : undefined,
@@ -5263,7 +5263,7 @@ export const LiveWorkerProvider = () =>
           (effect) =>
             effect.pipe(
               // A worker that exists but hasn't registered a version yet reads
-              // as "not deployed" — fall through to (re)create like NotFound.
+              // as "not deployed" -- fall through to (re)create like NotFound.
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
               Effect.catchTags({
@@ -5282,7 +5282,7 @@ export const LiveWorkerProvider = () =>
             });
           }
           // A version worker uploads an immutable version to its parent's
-          // script instead of owning a script of its own — none of the
+          // script instead of owning a script of its own -- none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
             return yield* putWorkerVersion(id, fqn, news, bindings, session, output);
@@ -5301,7 +5301,7 @@ export const LiveWorkerProvider = () =>
           );
 
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          // Observe — fetch the script's current settings if it already exists.
+          // Observe -- fetch the script's current settings if it already exists.
           // `putWorker` is a true upsert against the Cloudflare API; the
           // existing settings inform asset/migration decisions and let the
           // reconciler converge whether the worker is brand-new, adopted, or
@@ -5351,14 +5351,14 @@ export const LiveWorkerProvider = () =>
           return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Version workers own a version, not the script — `workerName` is
+          // Version workers own a version, not the script -- `workerName` is
           // the *parent's* script and must never be deleted here. Versions
           // can't be deleted through the API (they age out of Cloudflare's
           // retention window); all we clean up is live traffic: if the
           // current deployment routes traffic to our version, restore 100%
           // to the other version in the split.
           if (output.versionOf !== undefined) {
-            // Remove our affinity rules from the parent's zones — the
+            // Remove our affinity rules from the parent's zones -- the
             // canary owned them, and with the canary gone there is no
             // split left to pin. Best-effort: a zone we can no longer
             // touch must not fail the destroy.
@@ -5384,7 +5384,7 @@ export const LiveWorkerProvider = () =>
               );
             const latest = deployments[0];
             if (!latest?.versions.some((v) => v.versionId === output.versionId)) {
-              // Not part of the live deployment — the version just ages out.
+              // Not part of the live deployment -- the version just ages out.
               return;
             }
             const stable = latest.versions
@@ -5393,7 +5393,7 @@ export const LiveWorkerProvider = () =>
             if (!stable) {
               // Our version holds 100% of traffic; there is no other version
               // to restore. Deleting the resource must not take the parent's
-              // script down — leave the deployment in place.
+              // script down -- leave the deployment in place.
               yield* Effect.logWarning(
                 `Cloudflare Worker delete: version ${output.versionId} serves 100% of '${output.versionOf}' traffic; leaving the deployment as-is. Re-deploy the parent to move off it.`,
               );
@@ -5449,7 +5449,7 @@ export const LiveWorkerProvider = () =>
               Effect.orElseSucceed(() => []),
             );
           // Remove our redirect rules from each affected zone's dynamic
-          // redirect entrypoint *before* detaching the domains — the live
+          // redirect entrypoint *before* detaching the domains -- the live
           // domain list is what resolves each redirect hostname's zone.
           // Reconciling with an empty domain config removes exactly the
           // rules tagged `alchemy:worker:<script>:redirect:*`, leaving
@@ -5532,7 +5532,7 @@ export const contentTypeForModule = (filePath: string, type?: string) => {
   if (type === "Data") return "application/octet-stream";
   if (type === "CompiledWasm") return "application/wasm";
   // Vendored Python packages upload as opaque data, mirroring Wrangler's
-  // vendored-module rules — with one exception: the `workers-runtime-sdk`
+  // vendored-module rules -- with one exception: the `workers-runtime-sdk`
   // JS shims under `python_modules/workers/` must be ES modules so the
   // runtime can resolve them via `import_from_javascript()`.
   if (filePath.startsWith("python_modules/")) {
@@ -5574,7 +5574,7 @@ const contentTypeFromExtension = (extension: string) => {
  * script and class. Namespace ownership is authoritative cloud state: after a
  * transfer the namespace moves to the receiving
  * script, so this is how both sides of a transfer observe where a class
- * currently lives — the destination checks the source still hosts the class
+ * currently lives -- the destination checks the source still hosts the class
  * before emitting the transfer, and the former host checks whether a class
  * it is about to delete has already been transferred away. Missing records
  * are inconclusive because pagination is not an atomic account snapshot.
@@ -5830,7 +5830,7 @@ const commitDurableObjectTransfer = (params: {
 /**
  * Coerce a resolved `transferredFrom` declaration to its list form, dropping
  * self-references (a worker naming itself as its own former host is
- * meaningless — the class already lives there).
+ * meaningless -- the class already lives there).
  */
 const normalizeTransferSources = (
   value: string | readonly string[] | undefined,
@@ -5922,11 +5922,11 @@ function mergeDurableObjectClasses(
 function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, workerName: string) {
   // Resource authors (and the `make`/`yield* Tag`/plan-vs-apply machinery)
   // can register the same DO binding multiple times under the same logical
-  // id — `binding()` is a plain `worker.bind` and intentionally has no
+  // id -- `binding()` is a plain `worker.bind` and intentionally has no
   // dedup. Collapse duplicates here so each `(logicalId, bindingName,
   // className)` tuple appears at most once. We also exclude cross-script
   // references: a `scriptName` pointing to *another* worker means this
-  // worker just references a foreign class — ship the binding to
+  // worker just references a foreign class -- ship the binding to
   // Cloudflare, but don't drive class migrations for it.
   const seen = new Set<string>();
   return bindings.flatMap((binding) =>
@@ -5969,7 +5969,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
  *   spaces, unicode) is accepted and round-trips intact
  *
  * Alchemy reserves 3 ownership tags (`alchemy:stack/stage/id`) and 1
- * migration tag, so the Durable Object logical-id→class mapping must not
+ * migration tag, so the Durable Object logical-id->class mapping must not
  * spend one tag per DO (#811). Instead all mappings are packed into as few
  * `alchemy:dos:` tags as possible.
  */
@@ -5989,11 +5989,11 @@ class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoint
 }> {}
 
 /**
- * Pack Durable Object logical-id→class mappings into `alchemy:dos:` tags.
+ * Pack Durable Object logical-id->class mappings into `alchemy:dos:` tags.
  *
- * Each mapping is encoded as `logicalId=className` — elided to just
+ * Each mapping is encoded as `logicalId=className` -- elided to just
  * `className` when the two are equal (the common case for export-derived
- * classes) — with both components `encodeURIComponent`-escaped so the `;`
+ * classes) -- with both components `encodeURIComponent`-escaped so the `;`
  * pair separator, the `=` delimiter, and Cloudflare's forbidden tag
  * characters (`,`, `&`) can never collide with user identifiers. Pairs are
  * sorted for deterministic output and greedily packed so each tag stays
@@ -6033,12 +6033,12 @@ export function encodeDurableObjectTags(
 }
 
 /**
- * Parse the Durable Object logical-id→class mapping from a worker's script
+ * Parse the Durable Object logical-id->class mapping from a worker's script
  * tags. Reads both formats so workers deployed before the packed format roll
  * forward transparently:
  *
  * - legacy: one `alchemy:do:{logicalId}:{className}` tag per DO
- * - packed: `alchemy:dos:{pair};{pair};…` (see {@link encodeDurableObjectTags})
+ * - packed: `alchemy:dos:{pair};{pair};...` (see {@link encodeDurableObjectTags})
  *
  * A packed entry wins over a legacy entry for the same logical id.
  *
@@ -6076,7 +6076,7 @@ const isDurableObjectTag = (tag: string) =>
   tag.startsWith(LEGACY_DO_TAG_PREFIX) || tag.startsWith(PACKED_DO_TAG_PREFIX);
 
 /**
- * Fail fast — before the script upload — when a worker's tag set violates
+ * Fail fast -- before the script upload -- when a worker's tag set violates
  * Cloudflare's limits, instead of surfacing the raw `Forbidden`/`BadRequest`
  * at PUT time (#811). `alchemyTagCount` is the number of tags alchemy itself
  * generated (ownership + migration + packed DO tags) so the message can tell
@@ -6109,7 +6109,7 @@ const validateWorkerTags = (
       if (bytes > MAX_TAG_BYTES) {
         return yield* new InvalidWorkerTags({
           scriptName,
-          reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+          reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}\u2026 is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
         });
       }
     }

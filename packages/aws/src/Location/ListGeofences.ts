@@ -25,7 +25,7 @@ export interface ListGeofencesRequest extends Omit<
  * const listGeofences = yield* Location.ListGeofences(collection);
  *
  * const page = yield* listGeofences();
- * // page.Entries → [{ GeofenceId, Geometry, Status }, …]
+ * // page.Entries -> [{ GeofenceId, Geometry, Status }, ...]
  * ```
  *
  * @binding

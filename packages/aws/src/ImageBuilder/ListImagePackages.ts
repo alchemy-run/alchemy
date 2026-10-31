@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Observing Builds
  * **Example:** List the Packages Inside a Built Image
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listImagePackages = yield* AWS.ImageBuilder.ListImagePackages();
  *
  * // runtime

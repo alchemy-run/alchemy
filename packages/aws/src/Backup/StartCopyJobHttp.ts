@@ -21,7 +21,7 @@ export const StartCopyJobHttp = Layer.effect(
           policyStatements: [
             // StartCopyJob authorizes on the recovery point's underlying
             // resource ARN and CopyIntoBackupVault on the destination
-            // vault — both runtime request fields, so the grant is `*`.
+            // vault -- both runtime request fields, so the grant is `*`.
             {
               Effect: "Allow",
               Action: ["backup:StartCopyJob", "backup:CopyIntoBackupVault"],

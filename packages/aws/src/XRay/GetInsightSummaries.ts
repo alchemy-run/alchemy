@@ -17,7 +17,7 @@ export interface GetInsightSummariesRequest extends xray.GetInsightSummariesRequ
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetInsightSummaries
+ * // init -- grants xray:GetInsightSummaries
  * const getInsightSummaries = yield* XRay.GetInsightSummaries();
  *
  * // runtime

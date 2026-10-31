@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:ListTextTranslationJobs` — list the batch
+ * Runtime binding for `translate:ListTextTranslationJobs` -- list the batch
  * translation jobs submitted in the account and region, optionally filtered
  * by name, status, or submission time.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *   Filter: { JobStatus: "IN_PROGRESS" },
  *   MaxResults: 25,
  * });
- * // result.TextTranslationJobPropertiesList -> [{ JobId, JobStatus, … }, …]
+ * // result.TextTranslationJobPropertiesList -> [{ JobId, JobStatus, ... }, ...]
  * ```
  *
  * @binding

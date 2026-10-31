@@ -24,18 +24,18 @@ export interface DatasetProps {
    */
   name?: string;
   /**
-   * ARN of the schema that describes this dataset's fields. Immutable —
+   * ARN of the schema that describes this dataset's fields. Immutable --
    * changing it replaces the dataset.
    */
   schemaArn: string;
   /**
-   * ARN of the dataset group this dataset belongs to. Immutable — changing it
+   * ARN of the dataset group this dataset belongs to. Immutable -- changing it
    * replaces the dataset.
    */
   datasetGroupArn: string;
   /**
    * The type of dataset: `Interactions`, `Items`, `Users`, `Actions`, or
-   * `Action_Interactions`. Immutable — changing it replaces the dataset.
+   * `Action_Interactions`. Immutable -- changing it replaces the dataset.
    */
   datasetType: string;
   /**
@@ -78,8 +78,8 @@ export interface Dataset extends Resource<
 > {}
 
 /**
- * An Amazon Personalize dataset — a typed collection (Interactions, Items,
- * Users, …) inside a dataset group, backed by a schema. Creating the dataset
+ * An Amazon Personalize dataset -- a typed collection (Interactions, Items,
+ * Users, ...) inside a dataset group, backed by a schema. Creating the dataset
  * is a cheap metadata operation; bulk imports and training happen through
  * separate import jobs and solutions.
  *
@@ -180,8 +180,8 @@ export const DatasetProvider = () =>
           let dataset =
             output?.datasetArn !== undefined ? yield* describe(output.datasetArn) : undefined;
 
-          // Ensure — create if missing. A crashed prior run may have left a
-          // same-named dataset behind with no persisted state — adopt it by
+          // Ensure -- create if missing. A crashed prior run may have left a
+          // same-named dataset behind with no persisted state -- adopt it by
           // name and converge.
           if (dataset === undefined) {
             const arn = yield* personalize
@@ -208,7 +208,7 @@ export const DatasetProvider = () =>
             dataset = yield* waitActive(arn);
           }
 
-          // Sync tags — diff against OBSERVED cloud tags (no-op after a fresh
+          // Sync tags -- diff against OBSERVED cloud tags (no-op after a fresh
           // create; converges an adopted leftover).
           yield* syncPersonalizeTags(dataset.datasetArn!, desiredTags);
 
@@ -224,7 +224,7 @@ export const DatasetProvider = () =>
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
-          // Deletion is asynchronous (DELETE PENDING) — wait until the dataset
+          // Deletion is asynchronous (DELETE PENDING) -- wait until the dataset
           // is actually gone so the schema and dataset group it references can
           // delete without exhausting their ResourceInUse retries.
           const remaining = yield* describe(output.datasetArn).pipe(

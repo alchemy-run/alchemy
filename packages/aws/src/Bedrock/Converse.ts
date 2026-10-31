@@ -17,7 +17,7 @@ export interface ConverseRequest extends Omit<bedrock.ConverseRequest, "modelId"
 }
 
 /**
- * Runtime binding for `bedrock-runtime:Converse` — Amazon Bedrock's unified
+ * Runtime binding for `bedrock-runtime:Converse` -- Amazon Bedrock's unified
  * messages API that works across all conversational foundation models.
  *
  * Bind one or more model references inside a function runtime to get a
@@ -27,7 +27,7 @@ export interface ConverseRequest extends Omit<bedrock.ConverseRequest, "modelId"
  * `us.amazon.nova-micro-v1:0`), or a full Bedrock ARN (application inference
  * profile, imported model, prompt version, ...).
  *
- * Model access is an account entitlement — enable the model in the Bedrock
+ * Model access is an account entitlement -- enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`. Many newer models are only invocable through a
  * cross-region inference profile id, not their bare foundation-model id.

@@ -6,7 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * Runtime binding for `emr-serverless:StartApplication`.
  *
- * Starts the bound {@link Application} — pre-warming its pre-initialized
+ * Starts the bound {@link Application} -- pre-warming its pre-initialized
  * capacity ahead of a burst of job submissions so the first job skips the
  * application cold start. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.StartApplicationHttp)`.

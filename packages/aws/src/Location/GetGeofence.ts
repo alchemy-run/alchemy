@@ -22,7 +22,7 @@ export interface GetGeofenceRequest extends Omit<location.GetGeofenceRequest, "C
  * const getGeofence = yield* Location.GetGeofence(collection);
  *
  * const fence = yield* getGeofence({ GeofenceId: "warehouse" });
- * // fence.Status → "ACTIVE" once evaluable
+ * // fence.Status -> "ACTIVE" once evaluable
  * ```
  *
  * @binding

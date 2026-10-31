@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { Group } from "./Group.ts";
 
-/** Request for {@link GroupResources} — the group is injected from the binding. */
+/** Request for {@link GroupResources} -- the group is injected from the binding. */
 export type GroupResourcesRequest = Omit<resourcegroups.GroupResourcesInput, "Group">;
 
 /**
@@ -11,7 +11,7 @@ export type GroupResourcesRequest = Omit<resourcegroups.GroupResourcesInput, "Gr
  *
  * Adds the specified resources to the bound {@link Group}. Supported only
  * for groups configured with `AWS::ResourceGroups::ApplicationGroup`,
- * `AWS::EC2::HostManagement`, or `AWS::EC2::CapacityReservationPool` —
+ * `AWS::EC2::HostManagement`, or `AWS::EC2::CapacityReservationPool` --
  * query-based groups derive membership from their query instead. Grouping
  * is asynchronous (application-group members are tagged with
  * `awsApplication`): the response reports `Pending` ARNs which
@@ -24,7 +24,7 @@ export type GroupResourcesRequest = Omit<resourcegroups.GroupResourcesInput, "Gr
  * ### Managing Group Membership
  * **Example:** Add A Resource To An Application Group
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const groupResources = yield* AWS.ResourceGroups.GroupResources(group);
  *
  * // runtime

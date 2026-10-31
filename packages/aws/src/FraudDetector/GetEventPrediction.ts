@@ -16,7 +16,7 @@ export interface GetEventPredictionRequest extends Omit<
 
 /**
  * Submit an event to a bound Amazon Fraud Detector detector and receive the
- * real-time model scores and rule outcomes for it — the effectful prediction
+ * real-time model scores and rule outcomes for it -- the effectful prediction
  * call made from a deployed Lambda or Task.
  *
  * ### Scoring Events

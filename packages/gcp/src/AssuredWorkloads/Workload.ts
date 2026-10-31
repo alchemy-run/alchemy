@@ -51,7 +51,7 @@ export type ResourceType =
 export type ResourceSettings = {
   /**
    * Resource identifier. For a project this is `project_id`. For a
-   * KeyRing this is the keyring id. Folders ignore this — Google assigns
+   * KeyRing this is the keyring id. Folders ignore this -- Google assigns
    * the folder id.
    */
   resourceId?: string;
@@ -122,11 +122,11 @@ export type WorkloadProps = {
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the workload.
+   * Manager ancestor. Immutable -- changing it replaces the workload.
    */
   organization?: string;
   /**
-   * Location (`us-central1`, `europe-west1`, …). Immutable — changing it
+   * Location (`us-central1`, `europe-west1`, ...). Immutable -- changing it
    * replaces the workload. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -139,12 +139,12 @@ export type WorkloadProps = {
    */
   displayName?: string;
   /**
-   * Compliance regime. Immutable — changing it replaces the workload.
+   * Compliance regime. Immutable -- changing it replaces the workload.
    */
   complianceRegime: ComplianceRegime;
   /**
    * Billing account for resources created as children of this workload.
-   * Format `billingAccounts/{billing_account_id}`. Immutable — changing
+   * Format `billingAccounts/{billing_account_id}`. Immutable -- changing
    * it replaces the workload.
    */
   billingAccount?: string;
@@ -154,18 +154,18 @@ export type WorkloadProps = {
   labels?: Record<string, string>;
   /**
    * When true, email notifications for violations are enabled. Honored
-   * only on update — create always enables notifications.
+   * only on update -- create always enables notifications.
    * @default true
    */
   violationNotificationsEnabled?: boolean;
   /**
-   * Partner regime associated with this workload. Immutable — changing
+   * Partner regime associated with this workload. Immutable -- changing
    * it replaces the workload.
    */
   partner?: Partner;
   /**
    * Billing account used to purchase services from sovereign partners.
-   * Format `billingAccounts/{billing_account_id}`. Immutable — changing
+   * Format `billingAccounts/{billing_account_id}`. Immutable -- changing
    * it replaces the workload.
    */
   partnerServicesBillingAccount?: string;
@@ -175,29 +175,29 @@ export type WorkloadProps = {
    */
   partnerPermissions?: PartnerPermissions;
   /**
-   * Enable sovereignty controls (Europe/Canada customers). Immutable —
+   * Enable sovereignty controls (Europe/Canada customers). Immutable --
    * changing it replaces the workload.
    */
   enableSovereignControls?: boolean;
   /**
    * Parent folder for provisioned resources, as `folders/{folder_id}`.
    * When omitted, resources are created under the organization.
-   * Immutable — changing it replaces the workload.
+   * Immutable -- changing it replaces the workload.
    */
   provisionedResourcesParent?: string;
   /**
    * Custom settings for resources created with the workload. Input-only
-   * and immutable — changing them replaces the workload.
+   * and immutable -- changing them replaces the workload.
    */
   resourceSettings?: ResourceSettings[];
   /**
-   * CMEK crypto-key settings. Deprecated — prefer `ENCRYPTION_KEYS_PROJECT`
-   * or `KEYRING` in `resourceSettings`. Immutable — changing them
+   * CMEK crypto-key settings. Deprecated -- prefer `ENCRYPTION_KEYS_PROJECT`
+   * or `KEYRING` in `resourceSettings`. Immutable -- changing them
    * replaces the workload.
    */
   kmsSettings?: KmsSettings;
   /**
-   * Options applied at create time. Immutable — changing them replaces
+   * Options applied at create time. Immutable -- changing them replaces
    * the workload.
    */
   workloadOptions?: WorkloadOptions;
@@ -259,13 +259,13 @@ export type Workload = Resource<
 
 /**
  * An organization-scoped Assured Workloads folder that applies a
- * compliance regime (FedRAMP, IL4, regional data boundary, …) to the
+ * compliance regime (FedRAMP, IL4, regional data boundary, ...) to the
  * projects created under it.
  *
  * Workload ids are assigned by Google. Alchemy stamps ownership into
  * `labels` so `list` / `pnpm nuke:gcp` can find them. `organization`,
  * `location`, `complianceRegime`, billing accounts, partner settings,
- * and resource settings are identity — changing them replaces the
+ * and resource settings are identity -- changing them replaces the
  * workload. `displayName`, `labels`, `violationNotificationsEnabled`,
  * and `partnerPermissions` update in place.
  *

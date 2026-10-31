@@ -31,7 +31,7 @@ export type ClustersTopicProps = {
   /**
    * Parent cluster. Full name
    * `projects/{project}/locations/{location}/clusters/{cluster}` or the
-   * cluster id (combined with `location`). Immutable — changing it
+   * cluster id (combined with `location`). Immutable -- changing it
    * replaces the topic.
    */
   cluster: string;
@@ -42,7 +42,7 @@ export type ClustersTopicProps = {
   location?: string;
   /**
    * Topic id (the `{topic}` segment of `.../clusters/{cluster}/topics/{topic}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the topic.
    */
   topicId?: string;
@@ -52,13 +52,13 @@ export type ClustersTopicProps = {
    */
   partitionCount?: number;
   /**
-   * Replication factor. Immutable — changing it replaces the topic.
+   * Replication factor. Immutable -- changing it replaces the topic.
    * @default 3
    */
   replicationFactor?: number;
   /**
    * Topic configs that override cluster defaults (`cleanup.policy`,
-   * `compression.type`, …).
+   * `compression.type`, ...).
    */
   configs?: Record<string, string>;
 };

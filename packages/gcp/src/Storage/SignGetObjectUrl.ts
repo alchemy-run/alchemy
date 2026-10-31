@@ -46,8 +46,8 @@ export type SignGetObjectUrlError =
  * ```typescript
  * const signGetObjectUrl = yield* GCP.Storage.SignGetObjectUrl(bucket);
  * const url = yield* signGetObjectUrl({ object: "reports/2026.pdf" });
- * // hand `url` to a browser — it downloads the object without credentials
- * // …provided with Effect.provide(GCP.Storage.SignGetObjectUrlHttp)
+ * // hand `url` to a browser -- it downloads the object without credentials
+ * // ...provided with Effect.provide(GCP.Storage.SignGetObjectUrlHttp)
  * ```
  *
  * **Example:** Custom expiry and response Content-Type

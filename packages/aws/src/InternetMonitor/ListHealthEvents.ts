@@ -6,7 +6,7 @@ import type { Monitor } from "./Monitor.ts";
 export interface ListHealthEventsRequest extends Omit<im.ListHealthEventsInput, "MonitorName"> {}
 
 /**
- * Runtime binding for `internetmonitor:ListHealthEvents` — list the health
+ * Runtime binding for `internetmonitor:ListHealthEvents` -- list the health
  * events Internet Monitor created for the bound {@link Monitor}; the monitor
  * name is injected automatically.
  *
@@ -15,7 +15,7 @@ export interface ListHealthEventsRequest extends Omit<im.ListHealthEventsInput, 
  * ### Reading Health Events
  * **Example:** List Active Health Events
  * ```typescript
- * // init — grants internetmonitor:ListHealthEvents on the monitor
+ * // init -- grants internetmonitor:ListHealthEvents on the monitor
  * const listHealthEvents = yield* AWS.InternetMonitor.ListHealthEvents(monitor);
  *
  * // runtime

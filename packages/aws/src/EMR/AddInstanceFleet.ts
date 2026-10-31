@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:AddInstanceFleet` — adds a task instance fleet to the bound cluster (instance-fleet clusters only; TASK fleets can be added after launch).
+ * Runtime binding for `elasticmapreduce:AddInstanceFleet` -- adds a task instance fleet to the bound cluster (instance-fleet clusters only; TASK fleets can be added after launch).
  * ### Scaling the Cluster
  * **Example:** Add a Task Fleet
  * ```typescript

@@ -16,7 +16,7 @@ export interface ListResourceRecordSetsRequest extends Omit<
  * Runtime binding for the `ListResourceRecordSets` operation (IAM action
  * `route53:ListResourceRecordSets` on the hosted zone ARN).
  *
- * Pages through the bound {@link HostedZone}'s record sets — read the
+ * Pages through the bound {@link HostedZone}'s record sets -- read the
  * current DNS state before computing a change batch, or audit what a
  * dynamic-DNS workflow has written. Provide the implementation with
  * `Effect.provide(AWS.Route53.ListResourceRecordSetsHttp)`.

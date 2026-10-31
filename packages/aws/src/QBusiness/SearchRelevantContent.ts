@@ -16,7 +16,7 @@ export interface SearchRelevantContentRequest extends Omit<
  * `qbusiness:SearchRelevantContent`), scoped to one {@link Application}.
  *
  * Searches an application's indexed content through a retriever and
- * returns the relevant passages without generating an answer — the
+ * returns the relevant passages without generating an answer -- the
  * RAG retrieval half on its own.
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.SearchRelevantContentHttp)`.

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:DescribeProducts`.
  *
  * Lists the product integrations available in Security Hub (AWS services and partner products).
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.DescribeProductsHttp)`.
  * ### Product Integrations
  * **Example:** List Available Products
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeProducts = yield* AWS.SecurityHub.DescribeProducts();
  *
  * // runtime

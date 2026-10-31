@@ -64,7 +64,7 @@ export interface SubnetGroup extends Resource<
 > {}
 
 /**
- * A MemoryDB subnet group — the set of VPC subnets a MemoryDB cluster's nodes
+ * A MemoryDB subnet group -- the set of VPC subnets a MemoryDB cluster's nodes
  * are placed into.
  *
  * Subnet groups are free and provision instantly. A cluster references one by
@@ -143,10 +143,10 @@ export const SubnetGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* memorydb
               .createSubnetGroup({
@@ -167,7 +167,7 @@ export const SubnetGroupProvider = () =>
             });
           }
 
-          // 3. Sync — apply description / subnet delta from OBSERVED state.
+          // 3. Sync -- apply description / subnet delta from OBSERVED state.
           const update: memorydb.UpdateSubnetGroupRequest = {
             SubnetGroupName: name,
           };
@@ -188,7 +188,7 @@ export const SubnetGroupProvider = () =>
             observed = response.SubnetGroup ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
@@ -210,7 +210,7 @@ export const SubnetGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A subnet group still attached to a cluster rejects deletion with
-          // SubnetGroupInUseFault — retry (bounded) while the cluster releases
+          // SubnetGroupInUseFault -- retry (bounded) while the cluster releases
           // it. NotFound is success (idempotent delete).
           yield* memorydb.deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName }).pipe(
             Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),

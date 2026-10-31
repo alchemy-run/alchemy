@@ -187,10 +187,10 @@ export const UserProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* describe(news.serverId, news.userName);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* transfer
               .createUser({
@@ -210,7 +210,7 @@ export const UserProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
-            // 3. Sync — push mutable configuration.
+            // 3. Sync -- push mutable configuration.
             yield* transfer.updateUser({
               ServerId: news.serverId,
               UserName: news.userName,
@@ -230,7 +230,7 @@ export const UserProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.Arn;
           const observedTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

@@ -15,7 +15,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
 
 /**
  * An IoT rule action delivers the raw SQL `SELECT` payload as the Lambda
- * event — an arbitrary JSON object. We discriminate it from the Records-based
+ * event -- an arbitrary JSON object. We discriminate it from the Records-based
  * AWS events (SQS/S3/SNS/DynamoDB) and from HTTP invocations (function URL /
  * API Gateway / ALB, which carry `requestContext`) so a single function can
  * host an IoT source alongside its HTTP handler.

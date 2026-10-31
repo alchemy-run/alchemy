@@ -57,20 +57,20 @@ export type SecurityGatewaysApplicationProps = {
   /**
    * Parent SecurityGateway resource name
    * (`projects/{project}/locations/{location}/securityGateways/{securityGateway}`)
-   * or gateway id. Immutable — changing it replaces the application.
+   * or gateway id. Immutable -- changing it replaces the application.
    */
   securityGateway: string;
   /**
    * Application id (the `{application}` segment of
    * `.../securityGateways/{securityGateway}/applications/{application}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the application.
    */
   applicationId?: string;
   /**
    * Location of the parent gateway. Inferred from `securityGateway`
    * when that value is a full resource name. Defaults to `global`.
-   * Immutable — changing it replaces the application.
+   * Immutable -- changing it replaces the application.
    * @default "global"
    */
   location?: string;

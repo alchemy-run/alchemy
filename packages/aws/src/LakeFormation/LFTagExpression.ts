@@ -72,13 +72,13 @@ const normalize = (expression: LFTagPairSpec[]): LFTagPairSpec[] =>
     .sort((a, b) => a.tagKey.localeCompare(b.tagKey));
 
 /**
- * A named Lake Formation LF-tag expression — a reusable, saved combination
+ * A named Lake Formation LF-tag expression -- a reusable, saved combination
  * of LF-tag conditions that can be referenced from permission grants
  * (`Resource.LFTagExpression`) instead of repeating the raw expression.
  *
  * Creating LF-tag expressions requires `CREATE_LF_TAG_EXPRESSION` on the
  * catalog (data lake administrators have it) plus
- * `GRANT_WITH_LF_TAG_EXPRESSION` on the underlying LF-tag pairs — see
+ * `GRANT_WITH_LF_TAG_EXPRESSION` on the underlying LF-tag pairs -- see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
  * ### Creating LF-Tag Expressions
@@ -135,7 +135,7 @@ export const LFTagExpressionProvider = () =>
           if (name === undefined) return undefined;
           const found = yield* observe(name, olds?.catalogId);
           if (found === undefined) return undefined;
-          // LF-tag expressions are not taggable — ownership cannot be
+          // LF-tag expressions are not taggable -- ownership cannot be
           // verified.
           return {
             name,
@@ -153,7 +153,7 @@ export const LFTagExpressionProvider = () =>
           if ((news.catalogId ?? undefined) !== (olds.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // description / expression → update
+          // description / expression -> update
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -173,7 +173,7 @@ export const LFTagExpressionProvider = () =>
             });
             found = yield* observe(news.name, news.catalogId);
           } else {
-            // 3. SYNC — diff observed description/expression against desired.
+            // 3. SYNC -- diff observed description/expression against desired.
             const observedExpression = normalize(toExpressionPairs(found.Expression));
             const descriptionDrift =
               news.description !== undefined && news.description !== found.Description;

@@ -17,7 +17,7 @@ export type ResourceRecordSetRoutingPolicy = dns.RRSetRoutingPolicy;
 
 export type ResourceRecordSetProps = {
   /**
-   * Managed zone name or numeric id that owns this record set. Immutable —
+   * Managed zone name or numeric id that owns this record set. Immutable --
    * changing it replaces the record set.
    */
   managedZone: string;
@@ -25,12 +25,12 @@ export type ResourceRecordSetProps = {
    * Fully qualified DNS name (e.g. `"www.example.com."`). A trailing dot
    * is added if omitted. Relative names are qualified with the zone's
    * DNS name. If omitted entirely, a unique subdomain of the zone is
-   * generated. Immutable — changing it replaces the record set.
+   * generated. Immutable -- changing it replaces the record set.
    */
   name?: string;
   /**
-   * DNS record type (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, …).
-   * Immutable — changing it replaces the record set.
+   * DNS record type (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`, ...).
+   * Immutable -- changing it replaces the record set.
    */
   type: string;
   /**
@@ -326,7 +326,7 @@ export const ResourceRecordSetProvider = () =>
       const existing = yield* getByName(env.project, zone.name, name, type);
       if (existing === undefined) return undefined;
       // Record sets have no labels. Identity (zone + name + type) is
-      // ownership — same as Route 53 records.
+      // ownership -- same as Route 53 records.
       return toAttrs(existing, env.project, zone.name);
     }),
 

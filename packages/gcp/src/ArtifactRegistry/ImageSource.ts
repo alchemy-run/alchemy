@@ -6,7 +6,7 @@ import {
   type DockerfileImageSource,
 } from "@alchemy.run/docker/ImageSource";
 /**
- * INTERNAL — Artifact Registry image-source machinery for GKE workloads.
+ * INTERNAL -- Artifact Registry image-source machinery for GKE workloads.
  * Not exported from the GCP barrel or `ArtifactRegistry/index.ts`.
  *
  * Mirrors `AWS/ECR/ImageSource.ts`: bundle / docker-build / mirror into a
@@ -129,14 +129,14 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
   if (source.image !== undefined && source.dockerfile !== undefined) {
     return Effect.die(
       new Error(
-        `'${id}': 'image' and 'dockerfile' are both set — declare exactly one environment source`,
+        `'${id}': 'image' and 'dockerfile' are both set \u2014 declare exactly one environment source`,
       ),
     );
   }
   if (source.image !== undefined && source.context !== undefined) {
     return Effect.die(
       new Error(
-        `'${id}': 'image' and 'context' are both set — declare exactly one environment source`,
+        `'${id}': 'image' and 'context' are both set \u2014 declare exactly one environment source`,
       ),
     );
   }
@@ -147,7 +147,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
   ) {
     return Effect.die(
       new Error(
-        `'${id}': inline 'dockerfile' content builds with no context — use a path dockerfile with 'context', or drop 'context'`,
+        `'${id}': inline 'dockerfile' content builds with no context \u2014 use a path dockerfile with 'context', or drop 'context'`,
       ),
     );
   }
@@ -243,7 +243,7 @@ const tagResourceName = (project: string, location: string, repositoryId: string
   `${resourceName(project, location, repositoryId)}/packages/${IMAGE_NAME}/tags/${tag}`;
 
 export interface ArtifactRegistryResolveOptions extends ResolveImageOptions {
-  /** Artifact Registry location (`us-central1`, …). */
+  /** Artifact Registry location (`us-central1`, ...). */
   location: string;
 }
 
@@ -652,7 +652,7 @@ export const makeImageSource = Effect.gen(function* () {
       if (df !== undefined && isInlineDockerfile(df) && typeof df.content !== "string") {
         return yield* Effect.die(
           new Error(
-            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+            `'${id}': inline dockerfile content did not resolve to a string \u2014 Outputs in Dockerfile.inline must be resolvable at deploy time`,
           ),
         );
       }
@@ -738,7 +738,7 @@ export const makeImageSource = Effect.gen(function* () {
       if (typeof externalDf.content !== "string") {
         return yield* Effect.die(
           new Error(
-            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+            `'${id}': inline dockerfile content did not resolve to a string \u2014 Outputs in Dockerfile.inline must be resolvable at deploy time`,
           ),
         );
       }

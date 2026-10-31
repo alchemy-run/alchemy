@@ -13,7 +13,7 @@ export interface SendDataToWirelessDeviceRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotwireless:SendDataToWirelessDevice` — queue a
+ * Runtime binding for `iotwireless:SendDataToWirelessDevice` -- queue a
  * downlink message to the bound wireless device from a deployed Lambda or
  * Task. The message is delivered the next time the device opens a receive
  * window.
@@ -28,7 +28,7 @@ export interface SendDataToWirelessDeviceRequest extends Omit<
  * // init
  * const sendData = yield* AWS.IoTWireless.SendDataToWirelessDevice(device);
  *
- * // runtime — PayloadData is base64-encoded
+ * // runtime -- PayloadData is base64-encoded
  * const { MessageId } = yield* sendData({
  *   PayloadData: Buffer.from("hello").toString("base64"),
  *   TransmitMode: 1,

@@ -9,7 +9,7 @@ export interface ListResourcesRequest extends Omit<RE2.ListResourcesInput, "View
  * Runtime binding for `resource-explorer-2:ListResources`.
  *
  * Enumerates the resources visible through the bound {@link View} using a
- * structured filter (instead of `Search`'s free-form query string) — the
+ * structured filter (instead of `Search`'s free-form query string) -- the
  * building block of inventory automation: page through every resource the
  * view exposes and act on each one. The view's ARN is injected from the
  * binding. Provide the implementation with
@@ -17,7 +17,7 @@ export interface ListResourcesRequest extends Omit<RE2.ListResourcesInput, "View
  * ### Listing Resources
  * **Example:** List Resources Through a View
  * ```typescript
- * // init — bind the operation to the view
+ * // init -- bind the operation to the view
  * const listResources = yield* AWS.ResourceExplorer.ListResources(view);
  *
  * // runtime

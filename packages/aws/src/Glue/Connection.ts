@@ -49,7 +49,7 @@ export interface ConnectionProps {
    */
   matchCriteria?: string[];
   /**
-   * VPC networking requirements — required for connections that reach into a
+   * VPC networking requirements -- required for connections that reach into a
    * VPC (e.g. JDBC to an RDS instance).
    */
   physicalConnectionRequirements?: {
@@ -90,7 +90,7 @@ export interface Connection extends Resource<
 > {}
 
 /**
- * An AWS Glue connection — stores the connection details (JDBC URL, VPC
+ * An AWS Glue connection -- stores the connection details (JDBC URL, VPC
  * networking, credentials) that crawlers and jobs use to reach a data store.
  * ### Creating Connections
  * **Example:** JDBC Connection
@@ -204,7 +204,7 @@ export const ConnectionProvider = () =>
           if ((olds.catalogId ?? undefined) !== (news.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // type / properties / networking / description → update
+          // type / properties / networking / description -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

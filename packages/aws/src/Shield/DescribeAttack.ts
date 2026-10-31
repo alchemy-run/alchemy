@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Attack Visibility
  * **Example:** Hydrate Attack Details
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeAttack = yield* AWS.Shield.DescribeAttack();
  *
  * // runtime

@@ -8,7 +8,7 @@ import type { FileSystem } from "./FileSystem.ts";
  * action `elasticfilesystem:DescribeLifecycleConfiguration` on the file
  * system ARN).
  *
- * Reads the bound {@link FileSystem}'s lifecycle management rules — when
+ * Reads the bound {@link FileSystem}'s lifecycle management rules -- when
  * files transition between Standard, Infrequent Access, and Archive storage.
  * A file system without lifecycle management returns an empty array.
  * Provide the implementation with

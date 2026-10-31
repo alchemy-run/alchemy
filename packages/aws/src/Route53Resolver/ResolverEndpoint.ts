@@ -105,7 +105,7 @@ export interface ResolverEndpoint extends Resource<
 > {}
 
 /**
- * A Route 53 Resolver endpoint — the set of elastic network interfaces that
+ * A Route 53 Resolver endpoint -- the set of elastic network interfaces that
  * connect your VPC's `.2` resolver to DNS resolvers on your own network.
  *
  * An `INBOUND` endpoint lets DNS resolvers on your network forward queries
@@ -177,7 +177,7 @@ const retryEndpointExists = <A, E extends { _tag: string }, R>(
 
 /**
  * Deleting an endpoint that still has resolver rules attached (their own
- * deletion may still be propagating) surfaces `InvalidRequestException` —
+ * deletion may still be propagating) surfaces `InvalidRequestException` --
  * retry briefly so the delete converges.
  *
  * @internal
@@ -312,11 +312,11 @@ export const ResolverEndpointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output only caches
+          // 1. OBSERVE -- cloud state is authoritative; output only caches
           //    the endpoint ID.
           let endpoint = yield* observe(name, output?.resolverEndpointId);
 
-          // 2. ENSURE — create if missing. A DELETING predecessor holding
+          // 2. ENSURE -- create if missing. A DELETING predecessor holding
           //    the same CreatorRequestId surfaces ResourceExistsException,
           //    which is retried until the old endpoint drains.
           if (endpoint === undefined) {
@@ -346,7 +346,7 @@ export const ResolverEndpointProvider = () =>
           const settled = yield* untilEndpointSettled(getEndpoint(endpointId));
           endpoint = settled ?? endpoint;
 
-          // 3. SYNC — protocols and endpoint type are mutable in place.
+          // 3. SYNC -- protocols and endpoint type are mutable in place.
           //    Diff observed cloud state against desired; skip the API on
           //    no-op.
           const desiredProtocols = news.protocols;
@@ -366,7 +366,7 @@ export const ResolverEndpointProvider = () =>
               .pipe(Effect.map((r) => r.ResolverEndpoint ?? endpoint!));
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const arn = endpoint.Arn!;
           yield* syncResolverTags(arn, desiredTags);
 

@@ -83,7 +83,7 @@ export type Certificate = Resource<
     appName: string;
     /** Hostname this Certificate covers. Identity of the resource. */
     hostname: string;
-    /** Observed status (`active`, `pending_validation`, …). */
+    /** Observed status (`active`, `pending_validation`, ...). */
     status: string | undefined;
     /** Whether DNS/ownership validation has completed. */
     configured: boolean | undefined;
@@ -416,7 +416,7 @@ export const CertificateProvider = () =>
       if (appChanged || hostnameChanged || kindChanged) {
         return {
           action: "replace" as const,
-          // Same hostname cannot exist twice — delete the old kind first.
+          // Same hostname cannot exist twice -- delete the old kind first.
           deleteFirst: !hostnameChanged && !appChanged,
         };
       }

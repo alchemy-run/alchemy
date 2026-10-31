@@ -24,7 +24,7 @@ export interface AccountProps {
    */
   name?: string;
   /**
-   * The kind of account to create. Cannot be changed after creation —
+   * The kind of account to create. Cannot be changed after creation --
    * Cloudflare rejects type changes (`UpdateAccountTypeNotSupported`), so
    * updating this property triggers a replacement.
    * @default "standard"
@@ -32,7 +32,7 @@ export interface AccountProps {
   type?: AccountType;
   /**
    * Tenant unit to create the account under. Only meaningful for tenant /
-   * partner credentials; defaults to the tenant's root unit. Create-only —
+   * partner credentials; defaults to the tenant's root unit. Create-only --
    * updating this property triggers a replacement.
    *
    * @see https://developers.cloudflare.com/tenant/how-to/manage-accounts/
@@ -100,7 +100,7 @@ export type Account = Resource<TypeId, AccountProps, AccountAttributes, never, P
  * provision an account per customer.
  *
  * Creating accounts (`POST /accounts`) is restricted to credentials with the
- * tenant entitlement — a standard user receives the typed
+ * tenant entitlement -- a standard user receives the typed
  * `AccountCreationForbidden` error (Cloudflare error code 1002). The `name`
  * and account settings are mutable in place; `type` and the tenant `unit`
  * are create-only and trigger a replacement. Deleting the resource queues
@@ -155,7 +155,7 @@ export const AccountProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The account type cannot be changed after creation — Cloudflare
+      // The account type cannot be changed after creation -- Cloudflare
       // rejects it with `UpdateAccountTypeNotSupported`.
       const oldType = output?.type ?? olds?.type ?? "standard";
       if ((news.type ?? "standard") !== oldType) {
@@ -170,7 +170,7 @@ export const AccountProvider = () =>
 
     list: () =>
       // `listAccounts` (GET /accounts) enumerates every account the API
-      // token can access — no scope input required. The list items carry
+      // token can access -- no scope input required. The list items carry
       // the full account shape (settings + managedBy), so each maps
       // directly to the same `Attributes` `read` produces with no
       // per-item hydration. Paginate exhaustively.
@@ -184,7 +184,7 @@ export const AccountProvider = () =>
       ),
 
     read: Effect.fn(function* ({ output }) {
-      // The physical identity is the Cloudflare-assigned account id —
+      // The physical identity is the Cloudflare-assigned account id --
       // names are not unique, so there is no cold find-by-name fallback.
       if (!output?.accountId) return undefined;
       const observed = yield* getAccount(output.accountId);
@@ -194,11 +194,11 @@ export const AccountProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
-      // 1. Observe — the account id cached on `output` is a hint, not a
+      // 1. Observe -- the account id cached on `output` is a hint, not a
       //    guarantee: a deleted account falls through to create.
       let observed = output?.accountId ? yield* getAccount(output.accountId) : undefined;
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate. Requires the tenant entitlement: a standard user
       //    surfaces the typed `AccountCreationForbidden` (code 1002).
@@ -210,7 +210,7 @@ export const AccountProvider = () =>
         });
       }
 
-      // 3. Sync — diff observed cloud state against desired; skip the PUT
+      // 3. Sync -- diff observed cloud state against desired; skip the PUT
       //    entirely on a no-op. Settings props left undefined are
       //    unmanaged: the observed value is kept as-is.
       const settings = observed.settings ?? undefined;
@@ -241,7 +241,7 @@ export const AccountProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Account deletion is queued / asynchronous on Cloudflare's side —
+      // Account deletion is queued / asynchronous on Cloudflare's side --
       // a successful DELETE means "pending deletion", which is success for
       // us. An already-gone (or already-pending) account surfaces as
       // `InvalidRoute` (code 7003): that's success too.

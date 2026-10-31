@@ -18,7 +18,7 @@ export interface CertificateAuthorityPolicyProps {
    * The resource-based permission policy, either as a structured
    * {@link PolicyDocument} or a raw JSON string (escape hatch). The policy
    * grants cross-account access on the CA to an Amazon Web Services
-   * account, organization, or organizational unit — a policy that would
+   * account, organization, or organizational unit -- a policy that would
    * lock the CA owner out is rejected by AWS with the typed
    * `LockoutPreventedException`.
    */
@@ -40,7 +40,7 @@ export interface CertificateAuthorityPolicy extends Resource<
 
 /**
  * A resource-based policy attached to a private CA, granting cross-account
- * access — e.g. allowing a Certificate Manager (ACM) user in another
+ * access -- e.g. allowing a Certificate Manager (ACM) user in another
  * account to issue and renew certificates signed by this CA. This is the
  * policy Amazon Web Services Resource Access Manager (RAM) manages when a
  * CA is shared; attach it directly for fine-grained control.
@@ -84,7 +84,7 @@ export const CertificateAuthorityPolicyProvider = () =>
     CertificateAuthorityPolicy,
     Effect.gen(function* () {
       // A CA without a policy and a missing/deleted CA both answer
-      // getPolicy with ResourceNotFoundException — either way there is no
+      // getPolicy with ResourceNotFoundException -- either way there is no
       // policy to observe.
       const observe = (certificateAuthorityArn: string) =>
         acmpca.getPolicy({ ResourceArn: certificateAuthorityArn }).pipe(
@@ -147,7 +147,7 @@ export const CertificateAuthorityPolicyProvider = () =>
           const certificateAuthorityArn = news.certificateAuthorityArn;
           const desired = toDesired(news.policy);
 
-          // OBSERVE — putPolicy is an upsert; compare the canonicalized
+          // OBSERVE -- putPolicy is an upsert; compare the canonicalized
           // live document against the canonicalized desired one so a
           // re-deploy of an equivalent policy (key order, whitespace) skips
           // the API call entirely.
@@ -168,7 +168,7 @@ export const CertificateAuthorityPolicyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* acmpca.deletePolicy({ ResourceArn: output.certificateAuthorityArn }).pipe(
             // CA already gone, no policy attached, or CA in a state
-            // (DELETED) where the policy is no longer addressable — the
+            // (DELETED) where the policy is no longer addressable -- the
             // policy is gone with it.
             Effect.catchTag(
               ["ResourceNotFoundException", "InvalidStateException"],

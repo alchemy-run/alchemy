@@ -11,13 +11,13 @@ export interface GetDimensionValuesRequest extends ce.GetDimensionValuesRequest 
  * Runtime binding for `ce:GetDimensionValues`.
  *
  * Retrieve the available values for a Cost Explorer dimension
- * (services, linked accounts, regions, usage types, …) — the building
+ * (services, linked accounts, regions, usage types, ...) -- the building
  * blocks of query filter expressions. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetDimensionValuesHttp)`.
  * ### Exploring Dimensions and Tags
  * **Example:** List Available Services
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getDimensionValues = yield* AWS.CostExplorer.GetDimensionValues();
  *
  * // runtime

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Profile } from "./Profile.ts";
 
 /**
- * Request for {@link ListProfileAssociations} — the bound profile's id is
+ * Request for {@link ListProfileAssociations} -- the bound profile's id is
  * injected as `ProfileId`, so only the optional VPC filter and pagination
  * knobs remain.
  */
@@ -14,7 +14,7 @@ export interface ListProfileAssociationsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `route53profiles:ListProfileAssociations` — enumerate
+ * Runtime binding for `route53profiles:ListProfileAssociations` -- enumerate
  * the VPC associations of the bound {@link Profile} (each item carries the
  * association id, VPC `ResourceId`, and its `Status`), so an ops function
  * can audit which VPCs a shared DNS configuration currently applies to or
@@ -26,7 +26,7 @@ export interface ListProfileAssociationsRequest extends Omit<
  * ### Listing VPC Associations
  * **Example:** Enumerate the VPCs a Profile applies to
  * ```typescript
- * // init — grants route53profiles:ListProfileAssociations
+ * // init -- grants route53profiles:ListProfileAssociations
  * const listProfileAssociations =
  *   yield* AWS.Route53Profiles.ListProfileAssociations(profile);
  *

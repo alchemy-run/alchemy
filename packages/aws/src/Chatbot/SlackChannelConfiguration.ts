@@ -23,7 +23,7 @@ export interface SlackChannelConfigurationProps {
   /**
    * ID of the Slack workspace (team) authorized with AWS Chatbot, e.g.
    * `T012ABCDEFG`. The workspace must first be onboarded via the AWS Chatbot
-   * console OAuth flow — this cannot be automated.
+   * console OAuth flow -- this cannot be automated.
    *
    * Changing the workspace replaces the configuration.
    */
@@ -109,7 +109,7 @@ export interface SlackChannelConfiguration extends Resource<
  * channel members run read-only or scoped AWS commands.
  *
  * The Slack workspace must be onboarded to AWS Chatbot beforehand via the
- * console OAuth flow (Chatbot console -> Configure new client -> Slack) —
+ * console OAuth flow (Chatbot console -> Configure new client -> Slack) --
  * workspace authorization cannot be automated.
  *
  * ### Creating Slack Channel Configurations
@@ -166,7 +166,7 @@ export const SlackChannelConfigurationProvider = () =>
         return `arn:aws:chatbot::${accountId}:chat-configuration/slack-channel/${configurationName}`;
       });
 
-      // describeSlackChannelConfigurations is a filter — an unknown ARN
+      // describeSlackChannelConfigurations is a filter -- an unknown ARN
       // yields an empty list rather than a not-found error.
       const observeConfiguration = (arn: string) =>
         chatbot.describeSlackChannelConfigurations({ ChatConfigurationArn: arn }).pipe(
@@ -237,10 +237,10 @@ export const SlackChannelConfigurationProvider = () =>
             ? [...news.guardrailPolicyArns].sort()
             : undefined;
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeConfiguration(arn);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe.
           if (live === undefined) {
@@ -264,7 +264,7 @@ export const SlackChannelConfigurationProvider = () =>
               );
           }
 
-          // 3. SYNC — diff the OBSERVED mutable aspects against the desired
+          // 3. SYNC -- diff the OBSERVED mutable aspects against the desired
           //    state; update only on drift.
           const inSync =
             live !== undefined &&
@@ -294,7 +294,7 @@ export const SlackChannelConfigurationProvider = () =>
               );
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -337,7 +337,7 @@ export const SlackChannelConfigurationProvider = () =>
             })
             .pipe(
               inChatbotRegion,
-              // Idempotent delete — a missing configuration is not an error.
+              // Idempotent delete -- a missing configuration is not an error.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

@@ -6,7 +6,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
 
 /**
  * Connection descriptor for an ElastiCache serverless cache. Alchemy does
- * not bundle a valkey/redis client — pass these settings to the client of
+ * not bundle a valkey/redis client -- pass these settings to the client of
  * your choice (`iovalkey`, `ioredis`, `redis`, `memjs`, ...).
  */
 export interface CacheConnectionInfo {
@@ -19,7 +19,7 @@ export interface CacheConnectionInfo {
   /** Reader endpoint port, when the engine exposes one. */
   readerPort: number | undefined;
   /**
-   * Serverless caches only accept TLS connections — always `true`.
+   * Serverless caches only accept TLS connections -- always `true`.
    */
   tls: boolean;
 }
@@ -42,7 +42,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * plane for classic (non-RBAC) access, so the binding injects the cache's
  * endpoint host/port as environment variables on the host Function and
  * returns a typed {@link CacheConnectionInfo} at runtime. Network access is
- * governed by VPC security groups, NOT IAM — the host Function must:
+ * governed by VPC security groups, NOT IAM -- the host Function must:
  *
  * 1. be attached to the cache's VPC (`vpc: { subnetIds, securityGroupIds }`), and
  * 2. have a security group allowed ingress on the cache's port by one of the

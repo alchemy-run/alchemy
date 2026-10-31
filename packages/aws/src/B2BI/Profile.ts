@@ -31,7 +31,7 @@ export interface ProfileProps {
   email?: string;
   /**
    * Whether Amazon Web Services logs each event in an Amazon CloudWatch log
-   * group for the profile. Immutable after creation — changing it replaces
+   * group for the profile. Immutable after creation -- changing it replaces
    * the profile.
    * @default "ENABLED"
    */
@@ -133,7 +133,7 @@ export const ProfileProvider = () =>
 
         diff: Effect.fn(function* ({ olds = {}, news }) {
           if (!isResolved(news)) return undefined;
-          // logging has no member on updateProfile — it is immutable after
+          // logging has no member on updateProfile -- it is immutable after
           // create, so a change forces a replacement. Delete-first: profiles
           // are recovered by name (findByName) and capped at 5 per account.
           if ((olds.logging ?? "ENABLED") !== (news.logging ?? "ENABLED")) {
@@ -157,14 +157,14 @@ export const ProfileProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let live = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
                 .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (live === undefined) {
             const created = yield* b2bi.createProfile({
               name: news.name,
@@ -176,7 +176,7 @@ export const ProfileProvider = () =>
             });
             live = yield* b2bi.getProfile({ profileId: created.profileId });
           } else {
-            // 3. Sync — converge mutable settings (name/businessName/phone/
+            // 3. Sync -- converge mutable settings (name/businessName/phone/
             // email). logging is immutable after create (diff replaces).
             // phone/email are sensitive members that may decode as Redacted.
             const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
@@ -209,7 +209,7 @@ export const ProfileProvider = () =>
             .deleteProfile({ profileId: output.profileId })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // B2BI auto-creates /aws/vendedlogs/b2bi/profile/{profileId} when
-          // logging is ENABLED and deleteProfile does NOT remove it — every
+          // logging is ENABLED and deleteProfile does NOT remove it -- every
           // deleted profile would leak an orphaned log group. Reap it
           // (idempotently) using the service-reported name when available.
           const logGroupName =

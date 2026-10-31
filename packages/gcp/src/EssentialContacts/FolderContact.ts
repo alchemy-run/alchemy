@@ -34,12 +34,12 @@ export type FolderContactProps = {
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder
-   * ancestor. Immutable — changing it replaces the contact.
+   * ancestor. Immutable -- changing it replaces the contact.
    */
   folderId?: string;
   /**
    * Email address that receives Google Cloud notifications. Does not
-   * need to be a Google Account. Immutable — changing it replaces the
+   * need to be a Google Account. Immutable -- changing it replaces the
    * contact. If omitted, a unique `example.com` address is generated.
    * Essential Contacts have no labels field, so Alchemy stamps
    * ownership into a `+alc.{stack}.{stage}.{id}` plus-tag and strips it
@@ -48,7 +48,7 @@ export type FolderContactProps = {
   email?: string;
   /**
    * Preferred notification language as a BCP-47 / ISO 639-1 tag
-   * (`en-US`, `en-GB`, `ja`, …).
+   * (`en-US`, `en-GB`, `ja`, ...).
    * @default "en-US"
    */
   languageTag?: string;
@@ -93,7 +93,7 @@ export type FolderContact = Resource<
  *
  * Essential Contacts have no labels field, so Alchemy stamps ownership
  * into the email plus-tag for `list` / nuke. Folder and email are
- * identity — changing either replaces the contact. Language and
+ * identity -- changing either replaces the contact. Language and
  * notification categories update in place.
  *
  * ### Creating a Folder Contact

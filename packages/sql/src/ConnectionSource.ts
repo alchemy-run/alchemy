@@ -10,7 +10,7 @@ import * as Redacted from "effect/Redacted";
  *
  * - a literal / `Redacted` string
  * - a resource Output (Neon `project.connectionUri`, PlanetScale
- *   `role.connectionUrl`, Prisma `connection.databaseUrl`, ...) — bound
+ *   `role.connectionUrl`, Prisma `connection.databaseUrl`, ...) -- bound
  *   into the host environment at deploy and read back at runtime
  * - a runtime-only Effect (Cloudflare Hyperdrive's per-invocation
  *   `connectionString`)
@@ -24,7 +24,7 @@ export type ConnectionSource =
 
 /**
  * The deploy-resolvable subset of {@link ConnectionSource}: literals and
- * resource Outputs. Runtime-only Effects (Hyperdrive) are excluded —
+ * resource Outputs. Runtime-only Effects (Hyperdrive) are excluded --
  * deploy-time consumers (migrations, seeds) need a value that resolves
  * during stack evaluation.
  */
@@ -80,7 +80,7 @@ export const staticConnectionSource = (
 };
 
 /**
- * Non-secret digest of a connection source — a sha256 Output suitable for
+ * Non-secret digest of a connection source -- a sha256 Output suitable for
  * persisted identity inputs (e.g. a migration Action's diff key) where the
  * connection string itself must never be stored.
  */

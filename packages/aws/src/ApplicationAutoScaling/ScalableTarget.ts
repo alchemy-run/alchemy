@@ -19,7 +19,7 @@ export interface ScalableTargetProps {
   serviceNamespace: aas.ServiceNamespace;
   /**
    * The identifier of the resource to scale, in the format the service
-   * expects — e.g. `service/{clusterName}/{serviceName}` for an ECS service
+   * expects -- e.g. `service/{clusterName}/{serviceName}` for an ECS service
    * or `table/{tableName}` for a DynamoDB table.
    *
    * Changing this triggers a replacement.
@@ -43,7 +43,7 @@ export interface ScalableTargetProps {
   /**
    * IAM role that allows Application Auto Scaling to modify the scalable
    * target on your behalf. For services that support service-linked roles
-   * (ECS, DynamoDB, Lambda, ...) omit this — AWS creates and uses the
+   * (ECS, DynamoDB, Lambda, ...) omit this -- AWS creates and uses the
    * service-linked role automatically.
    */
   roleArn?: string;
@@ -105,7 +105,7 @@ export interface ScalableTarget extends Resource<
 > {}
 
 /**
- * An Application Auto Scaling scalable target — registers a resource's
+ * An Application Auto Scaling scalable target -- registers a resource's
  * capacity dimension (an ECS service's desired count, a DynamoDB table's
  * read capacity, Lambda provisioned concurrency, ...) so that scaling
  * policies and scheduled actions can act on it.
@@ -251,7 +251,7 @@ export const ScalableTargetProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // The identity triple is immutable — any change replaces the
+          // The identity triple is immutable -- any change replaces the
           // target. Only compare sides that are actually known: a
           // half-created state row may have lost Output-valued props.
           for (const key of ["serviceNamespace", "resourceId", "scalableDimension"] as const) {
@@ -281,10 +281,10 @@ export const ScalableTargetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           const existing = yield* describe(identity);
 
-          // Ensure + sync capacity — `registerScalableTarget` is an upsert
+          // Ensure + sync capacity -- `registerScalableTarget` is an upsert
           // (a put keyed by the identity triple), so one call both creates
           // a missing target and converges min/max/role/suspendedState on
           // an existing one. Tags in the request only apply on creation;
@@ -305,7 +305,7 @@ export const ScalableTargetProvider = () =>
           const found = yield* describe(identity);
           const scalableTargetArn = found?.ScalableTargetARN ?? existing?.ScalableTargetARN;
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           if (scalableTargetArn) {
             const currentTags = yield* observedTags(scalableTargetArn);
             const { removed, upsert } = diffTags(currentTags, desiredTags);

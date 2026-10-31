@@ -34,13 +34,13 @@ export type SfdcInstancesSfdcChannelProps = {
   /**
    * Parent SFDC instance resource name
    * `projects/{project}/locations/{location}/sfdcInstances/{sfdcInstance}`
-   * or a bare instance id (combined with `location`). Immutable —
+   * or a bare instance id (combined with `location`). Immutable --
    * changing it replaces the channel.
    */
   sfdcInstance: string;
   /**
    * Channel id (the `{sfdcChannel}` segment). Server-assigned on create
-   * when omitted. Immutable — changing it replaces the channel.
+   * when omitted. Immutable -- changing it replaces the channel.
    */
   sfdcChannelId?: string;
   /**
@@ -55,7 +55,7 @@ export type SfdcInstancesSfdcChannelProps = {
   displayName?: string;
   /**
    * Human-readable description. Channels have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;
@@ -104,7 +104,7 @@ export type SfdcInstancesSfdcChannel = Resource<
  * Integration SFDC instance.
  *
  * Channels have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Parent instance and id are identity —
+ * description for `list` / nuke. Parent instance and id are identity --
  * changing them replaces the channel. Display name, description, and
  * channel topic update in place.
  *

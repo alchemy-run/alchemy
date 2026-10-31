@@ -15,7 +15,7 @@ export interface GetAppsListRequest extends fms.GetAppsListRequest {}
  * ### Applications Lists
  * **Example:** Read an Applications List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getAppsList = yield* AWS.FMS.GetAppsList();
  *
  * // runtime

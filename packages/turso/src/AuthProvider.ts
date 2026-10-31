@@ -21,7 +21,7 @@ export type TursoAuthConfig = StoredAuthConfig;
 /**
  * Resolved Turso Platform API credentials.
  *
- * Turso has no OAuth application flow — the Platform API authenticates
+ * Turso has no OAuth application flow -- the Platform API authenticates
  * with API tokens only (`turso auth api-tokens mint <name>`). The
  * organization is optional: when omitted it is discovered from the token
  * (an organization-scoped token, or an account with a single organization).

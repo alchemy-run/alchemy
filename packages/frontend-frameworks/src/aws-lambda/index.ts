@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/aws-lambda` — the web adapter AWS
+ * `@alchemy.run/frontend-frameworks/aws-lambda` -- the web adapter AWS
  * deploy targets wrap around a framework's fetch handler.
  *
  * A Lambda behind a Function URL receives payload-v2 events. Frameworks
@@ -7,13 +7,13 @@
  * (`(request: Request) => Promise<Response>`). This module converts
  * between the two:
  *
- * - {@link toRequest} — payload-v2 event → web `Request`, honoring
+ * - {@link toRequest} -- payload-v2 event -> web `Request`, honoring
  *   `x-forwarded-host`/`x-forwarded-proto` (set by the CloudFront edge
  *   router) so the framework sees the viewer-facing URL.
- * - {@link toLambdaHandler} — fetch handler → streaming Lambda handler
+ * - {@link toLambdaHandler} -- fetch handler -> streaming Lambda handler
  *   (`awslambda.streamifyResponse` + `HttpResponseStream`); requires the
  *   Function URL to use `invokeMode: RESPONSE_STREAM`.
- * - {@link toBufferedLambdaHandler} — fetch handler → buffered handler
+ * - {@link toBufferedLambdaHandler} -- fetch handler -> buffered handler
  *   returning a complete payload-v2 response object, for `invokeMode:
  *   BUFFERED` (the default) and API Gateway HTTP APIs.
  */
@@ -76,7 +76,7 @@ const awslambdaGlobal = (): AwsLambdaGlobal => {
   const g = (globalThis as { awslambda?: AwsLambdaGlobal }).awslambda;
   if (g === undefined) {
     throw new Error(
-      "The `awslambda` global is missing — streaming handlers only run on the AWS Lambda Node.js runtime.",
+      "The `awslambda` global is missing \u2014 streaming handlers only run on the AWS Lambda Node.js runtime.",
     );
   }
   return g;
@@ -174,7 +174,7 @@ export const toLambdaHandler = (fetchHandler: FetchHandler): unknown => {
 
 /**
  * Wrap a fetch handler as a **buffered** Lambda handler returning a
- * complete payload-v2 response — for `invokeMode: BUFFERED` Function URLs
+ * complete payload-v2 response -- for `invokeMode: BUFFERED` Function URLs
  * and API Gateway HTTP APIs.
  */
 export const toBufferedLambdaHandler =

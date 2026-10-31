@@ -8,7 +8,7 @@ import type { Directory } from "./Directory.ts";
  * `ds:ResetUserPassword`), scoped to one {@link Directory}.
  *
  * Resets the password of any user in the bound Simple AD or Managed
- * Microsoft AD directory — the backbone of a self-service password-reset
+ * Microsoft AD directory -- the backbone of a self-service password-reset
  * function. `NewPassword` is sensitive; pass a `Redacted` value so it never
  * leaks into logs. The directory id is injected from the binding. Provide
  * the implementation with
@@ -16,7 +16,7 @@ import type { Directory } from "./Directory.ts";
  * ### Managing Users
  * **Example:** Reset a User's Password
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const resetUserPassword = yield* AWS.DirectoryService.ResetUserPassword(directory);
  *
  * // runtime

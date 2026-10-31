@@ -65,7 +65,7 @@ export const Secrets = ({ owner, repository, environment, secrets }: SecretsProp
 
 // Accepts a plain string, an existing `Redacted<string>`, or a lazy `Input`
 // of either. We must lift through lazy inputs so the inner string gets wrapped
-// after the engine resolves it — otherwise `Redacted.make(input)` produces an
+// after the engine resolves it -- otherwise `Redacted.make(input)` produces an
 // opaque `Redacted<Config | Effect | Output>` that the plan cannot resolve.
 const liftValue = (
   value: Input<string | Redacted.Redacted<string>>,

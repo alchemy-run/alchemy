@@ -8,12 +8,12 @@ import type { ReportDefinition } from "./ReportDefinition.ts";
  * Shared HTTP scaffolding for the AWS Cost and Usage Report (`cur`) runtime
  * bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below.
  *
  * The CUR control plane is a global service hosted only in `us-east-1`, so
- * every operation is resolved with the distilled Region pinned there —
+ * every operation is resolved with the distilled Region pinned there --
  * exactly like the {@link ReportDefinition} provider. The distilled Region
  * service value is `Effect<RegionName>`, not a raw string, hence
  * `Effect.succeed`.
@@ -58,7 +58,7 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
       }
       return Effect.fn(`AWS.CostAndUsageReport.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* pinCur(op((request ?? {}) as I));
       });
@@ -107,7 +107,7 @@ export const makeReportDefinitionHttpBinding = <
       }
       return Effect.fn(`AWS.CostAndUsageReport.${options.capability}(${report.LogicalId})`)(
         function* (request?: Omit<I, "ReportName">) {
-          // Call-site region pin — see makeCurHttpBinding above.
+          // Call-site region pin -- see makeCurHttpBinding above.
           return yield* pinCur(
             op({
               ...request,

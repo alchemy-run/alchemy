@@ -29,7 +29,7 @@ export type RegionCompositeHealthCheckProps = {
    */
   healthCheckName?: string;
   /**
-   * Region the composite health check lives in. Immutable — changing it
+   * Region the composite health check lives in. Immutable -- changing it
    * replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -37,7 +37,7 @@ export type RegionCompositeHealthCheckProps = {
   region?: string;
   /**
    * Optional description. Composite health checks have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;

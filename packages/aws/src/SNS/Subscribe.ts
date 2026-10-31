@@ -9,7 +9,7 @@ export interface SubscribeRequest extends Omit<sns.SubscribeInput, "TopicArn"> {
  * Runtime binding for `sns:Subscribe`.
  *
  * Bind this operation to a {@link Topic} to subscribe endpoints (email,
- * sms, https, sqs, ...) to the topic at runtime — for example subscribing a
+ * sms, https, sqs, ...) to the topic at runtime -- for example subscribing a
  * user's email address from an API handler. The `TopicArn` is injected
  * automatically.
  * Provide the `SubscribeHttp` layer on the Function to implement the binding.

@@ -16,11 +16,11 @@ export type SchemaProps = {
    * Schema id (the `{schema}` segment of `projects/{project}/schemas/{schema}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must start with a letter and be 3-255 characters.
-   * Immutable — changing it replaces the schema.
+   * Immutable -- changing it replaces the schema.
    */
   schemaId?: string;
   /**
-   * Schema definition language. Immutable — changing it replaces the schema.
+   * Schema definition language. Immutable -- changing it replaces the schema.
    */
   type: SchemaType;
   /**

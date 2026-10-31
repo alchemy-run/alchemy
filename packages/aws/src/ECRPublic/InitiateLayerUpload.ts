@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { PublicRepository } from "./Repository.ts";
 
-/** Request for {@link InitiateLayerUpload} — `repositoryName` is injected. */
+/** Request for {@link InitiateLayerUpload} -- `repositoryName` is injected. */
 export interface InitiateLayerUploadRequest extends Omit<
   ecrpublic.InitiateLayerUploadRequest,
   "repositoryName"

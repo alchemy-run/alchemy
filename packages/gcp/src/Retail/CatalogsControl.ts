@@ -34,7 +34,7 @@ export type CatalogsControlProps = {
   /**
    * Parent catalog resource name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the control.
    * @default "default_catalog"
    */
@@ -46,7 +46,7 @@ export type CatalogsControlProps = {
   location?: string;
   /**
    * Control id (`[a-z-_]`, 4-63 characters). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the control.
+   * generated. Immutable -- changing it replaces the control.
    */
   controlId?: string;
   /**

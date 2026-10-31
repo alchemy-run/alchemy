@@ -37,12 +37,12 @@ export type SchemaRegistriesContextsSubjectsVersionProps = {
   /**
    * Parent schema registry. Full name
    * `projects/{project}/locations/{location}/schemaRegistries/{id}` or
-   * the registry id (combined with `location`). Immutable — changing it
+   * the registry id (combined with `location`). Immutable -- changing it
    * replaces the version.
    */
   schemaRegistry: string;
   /**
-   * Schema context. Immutable — changing it replaces the version.
+   * Schema context. Immutable -- changing it replaces the version.
    */
   context: string;
   /**
@@ -51,17 +51,17 @@ export type SchemaRegistriesContextsSubjectsVersionProps = {
    */
   location?: string;
   /**
-   * Subject name. If omitted, a unique name is generated. Immutable —
+   * Subject name. If omitted, a unique name is generated. Immutable --
    * changing it replaces the version.
    */
   subject?: string;
   /**
    * Version number. If omitted, the server assigns the next id.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   version?: number;
   /**
-   * Schema payload. Immutable — changing it replaces the version.
+   * Schema payload. Immutable -- changing it replaces the version.
    */
   schema: string;
   /**

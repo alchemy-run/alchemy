@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Profile } from "./Profile.ts";
 
 /**
- * Request for {@link ListProfileResourceAssociations} — the bound profile's
+ * Request for {@link ListProfileResourceAssociations} -- the bound profile's
  * id is injected as `ProfileId`, so only the optional `ResourceType` filter
  * and pagination knobs remain.
  */
@@ -14,7 +14,7 @@ export interface ListProfileResourceAssociationsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `route53profiles:ListProfileResourceAssociations` —
+ * Runtime binding for `route53profiles:ListProfileResourceAssociations` --
  * enumerate the DNS resources attached to the bound {@link Profile}
  * (private hosted zones, Resolver rules, DNS Firewall rule groups; each item
  * carries the resource's ARN, type, properties, and `Status`), so an ops
@@ -26,7 +26,7 @@ export interface ListProfileResourceAssociationsRequest extends Omit<
  * ### Listing Attached DNS Resources
  * **Example:** Enumerate the DNS resources attached to a Profile
  * ```typescript
- * // init — grants route53profiles:ListProfileResourceAssociations
+ * // init -- grants route53profiles:ListProfileResourceAssociations
  * const listProfileResourceAssociations =
  *   yield* AWS.Route53Profiles.ListProfileResourceAssociations(profile);
  *

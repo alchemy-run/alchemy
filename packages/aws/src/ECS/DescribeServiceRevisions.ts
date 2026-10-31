@@ -9,7 +9,7 @@ export interface DescribeServiceRevisionsRequest extends ECS.DescribeServiceRevi
  * Runtime binding for `ecs:DescribeServiceRevisions`.
  *
  * Bind this operation to a `Service` inside a function runtime to get a
- * callable that describes the bound service's revisions — the immutable
+ * callable that describes the bound service's revisions -- the immutable
  * task-definition + configuration snapshots that deployments roll between.
  * The host is granted `ecs:DescribeServiceRevisions` on the service's
  * revisions (revision ARNs come from deployment describe/list responses).

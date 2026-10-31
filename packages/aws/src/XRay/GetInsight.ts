@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetInsightRequest extends xray.GetInsightRequest {}
 
 /**
- * Retrieve the summary information of an X-Ray insight — the anomaly
+ * Retrieve the summary information of an X-Ray insight -- the anomaly
  * details X-Ray detected for a group with insights enabled.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -17,7 +17,7 @@ export interface GetInsightRequest extends xray.GetInsightRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetInsight
+ * // init -- grants xray:GetInsight
  * const getInsight = yield* XRay.GetInsight();
  *
  * // runtime

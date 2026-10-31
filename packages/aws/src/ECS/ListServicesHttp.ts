@@ -9,7 +9,7 @@ export const ListServicesHttp = Layer.effect(
     tag: "AWS.ECS.ListServices",
     operation: ECS.listServices,
     actions: ["ecs:ListServices"],
-    // `ecs:ListServices` has no resource-level scoping — grant `*`
+    // `ecs:ListServices` has no resource-level scoping -- grant `*`
     // conditioned on the bound cluster.
     resources: "cluster-condition",
   }),

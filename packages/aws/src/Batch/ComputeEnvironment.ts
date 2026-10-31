@@ -151,7 +151,7 @@ export interface ComputeEnvironment extends Resource<
  * ```
  *
  * ### Composing the Batch chain
- * **Example:** Compute Environment → Job Queue
+ * **Example:** Compute Environment -> Job Queue
  * ```typescript
  * const ce = yield* Batch.ComputeEnvironment("JobsCE", {});
  * const queue = yield* Batch.JobQueue("JobsQueue", {
@@ -191,7 +191,7 @@ const observedTagsOf = (ce: { tags?: { [key: string]: string | undefined } }) =>
  * AccessDeniedException") even though the role and policy are correct.
  * Batch only re-validates an INVALID CE on its slow periodic health check
  * (tens of minutes), so waiting on the same CE cannot recover in deploy
- * time — the recovery is to delete the freshly-created CE and re-create.
+ * time -- the recovery is to delete the freshly-created CE and re-create.
  */
 const isAuthPropagationInvalid = (ce: batch.ComputeEnvironmentDetail | undefined): boolean =>
   ce?.status === "INVALID" &&
@@ -202,7 +202,7 @@ const isAuthPropagationInvalid = (ce: batch.ComputeEnvironmentDetail | undefined
     ce.statusReason.includes("AccessDenied"));
 
 /**
- * Resolve the default VPC's subnets and default security group — used when
+ * Resolve the default VPC's subnets and default security group -- used when
  * the user doesn't pin networking explicitly.
  */
 const resolveDefaultNetwork = Effect.gen(function* () {
@@ -214,7 +214,7 @@ const resolveDefaultNetwork = Effect.gen(function* () {
   )?.VpcId;
   if (!vpcId) {
     return yield* new NoDefaultVpcError({
-      message: "No default VPC found — pass `subnets` and `securityGroupIds` explicitly",
+      message: "No default VPC found \u2014 pass `subnets` and `securityGroupIds` explicitly",
     });
   }
   const subnets = yield* ec2.describeSubnets
@@ -240,7 +240,7 @@ const resolveDefaultNetwork = Effect.gen(function* () {
   if (network.subnets.length === 0 || network.securityGroupIds.length === 0) {
     return yield* new NoDefaultVpcError({
       message:
-        "Default VPC networking is not ready — pass `subnets` and `securityGroupIds` explicitly",
+        "Default VPC networking is not ready \u2014 pass `subnets` and `securityGroupIds` explicitly",
     });
   }
   return network;
@@ -262,7 +262,7 @@ export const ComputeEnvironmentProvider = () =>
 
       // A deleted environment lingers as a DELETED record for a while and the
       // name is immediately reusable, so a describe-by-name can briefly
-      // return both the tombstone and the live one — prefer the live one.
+      // return both the tombstone and the live one -- prefer the live one.
       const describeOne = (name: string) =>
         batch
           .describeComputeEnvironments({ computeEnvironments: [name] })
@@ -307,7 +307,7 @@ export const ComputeEnvironmentProvider = () =>
       /**
        * Restore the CE's regular (non-service-linked) service role when it no
        * longer exists in IAM, returning the role name to drop afterwards.
-       * Batch cannot tear a CE down without assuming this role — a dangling
+       * Batch cannot tear a CE down without assuming this role -- a dangling
        * role is the canonical cause of undeletable, forever-INVALID CEs.
        */
       const restoreServiceRoleIfMissing = Effect.fn(function* (serviceRoleArn: string | undefined) {
@@ -583,11 +583,11 @@ export const ComputeEnvironmentProvider = () =>
             return yield* invalid(name, undefined);
           });
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let ce = yield* describeOne(name);
           if (ce?.status === "DELETED") ce = undefined;
 
-          // Ensure — create if missing, then wait until the environment
+          // Ensure -- create if missing, then wait until the environment
           // settles to VALID (Fargate CEs settle in seconds).
           const create = Effect.asVoid(
             batch.createComputeEnvironment({
@@ -648,7 +648,7 @@ export const ComputeEnvironmentProvider = () =>
             let final = yield* awaitGone;
             if (final && final.status === "INVALID") {
               // The async deletion attempt failed (likely the same IAM
-              // propagation lag) — re-issue once and wait again.
+              // propagation lag) -- re-issue once and wait again.
               yield* requestDelete;
               yield* Effect.sleep("3 seconds");
               final = yield* awaitGone;
@@ -663,8 +663,8 @@ export const ComputeEnvironmentProvider = () =>
            * the freshly-created-INVALID IAM propagation race by deleting the
            * INVALID CE and re-creating. Each delete cycle takes ~1-2 minutes,
            * which is itself ample IAM propagation time. A CE that settles
-           * INVALID for any other reason — or is still auth-INVALID after 3
-           * total create attempts — is returned as-is so the caller's
+           * INVALID for any other reason -- or is still auth-INVALID after 3
+           * total create attempts -- is returned as-is so the caller's
            * awaitValid path fails loudly with the typed
            * ComputeEnvironmentInvalidError.
            */
@@ -682,7 +682,7 @@ export const ComputeEnvironmentProvider = () =>
           });
 
           if (ce?.computeEnvironmentArn && ce.status === "DELETING") {
-            // An interrupted destroy left the environment mid-deletion — let
+            // An interrupted destroy left the environment mid-deletion -- let
             // it finish, then fall through to a fresh create below.
             ce = yield* awaitSettled(name);
             if (ce?.status === "DELETED") ce = undefined;
@@ -690,12 +690,12 @@ export const ComputeEnvironmentProvider = () =>
           if (!ce?.computeEnvironmentArn) {
             ce = yield* createAndSettle;
           } else if (ce.status !== "VALID" && ce.status !== "INVALID") {
-            // A prior modification is still settling — wait before diffing.
+            // A prior modification is still settling -- wait before diffing.
             ce = yield* awaitSettled(name);
           }
           if (ce?.status === "DELETED") {
             // The settle above can still land on a tombstone (deletion that
-            // completed between observe and settle) — one more create pass.
+            // completed between observe and settle) -- one more create pass.
             ce = yield* createAndSettle;
           }
 
@@ -703,7 +703,7 @@ export const ComputeEnvironmentProvider = () =>
             return yield* Effect.die(new Error(`ComputeEnvironment ${name} did not settle`));
           }
 
-          // Sync — diff observed against desired, apply only the delta.
+          // Sync -- diff observed against desired, apply only the delta.
           const update: batch.UpdateComputeEnvironmentRequest = {
             computeEnvironment: name,
           };
@@ -748,7 +748,7 @@ export const ComputeEnvironmentProvider = () =>
             ce = yield* awaitValid();
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const { upsert, removed } = diffTags(observedTagsOf(ce), desiredTags);
           if (upsert.length > 0) {
             yield* batch.tagResource({
@@ -788,17 +788,17 @@ export const ComputeEnvironmentProvider = () =>
           const disabled = yield* awaitDisabled(name);
           if (!disabled || disabled.status === "DELETED") return;
 
-          // Batch tears the CE down (its ECS cluster, ENIs, …) by assuming the
+          // Batch tears the CE down (its ECS cluster, ENIs, ...) by assuming the
           // CE's service role. If that role was deleted first (crashed destroy,
           // force-nuke ordering), the async deletion fails with an sts:AssumeRole
           // CLIENT_ERROR and the CE is stuck INVALID forever. Restore a minimal
-          // same-name role (same ARN — role ARNs carry no unique id) so teardown
+          // same-name role (same ARN -- role ARNs carry no unique id) so teardown
           // can proceed, and drop it again once the CE is gone. Service-linked
           // roles are never restored (they're account infrastructure).
           const restoredRole = yield* restoreServiceRoleIfMissing(disabled.serviceRole);
 
           // deleteComputeEnvironment is idempotent (succeeds when missing) but
-          // rejects while a JobQueue association is still tearing down — retry
+          // rejects while a JobQueue association is still tearing down -- retry
           // through that window (queue deletion is asynchronous).
           const requestDelete = retryBatch(
             batch.deleteComputeEnvironment({ computeEnvironment: name }),
@@ -815,7 +815,7 @@ export const ComputeEnvironmentProvider = () =>
 
           // Wait until it's actually gone (CE deletion takes ~1-2 minutes).
           // Settling on INVALID means the async deletion attempt FAILED (e.g.
-          // the service role was dangling until the restore above) — it never
+          // the service role was dangling until the restore above) -- it never
           // self-recovers, so re-issue the delete once and wait again.
           const awaitGone = pollBatch(
             describeOne(name),
@@ -827,7 +827,7 @@ export const ComputeEnvironmentProvider = () =>
             yield* Effect.sleep("3 seconds");
             final = yield* awaitGone;
           } else if (final && final.status !== "DELETED") {
-            // Still DELETING when the poll budget expired — a slow but healthy
+            // Still DELETING when the poll budget expired -- a slow but healthy
             // teardown gets one more poll round before failing loudly.
             final = yield* awaitGone;
           }
@@ -836,7 +836,7 @@ export const ComputeEnvironmentProvider = () =>
             yield* dropRestoredServiceRole(restoredRole);
           }
 
-          // A poll that merely expires MUST NOT report success — the engine
+          // A poll that merely expires MUST NOT report success -- the engine
           // would then delete the CE's dependencies (service role, subnets)
           // while teardown is still consuming them, wedging the CE for good.
           if (final && final.status !== "DELETED") {

@@ -29,13 +29,13 @@ export type GcpUserAccessBindingProps = {
   /**
    * Organization parent (`organizations/{organization}` or the numeric
    * organization id). If omitted, Alchemy uses `GOOGLE_ORGANIZATION_ID`
-   * or the project's Resource Manager parent. Immutable — changing it
+   * or the project's Resource Manager parent. Immutable -- changing it
    * replaces the binding.
    */
   organization?: string;
   /**
    * Google Group id whose users are subject to this binding. Directory
-   * API group `id`, not the group email. Immutable — changing it
+   * API group `id`, not the group email. Immutable -- changing it
    * replaces the binding. Unique per organization.
    */
   groupKey: string;
@@ -98,7 +98,7 @@ export type GcpUserAccessBinding = Resource<
  *
  * Bindings live on an organization. The API assigns the resource name
  * and has no labels or description field. Identity is
- * `(organization, groupKey)` — Alchemy treats existence at that pair as
+ * `(organization, groupKey)` -- Alchemy treats existence at that pair as
  * ownership, and `list` returns every binding on the current
  * organization so `pnpm nuke:gcp` can clean leaks.
  *

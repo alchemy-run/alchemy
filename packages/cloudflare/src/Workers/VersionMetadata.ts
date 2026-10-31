@@ -7,7 +7,7 @@ const TypeId = "Cloudflare.Workers.VersionMetadata" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Runtime value Cloudflare exposes for a `version_metadata` binding — the
+ * Runtime value Cloudflare exposes for a `version_metadata` binding -- the
  * deployed Worker version's `id`, `tag`, and `timestamp`.
  */
 export interface WorkerVersionMetadata {
@@ -25,13 +25,13 @@ export interface WorkerVersionMetadata {
 export type VersionMetadataAccessor = Effect.Effect<WorkerVersionMetadata, never, RuntimeContext>;
 
 /**
- * A Cloudflare Workers Version Metadata binding — a Worker-only binding with no
+ * A Cloudflare Workers Version Metadata binding -- a Worker-only binding with no
  * backing cloud resource. Cloudflare provides the deployed Worker version at
  * runtime (`id`, `tag`, `timestamp`).
  *
  * `VersionMetadata` is a single value that is at once the `Binding.Service` tag,
  * the callable that produces a {@link VersionMetadataBinding}, and the type.
- * Declare it on a Worker's `env` (it flows through `InferEnv` →
+ * Declare it on a Worker's `env` (it flows through `InferEnv` ->
  * {@link WorkerVersionMetadata}) or `yield*` it inside an Effect-native Worker
  * to attach the binding and obtain a deferred {@link VersionMetadataAccessor}.
  *
@@ -81,7 +81,7 @@ export interface VersionMetadata extends Binding.Service<
   VersionMetadataAccessor
 > {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @default "CF_VERSION_METADATA"
    */
   (name?: string): VersionMetadataBinding;

@@ -66,8 +66,8 @@ const stripeAuth = makeStoredAuthProvider<StripeResolvedCredentials>({
  * {@link AuthProviders} registry. Include this in the Stripe `providers()`
  * layer so the alchemy CLI can discover it.
  *
- * Auth is a Stripe secret API key (`STRIPE_API_KEY`, typically `sk_test_…`
- * or `sk_live_…`). There is no OAuth flow. An optional
+ * Auth is a Stripe secret API key (`STRIPE_API_KEY`, typically `sk_test_...`
+ * or `sk_live_...`). There is no OAuth flow. An optional
  * `STRIPE_API_BASE_URL` overrides the API root (default
  * `https://api.stripe.com`).
  */

@@ -26,13 +26,13 @@ import {
 export type FolderLogScopeProps = {
   /**
    * Folder id (`folders/{folder}` or the numeric id). When omitted, the
-   * stack project is used. Immutable — changing it replaces the log
+   * stack project is used. Immutable -- changing it replaces the log
    * scope.
    */
   folderId?: string;
   /**
    * Location of the log scope. Log scopes are only available in `global`.
-   * Immutable — changing it replaces the log scope.
+   * Immutable -- changing it replaces the log scope.
    * @default "global"
    */
   location?: string;
@@ -41,7 +41,7 @@ export type FolderLogScopeProps = {
    * `{parent}/locations/{location}/logScopes/{logScope}`). If omitted, a
    * unique name is generated. Limited to 100 characters: letters, digits,
    * underscores, hyphens, periods; first character must be alphanumeric.
-   * Immutable — changing it replaces the log scope.
+   * Immutable -- changing it replaces the log scope.
    */
   logScopeId?: string;
   /**
@@ -54,7 +54,7 @@ export type FolderLogScopeProps = {
   resourceNames: string[];
   /**
    * Human-readable description (max 8000 characters). Log scopes have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]` prefix
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]` prefix
    * and stripped from attributes.
    */
   description?: string;
@@ -92,7 +92,7 @@ export type FolderLogScope = Resource<
  *
  * Log scopes exist only in `global`. They have no labels field, so Alchemy
  * stamps ownership into the description for `list` / nuke. `folderId`,
- * `logScopeId`, and `location` are identity — changing any of them
+ * `logScopeId`, and `location` are identity -- changing any of them
  * replaces the log scope. `resourceNames` and `description` update in
  * place. The `_Default` log scope cannot be modified or deleted.
  *

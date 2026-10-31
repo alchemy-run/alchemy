@@ -116,7 +116,7 @@ export interface Table extends Resource<
 > {}
 
 /**
- * An Amazon Timestream for LiveAnalytics table — a time-series store inside a
+ * An Amazon Timestream for LiveAnalytics table -- a time-series store inside a
  * {@link Database}.
  *
  * `Table` owns the table's lifecycle and its mutable configuration: memory and
@@ -281,7 +281,7 @@ export const TableProvider = () =>
           if (!isResolved(news)) return;
           const oldName = yield* createTableName(id, olds);
           const newName = yield* createTableName(id, news);
-          // Table name or its owning database is immutable — either requires a
+          // Table name or its owning database is immutable -- either requires a
           // replacement.
           if (oldName !== newName || olds.databaseName !== news.databaseName) {
             return { action: "replace" } as const;
@@ -305,7 +305,7 @@ export const TableProvider = () =>
           // Observe.
           let state = yield* readTable(databaseName, tableName);
 
-          // Ensure — create if missing; tolerate a ConflictException race.
+          // Ensure -- create if missing; tolerate a ConflictException race.
           if (state === undefined) {
             yield* withWriteEndpoint(
               TSW.createTable({
@@ -329,7 +329,7 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync retention / magnetic-store-write config — diff the desired
+          // Sync retention / magnetic-store-write config -- diff the desired
           // wire values against observed cloud state and skip the API call
           // entirely on a no-op.
           const retentionDrifted =
@@ -351,7 +351,7 @@ export const TableProvider = () =>
             yield* session.note(`Updated table ${tableName} configuration`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* withWriteEndpoint(

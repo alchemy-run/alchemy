@@ -34,7 +34,7 @@ export type FeatureGroupsFeatureProps = {
   featureGroup: string;
   /**
    * Feature id. Valid characters `[a-z0-9_]`, must start with a letter.
-   * Immutable — changing it replaces the feature.
+   * Immutable -- changing it replaces the feature.
    */
   featureId?: string;
   /**

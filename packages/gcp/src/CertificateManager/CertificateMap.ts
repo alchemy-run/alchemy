@@ -51,13 +51,13 @@ export type CertificateMapProps = {
    * `projects/{project}/locations/{location}/certificateMaps/{certificateMap}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * certificate map.
    */
   certificateMapId?: string;
   /**
    * Certificate Manager location. Certificate maps are global resources;
-   * omit or set `"global"`. Immutable — changing it replaces the map.
+   * omit or set `"global"`. Immutable -- changing it replaces the map.
    * `GLOBAL` is accepted and normalized to `global`.
    * @default "global"
    */
@@ -100,7 +100,7 @@ export type CertificateMap = Resource<
 >;
 
 /**
- * A Certificate Manager certificate map — a collection of certificate
+ * A Certificate Manager certificate map -- a collection of certificate
  * configurations selected by SNI for global external Application and
  * proxy Network Load Balancers.
  *

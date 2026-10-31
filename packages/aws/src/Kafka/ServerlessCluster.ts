@@ -56,12 +56,12 @@ export interface ServerlessCluster extends Resource<
     clusterName: string;
     /** ARN of the cluster. */
     clusterArn: string;
-    /** Cluster type — always `SERVERLESS` for this resource. */
+    /** Cluster type -- always `SERVERLESS` for this resource. */
     clusterType: string;
     /** Current state (`CREATING`, `ACTIVE`, `DELETING`, ...). */
     state: string;
     /**
-     * SASL/IAM bootstrap broker connection string — the endpoint kafkajs-style
+     * SASL/IAM bootstrap broker connection string -- the endpoint kafkajs-style
      * clients connect to using IAM authentication.
      */
     bootstrapBrokerStringSaslIam: string | undefined;
@@ -80,7 +80,7 @@ export interface ServerlessCluster extends Resource<
  * An Amazon MSK (Managed Streaming for Apache Kafka) **Serverless** cluster.
  *
  * MSK Serverless clusters use IAM authentication exclusively and scale broker
- * capacity automatically — there is no broker count, instance type, or storage
+ * capacity automatically -- there is no broker count, instance type, or storage
  * to configure. They are reachable only from inside a VPC. Creation takes
  * roughly 5-10 minutes.
  *
@@ -255,13 +255,13 @@ export const ServerlessClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative. Prefer the cached ARN,
+          // 1. Observe -- cloud state is authoritative. Prefer the cached ARN,
           //    fall back to a name scan (recovery / adoption).
           let observed = output?.clusterArn
             ? yield* describeByArn(output.clusterArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing; tolerate a concurrent create
+          // 2. Ensure -- create if missing; tolerate a concurrent create
           //    (ConflictException) by re-scanning for the cluster by name.
           if (!observed?.ClusterArn) {
             const created = yield* kafka
@@ -302,7 +302,7 @@ export const ServerlessClusterProvider = () =>
           // Wait for ACTIVE (bounded) so tag sync and broker resolution work.
           observed = yield* waitForActive(arn);
 
-          // 3. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 3. Sync tags -- diff against OBSERVED cloud tags so adoption
           //    rewrites ownership tags correctly.
           const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           if (removed.length > 0) {

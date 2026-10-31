@@ -34,20 +34,20 @@ export type IndexProps = {
   name?: string;
   /**
    * Number of dimensions for each vector stored in the index. Required
-   * unless `preset` is provided. Cannot be changed after creation —
+   * unless `preset` is provided. Cannot be changed after creation --
    * updating this property triggers a replacement.
    */
   dimensions?: number;
   /**
    * Distance metric used for similarity search. Cannot be changed after
-   * creation — updating this property triggers a replacement.
+   * creation -- updating this property triggers a replacement.
    * @default "cosine"
    */
   metric?: DistanceMetric;
   /**
    * A managed embedding model preset that fixes `dimensions` and `metric`
    * to match the named model. Mutually exclusive with `dimensions`/`metric`.
-   * Cannot be changed after creation — updating this triggers a replacement.
+   * Cannot be changed after creation -- updating this triggers a replacement.
    */
   preset?: Preset;
   /**
@@ -171,7 +171,7 @@ export const IndexProvider = () =>
       // index if the generator's output for this id ever drifts.
       const indexName = output?.indexName ?? (yield* createIndexName(id, news.name));
 
-      // Observe — read the live index by name. The name is the stable
+      // Observe -- read the live index by name. The name is the stable
       // identifier; fall back through a NotFound to the create path so
       // we recover from out-of-band deletes or partial state-persistence.
       let observed = yield* vectorize
@@ -181,7 +181,7 @@ export const IndexProvider = () =>
         })
         .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined));
 
-      // Ensure — create if missing. Cloudflare returns 409 Conflict when
+      // Ensure -- create if missing. Cloudflare returns 409 Conflict when
       // an index with the same name already exists; tolerate the race by
       // re-reading it.
       if (!observed) {

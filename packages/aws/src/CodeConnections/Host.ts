@@ -87,12 +87,12 @@ export interface Host extends Resource<
 > {}
 
 /**
- * An AWS CodeConnections host — the infrastructure representation of a
+ * An AWS CodeConnections host -- the infrastructure representation of a
  * self-managed source provider (GitHub Enterprise Server or GitLab
  * self-managed). One host serves all connections to that provider.
  *
  * A host is created in the `PENDING` state. Completing it requires a
- * one-time setup performed **manually** in the AWS console — there is no
+ * one-time setup performed **manually** in the AWS console -- there is no
  * API to finish the setup. Once completed the host becomes `AVAILABLE` and
  * `Connection`s can reference it via `hostArn`.
  * ### Creating a Host
@@ -200,7 +200,7 @@ export const HostProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // Provider type is immutable — replace on change. Endpoint and VPC
+          // Provider type is immutable -- replace on change. Endpoint and VPC
           // configuration are mutable via UpdateHost.
           if ((news?.providerType ?? undefined) !== (olds?.providerType ?? undefined)) {
             return { action: "replace" } as const;
@@ -222,12 +222,12 @@ export const HostProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredVpc = toWireVpcConfiguration(news.vpcConfiguration);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = output?.hostArn
             ? yield* getByArn(output.hostArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing. The host is created PENDING and
+          // 2. Ensure -- create if missing. The host is created PENDING and
           // its setup is completed manually in the console.
           if (observed?.HostArn === undefined) {
             const created = yield* codeconnections.createHost({
@@ -250,7 +250,7 @@ export const HostProvider = () =>
             }
           }
 
-          // 3. Sync — endpoint + VPC configuration, diffed against OBSERVED
+          // 3. Sync -- endpoint + VPC configuration, diffed against OBSERVED
           // cloud state; skip the API entirely on no-op.
           if (
             observed.ProviderEndpoint !== news.providerEndpoint ||
@@ -264,7 +264,7 @@ export const HostProvider = () =>
             observed = (yield* getByArn(observed.HostArn!)) ?? observed;
           }
 
-          // 4. Sync tags — diff against OBSERVED cloud tags.
+          // 4. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncResourceTags(observed.HostArn!, desiredTags);
 
           yield* session.note(name);
@@ -273,7 +273,7 @@ export const HostProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A host cannot be deleted while its VPC configuration is
-          // initializing/deleting — retry the transient state, bounded.
+          // initializing/deleting -- retry the transient state, bounded.
           yield* codeconnections.deleteHost({ HostArn: output.hostArn }).pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "ResourceUnavailableException",

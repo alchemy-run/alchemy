@@ -102,12 +102,12 @@ export type ClusterProps = {
    * `projects/{project}/locations/{location}/clusters/{cluster}`).
    * Lowercase letters, digits, and hyphens; max 53 characters (longer
    * values are truncated). If omitted, a unique RFC1035 name of at most
-   * 53 characters is generated. Immutable — changing it replaces the
+   * 53 characters is generated. Immutable -- changing it replaces the
    * cluster.
    */
   clusterId?: string;
   /**
-   * Region (`us-central1`, …). Immutable. `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, ...). Immutable. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -115,7 +115,7 @@ export type ClusterProps = {
   /**
    * Subnets for broker PSC endpoints. Each is
    * `projects/{project}/regions/{region}/subnetworks/{subnet}`. Defaults
-   * to the project's `default` subnet in `location`. Immutable — changing
+   * to the project's `default` subnet in `location`. Immutable -- changing
    * them replaces the cluster.
    */
   subnets?: string[];
@@ -163,7 +163,7 @@ export type Cluster = Resource<
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** vCPU count currently provisioned. */
     vcpuCount: string | undefined;

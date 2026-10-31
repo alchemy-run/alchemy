@@ -23,7 +23,7 @@ export type Rpc<Shape> = {
  * to {@link toRpcAsync}:
  *
  *   - the Worker class value's type, e.g. `typeof Backend`, which extends
- *     `Effect.Effect<Worker & Rpc<Shape>, …>`
+ *     `Effect.Effect<Worker & Rpc<Shape>, ...>`
  *   - the unwrapped `Worker & Rpc<Shape>` type
  *   - a bare `Shape` (when the caller types it explicitly)
  */
@@ -250,7 +250,7 @@ export const makeRpcErrorReviver = (
     try {
       return new (cls as new (props: unknown) => unknown)(error);
     } catch {
-      // A malformed wire object must not turn into a defect here — the
+      // A malformed wire object must not turn into a defect here -- the
       // caller still sees the raw envelope error.
       return error;
     }
@@ -354,7 +354,7 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
 // `fetch`-transport stream codec. Unlike the JSRPC path above (which can peel
 // to pick a raw-`bytes` vs `jsonl` encoding because its `ReadableStream` body
 // is materialized eagerly), an HTTP response body is consumed lazily AFTER the
-// handler returns — so peeling here would tie the source to the handler scope
+// handler returns -- so peeling here would tie the source to the handler scope
 // and truncate the body to its first element once that scope closes. Instead
 // this codec is uniformly NDJSON and FULLY LAZY (no peel, no scope): each line
 // is a JSON value, `Uint8Array` chunks are tagged + base64-encoded so binary
@@ -402,7 +402,7 @@ const fromBase64 = (b64: string): Uint8Array => {
 
 /**
  * Encode a `Stream` as a lazy NDJSON byte stream for an HTTP response body.
- * No peeking, so nothing is held open across the handler→body-streaming
+ * No peeking, so nothing is held open across the handler->body-streaming
  * boundary. `Uint8Array` elements are tagged + base64-encoded; a source
  * failure is appended as a trailing {@link RpcStreamErrorMarker}.
  */
@@ -452,7 +452,7 @@ export const decodeRpcResponseStream = <E>(
 // this property and reads its `channel`. An RPC stub method can't know
 // synchronously whether the remote method returns a value or a `Stream`
 // (the call is async), yet its declared type mirrors the remote `Shape`
-// verbatim — value methods are typed `Effect<A>`, streaming methods `Stream<A>`.
+// verbatim -- value methods are typed `Effect<A>`, streaming methods `Stream<A>`.
 // We satisfy BOTH by handing back the call `Effect` augmented with the Stream
 // brand + channel, so the single return value can be `yield*`-ed / `.pipe`d as
 // an Effect (value methods, e.g. `stub.put(k, v).pipe(Effect.orDie)`) AND piped
@@ -562,7 +562,7 @@ export const serveRpc = <Req = never>(
     }
 
     const text = yield* request.text;
-    // Keep arg-decode failures out of the handler's error channel — a
+    // Keep arg-decode failures out of the handler's error channel -- a
     // malformed argument payload is a client error, so answer 400.
     const argsResult = yield* Effect.result(
       Effect.try({
@@ -581,7 +581,7 @@ export const serveRpc = <Req = never>(
     const invoked = (method as (...a: unknown[]) => unknown)(...args);
 
     // Fully-lazy NDJSON body: nothing is held open across the
-    // handler→body-streaming boundary, so the stream isn't truncated. The
+    // handler->body-streaming boundary, so the stream isn't truncated. The
     // body's requirements are the shape method's phantom `R` (e.g.
     // `RuntimeContext`), satisfied by the surrounding runtime; erase it for
     // the response constructor.
@@ -592,7 +592,7 @@ export const serveRpc = <Req = never>(
       );
 
     // A *genuine* `Stream` (not an Effect) is encoded directly. A nested-RPC
-    // value built by {@link asEffectOrStream} is BOTH an Effect and a Stream —
+    // value built by {@link asEffectOrStream} is BOTH an Effect and a Stream --
     // it MUST be run as an effect (below), otherwise a forwarded value method
     // (e.g. a DO method returning `container.readObject(key)`) would be
     // mis-served as a stream envelope and decoded by the caller as a `Stream`
@@ -604,7 +604,7 @@ export const serveRpc = <Req = never>(
     const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
     if (Result.isSuccess(result)) {
       // The resolved value may itself be a `Stream` (e.g. a forwarded nested
-      // *streaming* RPC, where the inner call resolves to a `Stream`) — encode
+      // *streaming* RPC, where the inner call resolves to a `Stream`) -- encode
       // that as a stream body too.
       return Stream.isStream(result.success)
         ? streamResponse(result.success)

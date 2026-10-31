@@ -9,7 +9,7 @@ export interface ListApplicationAssociationsRequest extends Omit<
 > {}
 
 /**
- * Lists the associations of an AppIntegrations {@link Application} — the
+ * Lists the associations of an AppIntegrations {@link Application} -- the
  * Amazon Connect instances (or other clients) the application has been
  * associated with (`app-integrations:ListApplicationAssociations`).
  *
@@ -22,7 +22,7 @@ export interface ListApplicationAssociationsRequest extends Omit<
  * const listApplicationAssociations =
  *   yield* AWS.AppIntegrations.ListApplicationAssociations(application);
  *
- * // runtime — the ApplicationId is injected automatically
+ * // runtime -- the ApplicationId is injected automatically
  * const { ApplicationAssociations } = yield* listApplicationAssociations();
  * ```
  *

@@ -40,12 +40,12 @@ export type RegionalEndpointProps = {
    * RegionalEndpoint id (the `{regional_endpoint}` segment of
    * `projects/{project}/locations/{location}/regionalEndpoints/{regional_endpoint}`).
    * If omitted, a unique name is generated. Must match
-   * `[-a-z0-9]([-a-z0-9]{0,44})[a-z0-9]`. Immutable — changing it
+   * `[-a-z0-9]([-a-z0-9]{0,44})[a-z0-9]`. Immutable -- changing it
    * replaces the endpoint.
    */
   regionalEndpointId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * endpoint. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -53,30 +53,30 @@ export type RegionalEndpointProps = {
   location?: string;
   /**
    * Service endpoint this private regional endpoint connects to, e.g.
-   * `"storage.us-central1.p.rep.googleapis.com"`. Immutable — changing
+   * `"storage.us-central1.p.rep.googleapis.com"`. Immutable -- changing
    * it replaces the endpoint.
    */
   targetGoogleApi: string;
   /**
    * Access type reflected on the PSC forwarding rule (`REGIONAL` or
-   * `GLOBAL`). Immutable — changing it replaces the endpoint.
+   * `GLOBAL`). Immutable -- changing it replaces the endpoint.
    */
   accessType: RegionalEndpointAccessType;
   /**
    * VPC network
    * (`projects/{project}/global/networks/{network}` or a Compute
-   * self-link). Immutable — changing it replaces the endpoint.
+   * self-link). Immutable -- changing it replaces the endpoint.
    */
   network?: string;
   /**
    * Subnetwork used to allocate the IP
    * (`projects/{project}/regions/{region}/subnetworks/{subnetwork}` or a
-   * Compute self-link). Immutable — changing it replaces the endpoint.
+   * Compute self-link). Immutable -- changing it replaces the endpoint.
    */
   subnetwork?: string;
   /**
    * IP address or Address resource URI. When omitted, an IP is allocated
-   * from `subnetwork`. Immutable — changing it replaces the endpoint.
+   * from `subnetwork`. Immutable -- changing it replaces the endpoint.
    */
   address?: string;
   /**

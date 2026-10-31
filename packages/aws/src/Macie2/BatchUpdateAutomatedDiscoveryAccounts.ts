@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:BatchUpdateAutomatedDiscoveryAccounts`.
  *
  * Changes the status of automated sensitive data discovery for one or more accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.BatchUpdateAutomatedDiscoveryAccountsHttp)`.
  * ### Automated Discovery
  * **Example:** Toggle Automated Discovery per Account
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchUpdateAutomatedDiscoveryAccounts = yield* AWS.Macie2.BatchUpdateAutomatedDiscoveryAccounts();
  *
  * // runtime

@@ -6,13 +6,13 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * Shared scaffolding for AWS End User Messaging Social (WhatsApp) HTTP
  * bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate: WABA-scoped bindings inject the bound linked account's
- * `id` (`waba-…`) into every request and grant `actions` on the WABA ARN;
+ * `id` (`waba-...`) into every request and grant `actions` on the WABA ARN;
  * phone-plane bindings pass the request through (the caller addresses a
- * phone number by its `phone-number-id-…`) and grant `actions` on `*`,
+ * phone number by its `phone-number-id-...`) and grant `actions` on `*`,
  * because the WABA's phone numbers are provisioned by Meta at onboarding
  * time and their ARNs are not derivable from the WABA ARN at bind time.
  */
@@ -36,7 +36,7 @@ export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(opt
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const AccountId = yield* account.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${account})`({
@@ -60,7 +60,7 @@ export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(opt
  * (`SendWhatsAppMessage`, message media): the caller addresses one of the
  * bound WABA's phone numbers per request (`originationPhoneNumberId` /
  * `id`), so the request passes through unchanged. The deploy-time half
- * grants `actions` on `*` — phone numbers are provisioned by Meta under
+ * grants `actions` on `*` -- phone numbers are provisioned by Meta under
  * the WABA and their ARNs are not derivable from the WABA ARN.
  */
 export const makeWabaPhonePlaneHttpBinding = <I, A, E, R>(options: {

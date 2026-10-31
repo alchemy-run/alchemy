@@ -9,7 +9,7 @@ export interface PutMetadataRequest extends Omit<ivs.PutMetadataRequest, "channe
  * Runtime binding for `ivs:PutMetadata`.
  *
  * Inserts timed metadata (max 1 KB) into the bound {@link Channel}'s
- * active stream — the payload is embedded in the video and surfaced to
+ * active stream -- the payload is embedded in the video and surfaced to
  * players in sync with playback. Fails with the typed
  * `ChannelNotBroadcasting` tag when the channel is not live. At most 5
  * requests per second per channel. The channel ARN is injected from the
@@ -18,7 +18,7 @@ export interface PutMetadataRequest extends Omit<ivs.PutMetadataRequest, "channe
  * ### Embedding Timed Metadata
  * **Example:** Push a Poll Question to Viewers
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const putMetadata = yield* AWS.IVS.PutMetadata(channel);
  *
  * // runtime

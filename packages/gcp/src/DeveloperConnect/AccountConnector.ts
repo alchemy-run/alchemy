@@ -32,7 +32,7 @@ import {
 
 export type CustomOAuthConfig = {
   /**
-   * Client secret of the OAuth application. Input only — not returned
+   * Client secret of the OAuth application. Input only -- not returned
    * on read.
    */
   clientSecret?: string;
@@ -42,12 +42,12 @@ export type CustomOAuthConfig = {
   serviceDirectoryConfig?: ServiceDirectoryConfig;
   /**
    * SCM provider (`GITHUB_ENTERPRISE`, `GITLAB_ENTERPRISE`,
-   * `BITBUCKET_DATA_CENTER`). Immutable — changing it replaces the
+   * `BITBUCKET_DATA_CENTER`). Immutable -- changing it replaces the
    * connector.
    */
   scmProvider?: developerconnect.CustomOAuthConfigScmProviderEnum | (string & {});
   /**
-   * Host URI of the OAuth application. Immutable — changing it
+   * Host URI of the OAuth application. Immutable -- changing it
    * replaces the connector.
    */
   hostUri?: string;
@@ -60,7 +60,7 @@ export type CustomOAuthConfig = {
    */
   sslCaCertificate?: string;
   /**
-   * OAuth2 token request URL. Immutable — changing it replaces the
+   * OAuth2 token request URL. Immutable -- changing it replaces the
    * connector.
    */
   tokenUri?: string;
@@ -69,7 +69,7 @@ export type CustomOAuthConfig = {
    */
   pkceDisabled?: boolean;
   /**
-   * OAuth2 authorization server URL. Immutable — changing it replaces
+   * OAuth2 authorization server URL. Immutable -- changing it replaces
    * the connector.
    */
   authUri?: string;
@@ -83,7 +83,7 @@ export type ProviderOAuthConfig = {
   /**
    * Developer Connect provided OAuth system
    * (`GITHUB`, `GITLAB`, `GOOGLE`, `SENTRY`, `ROVO`, `NEW_RELIC`,
-   * `DATASTAX`, `DYNATRACE`). Immutable — changing it replaces the
+   * `DATASTAX`, `DYNATRACE`). Immutable -- changing it replaces the
    * connector.
    */
   systemProviderId?: developerconnect.ProviderOAuthConfigSystemProviderIdEnum | (string & {});
@@ -108,12 +108,12 @@ export type AccountConnectorProps = {
    * Account connector id (the `{accountConnector}` segment of
    * `projects/{project}/locations/{location}/accountConnectors/{accountConnector}`).
    * If omitted, a unique RFC1035 name is generated from the stack,
-   * stage, and logical id. Immutable — changing it replaces the
+   * stage, and logical id. Immutable -- changing it replaces the
    * connector.
    */
   accountConnectorId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the connector. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -183,8 +183,8 @@ export type AccountConnector = Resource<
 >;
 
 /**
- * A Developer Connect account connector — the OAuth configuration that
- * lets users connect their SCM accounts (GitHub, GitLab, Google, …) to
+ * A Developer Connect account connector -- the OAuth configuration that
+ * lets users connect their SCM accounts (GitHub, GitLab, Google, ...) to
  * Google Cloud.
  *
  * Changing `accountConnectorId`, `location`, `systemProviderId`, or

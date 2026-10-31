@@ -47,7 +47,7 @@ export interface RoleProps {
   path?: string;
   /**
    * IAM trust policy for the role. Optional when a binding contributes the
-   * trust statements (see the `assumeRolePolicyStatements` binding field) — at
+   * trust statements (see the `assumeRolePolicyStatements` binding field) -- at
    * least one of the two must supply a statement.
    */
   assumeRolePolicyDocument?: PolicyDocument;
@@ -113,7 +113,7 @@ export interface Role extends Resource<
      */
     policyStatements?: PolicyStatement[];
     /**
-     * Trust-policy (assume-role) statements contributed by bindings — e.g. a
+     * Trust-policy (assume-role) statements contributed by bindings -- e.g. a
      * consumer declaring which service principal may assume this role. They are
      * merged into the role's `assumeRolePolicyDocument`.
      */
@@ -500,14 +500,14 @@ export const RoleProvider = () =>
           };
           const desiredMaxSessionDuration = toWireSeconds(news.maxSessionDuration);
 
-          // Observe — read the role from IAM. Absence is signalled by
+          // Observe -- read the role from IAM. Absence is signalled by
           // `NoSuchEntityException`; ownership has already been verified
           // upstream so adopting a `Unowned` role is the engine's call.
           let observedRole = yield* iam
             .getRole({ RoleName: roleName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
-          // Ensure — create the role when missing. A peer reconciler may
+          // Ensure -- create the role when missing. A peer reconciler may
           // have created it concurrently; tolerate that race by reading
           // the existing role.
           if (!observedRole?.Role) {
@@ -537,7 +537,7 @@ export const RoleProvider = () =>
           const observedPermissionsBoundary =
             observedRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn;
 
-          // Sync assume-role policy — only call updateAssumeRolePolicy
+          // Sync assume-role policy -- only call updateAssumeRolePolicy
           // when the document actually differs. IAM returns the stored
           // document in its own form (reordered keys, single-item lists as
           // scalars), so compare normalized documents, not raw JSON text.
@@ -566,7 +566,7 @@ export const RoleProvider = () =>
             });
           }
 
-          // Sync permissions boundary — put when desired, delete when
+          // Sync permissions boundary -- put when desired, delete when
           // cleared, no-op when unchanged.
           if (news.permissionsBoundary !== observedPermissionsBoundary) {
             if (news.permissionsBoundary) {
@@ -583,7 +583,7 @@ export const RoleProvider = () =>
             }
           }
 
-          // Sync managed and inline policies — observe the live state
+          // Sync managed and inline policies -- observe the live state
           // and apply only the delta. This is robust to manual edits in
           // the AWS console and to adoption.
           const [observedManagedPolicies, observedInlinePolicies] = yield* Effect.all([

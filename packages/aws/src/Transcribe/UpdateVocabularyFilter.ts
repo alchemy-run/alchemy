@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:UpdateVocabularyFilter` — replace a vocabulary filter's word list.
+ * Runtime binding for `transcribe:UpdateVocabularyFilter` -- replace a vocabulary filter's word list.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:UpdateVocabularyFilter` on `*`.

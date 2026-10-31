@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:GetResourcePolicies`.
  *
  * Retrieves the RAM-generated resource policies attached to resources that you own and have shared.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetResourcePoliciesHttp)`.
  * ### Discovering Shares & Shared Resources
  * **Example:** Read the Policy of a Shared Resource
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getResourcePolicies = yield* AWS.RAM.GetResourcePolicies();
  *
  * // runtime

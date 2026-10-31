@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  * `docdb-elastic:TagResource`, plus the EC2 VPC-endpoint permissions elastic
  * clusters need to attach to a VPC).
  *
- * Restores a new elastic cluster from a snapshot — e.g. a disaster-recovery
+ * Restores a new elastic cluster from a snapshot -- e.g. a disaster-recovery
  * Lambda that rebuilds a cluster from the latest nightly backup. Provide the
  * implementation with
  * `Effect.provide(AWS.DocDBElastic.RestoreClusterFromSnapshotHttp)`.
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  *   snapshotArn,
  *   clusterName: "documents-restored",
  * });
- * // result.cluster.status → "CREATING"
+ * // result.cluster.status -> "CREATING"
  * ```
  *
  * @binding

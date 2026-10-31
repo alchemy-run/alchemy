@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:ReverseGeocode` — convert geographic
+ * Runtime binding for `geo-places:ReverseGeocode` -- convert geographic
  * coordinates into a human-readable address or place, with optional filtering
  * by place type and additional features such as time zones.
  *

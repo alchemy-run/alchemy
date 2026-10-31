@@ -40,7 +40,7 @@ export interface Thing extends Resource<
 > {}
 
 /**
- * An AWS IoT Thing — the cloud representation of a physical device.
+ * An AWS IoT Thing -- the cloud representation of a physical device.
  *
  * ### Creating a Thing
  * **Example:** Basic Thing
@@ -105,12 +105,12 @@ export const ThingProvider = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const thingName = output?.thingName ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud is authoritative; output is only an id cache.
+          // 1. OBSERVE -- cloud is authoritative; output is only an id cache.
           let live = yield* iot
             .describeThing({ thingName })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // 2. ENSURE — create if missing; tolerate an AlreadyExists race.
+          // 2. ENSURE -- create if missing; tolerate an AlreadyExists race.
           if (live === undefined) {
             yield* iot
               .createThing({
@@ -121,7 +121,7 @@ export const ThingProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             live = yield* iot.describeThing({ thingName });
           } else {
-            // 3. SYNC — converge attributes + thing type to desired.
+            // 3. SYNC -- converge attributes + thing type to desired.
             const desiredAttrs = news.attributes ?? {};
             const observedAttrs = live.attributes ?? {};
             const attrsChanged = JSON.stringify(desiredAttrs) !== JSON.stringify(observedAttrs);

@@ -16,7 +16,7 @@
 // fiber touching a relative path can race a transient process-wide chdir.
 // cross-spawn (bundled in vite/build tools the tests exercise) chdirs the
 // whole process to resolve a spawn's binary; `process.chdir.disabled` is
-// its own escape hatch (built for worker threads) — with it set, commands
+// its own escape hatch (built for worker threads) -- with it set, commands
 // still resolve via PATH and absolutize against the spawn's `cwd`.
 (process.chdir as { disabled?: boolean }).disabled = true;
 
@@ -151,13 +151,13 @@ const stage = Flag.String("stage").pipe(
 
 const fast = Flag.Boolean("fast").pipe(
   Flag.withDescription(
-    "Set FAST=1 — suites skip their slow tests (long-provisioning resources, smoke tests)",
+    "Set FAST=1 \u2014 suites skip their slow tests (long-provisioning resources, smoke tests)",
   ),
   Flag.withDefault(false),
 );
 
 /**
- * Build the `-t` matcher — bun/vitest semantics: the pattern is a regex
+ * Build the `-t` matcher -- bun/vitest semantics: the pattern is a regex
  * tested against the full nested title (`file > describe chain > name`).
  * A syntactically INVALID regex (e.g. `-t "[worker"`) degrades to a literal
  * substring match instead of erroring.
@@ -170,7 +170,7 @@ const toFilter = (pattern: Option.Option<string>): ((fullTitle: string) => boole
       try {
         regex = new RegExp(source);
       } catch {
-        // Not a valid regex — treat it as a literal substring.
+        // Not a valid regex -- treat it as a literal substring.
         regex = new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
       }
       return (fullTitle) => regex.test(fullTitle);
@@ -196,7 +196,7 @@ const rootCommand = Command.make(
     fast,
   },
   Effect.fn(function* (args) {
-    // Environment knobs — set BEFORE any test module is imported (imports
+    // Environment knobs -- set BEFORE any test module is imported (imports
     // happen inside `run` during collection), so `skipIf(process.env.FAST)`
     // gates and profile-dependent layers see the final values.
     // Inherit CI from the caller: setting it here also disables local auth
@@ -214,7 +214,7 @@ const rootCommand = Command.make(
       // The runner owns the terminal: stdout belongs to the reporter (or
       // the TUI) and stdin carries TUI keystrokes. Code under test must see
       // the same non-interactive, colorless process CI gives it, regardless
-      // of the terminal this run was launched from — otherwise assertions
+      // of the terminal this run was launched from -- otherwise assertions
       // on CLI output and on interactive-vs-plain copy depend on whether a
       // human or a pipeline started the run. Sigil's detection honors
       // FORCE_COLOR over everything else, so pin it rather than NO_COLOR.
@@ -302,7 +302,7 @@ const cli = Command.run(rootCommand, {
 cli.pipe(Effect.provide(Layer.mergeAll(BunServices.layer)), Effect.scoped, (effect) =>
   BunRuntime.runMain(effect as Effect.Effect<void>, {
     // ALWAYS exit once the main effect completes. runMain's default only
-    // force-exits on failure/signal — but tests can leak live handles
+    // force-exits on failure/signal -- but tests can leak live handles
     // (vite watchers, workerd sidecar sockets, keep-alive agents) that
     // keep bun's event loop alive forever after a green run. Everything
     // is already flushed by now (summary + log written in the main

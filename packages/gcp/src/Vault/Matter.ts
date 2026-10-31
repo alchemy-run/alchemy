@@ -31,7 +31,7 @@ export type MatterPermission = {
 
 export type MatterProps = {
   /**
-   * Server-assigned matter id. Leave blank on create. Immutable —
+   * Server-assigned matter id. Leave blank on create. Immutable --
    * changing it replaces the matter.
    */
   matterId?: string;
@@ -42,12 +42,12 @@ export type MatterProps = {
   name?: string;
   /**
    * Optional description. Vault matters have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
   /**
-   * Requested data region. Immutable — changing it replaces the matter.
+   * Requested data region. Immutable -- changing it replaces the matter.
    */
   matterRegion?: vault.MatterMatterRegionEnum | (string & {});
   /**
@@ -85,7 +85,7 @@ export type Matter = Resource<
  *
  * Vault matters have no labels field, so Alchemy stamps ownership into
  * `description` for `list` / nuke. The server-assigned id and data region
- * are identity — changing either replaces the matter. Name and description
+ * are identity -- changing either replaces the matter. Name and description
  * update in place. Delete closes the matter first, then soft-deletes it.
  *
  * ### Creating a Matter

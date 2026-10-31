@@ -36,11 +36,11 @@ export type InterceptDeploymentProps = {
    * Deployment id (the `{interceptDeployment}` segment of
    * `projects/{project}/locations/{location}/interceptDeployments/{interceptDeployment}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the deployment.
+   * logical id. Immutable -- changing it replaces the deployment.
    */
   interceptDeploymentId?: string;
   /**
-   * Zone of the deployment (`us-central1-a`, …). Immutable — changing
+   * Zone of the deployment (`us-central1-a`, ...). Immutable -- changing
    * it replaces the deployment. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -49,13 +49,13 @@ export type InterceptDeploymentProps = {
   /**
    * Parent InterceptDeploymentGroup resource name
    * (`projects/{project}/locations/global/interceptDeploymentGroups/{interceptDeploymentGroup}`).
-   * Immutable — changing it replaces the deployment.
+   * Immutable -- changing it replaces the deployment.
    */
   interceptDeploymentGroup: string;
   /**
    * Regional forwarding rule that fronts interceptors, e.g.
    * `projects/{project}/regions/{region}/forwardingRules/{forwardingRule}`.
-   * Immutable — changing it replaces the deployment.
+   * Immutable -- changing it replaces the deployment.
    */
   forwardingRule: string;
   /**
@@ -88,7 +88,7 @@ export type InterceptDeployment = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether reconciling is in progress. */
     reconciling: boolean;
@@ -102,7 +102,7 @@ export type InterceptDeployment = Resource<
 >;
 
 /**
- * A zonal intercept deployment — a GENEVE backend (typically an
+ * A zonal intercept deployment -- a GENEVE backend (typically an
  * internal passthrough load balancer) that belongs to a global
  * InterceptDeploymentGroup.
  *

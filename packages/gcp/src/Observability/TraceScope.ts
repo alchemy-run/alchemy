@@ -27,13 +27,13 @@ export type TraceScopeProps = {
    * `projects/{project}/locations/{location}/traceScopes/{traceScope}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the scope. The system-managed `_Default` scope
    * cannot be deleted.
    */
   traceScopeId?: string;
   /**
-   * Location. Trace scopes are only available in `global`. Immutable —
+   * Location. Trace scopes are only available in `global`. Immutable --
    * changing it replaces the scope.
    * @default "global"
    */
@@ -46,7 +46,7 @@ export type TraceScopeProps = {
   resourceNames?: string[];
   /**
    * Human-readable description (max 8000 characters). Trace scopes have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -78,12 +78,12 @@ export type TraceScope = Resource<
 >;
 
 /**
- * A Cloud Observability trace scope — a named collection of projects
+ * A Cloud Observability trace scope -- a named collection of projects
  * whose traces are queried together in Trace Explorer.
  *
  * Trace scopes exist only in the `global` location. They have no labels
  * field, so Alchemy stamps ownership into the description for `list` /
- * nuke. `traceScopeId` and `location` are identity — changing either
+ * nuke. `traceScopeId` and `location` are identity -- changing either
  * replaces the scope. `resourceNames` and description update in place.
  * The system-managed `_Default` scope cannot be deleted.
  *

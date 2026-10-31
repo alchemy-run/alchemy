@@ -18,7 +18,7 @@ export interface LandingZoneProps {
    */
   version: string;
   /**
-   * The landing zone manifest JSON document — the full configuration of
+   * The landing zone manifest JSON document -- the full configuration of
    * the landing zone (governed regions, organization structure, logging
    * and access-management settings). See the AWS Control Tower User Guide
    * for the manifest schema.
@@ -70,7 +70,7 @@ export interface LandingZone extends Resource<
 > {}
 
 /**
- * An AWS Control Tower landing zone — the org-wide multi-account
+ * An AWS Control Tower landing zone -- the org-wide multi-account
  * environment (organization structure, governed regions, centralized
  * logging, and access management) that Control Tower governs.
  *
@@ -137,7 +137,7 @@ class LandingZoneOperationPending extends Data.TaggedError("LandingZoneOperation
   readonly status: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -174,7 +174,7 @@ const waitForLandingZoneOperation = (operationIdentifier: string) =>
     }),
   );
 
-// A landing zone is a singleton per organization — `listLandingZones`
+// A landing zone is a singleton per organization -- `listLandingZones`
 // returns at most one ARN.
 const findLandingZoneArn = controltower.listLandingZones.pages({}).pipe(
   Stream.runCollect,
@@ -211,7 +211,7 @@ export const LandingZoneProvider = () =>
       return LandingZone.Provider.of({
         stables: ["landingZoneIdentifier", "landingZoneArn"],
         // Decommissioning a landing zone dismantles org-wide governance
-        // (an irreversible, ~1 hour operation) — never do it from `nuke`.
+        // (an irreversible, ~1 hour operation) -- never do it from `nuke`.
         nuke: { skip: true },
         list: () =>
           Effect.gen(function* () {
@@ -231,12 +231,12 @@ export const LandingZoneProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // 1. Observe — the landing zone is an org singleton; enumerate
+          // 1. Observe -- the landing zone is an org singleton; enumerate
           //    rather than trusting a cached identifier.
           let arn = output?.landingZoneArn ?? (yield* findLandingZoneArn);
           let detail = arn === undefined ? undefined : yield* readLandingZone(arn);
 
-          // 2. Ensure — create if missing and wait for the asynchronous
+          // 2. Ensure -- create if missing and wait for the asynchronous
           //    operation to converge.
           if (detail === undefined) {
             const internalTags = yield* createInternalTags(id);
@@ -251,7 +251,7 @@ export const LandingZoneProvider = () =>
             yield* waitForLandingZoneOperation(created.operationIdentifier);
             detail = yield* readLandingZone(arn);
           } else {
-            // 3. Sync — version / manifest / remediation types are updated
+            // 3. Sync -- version / manifest / remediation types are updated
             //    in place; diff observed cloud state against desired and
             //    skip the (very slow) update API on a no-op.
             const versionChanged = detail.version !== news.version;

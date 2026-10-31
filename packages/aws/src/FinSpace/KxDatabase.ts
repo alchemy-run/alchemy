@@ -70,7 +70,7 @@ export interface KxDatabase extends Resource<
 > {}
 
 /**
- * A kdb database inside an Amazon FinSpace Managed kdb environment — the
+ * A kdb database inside an Amazon FinSpace Managed kdb environment -- the
  * versioned, changeset-based store that kdb clusters mount and query.
  *
  * ### Creating kdb Databases
@@ -132,7 +132,7 @@ export const KxDatabaseProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["environmentId", "databaseName", "databaseArn"],
-        // Databases are keyed by their parent kdb environment — there is no
+        // Databases are keyed by their parent kdb environment -- there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -165,10 +165,10 @@ export const KxDatabaseProvider = () =>
           // One idempotency token per reconcile, reused across create+update.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let attrs = yield* readDatabase(environmentId, databaseName);
 
-          // Ensure — create if missing; tolerate an AlreadyExists race.
+          // Ensure -- create if missing; tolerate an AlreadyExists race.
           if (attrs === undefined) {
             yield* finspace
               .createKxDatabase({
@@ -188,7 +188,7 @@ export const KxDatabaseProvider = () =>
             }
           }
 
-          // Sync description — only call UpdateKxDatabase on drift.
+          // Sync description -- only call UpdateKxDatabase on drift.
           if (news.description !== undefined && news.description !== attrs.description) {
             yield* finspace.updateKxDatabase({
               environmentId,
@@ -199,7 +199,7 @@ export const KxDatabaseProvider = () =>
             yield* session.note(`Updated kdb database ${databaseName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           if (attrs.databaseArn) {
             const { removed, upsert } = diffTags(attrs.tags, desiredTags);
             if (removed.length > 0) {

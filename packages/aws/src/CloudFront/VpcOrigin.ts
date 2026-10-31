@@ -147,7 +147,7 @@ export const VpcOriginProvider = () =>
   Provider.effect(
     VpcOrigin,
     Effect.gen(function* () {
-      // Observe — locate the VPC origin by id, tolerating a concurrent delete.
+      // Observe -- locate the VPC origin by id, tolerating a concurrent delete.
       const getById = Effect.fn(function* (id: string) {
         const result = yield* cloudfront
           .getVpcOrigin({ Id: id })
@@ -158,7 +158,7 @@ export const VpcOriginProvider = () =>
         return { vpcOrigin: result.VpcOrigin, etag: result.ETag };
       });
 
-      // Crash recovery — a create can succeed in the cloud but fail to persist
+      // Crash recovery -- a create can succeed in the cloud but fail to persist
       // locally. Recover by listing and matching on the fronted ARN.
       const getByArn = Effect.fn(function* (arn: string) {
         let marker: string | undefined;
@@ -184,7 +184,7 @@ export const VpcOriginProvider = () =>
         return toTagsRecord(response.Tags.Items);
       });
 
-      // Wait — poll until the VPC origin reaches the terminal `Deployed` state,
+      // Wait -- poll until the VPC origin reaches the terminal `Deployed` state,
       // mirroring the Distribution deployment wait.
       const waitForDeployment = Effect.fn(function* (id: string) {
         return yield* getById(id).pipe(
@@ -281,7 +281,7 @@ export const VpcOriginProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as VpcOriginProps;
-          // `arn` is create-only — a changed target endpoint forces replace.
+          // `arn` is create-only -- a changed target endpoint forces replace.
           if (olds?.arn !== undefined && olds.arn !== news.arn) {
             return { action: "replace" } as const;
           }
@@ -310,13 +310,13 @@ export const VpcOriginProvider = () =>
             ...news.tags,
           };
 
-          // Observe — locate by cached id or recover by fronted ARN.
+          // Observe -- locate by cached id or recover by fronted ARN.
           let observed = output?.vpcOriginId ? yield* getById(output.vpcOriginId) : undefined;
           if (!observed) {
             observed = yield* getByArn(news.arn);
           }
 
-          // Ensure — create the VPC origin if it's missing. Tolerate an
+          // Ensure -- create the VPC origin if it's missing. Tolerate an
           // `EntityAlreadyExists` race by recovering via the fronted ARN.
           if (!observed) {
             const created = yield* cloudfront
@@ -345,7 +345,7 @@ export const VpcOriginProvider = () =>
             return toAttrs(deployed.vpcOrigin, deployed.etag, tags);
           }
 
-          // Sync endpoint config — patch only when the observed config differs
+          // Sync endpoint config -- patch only when the observed config differs
           // from desired, using the freshly observed ETag for concurrency.
           const desired = desiredEndpointConfig(name, news);
           let current = observed;
@@ -360,7 +360,7 @@ export const VpcOriginProvider = () =>
             current = yield* waitForDeployment(observed.vpcOrigin.Id);
           }
 
-          // Sync tags — diff against observed cloud tags so adoption converges.
+          // Sync tags -- diff against observed cloud tags so adoption converges.
           const observedTags = yield* fetchTags(current.vpcOrigin.Arn);
           yield* syncTags(current.vpcOrigin.Arn, observedTags, desiredTags);
 
@@ -372,14 +372,14 @@ export const VpcOriginProvider = () =>
             return;
           }
           // Observe current state. `deleteVpcOrigin` requires a terminal
-          // `Deployed` status and the *current* ETag — `output.etag` may be
+          // `Deployed` status and the *current* ETag -- `output.etag` may be
           // stale. If the origin is still `Deploying` (e.g. an interrupted
-          // create), CloudFront refuses the delete and leaves the origin — and
-          // its managed ENIs, which then block the VPC/ALB teardown —
+          // create), CloudFront refuses the delete and leaves the origin -- and
+          // its managed ENIs, which then block the VPC/ALB teardown --
           // orphaned. Wait for it to settle so it becomes deletable.
           const observed = yield* getById(output.vpcOriginId);
           if (!observed) {
-            return; // already gone — idempotent
+            return; // already gone -- idempotent
           }
           const current =
             observed.vpcOrigin.Status === "Deployed"

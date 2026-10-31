@@ -71,12 +71,12 @@ export type GetBindingType<T> =
       // module. `ctx.exports` (see `InferGlobalProps`) is the typed path.
       T extends Self
       ? Service
-      : // A Container bound in `env` is a container-backed Durable Object class —
+      : // A Container bound in `env` is a container-backed Durable Object class --
         // the runtime binding is the class's namespace. Must be tested BEFORE the
         // generic Effect unwrap: a Container declaration is itself an Effect.
         T extends Container.Decl<any, any, any, any, infer DOShape>
         ? DurableObjectNamespace<DOShape & Rpc.DurableObjectBranded>
-        : // A Worker-only binding lifted by `.pipe(Alchemy.remote())` — the brand
+        : // A Worker-only binding lifted by `.pipe(Alchemy.remote())` -- the brand
           // carries the underlying binding value type; recurse on it. Must also
           // be tested BEFORE the generic Effect unwrap (its Effect `A` is the
           // runtime client, not the binding value).

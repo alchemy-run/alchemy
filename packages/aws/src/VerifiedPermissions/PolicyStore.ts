@@ -13,8 +13,8 @@ import type { Providers } from "../Providers.ts";
  * Schema-validation strictness applied to Cedar policies and templates
  * submitted to the store.
  *
- * - `OFF` — no schema validation.
- * - `STRICT` — policies must reference entity types and actions declared in
+ * - `OFF` -- no schema validation.
+ * - `STRICT` -- policies must reference entity types and actions declared in
  *   the store's schema (requires a schema to be present).
  */
 export type ValidationMode = "OFF" | "STRICT";
@@ -46,7 +46,7 @@ export interface PolicyStore extends Resource<
   PolicyStoreProps,
   {
     /**
-     * Service-assigned unique ID of the policy store — pass it to
+     * Service-assigned unique ID of the policy store -- pass it to
      * {@link Policy}, {@link Schema}, and `IsAuthorized`.
      */
     policyStoreId: string;
@@ -60,7 +60,7 @@ export interface PolicyStore extends Resource<
 > {}
 
 /**
- * An Amazon Verified Permissions policy store — the container for Cedar
+ * An Amazon Verified Permissions policy store -- the container for Cedar
  * policies, policy templates, and a schema. Authorization requests
  * (`IsAuthorized`) are evaluated against all policies in a store.
  * ### Creating a Policy Store
@@ -130,7 +130,7 @@ export const PolicyStoreProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // no props trigger replacement — validationMode / description /
+        // no props trigger replacement -- validationMode / description /
         // deletionProtection are all mutable via updatePolicyStore
         diff: Effect.fn(function* ({ news }) {
           if (!isResolved(news)) return undefined;
@@ -142,11 +142,11 @@ export const PolicyStoreProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const validationMode = news.validationMode ?? "OFF";
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let store =
             output?.policyStoreId !== undefined ? yield* observe(output.policyStoreId) : undefined;
 
-          // 2. ENSURE — createPolicyStore returns id + arn directly
+          // 2. ENSURE -- createPolicyStore returns id + arn directly
           if (store === undefined) {
             const created = yield* avp.createPolicyStore({
               validationSettings: { mode: validationMode },
@@ -163,9 +163,9 @@ export const PolicyStoreProvider = () =>
             }
           }
 
-          // 3. SYNC — validation / description / deletion protection
+          // 3. SYNC -- validation / description / deletion protection
           const observedMode = store.validationSettings.mode;
-          // description decodes as a Redacted (SensitiveString) — unwrap to
+          // description decodes as a Redacted (SensitiveString) -- unwrap to
           // compare against the desired plain-string value
           const observedDescription =
             store.description === undefined
@@ -188,7 +188,7 @@ export const PolicyStoreProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = (store.tags ?? {}) as Record<string, string>;
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -212,7 +212,7 @@ export const PolicyStoreProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // deletePolicyStore is idempotent — returns 200 even if the store
+          // deletePolicyStore is idempotent -- returns 200 even if the store
           // does not exist
           yield* avp.deletePolicyStore({
             policyStoreId: output.policyStoreId,

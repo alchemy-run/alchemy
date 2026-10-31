@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:DescribeCreateAccountStatus`.
  *
- * Retrieves the current status of an asynchronous account-creation request — the polling half of an account-vending workflow.
- * Account-level operation — Organizations is a management-account-scoped
+ * Retrieves the current status of an asynchronous account-creation request -- the polling half of an account-vending workflow.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DescribeCreateAccountStatusHttp)`.
  * ### Account Vending
  * **Example:** Poll an Account-Creation Request
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeCreateAccountStatus = yield* AWS.Organizations.DescribeCreateAccountStatus();
  *
  * // runtime

@@ -14,9 +14,9 @@ import * as Schema from "effect/Schema";
 // classes below.
 import "effect/http-api/HttpApiSchema";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Primitives
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A 40-hex SHA-1 object id, branded so oids never mix with plain strings.
@@ -31,7 +31,7 @@ export const Oid = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)).pipe(
 export type Oid = typeof Oid.Type;
 
 /**
- * A repository name: 1–100 chars, alphanumeric with `._-` separators,
+ * A repository name: 1-100 chars, alphanumeric with `._-` separators,
  * must start and end alphanumeric. Case-insensitive match, stored as given.
  */
 export const RepoName = Schema.String.check(
@@ -62,32 +62,32 @@ export const RepoStatus = Schema.Literals(["ready", "importing", "forking", "del
 /** The decoded type of {@link RepoStatus}. */
 export type RepoStatus = typeof RepoStatus.Type;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Error taxonomy (tagged, status-annotated)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-/** 403 — the repo is flagged `readOnly`; writes are rejected. */
+/** 403 -- the repo is flagged `readOnly`; writes are rejected. */
 export class ReadOnlyRepo extends Schema.TaggedError<ReadOnlyRepo>()(
   "ReadOnlyRepo",
   {},
   { httpApiStatus: 403 },
 ) {}
 
-/** 403 — application policy refused a proposed ref update. */
+/** 403 -- application policy refused a proposed ref update. */
 export class PushDenied extends Schema.TaggedError<PushDenied>()(
   "PushDenied",
   { ref: Schema.String, reason: Schema.String },
   { httpApiStatus: 403 },
 ) {}
 
-/** 404 — no repo at `owner/repo` (or it finished deleting). */
+/** 404 -- no repo at `owner/repo` (or it finished deleting). */
 export class RepoNotFound extends Schema.TaggedError<RepoNotFound>()(
   "RepoNotFound",
   { owner: Schema.String, repo: Schema.String },
   { httpApiStatus: 404 },
 ) {}
 
-/** 409 — a repo already exists at `owner/repo`. */
+/** 409 -- a repo already exists at `owner/repo`. */
 export class RepoAlreadyExists extends Schema.TaggedError<RepoAlreadyExists>()(
   "RepoAlreadyExists",
   { owner: Schema.String, repo: Schema.String },
@@ -95,7 +95,7 @@ export class RepoAlreadyExists extends Schema.TaggedError<RepoAlreadyExists>()(
 ) {}
 
 /**
- * 409 — the repo exists but is not `ready` (importing / forking /
+ * 409 -- the repo exists but is not `ready` (importing / forking /
  * deleting); retry after polling `GET /repos/:owner/:repo`.
  */
 export class RepoNotReady extends Schema.TaggedError<RepoNotReady>()(
@@ -104,7 +104,7 @@ export class RepoNotReady extends Schema.TaggedError<RepoNotReady>()(
   { httpApiStatus: 409 },
 ) {}
 
-/** 404 — the named ref does not exist. */
+/** 404 -- the named ref does not exist. */
 export class RefNotFound extends Schema.TaggedError<RefNotFound>()(
   "RefNotFound",
   { ref: Schema.String },
@@ -112,7 +112,7 @@ export class RefNotFound extends Schema.TaggedError<RefNotFound>()(
 ) {}
 
 /**
- * 409 — compare-and-swap failure on a ref write: `expectedOid` did not
+ * 409 -- compare-and-swap failure on a ref write: `expectedOid` did not
  * match the ref's current value (`currentOid`, `null` when the ref does
  * not exist).
  */
@@ -122,14 +122,14 @@ export class RefConflict extends Schema.TaggedError<RefConflict>()(
   { httpApiStatus: 409 },
 ) {}
 
-/** 404 — no object with the given oid in this repo. */
+/** 404 -- no object with the given oid in this repo. */
 export class ObjectNotFound extends Schema.TaggedError<ObjectNotFound>()(
   "ObjectNotFound",
   { oid: Schema.String },
   { httpApiStatus: 404 },
 ) {}
 
-/** 422 — the object exists but has a different type than the endpoint expects. */
+/** 422 -- the object exists but has a different type than the endpoint expects. */
 export class WrongObjectType extends Schema.TaggedError<WrongObjectType>()(
   "WrongObjectType",
   { oid: Schema.String, expected: Schema.String, actual: Schema.String },
@@ -137,7 +137,7 @@ export class WrongObjectType extends Schema.TaggedError<WrongObjectType>()(
 ) {}
 
 /**
- * 422 — the blob is too large for the base64 JSON endpoint (> 1 MiB);
+ * 422 -- the blob is too large for the base64 JSON endpoint (> 1 MiB);
  * use the raw streaming route `GET .../blobs/:oid/raw` instead.
  */
 export class ObjectTooLarge extends Schema.TaggedError<ObjectTooLarge>()(
@@ -147,7 +147,7 @@ export class ObjectTooLarge extends Schema.TaggedError<ObjectTooLarge>()(
 ) {}
 
 /**
- * 422 — the two commits share no common ancestor within the walk bound
+ * 422 -- the two commits share no common ancestor within the walk bound
  * (disjoint histories, or divergence beyond the server's 10k-commit cap;
  * shallow imports can also surface this across the shallow boundary).
  */
@@ -157,35 +157,35 @@ export class NoMergeBase extends Schema.TaggedError<NoMergeBase>()(
   { httpApiStatus: 422 },
 ) {}
 
-/** 502 — the async import job failed against the source remote. */
+/** 502 -- the async import job failed against the source remote. */
 export class ImportFailed extends Schema.TaggedError<ImportFailed>()(
   "ImportFailed",
   { reason: Schema.String },
   { httpApiStatus: 502 },
 ) {}
 
-/** 400 — semantically invalid request (e.g. reserved owner name). */
+/** 400 -- semantically invalid request (e.g. reserved owner name). */
 export class ValidationError extends Schema.TaggedError<ValidationError>()(
   "ValidationError",
   { message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 
-/** 404 — no pull request with this number. */
+/** 404 -- no pull request with this number. */
 export class PullNotFound extends Schema.TaggedError<PullNotFound>()(
   "PullNotFound",
   { number: Schema.Number },
   { httpApiStatus: 404 },
 ) {}
 
-/** 422 — the PR's base or head branch does not exist (deleted after open). */
+/** 422 -- the PR's base or head branch does not exist (deleted after open). */
 export class BranchMissing extends Schema.TaggedError<BranchMissing>()(
   "BranchMissing",
   { ref: Schema.String },
   { httpApiStatus: 422 },
 ) {}
 
-/** 409 — an open PR for this base/head pair already exists. */
+/** 409 -- an open PR for this base/head pair already exists. */
 export class PullExists extends Schema.TaggedError<PullExists>()(
   "PullExists",
   { number: Schema.Number },
@@ -193,7 +193,7 @@ export class PullExists extends Schema.TaggedError<PullExists>()(
 ) {}
 
 /**
- * 409 — the operation is invalid in the PR's current state (e.g. merge a
+ * 409 -- the operation is invalid in the PR's current state (e.g. merge a
  * merged PR, reopen a merged PR).
  */
 export class PullStateConflict extends Schema.TaggedError<PullStateConflict>()(
@@ -205,7 +205,7 @@ export class PullStateConflict extends Schema.TaggedError<PullStateConflict>()(
   { httpApiStatus: 409 },
 ) {}
 
-/** 422 — head is already reachable from base; there is nothing to merge. */
+/** 422 -- head is already reachable from base; there is nothing to merge. */
 export class NothingToMerge extends Schema.TaggedError<NothingToMerge>()(
   "NothingToMerge",
   { number: Schema.Number },
@@ -213,7 +213,7 @@ export class NothingToMerge extends Schema.TaggedError<NothingToMerge>()(
 ) {}
 
 /**
- * 409 — the three-way merge is not trivial: these paths changed on both
+ * 409 -- the three-way merge is not trivial: these paths changed on both
  * sides relative to the merge base.
  */
 export class MergeConflict extends Schema.TaggedError<MergeConflict>()(
@@ -226,13 +226,13 @@ export class MergeConflict extends Schema.TaggedError<MergeConflict>()(
   { httpApiStatus: 409 },
 ) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Auth middleware
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Domain shapes
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A repository resource as returned by the management plane.
@@ -286,7 +286,7 @@ export class PushStats extends Schema.Class<PushStats>("PushStats")({
    * Ingest split by phase (ms): inflate, hash, delta, deflate, copy, sink.
    * Meaningful as CPU only where the clock runs during synchronous work
    * (local workerd); production workerd freezes `performance.now()` between
-   * awaits, so there only phases that yield to the event loop accumulate —
+   * awaits, so there only phases that yield to the event loop accumulate --
    * which is itself diagnostic (an async inflate path shows up, a sync one
    * reads 0).
    */
@@ -384,7 +384,7 @@ export const FileStatus = Schema.Literals(["added", "removed", "modified"]);
 export type FileStatus = typeof FileStatus.Type;
 
 /**
- * One changed file in a commit diff or comparison. Content is NOT included —
+ * One changed file in a commit diff or comparison. Content is NOT included --
  * clients fetch old/new blobs by oid (`blobs/:oid`, `blobs/:oid/raw`) and
  * diff locally. `oldSize`/`newSize` let the client gate binary/oversize
  * files without a round trip. Gitlinks (mode 160000) appear as entries whose
@@ -413,7 +413,7 @@ export class DiffEntry extends Schema.Class<DiffEntry>("DiffEntry")({
 export class CommitDiff extends Schema.Class<CommitDiff>("CommitDiff")({
   oid: Oid,
   /** The first parent the diff was computed against; `null` for a root
-   * commit (diffed against the empty tree — every file is `added`). */
+   * commit (diffed against the empty tree -- every file is `added`). */
   parent: Schema.NullOr(Oid),
   files: Schema.Array(DiffEntry),
   /** `true` when the file list was cut at the server cap (1000 files). */
@@ -447,7 +447,7 @@ export const PullState = Schema.Literals(["open", "closed", "merged"]);
 export type PullState = typeof PullState.Type;
 
 /**
- * A pull request. PRs track **live** branches by ref name — the row stores
+ * A pull request. PRs track **live** branches by ref name -- the row stores
  * intent + lifecycle, never a diff snapshot. Diff and mergeability are
  * recomputed from current ref tips on every read (see {@link PullDetail}).
  */
@@ -530,9 +530,9 @@ export const Paginated = <A extends Schema.Top>(items: A) =>
     nextCursor: Schema.NullOr(Schema.String),
     hasMore: Schema.Boolean,
   });
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Shared path-parameter structs
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** `(owner, repo)` path segments shared by repo-scoped endpoints. */
 export const RepoPath = Schema.Struct({ owner: OwnerName, repo: RepoName });

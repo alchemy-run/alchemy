@@ -50,12 +50,12 @@ export type TransferJobProps = {
    * unique name is generated from the stack, stage, and logical id. The
    * API name is `transferJobs/{job}` (max 128 characters, must not start
    * with `transferJobs/OPI` unless this is a POSIX transfer). Immutable
-   * — changing it replaces the job.
+   * -- changing it replaces the job.
    */
   jobId?: string;
   /**
    * User description (max 1024 bytes). Transfer jobs have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -67,19 +67,19 @@ export type TransferJobProps = {
   transferSpec?: TransferSpec;
   /**
    * Cross-bucket replication specification. Mutually exclusive with
-   * `transferSpec`. Immutable after create — changing it replaces the
+   * `transferSpec`. Immutable after create -- changing it replaces the
    * job.
    */
   replicationSpec?: ReplicationSpec;
   /**
    * Recurring or one-time schedule. Optional; omit to create a job that
    * never auto-runs (invoke `RunTransferJob` instead). Immutable after
-   * create — changing it replaces the job.
+   * create -- changing it replaces the job.
    */
   schedule?: Schedule;
   /**
    * Event-driven transfer stream. When set, `schedule` is ignored.
-   * Immutable after create — changing it replaces the job.
+   * Immutable after create -- changing it replaces the job.
    */
   eventStream?: EventStream;
   /**
@@ -99,7 +99,7 @@ export type TransferJobProps = {
   /**
    * User-managed service account that receives bucket permissions
    * instead of the Transfer Service agent. Email or unique id. Immutable
-   * after create — changing it replaces the job.
+   * after create -- changing it replaces the job.
    */
   serviceAccount?: string;
 };

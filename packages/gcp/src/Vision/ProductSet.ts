@@ -24,14 +24,14 @@ import {
 
 export type ProductSetProps = {
   /**
-   * Product Search location. Immutable — changing it replaces the set.
+   * Product Search location. Immutable -- changing it replaces the set.
    * @default "us-west1"
    */
   location?: string;
   /**
    * Product set id (the `{productSet}` segment of
    * `projects/{project}/locations/{location}/productSets/{productSet}`).
-   * If omitted, a unique id is generated. Immutable — changing it
+   * If omitted, a unique id is generated. Immutable -- changing it
    * replaces the set. At most 128 characters; cannot contain `/`.
    */
   productSetId?: string;
@@ -83,7 +83,7 @@ export type ProductSet = Resource<
  * Product sets have no labels field, so ownership rests on the
  * deterministic product set id: a set found without prior state is
  * reported as unowned and only taken over with `--adopt`. Location and
- * product set id are identity — changing either replaces the set. Display
+ * product set id are identity -- changing either replaces the set. Display
  * name and product membership update in place.
  *
  * ### Creating a Product Set

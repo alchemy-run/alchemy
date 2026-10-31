@@ -7,7 +7,7 @@ import type { HostedZone } from "./HostedZone.ts";
  * Runtime binding for the `GetHostedZone` operation (IAM action
  * `route53:GetHostedZone` on the hosted zone ARN).
  *
- * Reads the bound {@link HostedZone}'s detail — the authoritative name
+ * Reads the bound {@link HostedZone}'s detail -- the authoritative name
  * servers (delegation set), record count, and associated VPCs. Useful for
  * compute that hands out NS records or verifies delegation at runtime.
  * Provide the implementation with

@@ -97,7 +97,7 @@ export type Bucket = Resource<
     addOnId: string;
     /** Physical Tigris add-on / bucket name. */
     name: string;
-    /** Observed provisioning status (`ready`, …). */
+    /** Observed provisioning status (`ready`, ...). */
     status: string | undefined;
     /** Organization slug. */
     orgSlug: string | undefined;
@@ -497,7 +497,7 @@ const waitUntilGone = (addOnId: string, name: string) =>
   Effect.gen(function* () {
     // Best-effort: Tigris often answers "The specified bucket does not
     // exist" (untyped UnknownFlyIoError) for a delete that already
-    // succeeded. Never fail the wait on that — only on the add-on still
+    // succeeded. Never fail the wait on that -- only on the add-on still
     // showing up in list.
     yield* Effect.result(
       addons.deleteAddOn({
@@ -720,7 +720,7 @@ export const BucketProvider = () =>
       const name = output.name;
       if (addOnId.length === 0 && name.length === 0) return;
       // Always wait for the add-on to leave the list. A failed
-      // deleteAddOn plus a single list miss is not gone — Tigris
+      // deleteAddOn plus a single list miss is not gone -- Tigris
       // list lags, and a bucket still attached to an App is a
       // transient error. waitUntilGone retries delete and only
       // succeeds once list (id and name) is empty.
@@ -854,7 +854,7 @@ const secretsFromBoundEnv = (env: Record<string, string>): Record<string, string
  *
  * Looks up the add-on by id/name (retrying while Tigris is still
  * provisioning) and also copies any already-evaluated `AWS_*` /
- * `BUCKET_NAME` values from binding env — GraphQL `environment` is often
+ * `BUCKET_NAME` values from binding env -- GraphQL `environment` is often
  * empty after create. A missing add-on may use bound values only when the
  * bucket name, credential pair, and S3 endpoint are complete. Partial values
  * are never written. Region is optional, as in the Tigris bindings.

@@ -38,11 +38,11 @@ export type PartitionAutoscalingLimits = {
 };
 
 export type PartitionAutoscalingTargets = {
-  /** Target high-priority CPU percent (`10`–`90`). */
+  /** Target high-priority CPU percent (`10`-`90`). */
   highPriorityCpuUtilizationPercent?: number;
-  /** Target total CPU percent (`10`–`90`). */
+  /** Target total CPU percent (`10`-`90`). */
   totalCpuUtilizationPercent?: number;
-  /** Target storage percent (`10`–`99`). */
+  /** Target storage percent (`10`-`99`). */
   storageUtilizationPercent?: number;
 };
 
@@ -56,25 +56,25 @@ export type PartitionAutoscalingConfig = {
 export type InstancesInstancePartitionProps = {
   /**
    * Parent instance id or full name
-   * (`projects/{project}/instances/{instance}`). Immutable — changing
+   * (`projects/{project}/instances/{instance}`). Immutable -- changing
    * it replaces the partition.
    */
   instance: string;
   /**
    * Instance partition id (the `{partition}` segment of
    * `.../instancePartitions/{partition}`). If omitted, a unique name is
-   * generated. Must match `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64
-   * characters). Immutable — changing it replaces the partition.
+   * generated. Must match `^[a-z][-a-z0-9]*[a-z0-9]$` (2-64
+   * characters). Immutable -- changing it replaces the partition.
    */
   instancePartitionId?: string;
   /**
    * Instance configuration id (`regional-us-west1`) or full name.
-   * Typically a different config than the parent instance. Immutable —
+   * Typically a different config than the parent instance. Immutable --
    * changing it replaces the partition.
    */
   config: string;
   /**
-   * User-facing display name. Must be unique per project and 4–30
+   * User-facing display name. Must be unique per project and 4-30
    * characters. Defaults to a truncated partition id.
    */
   displayName?: string;

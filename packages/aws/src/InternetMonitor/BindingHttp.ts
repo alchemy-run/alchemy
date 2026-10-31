@@ -6,18 +6,18 @@ import type { Monitor } from "./Monitor.ts";
 /**
  * Shared scaffolding for Amazon CloudWatch Internet Monitor HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action is
  * boilerplate:
  *
- * - {@link makeInternetMonitorMonitorHttpBinding} — operations scoped to one
+ * - {@link makeInternetMonitorMonitorHttpBinding} -- operations scoped to one
  *   bound {@link Monitor} (`ListHealthEvents`, `GetHealthEvent`, the query
  *   interface). The runtime callable injects the monitor's name as the
  *   request's `MonitorName`; the deploy-time half grants `actions` on the
  *   monitor ARN plus its sub-resources (health events are addressed as
  *   `{monitorArn}/health-event/{id}`).
- * - {@link makeInternetMonitorAccountHttpBinding} — account-level operations
+ * - {@link makeInternetMonitorAccountHttpBinding} -- account-level operations
  *   (`GetInternetEvent`, `ListInternetEvents`). Internet events are global
  *   outage records, not ARN-addressable resources, so the deploy-time half
  *   grants `actions` on `*`.

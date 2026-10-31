@@ -38,14 +38,14 @@ import {
 export type OrganizationsLocationsGlobalPolicyOrchestratorProps = {
   /**
    * Organization (`organizations/{organization}` or the numeric id). When
-   * omitted, the stack project's organization is used. Immutable —
+   * omitted, the stack project's organization is used. Immutable --
    * changing it replaces the orchestrator.
    */
   organizationId?: string;
   /**
    * Orchestrator id (the `{policyOrchestrator}` segment of
    * `organizations/{organization}/locations/global/policyOrchestrators/{policyOrchestrator}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the orchestrator.
    */
   policyOrchestratorId?: string;

@@ -45,7 +45,7 @@ export interface UserPoolAuthConfig {
 export interface LambdaAuthorizerConfig {
   /**
    * The ARN of the Lambda authorizer function (or an alias/version
-   * qualified ARN). AppSync must be allowed to invoke it — attach a
+   * qualified ARN). AppSync must be allowed to invoke it -- attach a
    * `Lambda.Permission` with principal `appsync.amazonaws.com`.
    */
   authorizerUri: string;
@@ -93,7 +93,7 @@ export interface ApiCacheConfig {
    * `"PER_RESOLVER_CACHING"` caches only resolvers that opt in.
    */
   behavior: appsync.ApiCachingBehavior;
-  /** TTL for cache entries, e.g. `"60 seconds"` (1 second–1 hour). */
+  /** TTL for cache entries, e.g. `"60 seconds"` (1 second-1 hour). */
   ttl: Duration.Input;
   /** Encrypt cache entries in transit. Immutable after creation. */
   transitEncryptionEnabled?: boolean;
@@ -124,16 +124,16 @@ export interface GraphqlApiProps {
    */
   schema?: string;
   /**
-   * Cognito user pool config — required when `authenticationType` is
+   * Cognito user pool config -- required when `authenticationType` is
    * `AMAZON_COGNITO_USER_POOLS`.
    */
   userPoolConfig?: UserPoolAuthConfig;
   /**
-   * OIDC config — required when `authenticationType` is `OPENID_CONNECT`.
+   * OIDC config -- required when `authenticationType` is `OPENID_CONNECT`.
    */
   openIDConnectConfig?: OpenIDConnectAuthConfig;
   /**
-   * Lambda authorizer config — required when `authenticationType` is
+   * Lambda authorizer config -- required when `authenticationType` is
    * `AWS_LAMBDA`.
    */
   lambdaAuthorizerConfig?: LambdaAuthorizerConfig;
@@ -152,13 +152,13 @@ export interface GraphqlApiProps {
    */
   xrayEnabled?: boolean;
   /**
-   * `GLOBAL` (public endpoint) or `PRIVATE` (VPC-only). Immutable —
+   * `GLOBAL` (public endpoint) or `PRIVATE` (VPC-only). Immutable --
    * changing it triggers a replacement.
    * @default "GLOBAL"
    */
   visibility?: "GLOBAL" | "PRIVATE";
   /**
-   * `GRAPHQL` (standard) or `MERGED` (merged API). Immutable — changing
+   * `GRAPHQL` (standard) or `MERGED` (merged API). Immutable -- changing
    * it triggers a replacement.
    * @default "GRAPHQL"
    */
@@ -175,7 +175,7 @@ export interface GraphqlApiProps {
   /**
    * Server-side API cache. **Cache instances bill hourly** while
    * provisioned; omit to run without a cache. Provisioning is
-   * asynchronous (~10–20 minutes to reach `AVAILABLE`); reconcile does
+   * asynchronous (~10-20 minutes to reach `AVAILABLE`); reconcile does
    * not wait for it.
    */
   cache?: ApiCacheConfig;
@@ -442,7 +442,7 @@ export const GraphqlApiProvider = () =>
 
       /**
        * Apply the SDL schema and poll until the creation settles.
-       * `startSchemaCreation` is asynchronous; polling is bounded (~60s —
+       * `startSchemaCreation` is asynchronous; polling is bounded (~60s --
        * schema creation is normally seconds).
        */
       const applySchema = Effect.fn(function* (apiId: string, schema: string) {
@@ -472,7 +472,7 @@ export const GraphqlApiProvider = () =>
       /**
        * Converge the optional server-side cache: create when desired and
        * missing, update on drift, delete when no longer desired. Creation
-       * is asynchronous and NOT awaited (10–20 minutes to AVAILABLE).
+       * is asynchronous and NOT awaited (10-20 minutes to AVAILABLE).
        */
       const syncCache = Effect.fn(function* (apiId: string, desired: ApiCacheConfig | undefined) {
         const observed = yield* appsync.getApiCache({ apiId }).pipe(
@@ -605,7 +605,7 @@ export const GraphqlApiProvider = () =>
             logConfig: news.logConfig,
           };
 
-          // 1. OBSERVE — the cached apiId is only a hint; fall back to a
+          // 1. OBSERVE -- the cached apiId is only a hint; fall back to a
           //    name scan so interrupted deploys converge.
           let observed =
             output?.apiId !== undefined
@@ -629,7 +629,7 @@ export const GraphqlApiProvider = () =>
           }
           const apiId = observed.apiId!;
 
-          // 3. SYNC — one update call when the observed auth/limit surface
+          // 3. SYNC -- one update call when the observed auth/limit surface
           //    drifted from the desired one.
           if (!justCreated && !deepEqual(authSurface(observed), authSurface(desired))) {
             const updated = yield* retryConcurrentModification(
@@ -639,7 +639,7 @@ export const GraphqlApiProvider = () =>
             yield* session.note(`Updated GraphQL API ${apiId}`);
           }
 
-          // 3b. SYNC SCHEMA — `startSchemaCreation` replaces the schema
+          // 3b. SYNC SCHEMA -- `startSchemaCreation` replaces the schema
           //     wholesale (idempotent). Apply on first provision, on
           //     adoption, and whenever the desired SDL changed; the
           //     previous props are only a hint to skip the no-op call.
@@ -657,7 +657,7 @@ export const GraphqlApiProvider = () =>
           // 3d. SYNC ENVIRONMENT VARIABLES (ctx.env in resolver code).
           yield* syncEnvironmentVariables(apiId, news.environmentVariables);
 
-          // 3e. SYNC TAGS — against OBSERVED cloud tags.
+          // 3e. SYNC TAGS -- against OBSERVED cloud tags.
           if (observed.arn !== undefined) {
             yield* syncAppSyncTags({
               resourceArn: observed.arn,

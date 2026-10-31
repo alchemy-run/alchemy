@@ -24,10 +24,10 @@ import * as Effect from "effect/Effect";
  * "Owned" means a provider has affirmatively determined the resource was
  * created by this stack/stage/logical-id (typically by inspecting tags or
  * naming conventions). Resources without ownership semantics simply always
- * return plain attrs — they are treated as owned by default, so silent
+ * return plain attrs -- they are treated as owned by default, so silent
  * adoption is the norm and `--adopt` is unnecessary.
  *
- * The policy can be overridden per-effect via {@link adopt} — most commonly
+ * The policy can be overridden per-effect via {@link adopt} -- most commonly
  * applied at the resource or stack scope.
  */
 export class AdoptPolicy extends Context.Service<AdoptPolicy, boolean>()("AdoptPolicy") {}
@@ -72,7 +72,7 @@ export class UnverifiableReplacement extends Data.TaggedError("UnverifiableRepla
  * Private symbol used to brand attribute objects returned by `read` as
  * "exists in cloud, but not owned by this stack/stage/logical-id".
  *
- * Deliberately *not* registered via `Symbol.for` — the brand is an
+ * Deliberately *not* registered via `Symbol.for` -- the brand is an
  * engine-internal routing hint and must not be observable or
  * forgeable from outside this module. The engine strips it before any
  * state persistence (see {@link stripUnowned}) so it never leaks into
@@ -99,12 +99,12 @@ const UnownedTag: unique symbol = Symbol("alchemy/Unowned");
  * }),
  * ```
  *
- * The returned value is structurally still `T` — there is no wrapper to
+ * The returned value is structurally still `T` -- there is no wrapper to
  * unwrap. The brand is a non-enumerable symbol that the engine inspects
  * during planning to decide whether to take over (`adopt: true`) or fail
  * loudly (`adopt: false`).
  *
- * Resources without ownership semantics should simply return plain attrs —
+ * Resources without ownership semantics should simply return plain attrs --
  * the engine treats them as owned and silent adoption is the default.
  */
 export const Unowned: {
@@ -164,7 +164,7 @@ export class UnresolvedIdentity extends Data.TaggedError("UnresolvedIdentity")<{
 
 /**
  * Strip the {@link Unowned} brand from an attributes object before persisting
- * it — state should not carry per-deploy ownership-routing metadata.
+ * it -- state should not carry per-deploy ownership-routing metadata.
  *
  * The brand is intentionally non-enumerable, so a plain spread already
  * drops it; the additional `delete` is defense-in-depth in case a future

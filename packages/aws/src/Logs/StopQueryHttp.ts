@@ -9,7 +9,7 @@ export const StopQueryHttp = Layer.effect(
     tag: "AWS.Logs.StopQuery",
     operation: Logs.stopQuery,
     actions: ["logs:StopQuery"],
-    // logs:StopQuery does not support resource-level permissions — an
+    // logs:StopQuery does not support resource-level permissions -- an
     // exact log-group-ARN statement never matches (verified via the IAM
     // policy simulator: allowed for StartQuery/GetQueryResults on the same
     // ARN, implicitDeny for StopQuery). Grant on `*`.

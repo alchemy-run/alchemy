@@ -66,7 +66,7 @@ export interface ReadSubscriptionClient {
  *   yield* Effect.log(message.text, message.attributes);
  * }
  * yield* inbox.acknowledge(messages.map((m) => m.ackId));
- * // …provided with Effect.provide(GCP.PubSub.ReadSubscriptionHttp)
+ * // ...provided with Effect.provide(GCP.PubSub.ReadSubscriptionHttp)
  * ```
  *
  * **Example:** Release a message for redelivery

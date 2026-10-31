@@ -17,7 +17,7 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
 
 /**
  * HTTP implementation of the {@link GraphQL} binding. The AppSync data
- * plane has no SDK operation — each request is a SigV4-signed POST
+ * plane has no SDK operation -- each request is a SigV4-signed POST
  * (service `"appsync"`) to the API's `graphqlUrl`, made with the host
  * Function's own credentials. Grants `appsync:GraphQL` on every field of
  * the bound API (`{apiArn}/types/*&#47;fields/*`).
@@ -26,14 +26,14 @@ export const GraphQLHttp = Layer.effect(
   GraphQL,
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
-    // Resolve the ambient distilled context once at layer construction —
+    // Resolve the ambient distilled context once at layer construction --
     // credentials themselves are re-read per request (SSO/STS rotate).
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
 
     return Effect.fn(function* (api: GraphqlApi) {
-      // Outputs yield DEFERRED effects — resolving them here registers the
+      // Outputs yield DEFERRED effects -- resolving them here registers the
       // attribute on the host environment; re-yield per invocation below.
       const GraphqlUrl = yield* api.graphqlUrl;
 

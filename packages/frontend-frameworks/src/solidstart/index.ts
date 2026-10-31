@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/solidstart` — SolidStart integration
+ * `@alchemy.run/frontend-frameworks/solidstart` -- SolidStart integration
  * implementing framework-core's `Framework` service, with the deploy target
  * passed as a value (AWS Lambda by default, via the
  * `@alchemy.run/frontend-frameworks/solidstart/aws` subpath module).
@@ -9,7 +9,7 @@
  * `@solidjs/vite-plugin-nitro-2` turns the emitted SSR bundle into a nitro
  * server. This integration drives the project's own Vite install
  * (`createBuilder(...).buildApp()`) and appends its own nitro-plugin
- * instance so the deploy target owns the nitro preset — the project's
+ * instance so the deploy target owns the nitro preset -- the project's
  * `vite.config.*` needs no adapter wiring.
  *
  * The default export is the e2e-harness factory contract: a
@@ -17,8 +17,8 @@
  * the fully-typed path with SolidStart-specific options.
  *
  * This module (and `SolidStart.ts`) is target-agnostic by contract: it must
- * not import anything AWS-specific. The AWS half — nitro's `aws-lambda`
- * preset and its streaming handler — lives behind
+ * not import anything AWS-specific. The AWS half -- nitro's `aws-lambda`
+ * preset and its streaming handler -- lives behind
  * `@alchemy.run/frontend-frameworks/solidstart/aws`.
  */
 import type * as FileSystem from "effect/FileSystem";
@@ -64,7 +64,7 @@ export {
 
 /**
  * The structural subset of the e2e harness's `Options` this package reads.
- * SolidStart's build carries no harness-configurable options today — the
+ * SolidStart's build carries no harness-configurable options today -- the
  * nitro overrides ride on {@link SolidStartOptions} instead.
  */
 export interface HarnessOptions {

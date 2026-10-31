@@ -9,7 +9,7 @@ export const BatchGetRecordHttp = Layer.effect(
     tag: "AWS.SageMaker.BatchGetRecord",
     operation: featurestore.batchGetRecord,
     actions: ["sagemaker:BatchGetRecord"],
-    // The wire request identifies feature groups per identifier batch — scope
+    // The wire request identifies feature groups per identifier batch -- scope
     // the whole batch to the bound feature group.
     prepare: (request: BatchGetRecordRequest, featureGroupName) => ({
       Identifiers: [

@@ -6,8 +6,8 @@ import type { Bucket } from "./Bucket.ts";
 /**
  * Shared scaffolding for AWS S3 HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, makeBucketHttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, makeBucketHttpBinding({ ... }))` over
  * this builder. Everything except the operation, the IAM action(s), and the
  * IAM resource shape is boilerplate:
  *
@@ -36,9 +36,9 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
   actions: readonly string[];
   /**
    * Which ARNs the actions are granted on:
-   * - `"objects"` (default): `${bucketArn}/*` — object-level actions
-   *   (`s3:GetObject`, `s3:PutObject`, …);
-   * - `"bucket"`: the bucket ARN — bucket-level actions (`s3:ListBucket`,
+   * - `"objects"` (default): `${bucketArn}/*` -- object-level actions
+   *   (`s3:GetObject`, `s3:PutObject`, ...);
+   * - `"bucket"`: the bucket ARN -- bucket-level actions (`s3:ListBucket`,
    *   `s3:ListBucketVersions`, `s3:ListBucketMultipartUploads`).
    */
   iamResources?: "objects" | "bucket";

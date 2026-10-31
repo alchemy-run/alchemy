@@ -22,12 +22,12 @@ export interface EnvironmentProps {
 
   /**
    * Environment name (e.g. `production`, `staging`). The name is the
-   * environment's identity — changing it replaces the environment.
+   * environment's identity -- changing it replaces the environment.
    */
   name: string;
 
   /**
-   * Minutes to wait before allowing deployments to proceed (0–43200,
+   * Minutes to wait before allowing deployments to proceed (0-43200,
    * i.e. up to 30 days). Requires a plan that supports environment
    * protection rules on the repository.
    * @default 0
@@ -72,7 +72,7 @@ export interface EnvironmentProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -212,7 +212,7 @@ export interface Environment extends Resource<
 export const Environment = Resource<Environment>("GitHub.Environment");
 
 // At runtime, Resource references in props are resolved to their full
-// attributes — so an `Environment` passed to another resource's
+// attributes -- so an `Environment` passed to another resource's
 // `environment` prop arrives as `{ name: string; ... }` rather than the
 // statically-typed Resource (whose attributes are `Output<...>`). We cast
 // through the structural shape here.
@@ -227,7 +227,7 @@ export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
     stables: ["environmentId", "nodeId"],
 
-    // The environment name is its path identity — GitHub has no rename, so
+    // The environment name is its path identity -- GitHub has no rename, so
     // changing owner, repository, name, or the host replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -263,10 +263,10 @@ export const EnvironmentProvider = () =>
                 )),
               ];
 
-        // Ensure & Sync — the PUT is a full upsert of the environment's
+        // Ensure & Sync -- the PUT is a full upsert of the environment's
         // protection configuration. Protection rules are only sent when set now
         // or previously (olds): on private repos without GitHub Enterprise,
-        // sending them at all — even as defaults — is rejected as a billing
+        // sending them at all -- even as defaults -- is rejected as a billing
         // error. A prop that was set before and is now removed is sent as its
         // explicit default so it converges. `prevent_self_review` and
         // `reviewers` are sent together: GitHub rejects the former when the
@@ -294,7 +294,7 @@ export const EnvironmentProvider = () =>
                 : { protected_branches: false, custom_branch_policies: true },
         });
 
-        // Sync — custom branch policies live behind dedicated endpoints. Diff
+        // Sync -- custom branch policies live behind dedicated endpoints. Diff
         // the observed patterns against the desired list; create the missing
         // ones and delete the extras. Skipped entirely unless the policy mode
         // is custom (GitHub drops the policies itself when the mode changes).
@@ -335,7 +335,7 @@ export const EnvironmentProvider = () =>
       (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
     ),
 
-    // Enumerate every environment across the repositories the token can see —
+    // Enumerate every environment across the repositories the token can see --
     // environments are keyed by {owner, repository, name} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
@@ -363,7 +363,7 @@ export const EnvironmentProvider = () =>
               })),
             ),
             // Repos without environments support (plan limits) or where the
-            // token lacks access reject with 403/404 — skip them rather than
+            // token lacks access reject with 403/404 -- skip them rather than
             // failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

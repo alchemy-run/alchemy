@@ -35,17 +35,17 @@ import { findCycleMembers } from "./Util/scc.ts";
 /**
  * The outcome of checking or repairing drift for a single resource.
  *
- * - `unchanged` — the observed cloud state matches the persisted attributes.
- * - `drifted`   — (dry-run only) the cloud state diverged from the persisted
+ * - `unchanged` -- the observed cloud state matches the persisted attributes.
+ * - `drifted`   -- (dry-run only) the cloud state diverged from the persisted
  *                 attributes; a non-dry-run drift would repair it.
- * - `missing`   — (dry-run only) the resource no longer exists in the cloud;
+ * - `missing`   -- (dry-run only) the resource no longer exists in the cloud;
  *                 a non-dry-run drift would recreate it.
- * - `repaired`  — drift was detected and the resource was reconciled back to
+ * - `repaired`  -- drift was detected and the resource was reconciled back to
  *                 its desired (last-deployed) state.
- * - `recreated` — the resource was missing from the cloud and was reconciled
+ * - `recreated` -- the resource was missing from the cloud and was reconciled
  *                 from scratch, reusing the persisted instance id so
  *                 deterministic physical names converge to the same values.
- * - `skipped`   — the resource was not checked; see `reason` (provider has no
+ * - `skipped`   -- the resource was not checked; see `reason` (provider has no
  *                 `read`, or the persisted status is not stable).
  */
 export type DriftAction =
@@ -91,21 +91,21 @@ export class DriftResourceError extends Data.TaggedError("DriftResourceError")<{
  * Unlike `deploy` (which converges the cloud to a *new* desired state
  * computed from the stack program), `drift` converges the cloud back to the
  * *last-deployed* desired state recorded in the state store. It needs no
- * stack program — only the state store and the resource providers.
+ * stack program -- only the state store and the resource providers.
  *
- * The algorithm, per resource, is observe → compare → converge:
+ * The algorithm, per resource, is observe -> compare -> converge:
  *
- * 1. **Read** — call `provider.read` with the persisted props/attributes to
+ * 1. **Read** -- call `provider.read` with the persisted props/attributes to
  *    observe the live cloud state.
- * 2. **Compare** — deep-compare the observed attributes against the
- *    persisted attributes. Equal ⇒ `unchanged`.
- * 3. **Reconcile** — on drift, call `provider.reconcile` with the persisted
+ * 2. **Compare** -- deep-compare the observed attributes against the
+ *    persisted attributes. Equal => `unchanged`.
+ * 3. **Reconcile** -- on drift, call `provider.reconcile` with the persisted
  *    props as the desired state (`news`) and the *observed* attributes as
  *    `output`, so the provider diffs against reality rather than a stale
  *    snapshot. When the resource is missing entirely, reconcile runs
  *    greenfield (`olds`/`output` undefined) under the *same* instance id so
  *    deterministic physical names regenerate identically.
- * 4. **Persist** — write the fresh attributes back to the state store.
+ * 4. **Persist** -- write the fresh attributes back to the state store.
  *
  * Resources are observed concurrently. Repairs follow the persisted
  * `downstream` edges: a recreated topic exists before its subscription is
@@ -119,7 +119,7 @@ export class DriftResourceError extends Data.TaggedError("DriftResourceError")<{
  * Resources that cannot be checked are reported as `skipped` rather than
  * failing the run: providers without `read` (nothing to observe), and
  * resources whose persisted status is not stable (`creating`, `updating`,
- * `replacing`, `replaced`, `deleting`) — those represent an interrupted
+ * `replacing`, `replaced`, `deleting`) -- those represent an interrupted
  * deploy and must be recovered by `deploy`, which owns replacement chains
  * and dependency ordering. Action rows have no cloud state and are ignored.
  */
@@ -182,7 +182,7 @@ const runDrift = (
 
       if (old.status !== "created" && old.status !== "updated") {
         // Anything mid-flight (or with a pending replacement chain) belongs
-        // to `deploy`'s recovery machinery — replacement generations and
+        // to `deploy`'s recovery machinery -- replacement generations and
         // dependency ordering are not drift's to drive.
         return yield* skip(
           old.status === "replaced" || old.status === "replacing"
@@ -191,7 +191,7 @@ const runDrift = (
         );
       }
 
-      // Observe with the provider variant of the mode that created the row —
+      // Observe with the provider variant of the mode that created the row --
       // a local dev worker's state must be read by the local provider.
       // Legacy unstamped rows infer "local" from a `dev:` identity marker.
       const provider = yield* findProviderByType(resourceType, stampedMode(old));
@@ -200,7 +200,7 @@ const runDrift = (
       }
 
       // Persist a repaired row. Everything but the status, attributes and
-      // bindings carries over from the persisted row — notably the
+      // bindings carries over from the persisted row -- notably the
       // `providerMode` stamp, without which a repaired local row would be
       // treated as live.
       const commit = (
@@ -264,7 +264,7 @@ const runDrift = (
       }
 
       // `read` may brand the attributes as Unowned when ownership markers
-      // (tags) have drifted out from under us — the brand is a plan-time
+      // (tags) have drifted out from under us -- the brand is a plan-time
       // routing hint, never persisted, and here the state store already
       // records the resource as ours. Tag drift then surfaces through the
       // attribute comparison below and repairs like any other drift.
@@ -287,7 +287,7 @@ const runDrift = (
       observed: DriftResourceResult | PendingRepair | undefined,
     ): observed is PendingRepair => observed !== undefined && "old" in observed;
 
-    // ── missing — recreate under the same instance id, without bindings ──
+    // -- missing -- recreate under the same instance id, without bindings --
     //
     // Binding data often points at other resources (an S3 notification
     // targets a topic), and a binding edge inside a cycle is not recorded in
@@ -321,7 +321,7 @@ const runDrift = (
       return { rebind: { ...pending, live: attr, recreated: true } };
     });
 
-    // ── drifted — converge the cloud back to the last-deployed props ──
+    // -- drifted -- converge the cloud back to the last-deployed props --
     //
     // Also attaches the bindings of resources recreated bare above.
     const reconcile = Effect.fn("drift.reconcile")(function* (
@@ -432,7 +432,7 @@ const runDrift = (
 
     // Upstreams per the persisted `downstream` edges, among the resources
     // being repaired (an unchanged or skipped upstream never blocks). Edges
-    // inside a cycle — only possible through merged historical edges — are
+    // inside a cycle -- only possible through merged historical edges -- are
     // dropped.
     const upstream: Record<string, string[]> = Object.fromEntries(
       pending.map((node) => [node.fqn, [] as string[]]),
@@ -595,8 +595,8 @@ export interface DriftPlan {
   /**
    * The detection outcome projected onto the engine's {@link Plan} shape so
    * the CLI renders a drift exactly like a deploy plan (ink TUI when
-   * interactive, plain logging otherwise): `drifted` → `update`, `missing` →
-   * `create`, `unchanged`/`skipped` → `noop`.
+   * interactive, plain logging otherwise): `drifted` -> `update`, `missing` ->
+   * `create`, `unchanged`/`skipped` -> `noop`.
    */
   plan: Plan;
 }
@@ -604,7 +604,7 @@ export interface DriftPlan {
 /**
  * Run the drift-detection pass and project the
  * outcome onto a {@link Plan} for display/approval. The plan is a read-only
- * view — {@link repair} re-observes the cloud rather than trusting the
+ * view -- {@link repair} re-observes the cloud rather than trusting the
  * detection snapshot.
  */
 export const plan = (stack: {
@@ -624,7 +624,7 @@ export const plan = (stack: {
       });
       if (!persisted || isActionState(persisted)) continue;
       // Repair the row with the provider mode that created it (drift never
-      // switches modes — a local ⇄ live switch is a plan-time replacement).
+      // switches modes -- a local <-> live switch is a plan-time replacement).
       const provider = yield* findProviderByType(persisted.resourceType, stampedMode(persisted));
       const action =
         r.action === "drifted"
@@ -665,7 +665,7 @@ export const plan = (stack: {
           RuntimeContext: undefined!,
           Providers: undefined,
         } as ResourceLike,
-        // Drift repairs from the persisted bindings verbatim — surface them
+        // Drift repairs from the persisted bindings verbatim -- surface them
         // as noop rows so the renderer shows the binding topology without
         // implying binding changes.
         bindings: (persisted.bindings ?? []).map((binding) => ({

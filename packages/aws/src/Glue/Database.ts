@@ -36,7 +36,7 @@ export interface DatabaseProps {
   /**
    * Free-form key/value properties stored on the database. Alchemy adds its
    * own `alchemy::*` ownership markers to this map (Glue databases are not
-   * ARN-taggable) — user keys are preserved alongside them.
+   * ARN-taggable) -- user keys are preserved alongside them.
    */
   parameters?: Record<string, string>;
   /**
@@ -73,7 +73,7 @@ export interface Database extends Resource<
 > {}
 
 /**
- * An AWS Glue Data Catalog database — the top-level container for Glue tables
+ * An AWS Glue Data Catalog database -- the top-level container for Glue tables
  * that Athena, EMR, Redshift Spectrum, and Glue jobs query. Databases are free
  * and instant to create.
  * ### Creating Databases
@@ -158,7 +158,7 @@ export const DatabaseProvider = () =>
             catalogId: db.CatalogId ?? catalogId,
             configuration: observeDatabaseConfiguration(db),
           };
-          // Glue databases are not ARN-taggable — ownership markers live in
+          // Glue databases are not ARN-taggable -- ownership markers live in
           // the database Parameters map.
           return (yield* hasAlchemyTags(id, cleanMap(db.Parameters))) ? attrs : Unowned(attrs);
         }),
@@ -171,7 +171,7 @@ export const DatabaseProvider = () =>
           if ((olds.catalogId ?? undefined) !== (news.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // description / locationUri / parameters → update
+          // description / locationUri / parameters -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -204,7 +204,7 @@ export const DatabaseProvider = () =>
               );
             db = yield* observe(name, catalogId);
           } else {
-            // 3. SYNC — UpdateDatabase replaces the full DatabaseInput.
+            // 3. SYNC -- UpdateDatabase replaces the full DatabaseInput.
             yield* glue
               .updateDatabase({
                 CatalogId: catalogId,

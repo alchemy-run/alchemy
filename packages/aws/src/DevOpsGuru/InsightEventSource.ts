@@ -84,7 +84,7 @@ export interface InsightEventSourceProps extends EventRouteProps {
  * `aws.devops-guru`); this subscribes the host Function to those events so
  * it can page, annotate incidents, or drive remediation.
  *
- * DevOps Guru publishes to EventBridge automatically — no additional
+ * DevOps Guru publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

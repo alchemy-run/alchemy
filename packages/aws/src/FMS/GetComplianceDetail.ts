@@ -10,12 +10,12 @@ export interface GetComplianceDetailRequest extends fms.GetComplianceDetailReque
 /**
  * Runtime binding for `fms:GetComplianceDetail`.
  *
- * Returns detailed compliance information about the specified member account — the resources that are in and out of compliance with the specified policy. Provide the
+ * Returns detailed compliance information about the specified member account -- the resources that are in and out of compliance with the specified policy. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetComplianceDetailHttp)`.
  * ### Compliance and Protection Status
  * **Example:** Read a Member Account's Compliance Detail
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getComplianceDetail = yield* AWS.FMS.GetComplianceDetail();
  *
  * // runtime

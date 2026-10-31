@@ -21,12 +21,12 @@ export type TcpFlowProtectionFilterMode = "enabled" | "disabled" | "monitoring";
 export interface TcpFlowProtectionFilterProps {
   /**
    * The filter expression selecting which traffic TCP Flow Protection sees
-   * (e.g. `tcp.dstport in {443}`). Mutable — patched in place.
+   * (e.g. `tcp.dstport in {443}`). Mutable -- patched in place.
    */
   expression: string;
   /**
    * The mode the filter applies to: `enabled`, `disabled`, or
-   * `monitoring`. Mutable — patched in place.
+   * `monitoring`. Mutable -- patched in place.
    */
   mode: TcpFlowProtectionFilterMode;
 }
@@ -116,7 +116,7 @@ export const TcpFlowProtectionFilterProvider = () =>
       }
 
       // Adoption path: a filter with this expression may already exist.
-      // Filters carry no ownership markers, so brand the match `Unowned` —
+      // Filters carry no ownership markers, so brand the match `Unowned` --
       // the engine refuses to take over unless `adopt` is set.
       const expression = output?.expression ?? olds?.expression;
       if (expression) {
@@ -129,11 +129,11 @@ export const TcpFlowProtectionFilterProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the filter id cached on `output` is a hint, not a
+      // 1. Observe -- the filter id cached on `output` is a hint, not a
       //    guarantee: a missing filter falls through to create.
       let observed = output?.filterId ? yield* getFilter(accountId, output.filterId) : undefined;
 
-      // 2. Ensure — create when missing. Expressions are not unique on
+      // 2. Ensure -- create when missing. Expressions are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate.
       if (!observed) {
@@ -144,7 +144,7 @@ export const TcpFlowProtectionFilterProvider = () =>
         });
       }
 
-      // 3. Sync — diff observed expression/mode against desired; skip the
+      // 3. Sync -- diff observed expression/mode against desired; skip the
       //    patch entirely on a no-op.
       const dirty = observed.expression !== news.expression || observed.mode !== news.mode;
       if (dirty) {

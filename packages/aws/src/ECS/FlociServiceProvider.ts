@@ -13,10 +13,10 @@
  * - **Watch triggers** ({@link imageSourceTrigger}) apply to the
  *   image-owning forms (`main` / `context` / `image`). A BYO `task:`
  *   reference owns its image on the `AWS.ECS.Task` resource, so the
- *   service watcher has nothing to build — hot reload of the referenced
+ *   service watcher has nothing to build -- hot reload of the referenced
  *   task flows through [FlociTaskProvider](./FlociTaskProvider.ts) plus a
  *   redeploy to roll the service.
- * - **Swap mechanism** — a trigger re-runs the LIVE reconcile: the
+ * - **Swap mechanism** -- a trigger re-runs the LIVE reconcile: the
  *   content-addressed image pipeline pushes a new `<repositoryUri>:<hash>`
  *   tag, registers a new task definition revision, and `updateService`
  *   points the service at it. Floci swaps the service's task definition in
@@ -24,8 +24,8 @@
  *   old-revision tasks are stopped and the floci service scheduler
  *   relaunches them on the new revision (~6s observed end-to-end for a
  *   container relaunch).
- * - **Task roll** lives in the skeleton's `onReconciled` hook — NOT in the
- *   watch loop — so it also fires for engine-driven reconciles. Prop-only
+ * - **Task roll** lives in the skeleton's `onReconciled` hook -- NOT in the
+ *   watch loop -- so it also fires for engine-driven reconciles. Prop-only
  *   changes (an inline `dockerfile` edit, a new env var) never produce a
  *   file event: before the hook, they registered a new revision and
  *   `updateService`d onto it, but the running containers kept serving the
@@ -168,7 +168,7 @@ export const FlociServiceProvider = () =>
           rolled = current;
         }).pipe(Effect.repeat(Schedule.spaced("2 seconds")));
       }),
-    // Fires on every reconcile — watcher-triggered AND engine-driven
+    // Fires on every reconcile -- watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the
     // watch loop left the service's containers on the old revision).
     onReconciled: ({ previous, attrs }) =>
@@ -183,7 +183,7 @@ export const FlociServiceProvider = () =>
         const startedAt = Date.now();
         // `updateService` (inside the reconcile) pointed the service at
         // the new revision, but floci's in-place swap keeps the old
-        // containers running — stop them so the scheduler relaunches on
+        // containers running -- stop them so the scheduler relaunches on
         // the new revision.
         const restarted = yield* restartFamilyTasks({
           family: attrs.taskFamily,

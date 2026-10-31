@@ -30,7 +30,7 @@ export interface EventIntegrationProps {
   source: string;
   /**
    * The name of the Amazon EventBridge bus the partner events are delivered
-   * to, e.g. `default`. Only metadata is persisted — the bus itself is not
+   * to, e.g. `default`. Only metadata is persisted -- the bus itself is not
    * created. Changing the bus replaces the event integration.
    */
   eventBridgeBus: string;
@@ -57,7 +57,7 @@ export interface EventIntegration extends Resource<
  * An Amazon AppIntegrations event integration. An event integration
  * associates a partner event source with an Amazon EventBridge bus in your
  * account so external applications (e.g. Amazon Connect third-party apps)
- * can publish events into it. Only metadata is persisted — no EventBridge
+ * can publish events into it. Only metadata is persisted -- no EventBridge
  * objects are created.
  *
  * The event source and EventBridge bus are immutable; changing either
@@ -183,10 +183,10 @@ export const EventIntegrationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let live = yield* observe(name);
 
-          // 2. Ensure — create if missing; tolerate the concurrent-create race.
+          // 2. Ensure -- create if missing; tolerate the concurrent-create race.
           if (live === undefined) {
             yield* appintegrations
               .createEventIntegration({
@@ -201,7 +201,7 @@ export const EventIntegrationProvider = () =>
           }
           const attrs = yield* toAttrs(live);
 
-          // 3. Sync description — the only mutable field. The API cannot
+          // 3. Sync description -- the only mutable field. The API cannot
           //    clear a description (min length 1), so only push a defined
           //    value that differs from the observed one.
           if (news.description !== undefined && news.description !== live.Description) {
@@ -211,7 +211,7 @@ export const EventIntegrationProvider = () =>
             });
           }
 
-          // 4. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 4. Sync tags -- diff against OBSERVED cloud tags so adoption
           //    converges.
           const observedTags = yield* appintegrations
             .listTagsForResource({ resourceArn: attrs.eventIntegrationArn })

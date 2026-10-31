@@ -9,7 +9,7 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
  * Binding service that turns a {@link Queue} resource into a typed
  * {@link WriteQueueClient} you can call from a Worker's runtime Effect.
  *
- * The Cloudflare Worker queue binding is producer-only — `send` for a
+ * The Cloudflare Worker queue binding is producer-only -- `send` for a
  * single message and `sendBatch` for many in one call. Messages can be
  * any JSON-serializable value.
  * ### Sending Messages
@@ -39,7 +39,7 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
  * layer to resolve the underlying queue at request time.
  *
  * `WriteQueue` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.Queues.WriteQueue(queue)`.
  *
  * @binding

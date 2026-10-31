@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link BatchDeleteCategory} — `instanceId` is injected from the bound Q App.
+ * Request for {@link BatchDeleteCategory} -- `instanceId` is injected from the bound Q App.
  */
 export interface BatchDeleteCategoryRequest extends Omit<
   qapps.BatchDeleteCategoryInput,
@@ -19,7 +19,7 @@ export interface BatchDeleteCategoryRequest extends Omit<
  * ### Categories
  * **Example:** Delete Categories
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const batchDeleteCategory = yield* AWS.QApps.BatchDeleteCategory(app);
  *
  * // runtime

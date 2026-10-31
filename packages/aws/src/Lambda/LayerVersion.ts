@@ -28,7 +28,7 @@ const bucketNameOf = (bucket: BucketRef): string =>
  */
 export interface LayerVersionS3Content {
   /**
-   * S3 bucket holding the layer archive — an `AWS.S3.Bucket` resource or a
+   * S3 bucket holding the layer archive -- an `AWS.S3.Bucket` resource or a
    * raw bucket name.
    */
   bucket: BucketRef;
@@ -44,7 +44,7 @@ export interface LayerVersionProps {
    */
   layerName?: string;
   /**
-   * Local path to the layer content — either a directory whose contents are
+   * Local path to the layer content -- either a directory whose contents are
    * packaged into a zip archive, or an existing `.zip` file uploaded as-is.
    *
    * Layer archives are extracted into `/opt` at runtime, so the directory's
@@ -76,7 +76,7 @@ export interface LayerVersionProps {
    */
   compatibleArchitectures?: lambda.Architecture[];
   /**
-   * The layer's software license — an SPDX identifier, a URL, or the full
+   * The layer's software license -- an SPDX identifier, a URL, or the full
    * license text.
    */
   licenseInfo?: string;
@@ -142,7 +142,7 @@ export interface LayerVersion extends Resource<
 > {}
 
 /**
- * A version of a Lambda layer — a zip archive of libraries, a custom runtime,
+ * A version of a Lambda layer -- a zip archive of libraries, a custom runtime,
  * or other dependencies that Lambda extracts into `/opt` alongside your
  * function code.
  *
@@ -195,7 +195,7 @@ export const LayerVersion = Resource<LayerVersion>("AWS.Lambda.LayerVersion");
 
 /**
  * Lambda rejects a `PublishLayerVersion` request whose inline archive exceeds
- * 50 MB — larger archives must go through S3.
+ * 50 MB -- larger archives must go through S3.
  */
 const MAX_INLINE_ARCHIVE_SIZE = 50 * 1024 * 1024;
 
@@ -317,7 +317,7 @@ export const LayerVersionProvider = () =>
         }
         const layerArn =
           ("LayerArn" in version ? version.LayerArn : undefined) ??
-          // `arn:…:layer:{name}:{version}` — the layer ARN is the version ARN
+          // `arn:...:layer:{name}:{version}` -- the layer ARN is the version ARN
           // without its trailing version segment.
           version.LayerVersionArn.slice(0, version.LayerVersionArn.lastIndexOf(":"));
         const content = "Content" in version ? version.Content : undefined;
@@ -349,7 +349,7 @@ export const LayerVersionProvider = () =>
         stables: ["layerName", "layerArn"],
         // A layer version is immutable, but the *layer* is not: publishing
         // re-uses the layer name and mints version N+1. So a content or
-        // config change is an UPDATE, not a replacement — a replacement would
+        // config change is an UPDATE, not a replacement -- a replacement would
         // mint a fresh instance id, hence a fresh layer name, and every
         // change would strand a new layer stuck at version 1.
         diff: Effect.fn(function* ({ olds, news, output }) {
@@ -381,7 +381,7 @@ export const LayerVersionProvider = () =>
         list: () =>
           Effect.gen(function* () {
             // Layers carry no tags, so there is nothing to filter ownership
-            // on — enumerate every version of every layer in the ambient
+            // on -- enumerate every version of every layer in the ambient
             // account/region.
             const layerNames = yield* Lambda.listLayers.items({}).pipe(
               Stream.runCollect,
@@ -442,7 +442,7 @@ export const LayerVersionProvider = () =>
 
           // Retire the version this one supersedes, so an update doesn't
           // leak a version per deploy. Functions already referencing the old
-          // version keep working — Lambda retains a copy until nothing
+          // version keep working -- Lambda retains a copy until nothing
           // refers to it.
           if (output?.version !== undefined && output.version !== attrs.version) {
             yield* Lambda.deleteLayerVersion({

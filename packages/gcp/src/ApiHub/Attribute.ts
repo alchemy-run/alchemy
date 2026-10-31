@@ -39,12 +39,12 @@ export type AttributeProps = {
   /**
    * Attribute id (the `{attribute}` segment of
    * `projects/{project}/locations/{location}/attributes/{attribute}`). If
-   * omitted, a unique id is generated. Immutable — changing it replaces
+   * omitted, a unique id is generated. Immutable -- changing it replaces
    * the attribute.
    */
   attributeId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * attribute.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -55,16 +55,16 @@ export type AttributeProps = {
   displayName: string;
   /**
    * Human-readable description. Attributes have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
   /**
-   * Data type. Immutable — changing it replaces the attribute.
+   * Data type. Immutable -- changing it replaces the attribute.
    */
   dataType: "DATA_TYPE_UNSPECIFIED" | "ENUM" | "JSON" | "STRING" | "URI" | (string & {});
   /**
-   * Resource this attribute can attach to. Immutable — changing it
+   * Resource this attribute can attach to. Immutable -- changing it
    * replaces the attribute.
    */
   scope:
@@ -134,7 +134,7 @@ export type Attribute = Resource<
  *
  * Location, id, data type, and scope are immutable. Display name,
  * description, allowed values, and cardinality (increase only) update in
- * place. Attributes have no labels field — Alchemy stamps ownership into
+ * place. Attributes have no labels field -- Alchemy stamps ownership into
  * the description.
  *
  * ### Creating an Attribute

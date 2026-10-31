@@ -87,7 +87,7 @@ export interface IdentityPool extends Resource<
 > {}
 
 /**
- * An Amazon Cognito identity pool (federated identities) — exchanges tokens
+ * An Amazon Cognito identity pool (federated identities) -- exchanges tokens
  * from user pools, social providers, OIDC/SAML IdPs, or developer backends
  * for temporary AWS credentials.
  * ### Creating an Identity Pool
@@ -291,7 +291,7 @@ export const IdentityPoolProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — the id in output is only a cache.
+          // 1. OBSERVE -- the id in output is only a cache.
           let observed =
             output?.identityPoolId !== undefined
               ? yield* describePool(output.identityPoolId)
@@ -313,7 +313,7 @@ export const IdentityPoolProvider = () =>
               IdentityPoolTags: desiredTags,
             });
           } else if (hasDrift(name, news, observed)) {
-            // 3. SYNC — UpdateIdentityPool resets omitted fields to their
+            // 3. SYNC -- UpdateIdentityPool resets omitted fields to their
             //    defaults, so send the full desired configuration.
             observed = yield* ci.updateIdentityPool({
               IdentityPoolId: observed.IdentityPoolId,

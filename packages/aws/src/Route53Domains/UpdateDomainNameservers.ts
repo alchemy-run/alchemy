@@ -6,7 +6,7 @@ export interface UpdateDomainNameserversRequest
   extends route53domains.UpdateDomainNameserversRequest {}
 
 /**
- * Runtime binding for `route53domains:UpdateDomainNameservers` — replace
+ * Runtime binding for `route53domains:UpdateDomainNameservers` -- replace
  * the nameservers for a domain registered in the current AWS account (e.g.
  * point a registered domain at the delegation set of a Route 53 hosted
  * zone). The update is asynchronous: the response carries an `OperationId`

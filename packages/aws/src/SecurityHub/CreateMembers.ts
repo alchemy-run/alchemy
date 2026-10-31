@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:CreateMembers`.
  *
  * Creates member associations between this administrator account and the specified accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.CreateMembersHttp)`.
  * ### Members & Organization
  * **Example:** Add Member Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const createMembers = yield* AWS.SecurityHub.CreateMembers();
  *
  * // runtime

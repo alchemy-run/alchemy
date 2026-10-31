@@ -284,13 +284,13 @@ export const UserProvider = () =>
             ...news.tags,
           };
 
-          // Observe — read the live user (or absence).
+          // Observe -- read the live user (or absence).
           const observedResponse = yield* iam
             .getUser({ UserName: userName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           let observedUser = observedResponse?.User;
 
-          // Ensure — create the user when missing. On race, verify
+          // Ensure -- create the user when missing. On race, verify
           // ownership tags before adopting.
           if (!observedUser?.Arn) {
             const created = yield* iam
@@ -333,7 +333,7 @@ export const UserProvider = () =>
             }
           }
 
-          // Sync managed and inline policies — observe live state and
+          // Sync managed and inline policies -- observe live state and
           // apply only the delta.
           const [observedManagedPolicies, observedInlinePolicies] = yield* Effect.all([
             readManagedPolicies(userName),

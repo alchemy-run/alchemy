@@ -57,7 +57,7 @@ export interface DataSourceProps {
    */
   apiId: string;
   /**
-   * Name of the data source (`[_A-Za-z][_0-9A-Za-z]*` — no dashes). If
+   * Name of the data source (`[_A-Za-z][_0-9A-Za-z]*` -- no dashes). If
    * omitted, a deterministic name is generated from the app, stage, and
    * logical ID (dashes sanitized to underscores). Changing the name
    * triggers a replacement.
@@ -82,11 +82,11 @@ export interface DataSourceProps {
    * role (ignored when {@link DataSourceProps.serviceRoleArn} is provided).
    */
   policyStatements?: PolicyStatement[];
-  /** Lambda target — required when `type` is `AWS_LAMBDA`. */
+  /** Lambda target -- required when `type` is `AWS_LAMBDA`. */
   lambdaConfig?: LambdaDataSourceConfig;
-  /** DynamoDB target — required when `type` is `AMAZON_DYNAMODB`. */
+  /** DynamoDB target -- required when `type` is `AMAZON_DYNAMODB`. */
   dynamodbConfig?: DynamodbDataSourceConfig;
-  /** HTTP target — required when `type` is `HTTP`. */
+  /** HTTP target -- required when `type` is `HTTP`. */
   httpConfig?: HttpDataSourceConfig;
 }
 
@@ -115,7 +115,7 @@ export interface AppSyncDataSource extends Resource<
 > {}
 
 /**
- * An AppSync data source — the target a resolver reads from or writes to.
+ * An AppSync data source -- the target a resolver reads from or writes to.
  *
  * For `AWS_LAMBDA` and `AMAZON_DYNAMODB` targets a least-privilege service
  * role is created automatically (unless an explicit `serviceRoleArn` is
@@ -350,7 +350,7 @@ export const DataSourceProvider = () =>
         stables: ["apiId", "name", "dataSourceArn"],
 
         // Sub-resource keyed entirely by its GraphQL API (apiId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -380,7 +380,7 @@ export const DataSourceProvider = () =>
           const name = output?.name ?? (yield* createName(id, news));
           const configs = toWireConfigs(news, region);
 
-          // Ensure the service role first — the data source cannot point
+          // Ensure the service role first -- the data source cannot point
           // at a Lambda/DynamoDB target without one.
           let serviceRoleArn = news.serviceRoleArn;
           let roleName: string | undefined;
@@ -396,7 +396,7 @@ export const DataSourceProvider = () =>
           // 1. OBSERVE
           let observed = yield* getDataSourceSafe(apiId, name);
 
-          // 2. ENSURE — a fresh role can take a few seconds to become
+          // 2. ENSURE -- a fresh role can take a few seconds to become
           //    assumable by AppSync.
           if (observed?.name == null) {
             const created = yield* appsync
@@ -412,7 +412,7 @@ export const DataSourceProvider = () =>
             observed = created.dataSource!;
             yield* session.note(`Created data source ${name}`);
           } else {
-            // 3. SYNC — single update when the observed surface drifted.
+            // 3. SYNC -- single update when the observed surface drifted.
             const surface = (ds: {
               description?: string;
               type?: string;

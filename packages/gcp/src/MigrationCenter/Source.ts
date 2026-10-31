@@ -36,19 +36,19 @@ export type SourceProps = {
   /**
    * Source id (the `{source}` segment of
    * `projects/{project}/locations/{location}/sources/{source}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the source.
    */
   sourceId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * source. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
   location?: string;
   /**
-   * Data source type. Immutable — changing it replaces the source.
+   * Data source type. Immutable -- changing it replaces the source.
    * @default "SOURCE_TYPE_UPLOAD"
    */
   type?: SourceType;
@@ -58,7 +58,7 @@ export type SourceProps = {
   displayName?: string;
   /**
    * Free-text description. Sources have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
@@ -108,7 +108,7 @@ export type Source = Resource<
 /**
  * A Migration Center source that streams asset frames into a project.
  *
- * Sources have no labels field — Alchemy stamps ownership into the
+ * Sources have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. `sourceId`, `location`, and
  * `type` are immutable. Display name, description, and priority update
  * in place.

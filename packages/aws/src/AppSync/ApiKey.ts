@@ -33,8 +33,8 @@ export interface AppSyncApiKey extends Resource<
     /** The API this key belongs to. */
     apiId: string;
     /**
-     * The API key ID — this IS the secret key value (`da2-…`) clients send
-     * in the `x-api-key` header. Wrapped in `Redacted` — unwrap with
+     * The API key ID -- this IS the secret key value (`da2-...`) clients send
+     * in the `x-api-key` header. Wrapped in `Redacted` -- unwrap with
      * `Redacted.value(key.id)` where the raw header value is needed.
      */
     id: Redacted.Redacted<string>;
@@ -50,14 +50,14 @@ export interface AppSyncApiKey extends Resource<
 /**
  * An AppSync API key for `API_KEY`-authenticated GraphQL APIs.
  *
- * The key's `id` attribute is the secret value (`da2-…`) sent in the
+ * The key's `id` attribute is the secret value (`da2-...`) sent in the
  * `x-api-key` request header. It is wrapped in `Redacted`; unwrap with
  * `Redacted.value(key.id)` where the raw header value is needed.
  * ### Creating API Keys
  * **Example:** Key with the default 7-day expiry
  * ```typescript
  * const key = yield* AppSync.ApiKey("Key", { api });
- * // Redacted.value(key.id) → "da2-…" — send as the x-api-key header
+ * // Redacted.value(key.id) -> "da2-..." -- send as the x-api-key header
  * ```
  *
  * **Example:** Key with a managed expiry
@@ -131,13 +131,13 @@ export const ApiKeyProvider = () =>
         stables: ["apiId", "id"],
 
         // Sub-resource keyed entirely by its GraphQL API (apiId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ output }) {
-          // Keys carry no deterministic identity — without the cached id
+          // Keys carry no deterministic identity -- without the cached id
           // there is nothing to look up (a fresh reconcile will mint one).
           if (output?.id === undefined) return undefined;
           const key = yield* findKey(output.apiId, Redacted.value(output.id));
@@ -156,7 +156,7 @@ export const ApiKeyProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const apiId = output?.apiId ?? news.apiId;
 
-          // 1. OBSERVE — the cached key id is the only handle.
+          // 1. OBSERVE -- the cached key id is the only handle.
           let observed =
             output?.id !== undefined ? yield* findKey(apiId, Redacted.value(output.id)) : undefined;
 
@@ -172,7 +172,7 @@ export const ApiKeyProvider = () =>
             observed = created.apiKey!;
             yield* session.note(`Created API key for ${apiId}`);
           } else {
-            // 3. SYNC — update description/expiry on drift (expiry only
+            // 3. SYNC -- update description/expiry on drift (expiry only
             //    when managed by props; AWS floors it to the hour).
             const expiresDrifted =
               news.expires !== undefined && observed.expires !== floorToHour(news.expires);

@@ -14,15 +14,15 @@
  * The pack follows the flush as raw bytes and is present iff any
  * create/update command exists (it may be an empty 0-object pack); it is
  * absent for delete-only pushes. Clients push **thin packs** over HTTP by
- * default — REF_DELTA bases resolve from the object store during ingest.
+ * default -- REF_DELTA bases resolve from the object store during ingest.
  *
  * The **empty-flush probe**: git sends a bare `0000` POST when the payload
  * exceeds `http.postBuffer`; the server replies with an empty 200 so the
  * client retries with the real body.
  *
  * The choreography splits so the Repo DO owns the transaction:
- * {@link parseReceivePackRequest} → {@link ingestPushPack} (staging sink) →
- * {@link checkConnectivity} → DO `transactionSync` CAS →
+ * {@link parseReceivePackRequest} -> {@link ingestPushPack} (staging sink) ->
+ * {@link checkConnectivity} -> DO `transactionSync` CAS ->
  * {@link reportStatus}.
  */
 import * as Effect from "effect/Effect";
@@ -57,14 +57,14 @@ import {
 import { sidebandFrames } from "./Sideband.ts";
 import { StoreError } from "./Store.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Commands
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * One ref update command: `old-oid SP new-oid SP refname`. `old-oid` is the
- * client's expectation and the CAS token; zero-id old ⇒ create, zero-id new
- * ⇒ delete.
+ * client's expectation and the CAS token; zero-id old => create, zero-id new
+ * => delete.
  */
 export interface RefCommand {
   readonly oldOid: Oid;
@@ -76,7 +76,7 @@ export interface RefCommand {
 export type CommandKind = "create" | "update" | "delete";
 
 /**
- * Classifies a command: zero old-oid ⇒ `create`, zero new-oid ⇒ `delete`,
+ * Classifies a command: zero old-oid => `create`, zero new-oid => `delete`,
  * else `update`.
  */
 export const commandKind = (command: RefCommand): CommandKind =>
@@ -218,9 +218,9 @@ export const parseReceivePackRequest = Effect.fn(function* (body: Uint8Array) {
   return { _tag: "request", request } as ParsedReceivePack;
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Ingest driver
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Options for {@link ingestPushPack}.
@@ -230,7 +230,7 @@ export interface IngestPushOptions<E, R> {
   readonly body: Uint8Array;
   /** `request.packOffset` from {@link parseReceivePackRequest}. */
   readonly packOffset: number;
-  /** Live objects — resolves thin REF_DELTA bases. */
+  /** Live objects -- resolves thin REF_DELTA bases. */
   readonly store: ThinBaseSource;
   /** Receives each resolved entry (the DO stages it under the push id). */
   readonly sink: (entry: ResolvedEntry) => Effect.Effect<void, E, R>;
@@ -255,9 +255,9 @@ export const ingestPushPack = <E, R>(
         maxObjectSize: options.maxObjectSize,
       });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Connectivity check
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A staged object's identity, as needed by the connectivity walk.
@@ -268,7 +268,7 @@ export interface StagedObjectRef {
 }
 
 /**
- * The membership oracle and content reader the connectivity check needs —
+ * The membership oracle and content reader the connectivity check needs --
  * implemented by the Repo DO over batched SQL.
  */
 export interface ConnectivityDeps {
@@ -285,10 +285,10 @@ export interface ConnectivityDeps {
 
 /**
  * The full connectivity check (DESIGN §3.6 step 5): collects every oid
- * referenced by staged commits (tree, parents), staged trees (entries —
+ * referenced by staged commits (tree, parents), staged trees (entries --
  * gitlinks excluded, they point outside the repo), staged tags (target),
  * plus every command's non-zero `new-oid`; then verifies membership against
- * staged ∪ live objects. Returns the missing oids (empty = connected).
+ * staged U live objects. Returns the missing oids (empty = connected).
  *
  * This is the difference between "corrupt client" and "corrupt repo": any
  * miss fails the push with `unpack missing objects` + all-`ng`.
@@ -314,7 +314,7 @@ export const checkConnectivity = Effect.fn(function* (
         const content = yield* deps.readStagedContent(object.oid);
         const entries = yield* parseTree(content);
         for (const entry of entries) {
-          // gitlinks (mode 160000) reference commits in other repos — skip
+          // gitlinks (mode 160000) reference commits in other repos -- skip
           if (treeEntryKind(entry.mode) !== "commit") {
             referenced.add(entry.oid);
           }
@@ -341,9 +341,9 @@ export const checkConnectivity = Effect.fn(function* (
   return candidates.filter((oid) => !live.has(oid)).sort();
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // report-status
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The per-ref outcome of the CAS transaction, produced by the Repo DO and
@@ -379,7 +379,7 @@ export interface ReportStatusOptions {
 }
 
 /**
- * Renders the `report-status` (and `report-status-v2` — implemented
+ * Renders the `report-status` (and `report-status-v2` -- implemented
  * identically, with no `option` lines, which is valid) response:
  *
  * ```
@@ -389,7 +389,7 @@ export interface ReportStatusOptions {
  * ```
  *
  * When the client negotiated `side-band-64k` the entire report (including
- * its flush) is wrapped in band-1 frames followed by the outer flush —
+ * its flush) is wrapped in band-1 frames followed by the outer flush --
  * sending it unmuxed while side-band is active breaks the client.
  */
 export const reportStatus = (options: ReportStatusOptions): Uint8Array => {

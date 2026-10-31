@@ -9,8 +9,8 @@ import type { FileSystem } from "./FileSystem.ts";
  * `fsx:TagResource` on the file system ARN and on `arn:aws:fsx:*:*:task/*`).
  *
  * Starts a bulk data movement between the bound Lustre {@link FileSystem}
- * and its linked S3 data repository — `EXPORT_TO_REPOSITORY`,
- * `IMPORT_METADATA_FROM_REPOSITORY`, or `RELEASE_DATA_FROM_FILESYSTEM` —
+ * and its linked S3 data repository -- `EXPORT_TO_REPOSITORY`,
+ * `IMPORT_METADATA_FROM_REPOSITORY`, or `RELEASE_DATA_FROM_FILESYSTEM` --
  * from inside a function runtime, e.g. exporting results after a compute
  * job completes. A task already executing surfaces the typed
  * `DataRepositoryTaskExecuting`. Provide the implementation with

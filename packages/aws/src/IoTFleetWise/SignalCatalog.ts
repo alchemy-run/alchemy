@@ -38,7 +38,7 @@ export interface SignalCatalogProps {
    */
   description?: string;
   /**
-   * Signal nodes forming the catalog's tree — branches, sensors,
+   * Signal nodes forming the catalog's tree -- branches, sensors,
    * actuators, attributes, structs and properties. Each node is one of the
    * union variants (`{ branch }`, `{ sensor }`, ...) keyed by
    * `fullyQualifiedName`. Updated in place via
@@ -65,13 +65,13 @@ export interface SignalCatalog extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise signal catalog — the account-wide collection of
+ * An AWS IoT FleetWise signal catalog -- the account-wide collection of
  * standardized vehicle signals (branches, sensors, actuators, attributes)
  * that model manifests draw from.
  *
  * AWS IoT FleetWise is offered in `us-east-1` and `eu-central-1` only; the
  * provider follows the ambient region when supported and pins `us-east-1`
- * otherwise. Access to the service is allowlist-gated by AWS — accounts
+ * otherwise. Access to the service is allowlist-gated by AWS -- accounts
  * without access receive `AccessDeniedException` on every operation.
  * ### Creating a Signal Catalog
  * **Example:** Catalog with a Branch and a Sensor
@@ -172,10 +172,10 @@ export const SignalCatalogProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredNodes = news.nodes ?? [];
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCatalog(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createSignalCatalog({
@@ -202,7 +202,7 @@ export const SignalCatalogProvider = () =>
             );
           }
 
-          // 3. Sync nodes + description — diff OBSERVED nodes against the
+          // 3. Sync nodes + description -- diff OBSERVED nodes against the
           //    desired tree keyed by fullyQualifiedName.
           const observedNodes = yield* readNodes(name);
           const observedByFqn = new Map(observedNodes.map((node) => [nodeFqn(node), node]));
@@ -245,7 +245,7 @@ export const SignalCatalogProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: FleetWise deletes return success for missing
           // resources. Model manifests still detaching surface as
-          // ConflictException — retry through the window (bounded).
+          // ConflictException -- retry through the window (bounded).
           yield* iotfleetwise.deleteSignalCatalog({ name: output.signalCatalogName }).pipe(
             inFleetWiseRegion,
             retryWhileConflict,

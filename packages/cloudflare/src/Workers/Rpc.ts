@@ -25,14 +25,14 @@ export * from "alchemy/Rpc";
 
 /**
  * Wrap a Cloudflare service-binding stub (or an `Effect` that resolves
- * to one — useful when the stub depends on a service like
+ * to one -- useful when the stub depends on a service like
  * `WorkerEnvironment` that's only available at *exec* phase) into an
  * Effect-typed RPC client.
  *
  * `Service.fetch`/`Service.connect` are passed through eagerly when the
  * stub is already resolved; everything else is treated as an RPC method
  * whose dispatch is deferred until call time, so the user effect runs in
- * the right runtime layer (which is what `bindWorker` actually wants —
+ * the right runtime layer (which is what `bindWorker` actually wants --
  * its methods are called at exec, even though it's *defined* at init).
  */
 export const makeRpcStub = <Shape>(
@@ -46,7 +46,7 @@ export const makeRpcStub = <Shape>(
     readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
     /**
      * Append the caller's trace context to every call's arguments. Only for
-     * a callee known to strip it again — a Durable Object class bridged by
+     * a callee known to strip it again -- a Durable Object class bridged by
      * the same bundle; anything else would get an extra argument.
      */
     readonly traceContext?: boolean | undefined;

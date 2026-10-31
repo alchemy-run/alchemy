@@ -73,15 +73,15 @@ export type MaintenanceUpdatePolicy = {
 export type InstanceProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    */
   organization?: string;
   /**
    * Instance id (the `{instance}` segment of
    * `organizations/{org}/instances/{instance}`). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * 2–32 characters, lowercase letters, digits, and hyphens; must start
-   * with a letter. Immutable — changing it replaces the instance.
+   * 2-32 characters, lowercase letters, digits, and hyphens; must start
+   * with a letter. Immutable -- changing it replaces the instance.
    */
   instanceId?: string;
   /**
@@ -92,7 +92,7 @@ export type InstanceProps = {
   location?: string;
   /**
    * Human-readable description. Apigee instances have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -102,7 +102,7 @@ export type InstanceProps = {
   displayName?: string;
   /**
    * Size of the CIDR block reserved by the instance. Paid orgs support
-   * `SLASH_16`–`SLASH_20` (default `SLASH_16`); evaluation orgs support
+   * `SLASH_16`-`SLASH_20` (default `SLASH_16`); evaluation orgs support
    * only `SLASH_23`. Immutable.
    */
   peeringCidrRange?: apigee.GoogleCloudApigeeV1InstancePeeringCidrRangeEnum | (string & {});
@@ -161,7 +161,7 @@ export type Instance = Resource<
     accessLoggingConfig: AccessLoggingConfig | undefined;
     /** Maintenance update policy. */
     maintenanceUpdatePolicy: MaintenanceUpdatePolicy | undefined;
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** Runtime system version. */
     runtimeVersion: string | undefined;
@@ -189,11 +189,11 @@ export type Instance = Resource<
  *
  * Apigee instances have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. Name, organization, location,
- * peering CIDR, IP range, and CMEK are identity — changing them replaces
+ * peering CIDR, IP range, and CMEK are identity -- changing them replaces
  * the instance. Description, display name, consumer accept list, access
  * logging, and maintenance policy update in place.
  *
- * Provisioning typically takes 20–40 minutes. Live lifecycle tests are
+ * Provisioning typically takes 20-40 minutes. Live lifecycle tests are
  * skipIf-gated (`GCP_TEST_APIGEE_INSTANCE`).
  *
  * ### Creating an Instance
@@ -326,7 +326,7 @@ const getByName = (name: string) =>
     .getOrganizationsInstances({ name })
     .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
-/** Instance provisioning and deletion take 30–60 minutes. */
+/** Instance provisioning and deletion take 30-60 minutes. */
 const INSTANCE_BUDGET = "75 minutes";
 
 const waitUntilExists = (name: string) =>

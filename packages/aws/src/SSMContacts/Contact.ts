@@ -54,7 +54,7 @@ export interface ContactProps {
 
   /**
    * The contact's resource policy as a JSON policy document (string or
-   * object) — shares the contact and its engagements with other accounts.
+   * object) -- shares the contact and its engagements with other accounts.
    * When omitted, any existing policy is left untouched (SSM Contacts has
    * no delete-policy API).
    */
@@ -86,7 +86,7 @@ export interface Contact extends Resource<
 > {}
 
 /**
- * An Incident Manager contact — a person Incident Manager engages during an
+ * An Incident Manager contact -- a person Incident Manager engages during an
  * incident, an escalation plan that engages contacts in phases, or an
  * on-call schedule backed by rotations.
  *
@@ -241,7 +241,7 @@ export const ContactProvider = () =>
           // 1. OBSERVE
           let contact = yield* getContact(arn);
 
-          // 2. ENSURE — create if missing; tolerate the already-exists race.
+          // 2. ENSURE -- create if missing; tolerate the already-exists race.
           if (contact === undefined) {
             yield* session.note(`creating contact ${alias}`);
             yield* contacts
@@ -259,7 +259,7 @@ export const ContactProvider = () =>
             contact = (yield* getContact(arn))!;
           }
 
-          // 3. SYNC display name + plan — diff observed against desired.
+          // 3. SYNC display name + plan -- diff observed against desired.
           //    `plan` is only managed here when the prop is provided, so the
           //    standalone `SSMContacts.Plan` resource can own it otherwise.
           const displayNameDelta = (contact.DisplayName ?? "") !== (news.displayName ?? "");
@@ -272,7 +272,7 @@ export const ContactProvider = () =>
             });
           }
 
-          // 3b. SYNC resource policy — observed vs desired. Only managed
+          // 3b. SYNC resource policy -- observed vs desired. Only managed
           //     when the prop is provided; there is no delete-policy API.
           if (news.policy !== undefined) {
             const desiredPolicy =
@@ -294,7 +294,7 @@ export const ContactProvider = () =>
             }
           }
 
-          // 3c. SYNC tags — diff against OBSERVED cloud tags.
+          // 3c. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(contact.ContactArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

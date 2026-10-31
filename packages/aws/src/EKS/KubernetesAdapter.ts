@@ -28,19 +28,19 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * The `aws-eks` {@link ClusterAdapter}: everything platform-specific about
  * running `Kubernetes.*` workloads on Amazon EKS.
  *
- * - **connect** — SigV4 bearer tokens (STS presign) against the cluster
+ * - **connect** -- SigV4 bearer tokens (STS presign) against the cluster
  *   endpoint, re-describing the cluster when the connection doesn't carry
  *   endpoint/CA (or they've gone stale).
- * - **identity** — EKS Pod Identity: a generated IAM role +
+ * - **identity** -- EKS Pod Identity: a generated IAM role +
  *   `PodIdentityAssociation`, with `policyStatements` host bindings landed
  *   as the role's inline policy.
- * - **registry** — a per-workload ECR repository; `main` programs are
+ * - **registry** -- a per-workload ECR repository; `main` programs are
  *   bundled, `context` Dockerfiles built, and `image` refs mirrored into
  *   it.
- * - **bootstrap** — generated container entries wiring the AWS credential
+ * - **bootstrap** -- generated container entries wiring the AWS credential
  *   chain so Pod Identity's container-credentials endpoint resolves inside
  *   the pod.
- * - **loadBalancerDefaults** — EKS Auto Mode's `loadBalancerClass` and the
+ * - **loadBalancerDefaults** -- EKS Auto Mode's `loadBalancerClass` and the
  *   internet-facing NLB scheme.
  *
  * Registered by `AWS.providers()`; resolved dynamically by the
@@ -64,7 +64,7 @@ declare module "@alchemy.run/kubernetes/Connection" {
     /**
      * Authenticate against an Amazon EKS cluster with SigV4 bearer tokens
      * minted from the ambient AWS credentials. Contributed by
-     * `AWS.providers()` — `AWS.EKS.Cluster` attributes expose a ready-made
+     * `AWS.providers()` -- `AWS.EKS.Cluster` attributes expose a ready-made
      * `connection` carrying this descriptor.
      */
     "aws-eks": {
@@ -112,7 +112,7 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
   interface WorkloadBindingContract {
     /**
      * IAM policy statements landed on the workload's pod-identity role
-     * (EKS only) — the same host-binding channel as `AWS.Lambda.Function`
+     * (EKS only) -- the same host-binding channel as `AWS.Lambda.Function`
      * and `AWS.ECS.Task`.
      */
     policyStatements?: PolicyStatement[];
@@ -155,7 +155,7 @@ const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
 /**
  * Build a {@link ClusterTransport} for an EKS cluster from known
  * endpoint/CA. Captures the ambient AWS services so the per-request token
- * mint is self-contained — used by the adapter and by the
+ * mint is self-contained -- used by the adapter and by the
  * `AWS.EKS.Cluster` provider's own kubernetes-object binding channel.
  */
 export const makeEksTransport = Effect.fn(function* (options: {
@@ -177,7 +177,7 @@ export const makeEksTransport = Effect.fn(function* (options: {
 });
 
 /**
- * The `Kubernetes.Connection` of an EKS cluster — stamped on
+ * The `Kubernetes.Connection` of an EKS cluster -- stamped on
  * `AWS.EKS.Cluster` attributes so the cluster resource can be passed
  * directly as any `Kubernetes.*` workload's `cluster`.
  */
@@ -427,7 +427,7 @@ export const EksKubernetesAdapter = () =>
       const context = yield* Effect.context<EksAdapterDeps>();
 
       // Discharge the layer-captured AWS services; per-resource engine
-      // services (ResourceContext/Stack/Stage) stay ambient — they are provided
+      // services (ResourceContext/Stack/Stage) stay ambient -- they are provided
       // by the invoking lifecycle operation, never captured here.
       const withAws =
         (region: string | undefined) =>
@@ -517,7 +517,7 @@ export const EksKubernetesAdapter = () =>
           });
 
           // Unlike ECS/Fargate (whose agent injects `AWS_REGION`), EKS pods
-          // get no region env var — inject it so the bootstrap's
+          // get no region env var -- inject it so the bootstrap's
           // `Region.fromEnv()` resolves inside the pod.
           const { region } = yield* AWSEnvironment.current;
 
@@ -571,7 +571,7 @@ export const EksKubernetesAdapter = () =>
           typeof state?.repositoryName === "string"
             ? state.repositoryName
             : // Physical-name generation reads the resource's ambient
-              // ResourceContext/Stack/Stage — do not shadow them with the
+              // ResourceContext/Stack/Stage -- do not shadow them with the
               // layer-captured context.
               yield* createRepositoryName(options.id);
         const repositoryUri =

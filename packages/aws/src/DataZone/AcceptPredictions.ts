@@ -17,7 +17,7 @@ export interface AcceptPredictionsRequest extends Omit<
  * ### Publishing Assets
  * **Example:** Accept All Predictions
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const acceptPredictions = yield* AWS.DataZone.AcceptPredictions(domain);
  *
  * // runtime

@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListTokensRequest extends licensemanager.ListTokensRequest {}
 
 /**
- * Runtime binding for `license-manager:ListTokens` — enumerate the refresh
+ * Runtime binding for `license-manager:ListTokens` -- enumerate the refresh
  * tokens minted for the account's licenses (token metadata only; the token
  * material itself is returned once by `CreateToken`).
  *

@@ -101,7 +101,7 @@ export const ImagesLive = Layer.effect(
 
         let used = false;
         let loopbackService: WorkerdConfig.ServiceDesignator | undefined;
-        // The workerd entry port, captured in `start` — the images worker
+        // The workerd entry port, captured in `start` -- the images worker
         // resolves it through the loopback to build absolute variant URLs
         // (Miniflare's `/core/public-url`).
         let publicPort: number | undefined;
@@ -109,9 +109,9 @@ export const ImagesLive = Layer.effect(
         /**
          * Node-side handler for the images loopback route:
          *
-         * - `GET {PATH_IMAGES_PUBLIC_URL}` — the runtime entry URL (or
+         * - `GET {PATH_IMAGES_PUBLIC_URL}` -- the runtime entry URL (or
          *   `null` before the runtime is listening).
-         * - everything else — the Sharp transform/info fetcher
+         * - everything else -- the Sharp transform/info fetcher
          *   ({@link imagesLocalFetcher}), selected by pathname (`/info` vs
          *   transform).
          */

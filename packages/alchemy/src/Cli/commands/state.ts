@@ -244,7 +244,7 @@ const nukeCommand = Command.make(
         yield* Interaction.info("Nothing to clear.");
         return;
       }
-      yield* Console.log(stacks.map((stack) => `• ${stack}`).join("\n"));
+      yield* Console.log(stacks.map((stack) => `\u2022 ${stack}`).join("\n"));
       yield* confirmOrDecline({
         yes,
         message: `Permanently delete ALL ${stacks.length} stacks from the state store? This cannot be undone. Cloud resources will remain.`,

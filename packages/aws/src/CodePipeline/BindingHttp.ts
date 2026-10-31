@@ -6,15 +6,15 @@ import type { Pipeline } from "./Pipeline.ts";
 /**
  * Shared scaffolding for AWS CodePipeline HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and the injected
  * pipeline-name key is boilerplate.
  *
  * CodePipeline addresses the pipeline as `name` on some operations
  * (StartPipelineExecution, GetPipelineState) and `pipelineName` on the rest.
  * Stage- and action-addressed operations authorize against sub-resource ARNs
- * (`{pipelineArn}/{stage}` / `{pipelineArn}/{stage}/{action}`) — set
+ * (`{pipelineArn}/{stage}` / `{pipelineArn}/{stage}/{action}`) -- set
  * `subScoped` to additionally grant on `{pipelineArn}/*`.
  */
 
@@ -62,7 +62,7 @@ export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, 
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Pipeline>(pipeline: P) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const PipelineName = yield* pipeline.pipelineName;
       yield* bindPipelinePolicy(options.tag, pipeline, options.actions, false);
       return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (
@@ -80,7 +80,7 @@ export const makeCodePipelineNameHttpBinding = <I extends { name?: string }, A, 
  * Build the impl Effect for an operation that addresses the pipeline via a
  * `pipelineName` field (the majority): the runtime callable injects the
  * bound {@link Pipeline}'s name and the deploy-time half grants `actions`
- * on the pipeline ARN (plus `{pipelineArn}/*` when `subScoped` — stage- and
+ * on the pipeline ARN (plus `{pipelineArn}/*` when `subScoped` -- stage- and
  * action-addressed operations authorize against sub-resource ARNs).
  */
 export const makeCodePipelinePipelineNameHttpBinding = <

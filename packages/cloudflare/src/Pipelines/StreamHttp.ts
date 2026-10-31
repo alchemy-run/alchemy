@@ -16,7 +16,7 @@ import { StreamSendError, type WriteStreamClient } from "./WriteStream.ts";
 /**
  * Shared scaffolding for the HTTP-ingest Pipelines clients
  * (`WriteStreamHttp`, `WriteStreamLocal` and the matching StreamSink
- * layers). Internal — not exported from the Pipelines barrel.
+ * layers). Internal -- not exported from the Pipelines barrel.
  */
 
 /**
@@ -120,7 +120,7 @@ export const makeLocalStreamBinding = <Client>(options: {
 
     return Effect.fn(function* (stream: Stream<any> | LegacyPipeline) {
       if (isLegacyPipeline(stream)) return yield* legacyPipelineUnsupported(options.layer);
-      // Deferred accessor — resolves the stream id at apply time, so a
+      // Deferred accessor -- resolves the stream id at apply time, so a
       // stream created in the same deploy works. No `host.bind`.
       const streamId = yield* stream.streamId;
       return options.makeClient(

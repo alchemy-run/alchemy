@@ -12,7 +12,7 @@ export interface QueryRequest extends Omit<kendra.QueryRequest, "IndexId"> {}
  * Runtime binding for the `Query` operation (IAM action
  * `kendra:Query`), scoped to one {@link Index}.
  *
- * Searches the index with a natural-language query — returns ranked
+ * Searches the index with a natural-language query -- returns ranked
  * answers, FAQ matches, and document results, optionally filtered on
  * document attributes and the querying user's context.
  * Provide the implementation with

@@ -7,7 +7,7 @@ type NamespaceTypeId = typeof NamespaceTypeId;
 const NamespaceTypeId = "Cloudflare.Artifacts.Namespace" as const;
 
 /**
- * Cloudflare validation: 2–63 chars, starting with a letter or digit, followed
+ * Cloudflare validation: 2-63 chars, starting with a letter or digit, followed
  * by letters, digits, `.`, `_`, or `-`. See
  * https://developers.cloudflare.com/artifacts/platform/limits/.
  */
@@ -26,7 +26,7 @@ export type NamespaceProps = {
    * Cloudflare namespace name. The first repo created against a name that
    * does not exist yet creates the namespace.
    *
-   * Must be 2–63 characters, start with a letter or digit, and contain only
+   * Must be 2-63 characters, start with a letter or digit, and contain only
    * letters, digits, `.`, `_`, or `-`. If omitted, the lowercased logical id
    * is used.
    */
@@ -55,7 +55,7 @@ export const isNamespace = (value: unknown): value is Namespace =>
   (value as Namespace).kind === NamespaceTypeId;
 
 /**
- * A Cloudflare Artifacts namespace — the top-level container for Git-compatible
+ * A Cloudflare Artifacts namespace -- the top-level container for Git-compatible
  * versioned repositories. See the
  * {@link https://blog.cloudflare.com/artifacts-git-for-agents-beta/ | Artifacts launch post}
  * and {@link https://developers.cloudflare.com/artifacts/concepts/namespaces/ | Namespaces docs}.
@@ -69,7 +69,7 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * the bound `Artifacts` API.
  *
  * Unlike the other Worker-only bindings, an Artifacts namespace does **not**
- * auto-bind when yielded — it always requires an explicit access level via
+ * auto-bind when yielded -- it always requires an explicit access level via
  * {@link ReadNamespace} / {@link WriteNamespace} / {@link ReadWriteNamespace}.
  *
  * ### Declaring a Namespace
@@ -78,7 +78,7 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * const Repos = Cloudflare.Artifacts.Namespace("Repos");
  * ```
  *
- * **Example:** Override the namespace name (2–63 chars)
+ * **Example:** Override the namespace name (2-63 chars)
  * ```typescript
  * const Repos = Cloudflare.Artifacts.Namespace("Repos", { namespace: "starter-repos" });
  * ```

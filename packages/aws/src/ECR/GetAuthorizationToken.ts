@@ -7,20 +7,20 @@ import type * as Effect from "effect/Effect";
  *
  * Mints the temporary registry credential (`AWS:<password>` base64 token,
  * valid 12 hours) a Docker client presents to the account's private ECR
- * registry — a registry-level operation, so the binding takes no resource
+ * registry -- a registry-level operation, so the binding takes no resource
  * and the grant is on `Resource: ["*"]` (the action supports no
  * resource-level permissions). Provide the implementation with
  * `Effect.provide(AWS.ECR.GetAuthorizationTokenHttp)`.
  *
  * The returned `authorizationToken` is wrapped in `Redacted` so it never
- * leaks into logs — unwrap with `Redacted.value(...)` at the point of use.
+ * leaks into logs -- unwrap with `Redacted.value(...)` at the point of use.
  *
  * ### Registry Authentication
  * **Example:** Decode Docker Login Credentials
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
- * // init — registry-level binding takes no resource
+ * // init -- registry-level binding takes no resource
  * const getAuthorizationToken = yield* AWS.ECR.GetAuthorizationToken();
  *
  * // runtime

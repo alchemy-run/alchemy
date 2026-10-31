@@ -19,40 +19,40 @@ import {
 export type EnterprisesEnrollmentTokenProps = {
   /**
    * Parent enterprise (`enterprises/{enterprise}` or `{enterprise}`).
-   * Immutable — changing it replaces the token.
+   * Immutable -- changing it replaces the token.
    */
   parent: string;
   /**
    * Policy initially applied to the enrolled device
    * (`enterprises/{enterprise}/policies/{policy}` or `{policy}`).
-   * Immutable — changing it replaces the token.
+   * Immutable -- changing it replaces the token.
    */
   policyName?: string;
   /**
    * Whether personal usage is allowed on a device provisioned with this
-   * token. Immutable — changing it replaces the token.
+   * token. Immutable -- changing it replaces the token.
    */
   allowPersonalUsage?: androidmanagement.EnrollmentTokenAllowPersonalUsageEnum | (string & {});
   /**
-   * Google authentication options during enrollment. Immutable —
+   * Google authentication options during enrollment. Immutable --
    * changing them replaces the token.
    */
   googleAuthenticationOptions?: androidmanagement.GoogleAuthenticationOptions;
   /**
-   * One-time-use token. Immutable — changing it replaces the token.
+   * One-time-use token. Immutable -- changing it replaces the token.
    */
   oneTimeOnly?: boolean;
   /**
    * Token lifetime as a duration string (for example `3600s`). Defaults
    * to ten years so the resource stays usable until deleted.
-   * Immutable — changing it replaces the token.
+   * Immutable -- changing it replaces the token.
    * @default "315360000s"
    */
   duration?: string;
   /**
    * Arbitrary data exposed on the Device after enrollment (max 1024
    * characters). List/get return only a partial view and omit this
-   * field. Immutable — changing it replaces the token.
+   * field. Immutable -- changing it replaces the token.
    */
   additionalData?: string;
 };

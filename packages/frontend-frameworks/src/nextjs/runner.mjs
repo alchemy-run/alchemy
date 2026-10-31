@@ -1,7 +1,7 @@
 import fs from "node:fs";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
-// Programmatic @opennextjs/cloudflare build runner — NO wrangler binary, NO
+// Programmatic @opennextjs/cloudflare build runner -- NO wrangler binary, NO
 // wrangler.json. Executed as a disposable child process (see Build.ts): the
 // upstream pipeline mutates cwd-coupled module state, spawns `next build`, and
 // can process.exit(1), so it must never run inside the harness process.
@@ -11,7 +11,7 @@ import fs from "node:fs";
 // `compileConfig` / `getNormalizedOptions` wrappers are vendored here (~15
 // lines) over `@opennextjs/aws` exports so that NOTHING on this path ever
 // imports wrangler code. (`ensureNextjsVersionSupported` still imports
-// `wrangler/package.json` — a JSON version read satisfied by the inert
+// `wrangler/package.json` -- a JSON version read satisfied by the inert
 // `wrangler-stub` package this integration ships.)
 //
 // Usage: node runner.mjs '<json>' where json is Build.ts's RunnerConfig:

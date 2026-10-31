@@ -31,7 +31,7 @@ export interface RuleGroupProps {
   type: "STATELESS" | "STATEFUL";
   /**
    * Maximum operating capacity the rule group can consume when applied.
-   * Capacity cannot be changed after creation — changing it replaces the
+   * Capacity cannot be changed after creation -- changing it replaces the
    * rule group.
    */
   capacity: number;
@@ -82,7 +82,7 @@ export interface RuleGroup extends Resource<
 > {}
 
 /**
- * An AWS Network Firewall rule group — a reusable collection of stateless
+ * An AWS Network Firewall rule group -- a reusable collection of stateless
  * or stateful network traffic inspection rules referenced by
  * {@link FirewallPolicy | firewall policies}.
  * ### Creating Rule Groups
@@ -216,12 +216,12 @@ export const RuleGroupProvider = () =>
             ...internalTags,
           };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* nfw
             .describeRuleGroup({ RuleGroupName: name, Type: news.type })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             yield* nfw.createRuleGroup({
               RuleGroupName: name,
@@ -238,7 +238,7 @@ export const RuleGroupProvider = () =>
               .pipe(retryWhileNfwNotFound);
           }
 
-          // 3. Sync definition — compare desired against OBSERVED state and
+          // 3. Sync definition -- compare desired against OBSERVED state and
           // apply only when it differs.
           const observedDescription = observed.RuleGroupResponse.Description;
           const definitionDiffers =
@@ -263,7 +263,7 @@ export const RuleGroupProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = nfwTagsToRecord(observed.RuleGroupResponse.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           const arn = observed.RuleGroupResponse.RuleGroupArn;
@@ -281,7 +281,7 @@ export const RuleGroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A rule group still referenced by a firewall policy (deleted
           // moments ago by the engine) rejects deletion with
-          // InvalidOperationException — retry through the release window.
+          // InvalidOperationException -- retry through the release window.
           yield* nfw.deleteRuleGroup({ RuleGroupArn: output.ruleGroupArn }).pipe(
             retryWhileNfwInUse,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),

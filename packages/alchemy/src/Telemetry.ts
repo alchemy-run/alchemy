@@ -1,7 +1,7 @@
 /**
  * OpenTelemetry export for deployed Functions/Workers, built on Effect's
  * OTLP exporters (`effect/observability`) and configured through
- * alchemy's binding infrastructure — exporters are Layers, and their
+ * alchemy's binding infrastructure -- exporters are Layers, and their
  * configuration (endpoints, tokens) is wired from resource Outputs like any
  * other binding.
  *
@@ -18,7 +18,7 @@
  *   Effect.provide(
  *     Layer.mergeAll(
  *       Cloudflare.R2.ReadWriteBucketBinding,
- *       // vendor sugar — binds dataset endpoints + ingest token:
+ *       // vendor sugar -- binds dataset endpoints + ingest token:
  *       Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
  *       // or the generic OTLP form, wired from any Inputs/Outputs:
  *       // Alchemy.Telemetry.layerOtlp({ url: collector.url, headers: { ... } }),
@@ -32,7 +32,7 @@
  * {@link layerOtlp} is a *binding* layer: at deploy time it binds the
  * configured endpoints/headers onto the host (Redacted values as secrets),
  * and at runtime the exporter reads those bound values back. Telemetry is
- * off until a layer is provided — Effect's default tracer is a no-op, so
+ * off until a layer is provided -- Effect's default tracer is a no-op, so
  * all instrumentation stays free.
  *
  * `Telemetry` itself is a `Context.Reference` holding the Layer of
@@ -43,7 +43,7 @@
  * - the exporter's batching fiber runs inside the event's I/O context
  *   (required on workerd, where timers/fetches are pinned to the request),
  * - buffered spans/logs/metrics are flushed when the request scope
- *   finalizes — registered with `ctx.waitUntil`, so flushing never delays
+ *   finalizes -- registered with `ctx.waitUntil`, so flushing never delays
  *   the response.
  */
 import * as Effect from "effect/Effect";
@@ -96,7 +96,7 @@ const reference = Telemetry;
  * Layer on the current runtime context, where the runtime bridges pick it
  * up per event. Handlers' request-time context is assembled by the bridge,
  * so a plain `Layer.succeed` of the reference on the init Effect would
- * never reach them — the registration is what makes it visible at request
+ * never reach them -- the registration is what makes it visible at request
  * time.
  */
 export const layer = (exporter: TelemetryLayer): Layer.Layer<never> =>
@@ -120,7 +120,7 @@ export type OtlpHeaderValue = Input<string | Redacted.Redacted<string>>;
 
 /**
  * OTLP configuration for one signal. `url` and header values accept plain
- * values or resource Outputs — they are *bound* onto the host at deploy
+ * values or resource Outputs -- they are *bound* onto the host at deploy
  * time like any other binding.
  */
 export interface OtlpSignalOptions {
@@ -135,7 +135,7 @@ export interface OtlpSignalOptions {
 
 /**
  * Options for {@link layerOtlp}. Configure a base `url` (with
- * `/v1/{signal}` appended per signal), per-signal urls, or a mix — a
+ * `/v1/{signal}` appended per signal), per-signal urls, or a mix -- a
  * per-signal entry takes precedence over the base.
  */
 export interface OtlpOptions {
@@ -265,13 +265,13 @@ const destinationsOutput = (
  *
  * At deploy time, building this layer binds the configured urls and
  * headers onto the host Function/Worker (Redacted values as secret
- * bindings) — url and header values accept resource Outputs, so exporter
+ * bindings) -- url and header values accept resource Outputs, so exporter
  * config is wired from resources like any other binding. At runtime the
  * exporter reads the bound values back and ships traces, logs, and metrics
  * over OTLP/HTTP JSON, flushed as each event's scope closes.
  *
  * Exporters COMPOSE: merge several `otlp` layers (or vendor sugar like
- * `Axiom.Telemetry`) and every destination receives the telemetry — spans
+ * `Axiom.Telemetry`) and every destination receives the telemetry -- spans
  * are serialized once, so trace/span ids agree across destinations:
  *
  * ```ts

@@ -143,8 +143,8 @@ export interface AccountTosAcceptance {
 
 export interface AccountProps {
   /**
-   * Kind of connected account to create — `standard`, `express`, or
-   * `custom`. Create-only — changing it replaces the account.
+   * Kind of connected account to create -- `standard`, `express`, or
+   * `custom`. Create-only -- changing it replaces the account.
    *
    * Mutually exclusive with {@link AccountProps.controller}. Omitting both
    * makes Stripe default to a Standard account.
@@ -152,7 +152,7 @@ export interface AccountProps {
   type?: AccountKind;
   /**
    * Two-letter ISO country code of the account holder (e.g. `"US"`).
-   * Create-only — changing it replaces the account. When omitted, Stripe
+   * Create-only -- changing it replaces the account. When omitted, Stripe
    * defaults to the platform's country.
    */
   country?: string;
@@ -173,15 +173,15 @@ export interface AccountProps {
   businessProfile?: AccountBusinessProfile;
   /**
    * Capabilities to request, keyed by Stripe capability name
-   * (`card_payments`, `transfers`, …) with `{ requested: boolean }`.
-   * Mutable — requesting a capability does not activate it; Stripe
+   * (`card_payments`, `transfers`, ...) with `{ requested: boolean }`.
+   * Mutable -- requesting a capability does not activate it; Stripe
    * activates it once requirements are met.
    *
    * Nested fields use Stripe's wire names.
    */
   capabilities?: CreateAccountRequestCapabilities;
   /**
-   * Account behaviour settings (branding, payouts, card payments, …).
+   * Account behaviour settings (branding, payouts, card payments, ...).
    * Mutable. Nested fields use Stripe's wire names.
    */
   settings?: CreateAccountRequestSettings;
@@ -208,7 +208,7 @@ export interface AccountProps {
   tosAcceptance?: AccountTosAcceptance;
   /**
    * Who is responsible for fees, losses, requirement collection, and
-   * dashboard access. Create-only — changing it replaces the account.
+   * dashboard access. Create-only -- changing it replaces the account.
    *
    * Mutually exclusive with {@link AccountProps.type}.
    */
@@ -225,10 +225,10 @@ export type Account = Resource<
   "Stripe.Account",
   AccountProps,
   {
-    /** Stripe account id (`acct_…`). */
+    /** Stripe account id (`acct_...`). */
     id: string;
     /**
-     * Stripe account type — `standard`, `express`, `custom`, or `none`
+     * Stripe account type -- `standard`, `express`, `custom`, or `none`
      * for accounts created with an explicit `controller`.
      */
     type: AccountType | undefined;
@@ -254,7 +254,7 @@ export type Account = Resource<
      */
     detailsSubmitted: boolean;
     /**
-     * Capability name → status (`active`, `pending`, `inactive`) for every
+     * Capability name -> status (`active`, `pending`, `inactive`) for every
      * capability Stripe reports on the account.
      */
     capabilities: Record<string, string>;
@@ -274,7 +274,7 @@ export type Account = Resource<
 >;
 
 /**
- * A Stripe Connect connected account — a Standard, Express, or Custom
+ * A Stripe Connect connected account -- a Standard, Express, or Custom
  * account created by your platform on behalf of a user.
  *
  * Creating an account is only the first step of onboarding: Stripe

@@ -28,18 +28,18 @@ export type OrganizationLogScopeProps = {
    * Log scope id (the last segment of the resource name). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens,
-   * periods; first character must be alphanumeric. Immutable — changing
+   * periods; first character must be alphanumeric. Immutable -- changing
    * it replaces the log scope.
    */
   logScopeId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the log scope.
    */
   organization?: string;
   /**
-   * Location. Log scopes are only available in `global`. Immutable —
+   * Location. Log scopes are only available in `global`. Immutable --
    * changing it replaces the log scope.
    * @default "global"
    */
@@ -52,7 +52,7 @@ export type OrganizationLogScopeProps = {
   resourceNames?: string[];
   /**
    * Human-readable description (max 8000 characters). Log scopes have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;

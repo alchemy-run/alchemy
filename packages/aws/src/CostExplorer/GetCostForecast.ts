@@ -16,7 +16,7 @@ export interface GetCostForecastRequest extends ce.GetCostForecastRequest {}
  * ### Forecasting
  * **Example:** Forecast Next Month's Spend
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getCostForecast = yield* AWS.CostExplorer.GetCostForecast();
  *
  * // runtime

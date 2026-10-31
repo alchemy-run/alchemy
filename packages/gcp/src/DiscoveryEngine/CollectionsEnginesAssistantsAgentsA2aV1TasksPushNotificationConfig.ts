@@ -13,16 +13,16 @@ export type CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigPr
   /**
    * A2A tenant resource name, typically the assistant or agent:
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}/assistants/{assistant}`.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   tenant: string;
   /**
-   * Parent task resource (`tasks/{task}`). Immutable — changing it
+   * Parent task resource (`tasks/{task}`). Immutable -- changing it
    * replaces the config.
    */
   parent: string;
   /**
-   * Config id. If omitted, a unique id is generated. Immutable —
+   * Config id. If omitted, a unique id is generated. Immutable --
    * changing it replaces the config.
    */
   configId?: string;
@@ -35,7 +35,7 @@ export type CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigPr
    */
   token?: string;
   /**
-   * Authentication schemes (Basic, Bearer, …).
+   * Authentication schemes (Basic, Bearer, ...).
    */
   schemes?: string[];
   /**

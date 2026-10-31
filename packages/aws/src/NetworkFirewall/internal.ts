@@ -19,7 +19,7 @@ export const recordToNfwTags = (record: Record<string, string>): NFW.Tag[] =>
  * Network Firewall rejects deletion of a rule group / firewall policy that is
  * still referenced (or was referenced moments ago) with
  * `InvalidOperationException`. Dependents are deleted first by the engine,
- * but the service releases the reference asynchronously — retry through a
+ * but the service releases the reference asynchronously -- retry through a
  * short window.
  */
 export const retryWhileNfwInUse = <A, E extends { readonly _tag: string }, R>(

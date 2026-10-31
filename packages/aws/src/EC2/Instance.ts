@@ -77,7 +77,7 @@ export interface InstanceProps extends PlatformProps {
   instanceProfileName?: string;
   /**
    * User data script to provide at launch time.
-   * Changes force replacement — EC2 does not re-run user data on an
+   * Changes force replacement -- EC2 does not re-run user data on an
    * in-place update.
    *
    * Pass a `Redacted` when the script carries credentials: it is revealed
@@ -208,7 +208,7 @@ export interface Instance extends Resource<
      * Set when the instance is hosted (`main` / `port`). Under
      * `alchemy dev` the emulator's public address is
      * `{instanceId}.localhost.floci.io`, which resolves to 127.0.0.1
-     * and is served by a per-port host-routing mux — reading `url`
+     * and is served by a per-port host-routing mux -- reading `url`
      * instead of interpolating `publicIpAddress` is what makes the
      * instance reachable from the host. On AWS this is the public
      * IP/DNS and the process port.
@@ -530,7 +530,7 @@ export const InstanceProvider = () =>
       // Generation-scoped recovery lookup: instances are branded with the
       // engine's per-generation instance id (`alchemy::instance`) on top of
       // the stack/stage/id ownership tags. An interrupted create resumes with
-      // the same generation id, so it still recovers its own orphan — while a
+      // the same generation id, so it still recovers its own orphan -- while a
       // replacement's create phase runs under a freshly minted generation id
       // and can never re-adopt the old generation's live instance that the
       // cleanup phase is about to terminate.
@@ -695,7 +695,7 @@ export const InstanceProvider = () =>
           // bailing on `isResolved(news)` lets the engine default the change
           // to `update`, which keeps the same instance ID and never re-runs
           // user data. An unresolved replace-trigger is itself a replacement
-          // — the upstream's new value is unknown at plan time, so we can't
+          // -- the upstream's new value is unknown at plan time, so we can't
           // prove the launch config didn't change.
           const launchConfigChanged = (next: unknown, prev: unknown) =>
             !isResolved(next) || prev !== next;
@@ -729,7 +729,7 @@ export const InstanceProvider = () =>
           // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
           // subnet reference): a content-only edit changes no prop at all,
           // so bailing on full resolution silently no-ops the update. The
-          // content inputs are plain — gate on THEM, not on the whole bag
+          // content inputs are plain -- gate on THEM, not on the whole bag
           // (the same isResolved-defeats-content-diff bug the MicroVM image
           // diff had).
           const contentInputs = {
@@ -834,7 +834,7 @@ export const InstanceProvider = () =>
             output,
           });
 
-          // Observe — try the cached instanceId first, then fall back to the
+          // Observe -- try the cached instanceId first, then fall back to the
           // alchemy-tag search for recovery from interrupted creates. EC2
           // assigns instance IDs server-side so we always read the live
           // record before deciding whether to launch a new one.
@@ -853,7 +853,7 @@ export const InstanceProvider = () =>
             instance = undefined;
           }
 
-          // Ensure — RunInstances when no live instance was observed. The
+          // Ensure -- RunInstances when no live instance was observed. The
           // initial sourceDestCheck is set here because RunInstances itself
           // doesn't accept it. The ClientToken is this generation plus the
           // last instance it launched, so a launch retried after a lost reply
@@ -908,7 +908,7 @@ export const InstanceProvider = () =>
           const instanceId = instance.InstanceId as InstanceId;
           let restarted = false;
 
-          // Sync security groups — observed primary-ENI groups vs desired.
+          // Sync security groups -- observed primary-ENI groups vs desired.
           const observedSecurityGroups = (instance.SecurityGroups ?? [])
             .map((g) => g.GroupId)
             .filter((g): g is string => Boolean(g));
@@ -925,7 +925,7 @@ export const InstanceProvider = () =>
             });
           }
 
-          // Sync source/dest check — observed flag vs desired (default true).
+          // Sync source/dest check -- observed flag vs desired (default true).
           const desiredSourceDestCheck = news.sourceDestCheck ?? true;
           if ((instance.SourceDestCheck ?? true) !== desiredSourceDestCheck) {
             yield* ec2.modifyInstanceAttribute({
@@ -934,7 +934,7 @@ export const InstanceProvider = () =>
             });
           }
 
-          // Sync metadata options — only the fields the user set, against
+          // Sync metadata options -- only the fields the user set, against
           // the observed IMDS config. Unset fields keep whatever is live.
           const desiredMetadata = news.metadataOptions ?? {};
           const metadataMatches = (observed: ec2.InstanceMetadataOptionsResponse = {}) =>
@@ -968,7 +968,7 @@ export const InstanceProvider = () =>
             );
           }
 
-          // Sync instance type — observed type vs desired. Type changes need
+          // Sync instance type -- observed type vs desired. Type changes need
           // the instance stopped, then we restart it if it was running.
           if (news.instanceType && String(instance.InstanceType ?? "") !== news.instanceType) {
             const wasRunning = instance.State?.Name === "running";
@@ -997,7 +997,7 @@ export const InstanceProvider = () =>
             }
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (instance.Tags ?? [])
               .filter((t): t is { Key: string; Value: string } =>
@@ -1019,7 +1019,7 @@ export const InstanceProvider = () =>
             });
           }
 
-          // Hosted-runtime reboot — picks up new bundle/env without an
+          // Hosted-runtime reboot -- picks up new bundle/env without an
           // explicit instance-type cycle. Skip if the type-change path
           // already restarted us.
           if (news.main && !restarted) {

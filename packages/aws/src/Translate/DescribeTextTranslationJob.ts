@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:DescribeTextTranslationJob` — get the
+ * Runtime binding for `translate:DescribeTextTranslationJob` -- get the
  * properties of an asynchronous batch translation job (status, language
  * pair, input/output locations, document counts).
  *

@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `sesv2:GetDomainStatisticsReport`.
  *
  * Retrieves inbox-placement and engagement statistics for a domain identity
- * over a date range — the data behind the SES deliverability dashboard.
+ * over a date range -- the data behind the SES deliverability dashboard.
  * Requires the deliverability dashboard subscription; an unknown domain
  * surfaces the typed `NotFoundException`. Account-level operation. Provide the
  * implementation with `Effect.provide(AWS.SES.GetDomainStatisticsReportHttp)`.
  * ### Deliverability Insights
  * **Example:** Read a Domain's Deliverability Report
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getReport = yield* SES.GetDomainStatisticsReport();
  *
  * // runtime

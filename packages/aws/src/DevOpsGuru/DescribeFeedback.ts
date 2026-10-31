@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Feedback
  * **Example:** Read Recorded Feedback
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeFeedback = yield* AWS.DevOpsGuru.DescribeFeedback();
  *
  * // runtime

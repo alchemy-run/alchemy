@@ -79,7 +79,7 @@ export interface NetworkProps {
   ipRange: string;
   /**
    * Subnets allocated in this Network. Synced via `add_subnet` /
-   * `delete_subnet` — they are not their own resources.
+   * `delete_subnet` -- they are not their own resources.
    */
   subnets?: NetworkSubnet[];
   /**
@@ -141,7 +141,7 @@ export type Network = Resource<
 >;
 
 /**
- * A Hetzner Cloud private Network — an isolated IPv4 range that Cloud
+ * A Hetzner Cloud private Network -- an isolated IPv4 range that Cloud
  * Servers and Load Balancers attach to. Subnets, routes, delete protection,
  * and labels are synced on the Network itself; `network_actions` are not
  * modeled as their own resources.
@@ -515,14 +515,14 @@ export const NetworkProvider = () =>
       const exposeRoutesToVswitch = news.exposeRoutesToVswitch ?? false;
       const deleteProtection = news.deleteProtection ?? false;
 
-      // Observe — cached `output.networkId` is a hint. Fall back to
+      // Observe -- cached `output.networkId` is a hint. Fall back to
       // ownership labels, then the deterministic name.
       let current = yield* observe(output?.networkId, name, id);
 
       // A replacement create shares the logical id (and thus ownership
       // labels) with the outgoing generation. If the observed row cannot
       // accept the desired `ipRange` (Hetzner can only extend a range),
-      // do not reuse it — create a new Network and let the engine delete
+      // do not reuse it -- create a new Network and let the engine delete
       // the old generation.
       if (
         current !== undefined &&
@@ -532,7 +532,7 @@ export const NetworkProvider = () =>
         current = undefined;
       }
 
-      // Ensure — create when missing. A name-collision race is treated as
+      // Ensure -- create when missing. A name-collision race is treated as
       // the peer winning; we pick that row up and continue into sync.
       if (current === undefined) {
         const created = yield* Hetzner.networks

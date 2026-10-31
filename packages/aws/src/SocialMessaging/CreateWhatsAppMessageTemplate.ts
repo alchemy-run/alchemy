@@ -27,7 +27,7 @@ export interface CreateWhatsAppMessageTemplateRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Create a Template from a Definition
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const createTemplate = yield* AWS.SocialMessaging.CreateWhatsAppMessageTemplate(account);
  *
  * // runtime

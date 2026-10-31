@@ -15,13 +15,13 @@ type TypeId = typeof TypeId;
 
 export interface LeakedCredentialDetectionProps {
   /**
-   * Zone the custom detection belongs to. Stable — moving a detection
+   * Zone the custom detection belongs to. Stable -- moving a detection
    * between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * Ruleset expression locating the username in the request, e.g.
-   * `lookup_json_string(http.request.body.raw, "user")`. Mutable —
+   * `lookup_json_string(http.request.body.raw, "user")`. Mutable --
    * updated in place via PUT. At least one of `username`/`password`
    * should be set.
    */
@@ -29,7 +29,7 @@ export interface LeakedCredentialDetectionProps {
   /**
    * Ruleset expression locating the password in the request, e.g.
    * `lookup_json_string(http.request.body.raw, "secret")`. This is an
-   * expression over the request (not a secret value). Mutable — updated
+   * expression over the request (not a secret value). Mutable -- updated
    * in place via PUT.
    */
   password?: string;
@@ -56,15 +56,15 @@ export type LeakedCredentialDetection = Resource<
 
 /**
  * A custom detection location for Cloudflare Leaked Credential Checks
- * (`/zones/{zone_id}/leaked-credential-checks/detections`) — a pair of
+ * (`/zones/{zone_id}/leaked-credential-checks/detections`) -- a pair of
  * ruleset expressions telling the WAF where to find the username and
  * password in your application's login requests, so credentials submitted
  * in non-standard payloads can still be checked against breach data.
  *
  * Requires Leaked Credential Checks to be **enabled** on the zone (see
- * {@link LeakedCredentialCheck}) — every detection operation fails with the
+ * {@link LeakedCredentialCheck}) -- every detection operation fails with the
  * typed `LeakedCredentialChecksDisabled` error otherwise. The number of
- * custom detections is plan-gated — a zone over its quota fails creation
+ * custom detections is plan-gated -- a zone over its quota fails creation
  * with the typed `DetectionQuotaExceeded` error. Each username/password
  * expression pair may exist only once per zone (`DetectionAlreadyExists`).
  *
@@ -128,7 +128,7 @@ export const LeakedCredentialDetectionProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Detections live inside a zone (`/zones/{id}/.../detections`) with
-      // no account-wide enumeration API — fan out across every zone and
+      // no account-wide enumeration API -- fan out across every zone and
       // exhaustively paginate the per-zone list.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -182,7 +182,7 @@ export const LeakedCredentialDetectionProvider = () =>
 
       // Adoption path: a detection with these expressions may already
       // exist on the zone. Detections carry no ownership markers, so we
-      // cannot prove we created it — brand it `Unowned` so the engine
+      // cannot prove we created it -- brand it `Unowned` so the engine
       // refuses to take over unless `adopt` is set.
       const username = output?.username ?? olds?.username;
       const password = output?.password ?? olds?.password;
@@ -197,7 +197,7 @@ export const LeakedCredentialDetectionProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the detection id cached on `output` is a hint, not
+      // 1. Observe -- the detection id cached on `output` is a hint, not
       //    a guarantee: a missing detection falls through to the
       //    expression scan and then to create.
       let observed = output?.detectionId
@@ -205,18 +205,18 @@ export const LeakedCredentialDetectionProvider = () =>
         : undefined;
 
       // 2. Fall back to scanning the zone for an expression match.
-      //    Ownership has already been verified upstream — `read` reports
+      //    Ownership has already been verified upstream -- `read` reports
       //    existing detections as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByExpressions(zoneId, news.username, news.password);
       }
 
-      // 3. Ensure — create when missing. Requires the zone's Leaked
+      // 3. Ensure -- create when missing. Requires the zone's Leaked
       //    Credential Checks toggle to be on; otherwise this fails with
       //    the typed `LeakedCredentialChecksDisabled` error.
       //    A concurrent create of the same expression pair races us to
-      //    the typed `DetectionAlreadyExists` — re-observe and continue.
+      //    the typed `DetectionAlreadyExists` -- re-observe and continue.
       if (!observed) {
         observed = yield* lcc
           .createDetection({
@@ -235,7 +235,7 @@ export const LeakedCredentialDetectionProvider = () =>
         }
       }
 
-      // 4. Sync — PUT only when the observed expressions differ.
+      // 4. Sync -- PUT only when the observed expressions differ.
       const dirty =
         (observed.username ?? undefined) !== news.username ||
         (observed.password ?? undefined) !== news.password;
@@ -258,12 +258,12 @@ export const LeakedCredentialDetectionProvider = () =>
           detectionId: output.detectionId,
         })
         .pipe(
-          // Already gone — idempotent re-delete after a crashed run.
+          // Already gone -- idempotent re-delete after a crashed run.
           Effect.catchTags({
             DetectionNotFound: () => Effect.void,
             // The zone's toggle was switched off out-of-band; the API
             // refuses all detection operations then. The detection is
-            // unreachable either way — treat as converged.
+            // unreachable either way -- treat as converged.
             LeakedCredentialChecksDisabled: () => Effect.void,
           }),
         );
@@ -283,7 +283,7 @@ type ObservedDetection = {
 /**
  * Read a detection by id, mapping "gone" (`DetectionNotFound`, Cloudflare
  * error code 11002) and "product off" (`LeakedCredentialChecksDisabled`,
- * code 11001 — the API refuses all detection reads while the zone toggle is
+ * code 11001 -- the API refuses all detection reads while the zone toggle is
  * off) to `undefined`.
  */
 const getDetection = (zoneId: string, detectionId: string) =>

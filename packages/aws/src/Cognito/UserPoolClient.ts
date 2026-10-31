@@ -208,7 +208,7 @@ export const UserPoolClient = Resource<UserPoolClient>("AWS.Cognito.UserPoolClie
 const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
   value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
-/** The mutable desired state, in wire shape — used both as the update body
+/** The mutable desired state, in wire shape -- used both as the update body
  * and (against the observed client) for drift detection. */
 const desiredConfig = (news: UserPoolClientProps) => ({
   ExplicitAuthFlows: news.explicitAuthFlows,
@@ -336,7 +336,7 @@ export const UserPoolClientProvider = () =>
         stables: ["clientId", "userPoolId"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no
-        // global enumeration API of its own — nuke reaches it through the
+        // global enumeration API of its own -- nuke reaches it through the
         // parent pool's deletion, so enumeration returns empty per the
         // ProviderService doctrine.
         list: () => Effect.succeed([]),
@@ -362,7 +362,7 @@ export const UserPoolClientProvider = () =>
           const oldName = yield* createName(id, olds ?? {});
           const newName = yield* createName(id, news ?? {});
           if (oldName !== newName) {
-            // ClientName is mutable via UpdateUserPoolClient — fall through
+            // ClientName is mutable via UpdateUserPoolClient -- fall through
             // to the default update path.
             return undefined;
           }
@@ -372,7 +372,7 @@ export const UserPoolClientProvider = () =>
           const clientName = output?.clientName ?? (yield* createName(id, news));
           const userPoolId = news.userPoolId;
 
-          // 1. OBSERVE — output.clientId is only a cache.
+          // 1. OBSERVE -- output.clientId is only a cache.
           let observed =
             output?.clientId !== undefined
               ? yield* describeClient(userPoolId, output.clientId)
@@ -381,7 +381,7 @@ export const UserPoolClientProvider = () =>
             observed = yield* findClientByName(userPoolId, clientName);
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             observed = yield* cip
               .createUserPoolClient({
@@ -392,7 +392,7 @@ export const UserPoolClientProvider = () =>
               })
               .pipe(Effect.map((r) => r.UserPoolClient!));
           } else if (hasDrift(news, clientName, observed)) {
-            // 3. SYNC — UpdateUserPoolClient resets omitted fields to
+            // 3. SYNC -- UpdateUserPoolClient resets omitted fields to
             //    defaults, so the body is the full desired state; skip the
             //    call when nothing drifted.
             observed = yield* cip

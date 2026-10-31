@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxDataview` — reads one dataview of a kdb database in the bound environment — status, active versions, and segment configurations.
+ * Runtime binding for `finspace:GetKxDataview` -- reads one dataview of a kdb database in the bound environment -- status, active versions, and segment configurations.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxDataviewHttp)`.
  * ### Managing Dataviews

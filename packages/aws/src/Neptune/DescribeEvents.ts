@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `rds:DescribeEvents`).
  *
  * Lists recent events (failovers, maintenance, snapshots, parameter changes)
- * for the account's Neptune clusters and instances — the audit trail for
+ * for the account's Neptune clusters and instances -- the audit trail for
  * operational tooling. Provide the implementation with
  * `Effect.provide(AWS.Neptune.DescribeEventsHttp)`.
  * ### Monitoring Clusters

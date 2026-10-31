@@ -7,7 +7,7 @@ import type { ContactChannel } from "./ContactChannel.ts";
  * Runtime binding for `ssm-contacts:DeactivateContactChannel`.
  *
  * Deactivate the bound contact channel so Incident Manager stops paging
- * through it — e.g. while the owner is on leave. The channel's ARN is
+ * through it -- e.g. while the owner is on leave. The channel's ARN is
  * injected as `ContactChannelId`.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.DeactivateContactChannelHttp)`.

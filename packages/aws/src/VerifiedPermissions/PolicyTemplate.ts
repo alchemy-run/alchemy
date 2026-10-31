@@ -20,7 +20,7 @@ export interface PolicyTemplateProps {
    * `?resource` placeholders which are filled in when a template-linked
    * policy is created, e.g.
    * `permit(principal == ?principal, action == PhotoApp::Action::"viewPhoto", resource);`.
-   * Mutable — updating re-submits the statement via `UpdatePolicyTemplate`.
+   * Mutable -- updating re-submits the statement via `UpdatePolicyTemplate`.
    */
   statement: string;
   /**
@@ -38,7 +38,7 @@ export interface PolicyTemplate extends Resource<
      */
     policyStoreId: string;
     /**
-     * Service-assigned unique ID of the policy template within the store —
+     * Service-assigned unique ID of the policy template within the store --
      * pass it as the `templateId` of a template-linked {@link Policy}.
      */
     policyTemplateId: string;
@@ -96,7 +96,7 @@ export const PolicyTemplateProvider = () =>
       return PolicyTemplate.Provider.of({
         stables: ["policyStoreId", "policyTemplateId"],
 
-        // child of a policy store — not enumerable account-wide
+        // child of a policy store -- not enumerable account-wide
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -115,11 +115,11 @@ export const PolicyTemplateProvider = () =>
           if (olds.policyStoreId !== news.policyStoreId) {
             return { action: "replace" } as const;
           }
-          // statement / description are mutable → default update path
+          // statement / description are mutable -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const existing =
             output?.policyTemplateId !== undefined
               ? yield* observe(news.policyStoreId, output.policyTemplateId)
@@ -139,7 +139,7 @@ export const PolicyTemplateProvider = () =>
             };
           }
 
-          // 3. SYNC — diff observed statement/description against desired
+          // 3. SYNC -- diff observed statement/description against desired
           const observedStatement = unwrap(existing.statement);
           const observedDescription = unwrap(existing.description);
           if (

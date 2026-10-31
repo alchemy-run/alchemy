@@ -161,24 +161,24 @@ export type RestorePlanProps = {
    * Restore plan id (the `{restorePlan}` segment of
    * `projects/{project}/locations/{location}/restorePlans/{restorePlan}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the plan.
+   * and logical id. Immutable -- changing it replaces the plan.
    */
   restorePlanId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the plan. Must match the target cluster region.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
    * Target GKE cluster. Full name or a cluster id combined with
-   * `location`. Immutable — changing it replaces the plan.
+   * `location`. Immutable -- changing it replaces the plan.
    */
   cluster: string;
   /**
    * Source BackupPlan. Full name
    * `projects/{project}/locations/{location}/backupPlans/{backupPlan}`
-   * or a plan id combined with `location`. Immutable — changing it
+   * or a plan id combined with `location`. Immutable -- changing it
    * replaces the plan.
    */
   backupPlan: string;
@@ -236,7 +236,7 @@ export type RestorePlan = Resource<
 >;
 
 /**
- * A Backup for GKE restore plan — the configuration for restoring
+ * A Backup for GKE restore plan -- the configuration for restoring
  * Backups from a BackupPlan into a target cluster.
  *
  * Changing `restorePlanId`, `location`, `cluster`, or `backupPlan`

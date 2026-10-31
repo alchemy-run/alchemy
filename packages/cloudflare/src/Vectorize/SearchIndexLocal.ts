@@ -8,13 +8,13 @@ import { type SearchIndexAuth, makeHttpSearchIndexClient } from "./SearchIndexHt
 import type { Index } from "./VectorizeIndex.ts";
 
 /**
- * Local implementation of the {@link SearchIndex} binding — talks to a
+ * Local implementation of the {@link SearchIndex} binding -- talks to a
  * Vectorize index over the Cloudflare HTTP API using the **current
  * credentials** instead of a native Worker binding (`SearchIndexBinding`).
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) so you can
  * insert, upsert, query, and fetch vectors with the same client you'd use
- * inside a Worker — no Worker host, no `host.bind`, no minted token:
+ * inside a Worker -- no Worker host, no `host.bind`, no minted token:
  *
  * @example Seeding an index from an Action
  * ```typescript
@@ -39,7 +39,7 @@ import type { Index } from "./VectorizeIndex.ts";
  * provides around the body), so `SearchIndex(index)` works even though the
  * index is created in the same deploy.
  *
- * `raw` and `queryById` have no Cloudflare HTTP equivalent and `Effect.die` —
+ * `raw` and `queryById` have no Cloudflare HTTP equivalent and `Effect.die` --
  * see {@link makeHttpSearchIndexClient}.
  */
 export const SearchIndexLocal = Layer.effect(
@@ -47,7 +47,7 @@ export const SearchIndexLocal = Layer.effect(
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the HTTP ops run with the
-    // current credentials — no `host.bind`, no minted token.
+    // current credentials -- no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     const auth: SearchIndexAuth = {
@@ -56,7 +56,7 @@ export const SearchIndexLocal = Layer.effect(
     };
 
     return Effect.fn(function* (index: Index) {
-      // Deferred accessor — resolves the index name against the tracker at
+      // Deferred accessor -- resolves the index name against the tracker at
       // apply time (in an Action, that's the engine's resolve context).
       const indexName = yield* index.indexName;
       return makeHttpSearchIndexClient(auth, indexName);

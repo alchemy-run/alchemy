@@ -34,17 +34,17 @@ export interface ConfigurationProps {
   /**
    * Zone whose API Shield configuration is managed.
    *
-   * Immutable — moving the configuration between zones triggers a
+   * Immutable -- moving the configuration between zones triggers a
    * replacement (the old zone's configuration is restored to the value it
    * had before Alchemy managed it).
    */
   zoneId: string;
   /**
    * The session identifiers ("auth ID characteristics") API Shield uses to
-   * attribute API requests to individual consumers — used by API Discovery
+   * attribute API requests to individual consumers -- used by API Discovery
    * and volumetric abuse detection. At most 10.
    *
-   * Mutable — written in place via PUT.
+   * Mutable -- written in place via PUT.
    */
   authIdCharacteristics: AuthIdCharacteristic[];
 }
@@ -71,7 +71,7 @@ export type Configuration = Resource<
 >;
 
 /**
- * The API Shield configuration of a Cloudflare zone — the session
+ * The API Shield configuration of a Cloudflare zone -- the session
  * identifiers ("auth ID characteristics") used to attribute API traffic to
  * individual consumers for API Discovery and volumetric abuse detection.
  *
@@ -81,7 +81,7 @@ export type Configuration = Resource<
  * from the desired ones; destroy restores the characteristics the zone had
  * before Alchemy first managed them.
  *
- * Requires an API Shield entitlement (Enterprise) — on other plans every
+ * Requires an API Shield entitlement (Enterprise) -- on other plans every
  * operation fails with Cloudflare's `NotEntitled` error (code 10403).
  * ### Configuring session identifiers
  * **Example:** Identify sessions by an Authorization header
@@ -123,7 +123,7 @@ export const ConfigurationProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its configuration (it always exists,
       // defaulting to an empty list, on every entitled zone).
       const allZones = yield* listAllZones(accountId);
@@ -142,7 +142,7 @@ export const ConfigurationProvider = () =>
               );
             }),
             // API Shield is entitlement-gated and zones may be partial or
-            // deleted out-of-band — skip any zone we can't read.
+            // deleted out-of-band -- skip any zone we can't read.
             Effect.catchTag(
               ["NotEntitled", "InvalidObjectIdentifier", "Forbidden"],
               () => Effect.undefined,
@@ -168,12 +168,12 @@ export const ConfigurationProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (zoneId === undefined) return undefined;
       const observed = yield* apiGateway.getConfiguration({ zoneId }).pipe(
-        // Zone deleted out-of-band — the configuration is gone with it.
+        // Zone deleted out-of-band -- the configuration is gone with it.
         Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The configuration is a singleton that always exists with a default
-      // (empty) value — there is nothing to "own", so a cold read adopts
+      // (empty) value -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the baseline restored on destroy.
       const initial =
@@ -187,10 +187,10 @@ export const ConfigurationProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the configuration always exists; read its live value.
+      // 1. Observe -- the configuration always exists; read its live value.
       const observed = yield* apiGateway.getConfiguration({ zoneId });
 
-      // 2. Capture — the pre-management characteristics, restored on
+      // 2. Capture -- the pre-management characteristics, restored on
       //    destroy. `output` (including an adoption read) already carries
       //    them; otherwise this is our first touch and the observed value
       //    is the zone's original.
@@ -199,7 +199,7 @@ export const ConfigurationProvider = () =>
           ? output.initialAuthIdCharacteristics
           : toCharacteristics(observed.authIdCharacteristics);
 
-      // 3. Sync — PUT only when the observed characteristics differ.
+      // 3. Sync -- PUT only when the observed characteristics differ.
       if (
         characteristicsEqual(
           toCharacteristics(observed.authIdCharacteristics),
@@ -217,7 +217,7 @@ export const ConfigurationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialAuthIdCharacteristics } = output;
-      // Observe — if the zone itself is gone, so is the configuration.
+      // Observe -- if the zone itself is gone, so is the configuration.
       const observed = yield* apiGateway
         .getConfiguration({ zoneId })
         .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
@@ -257,7 +257,7 @@ const toCharacteristics = (
   );
 
 /**
- * Order-insensitive equality of two characteristic lists — Cloudflare
+ * Order-insensitive equality of two characteristic lists -- Cloudflare
  * treats the configuration as a set.
  */
 const characteristicsEqual = (a: AuthIdCharacteristic[], b: AuthIdCharacteristic[]): boolean => {

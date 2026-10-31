@@ -192,7 +192,7 @@ export interface DomainProps {
    */
   accessPolicies?: PolicyDocument | string;
   /**
-   * IP address type of the endpoint — `"ipv4"` or `"dualstack"`.
+   * IP address type of the endpoint -- `"ipv4"` or `"dualstack"`.
    */
   ipAddressType?: opensearch.IPAddressType;
   /**
@@ -269,7 +269,7 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An Amazon OpenSearch Service domain — a managed OpenSearch/Elasticsearch
+ * An Amazon OpenSearch Service domain -- a managed OpenSearch/Elasticsearch
  * cluster with a search/HTTP endpoint.
  *
  * Domains take roughly 15-25 minutes to provision (and about as long for
@@ -433,7 +433,7 @@ export const DomainProvider = () =>
             return { action: "replace" } as const;
           }
           // Encryption at rest and node-to-node encryption can be ENABLED
-          // in place but never disabled — disabling replaces the domain.
+          // in place but never disabled -- disabling replaces the domain.
           if (
             o.encryptionAtRest?.enabled !== false &&
             o.encryptionAtRest !== undefined &&
@@ -464,10 +464,10 @@ export const DomainProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readDomain(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* opensearch
               .createDomain({
@@ -510,7 +510,7 @@ export const DomainProvider = () =>
           // Processing=true; wait (bounded) so config updates do not fail.
           observed = yield* waitForActive(name);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: opensearch.UpdateDomainConfigRequest = {
             DomainName: name,
           };
@@ -616,7 +616,7 @@ export const DomainProvider = () =>
             observed = yield* waitForActive(name);
           }
 
-          // 3c. Sync tags — diff against OBSERVED cloud tags.
+          // 3c. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readDomainTags(observed.ARN);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -635,7 +635,7 @@ export const DomainProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           const name = output.domainName;
-          // A domain mid-create/config-change may reject deletion — wait
+          // A domain mid-create/config-change may reject deletion -- wait
           // (bounded, tolerant) for it to settle first. Already deleting
           // (or gone) is success.
           yield* repeatUntilDomainState(readDomain(name), isDomainDeletable).pipe(

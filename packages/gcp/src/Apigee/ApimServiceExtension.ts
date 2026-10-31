@@ -94,7 +94,7 @@ export type ApimServiceExtensionProps = {
   /**
    * Extensions that make up this service extension. Alchemy prepends a
    * never-matching ownership extension (`alchown`) so `list` / nuke can
-   * find the resource — the API has no labels field.
+   * find the resource -- the API has no labels field.
    */
   extensions?: ApimExtension[];
 };

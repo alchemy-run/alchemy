@@ -89,13 +89,13 @@ export type BuildSource = {
 export type RunConfig = {
   /** Maximum Cloud Run instances per revision. */
   maxInstances?: number;
-  /** Memory per instance in MiB (`128`–`32768`). */
+  /** Memory per instance in MiB (`128`-`32768`). */
   memoryMib?: number;
-  /** Maximum concurrent requests per instance (`1`–`1000`). */
+  /** Maximum concurrent requests per instance (`1`-`1000`). */
   concurrency?: number;
   /** Minimum Cloud Run instances. */
   minInstances?: number;
-  /** CPUs per instance (`0.08`–`8`). */
+  /** CPUs per instance (`0.08`-`8`). */
   cpu?: number;
 };
 
@@ -130,7 +130,7 @@ export type BackendsBuildProps = {
   /**
    * Parent backend. Full name
    * `projects/{project}/locations/{location}/backends/{backend}` or the
-   * backend id (combined with `location`). Immutable — changing it
+   * backend id (combined with `location`). Immutable -- changing it
    * replaces the build.
    */
   backend: string;
@@ -142,15 +142,15 @@ export type BackendsBuildProps = {
   /**
    * Build id (the `{buildId}` segment). If omitted, a unique RFC1035
    * name is generated from the stack, stage, and logical id. Immutable
-   * — changing it replaces the build.
+   * -- changing it replaces the build.
    */
   buildId?: string;
   /**
-   * Source for the build. Immutable — changing it replaces the build.
+   * Source for the build. Immutable -- changing it replaces the build.
    */
   source: BuildSource;
   /**
-   * Additional Cloud Run / environment configuration. Immutable —
+   * Additional Cloud Run / environment configuration. Immutable --
    * changing it replaces the build.
    */
   config?: BuildConfig;

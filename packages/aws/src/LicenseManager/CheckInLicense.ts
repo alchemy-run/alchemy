@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CheckInLicenseRequest extends licensemanager.CheckInLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:CheckInLicense` — return a
+ * Runtime binding for `license-manager:CheckInLicense` -- return a
  * previously checked-out entitlement to the license pool using the
  * consumption token from {@link CheckoutLicense}.
  *

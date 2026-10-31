@@ -4,15 +4,15 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for AWS CloudHSM (v2) HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeCloudHsmHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeCloudHsmHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * All CloudHSM bindings are account-level: the identifiers the operations
  * act on (cluster ids, backup ids, backup ARNs) are runtime data produced by
- * the service itself — backups are auto-created, ids are auto-assigned and
- * the API exposes no resource ARNs on clusters — so the deploy-time half
+ * the service itself -- backups are auto-created, ids are auto-assigned and
+ * the API exposes no resource ARNs on clusters -- so the deploy-time half
  * grants `actions` on `*`.
  */
 export const makeCloudHsmHttpBinding = <I, A, E, R>(options: {

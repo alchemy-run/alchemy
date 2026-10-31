@@ -45,7 +45,7 @@ export interface MagicSiteProps {
   secondaryConnectorId?: string;
   /**
    * Site high availability mode. If true, the site can have two connectors
-   * and runs in high availability mode. Create-only — changing it triggers
+   * and runs in high availability mode. Create-only -- changing it triggers
    * a replacement.
    * @default false
    */
@@ -78,15 +78,15 @@ export interface MagicSiteAttributes {
 export type MagicSite = Resource<TypeId, MagicSiteProps, MagicSiteAttributes, never, Providers>;
 
 /**
- * A Magic WAN site — represents a physical or logical network location
+ * A Magic WAN site -- represents a physical or logical network location
  * (typically backed by a Magic WAN Connector appliance) under which LANs,
  * WANs, and ACLs are configured.
  *
- * Requires a Magic WAN subscription — accounts without it receive a typed
+ * Requires a Magic WAN subscription -- accounts without it receive a typed
  * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
  * (code 1101, "forbidden: feature not enabled").
  *
- * `haMode` is create-only — changing it triggers a replacement. Everything
+ * `haMode` is create-only -- changing it triggers a replacement. Everything
  * else is updated in place.
  * ### Creating a site
  * **Example:** Basic site
@@ -131,10 +131,10 @@ export const MagicSiteProvider = () =>
   Provider.succeed(MagicSite, {
     stables: ["siteId", "accountId", "haMode"],
 
-    // Account collection — Magic WAN sites are account-scoped and enumerated
+    // Account collection -- Magic WAN sites are account-scoped and enumerated
     // via the paginated list API. Accounts without a Magic WAN subscription
     // reject with the typed `MagicWanUnauthorized` (code 1025) or
-    // `MagicWanNotEnabled` (code 1101) → return [].
+    // `MagicWanNotEnabled` (code 1101) -> return [].
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -154,7 +154,7 @@ export const MagicSiteProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
-      // haMode is create-only — the update API has no such field.
+      // haMode is create-only -- the update API has no such field.
       if ((olds.haMode ?? false) !== (news.haMode ?? false)) {
         return { action: "replace" } as const;
       }
@@ -169,7 +169,7 @@ export const MagicSiteProvider = () =>
         const observed = yield* getSite(acct, output.siteId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Sites carry no ownership markers; report as
       // Unowned so takeover is gated behind the adopt policy.
       const name = yield* createSiteName(id, olds?.name);
@@ -185,13 +185,13 @@ export const MagicSiteProvider = () =>
       const connectorId = news.connectorId as string | undefined;
       const secondaryConnectorId = news.secondaryConnectorId as string | undefined;
 
-      // Observe — the id on `output` is a hint; fall back to a name scan.
+      // Observe -- the id on `output` is a hint; fall back to a name scan.
       let observed = output?.siteId ? yield* getSite(accountId, output.siteId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createSite({
           accountId,
@@ -205,7 +205,7 @@ export const MagicSiteProvider = () =>
         return toAttributes({ ...created, id: created.id ?? undefined }, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; skip on no-op.
+      // Sync -- diff observed cloud state against desired; skip on no-op.
       const dirty =
         (observed.name ?? undefined) !== name ||
         (news.description !== undefined &&

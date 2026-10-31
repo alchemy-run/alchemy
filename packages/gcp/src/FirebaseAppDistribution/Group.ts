@@ -28,7 +28,7 @@ export type GroupProps = {
    * Group alias (the `{group}` segment of
    * `projects/{project}/groups/{group}`). 4-63 characters: lowercase
    * letters, digits, and hyphens. If omitted, a unique id is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the group.
    */
   groupId?: string;
@@ -69,7 +69,7 @@ export type Group = Resource<
  * Groups have no labels field, and the display name is shown to testers,
  * so Alchemy writes no ownership marker: a generated alias identifies the
  * group, and `read` reports an explicit alias it has no state for as
- * unowned. `groupId` is identity — changing it
+ * unowned. `groupId` is identity -- changing it
  * replaces the group. Display name updates in place.
  *
  * ### Creating a Group

@@ -6,8 +6,8 @@ import type { Role } from "../IAM/Role.ts";
 /**
  * Shared scaffolding for AWS Comprehend HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate: Comprehend's real-time detect APIs and async job APIs have no
  * resource-level IAM, so every grant is on `*`. The `Start*Job` operations
@@ -18,7 +18,7 @@ import type { Role } from "../IAM/Role.ts";
 /**
  * Build the impl Effect for a Comprehend operation with no bound resource
  * (real-time detection, job describe/list/stop). The deploy-time half grants
- * `actions` on `*` — Comprehend detection and job IAM actions do not support
+ * `actions` on `*` -- Comprehend detection and job IAM actions do not support
  * resource-level scoping.
  */
 export const makeComprehendHttpBinding = <I, A, E, R>(options: {
@@ -57,7 +57,7 @@ export const makeComprehendHttpBinding = <I, A, E, R>(options: {
  * assumes to read input documents from S3 and write results; its trust
  * policy must allow `comprehend.amazonaws.com`). The role's ARN is injected
  * as `DataAccessRoleArn` on every runtime request, and the deploy-time half
- * grants `actions` on `*` plus `iam:PassRole` on the role — without the
+ * grants `actions` on `*` plus `iam:PassRole` on the role -- without the
  * PassRole grant, `Start*Job` fails only at runtime with an AccessDenied.
  */
 export const makeComprehendStartJobHttpBinding = <

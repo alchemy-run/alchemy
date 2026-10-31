@@ -29,7 +29,7 @@ export type RegionInstantSnapshotProps = {
    */
   instantSnapshotName?: string;
   /**
-   * Region the instant snapshot lives in (e.g. `us-central1`). Immutable —
+   * Region the instant snapshot lives in (e.g. `us-central1`). Immutable --
    * changing it replaces the snapshot. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -38,12 +38,12 @@ export type RegionInstantSnapshotProps = {
   /**
    * Source regional disk URL or relative path used to create the instant
    * snapshot (`projects/{project}/regions/{region}/disks/{disk}`,
-   * `regions/{region}/disks/{disk}`, or a full self-link). Immutable —
+   * `regions/{region}/disks/{disk}`, or a full self-link). Immutable --
    * changing it replaces the snapshot.
    */
   sourceDisk: string;
   /**
-   * Optional description. Immutable — changing it replaces the snapshot.
+   * Optional description. Immutable -- changing it replaces the snapshot.
    */
   description?: string;
   /**
@@ -70,7 +70,7 @@ export type RegionInstantSnapshot = Resource<
     sourceDiskId: string | undefined;
     /** Optional description. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** Size of the source disk in GB. */
     diskSizeGb: string | undefined;
@@ -97,7 +97,7 @@ export type RegionInstantSnapshot = Resource<
  * A regional Compute Engine instant snapshot.
  *
  * Instant snapshots are crash-consistent rollback points of a regional
- * disk. Name, source disk, description, and region are immutable —
+ * disk. Name, source disk, description, and region are immutable --
  * changing them replaces the snapshot. Labels are updated in place via
  * `regionInstantSnapshots.setLabels`.
  *
@@ -357,7 +357,7 @@ export const RegionInstantSnapshotProvider = () =>
       if (current === undefined) {
         // A replacement snapshots the same disk again; Compute rejects a
         // second instant snapshot within 30s of the previous one.
-        // "The previous instant snapshot is too recent" — one instant snapshot
+        // "The previous instant snapshot is too recent" -- one instant snapshot
         // per disk every 30 seconds.
         const tooRecent = (error: { readonly _tag: string }) =>
           error instanceof OperationFailed && error.reason === "UNSUPPORTED_OPERATION";

@@ -38,18 +38,18 @@ export type CertificateSelfManaged = {
 export type CertificateManaged = {
   /**
    * Domains covered by a Google-managed certificate. Wildcard domains
-   * require DNS authorization. Immutable — changing them replaces the
+   * require DNS authorization. Immutable -- changing them replaces the
    * certificate.
    */
   domains?: string[];
   /**
    * DnsAuthorization resource names used to prove domain ownership.
-   * Immutable — changing them replaces the certificate.
+   * Immutable -- changing them replaces the certificate.
    */
   dnsAuthorizations?: string[];
   /**
    * CertificateIssuanceConfig resource name for private PKI certificates.
-   * Immutable — changing it replaces the certificate.
+   * Immutable -- changing it replaces the certificate.
    */
   issuanceConfig?: string;
 };
@@ -57,7 +57,7 @@ export type CertificateManaged = {
 export type CertificateManagedIdentity = {
   /**
    * SPIFFE ID of the Managed Identity used for this certificate.
-   * Immutable — changing it replaces the certificate.
+   * Immutable -- changing it replaces the certificate.
    */
   identity?: string;
 };
@@ -68,12 +68,12 @@ export type CertificateProps = {
    * `projects/{project}/locations/{location}/certificates/{certificate}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the
+   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable -- changing it replaces the
    * certificate.
    */
   certificateId?: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …). Immutable —
+   * Certificate Manager location (`global`, `us-central1`, ...). Immutable --
    * changing it replaces the certificate. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. `DEFAULT` / `EDGE_CACHE` / `CLIENT_AUTH`
    * / `ALL_REGIONS` certificates live in `global`; omit or set a region
@@ -90,7 +90,7 @@ export type CertificateProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Certificate serving scope. Immutable — changing it replaces the
+   * Certificate serving scope. Immutable -- changing it replaces the
    * certificate. Inferred from `managed` / `selfManaged` / `managedIdentity`
    * when omitted.
    * @default "DEFAULT"
@@ -99,7 +99,7 @@ export type CertificateProps = {
   /**
    * `SELF_MANAGED` (upload PEM), `MANAGED` (Google provisions), or
    * `MANAGED_IDENTITY`. Inferred from nested blocks when omitted.
-   * Immutable — changing it replaces the certificate.
+   * Immutable -- changing it replaces the certificate.
    * @default "SELF_MANAGED"
    */
   type?: CertificateType;
@@ -119,13 +119,13 @@ export type CertificateProps = {
    */
   selfManaged?: CertificateSelfManaged;
   /**
-   * Google-managed certificate configuration. Immutable — changing
+   * Google-managed certificate configuration. Immutable -- changing
    * domains, DNS authorizations, or issuance config replaces the
    * certificate.
    */
   managed?: CertificateManaged;
   /**
-   * Managed-identity certificate configuration. Immutable — changing
+   * Managed-identity certificate configuration. Immutable -- changing
    * the identity replaces the certificate.
    */
   managedIdentity?: CertificateManagedIdentity;
@@ -141,7 +141,7 @@ export type Certificate = Resource<
     certificateId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** `SELF_MANAGED`, `MANAGED`, or `MANAGED_IDENTITY`. */
     type: CertificateType;
@@ -181,7 +181,7 @@ export type Certificate = Resource<
 >;
 
 /**
- * A Certificate Manager TLS certificate — self-managed (uploaded PEM),
+ * A Certificate Manager TLS certificate -- self-managed (uploaded PEM),
  * Google-managed, or managed-identity.
  *
  * Changing `certificateId`, `location`, `scope`, certificate type,

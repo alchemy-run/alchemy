@@ -13,7 +13,7 @@ export interface DescribeAccountSettingsRequest extends Kinesis.DescribeAccountS
  * ### Account Settings
  * **Example:** Read the Account's Kinesis Settings
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const describeAccountSettings = yield* AWS.Kinesis.DescribeAccountSettings();
  *
  * // runtime

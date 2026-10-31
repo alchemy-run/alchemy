@@ -12,13 +12,13 @@ type TypeId = typeof TypeId;
 
 export type TieredCachingProps = {
   /**
-   * Zone the Tiered Caching setting belongs to. Stable — changing the
+   * Zone the Tiered Caching setting belongs to. Stable -- changing the
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Whether Tiered Caching is enabled on the zone. Mutable — patched in
+   * Whether Tiered Caching is enabled on the zone. Mutable -- patched in
    * place.
    *
    * @default true
@@ -62,7 +62,7 @@ export type TieredCaching = Resource<
  * reducing origin load and improving cache hit ratios. It is available on
  * all plans, free included.
  *
- * The setting is a singleton — it always exists on every zone with a
+ * The setting is a singleton -- it always exists on every zone with a
  * Cloudflare default, so this resource never creates or deletes anything
  * physical. Reconcile patches the setting when the observed value differs
  * from the desired one; destroy restores the value the setting had before
@@ -71,7 +71,7 @@ export type TieredCaching = Resource<
  * This is the generic Tiered Cache toggle (the dashboard "Tiered Cache"
  * switch). Smart Tiered Cache (the smart-topology variant managed under
  * `/cache/tiered_cache_smart_topology_enable`) requires Tiered Caching to
- * be enabled — deploy this resource first when combining the two.
+ * be enabled -- deploy this resource first when combining the two.
  * ### Enabling Tiered Caching
  * **Example:** Enable Tiered Caching on a zone
  * ```typescript
@@ -111,7 +111,7 @@ export const TieredCachingProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one,
       // tiered caching is available on all plans).
       const allZones = yield* listAllZones(accountId);
@@ -120,7 +120,7 @@ export const TieredCachingProvider = () =>
         (zoneId) =>
           argo.getTieredCaching({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed, toValue(observed.value))),
-            // Zone deleted out-of-band between enumeration and read —
+            // Zone deleted out-of-band between enumeration and read --
             // the setting is gone with it; skip it. A concurrently-purged
             // zone surfaces as `ZoneNotFound` (404 "Invalid or missing
             // zone") rather than the 7003 object-identifier code.
@@ -146,12 +146,12 @@ export const TieredCachingProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* argo.getTieredCaching({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
@@ -163,16 +163,16 @@ export const TieredCachingProvider = () =>
       const zoneId = news.zoneId as string;
       const desired: "on" | "off" = (news.enabled ?? true) ? "on" : "off";
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* argo.getTieredCaching({ zoneId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
 
-      // 3. Sync — patch only when the observed value differs.
+      // 3. Sync -- patch only when the observed value differs.
       if (toValue(observed.value) === desired) {
         return toAttributes(zoneId, observed, initialValue);
       }
@@ -185,7 +185,7 @@ export const TieredCachingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialValue } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* argo
         .getTieredCaching({ zoneId })
         .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
@@ -201,7 +201,7 @@ export const TieredCachingProvider = () =>
 
 /**
  * Narrow the distilled response's open `"on" | "off" | (string & {})`
- * value to the closed pair — Cloudflare only ever returns the two
+ * value to the closed pair -- Cloudflare only ever returns the two
  * literals for this setting.
  */
 const toValue = (value: string): "on" | "off" => (value === "on" ? "on" : "off");

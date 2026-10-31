@@ -8,7 +8,7 @@ export const clientToken = (instanceId: string): string =>
 /**
  * Drops AWS-managed system tags (`aws:*`, case-insensitive) from an
  * observed tag map. AppRegistry stamps resources with system tags (e.g.
- * `aws:servicecatalog:applicationName`) that customers cannot remove —
+ * `aws:servicecatalog:applicationName`) that customers cannot remove --
  * including them in the diff baseline makes untagResource fail with
  * "Customers cannot remove tag keys starting with aws:".
  */

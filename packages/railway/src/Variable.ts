@@ -130,7 +130,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * const site = yield* Railway.Project("Site");
  * const dbUrl = yield* Railway.Variable("DatabaseUrl", {
  *   project: site,
- *   value: Redacted.make("postgres://…"),
+ *   value: Redacted.make("postgres://..."),
  * });
  * ```
  *
@@ -147,7 +147,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * export const ApiToken = Railway.Variable("ApiToken", {
  *   project: Site,
  *   name: "API_TOKEN",
- *   value: Redacted.make("sk_live_…"),
+ *   value: Redacted.make("sk_live_..."),
  * });
  * ```
  *
@@ -166,7 +166,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * const token = yield* Railway.Variable("StagingToken", {
  *   project: site,
  *   environment: staging,
- *   value: Redacted.make("sk_staging_…"),
+ *   value: Redacted.make("sk_staging_..."),
  * });
  * ```
  *
@@ -188,14 +188,14 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  *   project: site,
  *   service: api,
  *   name: "API_TOKEN",
- *   value: Redacted.make("sk_live_…"),
+ *   value: Redacted.make("sk_live_..."),
  * });
  * ```
  *
  * ### Variable references
  * `value` may be a `Railway.ref(resource, key)` template instead of a
  * plaintext secret. Upsert stores `${{LogicalName.KEY}}` (or
- * `${{shared.NAME}}`) — not a resolved URI. Railway interpolates it.
+ * `${{shared.NAME}}`) -- not a resolved URI. Railway interpolates it.
  * Next to {@link ConnectPostgres}: use `ConnectPostgres` for a typed
  * client inside an Effect-native Service; use `Railway.ref` when you
  * want Railway's own `${{Db.DATABASE_URL}}` interpolation (IaC
@@ -221,7 +221,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * yield* Railway.Variable("SentryDsn", {
  *   project: site,
  *   name: "SENTRY_DSN",
- *   value: Redacted.make("https://…"),
+ *   value: Redacted.make("https://..."),
  * });
  * yield* Railway.Variable("ApiSentry", {
  *   project: site,
@@ -258,7 +258,7 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * export const ApiToken = Railway.Variable("ApiToken", {
  *   project: Site,
  *   name: "API_TOKEN",
- *   value: Redacted.make("sk_live_…"),
+ *   value: Redacted.make("sk_live_..."),
  * });
  * ```
  *

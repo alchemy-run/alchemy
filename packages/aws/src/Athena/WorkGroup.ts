@@ -33,7 +33,7 @@ export interface WorkGroupProps {
    */
   encryptionOption?: "SSE_S3" | "SSE_KMS" | "CSE_KMS";
   /**
-   * KMS key ARN/ID — required when `encryptionOption` is `SSE_KMS` or `CSE_KMS`.
+   * KMS key ARN/ID -- required when `encryptionOption` is `SSE_KMS` or `CSE_KMS`.
    */
   kmsKey?: string;
   /**
@@ -103,7 +103,7 @@ export interface WorkGroup extends Resource<
 > {}
 
 /**
- * An Amazon Athena workgroup — an isolation boundary for queries that pins the
+ * An Amazon Athena workgroup -- an isolation boundary for queries that pins the
  * S3 result-output location, result encryption, a bytes-scanned cutoff, and
  * whether that configuration is enforced over per-query client settings.
  *
@@ -225,10 +225,10 @@ export const WorkGroupProvider = () =>
               }
             : undefined;
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let wg = yield* getOne(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!wg) {
             yield* athena.createWorkGroup({
               Name: name,
@@ -255,7 +255,7 @@ export const WorkGroupProvider = () =>
             });
             wg = yield* getOne(name);
           } else {
-            // Sync — diff observed configuration against desired, apply the
+            // Sync -- diff observed configuration against desired, apply the
             // delta via UpdateWorkGroup (which takes a ConfigurationUpdates
             // shape distinct from CreateWorkGroup's Configuration).
             const cfg = wg.Configuration;
@@ -335,7 +335,7 @@ export const WorkGroupProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const observed = yield* fetchTags(arn);
           const { upsert, removed } = diffTags(observed, desiredTags);
           if (upsert.length > 0) {

@@ -78,13 +78,13 @@ export interface DataCellsFilter extends Resource<
 > {}
 
 /**
- * A Lake Formation data cells filter — row- and column-level security on a
+ * A Lake Formation data cells filter -- row- and column-level security on a
  * Glue table. Grant `SELECT` on the filter (via
  * `Resource.DataCellsFilter`) to give principals access to only the
  * filtered cells.
  *
  * Creating filters requires `SELECT` with the grant option on the table (or
- * data lake administrator) — see
+ * data lake administrator) -- see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
  * ### Creating Data Cells Filters
@@ -194,7 +194,7 @@ export const DataCellsFilterProvider = () =>
             name,
           });
           if (found === undefined) return undefined;
-          // Data cells filters are not taggable — ownership cannot be
+          // Data cells filters are not taggable -- ownership cannot be
           // verified.
           return {
             name,
@@ -219,7 +219,7 @@ export const DataCellsFilterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // rowFilter / columnNames / excludedColumnNames → update
+          // rowFilter / columnNames / excludedColumnNames -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -244,7 +244,7 @@ export const DataCellsFilterProvider = () =>
               .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
             found = yield* observe(key);
           } else {
-            // 3. SYNC — diff observed filter body against desired.
+            // 3. SYNC -- diff observed filter body against desired.
             const observed = {
               RowFilter: found.RowFilter,
               ColumnNames: found.ColumnNames,

@@ -6,8 +6,8 @@ import type { WriteStreamClient } from "./WriteStream.ts";
 
 /**
  * Build a {@link WriteStreamClient} over a transport that appends encoded
- * records. Shared by the binding, HTTP, and local implementations — they
- * differ only in `sendEncoded`. Internal — not exported from the K2 barrel.
+ * records. Shared by the binding, HTTP, and local implementations -- they
+ * differ only in `sendEncoded`. Internal -- not exported from the K2 barrel.
  */
 export const makeWriteStreamClient = (
   schema: RecordSchema<any> | undefined,

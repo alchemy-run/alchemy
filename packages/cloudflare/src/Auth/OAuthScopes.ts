@@ -882,7 +882,7 @@ export const OFFLINE_ACCESS_SCOPE = "offline_access";
  * it does not, leaving out {@link OFFLINE_ACCESS_SCOPE}. Profiles configured
  * against an older client (or scope catalog) can hold scopes the current
  * client rejects, and a single unknown scope invalidates the entire
- * authorize URL — sanitize with this before building one.
+ * authorize URL -- sanitize with this before building one.
  */
 export const partitionOAuthScopes = (
   scopes: ReadonlyArray<string>,

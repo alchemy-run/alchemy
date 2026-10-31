@@ -77,11 +77,11 @@ export type PersistentResourceProps = {
   /**
    * Persistent resource id. If omitted, a unique RFC1035 name is
    * generated. Must match `/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/`.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    */
   persistentResourceId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the resource.
+   * Vertex AI location. Immutable -- changing it replaces the resource.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -97,7 +97,7 @@ export type PersistentResourceProps = {
   labels?: Record<string, string>;
   /**
    * Resource pools. At least one pool is required. Pool machine specs
-   * are immutable — changing them replaces the resource. Replica counts
+   * are immutable -- changing them replaces the resource. Replica counts
    * update in place only for Ray clusters (`raySpec`); GCP rejects updates
    * to other persistent resources, so a replica change replaces them.
    */
@@ -141,7 +141,7 @@ export type PersistentResource = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`PROVISIONING`, `RUNNING`, …). */
+    /** Server-reported state (`PROVISIONING`, `RUNNING`, ...). */
     state: string | undefined;
     /** VPC network. */
     network: string | undefined;
@@ -159,7 +159,7 @@ export type PersistentResource = Resource<
 >;
 
 /**
- * A Vertex AI Persistent Resource — dedicated node pools for custom
+ * A Vertex AI Persistent Resource -- dedicated node pools for custom
  * training and Ray-on-Vertex workloads.
  *
  * Changing `persistentResourceId`, `location`, `network`,

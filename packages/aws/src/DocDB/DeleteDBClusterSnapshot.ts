@@ -4,9 +4,9 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DeleteDBClusterSnapshot` operation (IAM action
- * `rds:DeleteDBClusterSnapshot` — DocumentDB shares the RDS control plane).
+ * `rds:DeleteDBClusterSnapshot` -- DocumentDB shares the RDS control plane).
  *
- * Deletes a DocumentDB cluster snapshot by identifier — the retention half
+ * Deletes a DocumentDB cluster snapshot by identifier -- the retention half
  * of snapshot-rotation automation (create nightly, prune the oldest).
  * Snapshot identifiers are runtime data, so the grant spans the account's
  * `cluster-snapshot` ARNs. Provide the implementation with
@@ -19,7 +19,7 @@ import type * as Effect from "effect/Effect";
  * yield* deleteSnapshot({
  *   DBClusterSnapshotIdentifier: "nightly-2026-06-01",
  * }).pipe(
- *   // already gone — rotation is idempotent
+ *   // already gone -- rotation is idempotent
  *   Effect.catchTag("DBClusterSnapshotNotFoundFault", () => Effect.void),
  * );
  * ```

@@ -35,7 +35,7 @@ export const GetSecretHttp = Layer.effect(
           const name = yield* secretName;
           if (globalThis.__ALCHEMY_RUNTIME__) {
             // Fly injects App secrets as env vars on the Machine. Prefer
-            // that over getSecret — org tokens still cannot read plaintext
+            // that over getSecret -- org tokens still cannot read plaintext
             // from outside the App, and the env is already the source of
             // truth once the secret exists.
             const fromEnv = yield* Config.Redacted(name).pipe(

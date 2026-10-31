@@ -7,18 +7,18 @@ import type { StateMachine } from "./StateMachine.ts";
 /**
  * Shared scaffolding for AWS Step Functions HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
  * and the injected/derived identifier is boilerplate. Genuinely-different
- * bindings (none currently — `StartSyncExecution` folds its bespoke
+ * bindings (none currently -- `StartSyncExecution` folds its bespoke
  * `sync-states` endpoint into the `operation` effect it passes) stay
  * bespoke.
  */
 
 /**
  * Execution ARNs replace the `:stateMachine:` segment with `:execution:`
- * and append the execution name — grant on the machine's execution ARN
+ * and append the execution name -- grant on the machine's execution ARN
  * pattern.
  */
 export const executionArnPattern = (stateMachine: StateMachine) =>
@@ -29,7 +29,7 @@ export const executionArnPattern = (stateMachine: StateMachine) =>
 
 /**
  * Map Run ARNs replace the `:stateMachine:` segment with `:mapRun:` and
- * append `/{executionName}:{uuid}` — grant on the machine's Map Run ARN
+ * append `/{executionName}:{uuid}` -- grant on the machine's Map Run ARN
  * pattern.
  */
 export const mapRunArnPattern = (stateMachine: StateMachine) =>
@@ -63,7 +63,7 @@ const Grant = Effect.gen(function* () {
 /**
  * Build the impl Effect for a state-machine-scoped operation whose request
  * carries the machine identity as `stateMachineArn` (`StartExecution`,
- * `ListExecutions`, …): the runtime callable injects the bound
+ * `ListExecutions`, ...): the runtime callable injects the bound
  * {@link StateMachine}'s ARN and the deploy-time half grants `actions` on
  * it.
  */
@@ -101,7 +101,7 @@ export const makeStateMachineArnHttpBinding = <
 /**
  * Build the impl Effect for an operation addressed by an execution or Map
  * Run ARN the caller already holds (`DescribeExecution`, `StopExecution`,
- * `GetExecutionHistory`, `RedriveExecution`, `DescribeMapRun`, …): the
+ * `GetExecutionHistory`, `RedriveExecution`, `DescribeMapRun`, ...): the
  * runtime callable passes the request through unchanged while the
  * deploy-time half grants `actions` on the bound {@link StateMachine}'s
  * execution (or Map Run) ARN pattern.

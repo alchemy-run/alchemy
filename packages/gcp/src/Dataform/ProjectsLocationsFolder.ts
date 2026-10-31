@@ -28,14 +28,14 @@ import {
 
 export type ProjectsLocationsFolderProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * folder. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-friendly display name. Dataform folders have no labels field,
-   * so Alchemy stamps ownership into a `[alchemy …]` prefix and strips
+   * so Alchemy stamps ownership into a `[alchemy ...]` prefix and strips
    * it from attributes. If omitted, only the ownership marker is stored.
    */
   displayName?: string;

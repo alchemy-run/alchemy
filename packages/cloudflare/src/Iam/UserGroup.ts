@@ -20,7 +20,7 @@ export interface UserGroupPolicyInput {
   /**
    * Whether the policy allows or denies the combined permission/resource
    * groups. Note: Cloudflare currently rejects `deny` user-group policies
-   * with "Policy validation failed" — only `allow` is accepted in
+   * with "Policy validation failed" -- only `allow` is accepted in
    * practice.
    */
   access: "allow" | "deny";
@@ -31,7 +31,7 @@ export interface UserGroupPolicyInput {
   permissionGroups: string[];
   /**
    * IDs of the resource groups (which resources the permissions apply
-   * to) — e.g. from {@link ResourceGroup}.
+   * to) -- e.g. from {@link ResourceGroup}.
    */
   resourceGroups: string[];
 }
@@ -42,7 +42,7 @@ export interface UserGroupPolicyInput {
  */
 export interface UserGroupPolicy {
   /**
-   * Server-assigned identifier of the policy. Not stable — Cloudflare
+   * Server-assigned identifier of the policy. Not stable -- Cloudflare
    * assigns fresh policy ids on every policy update.
    */
   id: string | undefined;
@@ -62,7 +62,7 @@ export interface UserGroupProps {
    */
   name?: string;
   /**
-   * Fine-grained policies attached to the user group. Mutable in place —
+   * Fine-grained policies attached to the user group. Mutable in place --
    * the full set is replaced on update.
    */
   policies?: UserGroupPolicyInput[];
@@ -86,7 +86,7 @@ export interface UserGroupAttributes {
 export type UserGroup = Resource<TypeId, UserGroupProps, UserGroupAttributes, never, Providers>;
 
 /**
- * A Cloudflare IAM user group — a named set of account members that share
+ * A Cloudflare IAM user group -- a named set of account members that share
  * fine-grained policies (permission groups scoped to resource groups).
  *
  * Both `name` and `policies` are mutable in place; updating policies
@@ -146,7 +146,7 @@ export const UserGroupProvider = () =>
     // user-groups list. Each page item already carries the full shape
     // (`id`/`name`/`policies`/`createdOn`/`modifiedOn`) identical to the
     // single-get response, so it hydrates directly into `read`'s
-    // Attributes via `toAttributes` — no per-item re-fetch needed.
+    // Attributes via `toAttributes` -- no per-item re-fetch needed.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* iam.listUserGroups.pages({ accountId }).pipe(
@@ -168,7 +168,7 @@ export const UserGroupProvider = () =>
         return observed ? toAttributes(observed, acct) : undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name (exact match, re-checked client-side).
       const name = yield* createGroupName(id, olds?.name);
       const match = yield* findByName(acct, name);
@@ -184,7 +184,7 @@ export const UserGroupProvider = () =>
       const name = yield* createGroupName(id, news.name);
       const desired = resolvePolicies(news.policies ?? []);
 
-      // 1. Observe — the id cached on `output` is a hint, not a
+      // 1. Observe -- the id cached on `output` is a hint, not a
       //    guarantee: a missing group falls through to the name scan and
       //    then to create.
       let observed = output?.userGroupId
@@ -195,7 +195,7 @@ export const UserGroupProvider = () =>
         observed = match ? yield* getUserGroup(accountId, match.id) : undefined;
       }
 
-      // 2. Ensure — create when missing. User group names ARE unique on
+      // 2. Ensure -- create when missing. User group names ARE unique on
       //    Cloudflare's side; losing a create race surfaces as the typed
       //    `UserGroupNameInUse`, in which case we observe the winner and
       //    fall through to sync.
@@ -213,7 +213,7 @@ export const UserGroupProvider = () =>
         const match = yield* findByName(accountId, name);
         observed = match ? yield* getUserGroup(accountId, match.id) : undefined;
         if (!observed) {
-          // The name is claimed but invisible to our listing — re-attempt
+          // The name is claimed but invisible to our listing -- re-attempt
           // the create so the typed conflict surfaces rather than looping.
           const retried = yield* iam.createUserGroup({
             accountId,
@@ -224,7 +224,7 @@ export const UserGroupProvider = () =>
         }
       }
 
-      // 3. Sync — diff observed name/policies against desired. The PUT
+      // 3. Sync -- diff observed name/policies against desired. The PUT
       //    replaces the full policy set and entries MUST be sent without
       //    ids (Cloudflare rejects re-used policy ids with "Cannot re-use
       //    policy IDs"); the server assigns fresh ids on every update.

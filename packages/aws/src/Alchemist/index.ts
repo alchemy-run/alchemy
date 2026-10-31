@@ -26,7 +26,7 @@ const environment = Effect.fn(function* (target: AwsTarget) {
   const profile = yield* Auth.loadProfile(target.profile);
   const region = target.region ?? profile.region ?? "us-east-1";
   // The credentials effect runs later, inside the built layer, where these
-  // services are no longer in context — capture them here so the route's
+  // services are no longer in context -- capture them here so the route's
   // requirements stay visible in its type.
   const credentialServices =
     yield* Effect.context<Effect.Services<ReturnType<typeof Auth.loadProfileCredentials>>>();

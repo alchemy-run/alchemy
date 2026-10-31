@@ -48,12 +48,12 @@ export type ClusterProps = {
    * `projects/{project}/locations/{location}/clusters/{cluster}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-40 characters, start with a letter, and
-   * match `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces
    * the cluster.
    */
   clusterId?: string;
   /**
-   * Zone or region (`us-central1-a`, `us-central1`, …). Immutable —
+   * Zone or region (`us-central1-a`, `us-central1`, ...). Immutable --
    * changing it replaces the cluster. Autopilot clusters must be
    * regional. `US-CENTRAL1-A` is accepted and normalized to
    * `us-central1-a`.
@@ -61,7 +61,7 @@ export type ClusterProps = {
    */
   location?: string;
   /**
-   * Optional description. Immutable — changing it replaces the cluster.
+   * Optional description. Immutable -- changing it replaces the cluster.
    */
   description?: string;
   /**
@@ -70,12 +70,12 @@ export type ClusterProps = {
    */
   labels?: Record<string, string>;
   /**
-   * VPC network name or URL. Immutable — changing it replaces the cluster.
+   * VPC network name or URL. Immutable -- changing it replaces the cluster.
    * Defaults to the project `default` network.
    */
   network?: string;
   /**
-   * Subnetwork name or URL. Immutable — changing it replaces the cluster.
+   * Subnetwork name or URL. Immutable -- changing it replaces the cluster.
    */
   subnetwork?: string;
   /**
@@ -105,7 +105,7 @@ export type ClusterProps = {
    */
   enableShieldedNodes?: boolean;
   /**
-   * GKE addon configuration (HTTP load balancing, network policy, …).
+   * GKE addon configuration (HTTP load balancing, network policy, ...).
    */
   addonsConfig?: container.AddonsConfig;
   /**
@@ -113,8 +113,8 @@ export type ClusterProps = {
    */
   costManagementConfig?: container.CostManagementConfig;
   /**
-   * Create an Autopilot cluster. Immutable — changing it replaces the
-   * cluster. Node pool props (`initialNodeCount`, `machineType`, …) are
+   * Create an Autopilot cluster. Immutable -- changing it replaces the
+   * cluster. Node pool props (`initialNodeCount`, `machineType`, ...) are
    * ignored when Autopilot is enabled.
    * @default false
    */
@@ -142,7 +142,7 @@ export type ClusterProps = {
   monitoringConfig?: container.MonitoringConfig;
   /**
    * Enable Kubernetes alpha APIs. The cluster is deleted after 30 days
-   * and has no SLA. Immutable — changing it replaces the cluster.
+   * and has no SLA. Immutable -- changing it replaces the cluster.
    * @default false
    */
   enableKubernetesAlpha?: boolean;
@@ -157,21 +157,21 @@ export type ClusterProps = {
   nodeLocations?: string[];
   /**
    * Initial node count for the default pool. Ignored on Autopilot, and on
-   * update when `removeDefaultNodePool` is set. Otherwise immutable —
+   * update when `removeDefaultNodePool` is set. Otherwise immutable --
    * changing it replaces the cluster.
    * @default 1
    */
   initialNodeCount?: number;
   /**
    * Machine type for the default pool. Ignored on Autopilot, and on update
-   * when `removeDefaultNodePool` is set. Otherwise immutable — changing it
+   * when `removeDefaultNodePool` is set. Otherwise immutable -- changing it
    * replaces the cluster.
    * @default "e2-medium"
    */
   machineType?: string;
   /**
    * Boot disk size in GB for the default pool. Ignored on Autopilot, and on
-   * update when `removeDefaultNodePool` is set. Otherwise immutable —
+   * update when `removeDefaultNodePool` is set. Otherwise immutable --
    * changing it replaces the cluster.
    * @default 20
    */
@@ -179,21 +179,21 @@ export type ClusterProps = {
   /**
    * Boot disk type for the default pool (`pd-standard`, `pd-balanced`,
    * `pd-ssd`). Ignored on Autopilot, and on update when
-   * `removeDefaultNodePool` is set. Otherwise immutable — changing it
+   * `removeDefaultNodePool` is set. Otherwise immutable -- changing it
    * replaces the cluster.
    * @default "pd-standard"
    */
   diskType?: string;
   /**
    * Use Spot VMs for the default pool. Ignored on Autopilot, and on update
-   * when `removeDefaultNodePool` is set. Otherwise immutable — changing it
+   * when `removeDefaultNodePool` is set. Otherwise immutable -- changing it
    * replaces the cluster.
    * @default false
    */
   spot?: boolean;
   /**
    * Use preemptible VMs for the default pool. Ignored on Autopilot, and on
-   * update when `removeDefaultNodePool` is set. Otherwise immutable —
+   * update when `removeDefaultNodePool` is set. Otherwise immutable --
    * changing it replaces the cluster.
    * @default false
    */
@@ -243,7 +243,7 @@ export type Cluster = Resource<
     location: string;
     /** Server-assigned unique cluster id. */
     clusterUid: string | undefined;
-    /** Current status (`RUNNING`, `PROVISIONING`, …). */
+    /** Current status (`RUNNING`, `PROVISIONING`, ...). */
     status: string | undefined;
     /** Kubernetes API server endpoint URL. */
     endpoint: string | undefined;
@@ -255,7 +255,7 @@ export type Cluster = Resource<
     /**
      * The cluster-agnostic `Kubernetes.Connection` for this cluster.
      * Passing the whole cluster resource as a `Kubernetes.*` workload's
-     * `cluster` prop resolves through this — auth uses Google OAuth
+     * `cluster` prop resolves through this -- auth uses Google OAuth
      * bearer tokens minted from the ambient GCP credentials.
      */
     connection: Connection;
@@ -304,7 +304,7 @@ export type Cluster = Resource<
     autopilot: boolean;
     /** Whether Kubernetes alpha APIs are enabled. */
     enableKubernetesAlpha: boolean;
-    /** Release channel (`RAPID`, `REGULAR`, …). */
+    /** Release channel (`RAPID`, `REGULAR`, ...). */
     releaseChannel: string | undefined;
     /** Node locations currently configured. */
     nodeLocations: string[];
@@ -327,7 +327,7 @@ export type Cluster = Resource<
  * `enableKubernetesAlpha`, the node identity (`serviceAccount`,
  * `oauthScopes`), or default-pool node shape (`initialNodeCount`,
  * `machineType`, `diskSizeGb`, `diskType`, `spot`, `preemptible`) replaces
- * the cluster — except that default-pool props are ignored on update while
+ * the cluster -- except that default-pool props are ignored on update while
  * `removeDefaultNodePool` is set. Labels, endpoint access, Shielded Nodes,
  * addons, datapath, logging/monitoring, cost management, release channel,
  * and node locations update in place.
@@ -647,12 +647,12 @@ const operationResourceName = (
   return `projects/${project}/locations/${loc}/operations/${lastSegment(raw)}`;
 };
 
-// Cluster create / delete runs 5–10 min (Autopilot included) and most
+// Cluster create / delete runs 5-10 min (Autopilot included) and most
 // updates several minutes; bounded at 15 min.
 const clusterOperationSchedule = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]);
 
 /**
- * Wait for a GKE operation (create/delete runs 5–10 min, Autopilot and
+ * Wait for a GKE operation (create/delete runs 5-10 min, Autopilot and
  * large updates longer). ALREADY_EXISTS (code 6) counts as success
  * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete
  * race) and an operation that is already gone.
@@ -741,7 +741,7 @@ const waitUntilGone = (name: string) =>
 
 /**
  * GKE rejects a delete (400 "Cluster is running incompatible operation")
- * while a create/update is still in flight — e.g. a recovery delete after an
+ * while a create/update is still in flight -- e.g. a recovery delete after an
  * interrupted create. Wait for the cluster to leave its transitional states
  * first; a cluster that vanishes meanwhile is fine.
  */

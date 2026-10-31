@@ -8,7 +8,7 @@ import type { Cluster } from "./Cluster.ts";
  * `redshift:CreateClusterSnapshot` on the cluster and its
  * `snapshot:{cluster}/*` ARNs).
  *
- * Takes a manual snapshot of the bound {@link Cluster} — e.g. a
+ * Takes a manual snapshot of the bound {@link Cluster} -- e.g. a
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * cluster identifier is injected from the binding. Provide the
  * implementation with
@@ -16,7 +16,7 @@ import type { Cluster } from "./Cluster.ts";
  * ### Managing Snapshots
  * **Example:** Take a Manual Snapshot
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const createClusterSnapshot =
  *   yield* AWS.Redshift.CreateClusterSnapshot(cluster);
  *

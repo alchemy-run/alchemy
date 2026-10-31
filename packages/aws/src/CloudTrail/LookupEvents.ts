@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `cloudtrail:LookupEvents`.
  *
  * An account-level operation (no resource argument) that searches the last
- * 90 days of management events recorded in the region — the classic "who did
+ * 90 days of management events recorded in the region -- the classic "who did
  * what" audit read, available without any trail or event data store. Provide
  * the implementation with `Effect.provide(AWS.CloudTrail.LookupEventsHttp)`.
  * ### Reading Event History
  * **Example:** Look Up Recent Events
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const lookupEvents = yield* AWS.CloudTrail.LookupEvents();
  *
  * // runtime

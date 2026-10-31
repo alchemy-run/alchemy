@@ -7,19 +7,19 @@ import type { RuleGroup } from "./RuleGroup.ts";
 /**
  * Shared scaffolding for AWS Network Firewall HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation and the IAM action is
  * boilerplate:
  *
- * - {@link makeNetworkFirewallFirewallHttpBinding} — operations scoped to one
+ * - {@link makeNetworkFirewallFirewallHttpBinding} -- operations scoped to one
  *   bound {@link Firewall} (`DescribeFirewall`, the flow-operation interface,
  *   the analysis-report interface). The runtime callable injects the
  *   firewall's ARN as the request's `FirewallArn`; the deploy-time half
  *   grants `actions` on the firewall ARN.
- * - {@link makeNetworkFirewallFirewallPolicyHttpBinding} — operations scoped
+ * - {@link makeNetworkFirewallFirewallPolicyHttpBinding} -- operations scoped
  *   to one bound {@link FirewallPolicy}; injects `FirewallPolicyArn`.
- * - {@link makeNetworkFirewallRuleGroupHttpBinding} — operations scoped to
+ * - {@link makeNetworkFirewallRuleGroupHttpBinding} -- operations scoped to
  *   one bound {@link RuleGroup}; injects `RuleGroupArn`.
  */
 

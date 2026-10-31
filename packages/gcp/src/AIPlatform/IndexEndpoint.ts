@@ -30,7 +30,7 @@ import { settlePendingCreates, waitForOperation } from "./operations.ts";
 
 export type IndexEndpointProps = {
   /**
-   * Vertex AI location (`us-central1`, …). Immutable — changing it
+   * Vertex AI location (`us-central1`, ...). Immutable -- changing it
    * replaces the endpoint. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -185,7 +185,7 @@ const findVisible = (project: string, location: string, labels: Record<string, s
  * Find our resource by its ownership labels. Ids are server-assigned and the
  * resource is invisible to `list` while its create operation is pending
  * (minutes on a fresh project), so on a miss wait for pending creates in
- * this location and look again — otherwise an interrupted create's
+ * this location and look again -- otherwise an interrupted create's
  * recovery read reports it gone and leaks it.
  */
 const findOwned = (project: string, location: string, labels: Record<string, string>) =>

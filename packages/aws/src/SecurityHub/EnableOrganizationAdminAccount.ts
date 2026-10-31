@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:EnableOrganizationAdminAccount`.
  *
  * Designates an organization account as the delegated Security Hub administrator.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.EnableOrganizationAdminAccountHttp)`.
  * ### Members & Organization
  * **Example:** Delegate an Organization Administrator
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const enableOrganizationAdminAccount = yield* AWS.SecurityHub.EnableOrganizationAdminAccount();
  *
  * // runtime

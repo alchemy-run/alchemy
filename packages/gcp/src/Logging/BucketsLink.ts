@@ -27,7 +27,7 @@ export type BucketsLinkProps = {
    * Parent analytics-enabled log bucket. Full name
    * `projects/{project}/locations/{location}/buckets/{bucket}` or the
    * bucket id (combined with `location`). A bucket may have at most one
-   * link. Immutable — changing it replaces the link (delete-first).
+   * link. Immutable -- changing it replaces the link (delete-first).
    */
   bucket: string;
   /**
@@ -35,11 +35,11 @@ export type BucketsLinkProps = {
    * `.../buckets/{bucket}/links/{link}`). Also used as the BigQuery
    * dataset id, so it may contain only letters, digits, and underscores
    * and must start with a letter. If omitted, a unique name is generated.
-   * Immutable — changing it replaces the link.
+   * Immutable -- changing it replaces the link.
    */
   linkId?: string;
   /**
-   * Bucket location used when `bucket` is a bare id. Immutable — changing
+   * Bucket location used when `bucket` is a bare id. Immutable -- changing
    * it replaces the link.
    * @default "global"
    */
@@ -72,7 +72,7 @@ export type BucketsLink = Resource<
     description: string | undefined;
     /** BigQuery dataset id created for this link. */
     datasetId: string | undefined;
-    /** Link lifecycle (`ACTIVE`, `DELETE_REQUESTED`, …). */
+    /** Link lifecycle (`ACTIVE`, `DELETE_REQUESTED`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -87,7 +87,7 @@ export type BucketsLink = Resource<
  *
  * A bucket may have only one link. Create and delete are long-running
  * operations; the matching BigQuery dataset is created and deleted with
- * the link. Links have no update API and no labels field — Alchemy
+ * the link. Links have no update API and no labels field -- Alchemy
  * stamps ownership into the description at create. `linkId` and the
  * parent bucket are identity; replacement is delete-first because a
  * bucket cannot hold two links.

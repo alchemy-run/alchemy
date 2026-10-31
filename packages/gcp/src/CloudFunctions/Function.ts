@@ -239,19 +239,19 @@ export type FunctionProps = PlatformProps & {
    * Function id (the `{function}` segment of
    * `projects/{project}/locations/{location}/functions/{function}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. 4-63 characters, matching `[a-z][a-z0-9-]*`. Immutable — changing
+   * logical id. 4-63 characters, matching `[a-z][a-z0-9-]*`. Immutable -- changing
    * it replaces the function.
    */
   functionId?: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
+   * Region (`us-central1`, `europe-west1`, ...). Immutable -- changing it
    * replaces the function. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
-   * Generation (`GEN_1` or `GEN_2`). Immutable — changing it replaces the
+   * Generation (`GEN_1` or `GEN_2`). Immutable -- changing it replaces the
    * function.
    * @default "GEN_2"
    */
@@ -306,7 +306,7 @@ export type Function = Resource<
     functionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Generation (`GEN_1` or `GEN_2`). */
     environment: string;
@@ -316,7 +316,7 @@ export type Function = Resource<
     labels: Record<string, string>;
     /** HTTPS URL of the function. */
     url: string | undefined;
-    /** Server-reported state (`ACTIVE`, `DEPLOYING`, `FAILED`, …). */
+    /** Server-reported state (`ACTIVE`, `DEPLOYING`, `FAILED`, ...). */
     state: string | undefined;
     /** KMS key used for encryption, if any. */
     kmsKeyName: string | undefined;
@@ -469,7 +469,7 @@ export type FunctionShape = Main<FunctionServices>;
  * yield* GCP.PubSub.consumeTopicMessages(orders, (messages) =>
  *   messages.pipe(Stream.runForEach(({ message }) => Effect.log(message))),
  * );
- * // …provided with Effect.provide(GCP.CloudFunctions.TopicEventSource)
+ * // ...provided with Effect.provide(GCP.CloudFunctions.TopicEventSource)
  * ```
  *
  * With `main`, Alchemy bundles the program for Node.js (`nodejs22` by
@@ -663,7 +663,7 @@ const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
 
 /**
  * A gen2 create/update builds the source and rolls out a Cloud Run revision
- * (2–4 minutes; slow builds up to ~10). ALREADY_EXISTS (code 6) with
+ * (2-4 minutes; slow builds up to ~10). ALREADY_EXISTS (code 6) with
  * `alreadyExistsOk` and NOT_FOUND (code 5) with `notFoundOk` count as
  * success (create/delete races).
  */

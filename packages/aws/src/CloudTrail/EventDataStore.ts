@@ -127,7 +127,7 @@ export interface EventDataStore extends Resource<
 > {}
 
 /**
- * A CloudTrail Lake event data store — an immutable collection of events
+ * A CloudTrail Lake event data store -- an immutable collection of events
  * that can be queried with SQL via CloudTrail Lake.
  *
  * Deleting an event data store schedules it for deletion
@@ -252,7 +252,7 @@ export const EventDataStoreProvider = () =>
             ),
           );
 
-      // Find a store by name, INCLUDING pending-deletion ones — the caller
+      // Find a store by name, INCLUDING pending-deletion ones -- the caller
       // decides whether a `PENDING_DELETION` match should be restored.
       const findByName = (name: string) =>
         cloudtrail.listEventDataStores.pages({}).pipe(
@@ -305,7 +305,7 @@ export const EventDataStoreProvider = () =>
         diff: Effect.fn(function* ({ news }) {
           if (!isResolved(news)) return undefined;
           // Every prop (including the name) is mutable via
-          // UpdateEventDataStore — the ARN is the stable identity, so no
+          // UpdateEventDataStore -- the ARN is the stable identity, so no
           // prop change forces a replacement.
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -315,7 +315,7 @@ export const EventDataStoreProvider = () =>
           // The CloudTrail wire unit for RetentionPeriod is whole days.
           const retentionDays = toWireDays(news.retentionPeriod);
 
-          // 1. OBSERVE — prefer the cached ARN, fall back to name lookup.
+          // 1. OBSERVE -- prefer the cached ARN, fall back to name lookup.
           let store = output?.eventDataStoreArn
             ? yield* getByArn(output.eventDataStoreArn)
             : yield* findByName(name).pipe(
@@ -324,7 +324,7 @@ export const EventDataStoreProvider = () =>
                 ),
               );
 
-          // A pending-deletion store still holds the name — restore it and
+          // A pending-deletion store still holds the name -- restore it and
           // let the sync step converge it to the desired state.
           if (store !== undefined && store.Status === "PENDING_DELETION") {
             yield* session.note(`Restoring pending-deletion event data store ${store.Name}`);
@@ -336,7 +336,7 @@ export const EventDataStoreProvider = () =>
             store = yield* getByArn(store.EventDataStoreArn!);
           }
 
-          // 2. ENSURE — create if missing; on the AlreadyExists race (or a
+          // 2. ENSURE -- create if missing; on the AlreadyExists race (or a
           // same-name store pending deletion), converge via name lookup +
           // restore.
           if (store === undefined) {
@@ -363,12 +363,12 @@ export const EventDataStoreProvider = () =>
             if (created?.EventDataStoreArn) {
               store = yield* getByArn(created.EventDataStoreArn);
             } else {
-              // AlreadyExists race — the holder may be active (peer created
+              // AlreadyExists race -- the holder may be active (peer created
               // it) or pending deletion (a prior stack run deleted it).
               const existing = yield* findByName(name);
               if (existing?.Status === "PENDING_DELETION") {
                 yield* session.note(
-                  `Name ${name} is held by a pending-deletion store — restoring it`,
+                  `Name ${name} is held by a pending-deletion store \u2014 restoring it`,
                 );
                 yield* retryWhileSettling(
                   cloudtrail.restoreEventDataStore({
@@ -390,7 +390,7 @@ export const EventDataStoreProvider = () =>
 
           const arn = store.EventDataStoreArn!;
 
-          // 3. SYNC — diff observed against desired, push only the delta.
+          // 3. SYNC -- diff observed against desired, push only the delta.
           const updateDelta: Partial<
             Omit<cloudtrail.UpdateEventDataStoreRequest, "EventDataStore">
           > = {};
@@ -442,7 +442,7 @@ export const EventDataStoreProvider = () =>
             );
           }
 
-          // 3b. SYNC ingestion state — only when declared. The store's
+          // 3b. SYNC ingestion state -- only when declared. The store's
           // Status is the observed ingestion state: ENABLED ingests,
           // STOPPED_INGESTION does not. retryWhileSettling rides out the
           // CREATED/STARTING_INGESTION window after create/restore.
@@ -497,7 +497,7 @@ export const EventDataStoreProvider = () =>
         // cost). Idempotent: already-deleted (NotFound/ARNInvalid) and
         // already-pending (Inactive) stores are both success. A protected
         // store fails with the typed
-        // `EventDataStoreTerminationProtectedException` — disable
+        // `EventDataStoreTerminationProtectedException` -- disable
         // `terminationProtectionEnabled` first.
         delete: Effect.fn(function* ({ output }) {
           yield* retryWhileDeleteConflict(

@@ -9,7 +9,7 @@ export interface GetRateBasedStatementManagedKeysRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `wafv2:GetRateBasedStatementManagedKeys` — read the
+ * Runtime binding for `wafv2:GetRateBasedStatementManagedKeys` -- read the
  * IP addresses that a rate-based rule of the bound {@link WebACL} is
  * currently blocking; the web ACL name, id, and scope are injected
  * automatically.
@@ -19,7 +19,7 @@ export interface GetRateBasedStatementManagedKeysRequest extends Omit<
  * ### Inspecting Traffic
  * **Example:** Read the Currently Rate-Limited Addresses
  * ```typescript
- * // init — grants wafv2:GetRateBasedStatementManagedKeys on the web ACL
+ * // init -- grants wafv2:GetRateBasedStatementManagedKeys on the web ACL
  * const getManagedKeys = yield* AWS.WAFv2.GetRateBasedStatementManagedKeys(acl);
  *
  * // runtime

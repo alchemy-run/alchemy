@@ -18,18 +18,18 @@ export interface DescribeScalingActivitiesRequest extends Omit<
  * `application-autoscaling:DescribeScalingActivities`).
  *
  * Returns the scalable target's scaling activities from the previous six
- * weeks — what scaled, when, why, and whether it succeeded — including
+ * weeks -- what scaled, when, why, and whether it succeeded -- including
  * not-scaled reasons when `IncludeNotScaledActivities` is set. Provide the
  * implementation with
  * `Effect.provide(AWS.ApplicationAutoScaling.DescribeScalingActivitiesHttp)`.
  * ### Observing Scaling Activity
  * **Example:** List Recent Scaling Activities
  * ```typescript
- * // init — bind the operation to the scalable target
+ * // init -- bind the operation to the scalable target
  * const describeScalingActivities =
  *   yield* AWS.ApplicationAutoScaling.DescribeScalingActivities(target);
  *
- * // runtime — page through the target's recent activities
+ * // runtime -- page through the target's recent activities
  * const page = yield* describeScalingActivities({ MaxResults: 50 });
  * for (const activity of page.ScalingActivities ?? []) {
  *   yield* Effect.log(`${activity.StatusCode}: ${activity.Description}`);

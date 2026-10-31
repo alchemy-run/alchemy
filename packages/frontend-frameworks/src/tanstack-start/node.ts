@@ -1,22 +1,22 @@
 /**
- * `@alchemy.run/frontend-frameworks/tanstack-start/node` — the Node
+ * `@alchemy.run/frontend-frameworks/tanstack-start/node` -- the Node
  * container deploy target for the TanStack Start integration.
  *
  * TanStack Start is pure Vite: `tanstackStart()` in the project's
  * `vite.config.ts` builds a `client` environment into `<outDir>/client` and
  * an `ssr` environment into `<outDir>/server`, whose entry module
- * default-exports `{ fetch }` — a web-standard fetch handler. There is no
+ * default-exports `{ fetch }` -- a web-standard fetch handler. There is no
  * adapter to select and no deployment preset; what this target owns is the
  * Node packaging:
  *
- * - **`serverEntryFileName`** — `server.js`, the chunk the SSR environment
+ * - **`serverEntryFileName`** -- `server.js`, the chunk the SSR environment
  *   emits for the resolved server entry; the finishing pass wraps it.
- * - **`finish`** — emits the Node deployment surface next to the entry: a
+ * - **`finish`** -- emits the Node deployment surface next to the entry: a
  *   `package.json` (`type: "module"` so Node classifies the `.js` SSR
  *   bundle as ESM) and a Node HTTP program (`serve-node.mjs`) that serves
  *   `clientDirectory` first, then falls through to that fetch handler on
  *   `PORT` (default 3000), and answers `GET /health`.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  *
  * No Lambda adapter: the serve entry talks to the fetch handler directly.
  */
@@ -63,7 +63,7 @@ const fetchHandler =
     : (request) => entry.fetch(request);`;
 
 /**
- * The finish-only target — the shape the framework's regular build/finish
+ * The finish-only target -- the shape the framework's regular build/finish
  * pipeline consumes. Used directly in the build child (where `cwd === root`
  * holds); {@link makeNodeTarget} wraps it with the wholesale `build` hook
  * that spawns the child.
@@ -113,7 +113,7 @@ const makeNodeFinishTarget = (config: TanStackStartNodeTargetConfig = {}): TanSt
  * A TanStack Start build loads and executes the project's `vite.config.*`
  * (its `tanstackStart()` plugin crawls framework packages from
  * `process.cwd()`, and user plugins may mutate `process.env` or
- * `process.chdir`) — none of which may touch the engine process, where many
+ * `process.chdir`) -- none of which may touch the engine process, where many
  * deploys share one event loop. This target's wholesale `build` therefore
  * runs the framework in a disposable child process whose working directory
  * IS the project root (see `core/BuildChild.ts`). The shared
@@ -161,7 +161,7 @@ export const makeNodeTarget = (
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeNodeTarget;
 

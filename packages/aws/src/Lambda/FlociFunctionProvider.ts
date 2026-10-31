@@ -10,19 +10,19 @@
  * context, the instanceId-guarded watch registry, and the never-bundling dev
  * diff policy. This file supplies only the Lambda-specific parts:
  *
- * - **Watch loop** — a forked `Bundle.watch` (same rolldown config the
+ * - **Watch loop** -- a forked `Bundle.watch` (same rolldown config the
  *   deploy used, via [FunctionBundle](./FunctionBundle.ts)) rebuilds on file
  *   change and uploads the fresh archive to a stable per-function S3 key in
  *   the emulator's assets bucket. The first swap repoints the function's
  *   code at that key with `UpdateFunctionCode`, which enrolls floci's
  *   reactive S3 sync; every later swap is a bare `PutObject` (measured
- *   111–138 ms re-extract, warm containers drained, no stale invoke) —
+ *   111-138 ms re-extract, warm containers drained, no stale invoke) --
  *   until an engine reconcile re-points the function at a content-addressed
  *   key, after which the next swap re-enrolls it (see `enrolledAttrs`).
  *   `bundle: false` props fs-watch the prebuilt directory instead.
- * - **Replacement rules** — functionName and durableConfig-presence changes
+ * - **Replacement rules** -- functionName and durableConfig-presence changes
  *   replace, mirroring the live diff.
- * - **Precreate pinning** — floci validates the Handler FILE against the
+ * - **Precreate pinning** -- floci validates the Handler FILE against the
  *   package at CreateFunction (AWS defers that to first invoke); the 503
  *   stub ships a single `index.*` module, so handler-affecting props are
  *   pinned to the stub's own shape.
@@ -117,7 +117,7 @@ export const FlociFunctionProvider = () =>
       // Floci validates the Handler FILE against the package at
       // CreateFunction (AWS defers that to first invoke). The precreate 503
       // stub ships a single `index.*` module, so a `bundle: false` /
-      // custom-handler props set (`handler.handler`) would be rejected — pin
+      // custom-handler props set (`handler.handler`) would be rejected -- pin
       // the stub's handler-affecting props to the stub's own shape;
       // `reconcile` applies the real Handler together with the real package.
       transformPrecreateNews: (news) =>
@@ -144,13 +144,13 @@ export const FlociFunctionProvider = () =>
           // The attributes object that was current when the watch loop
           // last pointed the function at the stable dev key. Every
           // engine-driven reconcile (a binding added, an env var changed,
-          // …) re-uploads the bundle to a content-addressed key and
+          // ...) re-uploads the bundle to a content-addressed key and
           // re-points the function THERE, silently detaching it from the
           // dev key: floci's reactive S3 sync only follows the key the
           // function is enrolled at, so every later PutObject would be
           // ignored and hot swap would be dead until the next engine
           // update. The skeleton hands the watcher a fresh attrs object per
-          // reconcile, so identity (not the code hash — a source edited
+          // reconcile, so identity (not the code hash -- a source edited
           // back to its original content hashes the same) is the signal
           // that a re-point happened and the function must be re-enrolled.
           let enrolledAttrs: Function["Attributes"] | undefined;
@@ -170,7 +170,7 @@ export const FlociFunctionProvider = () =>
             const current = yield* ctx.currentAttrs;
             if (enrolledAttrs !== current) {
               // First swap, or the engine re-pointed the function since the
-              // last one: (re)point its code at the stable dev key — floci's
+              // last one: (re)point its code at the stable dev key -- floci's
               // reactive S3 sync then re-extracts on every subsequent
               // PutObject with no further Lambda API calls.
               yield* Lambda.updateFunctionCode({
@@ -191,7 +191,7 @@ export const FlociFunctionProvider = () =>
           });
 
           if (props.bundle === false) {
-            // Prebuilt directory: no module graph to watch — fs-watch the
+            // Prebuilt directory: no module graph to watch -- fs-watch the
             // directory and re-zip it as-is (exactly like `prebuiltCode`).
             const fs = yield* FileSystem.FileSystem;
             const realMain = yield* TempRoot.resolveMainPath(props.main);
@@ -207,7 +207,7 @@ export const FlociFunctionProvider = () =>
               ),
             );
           } else {
-            // The exact rolldown config the deploy used — incremental
+            // The exact rolldown config the deploy used -- incremental
             // rebuilds produce the identical artifact shape.
             const plan = yield* bundler.resolveBundlePlan(props);
             yield* Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(

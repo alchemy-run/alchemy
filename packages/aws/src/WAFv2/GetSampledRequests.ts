@@ -9,7 +9,7 @@ export interface GetSampledRequestsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `wafv2:GetSampledRequests` — read a sample of the web
+ * Runtime binding for `wafv2:GetSampledRequests` -- read a sample of the web
  * requests that the bound {@link WebACL} evaluated for a given rule and
  * time window; the web ACL ARN and scope are injected automatically.
  *
@@ -18,7 +18,7 @@ export interface GetSampledRequestsRequest extends Omit<
  * ### Inspecting Traffic
  * **Example:** Read Sampled Requests for a Rule
  * ```typescript
- * // init — grants wafv2:GetSampledRequests on the web ACL
+ * // init -- grants wafv2:GetSampledRequests on the web ACL
  * const getSampledRequests = yield* AWS.WAFv2.GetSampledRequests(acl);
  *
  * // runtime

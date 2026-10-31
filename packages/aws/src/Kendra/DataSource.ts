@@ -120,7 +120,7 @@ export interface DataSource extends Resource<
 > {}
 
 /**
- * An Amazon Kendra data source — a connector that syncs documents from a
+ * An Amazon Kendra data source -- a connector that syncs documents from a
  * repository (S3 bucket, SharePoint, website, ...) into a Kendra index.
  *
  * ### Creating Data Sources
@@ -227,7 +227,7 @@ const findDataSourceByName = Effect.fn(function* (
 });
 
 /**
- * A data source still transitioning toward the awaited status — retried by
+ * A data source still transitioning toward the awaited status -- retried by
  * {@link waitForDataSourceStatus}'s bounded schedule.
  */
 class DataSourceNotReady extends Data.TaggedError("DataSourceNotReady")<{
@@ -244,7 +244,7 @@ export class DataSourceProvisioningFailed extends Data.TaggedError("DataSourcePr
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -297,7 +297,7 @@ export const DataSourceProvider = () =>
       return {
         stables: ["id", "indexId", "arn"],
         // Keyed by a parent index; cannot be enumerated account-wide without
-        // iterating every index — treated as a sub-resource per the factory
+        // iterating every index -- treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -336,13 +336,13 @@ export const DataSourceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.id
             ? yield* readDataSourceById(indexId, output.id, arnOf)
             : yield* findDataSourceByName(indexId, name, arnOf);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* retryThroughIamPropagation(
               kendra.createDataSource({
@@ -372,7 +372,7 @@ export const DataSourceProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateDataSource — only when drifted.
+          // Sync mutable settings via UpdateDataSource -- only when drifted.
           const described = state.described;
           const needsUpdate =
             name !== described.Name ||
@@ -400,7 +400,7 @@ export const DataSourceProvider = () =>
             yield* session.note(`Updated data source ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* kendra.untagResource({

@@ -53,7 +53,7 @@ export interface CrawlerDynamoDbTarget {
   path?: string;
   /** Whether to scan all records (vs a sample). */
   scanAll?: boolean;
-  /** Fraction of the table's read capacity to consume (0.1–1.5). */
+  /** Fraction of the table's read capacity to consume (0.1-1.5). */
   scanRate?: number;
 }
 
@@ -165,7 +165,7 @@ export interface Crawler extends Resource<
 > {}
 
 /**
- * An AWS Glue crawler — connects to an S3 (or JDBC/DynamoDB/catalog) data
+ * An AWS Glue crawler -- connects to an S3 (or JDBC/DynamoDB/catalog) data
  * store, infers schemas, and populates the Glue Data Catalog with tables.
  * Runs are asynchronous: create the crawler, then invoke `startCrawler` (or
  * attach a schedule).
@@ -291,7 +291,7 @@ export const CrawlerProvider = () =>
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
-          // role / targets / schedule / policies / description → update
+          // role / targets / schedule / policies / description -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

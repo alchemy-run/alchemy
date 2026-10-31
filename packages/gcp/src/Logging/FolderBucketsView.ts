@@ -22,7 +22,7 @@ import {
 export type FolderBucketsViewProps = {
   /**
    * Full resource name of the parent log bucket
-   * (`{parent}/locations/{location}/buckets/{bucket}`). Immutable —
+   * (`{parent}/locations/{location}/buckets/{bucket}`). Immutable --
    * changing it replaces the view.
    */
   bucketName: string;
@@ -30,7 +30,7 @@ export type FolderBucketsViewProps = {
    * View id (the `{view}` segment of `{bucket}/views/{view}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens.
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   viewId?: string;
   /**
@@ -41,7 +41,7 @@ export type FolderBucketsViewProps = {
   filter?: string;
   /**
    * Human-readable description. Log views have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -75,7 +75,7 @@ export type FolderBucketsView = Resource<
  *
  * A bucket may contain at most 30 views. Views have no labels field, so
  * Alchemy stamps ownership into the description for `list` / nuke. `viewId`
- * and `bucketName` are identity — changing either replaces the view.
+ * and `bucketName` are identity -- changing either replaces the view.
  *
  * ### Creating a Folder Bucket View
  * **Example:** View over error entries

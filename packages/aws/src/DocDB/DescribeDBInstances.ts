@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DescribeDBInstances` operation (IAM action
- * `rds:DescribeDBInstances` — DocumentDB shares the RDS control plane).
+ * `rds:DescribeDBInstances` -- DocumentDB shares the RDS control plane).
  *
  * Lists the account's DocumentDB instances (optionally filtered by
- * identifier or cluster) with status, endpoint, and class embedded — the
+ * identifier or cluster) with status, endpoint, and class embedded -- the
  * building block of instance-health monitoring and reboot automation.
  * Provide the implementation with
  * `Effect.provide(AWS.DocDB.DescribeDBInstancesHttp)`.

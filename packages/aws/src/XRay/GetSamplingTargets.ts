@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetSamplingTargetsRequest extends xray.GetSamplingTargetsRequest {}
 
 /**
- * Report sampling statistics and receive updated sampling quotas — the
+ * Report sampling statistics and receive updated sampling quotas -- the
  * second half of the sampling protocol implemented by X-Ray SDK samplers.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -17,10 +17,10 @@ export interface GetSamplingTargetsRequest extends xray.GetSamplingTargetsReques
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetSamplingTargets
+ * // init -- grants xray:GetSamplingTargets
  * const getSamplingTargets = yield* XRay.GetSamplingTargets();
  *
- * // runtime — report what this client sampled and receive new quotas
+ * // runtime -- report what this client sampled and receive new quotas
  * const targets = yield* getSamplingTargets({
  *   SamplingStatisticsDocuments: [
  *     {

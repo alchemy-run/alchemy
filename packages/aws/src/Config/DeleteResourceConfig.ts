@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:DeleteResourceConfig` — delete the recorded
+ * Runtime binding for `config:DeleteResourceConfig` -- delete the recorded
  * configuration of a custom (third-party) resource previously recorded via
  * `PutResourceConfig`.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Recording Custom Resources
  * **Example:** Delete a Custom Resource's Configuration
  * ```typescript
- * // init — grants config:DeleteResourceConfig
+ * // init -- grants config:DeleteResourceConfig
  * const deleteResourceConfig = yield* AWS.Config.DeleteResourceConfig();
  *
  * // runtime

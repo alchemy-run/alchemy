@@ -9,7 +9,7 @@ export interface DescribeRuleGroupRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeRuleGroup` — read the bound
+ * Runtime binding for `network-firewall:DescribeRuleGroup` -- read the bound
  * {@link RuleGroup}'s definition (rules source, variables, capacity); the
  * rule group ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface DescribeRuleGroupRequest extends Omit<
  * ### Reading Rule Group State
  * **Example:** Read the Rule Group Definition
  * ```typescript
- * // init — grants network-firewall:DescribeRuleGroup on the rule group
+ * // init -- grants network-firewall:DescribeRuleGroup on the rule group
  * const describeRuleGroup =
  *   yield* AWS.NetworkFirewall.DescribeRuleGroup(ruleGroup);
  *

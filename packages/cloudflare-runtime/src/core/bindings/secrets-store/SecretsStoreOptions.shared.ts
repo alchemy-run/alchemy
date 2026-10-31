@@ -42,7 +42,7 @@ export const SECRETS_STORE_SECRET_ENTRYPOINT = "SecretsStoreSecret";
  * The Durable Object class hosting a store's data. Miniflare's secrets-store
  * plugin reuses the KV namespace object verbatim
  * (`workers-sdk/packages/miniflare/src/plugins/secret-store/index.ts`); so
- * does this port — the store service re-exports `KVNamespaceObject` from the
+ * does this port -- the store service re-exports `KVNamespaceObject` from the
  * KV simulator under its own service + storage.
  */
 export const SECRETS_STORE_OBJECT_CLASS_NAME = "KVNamespaceObject";

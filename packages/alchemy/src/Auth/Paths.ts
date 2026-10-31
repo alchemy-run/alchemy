@@ -4,7 +4,7 @@ import path from "pathe";
 /**
  * Root of alchemy's user-level auth state (`~/.alchemy`). Overridable with
  * `ALCHEMY_HOME`, which relocates profiles, credential files,
- * and cross-process locks together — used by tests to isolate a temp home
+ * and cross-process locks together -- used by tests to isolate a temp home
  * and available to users who keep dotfiles elsewhere. Resolved lazily so an
  * override set after module load (e.g. in a test) still takes effect. An
  * empty `ALCHEMY_HOME` counts as unset, never as the current directory.

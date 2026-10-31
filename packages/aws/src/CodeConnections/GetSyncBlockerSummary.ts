@@ -7,14 +7,14 @@ import type { SyncConfiguration } from "./SyncConfiguration.ts";
  * Runtime binding for `codeconnections:GetSyncBlockerSummary`.
  *
  * Bind this operation to a {@link SyncConfiguration} to read the latest
- * sync blockers — errors that stop Git sync from converging the resource —
+ * sync blockers -- errors that stop Git sync from converging the resource --
  * from inside a function runtime. Pair with {@link UpdateSyncBlocker} to
  * resolve them. Provide the implementation with
  * `Effect.provide(AWS.CodeConnections.GetSyncBlockerSummaryHttp)`.
  * ### Monitoring Git Sync
  * **Example:** Read the Latest Sync Blockers
  * ```typescript
- * // init — bind the operation to the sync configuration
+ * // init -- bind the operation to the sync configuration
  * const getSyncBlockerSummary =
  *   yield* AWS.CodeConnections.GetSyncBlockerSummary(sync);
  *

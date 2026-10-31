@@ -15,16 +15,16 @@ import { waitForCreate, waitForOperation } from "./internal.ts";
 const MAX_NAME_LENGTH = 63;
 export type TagValueProps = {
   /**
-   * Parent TagKey resource name (`tagKeys/{tagKey}`). Immutable —
+   * Parent TagKey resource name (`tagKeys/{tagKey}`). Immutable --
    * changing it replaces the TagValue.
    */
   parent: string;
   /**
    * User-assigned short name, unique among TagValues of the same TagKey.
-   * 1–256 characters, beginning and ending with `[a-zA-Z0-9]`, with
+   * 1-256 characters, beginning and ending with `[a-zA-Z0-9]`, with
    * dashes, underscores, dots, and alphanumerics between. If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the TagValue.
+   * Immutable -- changing it replaces the TagValue.
    */
   shortName?: string;
   /**
@@ -64,12 +64,12 @@ export type TagValue = Resource<
 >;
 
 /**
- * A Cloud Resource Manager TagValue — a child of a TagKey used to group
+ * A Cloud Resource Manager TagValue -- a child of a TagKey used to group
  * resources for policy.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
  * resource it finds without prior state as unowned (adopt it with `--adopt`).
- * `parent` and `shortName` are identity — changing either replaces the value.
+ * `parent` and `shortName` are identity -- changing either replaces the value.
  * Description updates in place. Create, update, and delete are long-running
  * operations polled via `getOperations`.
  *

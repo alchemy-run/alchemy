@@ -17,17 +17,17 @@ export interface DescribeScalingActivitiesRequest extends Omit<
  * `autoscaling:DescribeScalingActivities`; EC2 Auto Scaling `Describe*`
  * actions do not support resource-level permissions, so the grant is on `*`).
  *
- * Returns the bound group's recent scaling activities — what scaled, when,
+ * Returns the bound group's recent scaling activities -- what scaled, when,
  * why, and whether it succeeded. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.DescribeScalingActivitiesHttp)`.
  * ### Observing Scaling Activity
  * **Example:** List recent scaling activities
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const describeScalingActivities =
  *   yield* AWS.AutoScaling.DescribeScalingActivities(group);
  *
- * // runtime — page through the group's recent activities
+ * // runtime -- page through the group's recent activities
  * const page = yield* describeScalingActivities({ MaxRecords: 50 });
  * for (const activity of page.Activities ?? []) {
  *   yield* Effect.log(`${activity.StatusCode}: ${activity.Cause}`);

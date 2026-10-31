@@ -29,7 +29,7 @@ export interface Graph extends Resource<
 > {}
 
 /**
- * A Detective behavior graph — the account/region singleton that enables Amazon
+ * A Detective behavior graph -- the account/region singleton that enables Amazon
  * Detective. An account can have at most one behavior graph per region, so this
  * resource is a capture-and-restore singleton: adopting a pre-existing graph
  * that Alchemy did not create requires `--adopt`.
@@ -84,7 +84,7 @@ export const GraphProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Account/region singleton — enumerate the single behavior graph.
+        // Account/region singleton -- enumerate the single behavior graph.
         list: () =>
           detective.listGraphs({}).pipe(Effect.map((r) => (r.GraphList ?? []).map(buildAttrs))),
 
@@ -92,10 +92,10 @@ export const GraphProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let graph = yield* firstGraph;
 
-          // 2. ENSURE — create the graph (with tags inline) if none exists.
+          // 2. ENSURE -- create the graph (with tags inline) if none exists.
           if (!graph?.Arn) {
             const created = yield* detective.createGraph({
               Tags: desiredTags,
@@ -105,7 +105,7 @@ export const GraphProvider = () =>
 
           const arn = graph.Arn!;
 
-          // 3. SYNC tags — diff against OBSERVED cloud tags.
+          // 3. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

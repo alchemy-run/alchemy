@@ -98,7 +98,7 @@ class ReportedCliError {
 }
 
 // `ConfigError` is effect's own class and cannot carry the `UserFacingError`
-// marker. Everything else is matched by the marker alone — new user-facing
+// marker. Everything else is matched by the marker alone -- new user-facing
 // errors opt in by assigning the symbol, not by growing this list.
 const isUnmarkedUserFacingError = Schema.is(
   Schema.Struct({

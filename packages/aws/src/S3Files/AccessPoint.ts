@@ -76,11 +76,11 @@ export interface AccessPointProps {
   fileSystemId: string;
   /**
    * POSIX identity enforced for all operations through the access point.
-   * Immutable — changing it replaces the access point.
+   * Immutable -- changing it replaces the access point.
    */
   posixUser?: AccessPointPosixUser;
   /**
-   * Root directory the access point exposes. Immutable — changing it
+   * Root directory the access point exposes. Immutable -- changing it
    * replaces the access point.
    */
   rootDirectory?: AccessPointRootDirectory;
@@ -116,7 +116,7 @@ export interface AccessPoint extends Resource<
 > {}
 
 /**
- * An Amazon S3 File System Access Point — application-specific access to a
+ * An Amazon S3 File System Access Point -- application-specific access to a
  * {@link FileSystem} with POSIX user identity and root directory
  * enforcement, for managing shared datasets in multi-tenant scenarios.
  *
@@ -257,7 +257,7 @@ export const AccessPointProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // There is no UpdateAccessPoint API — everything except tags is
+          // There is no UpdateAccessPoint API -- everything except tags is
           // fixed at create time.
           if (replacementKey(olds ?? {}) !== replacementKey(news ?? {})) {
             return { action: "replace" } as const;
@@ -269,14 +269,14 @@ export const AccessPointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output only caches
+          // 1. OBSERVE -- cloud state is authoritative; output only caches
           //    the server-assigned access point id.
           let live =
             output?.accessPointId !== undefined
               ? yield* observe(output.accessPointId)
               : yield* findByAlchemyTags(id, news.fileSystemId);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces
+          // 2. ENSURE -- create when missing; a concurrent create surfaces
           //    as ConflictException, which we treat as a race and re-find.
           if (live === undefined) {
             const created = yield* s3files
@@ -313,7 +313,7 @@ export const AccessPointProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — diff against observed cloud tags so adoption and
+          // 3. SYNC TAGS -- diff against observed cloud tags so adoption and
           //    drift converge (create-time tags only apply on first create).
           yield* syncTags(accessPointId, toTagRecord(settled.tags), desiredTags);
 

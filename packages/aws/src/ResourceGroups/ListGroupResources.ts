@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { Group } from "./Group.ts";
 
-/** Request for {@link ListGroupResources} — the group is injected from the binding. */
+/** Request for {@link ListGroupResources} -- the group is injected from the binding. */
 export type ListGroupResourcesRequest = Omit<
   resourcegroups.ListGroupResourcesInput,
   "Group" | "GroupName"
@@ -12,7 +12,7 @@ export type ListGroupResourcesRequest = Omit<
 /**
  * Runtime binding for `resource-groups:ListGroupResources`.
  *
- * Enumerates the member resources of the bound {@link Group} — for a
+ * Enumerates the member resources of the bound {@link Group} -- for a
  * tag-based group the resources currently matching the query, for an
  * application or configuration group the explicitly grouped members. The
  * group name is injected from the binding; the grant also includes the
@@ -22,7 +22,7 @@ export type ListGroupResourcesRequest = Omit<
  * ### Enumerating Group Members
  * **Example:** List A Group's Member ARNs
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const listGroupResources = yield* AWS.ResourceGroups.ListGroupResources(group);
  *
  * // runtime

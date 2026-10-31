@@ -42,13 +42,13 @@ export type SubnetworkProps = {
    */
   subnetworkName?: string;
   /**
-   * Region of the subnetwork. Immutable — changing it replaces the
+   * Region of the subnetwork. Immutable -- changing it replaces the
    * subnetwork. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Parent VPC network name or URL. Immutable — changing it replaces the
+   * Parent VPC network name or URL. Immutable -- changing it replaces the
    * subnetwork.
    */
   network: string;
@@ -60,7 +60,7 @@ export type SubnetworkProps = {
   /**
    * User description. Alchemy ownership is stamped into the description
    * (Compute Subnetwork has no `labels` field) so `list` / nuke can find
-   * the resource. The API only accepts description at create time —
+   * the resource. The API only accepts description at create time --
    * changing it replaces the subnetwork.
    */
   description?: string;
@@ -77,7 +77,7 @@ export type SubnetworkProps = {
   stackType?: compute.SubnetworkStackTypeEnum;
   /**
    * Subnet purpose (`PRIVATE`, `INTERNAL_HTTPS_LOAD_BALANCER`,
-   * `REGIONAL_MANAGED_PROXY`, …). Immutable — changing it replaces the
+   * `REGIONAL_MANAGED_PROXY`, ...). Immutable -- changing it replaces the
    * subnetwork.
    */
   purpose?: compute.SubnetworkPurposeEnum;
@@ -100,7 +100,7 @@ export type SubnetworkProps = {
   privateIpv6GoogleAccess?: compute.SubnetworkPrivateIpv6GoogleAccessEnum;
   /**
    * IPv6 access type (`EXTERNAL` or `INTERNAL`). Immutable after the
-   * subnet is dual-stack — changing it replaces the subnetwork.
+   * subnet is dual-stack -- changing it replaces the subnetwork.
    */
   ipv6AccessType?: compute.SubnetworkIpv6AccessTypeEnum;
 };
@@ -158,7 +158,7 @@ export type Subnetwork = Resource<
  * A Google Compute Engine VPC subnetwork (subnet).
  *
  * Subnets are regional partitions of a VPC with one primary IPv4 range and
- * optional secondary ranges. Compute Subnetwork has no `labels` field —
+ * optional secondary ranges. Compute Subnetwork has no `labels` field --
  * Alchemy stamps `alchemy-stack` / `alchemy-stage` / `alchemy-id` into the
  * description so `list` and `pnpm nuke:gcp` can identify owned subnets.
  *

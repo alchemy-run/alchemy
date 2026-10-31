@@ -125,7 +125,7 @@ export const ensureMySQLProductionBranchClusterSize = Effect.fn(function* (
     keyspace = (yield* observeDefaultKeyspace(organization, database, branch)) ?? keyspace;
   }
 
-  // Sync replicas — MySQL databases cannot configure replicas at
+  // Sync replicas -- MySQL databases cannot configure replicas at
   // creation time (the API rejects the `replicas` param for mysql), so
   // the desired total replica count is converged in place via a keyspace
   // resize request.

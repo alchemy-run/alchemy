@@ -116,7 +116,7 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * ```typescript
  * const dbUrl = yield* Fly.Secret("DatabaseUrl", {
  *   app: Site,
- *   value: Redacted.make("postgres://…"),
+ *   value: Redacted.make("postgres://..."),
  * });
  * ```
  *
@@ -133,7 +133,7 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * export const ApiToken = Fly.Secret("ApiToken", {
  *   app: Site,
  *   name: "API_TOKEN",
- *   value: Redacted.make("sk_live_…"),
+ *   value: Redacted.make("sk_live_..."),
  * });
  * ```
  *
@@ -226,7 +226,7 @@ const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     // User env-var names are stored as-is (case-sensitive). Generated
-    // names use the Volume underscore shape — Fly rejects hyphens.
+    // names use the Volume underscore shape -- Fly rejects hyphens.
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
     return yield* createFlyVolumeName(id);
@@ -288,7 +288,7 @@ export const SecretProvider = () =>
       if (nameChanged || appChanged) {
         return {
           action: "replace" as const,
-          // Same (app, name) cannot exist twice — delete the old secret first.
+          // Same (app, name) cannot exist twice -- delete the old secret first.
           deleteFirst: nameChanged && !appChanged,
         };
       }
@@ -363,7 +363,7 @@ export const SecretProvider = () =>
         return yield* new SecretNotCreated({ appName, secretName: name });
       }
 
-      // Sync — skip if we just created. Prefer observed digest vs hash of
+      // Sync -- skip if we just created. Prefer observed digest vs hash of
       // desired; otherwise re-put when olds is absent (adoption) or the
       // previous value differs. Never log the plaintext.
       if (!createdThisRun) {

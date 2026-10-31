@@ -7,7 +7,7 @@ import type { Channel } from "./Channel.ts";
  * Runtime binding for `medialive:RestartChannelPipelines`.
  *
  * Restarts one or both encoder pipelines of the bound RUNNING
- * {@link Channel} without a full stop/start cycle — the standard remedy
+ * {@link Channel} without a full stop/start cycle -- the standard remedy
  * for a wedged pipeline (frozen output, persistent alert) that an
  * automated-recovery Lambda applies when a channel alert fires. The
  * channel id is injected from the binding. Provide the implementation
@@ -15,7 +15,7 @@ import type { Channel } from "./Channel.ts";
  * ### Controlling Channels
  * **Example:** Restart a Wedged Pipeline
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const restartPipelines = yield* AWS.MediaLive.RestartChannelPipelines(channel);
  *
  * // runtime

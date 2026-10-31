@@ -20,13 +20,13 @@ import {
 export type EnvgroupProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the group.
+   * current GCP project id. Immutable -- changing it replaces the group.
    */
   organization?: string;
   /**
    * Environment group id (the `{envgroup}` segment of
    * `organizations/{org}/envgroups/{envgroup}`). If omitted, a unique
-   * name is generated. Immutable — changing it replaces the group.
+   * name is generated. Immutable -- changing it replaces the group.
    */
   envgroupId?: string;
   /**
@@ -47,7 +47,7 @@ export type Envgroup = Resource<
     organization: string;
     /** Host names routed to this group. */
     hostnames: string[];
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** Creation time in milliseconds since epoch. */
     createdAt: string | undefined;
@@ -65,7 +65,7 @@ export type Envgroup = Resource<
  * The API has no labels or description, so Alchemy identifies its groups
  * by the generated `envgroupId`: `read` reports a group with an explicit
  * `envgroupId` as unowned (adopt it with `--adopt`), and nuke cannot
- * discover groups. Name is identity — changing `envgroupId` replaces the
+ * discover groups. Name is identity -- changing `envgroupId` replaces the
  * group. Hostnames update in place.
  *
  * ### Creating an Environment Group

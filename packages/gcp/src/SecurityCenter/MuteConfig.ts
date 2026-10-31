@@ -29,7 +29,7 @@ export type MuteConfigProps = {
    * Mute config id (the `{muteConfig}` segment of
    * `projects/{project}/muteConfigs/{muteConfig}`). If omitted, a unique
    * id is generated. Lowercase letters, digits, and hyphens; must start
-   * with a letter; max 63 characters. Immutable — changing it replaces
+   * with a letter; max 63 characters. Immutable -- changing it replaces
    * the config.
    */
   muteConfigId?: string;
@@ -39,13 +39,13 @@ export type MuteConfigProps = {
   filter: string;
   /**
    * Human-readable description (max 1024 characters). Mute configs have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
   /**
    * Mute config type. `STATIC` mutes matching findings immediately.
-   * `DYNAMIC` re-evaluates until `expiryTime`. Immutable — changing it
+   * `DYNAMIC` re-evaluates until `expiryTime`. Immutable -- changing it
    * replaces the config.
    * @default "STATIC"
    */
@@ -89,7 +89,7 @@ export type MuteConfig = Resource<
  * A project-scoped Security Command Center mute config that hides matching
  * findings from the default view.
  *
- * Mute configs have no labels field — Alchemy stamps ownership into the
+ * Mute configs have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Id and type are identity.
  * Filter, description, and expiry update in place.
  *

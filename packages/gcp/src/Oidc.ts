@@ -156,7 +156,7 @@ export const verifyGoogleIdToken = (options: {
     );
   });
 
-/** The `aud` claim of a bearer token, unverified — for diagnostics only. */
+/** The `aud` claim of a bearer token, unverified -- for diagnostics only. */
 export const unverifiedAudience = (authorization: string | undefined) => {
   try {
     const token = /^Bearer\s+(.+)$/i.exec(authorization ?? "")?.[1];

@@ -7,8 +7,8 @@ import type { Transformer } from "./Transformer.ts";
 /**
  * Shared scaffolding for B2BI HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * the injected identifier is boilerplate.
  */
@@ -32,7 +32,7 @@ export const makeTransformerScopedHttpBinding = <
   actions: readonly string[];
   /**
    * Companion statements the operation needs beyond the transformer-scoped
-   * b2bi action — B2BI reaches into S3 through the caller's session
+   * b2bi action -- B2BI reaches into S3 through the caller's session
    * (forward-access), so e.g. `StartTransformerJob` needs S3 access on the
    * host.
    */
@@ -69,7 +69,7 @@ export const makeTransformerScopedHttpBinding = <
 
 /**
  * Build the impl Effect for an account-level operation (no target resource).
- * The deploy-time half grants `actions` on `*` — B2BI's test/generate
+ * The deploy-time half grants `actions` on `*` -- B2BI's test/generate
  * operations don't support resource-level scoping.
  */
 export const makeB2biAccountHttpBinding = <I, A, E, R>(options: {

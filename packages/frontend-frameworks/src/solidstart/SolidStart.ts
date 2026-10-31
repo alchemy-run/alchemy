@@ -25,7 +25,7 @@ import {
 
 /**
  * The structural slice of the project's `vite` module this package drives.
- * Typed structurally so the package carries no dependency on vite — the
+ * Typed structurally so the package carries no dependency on vite -- the
  * *project's* install is always the one loaded.
  *
  * `createBuilder` (not `build`) is the entry point: SolidStart declares a
@@ -87,7 +87,7 @@ export interface SolidStartTargetConfig {
 
 /**
  * A deploy target for SolidStart: the generic `DeployTarget` seams plus the
- * nitro hooks the SolidStart build needs — the deployment preset to build
+ * nitro hooks the SolidStart build needs -- the deployment preset to build
  * with, and a last-word pass over the nitro config the integration hands to
  * the SolidStart nitro plugin.
  */
@@ -114,7 +114,7 @@ export type SolidStartTargetInput = DeployTargetInput<SolidStartTarget, SolidSta
 /**
  * The default deploy target: this package's own AWS Lambda target module,
  * loaded from the project's dependency tree. (Cloudflare deploys SolidStart
- * through its native Vite integration — `Cloudflare.Website.Vite` — so no
+ * through its native Vite integration -- `Cloudflare.Website.Vite` -- so no
  * Cloudflare target exists here.)
  */
 export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/aws";
@@ -162,11 +162,11 @@ const cwdLock = Semaphore.makeUnsafe(1);
 /**
  * Run `effect` with the process working directory set to the project root,
  * restoring it afterwards. A no-op (and lock-free) when the cwd already is the
- * root — the case for the isolated build child process.
+ * root -- the case for the isolated build child process.
  *
  * SolidStart 2's `solidStart()` plugin resolves the app root, the route
- * directory, and the `~` alias from `process.cwd()` at config-load time —
- * not from vite's `root` — so it only finds the app when the process is IN
+ * directory, and the `~` alias from `process.cwd()` at config-load time --
+ * not from vite's `root` -- so it only finds the app when the process is IN
  * the project. Production builds are already isolated in a child process
  * whose cwd IS the root (see `aws.ts`), which makes this a no-op there; the
  * dev server runs in the caller's process (alchemy's dev sidecar), so the
@@ -221,14 +221,14 @@ const inProjectCwd = <A, E, R>(
  *   programmatically: `createBuilder({ root, plugins: [nitroV2Plugin(...)] })`
  *   followed by `buildApp()`. The project's `vite.config.*` loads natively
  *   (its `solidStart()` plugin is untouched); the integration APPENDS a
- *   `nitroV2Plugin` instance — loaded from the project's own
- *   `node_modules` — carrying the deploy target's preset. Inline plugins are
+ *   `nitroV2Plugin` instance -- loaded from the project's own
+ *   `node_modules` -- carrying the deploy target's preset. Inline plugins are
  *   merged after the config file's, so the appended instance's
  *   `builder.buildApp` gets the last word. The `BuildOutput` is read from
  *   nitro's `.output`: `serverModules` entry-first from `.output/server`,
  *   `clientDirectory` = `.output/public` (prerendered pages included).
  * - `dev` runs the project's own Vite dev server (SolidStart's dev-server
- *   plugin serves SSR through it, with native HMR), scoped — closing the
+ *   plugin serves SSR through it, with native HMR), scoped -- closing the
  *   Scope closes the server. Nitro plays no part in dev.
  *
  * This module is target-agnostic: everything AWS-specific lives in
@@ -273,7 +273,7 @@ export const make: (
       ).pipe(
         Effect.mapError((error) =>
           fail(
-            `Failed to load the project's "${NITRO_PLUGIN_SPECIFIER}" — install it alongside ` +
+            `Failed to load the project's "${NITRO_PLUGIN_SPECIFIER}" \u2014 install it alongside ` +
               "`@solidjs/start`; it is the server half of a SolidStart build",
             error.cause,
           ),
@@ -290,7 +290,7 @@ export const make: (
       };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
-      // build in a disposable child process — vite.config.* executes user
+      // build in a disposable child process -- vite.config.* executes user
       // plugins that must not touch the engine process).
       if (target.build !== undefined) {
         return yield* target.build(targetContext).pipe(
@@ -303,7 +303,7 @@ export const make: (
       yield* requireNitroPreset(target);
 
       // Conflict policy: the deploy target owns the preset, so a foreign one
-      // is rejected with an actionable error instead of being replaced — a
+      // is rejected with an actionable error instead of being replaced -- a
       // build for a different preset would never be deployed.
       const conflict = findPresetConflict(options?.nitro, target.nitroPreset);
       if (conflict !== undefined) {
@@ -373,8 +373,8 @@ export const make: (
         Effect.provideService(FileSystem.FileSystem, fs),
       );
 
-      // The finishing-pass seam (none needed for the aws-lambda preset — the
-      // output is already a self-contained Node deployment unit — but the
+      // The finishing-pass seam (none needed for the aws-lambda preset -- the
+      // output is already a self-contained Node deployment unit -- but the
       // contract is honored for targets that do post-process).
       return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
         ...targetContext,
@@ -390,7 +390,7 @@ export const make: (
       const root = devOptions?.root ?? baseRoot;
       const vite = yield* loadVite(root);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-      // on older Vite — see `resolveViteDevPort`.
+      // on older Vite -- see `resolveViteDevPort`.
       const port = yield* FrameworkCore.resolveViteDevPort(
         vite.version,
         devOptions?.port ?? options?.dev?.port,
@@ -452,7 +452,7 @@ export const make: (
 
     // SolidStart's `solidStart()` plugin resolves the app from `process.cwd()`
     // at config-load time, so its startup needs `cwd === root`. That must not
-    // happen in a process hosting other sites (the alchemy dev sidecar) — run
+    // happen in a process hosting other sites (the alchemy dev sidecar) -- run
     // the dev server in a dedicated child whose cwd IS the root instead (see
     // core/DevChild.ts). Inside that child (or when the options cannot cross
     // the process boundary, e.g. a deploy-target VALUE from the e2e harness)
@@ -527,7 +527,7 @@ export const readNitroOutput = (
 
 /**
  * A `Layer` providing framework-core's `Framework` service for a SolidStart
- * project — the fully-typed entrypoint for `e2e.config.ts` and alchemy's
+ * project -- the fully-typed entrypoint for `e2e.config.ts` and alchemy's
  * `AWS.Website.SolidStart` composite.
  */
 export const layer = (

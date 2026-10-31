@@ -17,7 +17,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of an AMP resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readAmpTags = Effect.fn(function* (arn: string) {
   const response = yield* amp

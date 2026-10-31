@@ -8,7 +8,7 @@ export const BatchUpdateClusterHttp = Layer.effect(
   makeMemoryDBAccountHttpBinding({
     tag: "AWS.MemoryDB.BatchUpdateCluster",
     operation: memorydb.batchUpdateCluster,
-    // Clusters are addressed by a runtime name list — grant on the cluster
+    // Clusters are addressed by a runtime name list -- grant on the cluster
     // ARN wildcard.
     actions: ["memorydb:BatchUpdateCluster"],
     resources: ["arn:aws:memorydb:*:*:cluster/*"],

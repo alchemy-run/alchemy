@@ -41,31 +41,31 @@ export type ConnectorConfigStatus =
 export type CustomersConnectorConfigProps = {
   /**
    * Parent customer (`customers/{customer}` or `{customer}`). Immutable
-   * — changing it replaces the connector config.
+   * -- changing it replaces the connector config.
    */
   parent: string;
   /**
    * Connector config id (last path segment). If omitted, a unique id is
-   * generated from the stack, stage, and logical id. Immutable —
+   * generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the connector config.
    */
   connectorConfigId?: string;
   /**
    * Admin-facing display name. Connector configs have no labels field,
-   * so Alchemy stores ownership in a `[alchemy …]` prefix and strips it
+   * so Alchemy stores ownership in a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   displayName?: string;
   /**
    * Connector type (`REPORTING`, `DEVICE_TRUST`, `XDR`,
    * `IDENTITY_BASED_ENROLLMENT`, `CERTIFICATE_AUTHORITY`, `ROOT_STORE`,
-   * `CONTENT_ANALYSIS`). Immutable — changing it replaces the connector
+   * `CONTENT_ANALYSIS`). Immutable -- changing it replaces the connector
    * config.
    */
   type: ConnectorConfigType;
   /**
    * Type-specific connector details (Pub/Sub, Splunk, CrowdStrike,
-   * device trust, MIP, …). `apiKey` and `hecToken` fields are input-only
+   * device trust, MIP, ...). `apiKey` and `hecToken` fields are input-only
    * and are not returned by get.
    */
   details: ConnectorConfigDetails;
@@ -102,7 +102,7 @@ export type CustomersConnectorConfig = Resource<
  *
  * Connector configs have no labels field, so Alchemy stamps ownership
  * into `displayName` for `list` / nuke. Parent, connector config id, and
- * type are identity — changing any of them replaces the config. Display
+ * type are identity -- changing any of them replaces the config. Display
  * name and details update in place. Create requires a Chrome Enterprise
  * customer the caller can administer.
  *

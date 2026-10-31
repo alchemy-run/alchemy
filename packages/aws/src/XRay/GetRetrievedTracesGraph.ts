@@ -17,7 +17,7 @@ export interface GetRetrievedTracesGraphRequest extends xray.GetRetrievedTracesG
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetRetrievedTracesGraph
+ * // init -- grants xray:GetRetrievedTracesGraph
  * const getRetrievedTracesGraph = yield* XRay.GetRetrievedTracesGraph();
  *
  * // runtime

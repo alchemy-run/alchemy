@@ -17,7 +17,7 @@ export interface DescribeJobRequest extends Omit<
  * `glacier:DescribeJob` on the vault ARN).
  *
  * Reads the status of a job previously started with {@link InitiateJob} on
- * the bound {@link Vault} — its action, status code, and completion flag.
+ * the bound {@link Vault} -- its action, status code, and completion flag.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.DescribeJobHttp)`.
  * ### Retrieving Archives

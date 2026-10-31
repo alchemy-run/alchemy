@@ -39,14 +39,14 @@ export type RegionHealthCheckProps = {
    */
   healthCheckName?: string;
   /**
-   * Region the health check lives in. Immutable — changing it replaces
+   * Region the health check lives in. Immutable -- changing it replaces
    * the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute HealthCheck has no
    * labels field).
    */
@@ -57,7 +57,7 @@ export type RegionHealthCheckProps = {
    */
   checkIntervalSec?: number;
   /**
-   * Probe timeout in seconds. Must be ≤ `checkIntervalSec`.
+   * Probe timeout in seconds. Must be <= `checkIntervalSec`.
    * @default 5
    */
   timeoutSec?: number;
@@ -152,7 +152,7 @@ export type RegionHealthCheck = Resource<
  * Health checks probe backends for load balancing and managed-instance-group
  * autohealing. This resource maps to the regional `regionHealthChecks`
  * collection (the global `healthChecks` resource is
- * `GCP.Compute.HealthCheck`). Compute HealthCheck has no labels field —
+ * `GCP.Compute.HealthCheck`). Compute HealthCheck has no labels field --
  * Alchemy ownership is stored in the description so nuke can find leaked
  * checks.
  *

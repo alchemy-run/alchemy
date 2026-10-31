@@ -35,12 +35,12 @@ export type DeploymentProps = {
   /**
    * Deployment id (the `{deployment}` segment of
    * `projects/{project}/locations/{location}/deployments/{deployment}`).
-   * If omitted, a unique id is generated. Immutable — changing it replaces
+   * If omitted, a unique id is generated. Immutable -- changing it replaces
    * the deployment.
    */
   deploymentId?: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …). Immutable —
+   * Location of the API Hub instance (`us-central1`, ...). Immutable --
    * changing it replaces the deployment. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -52,7 +52,7 @@ export type DeploymentProps = {
   displayName?: string;
   /**
    * Human-readable description. API Hub deployments have no labels
-   * field, so Alchemy stamps ownership into a `[alchemy …]` prefix and
+   * field, so Alchemy stamps ownership into a `[alchemy ...]` prefix and
    * strips it from attributes.
    */
   description?: string;
@@ -90,7 +90,7 @@ export type DeploymentProps = {
    */
   sourceProject?: string;
   /**
-   * Source environment (`prod`, `dev`, `staging`, …).
+   * Source environment (`prod`, `dev`, `staging`, ...).
    */
   sourceEnvironment?: string;
   /**
@@ -155,13 +155,13 @@ export type Deployment = Resource<
 >;
 
 /**
- * An API Hub deployment — a gateway, proxy, or other runtime that hosts
+ * An API Hub deployment -- a gateway, proxy, or other runtime that hosts
  * APIs. Deployments are root-level entities and exist independently of
  * any API.
  *
  * API Hub deployments have no labels, so Alchemy stamps ownership into
  * the description for `list` / nuke. Location and deployment id are
- * identity — changing them replaces the deployment. Display name,
+ * identity -- changing them replaces the deployment. Display name,
  * description, type, URI, endpoints, and related attributes update in
  * place.
  *

@@ -83,8 +83,8 @@ export interface RedactedMarker {
 
 /**
  * Detect the (already JSON-parsed) {@link RedactedMarker} shape. After
- * `JSON.parse` the marker is a plain object — `Redacted.isRedacted` is
- * always `false` on it — so detection is structural.
+ * `JSON.parse` the marker is a plain object -- `Redacted.isRedacted` is
+ * always `false` on it -- so detection is structural.
  */
 export const isRedactedMarker = (value: unknown): value is RedactedMarker =>
   typeof value === "object" &&
@@ -94,7 +94,7 @@ export const isRedactedMarker = (value: unknown): value is RedactedMarker =>
 
 /**
  * Returns true when {@link unpackEnvValue}'s `JSON.parse` would reinterpret
- * the raw string as something other than itself — a number (`"123"`), a
+ * the raw string as something other than itself -- a number (`"123"`), a
  * boolean, `null`, or a JSON document. Such strings must stay
  * `JSON.stringify`-packed; everything else round-trips verbatim through the
  * parse-failure fallback.
@@ -113,11 +113,11 @@ const parsesAsJson = (value: string): boolean => {
  * a {@link RedactedMarker}, non-string values as JSON.
  *
  * A plain string is stored **verbatim** whenever `JSON.parse` would reject
- * it — which is almost every real-world string (names, URLs, ids). Packing
+ * it -- which is almost every real-world string (names, URLs, ids). Packing
  * those too would put `"my-queue"` (quote characters included) on the wire,
  * where anything that consumes the raw binding without going through
- * {@link unpackEnvValue} — the Cloudflare dashboard, a hand-written env
- * read, a queue-name comparison against `MessageBatch.queue` — sees the
+ * {@link unpackEnvValue} -- the Cloudflare dashboard, a hand-written env
+ * read, a queue-name comparison against `MessageBatch.queue` -- sees the
  * quoted form and mismatches (#1243). Only ambiguous strings (`"123"`,
  * `"null"`, JSON documents) keep the pack so the read side can't
  * reinterpret them.
@@ -153,11 +153,11 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  * `undefined` passes through.
  *
  * Runtime `get` accessors MUST feed this from the raw environment
- * (`process.env[key]` / the platform env object) — never through
+ * (`process.env[key]` / the platform env object) -- never through
  * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
  * values (unwrapping the marker before it could be detected here), and
  * during init the ambient provider is the interceptor installed in
- * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` —
+ * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` --
  * resolving through `Config` would re-enter it for the same key and
  * recurse forever.
  */

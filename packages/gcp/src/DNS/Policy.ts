@@ -39,12 +39,12 @@ export type PolicyProps = {
    * unique RFC1035 name is generated from the stack, stage, and logical
    * id. Must be 1-63 characters, begin with a letter, end with a letter
    * or digit, and contain only lowercase letters, digits, or dashes.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   policyName?: string;
   /**
    * Human-readable description (max 1024 characters). DNS policies have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -113,7 +113,7 @@ export type Policy = Resource<
  *
  * A policy controls inbound DNS forwarding, outbound forwarding to
  * alternative name servers, query logging, and DNS64. Name is identity
- * — changing it replaces the policy. A VPC network can belong to at
+ * -- changing it replaces the policy. A VPC network can belong to at
  * most one server policy.
  *
  * DNS policies have no labels. Alchemy stamps

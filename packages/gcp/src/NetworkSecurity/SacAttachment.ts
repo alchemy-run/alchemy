@@ -30,11 +30,11 @@ export type SacAttachmentProps = {
    * Attachment id (the `{sacAttachment}` segment of
    * `projects/{project}/locations/{location}/sacAttachments/{sacAttachment}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the attachment.
+   * and logical id. Immutable -- changing it replaces the attachment.
    */
   sacAttachmentId?: string;
   /**
-   * Region of the attachment (e.g. `us-central1`). Immutable — changing
+   * Region of the attachment (e.g. `us-central1`). Immutable -- changing
    * it replaces the attachment. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -43,13 +43,13 @@ export type SacAttachmentProps = {
   /**
    * SAC realm that owns the attachment, as an id or full resource name.
    * The realm must already be paired with its SSE partner's realm;
-   * otherwise create fails with `SacRealmNotPaired`. Immutable — changing
+   * otherwise create fails with `SacRealmNotPaired`. Immutable -- changing
    * it replaces the attachment.
    */
   sacRealm: string;
   /**
    * NCC Gateway spoke associated with the attachment, as an id or full
-   * resource name. Immutable — changing it replaces the attachment.
+   * resource name. Immutable -- changing it replaces the attachment.
    */
   nccGateway: string;
   /**
@@ -90,7 +90,7 @@ export type SacAttachment = Resource<
 >;
 
 /**
- * A Secure Access Connect (SAC) attachment — binds an NCC Gateway to a
+ * A Secure Access Connect (SAC) attachment -- binds an NCC Gateway to a
  * SAC realm so SSE traffic can be processed.
  *
  * The realm must first be paired with the SSE partner's realm (Palo Alto

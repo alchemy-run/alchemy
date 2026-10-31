@@ -12,13 +12,13 @@ export interface GetTransformerJobRequest extends Omit<
  * Runtime binding for `b2bi:GetTransformerJob`.
  *
  * Polls the status of an asynchronous transformer job started with
- * {@link StartTransformerJob} — `status` progresses from `running` to
+ * {@link StartTransformerJob} -- `status` progresses from `running` to
  * `succeeded` (with `outputFiles`) or `failed` (with `message`). Provide the
  * implementation with `Effect.provide(AWS.B2BI.GetTransformerJobHttp)`.
  * ### Running Transformer Jobs
  * **Example:** Poll a Transformer Job Until It Finishes
  * ```typescript
- * // init — grants b2bi:GetTransformerJob on the transformer
+ * // init -- grants b2bi:GetTransformerJob on the transformer
  * const getTransformerJob = yield* AWS.B2BI.GetTransformerJob(transformer);
  *
  * // runtime

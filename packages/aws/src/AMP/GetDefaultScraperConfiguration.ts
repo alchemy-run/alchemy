@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `aps:GetDefaultScraperConfiguration`.
  *
- * An account-level binding — call it with no arguments to get a callable
+ * An account-level binding -- call it with no arguments to get a callable
  * that returns the AWS-managed default scraper configuration as Prometheus
  * scrape-configuration YAML text (decoded from the wire blob). Provide the
  * `GetDefaultScraperConfigurationHttp` layer on the Function to satisfy the

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetFaceDetection` — get the results of an asynchronous faces detection job started by StartFaceDetection.
+ * Runtime binding for `rekognition:GetFaceDetection` -- get the results of an asynchronous faces detection job started by StartFaceDetection.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetFaceDetection` on `*` (Rekognition data-plane resources such

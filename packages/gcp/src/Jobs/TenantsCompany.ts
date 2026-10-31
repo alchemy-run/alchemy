@@ -33,11 +33,11 @@ import {
 export type TenantsCompanyProps = {
   /**
    * Parent tenant resource name `projects/{project}/tenants/{tenant}`
-   * or the tenant id. Immutable — changing it replaces the company.
+   * or the tenant id. Immutable -- changing it replaces the company.
    */
   parent: string;
   /**
-   * Server-assigned company id. Leave blank on create. Immutable —
+   * Server-assigned company id. Leave blank on create. Immutable --
    * changing it replaces the company.
    */
   companyId?: string;
@@ -128,13 +128,13 @@ export type TenantsCompany = Resource<
 >;
 
 /**
- * A Cloud Talent Solution company — the hiring entity that owns job
+ * A Cloud Talent Solution company -- the hiring entity that owns job
  * postings.
  *
  * Companies have no labels field, so Alchemy stamps ownership into the
  * client-side `externalId` for `list` / nuke (never into the
  * seeker-visible display name). Parent tenant and
- * company id are identity — changing either replaces the company.
+ * company id are identity -- changing either replaces the company.
  * Display name, URIs, size, and related fields update in place.
  *
  * ### Creating a Company

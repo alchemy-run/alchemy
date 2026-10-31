@@ -67,7 +67,7 @@ export type VolumeAttachment = Resource<
      * successful reconcile.
      */
     automount: boolean;
-    /** Device path on the file system (e.g. `/dev/disk/by-id/scsi-…`). */
+    /** Device path on the file system (e.g. `/dev/disk/by-id/scsi-...`). */
     linuxDevice: string;
   },
   never,
@@ -79,7 +79,7 @@ export type VolumeAttachment = Resource<
  * The Volume and Server must already exist. Deleting the attachment
  * detaches the Volume; it does not delete the Volume or the Server.
  *
- * This is an existence-style resource — its identity is the
+ * This is an existence-style resource -- its identity is the
  * `volume`/`server` pair. Changing either replaces the attachment.
  * `automount` updates in place (detach + re-attach).
  *
@@ -314,14 +314,14 @@ export const VolumeAttachmentProvider = () =>
       }
       const desiredAutomount = news.automount ?? false;
 
-      // Observe — cached output.volumeId is a hint; the Volume is the
+      // Observe -- cached output.volumeId is a hint; the Volume is the
       // source of truth for whether this attachment exists.
       let current = yield* getById(volumeId);
       if (current === undefined) {
         return yield* new VolumeNotFound({ volumeId });
       }
 
-      // Ensure — attach when missing or attached to a different Server.
+      // Ensure -- attach when missing or attached to a different Server.
       // Already-attached (UnprocessableEntity) is a race; re-observe.
       if (current.server !== serverId) {
         if (current.server !== null) {
@@ -336,7 +336,7 @@ export const VolumeAttachmentProvider = () =>
       }
 
       // Automount is only accepted on attach. Hetzner has no update API,
-      // and detach+reattach to flip it unmounts the disk — skip when the
+      // and detach+reattach to flip it unmounts the disk -- skip when the
       // Volume is already on the desired Server.
       const attrs = toAttrs(current, desiredAutomount);
       if (attrs === undefined) {

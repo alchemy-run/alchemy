@@ -15,7 +15,7 @@ import { SendError } from "./QueueTypes.ts";
  * Injectable auth used by the Queue HTTP client builder. Both the
  * scoped-token HTTP variant ({@link makeWriteQueueHttpClient}) and the
  * current-credentials Local variant build this so they share the exact
- * same request path — only the way credentials reach the SDK op differs.
+ * same request path -- only the way credentials reach the SDK op differs.
  *
  * - `authorize` runs a raw distilled op (which needs
  *   `Credentials | HttpClient`) and discharges those requirements down to

@@ -6,8 +6,8 @@ import type { Crawler } from "./Crawler.ts";
 /**
  * Runtime binding for `glue:GetCrawler`.
  *
- * Reads the bound {@link Crawler}'s metadata — most usefully its `State`
- * (`READY`, `RUNNING`, `STOPPING`) and `LastCrawl` outcome — so runtime code
+ * Reads the bound {@link Crawler}'s metadata -- most usefully its `State`
+ * (`READY`, `RUNNING`, `STOPPING`) and `LastCrawl` outcome -- so runtime code
  * can poll a crawl started with `StartCrawler` to completion. The crawler
  * name is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetCrawlerHttp)`.

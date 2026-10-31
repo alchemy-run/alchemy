@@ -9,8 +9,8 @@ export class HostedZoneLookupInvalidProps extends Data.TaggedError("HostedZoneLo
 
 /**
  * Find the most specific PUBLIC Route 53 hosted zone containing
- * `domainName`, walking up its labels (`svc.api.example.com` →
- * `api.example.com` → `example.com`). Wildcard labels (`*`) never name a
+ * `domainName`, walking up its labels (`svc.api.example.com` ->
+ * `api.example.com` -> `example.com`). Wildcard labels (`*`) never name a
  * zone, so they fall through to the parent naturally. Returns the bare
  * zone id (no `/hostedzone/` prefix), or `undefined` when no public zone
  * matches.
@@ -56,7 +56,7 @@ export const resolveHostedZoneId = Effect.fn("resolveHostedZoneId")(function* (
   if (inferred === undefined) {
     return yield* new HostedZoneLookupInvalidProps({
       message:
-        `No public Route 53 hosted zone in this account contains "${domainName}" — ` +
+        `No public Route 53 hosted zone in this account contains "${domainName}" \u2014 ` +
         `create the zone first or pass "hostedZoneId" explicitly.`,
     });
   }

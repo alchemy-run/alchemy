@@ -24,7 +24,7 @@ export interface CrlProps {
   crlData: string;
   /**
    * ARN of the trust anchor the CRL is associated with. Immutable after
-   * import — changing it replaces the CRL.
+   * import -- changing it replaces the CRL.
    */
   trustAnchorArn: string;
   /**
@@ -136,7 +136,7 @@ export const CrlProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // updateCrl only accepts name + crlData — the trust anchor
+          // updateCrl only accepts name + crlData -- the trust anchor
           // association is immutable, so a change forces a replacement.
           if (olds?.trustAnchorArn !== undefined && olds.trustAnchorArn !== news.trustAnchorArn) {
             return { action: "replace" } as const;
@@ -161,10 +161,10 @@ export const CrlProvider = () =>
           const desiredPem = news.crlData.trim();
           const encodePem = Effect.sync(() => new TextEncoder().encode(desiredPem));
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let live = output?.crlId ? yield* getById(output.crlId) : yield* findByName(name);
 
-          // 2. Ensure — import if missing.
+          // 2. Ensure -- import if missing.
           if (live === undefined) {
             const imported = yield* rolesanywhere.importCrl({
               name,
@@ -175,7 +175,7 @@ export const CrlProvider = () =>
             });
             live = imported.crl;
           } else {
-            // 3. Sync — converge name and revocation data.
+            // 3. Sync -- converge name and revocation data.
             const desiredName = news.crlName ?? live.name!;
             const observedPem = decodeCrlData(live.crlData)?.trim();
             if (live.name !== desiredName || observedPem !== desiredPem) {
@@ -189,7 +189,7 @@ export const CrlProvider = () =>
           }
 
           if ((live.enabled ?? false) !== desiredEnabled) {
-            // The enable/disable response can echo the pre-toggle state — the
+            // The enable/disable response can echo the pre-toggle state -- the
             // successful call itself is authoritative for the flag.
             yield* desiredEnabled
               ? rolesanywhere.enableCrl({ crlId: live.crlId! })

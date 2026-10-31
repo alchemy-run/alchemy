@@ -28,7 +28,7 @@ export type Validity = 7 | 30 | 90 | 365 | 730 | 1095 | 5475;
 export interface Props {
   /**
    * The Certificate Signing Request (CSR) in PEM format (newline-encoded).
-   * The CSR's key is yours; Cloudflare only signs it. Immutable — changing
+   * The CSR's key is yours; Cloudflare only signs it. Immutable -- changing
    * the CSR triggers a replacement (a new certificate is issued and the old
    * one is revoked).
    */
@@ -36,19 +36,19 @@ export interface Props {
   /**
    * Hostnames or wildcard names (e.g. `*.example.com`) bound to the
    * certificate. Hostnames must be fully qualified domain names belonging
-   * to zones on your account. Immutable — changing the hostnames triggers
+   * to zones on your account. Immutable -- changing the hostnames triggers
    * a replacement.
    */
   hostnames: string[];
   /**
    * Signature type desired on the certificate: `origin-rsa` (RSA),
    * `origin-ecc` (ECDSA), or `keyless-certificate` (for Keyless SSL
-   * servers). Immutable — changing the request type triggers a replacement.
+   * servers). Immutable -- changing the request type triggers a replacement.
    */
   requestType: RequestType;
   /**
    * The number of days for which the certificate should be valid.
-   * Immutable — changing the validity triggers a replacement.
+   * Immutable -- changing the validity triggers a replacement.
    * @default 5475
    */
   requestedValidity?: Validity;
@@ -91,7 +91,7 @@ export interface Attributes {
 export type OriginCaCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare Origin CA certificate — a free certificate signed by
+ * A Cloudflare Origin CA certificate -- a free certificate signed by
  * Cloudflare's Origin CA that encrypts traffic between Cloudflare's edge
  * and your origin server. Origin CA certificates are only trusted by
  * Cloudflare (not by browsers), so they are used together with proxied
@@ -99,7 +99,7 @@ export type OriginCaCertificate = Resource<TypeId, Props, Attributes, never, Pro
  *
  * You supply a CSR (keeping the private key to yourself); Cloudflare signs
  * it synchronously and returns the certificate PEM. The endpoints are
- * top-level (`/certificates`) — the zone is implied by the hostnames in the
+ * top-level (`/certificates`) -- the zone is implied by the hostnames in the
  * request, which must belong to zones on your account.
  *
  * Certificates are fully immutable: there is no update API, so changing any
@@ -166,7 +166,7 @@ export const OriginCaCertificateProvider = () =>
     // Origin CA certificates are enumerated per zone (the list endpoint
     // requires a `zone_id` query param). Fan out across every zone on the
     // account and flatten. The list response omits the csr and requested
-    // validity, so `toAttributes` fills them with the defaults — matching the
+    // validity, so `toAttributes` fills them with the defaults -- matching the
     // cold/unowned `read` shape. Origin CA endpoints may require the special
     // Origin CA Key auth; a zone we can't enumerate rejects with `Forbidden`,
     // which we skip rather than fail (the array stays as complete as the
@@ -196,9 +196,9 @@ export const OriginCaCertificateProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as Props | undefined;
       const n = news as Props;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o?.csr === undefined) return undefined;
-      // There is no update API for Origin CA certificates — every change
+      // There is no update API for Origin CA certificates -- every change
       // is a replacement.
       if (
         o.csr !== n.csr ||
@@ -220,15 +220,15 @@ export const OriginCaCertificateProvider = () =>
         return observed ? toAttributes(observed, { ...olds, ...output }) : undefined;
       }
 
-      // Cold read — Origin CA certificates have no name or tags, so the
+      // Cold read -- Origin CA certificates have no name or tags, so the
       // only identity available is the exact hostname set within the zone
       // implied by the hostnames. A match cannot be proven to be ours, so
       // brand it `Unowned` and let the engine gate takeover behind the
       // adopt policy. Ambiguity (several live certs with the same
-      // hostnames) means no identity at all — report missing and recreate
+      // hostnames) means no identity at all -- report missing and recreate
       // (certificates are free and revocation is harmless).
       // Output-valued hostname elements don't survive a `creating`-state
-      // round-trip (they deserialize as null/undefined) — without a concrete
+      // round-trip (they deserialize as null/undefined) -- without a concrete
       // hostname there is no identity to search by.
       if (typeof olds?.hostnames?.[0] !== "string") return undefined;
       const matches = yield* findByHostnames(olds.hostnames);
@@ -238,14 +238,14 @@ export const OriginCaCertificateProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      // Observe — the certificate id cached on `output` is a hint, not a
+      // Observe -- the certificate id cached on `output` is a hint, not a
       // guarantee: a missing or revoked certificate falls through to
       // "missing" and ensure re-issues.
       const observed = output?.certificateId
         ? yield* getCertificate(output.certificateId)
         : undefined;
 
-      // Ensure — issue when missing. Issuance is synchronous: the signed
+      // Ensure -- issue when missing. Issuance is synchronous: the signed
       // PEM comes back in the create response. Ids are server-assigned, so
       // there is no AlreadyExists race to tolerate.
       if (!observed) {
@@ -258,7 +258,7 @@ export const OriginCaCertificateProvider = () =>
         return toAttributes(created, news);
       }
 
-      // Sync — certificates are immutable; any prop change was already
+      // Sync -- certificates are immutable; any prop change was already
       // routed to replacement by diff, so there is nothing to converge.
       // GET omits the csr and requested validity, so fill them from the
       // desired props (they are guaranteed equal here).
@@ -270,7 +270,7 @@ export const OriginCaCertificateProvider = () =>
       // already-revoked certificate (1014) both mean "gone".
       //
       // `CertificateRevocationFailed` (code 1000) is the dual-use generic
-      // "API errors encountered" Cloudflare returns when a revoke blips —
+      // "API errors encountered" Cloudflare returns when a revoke blips --
       // most often during the replace-time GC delete, when the old
       // certificate is revoked right after its replacement was issued.
       // Left untyped it surfaced as `UnknownCloudflareError` and aborted the
@@ -332,7 +332,7 @@ const findByHostnames = (hostnames: string[]) =>
 
 /**
  * Resolve the zone id for a hostname by trying each suffix of the hostname
- * as a zone name (e.g. `a.b.example.com` → `a.b.example.com`,
+ * as a zone name (e.g. `a.b.example.com` -> `a.b.example.com`,
  * `b.example.com`, `example.com`). Returns `undefined` when no zone on the
  * account matches.
  */

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `imagebuilder:GetWorkflowStepExecution`.
  *
- * Reads the runtime state of one workflow step — its action, status,
+ * Reads the runtime state of one workflow step -- its action, status,
  * rollback status, inputs/outputs, and message. Step executions are created
  * dynamically by builds, so this is an account-level binding: pass an id
  * from `ListWorkflowStepExecutions` or `ListWaitingWorkflowSteps`. Provide
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Workflow Monitoring
  * **Example:** Read a Workflow Step's State
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getWorkflowStepExecution =
  *   yield* AWS.ImageBuilder.GetWorkflowStepExecution();
  *

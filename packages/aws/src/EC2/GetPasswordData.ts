@@ -18,16 +18,16 @@ export interface GetPasswordDataRequest extends Omit<
  *
  * Retrieves the encrypted Windows administrator password for the instance.
  * The `PasswordData` field is sensitive and surfaces as
- * `Redacted.Redacted<string>` — decrypt it with the launch key pair's private
+ * `Redacted.Redacted<string>` -- decrypt it with the launch key pair's private
  * key. Linux instances return an empty value. Provide the implementation with
  * `Effect.provide(AWS.EC2.GetPasswordDataHttp)`.
  * ### Diagnostics
  * **Example:** Fetch the encrypted Windows administrator password
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const getPasswordData = yield* AWS.EC2.GetPasswordData(instance);
  *
- * // runtime — the ciphertext is Redacted; unwrap explicitly to decrypt
+ * // runtime -- the ciphertext is Redacted; unwrap explicitly to decrypt
  * const result = yield* getPasswordData();
  * const ciphertext = result.PasswordData; // Redacted<string>
  * ```

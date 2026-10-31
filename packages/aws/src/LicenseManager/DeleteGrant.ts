@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface DeleteGrantRequest extends licensemanager.DeleteGrantRequest {}
 
 /**
- * Runtime binding for `license-manager:DeleteGrant` — retire a grant (e.g.
+ * Runtime binding for `license-manager:DeleteGrant` -- retire a grant (e.g.
  * when a customer's subscription lapses). The grant's current version must
  * be passed as `Version`.
  *

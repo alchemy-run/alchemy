@@ -21,13 +21,13 @@ export interface ContactProps {
    */
   contactListName: string;
   /**
-   * The contact's email address — the stable identifier within the list.
+   * The contact's email address -- the stable identifier within the list.
    * Changing it replaces the contact.
    */
   emailAddress: string;
   /**
    * The contact's per-topic subscription preferences. Replaced wholesale when
-   * set — pass the full desired set. Leave undefined to keep whatever SES
+   * set -- pass the full desired set. Leave undefined to keep whatever SES
    * currently has.
    */
   topicPreferences?: ContactTopicPreference[];
@@ -60,7 +60,7 @@ export interface Contact extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 contact — a single email address on a `SES.ContactList`,
+ * An Amazon SES v2 contact -- a single email address on a `SES.ContactList`,
  * with its own topic subscription preferences and unsubscribe state.
  * ### Adding Contacts
  * **Example:** Basic Contact
@@ -128,7 +128,7 @@ const normalizeAttributes = (
     try {
       value = JSON.parse(attributes) as unknown;
     } catch {
-      // Not JSON (a hand-written contact, say) — compare the raw string.
+      // Not JSON (a hand-written contact, say) -- compare the raw string.
       return attributes;
     }
   }
@@ -249,11 +249,11 @@ export const ContactProvider = () =>
           const emailAddress = output?.emailAddress ?? news.emailAddress;
           const attributesData = yield* Effect.sync(() => stringifyAttributes(news.attributes));
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* getContact(contactListName, emailAddress);
 
           if (observed === undefined) {
-            // 2. ENSURE — create; AlreadyExists is a race → converge via update.
+            // 2. ENSURE -- create; AlreadyExists is a race -> converge via update.
             yield* sesv2
               .createContact({
                 ContactListName: contactListName,
@@ -274,7 +274,7 @@ export const ContactProvider = () =>
                 ),
               );
           } else {
-            // 3. SYNC — only the aspects the caller manages. An omitted prop
+            // 3. SYNC -- only the aspects the caller manages. An omitted prop
             //    keeps whatever SES currently has, matching every sibling
             //    resource in this service; updateContact replaces each field
             //    it is given, so observed values are echoed back for the

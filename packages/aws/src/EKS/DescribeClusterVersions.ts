@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `eks:DescribeClusterVersions`.
  *
- * Reads the Kubernetes version catalog — which versions EKS currently offers, their support status, and end-of-support dates.
- * `eks:DescribeClusterVersions` is granted on `*` — the operation is account-scoped and takes no resource.
+ * Reads the Kubernetes version catalog -- which versions EKS currently offers, their support status, and end-of-support dates.
+ * `eks:DescribeClusterVersions` is granted on `*` -- the operation is account-scoped and takes no resource.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeClusterVersionsHttp)`.
  * ### Version Catalogs

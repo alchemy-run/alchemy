@@ -285,7 +285,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   }
 
   // The build runs at APPLY time (`Website.Server` is a resource), so its
-  // attributes are Outputs here — derive every deploy input lazily and let
+  // attributes are Outputs here -- derive every deploy input lazily and let
   // the engine resolve them once the build has produced real paths. Reading
   // `build.distDir` eagerly in the composite body would observe an Output
   // proxy, not a string.
@@ -322,7 +322,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   // `bake === "next"` ships `.next`/`public`/`next.config.*` from the
   // project root; every other bake ships the build's dist directory. BOTH
   // must be derived from `buildOut`: the artifacts only exist once the
-  // build has run at apply — probing the root here (pre-build) would miss
+  // build has run at apply -- probing the root here (pre-build) would miss
   // a fresh project's `.next` entirely.
   const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
     packSiteExtraFiles(bake === "next" ? root : out.distDir, bake),
@@ -377,7 +377,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
 
 /**
  * Composite-level tagged errors (`FrameworkServerError`, filesystem)
- * are defects — `Alchemy.Stack` only admits `ConfigError` on the user
+ * are defects -- `Alchemy.Stack` only admits `ConfigError` on the user
  * effect.
  */
 export const makeFrameworkSite = (

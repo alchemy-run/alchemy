@@ -53,7 +53,7 @@ export type TopicPartitionCapacity = {
 export type TopicPartitionConfig = {
   /**
    * Number of partitions. Must be at least 1. After create, the count
-   * can increase but not decrease — shrinking replaces the topic.
+   * can increase but not decrease -- shrinking replaces the topic.
    * @default 1
    */
   count?: number | string;
@@ -95,14 +95,14 @@ export type AdminTopicProps = {
    * `projects/{project}/locations/{location}/topics/{topic}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Pub/Sub Lite has no labels field, so Alchemy stamps
-   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable —
+   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable --
    * changing it replaces the topic.
    */
   topicId?: string;
   /**
    * Zone (`us-central1-a`) or region (`us-central1`). Zonal topics can
    * provision their own partition capacity. Regional topics must attach
-   * a reservation. Immutable — changing it replaces the topic.
+   * a reservation. Immutable -- changing it replaces the topic.
    * @default "us-central1-a"
    */
   location?: string;
@@ -144,7 +144,7 @@ export type AdminTopic = Resource<
 >;
 
 /**
- * A Pub/Sub Lite topic — a zonal or regional partitioned log.
+ * A Pub/Sub Lite topic -- a zonal or regional partitioned log.
  *
  * Pub/Sub Lite topics have no labels. Alchemy stamps
  * `alchemy-stack` / `alchemy-stage` / `alchemy-id` into the topic id so

@@ -97,12 +97,12 @@ export interface FileSystem extends Resource<
 > {}
 
 /**
- * An Amazon FSx file system — fully-managed shared storage for Lustre,
+ * An Amazon FSx file system -- fully-managed shared storage for Lustre,
  * Windows File Server, NetApp ONTAP, or OpenZFS.
  *
  * FSx file systems take several minutes to provision. The file system id,
  * ARN, and DNS name are returned as soon as `CreateFileSystem` accepts the
- * request; the file system then transitions `CREATING` → `AVAILABLE`
+ * request; the file system then transitions `CREATING` -> `AVAILABLE`
  * asynchronously. Create is idempotent on a deterministic client request
  * token derived from the app, stage, and logical id; if state is lost, the
  * file system is re-discovered by its internal Alchemy tags.
@@ -157,7 +157,7 @@ const fsxTagsToRecord = (tags: readonly fsx.Tag[] | undefined): Record<string, s
 const deleteConfigFor = (fs: fsx.FileSystem): Partial<fsx.DeleteFileSystemRequest> => {
   switch (fs.FileSystemType) {
     case "LUSTRE":
-      // Scratch deployments have no backups at all — FSx rejects ANY
+      // Scratch deployments have no backups at all -- FSx rejects ANY
       // LustreConfiguration on delete ("Final backup during delete is not
       // supported on file systems using the Scratch deployment type"), even
       // SkipFinalBackup: true.
@@ -267,13 +267,13 @@ export const FileSystemProvider = () =>
           if (replaced) {
             return { action: "replace" } as const;
           }
-          // undefined → default update path (storage-capacity increase, tags)
+          // undefined -> default update path (storage-capacity increase, tags)
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
 
-          // 1. OBSERVE — cloud state is authoritative; output is only a cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is only a cache.
           let fs = output?.fileSystemId
             ? yield* findById(output.fileSystemId)
             : yield* findByTags(id);
@@ -281,7 +281,7 @@ export const FileSystemProvider = () =>
             fs = undefined;
           }
 
-          // 2. ENSURE — create if missing. CreateFileSystem is idempotent on
+          // 2. ENSURE -- create if missing. CreateFileSystem is idempotent on
           //    the deterministic client request token.
           if (fs === undefined) {
             const token = yield* createToken(id);
@@ -309,7 +309,7 @@ export const FileSystemProvider = () =>
 
           const fileSystemId = fs.FileSystemId!;
 
-          // 3a. SYNC storage capacity — only an increase is valid, and only
+          // 3a. SYNC storage capacity -- only an increase is valid, and only
           //     while the file system is settled. Skip during CREATING.
           if (
             fs.Lifecycle === "AVAILABLE" &&
@@ -323,7 +323,7 @@ export const FileSystemProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = fsxTagsToRecord(fs.Tags);
           const { upsert, removed } = diffTags(observedTags, {

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:UpdateMemberSession`.
  *
  * Enables an Amazon Macie administrator to suspend or re-enable Macie for a member account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.UpdateMemberSessionHttp)`.
  * ### Organization & Members
  * **Example:** Pause Macie for a Member
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateMemberSession = yield* AWS.Macie2.UpdateMemberSession();
  *
  * // runtime

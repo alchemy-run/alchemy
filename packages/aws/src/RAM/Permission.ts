@@ -20,7 +20,7 @@ export class RAMPermissionUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * The policy template of a customer managed permission — the actions a
+ * The policy template of a customer managed permission -- the actions a
  * resource share grants to principals for the permission's resource type.
  * RAM policy templates only support `Effect: "Allow"` with `Action` and an
  * optional `Condition`; the `Principal` and `Resource` are supplied by the
@@ -50,7 +50,7 @@ export interface PermissionProps {
   permissionName?: string;
 
   /**
-   * The resource type this permission applies to, in `service:Type` format —
+   * The resource type this permission applies to, in `service:Type` format --
    * for example `appsync:Apis`. Only some resource types support customer
    * managed permissions (others, like `ec2:Subnet`, only allow the AWS
    * managed default permission).
@@ -140,7 +140,7 @@ const toName = (id: string, props: { permissionName?: string } = {}) =>
     ? Effect.succeed(props.permissionName)
     : createPhysicalName({ id, maxLength: 36 });
 
-/** RAM's inline `{ key, value }` tag list → a plain `Record`. */
+/** RAM's inline `{ key, value }` tag list -> a plain `Record`. */
 const tagsToRecord = (tags: readonly ram.Tag[] | undefined): Record<string, string> => {
   const record: Record<string, string> = {};
   for (const tag of tags ?? []) {
@@ -256,12 +256,12 @@ export const PermissionProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredPolicy = renderPolicyTemplate(news.policyTemplate);
 
-          // 1. OBSERVE — output ARN is only a cache; re-read live state.
+          // 1. OBSERVE -- output ARN is only a cache; re-read live state.
           let detail = output?.permissionArn
             ? yield* readDetail(output.permissionArn)
             : yield* readByName(name);
 
-          // 2. ENSURE — create if missing. PermissionAlreadyExists is a
+          // 2. ENSURE -- create if missing. PermissionAlreadyExists is a
           //    race with a concurrent create; fall through to observation.
           if (!detail) {
             const created = yield* ram
@@ -297,7 +297,7 @@ export const PermissionProvider = () =>
           const arn = detail.arn!;
           const previousVersion = detail.version;
 
-          // 3a. SYNC policy — diff the observed default version's policy
+          // 3a. SYNC policy -- diff the observed default version's policy
           //     against the desired template; publish a new default version
           //     on drift, then drop the superseded version (RAM caps a
           //     permission at 5 versions).
@@ -309,7 +309,7 @@ export const PermissionProvider = () =>
             });
             if (previousVersion !== undefined) {
               // The old version may still be attached to an existing share;
-              // that's fine — leave it and converge on a later reconcile.
+              // that's fine -- leave it and converge on a later reconcile.
               yield* ram
                 .deletePermissionVersion({
                   permissionArn: arn,
@@ -324,7 +324,7 @@ export const PermissionProvider = () =>
             }
           }
 
-          // 3b. SYNC tags — diff against observed cloud tags.
+          // 3b. SYNC tags -- diff against observed cloud tags.
           const { upsert, removed } = diffTags(tagsToRecord(detail.tags), desiredTags);
           if (upsert.length > 0) {
             yield* ram.tagResource({

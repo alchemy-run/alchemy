@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface ListMetricStreamsRequest extends cloudwatch.ListMetricStreamsInput {}
 
 /**
- * Runtime binding for `cloudwatch:ListMetricStreams` — list the metric
+ * Runtime binding for `cloudwatch:ListMetricStreams` -- list the metric
  * streams in the account/region.
  *
  * Provide `CloudWatch.ListMetricStreamsHttp` on the hosting Lambda
@@ -13,7 +13,7 @@ export interface ListMetricStreamsRequest extends cloudwatch.ListMetricStreamsIn
  * ### Reading Metric Streams
  * **Example:** List Metric Streams
  * ```typescript
- * // init — grants cloudwatch:ListMetricStreams
+ * // init -- grants cloudwatch:ListMetricStreams
  * const listMetricStreams = yield* AWS.CloudWatch.ListMetricStreams();
  *
  * // runtime

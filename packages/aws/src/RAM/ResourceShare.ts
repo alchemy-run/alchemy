@@ -119,7 +119,7 @@ export const ResourceShare = Resource<ResourceShare>("AWS.RAM.ResourceShare");
 const toName = (id: string, props: { shareName?: string } = {}) =>
   props.shareName ? Effect.succeed(props.shareName) : createPhysicalName({ id, maxLength: 128 });
 
-/** RAM's inline `{ key, value }` tag list → a plain `Record`. */
+/** RAM's inline `{ key, value }` tag list -> a plain `Record`. */
 const tagsToRecord = (tags: readonly ram.Tag[] | undefined): Record<string, string> => {
   const record: Record<string, string> = {};
   for (const tag of tags ?? []) {
@@ -236,12 +236,12 @@ export const ResourceShareProvider = () =>
           const desiredResources = news.resourceArns ?? [];
           const desiredSources = news.sources ?? [];
 
-          // 1. OBSERVE — output ARN is only a cache; re-read live state.
+          // 1. OBSERVE -- output ARN is only a cache; re-read live state.
           let state = output?.resourceShareArn
             ? yield* readByArn(output.resourceShareArn)
             : yield* readByName(name);
 
-          // 2. ENSURE — create if missing. On create RAM attaches the initial
+          // 2. ENSURE -- create if missing. On create RAM attaches the initial
           //    resources, principals, sources, permissions, and tags directly.
           if (!state) {
             const created = yield* ram.createResourceShare({
@@ -268,7 +268,7 @@ export const ResourceShareProvider = () =>
 
           const arn = state.resourceShareArn;
 
-          // 3a. SYNC settings — name / allowExternalPrincipals via update.
+          // 3a. SYNC settings -- name / allowExternalPrincipals via update.
           if (
             state.name !== name ||
             (news.allowExternalPrincipals !== undefined &&
@@ -281,7 +281,7 @@ export const ResourceShareProvider = () =>
             });
           }
 
-          // 3b. SYNC associations — diff observed vs desired for principals,
+          // 3b. SYNC associations -- diff observed vs desired for principals,
           //     resources, and sources; associate/disassociate the delta.
           const currentPrincipals = yield* readAssociations(arn, "PRINCIPAL");
           const currentResources = yield* readAssociations(arn, "RESOURCE");
@@ -308,7 +308,7 @@ export const ResourceShareProvider = () =>
             });
           }
 
-          // 3c. SYNC tags — diff against observed cloud tags.
+          // 3c. SYNC tags -- diff against observed cloud tags.
           const { upsert, removed } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* ram.tagResource({

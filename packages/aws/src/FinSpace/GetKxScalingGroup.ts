@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxScalingGroup` — reads a scaling group's status, host type, and the clusters placed on it in the bound environment.
+ * Runtime binding for `finspace:GetKxScalingGroup` -- reads a scaling group's status, host type, and the clusters placed on it in the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxScalingGroupHttp)`.
  * ### Managing Scaling Groups

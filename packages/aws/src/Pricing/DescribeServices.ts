@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface DescribeServicesRequest extends pricing.DescribeServicesRequest {}
 
 /**
- * Runtime binding for `pricing:DescribeServices` — list the service codes
+ * Runtime binding for `pricing:DescribeServices` -- list the service codes
  * known to the AWS Price List API, or the filterable attribute names of one
  * service.
  *

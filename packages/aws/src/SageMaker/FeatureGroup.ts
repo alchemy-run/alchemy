@@ -103,7 +103,7 @@ export interface FeatureGroup extends Resource<
 > {}
 
 /**
- * An Amazon SageMaker Feature Store FeatureGroup — a typed, versioned table
+ * An Amazon SageMaker Feature Store FeatureGroup -- a typed, versioned table
  * of ML features with an optional low-latency online store (for inference
  * lookups) and an S3-backed offline store (for training).
  *
@@ -181,7 +181,7 @@ const toAttrs = (
 });
 
 /**
- * The feature group is still transitioning toward the awaited state —
+ * The feature group is still transitioning toward the awaited state --
  * retried by the bounded wait schedule.
  */
 class FeatureGroupNotReady extends Data.TaggedError("FeatureGroupNotReady")<{
@@ -198,7 +198,7 @@ export class FeatureGroupCreateFailed extends Data.TaggedError("FeatureGroupCrea
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -286,7 +286,7 @@ export const FeatureGroupProvider = () =>
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           if (olds === undefined) return;
-          // The feature group schema and stores are fixed at creation —
+          // The feature group schema and stores are fixed at creation --
           // everything except tags replaces.
           const identity = (props: FeatureGroupProps) => [
             props.recordIdentifierFeatureName,
@@ -320,7 +320,7 @@ export const FeatureGroupProvider = () =>
           // Observe.
           let described = yield* describeFeatureGroupOrUndefined(name);
 
-          // Ensure — create if missing; tolerate the already-exists race.
+          // Ensure -- create if missing; tolerate the already-exists race.
           if (described === undefined) {
             yield* sagemaker
               .createFeatureGroup({
@@ -352,7 +352,7 @@ export const FeatureGroupProvider = () =>
           }
           const attrs = toAttrs(described);
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchFeatureGroupTags(attrs.featureGroupArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

@@ -39,12 +39,12 @@ export type ConversionWorkspaceProps = {
   /**
    * Conversion workspace id (the `{conversionWorkspace}` segment of
    * `projects/{project}/locations/{location}/conversionWorkspaces/{conversionWorkspace}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the workspace.
    */
   conversionWorkspaceId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * workspace. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -52,34 +52,34 @@ export type ConversionWorkspaceProps = {
   /**
    * User-friendly display name. Maximum length is 63 characters including
    * Alchemy's ownership marker. Conversion workspaces have no labels
-   * field, so ownership is stored in a `[alchemy …]` prefix and stripped
+   * field, so ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   displayName?: string;
   /**
-   * Source engine and version. Immutable — changing it replaces the
+   * Source engine and version. Immutable -- changing it replaces the
    * workspace.
    */
   source: DatabaseEngineInfo;
   /**
-   * Destination engine and version. Immutable — changing it replaces the
+   * Destination engine and version. Immutable -- changing it replaces the
    * workspace.
    */
   destination: DatabaseEngineInfo;
   /**
    * Provider for the source database (`CLOUDSQL`, `RDS`, `AURORA`,
-   * `ALLOYDB`, `AZURE_DATABASE`). Immutable — changing it replaces the
+   * `ALLOYDB`, `AZURE_DATABASE`). Immutable -- changing it replaces the
    * workspace.
    */
   sourceProvider?: ConversionWorkspaceSourceProvider;
   /**
-   * Provider for the destination database. Immutable — changing it
+   * Provider for the destination database. Immutable -- changing it
    * replaces the workspace.
    */
   destinationProvider?: ConversionWorkspaceDestinationProvider;
   /**
    * Database-pair specific workspace settings
-   * (`convert_foreign_key_to_interleave`, `skip_triggers`, …).
+   * (`convert_foreign_key_to_interleave`, `skip_triggers`, ...).
    */
   globalSettings?: Record<string, string>;
 };
@@ -128,7 +128,7 @@ export type ConversionWorkspace = Resource<
  * destination engines plus optional mapping-engine settings used by
  * heterogeneous migrations.
  *
- * Conversion workspaces have no labels field — Alchemy stamps ownership
+ * Conversion workspaces have no labels field -- Alchemy stamps ownership
  * into the display name so `list` / nuke can find them. `source`,
  * `destination`, and their providers are replacement triggers. Display
  * name and `globalSettings` update in place.

@@ -31,7 +31,7 @@ export const formatCreatedCloudflareToken = (result: CreatedToken, token: string
     "",
     token,
     "",
-    "Store this value now — Cloudflare only shows it once. Use it as CLOUDFLARE_API_TOKEN.",
+    "Store this value now \u2014 Cloudflare only shows it once. Use it as CLOUDFLARE_API_TOKEN.",
     ...result.diagnostics.map(
       (diagnostic) => `${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`,
     ),
@@ -40,7 +40,7 @@ export const formatCreatedCloudflareToken = (result: CreatedToken, token: string
 const allPermissionsFlag = Flag.Boolean("all-permissions").pipe(
   Flag.withDescription(
     "Grant the token EVERY Cloudflare permission group (a 'god token'). " +
-      "Use with care — it has full access to your account.",
+      "Use with care \u2014 it has full access to your account.",
   ),
   Flag.withDefault(false),
 );
@@ -72,13 +72,13 @@ const tokenAccountIdFlag = Flag.String("account-id").pipe(
 );
 
 /**
- * `alchemy provider cloudflare token` — mint a Cloudflare API token
+ * `alchemy provider cloudflare token` -- mint a Cloudflare API token
  * (`POST /user/tokens`).
  *
  * This command is **standalone**: it does not use an Alchemy auth profile.
  * Cloudflare only mints a token whose permissions the authenticating
- * credential is allowed to grant — and OAuth/scoped tokens silently produce a
- * token with zero permissions — so it always authenticates with the account's
+ * credential is allowed to grant -- and OAuth/scoped tokens silently produce a
+ * token with zero permissions -- so it always authenticates with the account's
  * **Global API Key** (read from `CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL`,
  * otherwise prompted). The key is used only to create the token and is never
  * stored.

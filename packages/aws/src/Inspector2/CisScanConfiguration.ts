@@ -14,7 +14,7 @@ export type CisSecurityLevel = "LEVEL_1" | "LEVEL_2";
 export interface CisScanConfigurationProps {
   /**
    * Name of the CIS scan configuration. If omitted, a unique name is
-   * generated. Updatable in place — identity is the configuration's ARN.
+   * generated. Updatable in place -- identity is the configuration's ARN.
    */
   scanName?: string;
 
@@ -73,7 +73,7 @@ export interface CisScanConfiguration extends Resource<
 > {}
 
 /**
- * An Amazon Inspector CIS scan configuration — schedules CIS Benchmark
+ * An Amazon Inspector CIS scan configuration -- schedules CIS Benchmark
  * scans of SSM-managed EC2 instances selected by resource tags. Name,
  * level, schedule, and targets are all updatable in place; identity is the
  * configuration's ARN.
@@ -162,13 +162,13 @@ export const CisScanConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative. The ARN survives
+          // 1. OBSERVE -- cloud state is authoritative. The ARN survives
           // renames; fall back to a name lookup otherwise.
           let live = output?.scanConfigurationArn
             ? yield* findByArn(output.scanConfigurationArn)
             : yield* findByName(scanName);
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (!live) {
             const { scanConfigurationArn } = yield* inspector2.createCisScanConfiguration({
               scanName,
@@ -187,7 +187,7 @@ export const CisScanConfigurationProvider = () =>
             }
           }
 
-          // 3. SYNC settings — observed ↔ desired.
+          // 3. SYNC settings -- observed <-> desired.
           const drift =
             live.scanName !== scanName ||
             live.securityLevel !== news.securityLevel ||
@@ -205,7 +205,7 @@ export const CisScanConfigurationProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges foreign tags too.
           const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
           if (upsert.length > 0) {
@@ -227,7 +227,7 @@ export const CisScanConfigurationProvider = () =>
           return buildAttrs(final ?? live);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the configuration may already be gone.
+          // Idempotent -- the configuration may already be gone.
           yield* inspector2
             .deleteCisScanConfiguration({
               scanConfigurationArn: output.scanConfigurationArn,

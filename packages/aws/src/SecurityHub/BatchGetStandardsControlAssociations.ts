@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:BatchGetStandardsControlAssociations`.
  *
  * Returns the enablement status of a batch of controls within specific standards.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.BatchGetStandardsControlAssociationsHttp)`.
  * ### Standards & Controls
  * **Example:** Read Control Associations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchGetStandardsControlAssociations = yield* AWS.SecurityHub.BatchGetStandardsControlAssociations();
  *
  * // runtime

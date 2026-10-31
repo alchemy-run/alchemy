@@ -113,7 +113,7 @@ export interface Product extends Resource<
 > {}
 
 /**
- * An AWS Service Catalog product — a CloudFormation-backed offering
+ * An AWS Service Catalog product -- a CloudFormation-backed offering
  * (or Terraform/external equivalent) with one or more provisioning
  * artifacts (versions) that principals can launch from a portfolio.
  *
@@ -169,7 +169,7 @@ export const ProductProvider = () =>
         return props.productName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      // Observe by ID (typed NotFound → undefined), falling back to a
+      // Observe by ID (typed NotFound -> undefined), falling back to a
       // name lookup when state was lost.
       const observe = Effect.fn(function* (selector: { Id: string } | { Name: string }) {
         return yield* servicecatalog
@@ -237,7 +237,7 @@ export const ProductProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // The initial provisioning artifact's template and the product
-          // type are immutable — changing either replaces the product.
+          // type are immutable -- changing either replaces the product.
           if (olds.provisioningArtifact?.templateUrl !== news.provisioningArtifact.templateUrl) {
             return { action: "replace" } as const;
           }
@@ -258,13 +258,13 @@ export const ProductProvider = () =>
             ...internalTags,
           };
 
-          // 1. OBSERVE — by cached ID, falling back to the deterministic name.
+          // 1. OBSERVE -- by cached ID, falling back to the deterministic name.
           let described = output?.productId ? yield* observe({ Id: output.productId }) : undefined;
           if (!described?.ProductViewDetail?.ProductViewSummary?.ProductId) {
             described = yield* observe({ Name: productName });
           }
 
-          // 2. ENSURE — create when missing; the idempotency token (derived
+          // 2. ENSURE -- create when missing; the idempotency token (derived
           // from the instance ID) makes a retried create converge.
           if (!described?.ProductViewDetail?.ProductViewSummary?.ProductId) {
             const created = yield* servicecatalog.createProduct({
@@ -296,7 +296,7 @@ export const ProductProvider = () =>
           const summary = described!.ProductViewDetail!.ProductViewSummary!;
           const productId = summary.ProductId!;
 
-          // 3a. SYNC product details + tags — diff observed against desired
+          // 3a. SYNC product details + tags -- diff observed against desired
           // and apply only the delta in a single updateProduct call.
           const observedTags = tagRecord(described!.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -339,7 +339,7 @@ export const ProductProvider = () =>
           }
 
           // 3b. SYNC the provisioning artifact's mutable fields (name and
-          // description; the template itself is immutable → replacement).
+          // description; the template itself is immutable -> replacement).
           const artifact = described!.ProvisioningArtifactSummaries?.[0];
           const provisioningArtifactId = output?.provisioningArtifactId ?? artifact?.Id ?? "";
           const desiredArtifactName = news.provisioningArtifact.name ?? "v1";

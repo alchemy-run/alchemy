@@ -12,8 +12,8 @@ import type { Workflow } from "./Workflow.ts";
  * `{workflowArn}/*` wildcard covering run- and task-scoped sub-resources),
  * and the runtime half injects the workflow's ARN into every request.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeMwaaServerlessHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeMwaaServerlessHttpBinding({ ... }))`.
  */
 export const makeMwaaServerlessHttpBinding = <I extends { WorkflowArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.MWAAServerless.StartWorkflowRun`. */
@@ -28,7 +28,7 @@ export const makeMwaaServerlessHttpBinding = <I extends { WorkflowArn: string },
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workflow: Workflow) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const WorkflowArn = yield* workflow.workflowArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${workflow})`({

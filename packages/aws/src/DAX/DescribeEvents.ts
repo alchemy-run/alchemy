@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `dax:DescribeEvents`).
  *
  * Returns events related to DAX clusters and parameter groups from the last
- * 24 hours (up to 14 days with an explicit time window) — node reboots,
+ * 24 hours (up to 14 days with an explicit time window) -- node reboots,
  * failovers, configuration changes. Provide the implementation with
  * `Effect.provide(AWS.DAX.DescribeEventsHttp)`.
  * ### Monitoring Clusters

@@ -4,11 +4,11 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DescribeDBClusterSnapshots` operation (IAM
- * action `rds:DescribeDBClusterSnapshots` — DocumentDB shares the RDS
+ * action `rds:DescribeDBClusterSnapshots` -- DocumentDB shares the RDS
  * control plane).
  *
  * Lists the account's DocumentDB cluster snapshots (optionally filtered by
- * cluster or snapshot identifier) with status and creation time embedded —
+ * cluster or snapshot identifier) with status and creation time embedded --
  * pairs with `CreateDBClusterSnapshot`/`DeleteDBClusterSnapshot` for backup
  * automation. Provide the implementation with
  * `Effect.provide(AWS.DocDB.DescribeDBClusterSnapshotsHttp)`.

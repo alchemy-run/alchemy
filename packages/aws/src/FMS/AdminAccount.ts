@@ -10,7 +10,7 @@ import { Region } from "../Region.ts";
 
 // FMS admin-account management (get/associate/disassociate AdminAccount) is a
 // global, organization-level operation served exclusively from the us-east-1
-// endpoint — every other region rejects it with `InvalidOperationException:
+// endpoint -- every other region rejects it with `InvalidOperationException:
 // This operation is not supported in the '<region>' region.` Pin every
 // control-plane call there regardless of the ambient stack region (same
 // pattern as Cost Explorer / ECR Public / WAFv2 CloudFront-scope).
@@ -45,7 +45,7 @@ export interface AdminAccount extends Resource<
 > {}
 
 /**
- * The AWS Firewall Manager administrator account — an organization-level
+ * The AWS Firewall Manager administrator account -- an organization-level
  * singleton that designates which account manages FMS security policies.
  *
  * :::caution
@@ -60,7 +60,7 @@ export interface AdminAccount extends Resource<
  * :::
  *
  * This is a capture-and-restore singleton: FMS exposes no tags, so ownership is
- * tracked by Alchemy state — adopting a pre-existing admin account that Alchemy
+ * tracked by Alchemy state -- adopting a pre-existing admin account that Alchemy
  * did not create requires `--adopt`, and destroy disassociates the admin.
  *
  * ### Designating the FMS admin
@@ -81,7 +81,7 @@ const AdminAccountResource = Resource<AdminAccount>("AWS.FMS.AdminAccount");
 export { AdminAccountResource as AdminAccount };
 
 // `getAdminAccount` throws `ResourceNotFoundException` when no FMS admin has
-// been designated — collapse to `undefined`.
+// been designated -- collapse to `undefined`.
 const getAdmin = pinFms(fms.getAdminAccount({})).pipe(
   Effect.map((r) => r as fms.GetAdminAccountResponse | undefined),
   Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
@@ -91,7 +91,7 @@ export const AdminAccountProvider = () =>
   Provider.effect(
     AdminAccountResource,
     Effect.gen(function* () {
-      // Association is asynchronous; the FMS role transitions CREATING → READY.
+      // Association is asynchronous; the FMS role transitions CREATING -> READY.
       const waitUntilReady = getAdmin.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
@@ -108,12 +108,12 @@ export const AdminAccountProvider = () =>
             adminAccount: admin.AdminAccount,
             roleStatus: admin.RoleStatus,
           };
-          // FMS admin has no tags — ownership can't be verified from the cloud.
+          // FMS admin has no tags -- ownership can't be verified from the cloud.
           // With no prior state, treat an existing admin as foreign.
           return output ? attrs : Unowned(attrs);
         }),
 
-        // Organization-level singleton — report the single admin account.
+        // Organization-level singleton -- report the single admin account.
         list: () =>
           getAdmin.pipe(
             Effect.map((a) =>
@@ -128,18 +128,18 @@ export const AdminAccountProvider = () =>
           // 1. OBSERVE
           let admin = yield* getAdmin;
 
-          // 2. ENSURE — associate the admin account if none is set.
+          // 2. ENSURE -- associate the admin account if none is set.
           if (!admin?.AdminAccount) {
             // On a fresh account the first associate call kicks off creation
             // of the AWSServiceRoleForFMS service-linked role and fails
-            // transiently while it materializes — either with a bare
+            // transiently while it materializes -- either with a bare
             // `InvalidOperationException: Operation is invalid.` or with
             // `Service role name AWSServiceRoleForFMS already exists ...
             // Otherwise, try your request again.` Both are eventual-
-            // consistency races, not terminal failures — retry bounded.
+            // consistency races, not terminal failures -- retry bounded.
             yield* pinFms(fms.associateAdminAccount({ AdminAccount: desired })).pipe(
               Effect.retry({
-                // `: boolean` blocks TS 5.5+ inferred type predicates — see
+                // `: boolean` blocks TS 5.5+ inferred type predicates -- see
                 // the note on the disassociate retry in `delete` below.
                 while: (e): boolean =>
                   e._tag === "InvalidOperationException" &&
@@ -170,7 +170,7 @@ export const AdminAccountProvider = () =>
           yield* pinFms(fms.disassociateAdminAccount({})).pipe(
             Effect.retry({
               // `: boolean` prevents TS 5.5+ from inferring a type predicate
-              // for this lambda — an inferred `e is InvalidOperationException`
+              // for this lambda -- an inferred `e is InvalidOperationException`
               // refinement makes `Effect.retry` collapse the error channel to
               // `unknown`, which breaks the `catchTag` below.
               while: (e): boolean =>

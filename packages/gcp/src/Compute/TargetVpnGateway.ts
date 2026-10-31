@@ -25,12 +25,12 @@ const MAX_NAME_LENGTH = 63;
 export type TargetVpnGatewayProps = {
   /**
    * Gateway name. If omitted, a unique RFC1035 name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the gateway.
    */
   targetVpnGatewayName?: string;
   /**
-   * Region the Classic VPN gateway lives in. Immutable — changing it
+   * Region the Classic VPN gateway lives in. Immutable -- changing it
    * replaces the gateway. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -39,11 +39,11 @@ export type TargetVpnGatewayProps = {
   /**
    * VPC network this gateway is attached to. Accepts a name
    * (`default`), a partial URL (`global/networks/default`), or a full
-   * resource URL. Immutable — changing it replaces the gateway.
+   * resource URL. Immutable -- changing it replaces the gateway.
    */
   network: string;
   /**
-   * Optional description. Immutable — changing it replaces the
+   * Optional description. Immutable -- changing it replaces the
    * gateway.
    */
   description?: string;

@@ -55,9 +55,9 @@ export interface TopicEventSourceProps {
 }
 
 export interface TopicRetryPolicy {
-  /** Minimum delay before redelivering a failed message, e.g. `"10s"` (0–600s). */
+  /** Minimum delay before redelivering a failed message, e.g. `"10s"` (0-600s). */
   minimumBackoff?: string;
-  /** Maximum delay before redelivering a failed message, e.g. `"600s"` (0–600s). */
+  /** Maximum delay before redelivering a failed message, e.g. `"600s"` (0-600s). */
   maximumBackoff?: string;
 }
 
@@ -87,14 +87,14 @@ export type TopicEventSourceService = <Req = never>(
  *
  * The host-specific implementation layers are:
  *
- * - `GCP.Run.TopicEventSource` — push delivery to an HTTP host
+ * - `GCP.Run.TopicEventSource` -- push delivery to an HTTP host
  *   (`GCP.Run.Service` / `GCP.Function`, `GCP.CloudFunctions.Function`).
  *   Provisions a push subscription at the host's URL, authenticated with an
  *   OIDC token for the host's runtime service account, grants that account
  *   `roles/run.invoker` on the host, and verifies the token on every
  *   delivery. A 2xx response acks; a failed handler returns 500 and Pub/Sub
  *   redelivers.
- * - `GCP.Run.TopicPullEventSource` — a pull loop for hosts without an
+ * - `GCP.Run.TopicPullEventSource` -- a pull loop for hosts without an
  *   inbound URL (`GCP.Run.Job`, `GCP.Run.WorkerPool`). Provisions a pull
  *   subscription, grants `roles/pubsub.subscriber` on it, and acks each
  *   batch after the handler succeeds.
@@ -137,7 +137,7 @@ export type TopicEventSourceService = <Req = never>(
  *   { maxMessages: 50 },
  *   (messages) => messages.pipe(Stream.runForEach(handle)),
  * );
- * // …provided with Effect.provide(GCP.Run.TopicPullEventSource)
+ * // ...provided with Effect.provide(GCP.Run.TopicPullEventSource)
  * ```
  *
  * @binding

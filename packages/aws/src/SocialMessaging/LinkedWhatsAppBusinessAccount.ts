@@ -41,7 +41,7 @@ export interface LinkedWhatsAppBusinessAccountProps {
    * your AWS account (format `waba-...`).
    *
    * WhatsApp Business onboarding requires the Meta embedded-signup OAuth flow
-   * in the AWS console and cannot be automated — this resource adopts and
+   * in the AWS console and cannot be automated -- this resource adopts and
    * manages an account that has already been linked. Changing the identifier
    * replaces the resource.
    */
@@ -136,7 +136,7 @@ export interface LinkedWhatsAppBusinessAccount extends Resource<
  * ### Consuming WhatsApp Events
  * **Example:** Handle Inbound Messages in a Lambda
  * WhatsApp events (inbound messages, message status updates) are delivered
- * exclusively to the SNS topics listed in `eventDestinations` — there is no
+ * exclusively to the SNS topics listed in `eventDestinations` -- there is no
  * separate event source for this service. Compose the resource with
  * `AWS.SNS.consumeTopicNotifications` on the destination topic:
  * ```typescript
@@ -294,14 +294,14 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — onboarding is console-only, so the account must already
+          // Observe -- onboarding is console-only, so the account must already
           // be linked; there is no create path to fall through to.
           const state = yield* readLinkedAccount(accountId);
           if (state === undefined) {
             return yield* new WhatsAppBusinessAccountNotLinked({ accountId });
           }
 
-          // Sync event destinations — the API replaces the full list.
+          // Sync event destinations -- the API replaces the full list.
           if (
             news.eventDestinations !== undefined &&
             destinationsDrifted(state.attrs.eventDestinations, news.eventDestinations)
@@ -316,7 +316,7 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
             yield* session.note(`Updated event destinations for ${state.attrs.id}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* socialmessaging.untagResource({

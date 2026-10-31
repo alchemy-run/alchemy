@@ -8,7 +8,7 @@ export interface DescribeAlarmsRequest extends Omit<cloudwatch.DescribeAlarmsInp
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
 /**
- * Runtime binding for `cloudwatch:DescribeAlarms` — read the current state
+ * Runtime binding for `cloudwatch:DescribeAlarms` -- read the current state
  * and configuration of the bound alarms. Bind it to one or more
  * {@link Alarm} / {@link CompositeAlarm} resources; the alarm names are
  * injected automatically.
@@ -28,7 +28,7 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
  *   ComparisonOperator: "GreaterThanOrEqualToThreshold",
  * });
  *
- * // init — grants cloudwatch:DescribeAlarms on the alarm
+ * // init -- grants cloudwatch:DescribeAlarms on the alarm
  * const describeAlarms = yield* AWS.CloudWatch.DescribeAlarms(alarm);
  *
  * // runtime

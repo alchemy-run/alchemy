@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:RejectResourceShareInvitation`.
  *
  * Rejects an invitation to a resource share from another account.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.RejectResourceShareInvitationHttp)`.
  * ### Invitations
  * **Example:** Reject an Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const rejectResourceShareInvitation = yield* AWS.RAM.RejectResourceShareInvitation();
  *
  * // runtime

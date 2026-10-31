@@ -116,8 +116,8 @@ export interface NetworkConnector extends Resource<
 > {}
 
 /**
- * A Lambda network connector that gives Lambda compute resources — notably
- * {@link MicrovmImage} MicroVMs — a managed egress path into your VPC. The
+ * A Lambda network connector that gives Lambda compute resources -- notably
+ * {@link MicrovmImage} MicroVMs -- a managed egress path into your VPC. The
  * connector provisions elastic network interfaces (ENIs) in the subnets you
  * specify so workloads can reach private resources such as databases, caches,
  * and internal APIs.
@@ -202,7 +202,7 @@ export const NetworkConnectorProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const name = yield* resolveName(id, news.name);
 
-      // Observe — prefer the cached identifier, falling back to a name lookup
+      // Observe -- prefer the cached identifier, falling back to a name lookup
       // so an interrupted create can recover before re-creating. A connector
       // stuck in DELETE_FAILED is treated as missing so we recreate.
       const found = output?.networkConnectorId
@@ -210,7 +210,7 @@ export const NetworkConnectorProvider = () =>
         : yield* getConnector(name);
       const observed = found && found.State !== "DELETE_FAILED" ? found : undefined;
 
-      // Ensure + sync — each branch returns the active connector, so we never
+      // Ensure + sync -- each branch returns the active connector, so we never
       // reassign across branches (which `tsc` narrows poorly).
       const connector = observed
         ? yield* syncConnector(observed, name, news, session)

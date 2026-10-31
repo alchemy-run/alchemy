@@ -15,7 +15,7 @@ export interface BatchDisassociateResourceRequest extends fms.BatchDisassociateR
  * ### Resource Sets
  * **Example:** Disassociate Resources from a Resource Set
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const batchDisassociateResource = yield* AWS.FMS.BatchDisassociateResource();
  *
  * // runtime

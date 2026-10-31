@@ -25,14 +25,14 @@ export interface PlatformApplicationProps {
    */
   platform: string;
   /**
-   * Platform credential — the FCM API key / service account JSON (GCM), the
+   * Platform credential -- the FCM API key / service account JSON (GCM), the
    * APNS private key, or the ADM client secret. SNS validates the credential
    * at creation time. Write-only: SNS never returns it, so it is pushed on
    * create/adopt and whenever the configured value changes.
    */
   platformCredential: Redacted.Redacted<string>;
   /**
-   * Platform principal — the APNS SSL certificate or ADM client id. Not
+   * Platform principal -- the APNS SSL certificate or ADM client id. Not
    * applicable for GCM. Write-only like `platformCredential`.
    */
   platformPrincipal?: Redacted.Redacted<string>;
@@ -147,7 +147,7 @@ export const PlatformApplicationProvider = () =>
       const name = yield* toApplicationName(id, news);
       const arn = output?.platformApplicationArn ?? (yield* toApplicationArn(id, news));
 
-      // Observe — the credential attributes are write-only, so observation
+      // Observe -- the credential attributes are write-only, so observation
       // covers existence plus the non-sensitive mutable attributes.
       const observed = yield* sns
         .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
@@ -164,7 +164,7 @@ export const PlatformApplicationProvider = () =>
       };
       const desiredAttributes = toAttributeMap(news.attributes);
 
-      // Ensure — create carries the full attribute set (credentials +
+      // Ensure -- create carries the full attribute set (credentials +
       // mutable attributes) in one call.
       if (observed === undefined) {
         const created = yield* sns.createPlatformApplication({
@@ -178,7 +178,7 @@ export const PlatformApplicationProvider = () =>
         return state ?? toApplicationAttributes(platformApplicationArn, desiredAttributes);
       }
 
-      // Sync — mutable non-secret attributes diff observed vs desired;
+      // Sync -- mutable non-secret attributes diff observed vs desired;
       // removed previously-managed keys reset to "". Credentials cannot be
       // observed, so they are pushed on adoption (`olds` absent) or when the
       // configured value changes (`olds` is only a hint to skip a no-op).
@@ -217,8 +217,8 @@ export const PlatformApplicationProvider = () =>
       return state ?? toApplicationAttributes(arn, desiredAttributes);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // `DeletePlatformApplication` is idempotent — deleting a non-existent
-      // application succeeds — so only genuine failures propagate.
+      // `DeletePlatformApplication` is idempotent -- deleting a non-existent
+      // application succeeds -- so only genuine failures propagate.
       yield* sns.deletePlatformApplication({
         PlatformApplicationArn: output.platformApplicationArn,
       });

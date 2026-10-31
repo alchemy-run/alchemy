@@ -16,7 +16,7 @@ export interface GetThirdPartyFirewallAssociationStatusRequest
  * ### Third-Party Firewalls
  * **Example:** Check Third-Party Firewall Onboarding Status
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getThirdPartyFirewallAssociationStatus =
  *   yield* AWS.FMS.GetThirdPartyFirewallAssociationStatus();
  *

@@ -52,7 +52,7 @@ export interface EventActionProps {
    * The id of the ENTITLED data set whose `RevisionPublished` event triggers
    * the action. Event actions can only be created for entitled data sets
    * (subscriptions or accepted data grants), not for owned data sets.
-   * Immutable — changing it replaces the event action.
+   * Immutable -- changing it replaces the event action.
    */
   dataSetId: string;
   /**
@@ -87,13 +87,13 @@ export interface EventAction extends Resource<
 > {}
 
 /**
- * An AWS Data Exchange event action — an auto-export rule that copies every
+ * An AWS Data Exchange event action -- an auto-export rule that copies every
  * newly published revision of an ENTITLED data set into your S3 bucket the
  * moment the provider publishes it. This is the subscriber-side automation
  * primitive: subscribe to a product (or accept a data grant), attach an
  * event action, and fresh data lands in your bucket with no polling.
  *
- * Event actions require an entitled data set — creating one against an
+ * Event actions require an entitled data set -- creating one against an
  * owned data set fails with a `ValidationException`.
  *
  * ### Auto-Exporting Entitled Data
@@ -161,7 +161,7 @@ export const EventActionProvider = () =>
   Provider.effect(
     EventAction,
     Effect.gen(function* () {
-      /** Get an event action by id; typed not-found → undefined. */
+      /** Get an event action by id; typed not-found -> undefined. */
       const getById = Effect.fn(function* (eventActionId: string) {
         return yield* dataexchange
           .getEventAction({ EventActionId: eventActionId })
@@ -223,7 +223,7 @@ export const EventActionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — output ids are only a cache; fall back to a
+          // 1. Observe -- output ids are only a cache; fall back to a
           //    tag-ownership scan of the data set's event actions.
           let eventAction = output?.eventActionId
             ? yield* getById(output.eventActionId)
@@ -232,7 +232,7 @@ export const EventActionProvider = () =>
             eventAction = yield* findByTags(id, dataSetId);
           }
 
-          // 2. Ensure — create when missing.
+          // 2. Ensure -- create when missing.
           if (eventAction === undefined) {
             eventAction = yield* dataexchange.createEventAction({
               Action: desiredAction,
@@ -241,7 +241,7 @@ export const EventActionProvider = () =>
             });
           }
 
-          // 3. Sync — the export destination is mutable in place. Only call
+          // 3. Sync -- the export destination is mutable in place. Only call
           //    the API on an actual delta.
           if (!sameAction(eventAction.Action, desiredAction)) {
             eventAction = yield* dataexchange.updateEventAction({
@@ -263,7 +263,7 @@ export const EventActionProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* dataexchange.deleteEventAction({ EventActionId: output.eventActionId }).pipe(
-            // Deletion is idempotent — a missing event action is success.
+            // Deletion is idempotent -- a missing event action is success.
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e): boolean => e._tag === "ThrottlingException",

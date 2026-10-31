@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateForecastExportJob` — export a complete
+ * Runtime binding for `forecast:CreateForecastExportJob` -- export a complete
  * forecast to S3 as CSV/Parquet, the bulk-consumption path that complements
  * per-item lookups via {@link QueryForecast}.
  *

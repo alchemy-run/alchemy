@@ -38,17 +38,17 @@ export type PlanBillingScheme = "per_unit" | "tiered";
 
 export interface PlanProps {
   /**
-   * Id of the Stripe Product this plan belongs to (`prod_…`). Mutable
+   * Id of the Stripe Product this plan belongs to (`prod_...`). Mutable
    * until the plan has been used on a subscription.
    */
   product: string;
   /**
    * Three-letter ISO currency code, lowercase (e.g. `"usd"`). Create-only
-   * — changing it replaces the plan.
+   * -- changing it replaces the plan.
    */
   currency: string;
   /**
-   * Billing frequency. Create-only — changing it replaces the plan.
+   * Billing frequency. Create-only -- changing it replaces the plan.
    */
   interval: PlanInterval;
   /**
@@ -60,7 +60,7 @@ export interface PlanProps {
   /**
    * Amount in the currency's minor units (e.g. cents). `0` is a free
    * plan. Required unless `amountDecimal` is set or the plan is tiered.
-   * Create-only — changing it replaces the plan.
+   * Create-only -- changing it replaces the plan.
    */
   amount?: number;
   /**
@@ -147,7 +147,7 @@ export type Plan = Resource<
 >;
 
 /**
- * A Stripe Plan — the legacy (pre-Price) catalog object that defines
+ * A Stripe Plan -- the legacy (pre-Price) catalog object that defines
  * currency, amount, and billing interval for a Product. Prefer
  * {@link Price} for new catalogs; Plan exists for the Plans API.
  *
@@ -380,7 +380,7 @@ export const PlanProvider = () =>
         logicalId: id,
       });
       // A previous generation (same logical id, different immutable
-      // fields) must not be reused — Stripe plans cannot change amount,
+      // fields) must not be reused -- Stripe plans cannot change amount,
       // currency, or billing interval.
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
         current = undefined;

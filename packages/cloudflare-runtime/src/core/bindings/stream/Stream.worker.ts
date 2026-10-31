@@ -5,18 +5,18 @@
  * workers (`workers-sdk/packages/miniflare/src/workers/stream/*`), collapsed
  * into a single worker hosting both halves:
  *
- * - `StreamBinding` (`binding.worker.ts` upstream) — the RPC entrypoint
+ * - `StreamBinding` (`binding.worker.ts` upstream) -- the RPC entrypoint
  *   `stream` bindings target. Also serves stored video bytes at
  *   `/cdn-cgi/mf/stream/<id>/watch` via its `fetch` handler (routed to by the
  *   stream router middleware).
- * - `StreamObject` (`object.worker.ts` upstream) — a SQL-enabled Durable
+ * - `StreamObject` (`object.worker.ts` upstream) -- a SQL-enabled Durable
  *   Object holding all video/caption/watermark/download metadata, with video
  *   and watermark bytes stored as blob files via the `stream:storage` disk
  *   service.
  *
  * This is a **local video store only** (mirroring upstream's fidelity
- * limits): no transcoding or HLS ladder — `hlsPlaybackUrl`/`dashPlaybackUrl`
- * point at a placeholder host — and no signed URLs (`generateToken` returns
+ * limits): no transcoding or HLS ladder -- `hlsPlaybackUrl`/`dashPlaybackUrl`
+ * point at a placeholder host -- and no signed URLs (`generateToken` returns
  * a base64 JSON stub). `createDirectUpload` is unsupported, matching
  * upstream's exact error message.
  *
@@ -764,7 +764,7 @@ export class StreamObject extends DurableObject<Env> {
 
   /**
    * Control operations for tests (fake timers, storage inspection), sent via
-   * a reserved header — the KV/R2 simulators' pattern, replacing upstream's
+   * a reserved header -- the KV/R2 simulators' pattern, replacing upstream's
    * `req.cf.miniflare.controlOp` channel.
    */
   async fetch(req: Request): Promise<Response> {
@@ -1057,7 +1057,7 @@ class StreamWatermarksImpl extends RpcTarget implements StreamWatermarks {
       const row = await stub.createWatermarkFromUrl(streamOrUrl, params);
       return rowToStreamWatermark(row);
     }
-    // ReadableStream — pre-fetched data passed directly
+    // ReadableStream -- pre-fetched data passed directly
     const buffer = await new Response(streamOrUrl).arrayBuffer();
     const row = await stub.createWatermarkFromBody(buffer, null, params);
     return rowToStreamWatermark(row);

@@ -77,14 +77,14 @@ export interface AccountSettings extends Resource<
 > {}
 
 /**
- * Account-level Amazon SES v2 settings — an account/region singleton that
+ * Account-level Amazon SES v2 settings -- an account/region singleton that
  * manages account-wide sending status, the account suppression list, and
  * Virtual Deliverability Manager (VDM) configuration.
  *
  * Only the aspects you specify are managed: omit `sendingEnabled`, `suppression`,
  * or `vdm` to leave that setting untouched.
  *
- * Deleting this resource is a **no-op** — it leaves the account settings exactly
+ * Deleting this resource is a **no-op** -- it leaves the account settings exactly
  * as they are. Unlike a normal resource there is nothing to tear down: these are
  * account-global toggles with no single safe default, and resetting them (e.g.
  * disabling sending or clearing the suppression list) would affect live mail
@@ -132,7 +132,7 @@ export interface AccountSettings extends Resource<
  *
  * **Example:** Manage Only VDM and Leave Sending Alone
  * ```typescript
- * // Omitted aspects are never touched — this deploy will not read or write
+ * // Omitted aspects are never touched -- this deploy will not read or write
  * // the account's sending status or suppression list.
  * const settings = yield* SES.AccountSettings("Account", {
  *   vdm: { enabled: "ENABLED" },
@@ -252,7 +252,7 @@ export const AccountSettingsProvider = () =>
         }),
 
         // Account-global singleton: deleting only stops managing the settings.
-        // We deliberately leave them in place — there is no single safe default
+        // We deliberately leave them in place -- there is no single safe default
         // to reset to, and changing them would affect account-wide mail.
         delete: Effect.fn(function* () {}),
       });

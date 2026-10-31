@@ -37,7 +37,7 @@ export type RoutineProps = {
   /**
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/datasets/{dataset}`) or a full dataset resource
-   * name. Immutable — changing it replaces the routine.
+   * name. Immutable -- changing it replaces the routine.
    */
   datasetId: string;
   /**
@@ -45,17 +45,17 @@ export type RoutineProps = {
    * `projects/{project}/datasets/{dataset}/routines/{routine}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id. Must
    * contain only letters, numbers, and underscores; max 256 characters.
-   * Immutable — changing it replaces the routine.
+   * Immutable -- changing it replaces the routine.
    */
   routineId?: string;
   /**
    * Routine kind (`SCALAR_FUNCTION`, `PROCEDURE`, `TABLE_VALUED_FUNCTION`,
-   * `AGGREGATE_FUNCTION`). Immutable — changing it replaces the routine.
+   * `AGGREGATE_FUNCTION`). Immutable -- changing it replaces the routine.
    */
   routineType: RoutineType;
   /**
    * Body of the routine. For SQL functions this is the expression inside
-   * the `AS (…)` clause, not a full `CREATE FUNCTION` statement. For
+   * the `AS (...)` clause, not a full `CREATE FUNCTION` statement. For
    * JavaScript, the evaluated string in the `AS` clause.
    */
   definitionBody: string;
@@ -80,7 +80,7 @@ export type RoutineProps = {
   returnTableType?: RoutineReturnTableType;
   /**
    * User-friendly description of this routine. Alchemy ownership is stored
-   * in a `[alchemy …]` prefix for `list` / nuke.
+   * in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -187,11 +187,11 @@ export type Routine = Resource<
 >;
 
 /**
- * A Google BigQuery routine — a user-defined function, table-valued
+ * A Google BigQuery routine -- a user-defined function, table-valued
  * function, aggregate function, or stored procedure.
  *
  * Routines have no labels; Alchemy stamps ownership into the description
- * (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`) so `list` /
+ * (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`) so `list` /
  * `pnpm nuke:gcp` can find them inside datasets that carry `alchemy-*`
  * labels. `datasetId`, `routineId`, and `routineType` are immutable
  * (changing them replaces the routine). Body, arguments, description,

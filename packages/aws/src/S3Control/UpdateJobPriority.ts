@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `s3:UpdateJobPriority` (S3 Batch Operations).
  *
- * Re-prioritizes an existing job relative to the account's other jobs —
+ * Re-prioritizes an existing job relative to the account's other jobs --
  * e.g. bumping an urgent restore ahead of routine re-tagging runs. The
  * account id is resolved once via `sts:GetCallerIdentity`. Provide the
  * implementation with `Effect.provide(AWS.S3Control.UpdateJobPriorityHttp)`.
  * ### Running Batch Operations Jobs
  * **Example:** Bump a Job's Priority
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateJobPriority = yield* AWS.S3Control.UpdateJobPriority();
  *
  * // runtime

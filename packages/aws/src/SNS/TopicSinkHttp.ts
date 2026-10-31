@@ -60,9 +60,9 @@ export const TopicSinkHttp = Layer.effect(
             })),
           }),
         // SenderFault=false failures (throttling, internal errors) are
-        // transient — re-submit them on the bounded schedule.
+        // transient -- re-submit them on the bounded schedule.
         unprocessed: (out, batch) => selectFailed(out.Failed, batch, false),
-        // SenderFault=true failures are permanent — drop and surface.
+        // SenderFault=true failures are permanent -- drop and surface.
         rejected: (out, batch) => selectFailed(out.Failed, batch, true),
       });
     });

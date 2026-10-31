@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link UpdateQAppSessionMetadata} — `instanceId` is injected from the bound Q App.
+ * Request for {@link UpdateQAppSessionMetadata} -- `instanceId` is injected from the bound Q App.
  */
 export interface UpdateQAppSessionMetadataRequest extends Omit<
   qapps.UpdateQAppSessionMetadataInput,
@@ -14,12 +14,12 @@ export interface UpdateQAppSessionMetadataRequest extends Omit<
 /**
  * Runtime binding for `qapps:UpdateQAppSessionMetadata`.
  *
- * Updates a Q App session's metadata — rename it or reconfigure how it is shared with collaborators. Provide the implementation with
+ * Updates a Q App session's metadata -- rename it or reconfigure how it is shared with collaborators. Provide the implementation with
  * `Effect.provide(AWS.QApps.UpdateQAppSessionMetadataHttp)`.
  * ### Sessions
  * **Example:** Share a Session
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const updateQAppSessionMetadata = yield* AWS.QApps.UpdateQAppSessionMetadata(app);
  *
  * // runtime

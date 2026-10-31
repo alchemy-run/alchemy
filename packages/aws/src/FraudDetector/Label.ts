@@ -40,7 +40,7 @@ export interface Label extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector label — a classification (e.g. `fraud`, `legit`)
+ * An Amazon Fraud Detector label -- a classification (e.g. `fraud`, `legit`)
  * used to tag stored events for supervised model training. Event types
  * reference labels; they are cheap metadata objects.
  *
@@ -65,7 +65,7 @@ export const LabelProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
-      /** Look a label up by name; typed not-found → undefined. */
+      /** Look a label up by name; typed not-found -> undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getLabels({ name })
@@ -104,7 +104,7 @@ export const LabelProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // putLabel is an idempotent upsert — call it to converge whether
+          // putLabel is an idempotent upsert -- call it to converge whether
           // creating or updating the description.
           yield* frauddetector.putLabel({
             name,
@@ -112,7 +112,7 @@ export const LabelProvider = () =>
           });
 
           const label = yield* get(name);
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(label!.arn!, desiredTags);
 
           yield* session.note(name);

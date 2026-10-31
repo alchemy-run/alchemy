@@ -109,7 +109,7 @@ export const VpcAssociationAuthorizationProvider = () =>
         // Sub-resource: authorizations are keyed by their parent hosted zone
         // and cannot be enumerated account-wide.
         list: () => Effect.succeed([]),
-        // Existence-only resource — every property is part of its identity.
+        // Existence-only resource -- every property is part of its identity.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
@@ -136,7 +136,7 @@ export const VpcAssociationAuthorizationProvider = () =>
             vpcRegion: observed.VPCRegion ?? output?.vpcRegion ?? "",
           };
         }),
-        // Existence-only: observe → if missing, create. There is no sync step
+        // Existence-only: observe -> if missing, create. There is no sync step
         // (an authorization has no mutable aspects).
         reconcile: Effect.fn(function* ({ news, session }) {
           const observed = yield* observe(news.hostedZoneId, news.vpcId);

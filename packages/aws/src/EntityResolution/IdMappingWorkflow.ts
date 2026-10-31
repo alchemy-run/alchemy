@@ -31,7 +31,7 @@ export interface IdMappingWorkflowProps {
   inputSourceConfig: entityresolution.IdMappingWorkflowInputSource[];
   /**
    * Where mapped output records are written: an S3 path (`outputS3Path`) and
-   * an optional KMS key (`KMSArn`). Optional — rule-based workflows can also
+   * an optional KMS key (`KMSArn`). Optional -- rule-based workflows can also
    * receive per-job output configuration on `StartIdMappingJob`.
    */
   outputSourceConfig?: entityresolution.IdMappingWorkflowOutputSource[];
@@ -76,7 +76,7 @@ export interface IdMappingWorkflow extends Resource<
 > {}
 
 /**
- * An AWS Entity Resolution ID mapping workflow — a data-processing job
+ * An AWS Entity Resolution ID mapping workflow -- a data-processing job
  * definition that translates record identifiers between a `SOURCE` and a
  * `TARGET` ID namespace, using rule-based matching or a provider service.
  *
@@ -125,7 +125,7 @@ export const IdMappingWorkflowProvider = () =>
         return props.workflowName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
-      /** Get an ID mapping workflow by name; typed not-found → undefined. */
+      /** Get an ID mapping workflow by name; typed not-found -> undefined. */
       const getByName = Effect.fn(function* (workflowName: string) {
         return yield* entityresolution
           .getIdMappingWorkflow({ workflowName })
@@ -143,7 +143,7 @@ export const IdMappingWorkflowProvider = () =>
             workflowName: workflow.workflowName,
             workflowArn: workflow.workflowArn,
           };
-          // getIdMappingWorkflow returns tags — use the observed tags for
+          // getIdMappingWorkflow returns tags -- use the observed tags for
           // the ownership check.
           const tags = toTagRecord(workflow.tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -163,10 +163,10 @@ export const IdMappingWorkflowProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — names are unique, so the name IS the identity.
+          // 1. Observe -- names are unique, so the name IS the identity.
           let workflow = yield* getByName(name);
 
-          // 2. Ensure — create when missing. A freshly-created IAM role is
+          // 2. Ensure -- create when missing. A freshly-created IAM role is
           //    transiently rejected while IAM propagates; tolerate the
           //    concurrent-create race, then re-observe: the create response
           //    is a structural subset of the Get shape (it omits
@@ -192,7 +192,7 @@ export const IdMappingWorkflowProvider = () =>
             });
           }
 
-          // 3. Sync — everything except the name updates in place via a
+          // 3. Sync -- everything except the name updates in place via a
           //    full-PUT update. Only call the API on an actual delta between
           //    OBSERVED and desired configuration.
           const desired = {
@@ -238,7 +238,7 @@ export const IdMappingWorkflowProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // deleteIdMappingWorkflow succeeds even when the workflow is
-          // already gone; a running mapping job conflicts — retry briefly.
+          // already gone; a running mapping job conflicts -- retry briefly.
           yield* entityresolution
             .deleteIdMappingWorkflow({ workflowName: output.workflowName })
             .pipe(

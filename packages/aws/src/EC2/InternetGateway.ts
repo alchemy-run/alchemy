@@ -84,7 +84,7 @@ export interface InternetGateway extends Resource<
  * gateway attached at a time.
  *
  * The only inputs are the optional `vpcId` to attach to and `tags`. Attaching a
- * gateway is not enough on its own to make a subnet public — you also need a
+ * gateway is not enough on its own to make a subnet public -- you also need a
  * `0.0.0.0/0` {@link Route} pointing at the gateway and a
  * {@link RouteTableAssociation} binding the subnet to that route table.
  *
@@ -262,7 +262,7 @@ export const InternetGatewayProvider = () =>
             "alchemy::instance": instanceId,
           };
 
-          // Observe — find the IGW via cached id, else fall through to create.
+          // Observe -- find the IGW via cached id, else fall through to create.
           let igw: ec2.InternetGateway | undefined;
           if (output?.internetGatewayId) {
             const lookup = yield* ec2
@@ -285,7 +285,7 @@ export const InternetGatewayProvider = () =>
             igw = yield* findInternetGatewayByTags(id);
           }
 
-          // Ensure — create the IGW if missing.
+          // Ensure -- create the IGW if missing.
           if (igw === undefined) {
             const createResult = yield* ec2.createInternetGateway({
               TagSpecifications: [
@@ -306,7 +306,7 @@ export const InternetGatewayProvider = () =>
 
           const internetGatewayId = igw.InternetGatewayId! as InternetGatewayId;
 
-          // Sync VPC attachment — observed attachment vs desired.
+          // Sync VPC attachment -- observed attachment vs desired.
           const attachedVpcId = igw.Attachments?.find(
             (a) => a.State === "available" || a.State === "attaching",
           )?.VpcId;
@@ -345,7 +345,7 @@ export const InternetGatewayProvider = () =>
             igw = yield* waitForInternetGatewayAttached(internetGatewayId, news.vpcId, session);
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (igw.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -384,7 +384,7 @@ export const InternetGatewayProvider = () =>
 
           // 1. Detach from all VPCs first. DetachInternetGateway fails with
           // DependencyViolation ("has some mapped public address(es)") while
-          // any ENI in the VPC still holds a public IP — a just-deleted VPC
+          // any ENI in the VPC still holds a public IP -- a just-deleted VPC
           // Lambda's Hyperplane ENIs or draining Fargate task ENIs can hold
           // theirs for 5-20 minutes after the owner is gone. Ride that
           // window out on the same budget the subnet delete uses, reaping
@@ -425,7 +425,7 @@ export const InternetGatewayProvider = () =>
               Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
               // Retry on dependency violations. Public addresses on a
               // draining EKS/HyperPod control plane's ENIs can take
-              // several minutes to release — 5s x 60 = ~5 min.
+              // several minutes to release -- 5s x 60 = ~5 min.
               Effect.retry({
                 while: (e) =>
                   e._tag === "DependencyViolation" ||

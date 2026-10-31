@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:GetRecommendations` — Returns a list of recommended items for a user from a campaign or
- * domain recommender — the core Personalize serving call. Campaign and
+ * Runtime binding for `personalize:GetRecommendations` -- Returns a list of recommended items for a user from a campaign or
+ * domain recommender -- the core Personalize serving call. Campaign and
  * recommender ARNs are chosen at runtime, so the binding takes no
  * arguments and grants `personalize:GetRecommendations` on `*`.
  * Provide the implementation with

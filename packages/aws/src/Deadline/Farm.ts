@@ -91,7 +91,7 @@ export interface Farm extends Resource<
 > {}
 
 /**
- * An AWS Deadline Cloud farm — the top-level container for render-farm
+ * An AWS Deadline Cloud farm -- the top-level container for render-farm
  * queues, fleets, storage profiles, and budgets.
  *
  * ### Creating Farms
@@ -208,13 +208,13 @@ export const FarmProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached farmId; fall back to a display-name
+          // Observe -- prefer the cached farmId; fall back to a display-name
           // lookup so a create whose state failed to persist is adopted.
           let state = output?.farmId
             ? yield* readFarmById(output.farmId, arnOf)
             : yield* findFarmByDisplayName(displayName, arnOf);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (state === undefined) {
             const created = yield* deadline.createFarm({
               displayName,
@@ -232,7 +232,7 @@ export const FarmProvider = () =>
             }
           }
 
-          // Sync mutable settings — only when drifted from OBSERVED state.
+          // Sync mutable settings -- only when drifted from OBSERVED state.
           const described = state.described;
           const needsUpdate =
             displayName !== described.displayName ||
@@ -250,7 +250,7 @@ export const FarmProvider = () =>
             yield* session.note(`Updated farm ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncDeadlineTags(state.attrs.farmArn, desiredTags);
 
           yield* session.note(state.attrs.farmArn);
@@ -264,7 +264,7 @@ export const FarmProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // A farm refuses deletion while ANY child resource exists (storage
-          // profiles, queues, fleets, budgets, limits, associations) — and
+          // profiles, queues, fleets, budgets, limits, associations) -- and
           // unlike async sub-resource drain, those conflicts never resolve
           // by waiting. A normal stack destroy deletes children first, so
           // this reap observes nothing; an orphan sweep (nuke) or a mid-run
@@ -281,7 +281,7 @@ export const FarmProvider = () =>
           // (queue job/session logs, fleet worker logs) and deleteFarm does
           // NOT remove them. The farm only deletes once every sub-resource
           // is fully gone, so by this point all of its log groups exist if
-          // they ever will — sweep the whole prefix.
+          // they ever will -- sweep the whole prefix.
           yield* reapDeadlineLogGroups(`/aws/deadline/${output.farmId}`);
         }),
       };

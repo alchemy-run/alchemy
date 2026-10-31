@@ -33,7 +33,7 @@ export type RepositoriesIssueProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the issue.
    */
   repository: string;
@@ -43,7 +43,7 @@ export type RepositoriesIssueProps = {
    */
   location?: string;
   /**
-   * Server-assigned issue id. Set after create. Immutable — changing it
+   * Server-assigned issue id. Set after create. Immutable -- changing it
    * replaces the issue.
    */
   issueId?: string;

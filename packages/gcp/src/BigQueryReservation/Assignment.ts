@@ -37,19 +37,19 @@ export type AssignmentProps = {
    * Parent reservation resource name
    * `projects/{project}/locations/{location}/reservations/{reservation}`
    * or a bare reservation id (resolved in the current project and
-   * `location`). Immutable — changing it replaces the assignment.
+   * `location`). Immutable -- changing it replaces the assignment.
    */
   reservation: string;
   /**
    * Resource that consumes the reservation: `projects/{project}`,
    * `folders/{folder}`, or `organizations/{org}`. Defaults to the
-   * current GCP project. Immutable — changing it replaces the
+   * current GCP project. Immutable -- changing it replaces the
    * assignment. One assignment per `(assignee, jobType, location)`.
    */
   assignee?: string;
   /**
    * Job type that uses the reservation (`QUERY`, `PIPELINE`,
-   * `ML_EXTERNAL`, `BACKGROUND`, `CONTINUOUS`, …). Immutable —
+   * `ML_EXTERNAL`, `BACKGROUND`, `CONTINUOUS`, ...). Immutable --
    * changing it replaces the assignment.
    * @default "QUERY"
    */
@@ -57,14 +57,14 @@ export type AssignmentProps = {
   /**
    * Assignment id (the `{assignment}` segment). If omitted, a unique
    * name is generated. Assignments have no labels field, so Alchemy
-   * stamps ownership into this id (`alch---…`) for `list` / nuke.
-   * Immutable — changing it replaces the assignment. Max 64
+   * stamps ownership into this id (`alch---...`) for `list` / nuke.
+   * Immutable -- changing it replaces the assignment. Max 64
    * characters, lowercase letters, digits, or dashes.
    */
   assignmentId?: string;
   /**
    * Location of the parent reservation. Used when `reservation` is a
-   * bare id. Immutable — changing it replaces the assignment.
+   * bare id. Immutable -- changing it replaces the assignment.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -83,7 +83,7 @@ export type Assignment = Resource<
   "GCP.BigQueryReservation.Assignment",
   AssignmentProps,
   {
-    /** Full resource name `…/reservations/{reservation}/assignments/{assignment}`. */
+    /** Full resource name `.../reservations/{reservation}/assignments/{assignment}`. */
     name: string;
     /** Assignment id (last path segment). */
     assignmentId: string;
@@ -95,7 +95,7 @@ export type Assignment = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** Assignee resource (`projects/…`, `folders/…`, `organizations/…`). */
+    /** Assignee resource (`projects/...`, `folders/...`, `organizations/...`). */
     assignee: string | undefined;
     /** Job type. */
     jobType: string | undefined;
@@ -111,7 +111,7 @@ export type Assignment = Resource<
 >;
 
 /**
- * A BigQuery reservation assignment — grants a project, folder, or
+ * A BigQuery reservation assignment -- grants a project, folder, or
  * organization slots from a {@link Reservation} for one job type.
  *
  * Assignments have no labels. Alchemy stamps ownership into

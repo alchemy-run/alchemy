@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * Several framework toolchains require `cwd === project root` at dev-server
  * startup (SolidStart resolves the app from the cwd at config-load time,
  * Waku resolves its html shell and relative inputs from the cwd), so their
- * integrations `process.chdir` around startup — and SvelteKit's plugin
+ * integrations `process.chdir` around startup -- and SvelteKit's plugin
  * construction races when several projects load `@sveltejs/kit` graphs
  * concurrently in one process. None of that may run in a process hosting
  * MANY dev servers (the alchemy dev sidecar serves every website of a run):
@@ -16,13 +16,13 @@ import { fileURLToPath } from "node:url";
  * `core/BuildChild.ts` (and Next.js dev solved with its `next dev` child).
  *
  * Instead, each such dev server runs in a DEDICATED child process whose
- * working directory IS the project root — no chdir anywhere, no lock:
+ * working directory IS the project root -- no chdir anywhere, no lock:
  *
  * - The **parent** ({@link runDevChild}) spawns the shared
  *   `core/DevChildRunner.ts` entry with `cwd = rootDir`, forwards the dev
  *   server's output, and resolves once the child prints the
  *   {@link DEV_CHILD_URL_REGEX} readiness marker. The child lives in the
- *   ambient Scope — the same lifetime an in-process dev handle has — and
+ *   ambient Scope -- the same lifetime an in-process dev handle has -- and
  *   is stopped (SIGTERM, then SIGKILL) when that scope closes.
  * - The **child** (`DevChildRunner`) imports the framework-integration
  *   module (a bare specifier, self-resolved within this package), calls
@@ -53,7 +53,7 @@ export const isInsideDevChild = (): boolean => process.env[DEV_CHILD_ENV_KEY] ==
 export interface DevChildPayload {
   /**
    * Framework-integration module specifier (e.g.
-   * `"@alchemy.run/frontend-frameworks/waku"`). Imported by the runner —
+   * `"@alchemy.run/frontend-frameworks/waku"`). Imported by the runner --
    * a bare self-reference resolves within this package.
    */
   readonly module: string;
@@ -74,7 +74,7 @@ export const devChildUrlMarker = (url: string) =>
   `<ALCHEMY_DEV_CHILD_URL>${url}</ALCHEMY_DEV_CHILD_URL>`;
 
 /**
- * `true` when `value` survives a JSON round-trip losslessly — i.e. it
+ * `true` when `value` survives a JSON round-trip losslessly -- i.e. it
  * contains no functions, symbols, bigints, class instances, or cycles a
  * child process could not reconstruct. Integrations use this to decide
  * whether their `make` options can cross the process boundary; when they
@@ -103,7 +103,7 @@ export const isJsonSerializable = (value: unknown): boolean => {
   try {
     return check(value);
   } catch {
-    // cyclic structures overflow the recursion — not serializable
+    // cyclic structures overflow the recursion -- not serializable
     return false;
   }
 };
@@ -131,13 +131,13 @@ export interface DevChildOptions {
   readonly module: string;
   /**
    * `import.meta.url` of the CALLING framework module. The shared runner
-   * entry is resolved as `../core/DevChildRunner.*` relative to it — which
+   * entry is resolved as `../core/DevChildRunner.*` relative to it -- which
    * lands on the stable entry file in both layouts
-   * (`src/{fw}/X.ts` → `src/core/DevChildRunner.ts`,
-   * `dist/_chunks/X.js` → `dist/core/DevChildRunner.js`).
+   * (`src/{fw}/X.ts` -> `src/core/DevChildRunner.ts`,
+   * `dist/_chunks/X.js` -> `dist/core/DevChildRunner.js`).
    */
   readonly callerUrl: string;
-  /** Project root — becomes the child's working directory. */
+  /** Project root -- becomes the child's working directory. */
   readonly rootDir: string;
   /** JSON-serializable options for the module's `make(...)`. */
   readonly makeOptions: Record<string, unknown>;

@@ -38,7 +38,7 @@ export type ApplicationsWorkloadProps = {
   /**
    * Parent Application. Full name
    * `projects/{project}/locations/{location}/applications/{application}`
-   * or the application id (combined with `location`). Immutable —
+   * or the application id (combined with `location`). Immutable --
    * changing it replaces the workload.
    */
   application: string;
@@ -50,14 +50,14 @@ export type ApplicationsWorkloadProps = {
   location?: string;
   /**
    * Workload id (the `{workload}` segment). Must be RFC1035 (63 chars).
-   * If omitted, a unique name is generated. Immutable — changing it
+   * If omitted, a unique name is generated. Immutable -- changing it
    * replaces the workload.
    */
   workloadId?: string;
   /**
    * Resource name of the original discovered workload, or the underlying
    * resource URI (looked up via `discoveredWorkloads:lookup`). Immutable
-   * — changing it replaces the workload.
+   * -- changing it replaces the workload.
    */
   discoveredWorkload: string;
   /**
@@ -68,7 +68,7 @@ export type ApplicationsWorkloadProps = {
   /**
    * User-defined description. Maximum length is 2048 characters.
    * Workloads have no labels field, so Alchemy stamps ownership into a
-   * `[alchemy …]` prefix and strips it from attributes.
+   * `[alchemy ...]` prefix and strips it from attributes.
    */
   description?: string;
   /**
@@ -119,7 +119,7 @@ export type ApplicationsWorkload = Resource<
 /**
  * An App Hub workload registered onto an Application. A workload is a
  * discovered binary deployment (managed instance group, GKE deployment,
- * …) that performs the smallest logical subset of business
+ * ...) that performs the smallest logical subset of business
  * functionality.
  *
  * Workloads have no labels field, so Alchemy stamps ownership into the

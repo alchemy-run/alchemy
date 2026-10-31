@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:SimulateCustomPolicy` — evaluate how a set of
+ * Runtime binding for `iam:SimulateCustomPolicy` -- evaluate how a set of
  * candidate IAM policy documents would decide a list of actions, without
  * attaching the policies to any entity. The building block for policy
  * linters, "what would this grant?" previews, and authorization test

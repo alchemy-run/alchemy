@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Budget } from "./Budget.ts";
 
 /**
- * Request for {@link DescribeBudget} — the bound budget's `AccountId` and
+ * Request for {@link DescribeBudget} -- the bound budget's `AccountId` and
  * `BudgetName` are injected automatically.
  */
 export interface DescribeBudgetRequest extends Omit<
@@ -15,15 +15,15 @@ export interface DescribeBudgetRequest extends Omit<
 /**
  * Runtime binding for `budgets:ViewBudget` via `DescribeBudget`.
  *
- * Bind this operation to a {@link Budget} to read its definition and — most
- * usefully at runtime — its `CalculatedSpend` (actual and forecasted spend so
+ * Bind this operation to a {@link Budget} to read its definition and -- most
+ * usefully at runtime -- its `CalculatedSpend` (actual and forecasted spend so
  * far in the period), e.g. for a cost kill-switch or a spend dashboard.
  * Provide the implementation with
  * `Effect.provide(AWS.Budgets.DescribeBudgetHttp)`.
  * ### Reading Budget Spend
  * **Example:** Check Actual Spend Against the Limit
  * ```typescript
- * // init — bind the operation to the budget
+ * // init -- bind the operation to the budget
  * const describeBudget = yield* AWS.Budgets.DescribeBudget(budget);
  *
  * // runtime

@@ -31,7 +31,7 @@ export interface StorageLensConfigurationProps {
    * Account-level metrics configuration (activity metrics, advanced
    * metrics, prefix-level metrics, ...). Passed through to the S3 Control
    * API verbatim.
-   * @default { BucketLevel: {} } — free metrics for every bucket
+   * @default { BucketLevel: {} } -- free metrics for every bucket
    */
   accountLevel?: s3control.AccountLevel;
   /**
@@ -78,7 +78,7 @@ export interface StorageLensConfiguration extends Resource<
 > {}
 
 /**
- * An Amazon S3 Storage Lens configuration — an account-wide (or
+ * An Amazon S3 Storage Lens configuration -- an account-wide (or
  * organization-wide) storage analytics dashboard aggregating usage and
  * activity metrics across buckets, with optional daily export to S3 or
  * CloudWatch.
@@ -136,7 +136,7 @@ export const StorageLensConfiguration = Resource<StorageLensConfiguration>(
  * Retry while a freshly-written Storage Lens configuration has not
  * propagated to reads yet.
  *
- * Explicitly typed at module scope — inlining `Effect.retry` in a lifecycle
+ * Explicitly typed at module scope -- inlining `Effect.retry` in a lifecycle
  * op leaks `Retry.Return`'s conditional type into declaration emit, widening
  * the provider layer to `unknown` and poisoning `AWS.providers()`.
  */
@@ -255,10 +255,10 @@ export const StorageLensConfigurationProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
           const configId = output?.configId ?? (yield* createConfigId(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeConfiguration(accountId, configId);
 
-          // 2. ENSURE + SYNC — PutStorageLensConfiguration is a true upsert;
+          // 2. ENSURE + SYNC -- PutStorageLensConfiguration is a true upsert;
           //    write only when the observed configuration differs.
           const desired = desiredConfiguration(configId, news);
           if (observed === undefined || canon(observed) !== canon(desired)) {
@@ -269,7 +269,7 @@ export const StorageLensConfigurationProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — PutStorageLensConfigurationTagging replaces the
+          // 3. SYNC TAGS -- PutStorageLensConfigurationTagging replaces the
           //    whole tag set, so diff against OBSERVED tags only to decide
           //    whether a write is needed.
           const internalTags = yield* createInternalTags(id);
@@ -286,7 +286,7 @@ export const StorageLensConfigurationProvider = () =>
             );
           }
 
-          // 4. RETURN — re-read for the service-assigned ARN.
+          // 4. RETURN -- re-read for the service-assigned ARN.
           const final = yield* retryWhileConfigurationPropagates(
             s3control.getStorageLensConfiguration({
               AccountId: accountId,
@@ -309,7 +309,7 @@ export const StorageLensConfigurationProvider = () =>
               ConfigId: output.configId,
             })
             .pipe(
-              // Idempotent delete — already gone is success.
+              // Idempotent delete -- already gone is success.
               Effect.catchTag("NoSuchConfiguration", () => Effect.void),
             );
         }),

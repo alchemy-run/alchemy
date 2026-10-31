@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:AnalyzeExpense` — synchronous analysis of
+ * Runtime binding for `textract:AnalyzeExpense` -- synchronous analysis of
  * invoices and receipts, extracting summary fields (vendor, total, dates)
  * and line-item groups.
  *

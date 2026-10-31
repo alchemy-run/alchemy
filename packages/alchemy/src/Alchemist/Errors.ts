@@ -9,8 +9,8 @@ export interface Diagnostic {
 }
 
 // Tag names are prefixed because the bare ones are already taken by the
-// clouds we talk to — distilled's core ships `NotFound`, Route53 ships
-// `InvalidInput` — and these errors travel in unions with cloud errors,
+// clouds we talk to -- distilled's core ships `NotFound`, Route53 ships
+// `InvalidInput` -- and these errors travel in unions with cloud errors,
 // where `catchTag` discriminates by tag alone.
 
 /** The caller sent something the operation cannot act on. */

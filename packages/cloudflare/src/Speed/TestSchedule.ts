@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Region a scheduled Observatory (speed) test runs from. GCP-style region
- * identifiers — Cloudflare keys schedules per `(url, region)` pair.
+ * identifiers -- Cloudflare keys schedules per `(url, region)` pair.
  */
 export type TestRegion =
   | "asia-east1"
@@ -48,7 +48,7 @@ export interface TestScheduleProps {
   /**
    * Zone the scheduled test belongs to.
    *
-   * Immutable — moving a schedule to a different zone triggers a
+   * Immutable -- moving a schedule to a different zone triggers a
    * replacement.
    */
   zoneId: string;
@@ -57,13 +57,13 @@ export interface TestScheduleProps {
    * Must be a page on the zone. Cloudflare normalizes a bare hostname to
    * `host/` (trailing slash).
    *
-   * Immutable — the URL is the schedule's identity (path parameter), so
+   * Immutable -- the URL is the schedule's identity (path parameter), so
    * changing it triggers a replacement. Deliberately a plain `string` (not
    * `string`) so it is statically knowable inside `diff`.
    */
   url: string;
   /**
-   * Region the test runs from. Schedules are keyed per `(url, region)` —
+   * Region the test runs from. Schedules are keyed per `(url, region)` --
    * changing the region triggers a replacement (a new schedule in the new
    * region is created and the old one deleted).
    * @default "us-central1"
@@ -72,7 +72,7 @@ export interface TestScheduleProps {
   /**
    * How often the test runs. The API has no update call, so changing the
    * frequency is converged in place by deleting and re-creating the
-   * schedule (same identity — not a replacement).
+   * schedule (same identity -- not a replacement).
    * @default WEEKLY for free plans, DAILY for paid plans (API default)
    */
   frequency?: TestFrequency;
@@ -98,7 +98,7 @@ export type TestSchedule = Resource<
 >;
 
 /**
- * A recurring Cloudflare Observatory (Speed) test schedule — Cloudflare runs
+ * A recurring Cloudflare Observatory (Speed) test schedule -- Cloudflare runs
  * a Lighthouse test against a page on your zone on a `DAILY` or `WEEKLY`
  * cadence from a region of your choice.
  *
@@ -110,7 +110,7 @@ export type TestSchedule = Resource<
  * test run.
  *
  * Plan quota applies: the number of allowed schedules per zone depends on
- * the zone's plan (e.g. 5 on Free/Pro) — see the Observatory availabilities
+ * the zone's plan (e.g. 5 on Free/Pro) -- see the Observatory availabilities
  * endpoint for the zone's remaining quota.
  *
  * Safety: schedules carry no ownership markers. When there is no prior
@@ -170,7 +170,7 @@ export const TestScheduleProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Schedules live inside a zone and are keyed per `(url, region)` —
+      // Schedules live inside a zone and are keyed per `(url, region)` --
       // there is no account-wide enumeration API. Fan out over every zone,
       // enumerate the zone's Observatory pages, and resolve each page's
       // schedule with the exact `(url, region)` keying `read` uses.
@@ -222,13 +222,13 @@ export const TestScheduleProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as TestScheduleProps | undefined;
       const n = news as TestScheduleProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o?.url === undefined) return undefined;
       // The URL is the schedule's path identity.
       if (normalizeUrl(o.url) !== normalizeUrl(n.url)) {
         return { action: "replace" } as const;
       }
-      // Schedules are keyed per region — a region change is a new schedule.
+      // Schedules are keyed per region -- a region change is a new schedule.
       if ((o.region ?? DEFAULT_REGION) !== (n.region ?? DEFAULT_REGION)) {
         return { action: "replace" } as const;
       }
@@ -254,7 +254,7 @@ export const TestScheduleProvider = () =>
       if (output) return attrs;
       // Adoption path: a schedule for this `(url, region)` already exists
       // but schedules carry no ownership markers, so we cannot prove we
-      // created it — brand it `Unowned` so the engine refuses to take over
+      // created it -- brand it `Unowned` so the engine refuses to take over
       // unless `adopt` is set.
       return Unowned(attrs);
     }),
@@ -264,18 +264,18 @@ export const TestScheduleProvider = () =>
       const zoneId = news.zoneId as string;
       const region = news.region ?? DEFAULT_REGION;
 
-      // 1. Observe — cloud state is authoritative. `output` is only a cache
+      // 1. Observe -- cloud state is authoritative. `output` is only a cache
       //    of the stable identity, which `news` fully determines anyway.
       let observed = yield* getSchedule(zoneId, news.url, region);
 
-      // 2. Ensure — create when missing. A concurrent create surfaces as
+      // 2. Ensure -- create when missing. A concurrent create surfaces as
       //    `TestScheduleAlreadyExists`: converge by re-reading the schedule
       //    that won the race.
       if (!observed) {
         observed = yield* createAndObserve(zoneId, news.url, region, news.frequency);
       }
 
-      // 3. Sync — the only mutable aspect is `frequency`, and the API has
+      // 3. Sync -- the only mutable aspect is `frequency`, and the API has
       //    no update call: converge drift by deleting and re-creating the
       //    schedule under the same identity. Skip entirely on a no-op (or
       //    when the user left frequency to the API default).
@@ -286,7 +286,7 @@ export const TestScheduleProvider = () =>
           .pipe(Effect.catchTag("TestScheduleNotFound", () => Effect.void));
         observed = yield* createAndObserve(zoneId, news.url, region, news.frequency).pipe(
           // Cloudflare caps DAILY-schedule creations per URL per day. We
-          // already deleted the old schedule — restore it so a quota
+          // already deleted the old schedule -- restore it so a quota
           // rejection degrades to "unchanged" rather than "lost", then
           // surface the typed error.
           Effect.catchTag("TestScheduleQuotaReached", (error) =>
@@ -335,7 +335,7 @@ const getSchedule = (zoneId: string, url: string, region: TestRegion) =>
 
 /**
  * Create a schedule and return the observed result. A concurrent create
- * surfaces as `TestScheduleAlreadyExists` — converge by re-reading the
+ * surfaces as `TestScheduleAlreadyExists` -- converge by re-reading the
  * schedule that won the race (and fail with the original error if it
  * vanished again in between).
  */
@@ -349,14 +349,14 @@ const createAndObserve = (
     Effect.flatMap((created) =>
       created.schedule
         ? Effect.succeed(created.schedule as ObservedSchedule)
-        : // The create succeeded but echoed no schedule — re-observe.
+        : // The create succeeded but echoed no schedule -- re-observe.
           getScheduleOrFail(zoneId, url, region),
     ),
     Effect.catchTag("TestScheduleAlreadyExists", () => getScheduleOrFail(zoneId, url, region)),
   );
 
 const getScheduleOrFail = (zoneId: string, url: string, region: TestRegion) =>
-  // Let the typed `TestScheduleNotFound` propagate — reaching this state
+  // Let the typed `TestScheduleNotFound` propagate -- reaching this state
   // means the schedule vanished between our calls; surfacing the typed
   // error is more honest than inventing one.
   speed.getSchedule({ zoneId, url, region }).pipe(Effect.map((s): ObservedSchedule => s));

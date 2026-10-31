@@ -14,7 +14,7 @@ import type { Providers } from "../Providers.ts";
 export interface HealthCheckProps {
   /**
    * Health check protocol/type (e.g. `"HTTP"`, `"HTTPS"`, `"TCP"`,
-   * `"CALCULATED"`, `"CLOUDWATCH_METRIC"`). Immutable — changing it forces
+   * `"CALCULATED"`, `"CLOUDWATCH_METRIC"`). Immutable -- changing it forces
    * replacement.
    */
   type: route53.HealthCheckType;
@@ -41,7 +41,7 @@ export interface HealthCheckProps {
   /**
    * Time between checks, e.g. `"30 seconds"` or `Duration.seconds(10)` (a
    * bare number is milliseconds). Rounded to whole seconds on the wire
-   * (10 or 30). Immutable — changing it forces replacement.
+   * (10 or 30). Immutable -- changing it forces replacement.
    * @default 30 seconds
    */
   requestInterval?: Duration.Input;
@@ -51,7 +51,7 @@ export interface HealthCheckProps {
    */
   failureThreshold?: number;
   /**
-   * Whether Route 53 measures latency. Immutable — changing it forces
+   * Whether Route 53 measures latency. Immutable -- changing it forces
    * replacement.
    */
   measureLatency?: boolean;
@@ -351,7 +351,7 @@ export const HealthCheckProvider = () =>
           // Observe.
           let check = output?.id ? yield* observe(output.id) : undefined;
 
-          // Ensure — CallerReference makes create idempotent.
+          // Ensure -- CallerReference makes create idempotent.
           if (!check) {
             check = yield* route53
               .createHealthCheck({
@@ -363,7 +363,7 @@ export const HealthCheckProvider = () =>
                 Effect.catchTag("HealthCheckAlreadyExists", () =>
                   // Same CallerReference already created it; the engine stores
                   // output, so on a true re-run output.id observes above. A bare
-                  // race here means we must re-read — but the API gives us no id,
+                  // race here means we must re-read -- but the API gives us no id,
                   // so fall back to the stored output if present.
                   output?.id
                     ? observe(output.id).pipe(
@@ -380,7 +380,7 @@ export const HealthCheckProvider = () =>
               );
           }
 
-          // Sync config — diff observed mutable fields against desired.
+          // Sync config -- diff observed mutable fields against desired.
           if (mutableDiffers(check.HealthCheckConfig, news)) {
             const updated = yield* route53
               .updateHealthCheck({

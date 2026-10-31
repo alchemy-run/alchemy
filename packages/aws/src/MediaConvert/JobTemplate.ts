@@ -35,8 +35,8 @@ export interface JobTemplateProps {
    */
   priority?: number;
   /**
-   * The transcode settings — input template(s), output groups, timecode
-   * config, and so on — applied to jobs created from this template. Required.
+   * The transcode settings -- input template(s), output groups, timecode
+   * config, and so on -- applied to jobs created from this template. Required.
    */
   settings: mediaconvert.JobTemplateSettings;
   /**
@@ -72,7 +72,7 @@ export interface JobTemplate extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaConvert job template — a reusable, named transcode
+ * An AWS Elemental MediaConvert job template -- a reusable, named transcode
  * configuration (inputs, output groups, and job-level settings) that new jobs
  * are created from so callers only supply the input/output specifics.
  *
@@ -128,7 +128,7 @@ export const JobTemplateProvider = () =>
         category: template.Category,
       });
 
-      /** Get a job template by name; typed not-found → undefined. */
+      /** Get a job template by name; typed not-found -> undefined. */
       const getJobTemplate = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getJobTemplate({ Name: name })
@@ -160,10 +160,10 @@ export const JobTemplateProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = output?.jobTemplateName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let template = yield* getJobTemplate(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (template === undefined) {
             const created = yield* mediaconvert.createJobTemplate({
               Name: name,
@@ -179,7 +179,7 @@ export const JobTemplateProvider = () =>
             });
             template = created.JobTemplate!;
           } else {
-            // 3. Sync — UpdateJobTemplate re-applies the mutable fields.
+            // 3. Sync -- UpdateJobTemplate re-applies the mutable fields.
             const updated = yield* mediaconvert.updateJobTemplate({
               Name: name,
               Description: news.description,
@@ -194,7 +194,7 @@ export const JobTemplateProvider = () =>
             template = updated.JobTemplate!;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMcTags(template.Arn!, desiredTags);
 
           yield* session.note(name);

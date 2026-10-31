@@ -1,7 +1,7 @@
 import { Jose } from "@distilled.cloud/acme";
 /**
  * Keys, PKCS#10 certificate requests and X.509 parsing for the ACME flow.
- * WebCrypto plus the tiny DER codec in `Der.ts` — no native code, so the
+ * WebCrypto plus the tiny DER codec in `Der.ts` -- no native code, so the
  * same code runs at deploy time and inside a Worker or Fly Service.
  */
 import * as Effect from "effect/Effect";
@@ -134,7 +134,7 @@ export const privateKeyToJwk = (
     ),
   );
 
-/** Raw `r || s` ECDSA signature → DER `SEQUENCE { r INTEGER, s INTEGER }`. */
+/** Raw `r || s` ECDSA signature -> DER `SEQUENCE { r INTEGER, s INTEGER }`. */
 const ecdsaToDer = (raw: Uint8Array): Uint8Array => {
   const half = raw.length / 2;
   return Der.sequence(Der.integer(raw.subarray(0, half)), Der.integer(raw.subarray(half)));

@@ -357,7 +357,7 @@ const TRANSIENT_GET_TAGS = [
 /**
  * After the Machine is started, wait until Fly reports every service
  * check as passing. No configured checks is a no-op. Empty live
- * `servicecheck-*` results keep polling — they are not success.
+ * `servicecheck-*` results keep polling -- they are not success.
  * `warning` / `unknown` during grace keep polling.
  */
 export const waitHealthy = Effect.fn(function* (
@@ -516,7 +516,7 @@ const durationNanoseconds = (value: string | undefined) => {
     ns: 1n,
     us: 1_000n,
     µs: 1_000n,
-    μs: 1_000n,
+    "\u03bcs": 1_000n,
     ms: 1_000_000n,
     s: 1_000_000_000n,
     m: 60_000_000_000n,
@@ -524,7 +524,7 @@ const durationNanoseconds = (value: string | undefined) => {
   };
   let total = 0n;
   let consumed = 0;
-  for (const part of duration.matchAll(/(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/gy)) {
+  for (const part of duration.matchAll(/(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|\u03bcs|ms|s|m|h)/gy)) {
     const [integer = "", fraction = ""] = part[1]!.split(".");
     const whole = integer.replace(/^0+/, "") || "0";
     if (whole.length > 19) return undefined;

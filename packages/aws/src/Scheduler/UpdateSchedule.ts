@@ -37,7 +37,7 @@ export interface UpdateScheduleRequest extends Omit<
  *
  * Pairs with {@link CreateSchedule} for the dynamic-scheduling pattern: a
  * deployed Lambda reschedules or pauses schedules it minted at runtime (push
- * a reminder back, disable a recurring job). `UpdateSchedule` is a full PUT —
+ * a reminder back, disable a recurring job). `UpdateSchedule` is a full PUT --
  * unspecified fields are reset to their defaults, so send the complete
  * desired configuration.
  *
@@ -50,7 +50,7 @@ export interface UpdateScheduleRequest extends Omit<
  * ```typescript
  * const updateSchedule = yield* AWS.Scheduler.UpdateSchedule(role);
  *
- * // runtime: push the reminder back a day (full PUT — resend the target)
+ * // runtime: push the reminder back a day (full PUT -- resend the target)
  * yield* updateSchedule({
  *   Name: `reminder-${userId}`,
  *   ScheduleExpression: "at(2026-01-02T00:00:00)",

@@ -14,7 +14,7 @@ export interface CreateBlueprintVersionRequest extends Omit<
 
 /**
  * Runtime binding for the `CreateBlueprintVersion` operation (IAM action
- * `bedrock:CreateBlueprintVersion` on the blueprint ARN) — snapshot the
+ * `bedrock:CreateBlueprintVersion` on the blueprint ARN) -- snapshot the
  * bound blueprint's current schema as an immutable version from a deployed
  * Function.
  *
@@ -23,11 +23,11 @@ export interface CreateBlueprintVersionRequest extends Omit<
  * ### Blueprint Management
  * **Example:** Snapshot The Blueprint
  * ```typescript
- * // deploy time — bind the blueprint
+ * // deploy time -- bind the blueprint
  * const createVersion =
  *   yield* AWS.BedrockDataAutomation.CreateBlueprintVersion(blueprint);
  *
- * // runtime — freeze the current schema as a new version
+ * // runtime -- freeze the current schema as a new version
  * const { blueprint: version } = yield* createVersion({});
  * yield* Effect.log(`created version ${version.blueprintVersion}`);
  * ```

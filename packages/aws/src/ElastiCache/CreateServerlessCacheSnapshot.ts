@@ -8,7 +8,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * actions `elasticache:CreateServerlessCacheSnapshot` +
  * `elasticache:AddTagsToResource`), scoped to one {@link ServerlessCache}.
  *
- * Takes an on-demand snapshot of the bound serverless cache — e.g. a
+ * Takes an on-demand snapshot of the bound serverless cache -- e.g. a
  * pre-migration backup from an operational Lambda. Available for valkey,
  * redis, and serverless memcached. Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.CreateServerlessCacheSnapshotHttp)`.
@@ -20,7 +20,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * const result = yield* createSnapshot({
  *   ServerlessCacheSnapshotName: "pre-migration",
  * });
- * // result.ServerlessCacheSnapshot.Status → "creating"
+ * // result.ServerlessCacheSnapshot.Status -> "creating"
  * ```
  *
  * @binding

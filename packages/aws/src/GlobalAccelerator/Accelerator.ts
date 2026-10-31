@@ -100,12 +100,12 @@ export interface Accelerator extends Resource<
 > {}
 
 /**
- * An AWS Global Accelerator standard accelerator — two anycast static IP
+ * An AWS Global Accelerator standard accelerator -- two anycast static IP
  * addresses that route client traffic over the AWS global network to the
  * closest healthy regional endpoint.
  *
  * Accelerators are global resources (the control-plane API lives in
- * us-west-2 regardless of your deployment region — alchemy pins it
+ * us-west-2 regardless of your deployment region -- alchemy pins it
  * automatically). Attach `Listener`s to accept traffic and `EndpointGroup`s
  * to route it to ALBs, NLBs, EC2 instances, or Elastic IPs per region.
  * ### Creating Accelerators
@@ -286,7 +286,7 @@ export const AcceleratorProvider = () =>
         ? yield* describeAccelerator(output.acceleratorArn)
         : undefined;
       if (!live?.AcceleratorArn) {
-        // No cached ARN (or it vanished) — fall back to the deterministic
+        // No cached ARN (or it vanished) -- fall back to the deterministic
         // physical name to recover from lost state / support adoption.
         const name = yield* createAcceleratorName(id, olds ?? {});
         live = yield* findAcceleratorByName(name);
@@ -299,7 +299,7 @@ export const AcceleratorProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return undefined;
-      // Static BYOIP addresses are the accelerator's identity — changing
+      // Static BYOIP addresses are the accelerator's identity -- changing
       // them requires a replacement. Name, ipAddressType, and enabled are
       // all mutable via updateAccelerator.
       if (JSON.stringify(news.ipAddresses ?? []) !== JSON.stringify(olds.ipAddresses ?? [])) {
@@ -321,7 +321,7 @@ export const AcceleratorProvider = () =>
       };
       const desiredEnabled = news.enabled ?? true;
 
-      // Observe — cached ARN first, deterministic name as fallback (covers
+      // Observe -- cached ARN first, deterministic name as fallback (covers
       // create-then-persist-failure and adoption).
       let live = output?.acceleratorArn
         ? yield* describeAccelerator(output.acceleratorArn)
@@ -330,7 +330,7 @@ export const AcceleratorProvider = () =>
         live = yield* findAcceleratorByName(output?.name ?? name);
       }
 
-      // Ensure — create if missing. The idempotency token (derived from the
+      // Ensure -- create if missing. The idempotency token (derived from the
       // instance id) makes a crashed-and-retried create safe.
       if (!live?.AcceleratorArn) {
         live = yield* ga
@@ -356,7 +356,7 @@ export const AcceleratorProvider = () =>
       }
       const acceleratorArn = live.AcceleratorArn;
 
-      // Sync settings — diff observed vs desired, apply only the delta.
+      // Sync settings -- diff observed vs desired, apply only the delta.
       const update: ga.UpdateAcceleratorRequest = {
         AcceleratorArn: acceleratorArn,
       };
@@ -382,7 +382,7 @@ export const AcceleratorProvider = () =>
         if (updated) live = updated;
       }
 
-      // Sync flow logs — diff observed attributes against the desired
+      // Sync flow logs -- diff observed attributes against the desired
       // flowLogs prop; only call updateAcceleratorAttributes on drift.
       let flowLogs = yield* describeFlowLogs(acceleratorArn);
       const desiredFlowLogsEnabled = news.flowLogs !== undefined;

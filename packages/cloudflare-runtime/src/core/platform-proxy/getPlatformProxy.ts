@@ -1,11 +1,11 @@
 /**
  * Promise-based convenience wrapper around {@link ./PlatformProxy.ts} for
  * framework consumption (SvelteKit `platform` emulation, OpenNext
- * `initOpenNextCloudflareForDev`, Astro `platformProxy`, …): no Effect
+ * `initOpenNextCloudflareForDev`, Astro `platformProxy`, ...): no Effect
  * knowledge required, one call returns `{ env, cf, ctx, caches, dispose }`.
  *
  * The wrapper builds a local-only runtime layer internally (local bindings,
- * dev registry, loopback — no Cloudflare API access). To use remote bindings
+ * dev registry, loopback -- no Cloudflare API access). To use remote bindings
  * or a custom layer stack, use the Effect API (`PlatformProxy.open`) with
  * `RuntimeServices.layerRuntime` instead.
  */
@@ -38,7 +38,7 @@ export interface GetPlatformProxyOptions<
    * nothing is persisted: state lives in a temporary directory removed on
    * `dispose()`. Pass `{ directory }` to keep state across runs.
    * Note: the local KV emulation is in-memory either way.
-   * Ignored when {@link services} is provided — the owning runtime governs
+   * Ignored when {@link services} is provided -- the owning runtime governs
    * storage.
    */
   readonly persist?: { readonly directory: string } | false;
@@ -47,7 +47,7 @@ export interface GetPlatformProxyOptions<
    * the internal local-only layer. Embedders that already run a
    * cloudflare-runtime stack (alchemy's dev sidecar hands one to framework
    * source modules as `DevContext.runtimeContext`) pass it here so the proxy
-   * shares that stack — including remote-bindings support, which the
+   * shares that stack -- including remote-bindings support, which the
    * internal layer deliberately omits (it is credential-free). `dispose()`
    * then tears down only this proxy instance, never the shared services.
    */
@@ -81,7 +81,7 @@ const makeLayer = (persist: GetPlatformProxyOptions["persist"]) =>
 
 /**
  * Start a workerd instance hosting the requested bindings and return
- * Node-side proxies to them — our equivalent of wrangler's
+ * Node-side proxies to them -- our equivalent of wrangler's
  * `getPlatformProxy()`, reimplemented on `cloudflare-runtime` (no wrangler,
  * no wrangler.json: bindings are declared in memory).
  *
@@ -103,7 +103,7 @@ export const getPlatformProxy = async <
   const scope = Scope.makeUnsafe();
   try {
     // The layer must be BUILT INTO the dispose scope, not provided around
-    // `open` — `Effect.provide` closes the layer's build scope as soon as
+    // `open` -- `Effect.provide` closes the layer's build scope as soon as
     // the effect resolves, tearing down the scoped services (temp storage
     // directory, loopback server, registry watcher) out from under the
     // still-running workerd instance. The first binding call then fails

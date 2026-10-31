@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:DisassociateFromAdministratorAccount`.
  *
  * Disassociates a member account from its Amazon Macie administrator account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DisassociateFromAdministratorAccountHttp)`.
  * ### Administrator & Invitations
  * **Example:** Leave the Administrator Account
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disassociateFromAdministratorAccount = yield* AWS.Macie2.DisassociateFromAdministratorAccount();
  *
  * // runtime

@@ -4,17 +4,17 @@
  * A delta payload (after inflation) is:
  *
  * ```
- * varint(base_size) varint(result_size)   — plain 7-bit little-endian
+ * varint(base_size) varint(result_size)   -- plain 7-bit little-endian
  * instructions...
  * ```
  *
  * Instructions:
  *
- * - **Copy** (`1xxxxxxx`): bits 0–3 select which of 4 little-endian offset
- *   bytes follow; bits 4–6 which of 3 size bytes. Absent bytes are zero.
+ * - **Copy** (`1xxxxxxx`): bits 0-3 select which of 4 little-endian offset
+ *   bytes follow; bits 4-6 which of 3 size bytes. Absent bytes are zero.
  *   **`size == 0` means `0x10000`** (the classic special case). Copies
  *   `size` bytes from `offset` in the base into the output.
- * - **Insert** (`0xxxxxxx`, x ≠ 0): the low 7 bits are the count (1–127) of
+ * - **Insert** (`0xxxxxxx`, x != 0): the low 7 bits are the count (1-127) of
  *   literal bytes that follow; append them.
  * - `0x00` is reserved/invalid.
  *
@@ -145,7 +145,7 @@ export const applyDelta = (
         out.set(base.subarray(offset, offset + size), outPos);
         outPos += size;
       } else {
-        // insert instruction: opcode = literal byte count (1–127)
+        // insert instruction: opcode = literal byte count (1-127)
         const size = opcode;
         if (pos + size > delta.length) {
           return Effect.fail(DeltaFormatError.make({ reason: "truncated insert data" }));

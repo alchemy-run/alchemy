@@ -67,7 +67,7 @@ export interface Repository extends Resource<
 > {}
 
 /**
- * An AWS CodeArtifact repository — a package store inside a
+ * An AWS CodeArtifact repository -- a package store inside a
  * {@link Domain}. Repositories host packages (npm, PyPI, Maven, NuGet, etc.)
  * and can chain to upstream repositories and a single external connection to a
  * public registry.
@@ -192,7 +192,7 @@ export const RepositoryProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // The containing domain is immutable — replace on change.
+          // The containing domain is immutable -- replace on change.
           if (
             (news?.domain ?? undefined) !== (olds?.domain ?? undefined) ||
             (news?.domainOwner ?? undefined) !== (olds?.domainOwner ?? undefined)
@@ -225,10 +225,10 @@ export const RepositoryProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredUpstreams = news.upstreams ?? [];
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getRepository(domain, domainOwner, name);
 
-          // 2. Ensure — create if missing. Tolerate a concurrent-create race.
+          // 2. Ensure -- create if missing. Tolerate a concurrent-create race.
           if (observed?.arn === undefined) {
             observed = yield* codeartifact
               .createRepository({
@@ -273,7 +273,7 @@ export const RepositoryProvider = () =>
             }
           }
 
-          // 3b. Sync the external connection — AWS allows at most one.
+          // 3b. Sync the external connection -- AWS allows at most one.
           const desiredConn = news.externalConnection;
           const currentConns = externalConnectionNames(observed!.externalConnections);
           for (const conn of currentConns) {
@@ -297,7 +297,7 @@ export const RepositoryProvider = () =>
               .pipe(Effect.map((res) => res.repository ?? observed));
           }
 
-          // 3c. Sync tags — diff against OBSERVED cloud tags.
+          // 3c. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(observed!.arn!, desiredTags);
 
           // 4. Return fresh attributes.
@@ -313,7 +313,7 @@ export const RepositoryProvider = () =>
               repository: output.repositoryName,
             })
             .pipe(
-              // Deleting a downstream repository propagates eventually — a
+              // Deleting a downstream repository propagates eventually -- a
               // shared upstream deleted right after can transiently fail with
               // "being used as an upstream repository".
               Effect.retry({

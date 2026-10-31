@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  *
  * Resolves a set of component candidates against a target platform,
  * returning the exact component versions (and their recipes) that satisfy
- * the version requirements — the same dependency-resolution API the
+ * the version requirements -- the same dependency-resolution API the
  * Greengrass nucleus calls during a deployment. Provide the implementation
  * with `Effect.provide(AWS.GreengrassV2.ResolveComponentCandidatesHttp)`.
  *
@@ -15,12 +15,12 @@ import type * as Effect from "effect/Effect";
  * Greengrass **data plane** endpoint authenticated with an AWS IoT device
  * certificate. Calls signed with plain IAM credentials (e.g. from a Lambda
  * role) are rejected with a typed `AccessDeniedException` even when the
- * `greengrass:ResolveComponentCandidates` permission is granted — use this
+ * `greengrass:ResolveComponentCandidates` permission is granted -- use this
  * binding only from device-credentialed contexts.
  * ### Reading Components
  * **Example:** Resolve Versions For A Platform
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const resolveComponentCandidates =
  *   yield* AWS.GreengrassV2.ResolveComponentCandidates();
  *

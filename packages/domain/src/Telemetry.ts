@@ -86,7 +86,7 @@ const flatten = (out: Record<string, unknown>, key: string, value: unknown, dept
   } else if (value === null || typeof value === "boolean" || typeof value === "number") {
     out[key] = value;
   } else if (typeof value === "string") {
-    out[key] = value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}…` : value;
+    out[key] = value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}\u2026` : value;
   } else if (typeof value === "bigint") {
     out[key] = value.toString();
   } else if (DateTime.isDateTime(value)) {

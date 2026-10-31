@@ -13,7 +13,7 @@ export interface DescribeLimitsRequest extends Kinesis.DescribeLimitsInput {}
  * ### Account Settings
  * **Example:** Check Shard Quota Headroom
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const describeLimits = yield* AWS.Kinesis.DescribeLimits();
  *
  * // runtime

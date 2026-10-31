@@ -48,7 +48,7 @@ export interface SinkR2Config {
   bucket: string | Bucket;
   /**
    * R2 S3-compatible credentials the sink uses to write objects.
-   * Write-only — Cloudflare never echoes them back, and sinks cannot be
+   * Write-only -- Cloudflare never echoes them back, and sinks cannot be
    * updated, so changing them does NOT replace the sink (see the
    * resource docs on rotating credentials).
    */
@@ -116,7 +116,7 @@ export interface SinkR2DataCatalogConfig {
    */
   namespace?: string;
   /**
-   * Cloudflare API token with R2 Data Catalog permissions. Write-only —
+   * Cloudflare API token with R2 Data Catalog permissions. Write-only --
    * Cloudflare never echoes it back, and changing it does NOT replace
    * the sink.
    */
@@ -208,7 +208,7 @@ interface SinkBaseProps {
 export type SinkProps =
   | (SinkBaseProps & {
       /**
-       * Sink type — `r2` writes raw files to an R2 bucket.
+       * Sink type -- `r2` writes raw files to an R2 bucket.
        */
       type: "r2";
       /**
@@ -218,7 +218,7 @@ export type SinkProps =
     })
   | (SinkBaseProps & {
       /**
-       * Sink type — writes an Iceberg table via the Basin (R2 Data)
+       * Sink type -- writes an Iceberg table via the Basin (R2 Data)
        * Catalog.
        */
       type: SinkCatalogType;
@@ -230,7 +230,7 @@ export type SinkProps =
     })
   | (SinkBaseProps & {
       /**
-       * Sink type — writes an Iceberg table via the Basin (R2 Data)
+       * Sink type -- writes an Iceberg table via the Basin (R2 Data)
        * Catalog.
        */
       type: SinkCatalogType;
@@ -241,7 +241,7 @@ export type SinkProps =
       catalog: SinkCatalogReference;
       /**
        * The Iceberg table to write. Cloudflare creates it with the
-       * sink — sinks cannot be created for existing Iceberg tables.
+       * sink -- sinks cannot be created for existing Iceberg tables.
        */
       table: SinkCatalogTable;
       /**
@@ -281,7 +281,7 @@ export interface SinkAttributes {
 export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>;
 
 /**
- * A Cloudflare Pipelines sink — the destination of the Pipelines product
+ * A Cloudflare Pipelines sink -- the destination of the Pipelines product
  * (also exported as `Cloudflare.Basin.Sink`). A SQL {@link Pipeline}
  * reads events from a {@link Stream} and writes them to a sink, which
  * stores them in R2 either as raw files (`r2`) or as an Iceberg table via
@@ -289,21 +289,21 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  *
  * Sinks have no update API: changing the destination (bucket, path,
  * table, format, partitioning, rolling policy) triggers a replacement.
- * Equivalent spellings never replace — `basin_catalog` ⇄
- * `r2_data_catalog`, the `config` form ⇄ the `catalog` / `table` form,
- * omitted ⇄ explicit defaults. With engine-generated names a replacement
+ * Equivalent spellings never replace -- `basin_catalog` <->
+ * `r2_data_catalog`, the `config` form <-> the `catalog` / `table` form,
+ * omitted <-> explicit defaults. With engine-generated names a replacement
  * is seamless (the new sink gets a fresh name before the old one is
  * deleted); with an explicit `name` it collides, so prefer generated
  * names.
  *
  * Credentials (`credentials`, `token`) are write-only and are not part of
- * the replacement diff, so rotating them never recreates the sink — a
+ * the replacement diff, so rotating them never recreates the sink -- a
  * catalog sink could not be recreated anyway, because Cloudflare refuses
  * to create sinks for existing Iceberg tables. The sink keeps the
  * credentials it was created with; to move it onto new ones, rename it
  * (which replaces it).
  *
- * Pipelines is ingest-only — to react to files the sink writes, subscribe
+ * Pipelines is ingest-only -- to react to files the sink writes, subscribe
  * to its bucket with `Cloudflare.R2.BucketEventNotification`.
  *
  * ### Creating a Sink
@@ -392,7 +392,7 @@ export const SinkProvider = () =>
       }
       const o = olds as SinkProps | undefined;
       if (o === undefined) return undefined;
-      // Sinks have no update API — any destination change replaces. Compare
+      // Sinks have no update API -- any destination change replaces. Compare
       // the CANONICAL destination (credentials excluded) so equivalent
       // spellings and credential rotation never replace.
       const newName = yield* sinkName(id, news.name);
@@ -413,7 +413,7 @@ export const SinkProvider = () =>
         const observed = yield* getSink(acct, output.sinkId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — sink names are unique per account; a generated-name
+      // Cold read -- sink names are unique per account; a generated-name
       // match is proof of ownership, an explicit name is not.
       const name = yield* sinkName(id, olds?.name);
       const match = yield* findSinkByName(acct, name);
@@ -428,7 +428,7 @@ export const SinkProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* sinkName(id, news.name);
 
-      // 1. Observe — by cached id first, then by (unique) name so we
+      // 1. Observe -- by cached id first, then by (unique) name so we
       //    recover from lost state writes.
       let observed = output?.sinkId
         ? yield* getSink(output.accountId ?? accountId, output.sinkId)
@@ -437,7 +437,7 @@ export const SinkProvider = () =>
         observed = yield* findSinkByName(accountId, name);
       }
 
-      // Converge drift — there is no update API, so when observable
+      // Converge drift -- there is no update API, so when observable
       // echoed config (bucket/path/table) differs from the desired state
       // (e.g. the bucket reference was unresolved at diff time), delete
       // the stale sink and fall through to recreate it under the same
@@ -456,10 +456,10 @@ export const SinkProvider = () =>
         observed = undefined;
       }
 
-      // 2. Ensure — create when missing. There is no sync step: sinks
+      // 2. Ensure -- create when missing. There is no sync step: sinks
       //    have no update API, so destination changes arrive as
       //    replacements (diff) rather than in-place updates. An
-      //    AlreadyExists on create is a race or recovery — resolve it via
+      //    AlreadyExists on create is a race or recovery -- resolve it via
       //    the name lookup.
       if (!observed) {
         observed = yield* pipelines
@@ -578,7 +578,7 @@ const getSink = (accountId: string, sinkId: string) =>
   );
 
 /**
- * Idempotent delete — a sink that is already gone is success. Rides out
+ * Idempotent delete -- a sink that is already gone is success. Rides out
  * `SinkInUse` (HTTP 422 "Sink still in use") with a bounded retry while
  * a dependent pipeline's own deletion propagates.
  */

@@ -25,13 +25,13 @@ export type ModelProps = {
   /**
    * Server-assigned model id (the `{model}` segment of
    * `projects/{project}/locations/{location}/models/{model}`, e.g.
-   * `NM…`) of an existing model to manage. Omit to train a new model.
-   * Immutable — changing it replaces the model.
+   * `NM...`) of an existing model to manage. Omit to train a new model.
+   * Immutable -- changing it replaces the model.
    */
   modelId?: string;
   /**
-   * Location of the model (`us-central1`, `europe-west1`, …). Custom
-   * AutoML Translation models are regional. Immutable — changing it
+   * Location of the model (`us-central1`, `europe-west1`, ...). Custom
+   * AutoML Translation models are regional. Immutable -- changing it
    * replaces the model.
    * @default "us-central1"
    */
@@ -39,12 +39,12 @@ export type ModelProps = {
   /**
    * Training dataset resource name
    * `projects/{project}/locations/{location}/datasets/{dataset}` or the
-   * dataset id (combined with `location`). Immutable — changing it
+   * dataset id (combined with `location`). Immutable -- changing it
    * replaces the model.
    */
   dataset: string;
   /**
-   * User-facing display name. There is no update API — changing display name
+   * User-facing display name. There is no update API -- changing display name
    * replaces the model.
    */
   displayName?: string;
@@ -93,7 +93,7 @@ export type Model = Resource<
  * model it finds without prior state as unowned (adopt it with `--adopt`).
  * Models are trained from a Translation dataset in the same location. Create
  * and delete are long-running operations. Dataset, location, and display name
- * are immutable — there is no patch RPC. Training can take hours; tests
+ * are immutable -- there is no patch RPC. Training can take hours; tests
  * skipIf-gate behind `FAST`.
  *
  * ### Creating a Model

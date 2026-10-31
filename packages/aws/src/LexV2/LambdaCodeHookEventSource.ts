@@ -14,7 +14,7 @@ import {
 } from "./CodeHookEventSource.ts";
 
 /**
- * An Amazon Lex V2 code hook invocation — the
+ * An Amazon Lex V2 code hook invocation -- the
  * `messageVersion`/`invocationSource`/`bot`/`sessionState` envelope Lex
  * sends to dialog and fulfillment Lambda functions.
  */

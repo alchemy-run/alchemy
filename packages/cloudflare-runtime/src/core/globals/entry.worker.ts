@@ -44,7 +44,7 @@ interface Env {
   /**
    * The raw user worker, bypassing downstream fetch middlewares. All
    * non-fetch JSRPC dispatch (`queue()`, `scheduled()`, `email()`) goes
-   * through this binding — middlewares are fetch-only HTTP interceptors and
+   * through this binding -- middlewares are fetch-only HTTP interceptors and
    * do not implement those methods (see EntryOptions.shared.ts).
    */
   [BINDING_USER_WORKER_DIRECT]: Fetcher;
@@ -52,7 +52,7 @@ interface Env {
   /** Simulated Cloudflare Access state (`{ app_aud, jwt_claims }`). */
   [BINDING_ACCESS_BLOB]?: Record<string, unknown>;
   // Omitted when the runtime storage isn't disk-backed (never the case with
-  // the built-in storage layers) — replies then fail with a clear error.
+  // the built-in storage layers) -- replies then fail with a clear error.
   [BINDING_EMAIL_DISK]?: Fetcher;
   [BINDING_EMAIL_DIRECTORY]?: string;
 }
@@ -253,7 +253,7 @@ function synthesizeLocalMessageId(): string {
  * Turn an HTTP request into a `ForwardableEmailMessage`-like object and
  * dispatch it to the user worker's `email()` handler
  * (`workers/core/email.ts` `handleEmail`), using:
- * - `from` and `to` from the URL — the SMTP envelope addresses
+ * - `from` and `to` from the URL -- the SMTP envelope addresses
  *   (https://datatracker.ietf.org/doc/html/rfc5321#section-3)
  * - `raw` from the request body
  * - `headers` from the parsed message headers

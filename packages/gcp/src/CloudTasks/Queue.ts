@@ -47,18 +47,18 @@ export type QueueProps = {
    * Queue id (the `{queue}` segment of
    * `projects/{project}/locations/{location}/queues/{queue}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the queue.
+   * Immutable -- changing it replaces the queue.
    */
   queueId?: string;
   /**
-   * Location of the queue (e.g. `us-central1`). Immutable — changing it
+   * Location of the queue (e.g. `us-central1`). Immutable -- changing it
    * replaces the queue. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Queue-level retry settings applied to Cloud Tasks–created tasks.
+   * Queue-level retry settings applied to Cloud Tasks-created tasks.
    * Omitted fields keep the values Cloud Tasks currently has (including
    * API defaults).
    */
@@ -83,7 +83,7 @@ export type QueueProps = {
    */
   appEngineRoutingOverride?: QueueAppEngineRouting;
   /**
-   * Desired queue state. `UpdateQueue` cannot change state — Alchemy
+   * Desired queue state. `UpdateQueue` cannot change state -- Alchemy
    * calls PauseQueue / ResumeQueue. `DISABLED` is queue.yaml-only and
    * is not settable here.
    * @default "RUNNING"
@@ -131,7 +131,7 @@ export type Queue = Resource<
  * discover queues.
  *
  * Changing `queueId` or `location` replaces the queue. Deleted queue
- * names are tombstoned for up to 3 days — CreateQueue may appear to
+ * names are tombstoned for up to 3 days -- CreateQueue may appear to
  * succeed; GetQueue is the source of truth.
  *
  * ### Creating a Queue

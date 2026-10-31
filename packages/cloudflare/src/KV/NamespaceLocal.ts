@@ -18,7 +18,7 @@ import type { KVAuth } from "./NamespaceHttp.ts";
  * builds the client per resolved namespace id:
  *
  * - a REAL id gets the HTTP client (same builders as the `*Http` variant,
- *   authorized with the current credentials — no `host.bind`, no minted
+ *   authorized with the current credentials -- no `host.bind`, no minted
  *   token);
  * - a `dev:` id (local emulation under `alchemy dev`) gets the native
  *   binding client (same builders as the `*Binding` variant) over a scoped
@@ -27,7 +27,7 @@ import type { KVAuth } from "./NamespaceHttp.ts";
  * The id resolves lazily at apply time, so the returned client dispatches
  * per call.
  *
- * NOT exported from `index.ts` — this is internal scaffolding shared by the
+ * NOT exported from `index.ts` -- this is internal scaffolding shared by the
  * three access-level Local layers.
  */
 export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
@@ -39,7 +39,7 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
     // branch evaluates it; native local clients need no cloud credentials.
     // Credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so KV HTTP ops can run with
-    // the current credentials — no `host.bind`, no minted token.
+    // the current credentials -- no `host.bind`, no minted token.
     const environment = yield* CloudflareEnvironment;
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
@@ -49,7 +49,7 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
     const ambient = yield* Effect.context<never>();
 
     return Effect.fn(function* (namespace: Namespace | InstantNamespace) {
-      // Deferred accessor — resolves the namespaceId against the tracker at
+      // Deferred accessor -- resolves the namespaceId against the tracker at
       // apply time (in an Action, that's the engine's resolve context).
       const namespaceId = yield* namespace.namespaceId;
       const auth: KVAuth = {

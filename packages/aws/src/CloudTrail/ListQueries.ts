@@ -7,13 +7,13 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * Runtime binding for `cloudtrail:ListQueries`.
  *
  * Lists the CloudTrail Lake queries that ran against the bound
- * {@link EventDataStore} in the last seven days — the store is injected from
+ * {@link EventDataStore} in the last seven days -- the store is injected from
  * the binding. Provide the implementation with
  * `Effect.provide(AWS.CloudTrail.ListQueriesHttp)`.
  * ### Querying CloudTrail Lake
  * **Example:** List Recent Queries
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const listQueries = yield* AWS.CloudTrail.ListQueries(store);
  *
  * // runtime

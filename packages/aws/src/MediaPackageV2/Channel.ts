@@ -32,7 +32,7 @@ export interface ChannelProps {
   channelName?: string;
   /**
    * The input type of content the channel receives: `HLS` or `CMAF`.
-   * Immutable — changing it replaces the channel.
+   * Immutable -- changing it replaces the channel.
    * @default "HLS"
    */
   inputType?: mediapackagev2.InputType;
@@ -87,7 +87,7 @@ export interface Channel extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaPackage v2 channel — the entry point for live
+ * An AWS Elemental MediaPackage v2 channel -- the entry point for live
  * content into MediaPackage. An encoder (such as AWS Elemental MediaLive)
  * pushes an HLS or CMAF stream to the channel's ingest endpoints; origin
  * endpoints then package and serve that content downstream.
@@ -168,7 +168,7 @@ export const ChannelProvider = () =>
         })),
       });
 
-      /** Get a channel by group + name; typed not-found → undefined. */
+      /** Get a channel by group + name; typed not-found -> undefined. */
       const getChannel = Effect.fn(function* (channelGroupName: string, channelName: string) {
         return yield* mediapackagev2
           .getChannel({
@@ -211,10 +211,10 @@ export const ChannelProvider = () =>
           const channelGroupName = news.channelGroupName;
           const channelName = output?.channelName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let channel = yield* getChannel(channelGroupName, channelName);
 
-          // 2. Ensure — create if missing; a Conflict means a peer created it
+          // 2. Ensure -- create if missing; a Conflict means a peer created it
           //    concurrently, so fall through to observing the winner.
           if (channel === undefined) {
             channel = yield* mediapackagev2
@@ -236,7 +236,7 @@ export const ChannelProvider = () =>
                 ),
               );
           } else {
-            // 3. Sync — apply the mutable fields only when the observed
+            // 3. Sync -- apply the mutable fields only when the observed
             //    state has drifted from the desired state.
             const desired = {
               Description: news.description ?? "",
@@ -259,10 +259,10 @@ export const ChannelProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMpTags(channel.Arn, toMpTagRecord(channel.Tags), desiredTags);
 
-          // 3c. Sync the resource policy — observe the live policy (absent
+          // 3c. Sync the resource policy -- observe the live policy (absent
           //     policy is the typed not-found) and apply only the delta.
           const observedPolicy = yield* mediapackagev2
             .getChannelPolicy({

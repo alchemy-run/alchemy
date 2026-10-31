@@ -16,7 +16,7 @@ export interface GetImageSetRequest extends Omit<
  * Runtime binding for the `GetImageSet` operation (IAM action
  * `medical-imaging:GetImageSet`), scoped to one {@link Datastore}.
  *
- * Reads an image set's properties — state, workflow status, version and
+ * Reads an image set's properties -- state, workflow status, version and
  * ARN. Pass `versionId` to read a specific version; omit it for the latest.
  * Provide the implementation with
  * `Effect.provide(AWS.MedicalImaging.GetImageSetHttp)`.

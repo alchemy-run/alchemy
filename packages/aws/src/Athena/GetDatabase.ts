@@ -6,13 +6,13 @@ import type { DataCatalog } from "./DataCatalog.ts";
 /**
  * Runtime binding for `athena:GetDatabase`.
  *
- * Reads a single database's metadata from the bound data catalog — the
+ * Reads a single database's metadata from the bound data catalog -- the
  * catalog name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Athena.GetDatabaseHttp)`.
  * ### Browsing Catalog Metadata
  * **Example:** Read a Database from the Catalog
  * ```typescript
- * // init — bind the operation to the data catalog
+ * // init -- bind the operation to the data catalog
  * const getDatabase = yield* AWS.Athena.GetDatabase(catalog);
  *
  * // runtime

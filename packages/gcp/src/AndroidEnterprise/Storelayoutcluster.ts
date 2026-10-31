@@ -24,15 +24,15 @@ import {
 
 export type StorelayoutclusterProps = {
   /**
-   * Play EMM enterprise id. Immutable — changing it replaces the cluster.
+   * Play EMM enterprise id. Immutable -- changing it replaces the cluster.
    */
   enterpriseId: string;
   /**
-   * Parent store page id. Immutable — changing it replaces the cluster.
+   * Parent store page id. Immutable -- changing it replaces the cluster.
    */
   pageId: string;
   /**
-   * Server-assigned cluster id. Immutable — changing it replaces the
+   * Server-assigned cluster id. Immutable -- changing it replaces the
    * cluster.
    */
   clusterId?: string;
@@ -81,7 +81,7 @@ export type Storelayoutcluster = Resource<
  * Store clusters have no labels field and their names are shown to device
  * users, so Alchemy tracks a cluster by its recorded id only (`list` finds
  * clusters from older releases that carried a name marker). `enterpriseId`, `pageId`,
- * and `clusterId` are identity — changing any replaces the cluster.
+ * and `clusterId` are identity -- changing any replaces the cluster.
  * Names, products, and order update in place.
  *
  * ### Creating a Store Cluster

@@ -15,11 +15,11 @@ export type KeyRingProps = {
    * If omitted, a deterministic name `{stack}-{id}-{stage}` is derived
    * (no random suffix), so a redeploy after destroy reuses the same ring
    * instead of leaking a new one. Must match `[a-zA-Z0-9_-]{1,63}`.
-   * Immutable — changing it replaces the key ring.
+   * Immutable -- changing it replaces the key ring.
    */
   keyRingId?: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Immutable —
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Immutable --
    * changing it replaces the key ring. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -35,7 +35,7 @@ export type KeyRing = Resource<
     name: string;
     /** Key ring id (last path segment). */
     keyRingId: string;
-    /** Location id (`us-central1`, `global`, …). */
+    /** Location id (`us-central1`, `global`, ...). */
     location: string;
     /** Project id. */
     project: string;
@@ -47,7 +47,7 @@ export type KeyRing = Resource<
 >;
 
 /**
- * A Cloud KMS KeyRing — a location-scoped container for CryptoKeys.
+ * A Cloud KMS KeyRing -- a location-scoped container for CryptoKeys.
  *
  * Key rings have no labels and no update API. Name and location are
  * identity; Cloud KMS also has no delete API, so destroy removes the
@@ -182,7 +182,7 @@ export const KeyRingProvider = () =>
       // the deterministic `{stack}-{id}-{stage}` name can only come from an
       // earlier deploy of this same logical resource (rings are never
       // deleted, so destroy leaves it behind); adopt it. A ring is an empty
-      // namespace — the keys inside carry their own ownership labels.
+      // namespace -- the keys inside carry their own ownership labels.
       return toAttrs(existing, env.project, env.region);
     }),
 
@@ -245,7 +245,7 @@ export const KeyRingProvider = () =>
       // Cloud KMS has no KeyRing delete API. Forget it from state; the
       // empty ring remains in the project until Google adds deletion.
       yield* Effect.logWarning(
-        `GCP Cloud KMS has no KeyRing delete API — "${output.name}" was removed from state but still exists.`,
+        `GCP Cloud KMS has no KeyRing delete API \u2014 "${output.name}" was removed from state but still exists.`,
       );
     }),
   });

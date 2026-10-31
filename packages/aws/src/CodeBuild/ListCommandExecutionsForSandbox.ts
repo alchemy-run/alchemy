@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:ListCommandExecutionsForSandbox` — lists
+ * Runtime binding for `codebuild:ListCommandExecutionsForSandbox` -- lists
  * the command executions run in a sandbox of the bound project.
  * ### Sandboxes
  * **Example:** List Command Executions

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:PutLifecycleEventHookExecutionStatus` —
+ * Runtime binding for `codedeploy:PutLifecycleEventHookExecutionStatus` --
  * the canonical CodeDeploy data-plane call: a Lambda validation hook
  * (`BeforeAllowTraffic`/`AfterAllowTraffic` for Lambda deployments, plus
  * `BeforeInstall`/`AfterInstall`/`AfterAllowTestTraffic` for ECS) reports

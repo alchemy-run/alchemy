@@ -57,7 +57,7 @@ export interface QueryMetricsClient {
 }
 
 /**
- * Runtime binding for `aps:QueryMetrics` — evaluate PromQL against an AMP
+ * Runtime binding for `aps:QueryMetrics` -- evaluate PromQL against an AMP
  * {@link Workspace}'s Prometheus-compatible query API (`api/v1/query` and
  * `api/v1/query_range`), SigV4-signed with the host Function's credentials.
  *

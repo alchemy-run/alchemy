@@ -30,7 +30,7 @@ export interface RecordAliasTarget {
 }
 
 /**
- * Fully-resolved alias target as stored in the record's attributes — a
+ * Fully-resolved alias target as stored in the record's attributes -- a
  * `RecordAliasTarget` with all `Input` values resolved.
  */
 export interface ResolvedRecordAliasTarget {
@@ -94,8 +94,8 @@ export interface RecordProps {
   /**
    * Hosted zone that owns the record. When omitted, the most specific
    * PUBLIC hosted zone in the account containing `name` is inferred by
-   * walking the name's parent domains (`svc.api.example.com` →
-   * `api.example.com` → `example.com`); the deploy fails actionably when
+   * walking the name's parent domains (`svc.api.example.com` ->
+   * `api.example.com` -> `example.com`); the deploy fails actionably when
    * no zone matches.
    */
   hostedZoneId?: string;
@@ -337,11 +337,11 @@ export interface Record extends Resource<
  */
 export const Record = Resource<Record>("AWS.Route53.Record");
 
-/** @internal shared with `Records.ts` — not exported from the barrel. */
+/** @internal shared with `Records.ts` -- not exported from the barrel. */
 export const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
 
-/** @internal shared with `Records.ts` — not exported from the barrel. */
+/** @internal shared with `Records.ts` -- not exported from the barrel. */
 export const normalizeName = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
 /**
@@ -349,14 +349,14 @@ export const normalizeName = (name: string) => (name.endsWith(".") ? name : `${n
  * `\ddd` octal escapes (a wildcard `*` comes back as `\052`), so compare
  * names in that decoded, lowercase form.
  *
- * @internal shared with `Records.ts` — not exported from the barrel.
+ * @internal shared with `Records.ts` -- not exported from the barrel.
  */
 export const canonicalName = (name: string) =>
   normalizeName(name)
     .replace(/\\(\d{3})/g, (_, code: string) => String.fromCharCode(Number.parseInt(code, 8)))
     .toLowerCase();
 
-/** @internal shared with `Records.ts` — not exported from the barrel. */
+/** @internal shared with `Records.ts` -- not exported from the barrel. */
 export const toAliasTarget = (
   aliasTarget: route53.AliasTarget | undefined,
 ): ResolvedRecordAliasTarget | undefined =>
@@ -432,9 +432,9 @@ const fromCidrRouting = (
 
 /**
  * Build the full `ResourceRecordSet` wire shape from props. Used for both the
- * UPSERT change batch and the DELETE change batch — DELETE requires an exact
+ * UPSERT change batch and the DELETE change batch -- DELETE requires an exact
  * match of every policy field, so this must round-trip the entire surface.
- * @internal shared with `Records.ts` — not exported from the barrel.
+ * @internal shared with `Records.ts` -- not exported from the barrel.
  */
 export const toRecordSet = (
   props: Pick<
@@ -501,7 +501,7 @@ const toAttrs = (recordSet: route53.ResourceRecordSet, hostedZoneId: string) => 
 
 /**
  * Route 53 identifies a record set by zone + name + type (+ set identifier),
- * so two resources can hold the same record set at different times — e.g.
+ * so two resources can hold the same record set at different times -- e.g.
  * swapping the names of two records replaces both, and each replacement's
  * UPSERT takes over the record set the other one's old generation still
  * points at. Returns whether another current resource in this stack holds
@@ -561,7 +561,7 @@ export const RecordProvider = () =>
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
       // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
-      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // accepts the bare id -- the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
         return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
@@ -671,12 +671,12 @@ export const RecordProvider = () =>
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // Identity change → replace, but only when the old value is known —
+          // Identity change -> replace, but only when the old value is known --
           // a half-created state row can't round-trip Output-valued props
           // (they deserialize as `undefined`), and an unknown old identity
           // must fall through to the create/update recovery path.
           if (
-            // An undefined side means "inferred" — reconcile resolves it
+            // An undefined side means "inferred" -- reconcile resolves it
             // against the live account, so only two explicit, differing
             // zones are a replacement.
             (olds.hostedZoneId !== undefined &&
@@ -696,7 +696,7 @@ export const RecordProvider = () =>
           const type = output?.type ?? olds?.type;
           if (hostedZoneId === undefined || name === undefined || type === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
-            // — without the record's identity we can't look it up. Report
+            // -- without the record's identity we can't look it up. Report
             // "not found" so the engine re-drives the create (the UPSERT in
             // reconcile converges on any half-created record).
             return undefined;
@@ -725,7 +725,7 @@ export const RecordProvider = () =>
           // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally
           // reconciler-friendly: it creates the record if missing and
           // overwrites it if present. There's no separate ensure/sync split
-          // — one call converges to the desired record set.
+          // -- one call converges to the desired record set.
           yield* upsertRecord(hostedZoneId, news);
 
           // Re-read so the returned attributes reflect the actual current
@@ -742,7 +742,7 @@ export const RecordProvider = () =>
         delete: Effect.fn(function* ({ instanceId, output, session }) {
           if (yield* isRecordSetClaimed(instanceId, output)) {
             yield* session.note(
-              `${output.type} ${output.name} is now managed by another resource — leaving it in place`,
+              `${output.type} ${output.name} is now managed by another resource \u2014 leaving it in place`,
             );
             return;
           }
@@ -754,7 +754,7 @@ export const RecordProvider = () =>
                 Changes: [
                   {
                     Action: "DELETE",
-                    // Serialize the full record set — DELETE requires an exact
+                    // Serialize the full record set -- DELETE requires an exact
                     // match including routing-policy fields, so reuse the same
                     // builder as UPSERT against the stored attributes.
                     ResourceRecordSet: toRecordSet({

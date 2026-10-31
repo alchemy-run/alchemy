@@ -68,11 +68,11 @@ export type NfsShareProps = {
    * NFS share id (the `{nfsshare}` segment of
    * `projects/{project}/locations/{location}/nfsShares/{nfsshare}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the share.
+   * and logical id. Immutable -- changing it replaces the share.
    */
   nfsShareId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the share. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -84,14 +84,14 @@ export type NfsShareProps = {
    */
   requestedSizeGib?: number | string;
   /**
-   * Storage type of the underlying volume. Immutable — changing it
+   * Storage type of the underlying volume. Immutable -- changing it
    * replaces the share.
    * @default "SSD"
    */
   storageType?: baremetalsolution.NfsShareStorageTypeEnum | (string & {});
   /**
    * Independent infrastructure pod. The share can only attach to networks
-   * and instances in the same pod. Immutable — changing it replaces the
+   * and instances in the same pod. Immutable -- changing it replaces the
    * share.
    */
   pod?: string;
@@ -159,7 +159,7 @@ export type NfsShare = Resource<
 >;
 
 /**
- * A Bare Metal Solution NFS share — file storage attached to BMS
+ * A Bare Metal Solution NFS share -- file storage attached to BMS
  * networks in the same region and pod.
  *
  * Changing `nfsShareId`, `location`, `storageType`, or `pod` replaces the

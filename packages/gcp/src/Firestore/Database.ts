@@ -44,7 +44,7 @@ export type DatabaseCmekConfig = {
   /**
    * Cloud KMS CryptoKey used to encrypt the database
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
-   * Must be in the same location as the database. Immutable — changing
+   * Must be in the same location as the database. Immutable -- changing
    * it replaces the database.
    */
   kmsKeyName?: string;
@@ -57,12 +57,12 @@ export type DatabaseProps = {
    * is generated from the stack, stage, and logical id. Must be 4-63
    * characters, match `[a-z][a-z0-9-]*[a-z0-9]`, and must not look like a
    * UUID. `"(default)"` is valid for the Standard edition default
-   * database. Immutable — changing it replaces the database.
+   * database. Immutable -- changing it replaces the database.
    */
   databaseId?: string;
   /**
-   * Location of the database (`us-central1`, `nam5`, `eur3`, …).
-   * Immutable — changing it replaces the database. `US-CENTRAL1` is
+   * Location of the database (`us-central1`, `nam5`, `eur3`, ...).
+   * Immutable -- changing it replaces the database. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -74,7 +74,7 @@ export type DatabaseProps = {
    */
   type?: DatabaseType;
   /**
-   * Database edition. Immutable — changing it replaces the database.
+   * Database edition. Immutable -- changing it replaces the database.
    * @default "STANDARD"
    */
   databaseEdition?: DatabaseEdition;
@@ -102,7 +102,7 @@ export type DatabaseProps = {
    */
   deleteProtectionState?: DatabaseDeleteProtectionState;
   /**
-   * Default Realtime Updates mode. Immutable — changing it replaces the
+   * Default Realtime Updates mode. Immutable -- changing it replaces the
    * database.
    */
   realtimeUpdatesMode?: DatabaseRealtimeUpdatesMode;
@@ -117,7 +117,7 @@ export type DatabaseProps = {
    */
   mongodbCompatibleDataAccessMode?: DatabaseDataAccessMode;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * database.
    */
   cmekConfig?: DatabaseCmekConfig;
@@ -133,7 +133,7 @@ export type Database = Resource<
     databaseId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `nam5`, …). */
+    /** Location id (`us-central1`, `nam5`, ...). */
     location: string;
     /** Database type (`FIRESTORE_NATIVE`, `DATASTORE_MODE`). */
     type: string;
@@ -184,7 +184,7 @@ export type Database = Resource<
  * unowned (adopt it with `--adopt`). Changing `databaseId`, `location`, `databaseEdition`, CMEK, or
  * Realtime Updates mode replaces the database.
  *
- * Create, update, and delete are long-running operations — provisioning
+ * Create, update, and delete are long-running operations -- provisioning
  * a named database typically takes tens of seconds.
  *
  * ### Creating a Database

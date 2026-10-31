@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateWhatIfForecast` — create a scenario
+ * Runtime binding for `forecast:CreateWhatIfForecast` -- create a scenario
  * forecast under a what-if analysis, transforming the baseline time series
  * (or replacing it from S3) so the outcome can be compared with
  * {@link QueryWhatIfForecast}.

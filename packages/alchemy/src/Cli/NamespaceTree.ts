@@ -126,7 +126,7 @@ function deriveNamespaceAction(node: TreeNode): DerivedAction {
   }
   for (const action of node.actions) {
     // Map task actions onto the resource action space for the rollup:
-    // run → create, delete → delete, noop → noop.
+    // run -> create, delete -> delete, noop -> noop.
     actions.add(
       action.action === "run" ? "create" : action.action === "delete" ? "delete" : "noop",
     );

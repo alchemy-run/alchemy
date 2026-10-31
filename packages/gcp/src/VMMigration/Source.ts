@@ -35,12 +35,12 @@ export type SourceProps = {
   /**
    * Source id (the `{source}` segment of
    * `projects/{project}/locations/{location}/sources/{source}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the source.
    */
   sourceId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * source. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -54,7 +54,7 @@ export type SourceProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Encryption of source data stored by the service. Immutable —
+   * Encryption of source data stored by the service. Immutable --
    * changing it replaces the source.
    */
   encryption?: Encryption;

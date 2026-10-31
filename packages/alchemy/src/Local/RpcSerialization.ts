@@ -302,7 +302,7 @@ const serializeRpcArgs = (value: unknown): unknown => {
       value: Redacted.value(value),
     } satisfies RedactedMarker;
   }
-  // Output must be tested BEFORE Effect.isEffect — Output exprs are yieldable
+  // Output must be tested BEFORE Effect.isEffect -- Output exprs are yieldable
   // and would otherwise be misclassified as plain Effects.
   if (Output.isOutput(value)) {
     return {
@@ -311,7 +311,7 @@ const serializeRpcArgs = (value: unknown): unknown => {
     };
   }
   // Runtime-only effect values riding in props (e.g. a Worker's `exports`
-  // carries each DO's `constructor` Effect and captured `services` Context —
+  // carries each DO's `constructor` Effect and captured `services` Context --
   // passed through prop resolution by identity since #1094). They cannot
   // cross the wire (function-valued internals kill capnweb) and the sidecar
   // never runs them (`stripEffects` drops them from `news` provider-side), so
@@ -331,7 +331,7 @@ const serializeRpcArgs = (value: unknown): unknown => {
     } satisfies ContextMarker;
   }
   // Duration has `toJSON` (so the structural walk below skips it) but
-  // capnweb cannot serialize the live Effect Duration object — it dies
+  // capnweb cannot serialize the live Effect Duration object -- it dies
   // with `TypeError: Cannot serialize value: 15000 millis`. Use the same
   // `{ __duration__: toJSON() }` envelope as persisted state.
   if (Duration.isDuration(value)) {

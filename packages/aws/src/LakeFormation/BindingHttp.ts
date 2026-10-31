@@ -4,14 +4,14 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared HTTP scaffolding for the Lake Formation runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeLakeFormationHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeLakeFormationHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * Per the `lakeformation` service authorization reference, Lake Formation
  * IAM actions support no resource types (authorization beyond IAM is
- * enforced by Lake Formation's own permission grants — see
+ * enforced by Lake Formation's own permission grants -- see
  * `AWS.LakeFormation.Permissions`), so every binding grants its actions on
  * `Resource: ["*"]`.
  */

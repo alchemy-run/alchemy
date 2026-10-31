@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:ListIncidentRecords`.
  *
- * Lists the incident records in the account — the incidents started from any
+ * Lists the incident records in the account -- the incidents started from any
  * response plan. Incident records are runtime entities (their ARNs embed the
  * response-plan name and a UUID that only exist once an incident starts), so
  * the deploy-time grant is account-level (`Resource: "*"`).

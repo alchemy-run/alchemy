@@ -16,17 +16,17 @@ export interface StopInstanceRequest extends Omit<
  * Runtime binding for the `StopInstances` operation scoped to the bound
  * {@link Instance} (IAM action `ec2:StopInstances` on the instance ARN).
  *
- * Stops the running instance — the other half of the scheduled
+ * Stops the running instance -- the other half of the scheduled
  * start/stop-Lambda pattern that powers dev fleets off overnight. Pass
  * `Hibernate: true` for hibernation-enabled instances. Provide the
  * implementation with `Effect.provide(AWS.EC2.StopInstanceHttp)`.
  * ### Instance Lifecycle Control
  * **Example:** Stop the bound instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const stopInstance = yield* AWS.EC2.StopInstance(instance);
  *
- * // runtime — power the instance off
+ * // runtime -- power the instance off
  * const result = yield* stopInstance();
  * console.log(result.StoppingInstances?.[0]?.CurrentState?.Name);
  * ```

@@ -74,12 +74,12 @@ export type NodePoolProps = {
   /**
    * Parent cluster id or full resource name
    * (`projects/{project}/locations/{location}/clusters/{cluster}`).
-   * Immutable — changing it replaces the node pool.
+   * Immutable -- changing it replaces the node pool.
    */
   cluster: string;
   /**
    * Zone or region of the parent cluster (`us-central1-a`, `us-central1`,
-   * …). Ignored when `cluster` is a full resource name. Immutable —
+   * ...). Ignored when `cluster` is a full resource name. Immutable --
    * changing it replaces the node pool.
    * @default "us-central1-a"
    */
@@ -88,7 +88,7 @@ export type NodePoolProps = {
    * Node pool id (the `{nodePool}` segment of
    * `.../clusters/{cluster}/nodePools/{nodePool}`). If omitted, a unique
    * RFC1035 name is generated. Must be 1-40 characters and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * pool.
    */
   nodePoolId?: string;
@@ -105,7 +105,7 @@ export type NodePoolProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Machine type (`e2-medium`, `e2-small`, …).
+   * Machine type (`e2-medium`, `e2-small`, ...).
    * @default "e2-medium"
    */
   machineType?: string;
@@ -120,7 +120,7 @@ export type NodePoolProps = {
    */
   diskType?: string;
   /**
-   * Node image type (`COS_CONTAINERD`, `UBUNTU_CONTAINERD`, …).
+   * Node image type (`COS_CONTAINERD`, `UBUNTU_CONTAINERD`, ...).
    */
   imageType?: string;
   /**
@@ -129,12 +129,12 @@ export type NodePoolProps = {
    */
   version?: string;
   /**
-   * Use Spot VMs. Immutable — changing it replaces the pool.
+   * Use Spot VMs. Immutable -- changing it replaces the pool.
    * @default false
    */
   spot?: boolean;
   /**
-   * Use preemptible VMs. Immutable — changing it replaces the pool.
+   * Use preemptible VMs. Immutable -- changing it replaces the pool.
    * @default false
    */
   preemptible?: boolean;
@@ -175,26 +175,26 @@ export type NodePoolProps = {
    */
   taints?: NodePoolTaint[];
   /**
-   * OAuth scopes for the node service account. Immutable — changing them
+   * OAuth scopes for the node service account. Immutable -- changing them
    * replaces the pool.
    */
   oauthScopes?: string[];
   /**
-   * Service account email for node VMs. Immutable — changing it replaces
+   * Service account email for node VMs. Immutable -- changing it replaces
    * the pool.
    */
   serviceAccount?: string;
   /**
-   * Local SSD count. Immutable — changing it replaces the pool.
+   * Local SSD count. Immutable -- changing it replaces the pool.
    */
   localSsdCount?: number;
   /**
-   * Customer-managed KMS key for boot disks. Immutable — changing it
+   * Customer-managed KMS key for boot disks. Immutable -- changing it
    * replaces the pool.
    */
   bootDiskKmsKey?: string;
   /**
-   * Max pods per node. Immutable — changing it replaces the pool.
+   * Max pods per node. Immutable -- changing it replaces the pool.
    */
   maxPodsPerNode?: number;
   /**
@@ -227,7 +227,7 @@ export type NodePool = Resource<
     project: string;
     /** Zone or region id. */
     location: string;
-    /** Server-reported status (`RUNNING`, `PROVISIONING`, …). */
+    /** Server-reported status (`RUNNING`, `PROVISIONING`, ...). */
     status: string | undefined;
     /** Kubernetes version currently on the nodes. */
     version: string | undefined;

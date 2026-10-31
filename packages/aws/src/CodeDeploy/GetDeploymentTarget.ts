@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:GetDeploymentTarget` — reads one
+ * Runtime binding for `codedeploy:GetDeploymentTarget` -- reads one
  * deployment target (instance, Lambda function, or ECS task set) of a
  * deployment, including per-lifecycle-event status.
  * ### Observing Deployment Targets

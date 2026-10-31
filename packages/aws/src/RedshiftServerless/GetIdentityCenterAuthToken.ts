@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  * `redshift-serverless:GetIdentityCenterAuthToken`).
  *
  * Mints an IAM Identity Center authentication token for up to 20
- * workgroups — the trusted-identity-propagation alternative to
+ * workgroups -- the trusted-identity-propagation alternative to
  * {@link Connect}'s `GetCredentials` flow. The response `token` decodes to
  * `Redacted<string>`. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.GetIdentityCenterAuthTokenHttp)`.
  * ### Connecting to a Workgroup
  * **Example:** Mint an Identity Center Token
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const getToken = yield* AWS.RedshiftServerless.GetIdentityCenterAuthToken();
  *
  * const { token, expirationTime } = yield* getToken({

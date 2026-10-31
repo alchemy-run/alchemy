@@ -61,7 +61,7 @@ export const loadPrerenderPairs = async (cwd: string): Promise<LoadedPrerenderPa
   return buildVinextPrerenderKVPairs(vinextRoot, serverDir);
 };
 
-/** Platform-agnostic seed: pairs → `sink.putText`. */
+/** Platform-agnostic seed: pairs -> `sink.putText`. */
 export const seedPrerenderTo = <E, R>(
   sink: SeedSink<E, R>,
   options: { readonly rootDir: string; readonly label: string },

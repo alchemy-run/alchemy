@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  *
  * Runs an ad-hoc resource query (the same `TAG_FILTERS_1_0` /
  * `CLOUDFORMATION_STACK_1_0` syntax a query-based group is defined with)
- * and returns the matching resource ARNs — a group-less preview of what a
+ * and returns the matching resource ARNs -- a group-less preview of what a
  * query would capture. Account-level: the query is chosen per request, so
  * the grant is on `*` (including the Tagging API / CloudFormation
  * read-through permissions the search fans out to). Provide the

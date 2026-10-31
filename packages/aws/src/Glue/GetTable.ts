@@ -11,8 +11,8 @@ export interface GetTableRequest extends Omit<
 /**
  * Runtime binding for `glue:GetTable`.
  *
- * Reads the bound {@link Table}'s full catalog definition — columns, storage
- * descriptor, partition keys, and parameters — so a function can introspect
+ * Reads the bound {@link Table}'s full catalog definition -- columns, storage
+ * descriptor, partition keys, and parameters -- so a function can introspect
  * the schema it is writing against. The database/table names and catalog id
  * are injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetTableHttp)`.

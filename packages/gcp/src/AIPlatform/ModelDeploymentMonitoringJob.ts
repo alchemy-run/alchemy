@@ -30,7 +30,7 @@ import { waitForOperation } from "./operations.ts";
 
 export type ModelDeploymentMonitoringJobProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;

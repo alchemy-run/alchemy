@@ -83,9 +83,9 @@ type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
 const workerStartedMessage = (elapsed: number, url: URL): string => {
   const duration = `${Math.round(elapsed)}ms`;
   if (!colorsEnabled()) {
-    return `Started in ${duration} → ${url}`;
+    return `Started in ${duration} \u2192 ${url}`;
   }
-  return `Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} → ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET}`;
+  return `Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} \u2192 ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET}`;
 };
 
 const workerUpdatedMessage = (elapsed: number): string => {
@@ -95,7 +95,7 @@ const workerUpdatedMessage = (elapsed: number): string => {
     : `Updated in ${duration}`;
 };
 
-// Hosts that bind every interface — the dev server is then reachable at
+// Hosts that bind every interface -- the dev server is then reachable at
 // `localhost` *and* at each LAN address, like Vite's `--host` output.
 const isWildcardHost = (host: string) =>
   host === "0.0.0.0" || host === "::" || host === "[::]" || host === "*";
@@ -104,7 +104,7 @@ const isWildcardHost = (host: string) =>
  * Resolve every URL a local dev server is reachable at, most relevant
  * first. A loopback or explicit host yields just that URL; a wildcard host
  * (`0.0.0.0`, `::`) yields `http://localhost:<port>` followed by one URL
- * per external IPv4 interface (`http://192.168.0.12:<port>`, ...) —
+ * per external IPv4 interface (`http://192.168.0.12:<port>`, ...) --
  * mirroring Vite's "Local / Network" dev-server output.
  */
 const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
@@ -115,7 +115,7 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
       return [serverUrl.origin];
     }
     // `os.networkInterfaces()` is a sync, CPU-only syscall with no Effect
-    // platform equivalent — wrapped in `Effect.sync` so it participates in
+    // platform equivalent -- wrapped in `Effect.sync` so it participates in
     // the runtime.
     const interfaces = os.networkInterfaces();
     const lanAddresses = Object.values(interfaces)
@@ -160,7 +160,7 @@ export const LocalWorkerProvider = () =>
       // ConsumerSettings speaks the Cloudflare API's dialect (batchSize,
       // maxWaitTimeMs in milliseconds); the runtime's QueueConsumer speaks
       // wrangler's (maxBatchSize, maxBatchTimeout in seconds). Map
-      // explicitly — a spread silently drops the mismatched fields.
+      // explicitly -- a spread silently drops the mismatched fields.
       const toRuntimeConsumerSettings = (
         settings: ConsumerSettings | undefined,
       ): Pick<
@@ -186,7 +186,7 @@ export const LocalWorkerProvider = () =>
             if (isLiveId(consumer.queueId)) {
               if (!consumer.queueName) {
                 return yield* Effect.die(
-                  `Consumer of live queue ${consumer.queueId} is missing its resolved queueName — re-deploy the consumer`,
+                  `Consumer of live queue ${consumer.queueId} is missing its resolved queueName \u2014 re-deploy the consumer`,
                 );
               }
               consumers.push({
@@ -247,7 +247,7 @@ export const LocalWorkerProvider = () =>
         const modules: Module[] = [];
         for (const file of bundle.files) {
           // Vendored Python packages are opaque Data modules named by their
-          // `python_modules/<relpath>` — mirroring the deploy path — except
+          // `python_modules/<relpath>` -- mirroring the deploy path -- except
           // the `workers-runtime-sdk` JS shims, which the runtime imports
           // as ES modules via `import_from_javascript()`.
           if (file.path.startsWith("python_modules/")) {
@@ -321,14 +321,14 @@ export const LocalWorkerProvider = () =>
 
       /**
        * The restart-relevant, canonically-hashable view of a local Worker's
-       * desired state — `LocalProvider`'s `resolveConfig`. Everything here
-       * is plain data: binding *descriptors* (not `BindingHook` closures —
+       * desired state -- `LocalProvider`'s `resolveConfig`. Everything here
+       * is plain data: binding *descriptors* (not `BindingHook` closures --
        * those are materialized in `start` via {@link toRuntimeBinding}),
        * DO-namespace/hyperdrive/container-image records, bundle options.
        *
        * Queue consumers are deliberately EXCLUDED: `getQueueConsumers`
        * reads `LocalRuntimeState` at serve time and sibling `Consumer`
-       * reconciles drive restarts through the `workerRestarts` hook — they
+       * reconciles drive restarts through the `workerRestarts` hook -- they
        * are runtime wiring observed at start, not desired-state config.
        */
       const resolveConfig = Effect.fn(function* ({
@@ -347,7 +347,7 @@ export const LocalWorkerProvider = () =>
         > = {};
         const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
-        // Dev-only channel (like `hyperdrives`): binding name → opt-out of
+        // Dev-only channel (like `hyperdrives`): binding name -> opt-out of
         // local emulation (the binding was piped through `Alchemy.remote()`). Read
         // by `toRuntimeBinding` when lowering browser/images/stream/
         // send_email descriptors. Part of the hashed config: flipping the
@@ -472,11 +472,11 @@ export const LocalWorkerProvider = () =>
               };
         return {
           id,
-          /** Namespace-qualified id — the display prefix for every log line. */
+          /** Namespace-qualified id -- the display prefix for every log line. */
           fqn,
           name,
           compatibility,
-          /** User env (Redacted preserved — the canonical hasher unwraps). */
+          /** User env (Redacted preserved -- the canonical hasher unwraps). */
           env: Object.keys(boundEnv).length > 0 ? boundEnv : props.env,
           /**
            * Raw inline module source (mutually exclusive with `main`).
@@ -501,10 +501,10 @@ export const LocalWorkerProvider = () =>
           workflows: Object.values(workflows),
           hyperdrives,
           /**
-           * Container image CONTENT hashes (className → hash). The DO
+           * Container image CONTENT hashes (className -> hash). The DO
            * namespace records above only carry the image's stable paths, so
-           * this is what makes an image content change — a Dockerfile edit,
-           * a rebuilt effectful bundle — restart the instance (which is
+           * this is what makes an image content change -- a Dockerfile edit,
+           * a rebuilt effectful bundle -- restart the instance (which is
            * what re-runs the docker build).
            */
           containerHashes,
@@ -517,7 +517,7 @@ export const LocalWorkerProvider = () =>
           /**
            * Prebuilt worker (`bundle: false`): local dev must serve the
            * entry + rule-matched sibling modules byte-for-byte (fs-watch +
-           * re-read) — never re-bundle the prebuilt artifact with rolldown.
+           * re-read) -- never re-bundle the prebuilt artifact with rolldown.
            */
           prebuilt: props.bundle === false,
           rules: props.rules,
@@ -547,13 +547,13 @@ export const LocalWorkerProvider = () =>
           // deliberately hash-safe). Restart-relevant: serve lowers the list
           // into workerd's native `tails` service designators.
           tailConsumers: resolveTailConsumers(props.tailConsumers),
-          // Streaming tail consumers, same resolution — serve lowers the
+          // Streaming tail consumers, same resolution -- serve lowers the
           // list into workerd's `streamingTails` designators, which deliver
           // the producer's events live via the consumer's `tailStream()`.
           streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
           /**
            * Zone routes, emulated by the local edge (see `LocalEdge`). The
-           * zone is never resolved in dev — `zoneId` is the declared id or
+           * zone is never resolved in dev -- `zoneId` is the declared id or
            * a `dev:`-marked stand-in.
            */
           routes: (props.routes ?? []).map((route) => {
@@ -592,7 +592,7 @@ export const LocalWorkerProvider = () =>
       /**
        * Materialize the plain binding descriptors from {@link resolveConfig}
        * into live cloudflare-runtime `BindingHook`s. This is the non-plain
-       * half of the old `buildConfig` — kept out of the hashed config.
+       * half of the old `buildConfig` -- kept out of the hashed config.
        */
       const materializeWorkerBindings = Effect.fn(function* (
         config: WorkerConfig,
@@ -640,8 +640,8 @@ export const LocalWorkerProvider = () =>
       const workerdScopes = new Map<string, Scope.Closeable>();
 
       // Serve with make-before-break semantics: start the replacement
-      // workerd while the previous instance (if any) keeps serving — and
-      // stays registered in the dev registry — then cut the proxy over and
+      // workerd while the previous instance (if any) keeps serving -- and
+      // stays registered in the dev registry -- then cut the proxy over and
       // tear the previous instance down. Cross-script consumers (e.g. a DO
       // bound via `scriptName` from another Worker) therefore never observe
       // a window where the script has no running instance and no registry
@@ -657,7 +657,7 @@ export const LocalWorkerProvider = () =>
       // The workerd scope is forked from the provider's `rootScope`, NOT
       // the instance scope: a reconcile that replaces the instance (or a
       // restart triggered from a sibling provider's fiber) tears down the
-      // bundle watcher without killing the currently serving workerd — the
+      // bundle watcher without killing the currently serving workerd -- the
       // last good instance keeps serving until the replacement's first
       // serve completes. Ownership is tracked in `workerdScopes`, closed by
       // the next successful serve, by `delete`, or by provider shutdown.
@@ -680,14 +680,14 @@ export const LocalWorkerProvider = () =>
 
       /**
        * Watch a worker's Build-variant container contexts and restart the
-       * instance when their CONTENT changes — the docker build happens at
+       * instance when their CONTENT changes -- the docker build happens at
        * instance start, so a restart IS the image rebuild.
        *
        * This is the reload path for USER-supplied Dockerfile/context
        * containers: those files are not imported by the stack, so
        * `bun --watch` never re-runs the exec child for them and no replan
        * (hence no config-hash restart) ever fires. Generated contexts
-       * (under `.alchemy/`) are excluded — the effectful `main` variant
+       * (under `.alchemy/`) are excluded -- the effectful `main` variant
        * rewrites its bundle there on every plan, which would loop; that
        * variant reloads through the config's `containerHashes` instead.
        *
@@ -870,7 +870,7 @@ export const LocalWorkerProvider = () =>
               ).pipe(Effect.uninterruptible);
               // Container names are deterministic per Durable Object, so a
               // new workerd would "recover" the previous instance's
-              // still-running container — which the previous instance's
+              // still-running container -- which the previous instance's
               // teardown then removes (with its networking sidecar) out from
               // under it. For workers with containers, break before make:
               // retire the previous instance after the slow part of the start
@@ -891,7 +891,7 @@ export const LocalWorkerProvider = () =>
               // Queue-consumer wiring can change while `runtime.start` is in
               // flight (a sibling `Consumer` reconcile), before the restart
               // hook below exists to pick it up. We hold the serve lock, so a
-              // restart would deadlock — instead, loop and serve again until
+              // restart would deadlock -- instead, loop and serve again until
               // the wiring is stable across a start.
               while (true) {
                 const queueConsumers = yield* getQueueConsumers(worker.name);
@@ -915,7 +915,7 @@ export const LocalWorkerProvider = () =>
                     .start({
                       name: worker.name,
                       logging: {
-                        // `(chunk, stream)` — chunk first; the stream name
+                        // `(chunk, stream)` -- chunk first; the stream name
                         // indexes the splitters directly.
                         onOutput: (chunk, stream) => splitters[stream].push(chunk),
                       },
@@ -936,19 +936,19 @@ export const LocalWorkerProvider = () =>
                       // per expression and exposes the Miniflare-compatible
                       // manual trigger route `/cdn-cgi/handler/scheduled`.
                       crons: worker.crons,
-                      // Tail consumers by script name — each resolves through
+                      // Tail consumers by script name -- each resolves through
                       // the dev registry proxy exactly like cross-worker
                       // service bindings; a consumer that isn't running yet
                       // drops events with a `[registry]` warning until it
                       // registers (wrangler dev-registry semantics).
                       tails: worker.tailConsumers?.map((c) => c.service),
-                      // Streaming tail consumers by script name — resolved
+                      // Streaming tail consumers by script name -- resolved
                       // through the same registry proxy; the consumer's
                       // `tailStream()` receives the onset while the producer
                       // is still executing (dropped with a `[registry]`
                       // warning until the consumer registers).
                       streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
-                      // Cache API opt-out (`dev: { cache: false }`) — matches
+                      // Cache API opt-out (`dev: { cache: false }`) -- matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
                       // Per-worker request.cf override (`dev: { cf: {...} }`).
@@ -961,7 +961,7 @@ export const LocalWorkerProvider = () =>
                     .pipe(Scope.provide(scope)),
                 ).pipe(
                   // The scope hangs off `rootScope`, so a failed or
-                  // interrupted start must close it here — nothing else owns
+                  // interrupted start must close it here -- nothing else owns
                   // it yet.
                   Effect.onExit((exit) =>
                     exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
@@ -986,7 +986,7 @@ export const LocalWorkerProvider = () =>
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
-                  // Wiring changed while workerd was starting — serve again
+                  // Wiring changed while workerd was starting -- serve again
                   // with the fresh consumers before exposing the instance.
                   retiring.push(scope);
                   continue;
@@ -995,8 +995,8 @@ export const LocalWorkerProvider = () =>
               }
               yield* exposeWorker(worker, proxy, url);
               // Only now tear the replaced instances down (unless
-              // `beforeServe` already did): `previous` kept serving — and
-              // stayed registered in the dev registry — until the cutover
+              // `beforeServe` already did): `previous` kept serving -- and
+              // stayed registered in the dev registry -- until the cutover
               // above. The registry's entry removal is owner-aware, so these
               // closes cannot delete the replacement's registration.
               yield* closeRetiring;
@@ -1009,7 +1009,7 @@ export const LocalWorkerProvider = () =>
        * Restart a running worker with its latest bundle (or its latest Vite
        * dev-server child) so start-time runtime wiring (queue consumers) is
        * re-read from {@link LocalRuntimeState}. No-op if the worker hasn't
-       * served yet — the pending first serve will already observe the
+       * served yet -- the pending first serve will already observe the
        * updated state.
        */
       const logRestartFailure = (fqn: string) =>
@@ -1049,7 +1049,7 @@ export const LocalWorkerProvider = () =>
         });
 
       // Tear down the running workerd for a worker FQN, if any. Used when the
-      // Worker is deleted or handed off to an external dev process —
+      // Worker is deleted or handed off to an external dev process --
       // instance replacement does NOT go through this: the previous workerd
       // keeps serving until the replacement's first serve closes it.
       const closeWorkerd = Effect.fn(function* (id: string) {
@@ -1061,7 +1061,7 @@ export const LocalWorkerProvider = () =>
         }
       });
 
-      // Note: `serveLocks` entries are intentionally retained — an
+      // Note: `serveLocks` entries are intentionally retained -- an
       // in-flight restart may still hold the semaphore when the instance
       // is torn down, and a same-id re-create must serialize against it.
       const dropServeState = (id: string) => {
@@ -1128,7 +1128,7 @@ export const LocalWorkerProvider = () =>
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
-                  // URL on first start only — vite-banner style; rebuild
+                  // URL on first start only -- vite-banner style; rebuild
                   // lines stay compact.
                   const message = Effect.log(
                     status === "update"
@@ -1158,7 +1158,7 @@ export const LocalWorkerProvider = () =>
 
       // Assets-only Worker: there is no entry module to bundle or watch.
       // The local runtime requires a user worker module, so serve a stub
-      // that delegates every request to the ASSETS binding — the assets
+      // that delegates every request to the ASSETS binding -- the assets
       // worker applies `htmlHandling` / `notFoundHandling` (including SPA
       // fallback) itself, matching Cloudflare's deployed assets-only
       // behavior.
@@ -1209,8 +1209,8 @@ export const LocalWorkerProvider = () =>
       // `Consumer` reconciles can restart the child with fresh queue-consumer
       // wiring, and a post-start re-check so wiring that lands while the
       // child is starting is not lost. Unlike `serveWith` this is
-      // break-before-make — two Vite dev servers rooted at the same app
-      // would race file watchers and Durable Object storage — so the proxy
+      // break-before-make -- two Vite dev servers rooted at the same app
+      // would race file watchers and Durable Object storage -- so the proxy
       // queues requests across the gap. The child's scope is forked from
       // `rootScope` and tracked in `workerdScopes`, so it survives instance
       // restarts and is reclaimed by `stop`/handoff/`serveWith` like any
@@ -1245,7 +1245,7 @@ export const LocalWorkerProvider = () =>
               // Queue-consumer wiring can change while the child is starting
               // (a sibling `Consumer` reconcile), before the restart hook
               // below exists to pick it up. We hold the serve lock, so a
-              // restart would deadlock — instead, loop and serve again until
+              // restart would deadlock -- instead, loop and serve again until
               // the wiring is stable across a start.
               while (true) {
                 const queueConsumers = yield* getQueueConsumers(worker.name);
@@ -1296,7 +1296,7 @@ export const LocalWorkerProvider = () =>
                   ).pipe(Scope.provide(scope)),
                 ).pipe(
                   // The scope hangs off `rootScope`, so a failed or
-                  // interrupted start must close it here — nothing else owns
+                  // interrupted start must close it here -- nothing else owns
                   // it yet.
                   Effect.onExit((exit) =>
                     exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
@@ -1328,7 +1328,7 @@ export const LocalWorkerProvider = () =>
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (JSON.stringify(currentConsumers) !== JSON.stringify(queueConsumers)) {
-                  // Wiring changed while the child was starting — serve
+                  // Wiring changed while the child was starting -- serve
                   // again with the fresh consumers before exposing it.
                   continue;
                 }
@@ -1352,7 +1352,7 @@ export const LocalWorkerProvider = () =>
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
         const url = new URL(proxy.url);
         if (servedViteHttps.get(worker.fqn)) url.protocol = "https:";
-        // The programmatic vite API never prints the CLI's URL banner — and
+        // The programmatic vite API never prints the CLI's URL banner -- and
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
         yield* Effect.log(workerStartedMessage(Date.now() - start, url));
@@ -1467,7 +1467,7 @@ export const LocalWorkerProvider = () =>
                   port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
-            // No cloud script exists in dev — fabricate a `dev:`-marked
+            // No cloud script exists in dev -- fabricate a `dev:`-marked
             // identity (the shared local-provider convention, and the
             // legacy-row mode marker; see LOCAL_ID_PREFIX).
             workerId: `dev:${name}`,
@@ -1489,11 +1489,11 @@ export const LocalWorkerProvider = () =>
           const accountId = yield* localAccountId;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
-          // entirely — typically because an external dev process
+          // entirely -- typically because an external dev process
           // (Command.Dev) is serving requests. The instance exists in the
           // registry (with an empty scope) but has no workerd behind it. A
           // previous worker-mode instance for this FQN may have registered
-          // serve/restart state — drop it, and tear down its workerd (with
+          // serve/restart state -- drop it, and tear down its workerd (with
           // make-before-break the running workerd outlives instance scopes
           // and must be closed explicitly on handoff).
           if (config.dev.mode === "external") {
@@ -1520,7 +1520,7 @@ export const LocalWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
 
-          // `Worker.URL` locally resolves to the worker's dev-proxy URL —
+          // `Worker.URL` locally resolves to the worker's dev-proxy URL --
           // the proxy is stable per worker FQN (the same instance `runWorker`
           // / `runVite` attach to below), so the URL is known before workerd
           // starts. Trailing slash stripped to match the cloud value's shape.
@@ -1531,7 +1531,7 @@ export const LocalWorkerProvider = () =>
           const selfUrl = needsSelfUrl
             ? (yield* maybeStartProxy(fqn, config.dev)).url.toString().replace(/\/$/, "")
             : undefined;
-          // Substitute `Worker.URL` sentinels once, up front — the runtime
+          // Substitute `Worker.URL` sentinels once, up front -- the runtime
           // bindings, the Vite define entries, and the child-process config
           // all consume the resolved URL as a plain string.
           const env =
@@ -1575,7 +1575,7 @@ export const LocalWorkerProvider = () =>
               : config.assetsOnly
                 ? runAssetsOnly(worker)
                 : runSource(worker);
-          // In dev, `urls` is the dev server's actual surface — localhost
+          // In dev, `urls` is the dev server's actual surface -- localhost
           // first, then LAN addresses for wildcard hosts. Deployed domains
           // are not served by this session, so they don't appear.
           const urls = yield* resolveLocalUrls(serverUrl);
@@ -1638,12 +1638,12 @@ const toRuntimeAssets = Effect.fn(function* (assets: WorkerAssetsConfig | undefi
   // explicit `headers` / `redirects` props. The local runtime parses
   // the raw string contents just like Cloudflare does.
   //
-  // A Vite website's `assets` is config-only (`{ runWorkerFirst: true }`) —
+  // A Vite website's `assets` is config-only (`{ runWorkerFirst: true }`) --
   // the client output directory is the build's business, and in `dev` the
   // vite plugin serves assets from the dev server, so there is no directory
   // to read here.
   const directory: string | undefined = typeof assets === "string" ? assets : assets.directory;
-  // An unreadable file just means no rules here — the assets plugin
+  // An unreadable file just means no rules here -- the assets plugin
   // reports directory problems itself.
   const files = yield* readAssetsConfigFiles(directory).pipe(
     Effect.orElseSucceed(() => ({
@@ -1665,7 +1665,7 @@ const toRuntimeAssets = Effect.fn(function* (assets: WorkerAssetsConfig | undefi
     htmlHandling: assets.htmlHandling,
     notFoundHandling: assets.notFoundHandling,
     // The deployed default is assets-first (`run_worker_first` omitted =
-    // false on the cloud API), but the runtime's router inverts it — it
+    // false on the cloud API), but the runtime's router inverts it -- it
     // treats anything `!== false` (including `undefined`) as worker-first.
     // Pin the cloud default explicitly so a Worker with an assets directory
     // and a `main` serves asset paths from the asset layer locally exactly

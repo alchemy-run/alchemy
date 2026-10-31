@@ -43,24 +43,24 @@ export type AgentsSessionsEntityTypeProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}`.
-   * Immutable — changing it replaces the session entity type.
+   * Immutable -- changing it replaces the session entity type.
    */
   agent: string;
   /**
    * Session id. Dialogflow sessions are created implicitly.
-   * Immutable — changing it replaces the session entity type.
+   * Immutable -- changing it replaces the session entity type.
    * @default "alchemy"
    */
   sessionId?: string;
   /**
-   * Entity type id (`sys.color` or a custom entity type id). Immutable —
+   * Entity type id (`sys.color` or a custom entity type id). Immutable --
    * changing it replaces the session entity type.
    * @default "sys.color"
    */
   entityTypeId?: string;
   /**
    * Location used when `agent` is an id rather than a resource name.
-   * Immutable — changing it replaces the session entity type.
+   * Immutable -- changing it replaces the session entity type.
    * @default "global"
    */
   location?: string;
@@ -105,7 +105,7 @@ export type AgentsSessionsEntityType = Resource<
 /**
  * A Dialogflow CX session entity type (per-session entity overlay).
  *
- * Session entity types have no labels or display name — Alchemy stamps
+ * Session entity types have no labels or display name -- Alchemy stamps
  * ownership into a reserved entity value so `list` / nuke can find
  * them. `list` enumerates the default `alchemy` session on every agent.
  * Parent agent, session id, and entity type id are immutable. Override

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteDBClusterSnapshot` operation (IAM action
  * `rds:DeleteDBClusterSnapshot`).
  *
- * Deletes a manual Aurora cluster snapshot — the pruning half of a
+ * Deletes a manual Aurora cluster snapshot -- the pruning half of a
  * snapshot-rotation function. Provide the implementation with
  * `Effect.provide(AWS.RDS.DeleteDBClusterSnapshotHttp)`.
  * ### Managing Cluster Snapshots

@@ -11,13 +11,13 @@ export interface GetResourceLFTagsRequest extends lf.GetResourceLFTagsRequest {}
  * Runtime binding for `lakeformation:GetResourceLFTags`.
  *
  * Reads the LF-tags attached to a Data Catalog resource (database, table,
- * or columns) — lets a function make tag-driven decisions about the data it
+ * or columns) -- lets a function make tag-driven decisions about the data it
  * touches. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.GetResourceLFTagsHttp)`.
  * ### Reading LF-Tags
  * **Example:** Read a Database's LF-Tags
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getResourceLFTags = yield* AWS.LakeFormation.GetResourceLFTags();
  *
  * // runtime

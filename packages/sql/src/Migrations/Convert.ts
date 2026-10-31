@@ -36,7 +36,7 @@ export interface ForeignHistory {
 /**
  * Normalize a timestamp-ish column value for re-insertion as a SQL
  * literal. Drivers differ: pg hands back JS Dates (whose default
- * stringification pg itself cannot parse — "GMT-0700 (…)"), sqlite hands
+ * stringification pg itself cannot parse -- "GMT-0700 (...)"), sqlite hands
  * back strings.
  */
 export const toTimestampString = (value: unknown): string | undefined =>
@@ -53,25 +53,25 @@ const qualify = (table: string, dialect: SqlExecutor["dialect"], schema?: string
 
 /**
  * Discover applied-migration history left behind by the tool a user is
- * migrating FROM — drizzle-kit, Prisma, or wrangler — so it can be copied
+ * migrating FROM -- drizzle-kit, Prisma, or wrangler -- so it can be copied
  * into Alchemy's own table once. This is a ONE-WAY migration: the foreign
  * table is read but never written or dropped (it is simply frozen), and
  * from that point on Alchemy's table is the only bookkeeping.
  *
  * Sources probed, most-specific first:
- * - drizzle: `__drizzle_migrations` (in the `drizzle` schema on Postgres) —
+ * - drizzle: `__drizzle_migrations` (in the `drizzle` schema on Postgres) --
  *   drizzle's columns are Alchemy's columns, so rows copy verbatim.
- * - prisma: `_prisma_migrations` — `migration_name`/`checksum` map to
+ * - prisma: `_prisma_migrations` -- `migration_name`/`checksum` map to
  *   `name`/`hash` (both are sha256 of `migration.sql`). A failed migration
  *   (`finished_at IS NULL`, not rolled back) aborts the conversion: it must
  *   be repaired with `prisma migrate resolve` first. Rolled-back rows are
  *   skipped.
- * - wrangler (sqlite): `d1_migrations` in wrangler's shape — names carry
+ * - wrangler (sqlite): `d1_migrations` in wrangler's shape -- names carry
  *   over; hashes backfill from local records.
  */
 export const findForeignHistory = (options: {
   executor: SqlExecutor;
-  /** The resolved Alchemy table — a source with this name is not foreign. */
+  /** The resolved Alchemy table -- a source with this name is not foreign. */
   table: string;
 }): Effect.Effect<ForeignHistory | undefined, MigrationError> =>
   Effect.gen(function* () {
@@ -150,7 +150,7 @@ export const findForeignHistory = (options: {
     }
 
     // wrangler / pre-registry Alchemy on D1 (which shared the
-    // d1_migrations name — covers state-lost adoption of old deploys)
+    // d1_migrations name -- covers state-lost adoption of old deploys)
     if (dialect === "sqlite" && table !== "d1_migrations") {
       const shape = classifyTable(yield* tableColumns(executor, "d1_migrations"));
       if (shape === "wrangler" || shape === "legacy-alchemy" || shape === "legacy-2col") {
@@ -179,8 +179,8 @@ export const findForeignHistory = (options: {
 /**
  * Validate foreign history against the local migrations directory and fill
  * in missing hashes. Every foreign row must match a local record by name
- * (or by the `<dir>/migration.sql` ⇄ `<dir>` aliasing between flat and
- * directory layouts) — an unmatched row means migrations were applied that
+ * (or by the `<dir>/migration.sql` <-> `<dir>` aliasing between flat and
+ * directory layouts) -- an unmatched row means migrations were applied that
  * this checkout does not have.
  */
 export const matchForeignRows = (options: {

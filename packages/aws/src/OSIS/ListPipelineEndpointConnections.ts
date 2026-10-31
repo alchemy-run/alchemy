@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `osis:ListPipelineEndpointConnections`.
  *
- * Lists the VPC endpoint connections attached to pipelines in the account —
- * including endpoints owned by other accounts — so an ops function can audit
+ * Lists the VPC endpoint connections attached to pipelines in the account --
+ * including endpoints owned by other accounts -- so an ops function can audit
  * who can ingest into your pipelines (pair with
  * {@link RevokePipelineEndpointConnections} to cut off access). Account-level:
  * no resource argument. Provide the implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Endpoint Connections
  * **Example:** Audit Endpoint Connections
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listConnections = yield* AWS.OSIS.ListPipelineEndpointConnections();
  *
  * // runtime

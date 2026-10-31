@@ -69,11 +69,11 @@ export type ConsumerPscConfig = {
 export type ServiceConnectionMapProps = {
   /**
    * Map id (the `{service_connection_map}` segment). If omitted, a unique
-   * name is generated. Immutable — changing it replaces the map.
+   * name is generated. Immutable -- changing it replaces the map.
    */
   serviceConnectionMapId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * map. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -128,7 +128,7 @@ export type ServiceConnectionMap = Resource<
     producerPscConfigs: ProducerPscConfig[];
     /** Consumer PSC configs. */
     consumerPscConfigs: ConsumerPscConfig[];
-    /** Infrastructure used for connections (`PSC`, …). */
+    /** Infrastructure used for connections (`PSC`, ...). */
     infrastructure: string | undefined;
     /** User-provided description. */
     description: string | undefined;

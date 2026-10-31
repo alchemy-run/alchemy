@@ -122,7 +122,7 @@ export interface ProviderService<
    * Set by `ProviderLayer.dual` registrations: the delegating service
    * registered in context carries the run's default mode, and each built
    * variant carries its concrete mode. Mode-agnostic providers (plain
-   * {@link succeed}/{@link effect} registrations) leave it `undefined` —
+   * {@link succeed}/{@link effect} registrations) leave it `undefined` --
    * their resources never persist a mode and never replace on a mode
    * switch.
    */
@@ -130,8 +130,8 @@ export interface ProviderService<
   /**
    * Lazily-built mode variants, present only for `ProviderLayer.dual`
    * registrations. Each effect builds (once, memoized, into the stack's
-   * layer scope) the provider service for that mode — including any
-   * mode-specific dependency layers — and returns it. The engine resolves
+   * layer scope) the provider service for that mode -- including any
+   * mode-specific dependency layers -- and returns it. The engine resolves
    * a concrete variant via {@link findProviderByType} with a mode so that
    * e.g. a local-mode state row is always deleted by the local provider,
    * even during a live deploy (and vice versa).
@@ -140,14 +140,14 @@ export interface ProviderService<
   /**
    * Data-plane override context for this provider's **local** mode: a layer
    * of cloud environment services (endpoint, credentials, region,
-   * environment) that points data-plane API calls at the local emulator —
+   * environment) that points data-plane API calls at the local emulator --
    * the same override the local lifecycle variant runs under (e.g. AWS's
    * `flociServices()`).
    *
    * Set by `ProviderLayer.dual` registrations that pass `dataPlane`.
    * Consumed by `Binding.Service`'s client wrapper (via
-   * {@link resolveLocalDataPlane}) so deploy-time binding invocations —
-   * inside an `Action` body or a plan-time `execute` — target whatever
+   * {@link resolveLocalDataPlane}) so deploy-time binding invocations --
+   * inside an `Action` body or a plan-time `execute` -- target whatever
    * data plane the bound resource actually lives on: a local-mode resource
    * routes to the emulator while an `Alchemy.remote()` resource keeps
    * hitting the real cloud. Pass a module-memoized layer reference.
@@ -170,7 +170,7 @@ export interface ProviderService<
    */
   nuke?: {
     /**
-     * The resource is an account/zone **singleton setting** — always-present
+     * The resource is an account/zone **singleton setting** -- always-present
      * configuration (e.g. Bot Management, Email Routing, a zone's SSL
      * settings) whose `delete` only *resets* it to defaults rather than
      * removing a discrete resource. Skipped by nuke, since `list` always
@@ -179,7 +179,7 @@ export interface ProviderService<
      */
     singleton?: boolean;
     /**
-     * The resource is skipped by nuke for any other reason — typically because
+     * The resource is skipped by nuke for any other reason -- typically because
      * it can never actually be deleted (no delete API, like RealtimeKit Apps;
      * or a registration that is never released, like Registrar Domains). Unlike
      * {@link singleton}, these are ordinary multi-instance resources.
@@ -187,7 +187,7 @@ export interface ProviderService<
     skip?: boolean;
     /**
      * Provider IDs (picomatch globs, e.g. `"AWS.IAM.Role"` or `"AWS.EC2.*"`)
-     * whose resources this type's **cloud-side teardown** consumes — they
+     * whose resources this type's **cloud-side teardown** consumes -- they
      * must still exist while this type is deleting. `alchemy unsafe nuke`
      * topologically orders deletion so every resource of this type is fully
      * gone before any matching type starts deleting; if this type's deletes
@@ -195,7 +195,7 @@ export interface ProviderService<
      * under an in-flight teardown.
      *
      * Example: SageMaker HyperPod deletes node ENIs by assuming the
-     * instance group's execution role — deleting the role (or the VPC)
+     * instance group's execution role -- deleting the role (or the VPC)
      * mid-teardown wedges the cluster in `Deleting` permanently, so
      * `AWS.SageMaker.Cluster` declares `dependsOn: ["AWS.IAM.Role", ...]`.
      *
@@ -209,7 +209,7 @@ export interface ProviderService<
   /**
    * Enumerates every existing resource of this type in the ambient scope
    * (account / region / zone resolved from the environment services), and
-   * returns the full {@link ProviderService} `Attributes` shape for each —
+   * returns the full {@link ProviderService} `Attributes` shape for each --
    * the same shape {@link read} produces, so each item is directly usable
    * with {@link delete} without a follow-up read.
    *
@@ -229,7 +229,7 @@ export interface ProviderService<
   tail?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -244,7 +244,7 @@ export interface ProviderService<
   logs?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -261,7 +261,7 @@ export interface ProviderService<
   read?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -285,7 +285,7 @@ export interface ProviderService<
   diff?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -326,7 +326,7 @@ export interface ProviderService<
   observe?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -338,7 +338,7 @@ export interface ProviderService<
   precreate?(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -351,28 +351,28 @@ export interface ProviderService<
    * Reconciles the desired state of a Resource with the live cloud state.
    *
    * This unified lifecycle method replaces the previous `create` and `update`
-   * pair. The engine dispatches `reconcile` for both intents — initial
-   * provisioning and subsequent updates — and providers must defensively
+   * pair. The engine dispatches `reconcile` for both intents -- initial
+   * provisioning and subsequent updates -- and providers must defensively
    * handle every combination of inputs:
    *
-   * - `output === undefined` and `olds === undefined` — first reconciliation
+   * - `output === undefined` and `olds === undefined` -- first reconciliation
    *   for this logical resource. Treat as a create. Must remain idempotent
    *   because state persistence can fail after a successful API call.
-   * - `output !== undefined` and `olds === undefined` — engine adopted an
+   * - `output !== undefined` and `olds === undefined` -- engine adopted an
    *   existing cloud resource (via {@link read}). The provider has never
    *   written this resource through Alchemy before, so cannot rely on prior
    *   props as a baseline.
-   * - `output !== undefined` and `olds !== undefined` — standard update
+   * - `output !== undefined` and `olds !== undefined` -- standard update
    *   path with a known prior state.
    *
-   * Ownership has already been verified upstream — by the time `reconcile`
+   * Ownership has already been verified upstream -- by the time `reconcile`
    * runs, the engine has confirmed (via `read` returning a non-`Unowned`
    * value, or by writing the resource itself) that mutation is safe.
    */
   reconcile(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -387,7 +387,7 @@ export interface ProviderService<
   delete(input: {
     id: string;
     /**
-     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) --
      * globally unique, so providers can stamp ownership metadata on cloud objects.
      */
     fqn: string;
@@ -400,7 +400,7 @@ export interface ProviderService<
      * Set by account-wide teardown (`alchemy unsafe nuke`) to signal the
      * operator explicitly requested destructive deletion. Nuke enumerates
      * resources straight from the cloud, so `olds` carries Attributes rather
-     * than the originally-deployed Props — destructive prerequisites that a
+     * than the originally-deployed Props -- destructive prerequisites that a
      * normal destroy gates behind a prop (e.g. emptying a non-empty S3
      * bucket behind `forceDestroy`) may be performed when this is set.
      * Normal engine destroys never set it.
@@ -417,8 +417,8 @@ export interface ProviderService<
  * `() => Effect.succeed([])` default.
  *
  * Making `list` optional at the constructor (rather than on
- * {@link ProviderService} itself) keeps the engine's contract intact — every
- * registered provider still has a callable `list` — while removing the
+ * {@link ProviderService} itself) keeps the engine's contract intact -- every
+ * registered provider still has a callable `list` -- while removing the
  * type-inference trap where a missing required member silently defaults all
  * `*Req` type params to `never` and produces baffling `R is not assignable
  * to never` cascades at every other property.
@@ -572,7 +572,7 @@ export interface ProviderCollectionService {
   /**
    * Every provider in this collection keyed by its resource type
    * (e.g. `"Cloudflare.Worker"`). Used by account-wide operations such
-   * as `alchemy unsafe nuke` to enumerate and filter providers — the
+   * as `alchemy unsafe nuke` to enumerate and filter providers -- the
    * collection's closure-captured map would otherwise be unreachable.
    */
   readonly providers: Record<string, ProviderService>;
@@ -634,12 +634,12 @@ export const isProviderService = (value: unknown): value is ProviderService =>
 /**
  * Resolve the concrete service for `mode` from a provider found in context.
  *
- * - `mode === undefined` → the service as registered (for dual
+ * - `mode === undefined` -> the service as registered (for dual
  *   registrations that is the delegating service for the run's default
  *   mode).
- * - `mode` given and the provider carries {@link ProviderService.modes} →
+ * - `mode` given and the provider carries {@link ProviderService.modes} ->
  *   the (lazily built, memoized) variant for that mode.
- * - `mode` given but the provider is mode-agnostic → the service itself:
+ * - `mode` given but the provider is mode-agnostic -> the service itself:
  *   a single implementation satisfies every mode (hybrid), which is what
  *   lets live-only resources (e.g. DNS records) participate in dev runs.
  */
@@ -651,23 +651,23 @@ export const providerForMode = <R extends ResourceLike>(
 
 /**
  * Why a resource's deploy-time binding clients target the data plane they
- * do — see {@link describeDataPlane}.
+ * do -- see {@link describeDataPlane}.
  *
- * - `local` — the resource runs on its provider's local emulator; `layer`
+ * - `local` -- the resource runs on its provider's local emulator; `layer`
  *   is the override to provide closest around every client call.
- * - `live` — the resource targets the real cloud: either pinned there
+ * - `live` -- the resource targets the real cloud: either pinned there
  *   (`Alchemy.remote()`) or the run is a plain deploy. `layer` is the
  *   registration-captured live environment, provided closest around every
  *   client call so a `remote()` resource still hits the real cloud when the
  *   ambient environment is the emulator.
- * - `undeclared` — the resource resolves to local mode, but its provider
+ * - `undeclared` -- the resource resolves to local mode, but its provider
  *   is a dual registration without a {@link ProviderService.localDataPlane}
  *   (a process-hosted local variant with no API to route to, or a missing
  *   `dataPlane` on a hand-written `ProviderLayer.dual`). Clients fall back
- *   to the real cloud — reported by name so the two are never confused.
- * - `agnostic` — the provider is mode-agnostic (plain registration); its
+ *   to the real cloud -- reported by name so the two are never confused.
+ * - `agnostic` -- the provider is mode-agnostic (plain registration); its
  *   resources live on the real cloud even in dev.
- * - `unregistered` — no provider in context (bare runtime, unit tests).
+ * - `unregistered` -- no provider in context (bare runtime, unit tests).
  */
 export type DataPlaneResolution =
   | { readonly kind: "local"; readonly layer: Layer.Layer<any, any, never> }
@@ -682,8 +682,8 @@ export type DataPlaneResolution =
 /**
  * Resolve where a resource's deploy-time binding clients should be routed:
  * its registration-captured {@link ResourceLike.Mode} (`Alchemy.remote()`
- * → `"live"`) or the run default (`alchemy dev` → `"local"`) — the same
- * resolution `Plan.make` applies to lifecycle operations — combined with
+ * -> `"live"`) or the run default (`alchemy dev` -> `"local"`) -- the same
+ * resolution `Plan.make` applies to lifecycle operations -- combined with
  * whether the provider registered a local data plane at all.
  */
 export const describeDataPlane = (resource: {
@@ -738,7 +738,7 @@ export const findProviderByType: {
  * Resolve the concrete provider for the requested or current run mode.
  * Typed provider lookup by resource class (or {@link Platform}) value. Infers
  * `R` from the class so `provider.list()` / `provider.read(...)` return the
- * resource's `Attributes` shape — prefer this over {@link findProviderByType},
+ * resource's `Attributes` shape -- prefer this over {@link findProviderByType},
  * which only takes the type string.
  */
 export const findProvider: {
@@ -751,7 +751,7 @@ export const findProvider: {
 
 /**
  * A persisted state row references a resource type with no registered
- * provider — the type was removed from the program (or renamed without an
+ * provider -- the type was removed from the program (or renamed without an
  * alias) while its state row still exists ("zombie" row).
  *
  * This is FATAL at plan time: the program and state fundamentally disagree,
@@ -820,7 +820,7 @@ export const tryFindProviderRegistrationByType: {
 
   // State persisted before a type rename carries the legacy name, so no
   // provider is keyed under it. Fall back to a provider that declares the
-  // name in its `aliases` — scanning both bare Provider layers and the
+  // name in its `aliases` -- scanning both bare Provider layers and the
   // members of every ProviderCollection.
   for (const value of context.mapUnsafe.values()) {
     if (isProviderCollectionService(value)) {

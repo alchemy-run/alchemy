@@ -27,7 +27,7 @@ export type AppsAgentProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * agent.
    */
   app: string;
@@ -38,7 +38,7 @@ export type AppsAgentProps = {
   location?: string;
   /**
    * Agent id (the `{agent}` segment). If omitted, a unique name is
-   * generated. Immutable — changing it replaces the agent.
+   * generated. Immutable -- changing it replaces the agent.
    */
   agentId?: string;
   /**

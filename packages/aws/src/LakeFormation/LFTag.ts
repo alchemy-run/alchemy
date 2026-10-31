@@ -40,12 +40,12 @@ export interface LFTag extends Resource<
 > {}
 
 /**
- * A Lake Formation LF-tag definition — a key with a list of allowed values
+ * A Lake Formation LF-tag definition -- a key with a list of allowed values
  * used for tag-based access control (attach values to databases/tables with
  * {@link LFTagAssociation | AWS.LakeFormation.LFTagAssociation}, grant on
  * expressions with {@link Permissions | AWS.LakeFormation.Permissions}).
  *
- * Creating LF-tags requires the caller to be a data lake administrator — see
+ * Creating LF-tags requires the caller to be a data lake administrator -- see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
  * ### Creating LF-Tags
@@ -95,7 +95,7 @@ export const LFTagProvider = () =>
           if (tagKey === undefined) return undefined;
           const tag = yield* observe(tagKey, olds?.catalogId);
           if (tag === undefined) return undefined;
-          // LF-tags are not taggable — ownership cannot be verified.
+          // LF-tags are not taggable -- ownership cannot be verified.
           return {
             tagKey,
             tagValues: [...(tag.TagValues ?? [])],
@@ -135,7 +135,7 @@ export const LFTagProvider = () =>
             });
             tag = yield* observe(news.tagKey, news.catalogId);
           } else {
-            // 3. SYNC — diff observed values against desired.
+            // 3. SYNC -- diff observed values against desired.
             const current = tag.TagValues ?? [];
             const toAdd = news.tagValues.filter((v) => !current.includes(v));
             const toDelete = current.filter((v) => !news.tagValues.includes(v));

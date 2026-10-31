@@ -81,7 +81,7 @@ export class DurableObjectState extends Context.Service<
      * given message is logged and cannot be caught in application code.
      *
      * By default an in-progress alarm retries after the reset. Pass
-     * `{ retryAlarm: false }` to stop it instead — for example an `alarm`
+     * `{ retryAlarm: false }` to stop it instead -- for example an `alarm`
      * handler that deletes storage so the constructor does not recreate it.
      */
     abort(
@@ -117,7 +117,7 @@ export const fromDurableObjectState = (
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
+      // Register the promise with workerd un-awaited -- waitUntil extends the
       // event's lifetime without blocking the caller.
       const track = yield* Effect.serviceOption(BackgroundWork);
       yield* Effect.sync(() => {

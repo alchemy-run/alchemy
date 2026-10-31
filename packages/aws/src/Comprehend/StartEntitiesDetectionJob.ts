@@ -20,7 +20,7 @@ export interface StartEntitiesDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartEntitiesDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartEntitiesDetectionJob` -- start an asynchronous
  * entity detection job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -35,7 +35,7 @@ export interface StartEntitiesDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous Entities Detection Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startEntitiesDetectionJob = yield* AWS.Comprehend.StartEntitiesDetectionJob(dataAccessRole);
  *
  * // runtime

@@ -24,7 +24,7 @@ export interface VirtualNetworkProps {
    */
   name?: string;
   /**
-   * Optional remark describing the virtual network. Mutable — patched
+   * Optional remark describing the virtual network. Mutable -- patched
    * in place.
    *
    * @default ""
@@ -32,8 +32,8 @@ export interface VirtualNetworkProps {
   comment?: string;
   /**
    * If `true`, this virtual network is the default for the account. Only
-   * one default exists per account — promoting a network demotes the
-   * previous default. Mutable — patched in place.
+   * one default exists per account -- promoting a network demotes the
+   * previous default. Mutable -- patched in place.
    *
    * @default false
    */
@@ -64,7 +64,7 @@ export type VirtualNetwork = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust Virtual Network — an isolated routing namespace
+ * A Cloudflare Zero Trust Virtual Network -- an isolated routing namespace
  * for Cloudflare Tunnel private networks.
  *
  * Virtual networks let you run overlapping CIDR ranges side by side: each
@@ -73,7 +73,7 @@ export type VirtualNetwork = Resource<
  * they see. Every account starts with a single `default` virtual network.
  *
  * Name and comment are mutable in place. Deleting a virtual network
- * requires that no routes reference it — express that relationship by
+ * requires that no routes reference it -- express that relationship by
  * passing `vnet.virtualNetworkId` into your `Route`s so destroy
  * ordering is correct.
  * ### Creating a Virtual Network
@@ -97,7 +97,7 @@ export type VirtualNetwork = Resource<
  * ### Default network
  * **Example:** Promote a virtual network to the account default
  * ```typescript
- * // Only one default per account — promoting demotes the previous one.
+ * // Only one default per account -- promoting demotes the previous one.
  * const vnet = yield* Cloudflare.Tunnel.VirtualNetwork("Primary", {
  *   isDefaultNetwork: true,
  * });
@@ -134,13 +134,13 @@ export const VirtualNetworkProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached id.
+      // Owned path -- refresh by the cached id.
       if (output?.virtualNetworkId) {
         const observed = yield* getVnet(acct, output.virtualNetworkId);
         if (observed) return toAttributes(observed, acct);
       }
 
-      // Cold read — names are unique per account, so an exact name match
+      // Cold read -- names are unique per account, so an exact name match
       // is the resource's identity. Virtual networks carry no ownership
       // markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
@@ -153,7 +153,7 @@ export const VirtualNetworkProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
-      // 1. Observe — the cached id is a hint, not a guarantee.
+      // 1. Observe -- the cached id is a hint, not a guarantee.
       let observed = output?.virtualNetworkId
         ? yield* getVnet(accountId, output.virtualNetworkId)
         : undefined;
@@ -161,7 +161,7 @@ export const VirtualNetworkProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Names are unique per account, so
+      // 2. Ensure -- create when missing. Names are unique per account, so
       //    a racing create surfaces as VirtualNetworkConflict (code 1014):
       //    converge by re-reading the network that won the race.
       if (!observed) {
@@ -184,9 +184,9 @@ export const VirtualNetworkProvider = () =>
         observed = created;
       }
 
-      // 3. Sync — diff observed cloud state against desired and PATCH only
+      // 3. Sync -- diff observed cloud state against desired and PATCH only
       //    the delta; skip the call entirely on a no-op. `isDefaultNetwork`
-      //    is never patched to false here — demotion happens implicitly
+      //    is never patched to false here -- demotion happens implicitly
       //    when another network is promoted (Cloudflare rejects an explicit
       //    demote of the only default).
       const desired = {
@@ -215,7 +215,7 @@ export const VirtualNetworkProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Deleting a vnet with routes still attached fails — routes that
+      // Deleting a vnet with routes still attached fails -- routes that
       // reference `virtualNetworkId` as an Input get correct destroy
       // ordering, so by the time we run the routes are gone. A missing
       // vnet (VirtualNetworkNotFound, code 1046) means we're done.

@@ -30,26 +30,26 @@ export type NetworkFirewallPolicyAssociation = compute.FirewallPolicyAssociation
 export type NetworkFirewallPolicyProps = {
   /**
    * Policy name (RFC1035, 1-63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the policy.
    */
   networkFirewallPolicyName?: string;
   /**
    * Optional description. Network firewall policies have no labels field,
    * so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
    * Updated in place via `patch`.
    */
   description?: string;
   /**
-   * Policy type. Set only at create time — changing it replaces the
+   * Policy type. Set only at create time -- changing it replaces the
    * policy.
    * @default "VPC_POLICY"
    */
   policyType?: NetworkFirewallPolicyType;
   /**
    * Hierarchical firewall rules. GCP always keeps default `goto_next`
-   * rules in the reserved priority range `2147483548`–`2147483647`;
+   * rules in the reserved priority range `2147483548`-`2147483647`;
    * Alchemy never add/patch/remove those. When this field is set, user
    * rules are synced with `addRule` / `patchRule` / `removeRule`. When
    * omitted on later updates, observed rules are left in place.
@@ -108,7 +108,7 @@ export type NetworkFirewallPolicy = Resource<
  * place via `networkFirewallPolicies.patch`. Rules are synced with
  * `addRule` / `patchRule` / `removeRule`. Associations are synced with
  * `addAssociation` / `removeAssociation`. Compute network firewall
- * policies have no labels field — Alchemy stamps ownership into the
+ * policies have no labels field -- Alchemy stamps ownership into the
  * description so nuke can find leaked policies.
  *
  * ### Creating a Network Firewall Policy
@@ -548,7 +548,7 @@ export const NetworkFirewallPolicyProvider = () =>
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
       // Name is immutable on GCP. Resolve the desired name the same way
-      // create does — do not fall back to previousName when news omits
+      // create does -- do not fall back to previousName when news omits
       // networkFirewallPolicyName, or a generated-name change looks like a no-op.
       const previousName = output?.networkFirewallPolicyName ?? olds?.networkFirewallPolicyName;
       const nextName = yield* toName(id, news.networkFirewallPolicyName);

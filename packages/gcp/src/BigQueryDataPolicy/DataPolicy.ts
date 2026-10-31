@@ -69,12 +69,12 @@ export type DataPolicyProps = {
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Letters, digits, and underscores; max 200 characters.
    * Data policies have no labels field, so Alchemy stamps ownership into
-   * this id (`alch___…`) for `list` / nuke. Immutable — changing it
+   * this id (`alch___...`) for `list` / nuke. Immutable -- changing it
    * replaces the policy.
    */
   dataPolicyId?: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Immutable --
    * changing it replaces the policy. Multi-regions `US` and `EU` stay
    * uppercase; regional ids are lowercased (`US-CENTRAL1` becomes
    * `us-central1`).
@@ -113,7 +113,7 @@ export type DataPolicy = Resource<
     dataPolicyId: string;
     /** Project id used when the policy was reconciled. */
     project: string;
-    /** Location id (`us-central1`, `US`, …). */
+    /** Location id (`us-central1`, `US`, ...). */
     location: string;
     /** Policy type. */
     dataPolicyType: string | undefined;
@@ -135,11 +135,11 @@ export type DataPolicy = Resource<
 >;
 
 /**
- * A BigQuery Data Policy (v2) — raw-data access or column data masking.
+ * A BigQuery Data Policy (v2) -- raw-data access or column data masking.
  *
  * Data policies have no labels, so Alchemy stamps ownership into the
- * policy id (`alch___…`) so `list` / `pnpm nuke:gcp` can find them.
- * `dataPolicyId` and `location` are identity — changing either replaces
+ * policy id (`alch___...`) so `list` / `pnpm nuke:gcp` can find them.
+ * `dataPolicyId` and `location` are identity -- changing either replaces
  * the policy. Type, masking rule, grantees, and the data-governance tag
  * update in place. Patches send the observed etag.
  *

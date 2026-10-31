@@ -29,7 +29,7 @@ import {
 const COLLECTION = "multicloudDataTransferConfigs";
 
 export type StateMetadata = {
-  /** Transient or rest state (`ADDING`, `ACTIVE`, `DELETING`, …). */
+  /** Transient or rest state (`ADDING`, `ACTIVE`, `DELETING`, ...). */
   state?: string;
   /** RFC3339 time when a transient state becomes effective. */
   effectiveTime?: string;
@@ -45,11 +45,11 @@ export type MulticloudDataTransferConfigProps = {
    * Config id (the `{multicloud_data_transfer_config}` segment of
    * `projects/{project}/locations/{location}/multicloudDataTransferConfigs/{multicloud_data_transfer_config}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the config.
+   * logical id. Immutable -- changing it replaces the config.
    */
   multicloudDataTransferConfigId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -106,7 +106,7 @@ export type MulticloudDataTransferConfig = Resource<
 >;
 
 /**
- * A Data Transfer Essentials `MulticloudDataTransferConfig` — the
+ * A Data Transfer Essentials `MulticloudDataTransferConfig` -- the
  * billing/metering configuration for services whose traffic is billed
  * through DTE.
  *

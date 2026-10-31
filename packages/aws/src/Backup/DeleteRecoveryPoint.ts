@@ -16,7 +16,7 @@ export interface DeleteRecoveryPointRequest extends Omit<
  * Runtime binding for the `DeleteRecoveryPoint` operation (IAM action
  * `backup:DeleteRecoveryPoint`).
  *
- * Deletes a recovery point from the bound {@link BackupVault} — e.g. a
+ * Deletes a recovery point from the bound {@link BackupVault} -- e.g. a
  * retention janitor pruning on-demand backups. Provide the implementation
  * with `Effect.provide(AWS.Backup.DeleteRecoveryPointHttp)`.
  * ### Recovery Points

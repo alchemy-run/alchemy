@@ -43,12 +43,12 @@ export type AppTargeting = AppTargetingValue;
 export type BiddersPretargetingConfigProps = {
   /**
    * Parent bidder, as `bidders/{bidder}` or the bidder account id.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   parent: string;
   /**
    * Server-assigned config id (last path segment). Omit on create; pass
-   * the observed id to keep the same config. Immutable — changing it
+   * the observed id to keep the same config. Immutable -- changing it
    * replaces the config.
    */
   configId?: string;
@@ -56,7 +56,7 @@ export type BiddersPretargetingConfigProps = {
    * Human-readable display name. Must be unique among the bidder's
    * pretargeting configs. If omitted, a unique name is generated from
    * the stack, stage, and logical id. Pretargeting configs have no
-   * labels field, so Alchemy stamps ownership into a `[alchemy …]`
+   * labels field, so Alchemy stamps ownership into a `[alchemy ...]`
    * prefix and strips it from attributes.
    */
   displayName?: string;
@@ -81,7 +81,7 @@ export type BiddersPretargetingConfigProps = {
    */
   includedPlatforms?: string[];
   /**
-   * User identifier types (`GOOGLE_COOKIE`, `DEVICE_ID`, …). At least
+   * User identifier types (`GOOGLE_COOKIE`, `DEVICE_ID`, ...). At least
    * one listed type must be present on a bid request.
    */
   includedUserIdTypes?: string[];
@@ -112,7 +112,7 @@ export type BiddersPretargetingConfigProps = {
    */
   maximumQps?: string;
   /**
-   * Minimum predicted viewability decile (0–10). `5` means 50%.
+   * Minimum predicted viewability decile (0-10). `5` means 50%.
    */
   minimumViewabilityDecile?: number;
   /**
@@ -212,7 +212,7 @@ export type BiddersPretargetingConfig = Resource<
  *
  * Pretargeting configs have no labels field, so Alchemy stamps ownership
  * into `displayName` for `list` / nuke. Parent and config id are
- * identity — changing either replaces the config. Display name and
+ * identity -- changing either replaces the config. Display name and
  * targeting update in place. Create yields `ACTIVE`; pass `state:
  * "SUSPENDED"` to suspend. A bidder may own at most 10 configs.
  *

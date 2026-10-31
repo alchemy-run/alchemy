@@ -224,7 +224,7 @@ export const AccountApiTokenProvider = () =>
         );
       }
 
-      // Observe — fetch current state if we already know the token id.
+      // Observe -- fetch current state if we already know the token id.
       // Cloudflare reports a deleted token as `InvalidRoute` or
       // `TokenNotFound`; both mean "create from scratch".
       const observed = output?.tokenId
@@ -242,7 +242,7 @@ export const AccountApiTokenProvider = () =>
             )
         : undefined;
 
-      // Ensure — create if missing. Cloudflare returns the plaintext
+      // Ensure -- create if missing. Cloudflare returns the plaintext
       // token value exactly once on create, so we must persist it for
       // downstream consumers. There is no idempotency token here; if
       // a stale write produced an orphan we accept the duplicate over
@@ -262,7 +262,7 @@ export const AccountApiTokenProvider = () =>
         return buildAttributes(result, Redacted.make(result.value), accountId);
       }
 
-      // Sync — the update API replaces all mutable fields (name,
+      // Sync -- the update API replaces all mutable fields (name,
       // policies, condition, validity window). Cloudflare does not
       // return the plaintext value on update, so we preserve the one
       // captured at creation.
@@ -284,7 +284,7 @@ export const AccountApiTokenProvider = () =>
           tokenId: output.tokenId,
         })
         .pipe(
-          // Already gone — Cloudflare may report this as either an
+          // Already gone -- Cloudflare may report this as either an
           // `InvalidRoute` (token-id no longer routable) or a generic
           // `TokenNotFound`. Either is fine; we just want the resource gone.
           Effect.catchTags({
@@ -301,7 +301,7 @@ export const AccountApiTokenProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The plaintext token value is only returned by Cloudflare once, at
       // creation time. The list/get APIs never expose it, so we hydrate an
-      // empty redacted placeholder — matching what `read` returns when it
+      // empty redacted placeholder -- matching what `read` returns when it
       // re-observes a token whose value we no longer hold.
       //
       // `GET /accounts/{id}/tokens` is offset-paginated over a name-sorted

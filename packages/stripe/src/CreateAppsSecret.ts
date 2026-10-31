@@ -8,7 +8,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 /**
- * Create or replace a Stripe Apps Secret over HTTP. Account-scoped —
+ * Create or replace a Stripe Apps Secret over HTTP. Account-scoped --
  * binds the API key onto the host, not a specific secret resource.
  *
  * ### Creating a Secret at runtime

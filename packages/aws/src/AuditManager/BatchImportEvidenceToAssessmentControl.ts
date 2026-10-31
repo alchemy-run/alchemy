@@ -13,7 +13,7 @@ export interface BatchImportEvidenceToAssessmentControlRequest extends Omit<
  * Runtime binding for `auditmanager:BatchImportEvidenceToAssessmentControl`.
  *
  * Adds one or more pieces of manual evidence to a control in the
- * bound assessment — free-form text, an S3 object, or a file uploaded via
+ * bound assessment -- free-form text, an S3 object, or a file uploaded via
  * {@link GetEvidenceFileUploadUrl}. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.BatchImportEvidenceToAssessmentControlHttp)`.
  * ### Manual Evidence

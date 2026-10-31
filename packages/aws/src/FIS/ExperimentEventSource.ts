@@ -52,12 +52,12 @@ export interface ExperimentEventSourceProps extends EventRouteProps {
  * Event source connecting AWS Fault Injection Service experiment state
  * changes to the hosting compute. FIS publishes an event to the account's
  * default EventBridge bus (source `aws.fis`, detail-type
- * `FIS Experiment State Change`) whenever an experiment transitions state —
- * starts running, completes, stops, or fails — so a function can post
+ * `FIS Experiment State Change`) whenever an experiment transitions state --
+ * starts running, completes, stops, or fails -- so a function can post
  * chaos-run reports or trigger follow-up verification the moment an
  * experiment finishes.
  *
- * FIS publishes to EventBridge automatically — no additional resource is
+ * FIS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

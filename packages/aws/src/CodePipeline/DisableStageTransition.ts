@@ -9,7 +9,7 @@ export interface DisableStageTransitionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:DisableStageTransition` — freezes a
+ * Runtime binding for `codepipeline:DisableStageTransition` -- freezes a
  * transition into (`Inbound`) or out of (`Outbound`) a stage, e.g. to gate
  * deploys during an incident.
  * ### Operating Stages

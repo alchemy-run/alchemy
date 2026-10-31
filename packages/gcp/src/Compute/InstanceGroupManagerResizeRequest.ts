@@ -30,7 +30,7 @@ export type InstanceGroupManagerResizeRequestProps = {
    */
   zone?: string;
   /**
-   * Managed instance group name or URL. Immutable — changing it replaces
+   * Managed instance group name or URL. Immutable -- changing it replaces
    * the request.
    */
   instanceGroupManager: string;
@@ -40,8 +40,8 @@ export type InstanceGroupManagerResizeRequestProps = {
    */
   resizeBy: number;
   /**
-   * Optional description. Resize requests have no labels field — Alchemy
-   * ownership is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * Optional description. Resize requests have no labels field -- Alchemy
+   * ownership is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -69,7 +69,7 @@ export type InstanceGroupManagerResizeRequest = Resource<
     description: string | undefined;
     /** Requested run duration. */
     requestedRunDuration: InstanceGroupManagerResizeRequestDuration | undefined;
-    /** Current state (`ACCEPTED`, `SUCCEEDED`, …). */
+    /** Current state (`ACCEPTED`, `SUCCEEDED`, ...). */
     state: string | undefined;
     /** Server-assigned numeric id. */
     resizeRequestId: string | undefined;
@@ -88,7 +88,7 @@ export type InstanceGroupManagerResizeRequest = Resource<
  * Resize requests provision additional MIG VMs immediately or by queueing
  * until capacity is available (typically GPU / queued-provisioning
  * machine types). Name, zone, MIG, `resizeBy`, and run duration replace
- * the request — there is no in-place update. Compute has no labels
+ * the request -- there is no in-place update. Compute has no labels
  * field, so Alchemy stamps ownership into the description.
  *
  * Delete cancels an `ACCEPTED` / `CREATING` request first, then removes

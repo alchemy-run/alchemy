@@ -103,7 +103,7 @@ export interface FileSystemProps {
    */
   replicationOverwriteProtection?: "ENABLED" | "DISABLED";
   /**
-   * The file system policy — an IAM resource-based policy controlling client
+   * The file system policy -- an IAM resource-based policy controlling client
    * access to the file system (e.g. enforcing in-transit encryption or
    * restricting mounts to access points). Either a structured
    * {@link PolicyDocument} or a raw JSON string. Omitting the property
@@ -130,13 +130,13 @@ export interface FileSystem extends Resource<
 > {}
 
 /**
- * An Amazon EFS file system — serverless, elastic, shared POSIX storage.
+ * An Amazon EFS file system -- serverless, elastic, shared POSIX storage.
  *
  * The file system is created encrypted by default with a deterministic
  * creation token derived from the app, stage, and logical ID, so retried
  * creates are idempotent. Mount it into compute with
  * {@link MountTarget} (per-subnet network endpoints) and
- * {@link AccessPoint} (application-specific POSIX entry points — required
+ * {@link AccessPoint} (application-specific POSIX entry points -- required
  * for Lambda mounts).
  * ### Creating File Systems
  * **Example:** Default file system (encrypted, general purpose)
@@ -232,7 +232,7 @@ export interface FileSystem extends Resource<
  *
  * **Example:** Host-agnostic mount binding (Lambda or ECS)
  * `EFS.mount` wires the mount config + least-privilege IAM through the
- * host's binding channel — the same code works inside a Lambda Function or
+ * host's binding channel -- the same code works inside a Lambda Function or
  * an ECS Task body (provide `AWS.EFS.MountLive` on the host Effect).
  * ```typescript
  * export default class Api extends AWS.Lambda.Function<Api>()(
@@ -415,14 +415,14 @@ export const FileSystemProvider = () =>
           if (replaced) {
             return { action: "replace" } as const;
           }
-          // undefined → default update path (throughput/lifecycle/tags sync)
+          // undefined -> default update path (throughput/lifecycle/tags sync)
         }),
 
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const token = yield* createToken(id);
           const internalTags = yield* createInternalTags(id);
 
-          // 1. OBSERVE — the creation token is the deterministic identity;
+          // 1. OBSERVE -- the creation token is the deterministic identity;
           //    output.fileSystemId is only a cache and may be stale.
           let fs = output?.fileSystemId
             ? yield* findById(output.fileSystemId)
@@ -431,7 +431,7 @@ export const FileSystemProvider = () =>
             fs = undefined;
           }
 
-          // 2. ENSURE — create if missing. CreateFileSystem is idempotent on
+          // 2. ENSURE -- create if missing. CreateFileSystem is idempotent on
           //    the creation token; a concurrent create surfaces the typed
           //    FileSystemAlreadyExists which we resolve by re-observing.
           if (fs === undefined) {
@@ -468,7 +468,7 @@ export const FileSystemProvider = () =>
               .pipe(Effect.map((r) => r.FileSystems![0])),
           );
 
-          // 3a. SYNC throughput — observed vs desired; only call the API on a
+          // 3a. SYNC throughput -- observed vs desired; only call the API on a
           //     real delta.
           if (news.throughputMode !== undefined) {
             const modeChanged = fs.ThroughputMode !== news.throughputMode;
@@ -489,7 +489,7 @@ export const FileSystemProvider = () =>
             }
           }
 
-          // 3b. SYNC lifecycle policies — a PUT with the full desired list;
+          // 3b. SYNC lifecycle policies -- a PUT with the full desired list;
           //     an empty list clears lifecycle management.
           const observedPolicies = yield* efs
             .describeLifecycleConfiguration({ FileSystemId: fileSystemId })
@@ -504,7 +504,7 @@ export const FileSystemProvider = () =>
             );
           }
 
-          // 3c. SYNC backup policy — observed vs desired; only call the API
+          // 3c. SYNC backup policy -- observed vs desired; only call the API
           //     on a real delta. An in-flight transition (ENABLING/
           //     DISABLING) counts as its target state. When the prop is
           //     omitted the AWS default is left alone.
@@ -529,7 +529,7 @@ export const FileSystemProvider = () =>
             }
           }
 
-          // 3d. SYNC replication overwrite protection — observed vs desired
+          // 3d. SYNC replication overwrite protection -- observed vs desired
           //     from the file system description. When the prop is omitted
           //     the current protection setting is left alone.
           if (news.replicationOverwriteProtection !== undefined) {
@@ -545,7 +545,7 @@ export const FileSystemProvider = () =>
             }
           }
 
-          // 3e. SYNC file system policy — compare the observed policy with
+          // 3e. SYNC file system policy -- compare the observed policy with
           //     the desired one after canonicalization (sorted keys, no
           //     whitespace) so a re-deploy of an equivalent document is a
           //     no-op API-wise.
@@ -579,7 +579,7 @@ export const FileSystemProvider = () =>
             );
           }
 
-          // 3f. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3f. SYNC tags -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = efsTagsToRecord(fs.Tags);
           const desiredTags = mutableEfsTags({

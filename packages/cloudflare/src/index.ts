@@ -1,4 +1,4 @@
-// ── cross-cutting utilities (flat) ──
+// -- cross-cutting utilities (flat) --
 export * from "./CloudflareEnvironment.ts";
 export * from "./EdgeSession.ts";
 export * from "./Fetcher.ts";
@@ -6,7 +6,7 @@ export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
 export * from "./Workers/RpcAsync.ts";
 
-// ── services (namespaced) ──
+// -- services (namespaced) --
 export * as ACME from "./ACME.ts";
 export * as Access from "./Access/index.ts";
 export * as Account from "./Account/index.ts";
@@ -107,14 +107,14 @@ export * as Workflows from "./Workflows/index.ts";
 export * as Zaraz from "./Zaraz/index.ts";
 export * as Zone from "./Zone/index.ts";
 
-// ── convenience root re-exports (common building blocks) ──
+// -- convenience root re-exports (common building blocks) --
 export * from "./Containers/index.ts";
 export * from "./Images/Images.ts";
 export * from "./Workers/index.ts";
 // Only the Workflow resource: the workflow engines stay under `Cloudflare.Workflows`.
 export * from "./Workflows/Workflow.ts";
 
-// runtime bridge factories — the generated Worker entry imports these from
+// runtime bridge factories -- the generated Worker entry imports these from
 // the runtime-only "@alchemy.run/cloudflare/Bridge" entry (see Bridge.ts and
 // Workers/Sources/Rolldown.ts); they stay top-level here for hand-written
 // entries that import them from "@alchemy.run/cloudflare".

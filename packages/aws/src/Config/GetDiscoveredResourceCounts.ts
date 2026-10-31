@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetDiscoveredResourceCounts` — count the
+ * Runtime binding for `config:GetDiscoveredResourceCounts` -- count the
  * resources AWS Config has discovered, grouped by resource type.
  *
  * Provide `Config.GetDiscoveredResourceCountsHttp` on the hosting Lambda Function to
@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Discovering Resources
  * **Example:** Count Discovered Resources
  * ```typescript
- * // init — grants config:GetDiscoveredResourceCounts
+ * // init -- grants config:GetDiscoveredResourceCounts
  * const getDiscoveredResourceCounts = yield* AWS.Config.GetDiscoveredResourceCounts();
  *
  * // runtime

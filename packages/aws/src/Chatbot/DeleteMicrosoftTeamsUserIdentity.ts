@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:DeleteMicrosoftTeamsUserIdentity`.
  *
- * Unlinks a Microsoft Teams user identity from its AWS user identity — the
+ * Unlinks a Microsoft Teams user identity from its AWS user identity -- the
  * write half of identity offboarding automation. Provide the implementation
  * with `Effect.provide(AWS.Chatbot.DeleteMicrosoftTeamsUserIdentityHttp)`.
  * ### Microsoft Teams Identity Management

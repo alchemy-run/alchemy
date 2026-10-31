@@ -14,7 +14,7 @@ export interface DeleteEventsByEventTypeRequest extends Omit<
 
 /**
  * Start an asynchronous bulk delete of ALL events stored for a bound Amazon
- * Fraud Detector event type — the effectful cleanup call (e.g. a data-privacy
+ * Fraud Detector event type -- the effectful cleanup call (e.g. a data-privacy
  * purge) made from a deployed Lambda or Task. Track progress with the
  * companion `GetDeleteEventsByEventTypeStatus` binding.
  *

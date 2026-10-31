@@ -111,8 +111,8 @@ export type ManagedTableType =
 
 export type TransferConfigProps = {
   /**
-   * Data Transfer location (`us-central1`, `us-east1`, `us`, …). Must
-   * match the destination dataset location. Immutable — changing it
+   * Data Transfer location (`us-central1`, `us-east1`, `us`, ...). Must
+   * match the destination dataset location. Immutable -- changing it
    * replaces the config. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -120,14 +120,14 @@ export type TransferConfigProps = {
   location?: string;
   /**
    * Data source id (e.g. `"scheduled_query"`, `"google_cloud_storage"`).
-   * Immutable — changing it replaces the config. The full list is
+   * Immutable -- changing it replaces the config. The full list is
    * available from `projects.locations.dataSources.list`.
    */
   dataSourceId: string;
   /**
    * User-specified display name. Transfer configs have no labels field,
    * so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `read` /
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `read` /
    * `list` / nuke.
    */
   displayName?: string;
@@ -157,7 +157,7 @@ export type TransferConfigProps = {
   scheduleOptions?: ScheduleOptions;
   /**
    * V2 schedule (time-based, event-driven, or manual). Replaces
-   * `schedule` and `scheduleOptions` — the two families cannot be
+   * `schedule` and `scheduleOptions` -- the two families cannot be
    * combined.
    */
   scheduleOptionsV2?: ScheduleOptionsV2;
@@ -196,7 +196,7 @@ export type TransferConfigProps = {
   /**
    * Service account the transfer runs as. The caller needs
    * `iam.serviceAccounts.actAs`. Not all data sources support this;
-   * omitted uses the caller's credentials. Not returned by get — passed
+   * omitted uses the caller's credentials. Not returned by get -- passed
    * on create and whenever it changes.
    */
   serviceAccountName?: string;
@@ -221,7 +221,7 @@ export type TransferConfig = Resource<
     transferConfigId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** User display name with the Alchemy ownership prefix stripped. */
     displayName: string | undefined;
@@ -273,9 +273,9 @@ export type TransferConfig = Resource<
 /**
  * A BigQuery Data Transfer Service transfer configuration.
  *
- * Transfer configs have no labels field — Alchemy stamps ownership into
- * the display name (`[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]`) so `read`, `list`, and `pnpm nuke:gcp` can find them.
+ * Transfer configs have no labels field -- Alchemy stamps ownership into
+ * the display name (`[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]`) so `read`, `list`, and `pnpm nuke:gcp` can find them.
  * The physical id is a server-assigned UUID. `dataSourceId` and
  * `location` are immutable; changing either replaces the config.
  *

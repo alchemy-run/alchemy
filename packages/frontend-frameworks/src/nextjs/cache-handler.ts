@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/nextjs/cache-handler` — Next.js
+ * `@alchemy.run/frontend-frameworks/nextjs/cache-handler` -- Next.js
  * `cacheHandler` backed by S3, for Next's standalone server on AWS Lambda
  * Web Functions.
  *
@@ -22,8 +22,8 @@
  * standalone `node_modules`). Requests are signed with the function's own
  * credentials from the environment. Configuration:
  *
- * - `CACHE_BUCKET_NAME` — the bucket
- * - `CACHE_BUCKET_KEY_PREFIX` — key prefix (default `_cache`)
+ * - `CACHE_BUCKET_NAME` -- the bucket
+ * - `CACHE_BUCKET_KEY_PREFIX` -- key prefix (default `_cache`)
  */
 import { createHash, createHmac } from "node:crypto";
 import { createRequire } from "node:module";

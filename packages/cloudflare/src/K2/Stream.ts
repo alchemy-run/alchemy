@@ -97,7 +97,7 @@ export interface StreamAttributes {
 
 /**
  * A K2 stream. `A` is the record type its producers send and its consumers
- * decode — the Effect Schema's `Type` when the stream was declared with
+ * decode -- the Effect Schema's `Type` when the stream was declared with
  * `schema`, unknown otherwise.
  */
 export interface Stream<A = unknown> extends Resource<
@@ -182,7 +182,7 @@ const constructStream = (id: string, props: unknown) =>
   });
 
 /**
- * A Cloudflare K2 stream — a durable, ordered log of records. Producers
+ * A Cloudflare K2 stream -- a durable, ordered log of records. Producers
  * append records over HTTP or from Workers through a `k2` binding;
  * consumers read them through a {@link Subscription}, each with its own
  * position in the stream.
@@ -323,13 +323,13 @@ export const StreamProvider = () =>
       const name = output?.streamName ?? (yield* streamName(id, news.name));
       const desired = desiredState(news);
 
-      // Observe — the cached id is a hint; fall back to the name.
+      // Observe -- the cached id is a hint; fall back to the name.
       let observed = output?.streamId ? yield* getStream(acct, output.streamId) : undefined;
       if (!observed) {
         observed = yield* findStreamByName(acct, name);
       }
 
-      // Ensure — create when missing. A taken name is a race or a lost state
+      // Ensure -- create when missing. A taken name is a race or a lost state
       // write: adopt the stream with that name.
       if (!observed) {
         observed = yield* k2
@@ -349,7 +349,7 @@ export const StreamProvider = () =>
           );
       }
 
-      // Sync — diff observed cloud state against desired and PATCH only the
+      // Sync -- diff observed cloud state against desired and PATCH only the
       // delta. A provided input object replaces the existing one.
       const patch: k2.UpdateStreamRequest = { accountId: acct, streamId: observed.id };
       let dirty = false;

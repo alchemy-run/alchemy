@@ -24,7 +24,7 @@ export type TensorboardsExperimentsRunProps = {
   /**
    * Parent TensorboardExperiment resource name
    * (`projects/{project}/locations/{location}/tensorboards/{tensorboard}/experiments/{experiment}`).
-   * Immutable — changing it replaces the run.
+   * Immutable -- changing it replaces the run.
    */
   parent: string;
   /**

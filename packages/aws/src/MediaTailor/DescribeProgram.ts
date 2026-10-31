@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:DescribeProgram` — read a scheduled
+ * Runtime binding for `mediatailor:DescribeProgram` -- read a scheduled
  * program on a channel-assembly channel.
  *
  * Channel/program names are runtime parameters, so the binding is

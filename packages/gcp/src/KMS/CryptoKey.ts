@@ -51,7 +51,7 @@ export type CryptoKeyVersionTemplate = {
    */
   algorithm?: kms.CryptoKeyVersionTemplateAlgorithmEnum | (string & {});
   /**
-   * Protection level for new versions. Immutable — changing it replaces
+   * Protection level for new versions. Immutable -- changing it replaces
    * the key.
    * @default "SOFTWARE"
    */
@@ -62,13 +62,13 @@ export type CryptoKeyProps = {
   /**
    * Parent KeyRing. Full name
    * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the
-   * key ring id (combined with `location`). Immutable — changing it
+   * key ring id (combined with `location`). Immutable -- changing it
    * replaces the key.
    */
   keyRing: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
-   * `keyRing` is a bare id. Immutable — changing it replaces the key.
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
+   * `keyRing` is a bare id. Immutable -- changing it replaces the key.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -78,9 +78,9 @@ export type CryptoKeyProps = {
    * name `{stack}-{id}-{stage}` is derived (no random suffix), plus a short
    * hash of `purpose`, `versionTemplate.protectionLevel`, `importOnly`,
    * `destroyScheduledDuration`, and `cryptoKeyBackend` when any differ
-   * from their defaults — so a redeploy after destroy reclaims the same
+   * from their defaults -- so a redeploy after destroy reclaims the same
    * key, and a replacement caused by those settings gets a distinct name.
-   * Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the
+   * Must match `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it replaces the
    * key.
    */
   cryptoKeyId?: string;
@@ -139,7 +139,7 @@ export type CryptoKeyAttrs = {
   cryptoKeyId: string;
   /** Parent KeyRing resource name. */
   keyRing: string;
-  /** Location id (`us-central1`, `global`, …). */
+  /** Location id (`us-central1`, `global`, ...). */
   location: string;
   /** Project id. */
   project: string;
@@ -174,7 +174,7 @@ export type CryptoKey = Resource<
 >;
 
 /**
- * A Cloud KMS CryptoKey — a named key that holds zero or more versions.
+ * A Cloud KMS CryptoKey -- a named key that holds zero or more versions.
  *
  * Purpose, location, parent KeyRing, import-only, backend,
  * `destroyScheduledDuration`, and `versionTemplate.protectionLevel` are
@@ -182,13 +182,13 @@ export type CryptoKey = Resource<
  * `versionTemplate.algorithm` update in place.
  *
  * Cloud KMS only permanently deletes a CryptoKey after every version is
- * gone, and a deleted CryptoKey's name is retired forever — it can never
+ * gone, and a deleted CryptoKey's name is retired forever -- it can never
  * be created again in the project.
  *
  * Destroying a key therefore *releases* it instead of deleting it: every
  * version is scheduled for destruction and the ownership labels are
  * replaced by `alchemy-released`. A later deploy with the same
- * `cryptoKeyId` — from this stack or any other — reclaims the released key
+ * `cryptoKeyId` -- from this stack or any other -- reclaims the released key
  * and mints a fresh primary version. The default `cryptoKeyId` is
  * deterministic per stack, stage, and logical id, so destroy/redeploy
  * cycles reuse one key rather than leaving a new released key behind each
@@ -642,7 +642,7 @@ const releaseKey = (name: string, current: kms.CryptoKey) =>
         );
 
 /**
- * Give a key usable material when it has none — a reclaimed released key,
+ * Give a key usable material when it has none -- a reclaimed released key,
  * or one whose versions were destroyed out of band. Symmetric keys also
  * need that version as their primary.
  */

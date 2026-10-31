@@ -27,7 +27,7 @@ export type ObservabilityDataset =
 export interface ObservabilityDestinationProps {
   /**
    * Human readable destination name. Cloudflare derives the destination's
-   * stable `slug` from it and the name cannot be changed afterwards —
+   * stable `slug` from it and the name cannot be changed afterwards --
    * updating this property triggers a replacement. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
@@ -35,7 +35,7 @@ export interface ObservabilityDestinationProps {
   name?: string;
   /**
    * HTTPS endpoint the OTLP payloads are pushed to (e.g. an OTLP/HTTP
-   * collector). Mutable — updated in place.
+   * collector). Mutable -- updated in place.
    *
    * Cloudflare verifies the endpoint with a preflight request on create
    * (unless {@link skipPreflightCheck} is set) and on **every** update, so
@@ -47,24 +47,24 @@ export interface ObservabilityDestinationProps {
    * Extra HTTP headers sent with each push (e.g. authentication tokens).
    * Pass credentials as `Redacted` values to keep them out of plan output.
    * Cloudflare always adds a `content-type: application/json` header of
-   * its own. Mutable — updated in place.
+   * its own. Mutable -- updated in place.
    * @default {}
    */
   headers?: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Which Workers Logs dataset to export. Cannot be changed after
-   * creation — updating this property triggers a replacement.
+   * creation -- updating this property triggers a replacement.
    */
   logpushDataset: ObservabilityDataset;
   /**
-   * Whether the destination actively exports data. Mutable — updated in
+   * Whether the destination actively exports data. Mutable -- updated in
    * place.
    * @default true
    */
   enabled?: boolean;
   /**
    * Skip the create-time preflight request against {@link url}. Useful
-   * when the collector rejects empty probe payloads. Create-only — the
+   * when the collector rejects empty probe payloads. Create-only -- the
    * update API always performs the preflight check.
    * @default false
    */
@@ -119,7 +119,7 @@ export type ObservabilityDestination = Resource<
 >;
 
 /**
- * A Workers observability destination — an account-level OTLP export of
+ * A Workers observability destination -- an account-level OTLP export of
  * Workers Logs telemetry (traces, logs, or metrics) pushed to an external
  * HTTPS collector via Logpush.
  *
@@ -192,7 +192,7 @@ export const ObservabilityDestinationProvider = () =>
         return { action: "replace" } as const;
       }
       // The slug is derived from the name at creation and the update API
-      // cannot rename — a name change is a replacement.
+      // cannot rename -- a name change is a replacement.
       const oldName = output?.name ?? olds?.name ?? (yield* createDestinationName(id));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
@@ -248,7 +248,7 @@ export const ObservabilityDestinationProvider = () =>
       let appliedHeaders = olds?.headers ? unwrapRedacted(olds.headers) : undefined;
       const enabled = news.enabled ?? true;
 
-      // 1. Observe — the slug cached on `output` is a hint, not a
+      // 1. Observe -- the slug cached on `output` is a hint, not a
       //    guarantee; fall back to the name (Cloudflare enforces name
       //    uniqueness, and ownership of a name match has already been
       //    verified upstream by `read` + the adopt policy).
@@ -258,7 +258,7 @@ export const ObservabilityDestinationProvider = () =>
       }
 
       // 2. Ensure. The API reports both a duplicate name and a failed
-      //    endpoint preflight as the same opaque 400 — re-observe by name
+      //    endpoint preflight as the same opaque 400 -- re-observe by name
       //    to tell a creation race (converge via sync below) from a
       //    genuine failure (re-fail).
       if (!observed) {
@@ -293,7 +293,7 @@ export const ObservabilityDestinationProvider = () =>
           : yield* freshObserved(accountId, createdSlug);
       }
 
-      // 3. Sync — diff observed cloud state against desired and PATCH only
+      // 3. Sync -- diff observed cloud state against desired and PATCH only
       //    on drift. Skipping the no-op matters doubly here: every PATCH
       //    re-runs the endpoint preflight.
       if (
@@ -342,7 +342,7 @@ export const ObservabilityDestinationProvider = () =>
     // the distilled list op paginates on `result`; exhaustively collect every
     // page and hydrate each item into the exact `read` Attributes shape via
     // `toAttributes`. The destination's stored credentials/headers token are
-    // write-only on the API, so — like `read` — they never appear here.
+    // write-only on the API, so -- like `read` -- they never appear here.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* workers.listObservabilityDestinations.items({ accountId }).pipe(
@@ -396,7 +396,7 @@ const freshObserved = (accountId: string, slug: string) =>
         ? Effect.succeed(observed)
         : // The destination cannot vanish between the write that just
           // succeeded and this read except via an out-of-band delete racing
-          // us — surface that as the typed not-found the API would raise.
+          // us -- surface that as the typed not-found the API would raise.
           Effect.fail(
             workers.ObservabilityDestinationNotFound.make({
               code: 0,
@@ -408,7 +408,7 @@ const freshObserved = (accountId: string, slug: string) =>
 
 /**
  * Compare observed headers against the desired set. Cloudflare always
- * injects a `content-type: application/json` header of its own — ignore
+ * injects a `content-type: application/json` header of its own -- ignore
  * it unless the user explicitly pinned one, so an empty desired set is
  * not perpetually "dirty".
  *

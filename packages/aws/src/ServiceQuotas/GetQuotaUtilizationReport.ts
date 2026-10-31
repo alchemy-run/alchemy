@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:GetQuotaUtilizationReport` — read the
+ * Runtime binding for `servicequotas:GetQuotaUtilizationReport` -- read the
  * result of a utilization report started with
  * {@link StartQuotaUtilizationReport | StartQuotaUtilizationReport} from
  * inside a Function.

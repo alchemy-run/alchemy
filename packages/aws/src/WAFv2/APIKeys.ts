@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `wafv2:CreateAPIKey` — mint an API key for the
+ * Runtime binding for `wafv2:CreateAPIKey` -- mint an API key for the
  * CAPTCHA JavaScript integration, scoped to up to 5 token domains (e.g.
  * onboarding a new tenant domain in a SaaS). The returned key is embedded
  * in client-side JavaScript by design (it is not a secret credential).
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### CAPTCHA API Keys
  * **Example:** Mint a CAPTCHA API Key for a Domain
  * ```typescript
- * // init — grants wafv2:CreateAPIKey
+ * // init -- grants wafv2:CreateAPIKey
  * const createAPIKey = yield* AWS.WAFv2.CreateAPIKey();
  *
  * // runtime
@@ -38,7 +38,7 @@ export interface CreateAPIKey extends Binding.Service<
 export const CreateAPIKey = Binding.Service<CreateAPIKey>("AWS.WAFv2.CreateAPIKey");
 
 /**
- * Runtime binding for `wafv2:GetDecryptedAPIKey` — read the token domains
+ * Runtime binding for `wafv2:GetDecryptedAPIKey` -- read the token domains
  * and creation time encoded in a CAPTCHA API key.
  *
  * Provide `WAFv2.GetDecryptedAPIKeyHttp` on the hosting Lambda Function to
@@ -46,7 +46,7 @@ export const CreateAPIKey = Binding.Service<CreateAPIKey>("AWS.WAFv2.CreateAPIKe
  * ### CAPTCHA API Keys
  * **Example:** Inspect an API Key
  * ```typescript
- * // init — grants wafv2:GetDecryptedAPIKey
+ * // init -- grants wafv2:GetDecryptedAPIKey
  * const getDecryptedAPIKey = yield* AWS.WAFv2.GetDecryptedAPIKey();
  *
  * // runtime
@@ -73,7 +73,7 @@ export const GetDecryptedAPIKey = Binding.Service<GetDecryptedAPIKey>(
 );
 
 /**
- * Runtime binding for `wafv2:ListAPIKeys` — list the CAPTCHA API keys
+ * Runtime binding for `wafv2:ListAPIKeys` -- list the CAPTCHA API keys
  * defined for a scope (also returns the CAPTCHA JavaScript integration
  * URL).
  *
@@ -82,7 +82,7 @@ export const GetDecryptedAPIKey = Binding.Service<GetDecryptedAPIKey>(
  * ### CAPTCHA API Keys
  * **Example:** List API Keys
  * ```typescript
- * // init — grants wafv2:ListAPIKeys
+ * // init -- grants wafv2:ListAPIKeys
  * const listAPIKeys = yield* AWS.WAFv2.ListAPIKeys();
  *
  * // runtime
@@ -104,7 +104,7 @@ export interface ListAPIKeys extends Binding.Service<
 export const ListAPIKeys = Binding.Service<ListAPIKeys>("AWS.WAFv2.ListAPIKeys");
 
 /**
- * Runtime binding for `wafv2:DeleteAPIKey` — delete a CAPTCHA API key
+ * Runtime binding for `wafv2:DeleteAPIKey` -- delete a CAPTCHA API key
  * (e.g. offboarding a tenant domain).
  *
  * Provide `WAFv2.DeleteAPIKeyHttp` on the hosting Lambda Function to
@@ -112,7 +112,7 @@ export const ListAPIKeys = Binding.Service<ListAPIKeys>("AWS.WAFv2.ListAPIKeys")
  * ### CAPTCHA API Keys
  * **Example:** Delete an API Key
  * ```typescript
- * // init — grants wafv2:DeleteAPIKey
+ * // init -- grants wafv2:DeleteAPIKey
  * const deleteAPIKey = yield* AWS.WAFv2.DeleteAPIKey();
  *
  * // runtime

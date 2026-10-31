@@ -58,7 +58,7 @@ export interface MultiRegionEndpoint extends Resource<
      * The endpoint's provisioning status at the time reconcile returned.
      * Provisioning is asynchronous and starts as `CREATING`; the endpoint is
      * not usable until it reaches `READY`. Reconcile does NOT wait for
-     * `READY` — poll `getMultiRegionEndpoint` downstream if you need to block
+     * `READY` -- poll `getMultiRegionEndpoint` downstream if you need to block
      * on readiness.
      */
     status: MultiRegionEndpointStatus;
@@ -68,7 +68,7 @@ export interface MultiRegionEndpoint extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 multi-region endpoint (global endpoint) — a single sending
+ * An Amazon SES v2 multi-region endpoint (global endpoint) -- a single sending
  * endpoint that splits email traffic across a primary region (where the
  * endpoint is created) and one or more secondary regions, improving
  * resilience and deliverability.
@@ -76,7 +76,7 @@ export interface MultiRegionEndpoint extends Resource<
  * :::note
  * Provisioning is asynchronous and can take a while: creation returns
  * immediately with status `CREATING`, and the endpoint only becomes usable
- * once it reaches `READY`. This resource does **not** wait for `READY` — the
+ * once it reaches `READY`. This resource does **not** wait for `READY` -- the
  * `status` attribute reflects the value observed when reconcile returned.
  * Poll `getMultiRegionEndpoint` yourself if you need to block on readiness.
  * :::
@@ -144,7 +144,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // getMultiRegionEndpoint returns no ARN, so the ARN listTagsForResource needs
-// is derived from the endpoint NAME (not its id) — verified live.
+// is derived from the endpoint NAME (not its id) -- verified live.
 const endpointArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
 
@@ -175,7 +175,7 @@ export const MultiRegionEndpointProvider = () =>
       });
 
       // getMultiRegionEndpoint does not return tags, so ownership costs a
-      // second API call. Only `read` pays it — `list` deletes by name.
+      // second API call. Only `read` pays it -- `list` deletes by name.
       const getEndpointTags = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return yield* sesv2
@@ -243,11 +243,11 @@ export const MultiRegionEndpointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getEndpoint(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create; AlreadyExists is a race, not a failure.
+            // 2. ENSURE -- create; AlreadyExists is a race, not a failure.
             //    Provisioning is asynchronous: creation returns CREATING and we
             //    deliberately do NOT wait for READY (that exceeds the polling
             //    budget; downstream consumers poll if they need readiness).
@@ -280,7 +280,7 @@ export const MultiRegionEndpointProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so an adopted
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so an adopted
           //    endpoint gets branded and stops reading as Unowned.
           const observedTags = yield* getEndpointTags(name);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -316,7 +316,7 @@ export const MultiRegionEndpointProvider = () =>
           // CREATING, so a destroy that follows closely enough hits an endpoint
           // still coming up: SES answers ConcurrentModificationException
           // ("Unable to delete resource in PROVISIONING status"). That is
-          // eventual consistency, not a failure — retry on a bounded schedule
+          // eventual consistency, not a failure -- retry on a bounded schedule
           // until the endpoint settles and the delete takes.
           yield* sesv2.deleteMultiRegionEndpoint({ EndpointName: output.endpointName }).pipe(
             Effect.retry({

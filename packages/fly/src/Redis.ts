@@ -40,7 +40,7 @@ export interface RedisProps {
    */
   name?: string;
   /**
-   * Primary region (`iad`, `ord`, `sjc`, …). Fly cannot move a primary.
+   * Primary region (`iad`, `ord`, `sjc`, ...). Fly cannot move a primary.
    * Changing it replaces the database.
    *
    * @default "iad"
@@ -89,11 +89,11 @@ export type Redis = Resource<
     primaryRegion: string;
     /** Observed read-replica regions. */
     readRegions: string[];
-    /** Observed status (`ready`, `provisioning`, …). */
+    /** Observed status (`ready`, `provisioning`, ...). */
     status: string | undefined;
     /** Selected plan id, if the API returned one. */
     planId: string | undefined;
-    /** Observed plan name (`Pay-as-you-go`, `Fixed 250MB`, …). */
+    /** Observed plan name (`Pay-as-you-go`, `Fixed 250MB`, ...). */
     planName: string | undefined;
     /** Private 6PN address, if the API returned one. */
     privateIp: string | undefined;
@@ -116,7 +116,7 @@ export type Redis = Resource<
  * {@link WriteRedis}, or {@link ReadWriteRedis} on a {@link Service}.
  * Alchemy transports the redacted `url` Output to the runtime client
  * and also writes `REDIS_URL` as an App secret for compatibility.
- * Redis is not reachable from CI — drive it over HTTP.
+ * Redis is not reachable from CI -- drive it over HTTP.
  *
  * @see https://fly.io/docs/upstash/redis/
  *

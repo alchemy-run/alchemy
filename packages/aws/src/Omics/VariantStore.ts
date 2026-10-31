@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncOmicsTags } from "./internal.ts";
 
-// Variant store names must match `[a-z]([a-z0-9_]){0,254}` — the generated
+// Variant store names must match `[a-z]([a-z0-9_]){0,254}` -- the generated
 // physical name (hyphens, mixed case) is coerced to fit.
 const toStoreName = (raw: string) => {
   const sanitized = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
@@ -32,7 +32,7 @@ export interface VariantStoreProps {
   description?: string;
   /**
    * The genome reference for the store, as a reference ARN. Required.
-   * Immutable — changing it replaces the store.
+   * Immutable -- changing it replaces the store.
    */
   reference: {
     /** ARN of a reference in a HealthOmics reference store. */
@@ -80,11 +80,11 @@ export interface VariantStore extends Resource<
 > {}
 
 /**
- * An Amazon HealthOmics variant store — a container for genomic variant data
+ * An Amazon HealthOmics variant store -- a container for genomic variant data
  * (VCF) aligned to a reference genome.
  *
  * A variant store name is auto-generated from the app, stage, and logical ID
- * unless you provide one. The `reference` and `sseConfig` are immutable —
+ * unless you provide one. The `reference` and `sseConfig` are immutable --
  * changing either replaces the store. `description` is updated in place.
  * ### Creating a Variant Store
  * **Example:** Basic Variant Store

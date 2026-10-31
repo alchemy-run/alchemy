@@ -25,7 +25,7 @@ export interface ControlSourceKeyword {
    */
   keywordInputType?: auditmanager.KeywordInputType;
   /**
-   * The value of the keyword — e.g. a CloudTrail event name, a Config rule
+   * The value of the keyword -- e.g. a CloudTrail event name, a Config rule
    * name, or a Security Hub control name.
    */
   keywordValue?: string;
@@ -117,7 +117,7 @@ export interface Control extends Resource<
      */
     name: string;
     /**
-     * The control's type — always `Custom` for controls Alchemy creates.
+     * The control's type -- always `Custom` for controls Alchemy creates.
      */
     type: auditmanager.ControlType | undefined;
     /**
@@ -134,7 +134,7 @@ export interface Control extends Resource<
 > {}
 
 /**
- * A custom control in AWS Audit Manager — a compliance requirement paired
+ * A custom control in AWS Audit Manager -- a compliance requirement paired
  * with the data sources (CloudTrail, Config, Security Hub, API calls, or
  * manual evidence) Audit Manager collects evidence from to demonstrate it.
  *
@@ -210,7 +210,7 @@ const findControlByName = Effect.fn(function* (name: string) {
 
 /**
  * Projection used for drift detection between desired and observed mapping
- * sources — server-assigned fields (sourceId) are excluded.
+ * sources -- server-assigned fields (sourceId) are excluded.
  */
 const projectSource = (source: {
   sourceName?: string | undefined;
@@ -265,13 +265,13 @@ export const ControlProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let control = output?.controlId
             ? yield* readControlById(output.controlId)
             : yield* findControlByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (control === undefined) {
             const created = yield* auditmanager.createControl({
               name,
@@ -291,7 +291,7 @@ export const ControlProvider = () =>
             yield* session.note(`Created control ${name} (${control.id})`);
           }
 
-          // Sync — diff observed against desired; UpdateControl on drift.
+          // Sync -- diff observed against desired; UpdateControl on drift.
           const observedSources = (control.controlMappingSources ?? []).map((source) =>
             projectSource({
               ...source,
@@ -332,7 +332,7 @@ export const ControlProvider = () =>
             yield* session.note(`Updated control ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const attrs = toAttributes(control);
           const { removed, upsert } = diffTags(attrs.tags, desiredTags);
           if (removed.length > 0) {

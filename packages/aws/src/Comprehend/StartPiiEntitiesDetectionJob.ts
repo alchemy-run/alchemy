@@ -20,7 +20,7 @@ export interface StartPiiEntitiesDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartPiiEntitiesDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartPiiEntitiesDetectionJob` -- start an asynchronous
  * PII entity detection job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -35,7 +35,7 @@ export interface StartPiiEntitiesDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous PiiEntities Detection Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startPiiEntitiesDetectionJob = yield* AWS.Comprehend.StartPiiEntitiesDetectionJob(dataAccessRole);
  *
  * // runtime

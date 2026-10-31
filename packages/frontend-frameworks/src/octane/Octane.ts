@@ -14,7 +14,7 @@ import {
 /**
  * The structural slice of the project's `@octanejs/vite-plugin` module this
  * package drives. Typed structurally so the package carries no dependency on
- * `@octanejs/vite-plugin` — the *project's* install is always the one loaded.
+ * `@octanejs/vite-plugin` -- the *project's* install is always the one loaded.
  */
 export interface OctaneVitePluginModule {
   /**
@@ -76,12 +76,12 @@ export interface OctaneTargetConfig {
 export interface OctaneTarget extends DeployTarget<OctaneTargetConfig> {
   /**
    * The `adapter.name` the resolved `octane.config.ts` must carry (the
-   * Cloudflare target requires `"cloudflare"` — Octane's
+   * Cloudflare target requires `"cloudflare"` -- Octane's
    * `@octanejs/adapter-cloudflare`).
    */
   readonly adapterName: string;
   /**
-   * The npm package providing that adapter — used in the actionable error
+   * The npm package providing that adapter -- used in the actionable error
    * when the project's config selects no (or a foreign) adapter.
    */
   readonly adapterPackage: string;
@@ -97,7 +97,7 @@ export interface OctaneTarget extends DeployTarget<OctaneTargetConfig> {
 /**
  * How a deploy target is passed to this package: an `OctaneTarget` value, a
  * factory `(config) => OctaneTarget`, or a module specifier resolved from the
- * *project's* `node_modules` (default-export — or named export `target` — a
+ * *project's* `node_modules` (default-export -- or named export `target` -- a
  * value or factory).
  */
 export type OctaneTargetInput = DeployTargetInput<OctaneTarget, OctaneTargetConfig>;
@@ -147,7 +147,7 @@ const fail = (message: string, cause?: unknown) =>
  * Build the `Framework` service implementation for an Octane project.
  *
  * - `build` resolves the deploy target, then drives the PROJECT's own Vite
- *   install programmatically: Octane's `vite build` is the whole pipeline —
+ *   install programmatically: Octane's `vite build` is the whole pipeline --
  *   `@octanejs/vite-plugin` builds the client bundle, launches the `ssr:
  *   true` server sub-build, and runs the config's deploy adapter, which
  *   emits the platform Worker entry (Cloudflare:
@@ -159,9 +159,9 @@ const fail = (message: string, cause?: unknown) =>
  *   adapters fail with an actionable error.
  * - `dev` runs Octane's own Vite dev server programmatically (the plugin's
  *   dev SSR middleware serves rendering, server routes, and RPC in-process),
- *   scoped — closing the Scope closes the server. NOTE: Octane's dev
+ *   scoped -- closing the Scope closes the server. NOTE: Octane's dev
  *   middleware does not supply request-scoped platform bindings
- *   (`context.platform` is `undefined` in dev — an upstream limitation), so
+ *   (`context.platform` is `undefined` in dev -- an upstream limitation), so
  *   Cloudflare bindings are live/preview-only for now.
  *
  * This module is target-agnostic: everything Cloudflare-specific lives in
@@ -199,7 +199,7 @@ export const make: (
       ).pipe(
         Effect.mapError((error) =>
           fail(
-            `Failed to load the project's "${OCTANE_VITE_PLUGIN_SPECIFIER}" install — ` +
+            `Failed to load the project's "${OCTANE_VITE_PLUGIN_SPECIFIER}" install \u2014 ` +
               "is it added to the project's dependencies?",
             error.cause,
           ),
@@ -247,7 +247,7 @@ export const make: (
                 `\`import { ${target.adapterName} } from "${target.adapterPackage}"\` ` +
                 `and \`adapter: ${target.adapterName}()\`.`
             : `octane.config.ts selects the "${config.adapter.name}" deploy adapter, but ` +
-                `this build targets "${target.platform}" — use the "${target.adapterName}" ` +
+                `this build targets "${target.platform}" \u2014 use the "${target.adapterName}" ` +
                 `adapter from ${target.adapterPackage} instead.`,
         );
       }
@@ -269,8 +269,8 @@ export const make: (
         serverEntryFileName: target.serverEntryFileName,
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
-      // The finishing-pass seam (none needed for Cloudflare — the adapter's
-      // worker.js is already self-contained workerd ESM — but the contract
+      // The finishing-pass seam (none needed for Cloudflare -- the adapter's
+      // worker.js is already self-contained workerd ESM -- but the contract
       // is honored for targets that do post-process).
       return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
         ...targetContext,
@@ -286,7 +286,7 @@ export const make: (
       const root = devOptions?.root ?? baseRoot;
       const vite = yield* loadVite(root);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-      // on older Vite — see `resolveViteDevPort`.
+      // on older Vite -- see `resolveViteDevPort`.
       const port = yield* FrameworkCore.resolveViteDevPort(
         vite.version,
         devOptions?.port ?? options?.dev?.port,
@@ -368,7 +368,7 @@ export interface OctaneOutputDirs {
  * `serverModules` entry-first from the server directory (POSIX names,
  * sha256-hashed, excluding the embedded-template inputs), `clientDirectory`
  * = the client directory. The adapter's server output is already
- * self-contained ESM (only `node:` externals) — no finishing pass, and no
+ * self-contained ESM (only `node:` externals) -- no finishing pass, and no
  * external workspace roots (the server sub-build bundles with
  * `noExternal: true`, so workspace imports are inlined).
  */
@@ -391,7 +391,7 @@ export const readOctaneOutput = (
     }
     if (serverModules[0]?.name !== entryName) {
       return yield* fail(
-        `The Octane build produced no "${entryName}" entry in ${dirs.serverDir} — ` +
+        `The Octane build produced no "${entryName}" entry in ${dirs.serverDir} \u2014 ` +
           "did the deploy adapter's adapt() pass run?",
       );
     }
@@ -405,7 +405,7 @@ export const readOctaneOutput = (
 
 /**
  * A `Layer` providing framework-core's `Framework` service for an Octane
- * project — the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
+ * project -- the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
  * and alchemy's `Website.Octane` composite.
  */
 export const layer = (

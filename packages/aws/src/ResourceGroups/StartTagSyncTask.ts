@@ -5,7 +5,7 @@ import type { Role } from "../IAM/Role.ts";
 import type { Group } from "./Group.ts";
 
 /**
- * Request for {@link StartTagSyncTask} — the group and (by default) the
+ * Request for {@link StartTagSyncTask} -- the group and (by default) the
  * bound role are injected from the binding; pass `RoleArn` to override.
  */
 export type StartTagSyncTaskRequest = Omit<
@@ -28,7 +28,7 @@ export type StartTagSyncTaskRequest = Omit<
  * ### Tag-Sync Tasks
  * **Example:** Keep A Group In Sync With A Tag
  * ```typescript
- * // init — bind the operation to the group and the sync role
+ * // init -- bind the operation to the group and the sync role
  * const startTagSyncTask = yield* AWS.ResourceGroups.StartTagSyncTask(group, syncRole);
  *
  * // runtime

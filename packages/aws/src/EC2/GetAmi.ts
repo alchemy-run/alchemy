@@ -10,7 +10,7 @@ import type { FindImageOptions } from "./Image.ts";
  * runtime grant is on `*`). Returns the newest available image matching the
  * filters, or `undefined` when nothing matches.
  *
- * As a **data source**, invoke it at plan time via {@link getAmi} — the
+ * As a **data source**, invoke it at plan time via {@link getAmi} -- the
  * result is an `Output` resolved during plan/deploy and inert inside
  * deployed bundles. As a **runtime binding**, bind it inside a Function to
  * look images up at runtime with the IAM grant attached automatically.
@@ -31,13 +31,13 @@ import type { FindImageOptions } from "./Image.ts";
  * ```
  * **Example:** Runtime lookup inside a Function
  * ```typescript
- * // init — bind the operation
+ * // init -- bind the operation
  * const getAmi = yield* AWS.EC2.GetAmi({
  *   owners: ["amazon"],
  *   name: ["al2023-ami-2023.*"],
  * });
  *
- * // runtime — read the newest matching image
+ * // runtime -- read the newest matching image
  * const latest = yield* getAmi();
  * console.log(latest?.ImageId, latest?.CreationDate);
  * ```
@@ -55,7 +55,7 @@ export interface GetAmi extends Binding.Service<
 export const GetAmi = Binding.Service<GetAmi>("AWS.EC2.GetAmi");
 
 /**
- * Plan-time AMI lookup — the data-source form of {@link GetAmi} (what
+ * Plan-time AMI lookup -- the data-source form of {@link GetAmi} (what
  * Terraform calls a data source and Pulumi an invoke). Returns an
  * `Output<ec2.Image | undefined>` resolved during plan/deploy; safe to call
  * from composition code that is re-executed inside a deployed runtime

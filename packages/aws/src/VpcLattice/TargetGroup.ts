@@ -98,45 +98,45 @@ export interface TargetGroupHealthCheck {
 export interface TargetGroupProps {
   /**
    * Name of the target group. If omitted, a unique name is generated.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    */
   name?: string;
   /**
-   * The kind of targets the group routes to. Immutable — changing it replaces
+   * The kind of targets the group routes to. Immutable -- changing it replaces
    * the resource.
    */
   type: TargetGroupType;
   /**
    * Port the targets listen on. Required for every type except `LAMBDA`.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    */
   port?: number;
   /**
    * Protocol used to route traffic to the targets (`HTTP`, `HTTPS`, or
-   * `TCP`). Not applicable to `LAMBDA`. Immutable — changing it replaces the
+   * `TCP`). Not applicable to `LAMBDA`. Immutable -- changing it replaces the
    * resource.
    */
   protocol?: string;
   /**
    * Protocol version (`HTTP1`, `HTTP2`, or `GRPC`). Not applicable to
-   * `LAMBDA`. Immutable — changing it replaces the resource.
+   * `LAMBDA`. Immutable -- changing it replaces the resource.
    * @default "HTTP1"
    */
   protocolVersion?: string;
   /**
    * IP address type of the targets (`IPV4` or `IPV6`). `IP` type only.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    * @default "IPV4"
    */
   ipAddressType?: string;
   /**
    * ID of the VPC the targets live in. Required for every type except
-   * `LAMBDA`. Immutable — changing it replaces the resource.
+   * `LAMBDA`. Immutable -- changing it replaces the resource.
    */
   vpcIdentifier?: string;
   /**
    * Version of the event structure a `LAMBDA` target receives (`V1` or
-   * `V2`). Immutable — changing it replaces the resource.
+   * `V2`). Immutable -- changing it replaces the resource.
    * @default "V1"
    */
   lambdaEventStructureVersion?: string;
@@ -191,7 +191,7 @@ export interface TargetGroup extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice target group — the collection of compute targets
+ * An Amazon VPC Lattice target group -- the collection of compute targets
  * (IPs, EC2 instances, ALBs, or Lambda functions) that a lattice service's
  * listeners and rules forward traffic to.
  *
@@ -310,7 +310,7 @@ export const TargetGroupProvider = () =>
           );
         const desiredKeys = new Set(desired.map(targetKey));
         const observedKeys = new Set(observed.map(targetKey));
-        // DRAINING targets are already being deregistered — leave them alone.
+        // DRAINING targets are already being deregistered -- leave them alone.
         const toRemove = observed.filter(
           (t): t is typeof t & { id: string } =>
             t.id != null && !desiredKeys.has(targetKey(t)) && t.status !== "DRAINING",
@@ -381,12 +381,12 @@ export const TargetGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the stable id cache, fall back to name lookup.
+          // Observe -- prefer the stable id cache, fall back to name lookup.
           let group = output?.targetGroupId
             ? yield* observe(output.targetGroupId)
             : yield* findByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!group?.arn || !group.id) {
             const created = yield* vpclattice
               .createTargetGroup({
@@ -429,7 +429,7 @@ export const TargetGroupProvider = () =>
           // Target groups reject updates while CREATE_IN_PROGRESS.
           const stable = yield* waitUntilStable(observe(targetGroupId));
 
-          // Sync health check — the only mutable setting (IP/INSTANCE only).
+          // Sync health check -- the only mutable setting (IP/INSTANCE only).
           if (news.healthCheck !== undefined) {
             const desired = toWireHealthCheck(news.healthCheck);
             const observedHealthCheck = stable?.config?.healthCheck ?? {};
@@ -450,7 +450,7 @@ export const TargetGroupProvider = () =>
             }
           }
 
-          // Sync targets — register missing, deregister extras.
+          // Sync targets -- register missing, deregister extras.
           yield* syncTargets(targetGroupId, news.targets ?? []);
 
           yield* syncTags(targetGroupArn, desiredTags);

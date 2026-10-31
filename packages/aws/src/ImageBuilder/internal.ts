@@ -13,8 +13,8 @@ import { AWSEnvironment } from "../Environment.ts";
 /**
  * Plan-time replacement check for immutable Image Builder versions
  * (components, image recipes). `news` may still carry unresolved Outputs
- * at plan time — e.g. the build-version ARN of a component being replaced
- * in the same deploy — so compare per key and skip only the keys that are
+ * at plan time -- e.g. the build-version ARN of a component being replaced
+ * in the same deploy -- so compare per key and skip only the keys that are
  * unresolved. A resolved change on an immutable key (like a
  * `semanticVersion` bump) must still plan a replacement; drift hidden
  * behind an unresolved key is caught by the provider's reconcile
@@ -25,7 +25,7 @@ export const immutableVersionKeysChanged = <Props extends object>(
   news: Input<Props>,
   keys: readonly (keyof Props)[],
 ): boolean => {
-  // The whole props object itself may be an unresolved expression — no
+  // The whole props object itself may be an unresolved expression -- no
   // per-key comparison is possible; defer to the reconcile guard.
   if (Output.isExpr(news) || Effect.isEffect(news)) return false;
   const desired = news as { [K in keyof Props]: Input<Props[K]> };
@@ -97,7 +97,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of an Image Builder resource. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readImageBuilderTags = Effect.fn(function* (arn: string) {
   const response = yield* imagebuilder
@@ -142,7 +142,7 @@ export const imageBuilderArn = Effect.fn(function* (resourceType: string, resour
 /**
  * Structural drift check between the desired value the user specified and
  * the observed cloud value. `undefined` desired values are "unspecified"
- * (no drift — the service fills defaults we must not fight). Objects are
+ * (no drift -- the service fills defaults we must not fight). Objects are
  * compared as subsets: every key the user specified must match; extra
  * observed keys (server defaults) are ignored. Arrays compare length +
  * element-wise.

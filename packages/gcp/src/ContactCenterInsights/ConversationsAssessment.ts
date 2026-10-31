@@ -26,11 +26,11 @@ type AgentInfo = {
   agentId?: string;
   /**
    * Agent display name. Assessments have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix on this field and
+   * ownership is stored in a `[alchemy ...]` prefix on this field and
    * stripped from attributes.
    */
   displayName?: string;
-  /** Agent type (`HUMAN_AGENT`, `AUTOMATED_AGENT`, …). */
+  /** Agent type (`HUMAN_AGENT`, `AUTOMATED_AGENT`, ...). */
   agentType?: "ROLE_UNSPECIFIED" | "HUMAN_AGENT" | "AUTOMATED_AGENT" | "END_USER" | "ANY_AGENT";
   /** Deprecated team string. Prefer `teams`. */
   team?: string;
@@ -58,7 +58,7 @@ export type ConversationsAssessmentProps = {
   /**
    * Parent Conversation resource name
    * (`projects/{project}/locations/{location}/conversations/{conversation}`).
-   * Immutable — changing it replaces the assessment.
+   * Immutable -- changing it replaces the assessment.
    */
   parent: string;
   /**
@@ -98,7 +98,7 @@ export type ConversationsAssessment = Resource<
 /**
  * A quality assessment of a Contact Center Insights conversation.
  *
- * Parent conversation and agent info are immutable — there is no update
+ * Parent conversation and agent info are immutable -- there is no update
  * RPC, so changing either replaces the assessment. Assessments have no
  * labels field; Alchemy stamps ownership into `agentInfo.displayName`.
  *

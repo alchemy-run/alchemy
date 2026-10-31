@@ -17,7 +17,7 @@ export interface CancelSubscriptionRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** Cancel a Subscription
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const cancelSubscription = yield* AWS.DataZone.CancelSubscription(domain);
  *
  * // runtime

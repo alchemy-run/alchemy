@@ -38,18 +38,18 @@ export type DomainProps = {
    * stack, stage, and logical id (`{id}.alch.test`). Must be 2-64
    * characters, start with a letter, use only lowercase letters, numbers,
    * periods, and hyphens, and the first label must be 15 characters or
-   * fewer. Immutable — changing it replaces the domain.
+   * fewer. Immutable -- changing it replaces the domain.
    */
   domainName?: string;
   /**
    * CIDR of internal addresses reserved for this domain (`10.0.1.0/24`).
    * Must be `/24` or larger and must not overlap subnets in
-   * `authorizedNetworks`. Immutable — changing it replaces the domain.
+   * `authorizedNetworks`. Immutable -- changing it replaces the domain.
    */
   reservedIpRange: string;
   /**
    * Regions where domain controllers are provisioned (`us-central1`,
-   * `us-east4`, …). Up to 4. `US-CENTRAL1` is accepted and normalized to
+   * `us-east4`, ...). Up to 4. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default [the stack's GCP region] (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -63,7 +63,7 @@ export type DomainProps = {
   authorizedNetworks?: string[];
   /**
    * Delegated administrator account used for Active Directory operations.
-   * Immutable — changing it replaces the domain.
+   * Immutable -- changing it replaces the domain.
    * @default "setupadmin"
    */
   admin?: string;
@@ -106,7 +106,7 @@ export type Domain = Resource<
     fqdn: string | undefined;
     /** Current trusts associated with the domain. */
     trusts: managedidentities.Trust[];
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Additional status information, if available. */
     statusMessage: string | undefined;

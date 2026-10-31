@@ -39,17 +39,17 @@ export type InboundSsoAssignmentSignInBehavior = {
 export type InboundSsoAssignmentProps = {
   /**
    * Customer (`customers/C0123abc` or `customers/my_customer`).
-   * Immutable — changing it replaces the assignment.
+   * Immutable -- changing it replaces the assignment.
    * @default "customers/my_customer"
    */
   customer?: string;
   /**
-   * Target group (`groups/{group}`). Immutable — changing it
-   * replaces the assignment. Rank must be ≥ 1 when set.
+   * Target group (`groups/{group}`). Immutable -- changing it
+   * replaces the assignment. Rank must be >= 1 when set.
    */
   targetGroup?: string;
   /**
-   * Target org unit (`orgUnits/{org_unit}`). Immutable — changing
+   * Target org unit (`orgUnits/{org_unit}`). Immutable -- changing
    * it replaces the assignment. Rank must be 0 (the default).
    */
   targetOrgUnit?: string;
@@ -59,7 +59,7 @@ export type InboundSsoAssignmentProps = {
   ssoMode?: cloudidentity.InboundSsoAssignmentSsoModeEnum | (string & {});
   /**
    * Priority among group-targeted assignments. Zero for org units;
-   * ≥ 1 for groups.
+   * >= 1 for groups.
    */
   rank?: number;
   /**

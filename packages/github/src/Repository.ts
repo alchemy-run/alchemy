@@ -16,10 +16,10 @@ export class RepositoryOperationFailed extends Data.TaggedError("RepositoryOpera
 
 export interface RepositoryProps {
   /**
-   * Repository owner — a user or organization login.
+   * Repository owner -- a user or organization login.
    *
    * Changing the owner replaces the repository: a NEW, EMPTY repository is
-   * created under the new owner — history, issues, and pull requests are
+   * created under the new owner -- history, issues, and pull requests are
    * not carried over. The old repository is retained on GitHub under the
    * default `retain` removal policy; it is only deleted when the resource
    * opted into deletion via `destroy()`. To actually move a repository
@@ -91,7 +91,7 @@ export interface RepositoryProps {
 
   /**
    * The default branch name. Only applied to repositories that already have
-   * at least one branch — setting it on an empty repository has no effect.
+   * at least one branch -- setting it on an empty repository has no effect.
    */
   defaultBranch?: string;
 
@@ -133,7 +133,7 @@ export interface RepositoryProps {
 
   /**
    * Initialize the repository with an empty README on creation. Only used at
-   * create time — ignored on subsequent updates.
+   * create time -- ignored on subsequent updates.
    * @default false
    */
   autoInit?: boolean;
@@ -154,7 +154,7 @@ export interface RepositoryProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -225,7 +225,7 @@ export interface Repository extends Resource<
  * organization. The repository is created on first deploy and its settings are
  * converged on every subsequent deploy.
  *
- * Repositories default to **retain** on removal — destroying the stack does
+ * Repositories default to **retain** on removal -- destroying the stack does
  * NOT delete the repository on GitHub, protecting its irreplaceable history
  * (issues, pull requests, commits). Opt in to actual deletion by wrapping the
  * resource (or the whole stack) in {@link destroy}() from
@@ -259,7 +259,7 @@ export interface Repository extends Resource<
  *
  * **Example:** Initialize from Templates
  * The `autoInit`, `gitignoreTemplate`, and `licenseTemplate` props seed the
- * first commit. They are only honored at create time — changing them on a
+ * first commit. They are only honored at create time -- changing them on a
  * later deploy has no effect on an existing repository.
  * ```typescript
  * const repo = yield* GitHub.Repository("service", {
@@ -288,7 +288,7 @@ export interface Repository extends Resource<
  * ### Renaming a Repository
  * **Example:** Rename in Place
  * Keep the same logical ID and change `name` to rename the live repository
- * instead of replacing it — the repository's history, issues, and pull
+ * instead of replacing it -- the repository's history, issues, and pull
  * requests are preserved. Only changing `owner` triggers a replacement.
  * ```typescript
  * // First deploy creates "api".
@@ -377,7 +377,7 @@ export const RepositoryProvider = () =>
     stables: ["repoId", "nodeId"],
 
     // Structural changes are the owner (we deliberately do NOT call GitHub's
-    // transfer API — user-to-user transfers require out-of-band acceptance
+    // transfer API -- user-to-user transfers require out-of-band acceptance
     // and cannot converge deterministically) and the host (the same repo
     // name on a different GitHub instance is a different repository). A
     // `name` change is a rename, handled in `reconcile`, not a replacement.
@@ -401,7 +401,7 @@ export const RepositoryProvider = () =>
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
-        // Observe — probe for the live repository under the desired name. On a
+        // Observe -- probe for the live repository under the desired name. On a
         // rename (name changed since last deploy) the desired name 404s, so fall
         // back to the prior name so we converge by renaming rather than creating
         // a duplicate.
@@ -410,7 +410,7 @@ export const RepositoryProvider = () =>
           observed = yield* getRepo(olds.name);
         }
 
-        // Ensure — create the repository when it does not exist. The owner may be
+        // Ensure -- create the repository when it does not exist. The owner may be
         // a user or an organization; pick the matching create endpoint.
         if (observed === undefined) {
           const owner = yield* Users.getByUsername({ username: news.owner });
@@ -447,7 +447,7 @@ export const RepositoryProvider = () =>
                   private: news.visibility ? news.visibility !== "public" : undefined,
                 })
           ).pipe(
-            // A 422 means the name already exists — treat as a create race
+            // A 422 means the name already exists -- treat as a create race
             // and re-observe so the sync step converges its settings.
             Effect.catchTag("UnprocessableEntity", () => Effect.undefined),
           );
@@ -462,7 +462,7 @@ export const RepositoryProvider = () =>
           }
         }
 
-        // Sync — converge settings (and the name on a rename) against the live
+        // Sync -- converge settings (and the name on a rename) against the live
         // repository. GitHub's update is an idempotent PATCH, so we always issue
         // it with the desired settings. `archived` is applied in a separate,
         // later PATCH because an archived repository rejects any other settings
@@ -489,7 +489,7 @@ export const RepositoryProvider = () =>
           // Only set the default branch when it actually differs from the
           // observed branch. GitHub returns 422 if the branch does not yet
           // exist (e.g. an empty repo), so the 422 handler below strips it and
-          // retries rather than hard-failing — the branch may be created right
+          // retries rather than hard-failing -- the branch may be created right
           // after this deploy.
           default_branch:
             news.defaultBranch !== undefined && observed.default_branch !== news.defaultBranch
@@ -508,7 +508,7 @@ export const RepositoryProvider = () =>
           }),
         );
 
-        // Sync — apply `archived` in its own PATCH. Use the confirmed
+        // Sync -- apply `archived` in its own PATCH. Use the confirmed
         // post-rename name from the first update so the call targets the right
         // repo. Archiving is one-directional in this PATCH: only send it when
         // explicitly provided.
@@ -516,7 +516,7 @@ export const RepositoryProvider = () =>
           yield* Repos.update({ owner: news.owner, repo: updated.name, archived: news.archived });
         }
 
-        // Sync — topics are managed via a dedicated endpoint. The provided list
+        // Sync -- topics are managed via a dedicated endpoint. The provided list
         // fully replaces existing topics, so removing the field (defined -> undefined)
         // must clear them. Use the confirmed post-rename name from the first PATCH.
         if (news.topics !== undefined || olds?.topics !== undefined) {
@@ -533,7 +533,7 @@ export const RepositoryProvider = () =>
     ),
 
     // Enumerate every repository the authenticated token can see. GitHub has no
-    // account/region scope resolved from env services — the ambient scope is the
+    // account/region scope resolved from env services -- the ambient scope is the
     // token itself, so we list the authenticated user's repositories (across all
     // owners/orgs the token is a member of), every page. Each list item is a
     // full repository object, so it hydrates directly into the same

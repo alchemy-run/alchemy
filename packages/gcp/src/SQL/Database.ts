@@ -57,15 +57,15 @@ export type DatabaseProps = {
   /**
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the database.
    */
   instance: string;
   /**
    * Database name inside the instance. If omitted, a unique name is
    * generated from the stack, stage, and logical id. Must start with a
-   * letter and contain only letters, numbers, and underscores (1–60
-   * characters). Immutable — changing it replaces the database.
+   * letter and contain only letters, numbers, and underscores (1-60
+   * characters). Immutable -- changing it replaces the database.
    */
   databaseName?: string;
   /**
@@ -79,12 +79,12 @@ export type DatabaseProps = {
    */
   collation?: string;
   /**
-   * SQL Server–only settings. Ignored on MySQL and PostgreSQL.
+   * SQL Server-only settings. Ignored on MySQL and PostgreSQL.
    */
   sqlserverDatabaseDetails?: SqlServerDatabaseDetails;
   /**
    * What to do on destroy. `ABANDON` removes the database from state
-   * without calling the Cloud SQL API — useful when the parent instance
+   * without calling the Cloud SQL API -- useful when the parent instance
    * is being deleted.
    * @default "DELETE"
    */
@@ -516,7 +516,7 @@ export const DatabaseProvider = () =>
         current = yield* waitUntilExists(env.project, instance, databaseName);
       }
 
-      // Sync migrations — the shared pipeline skips already-applied ones.
+      // Sync migrations -- the shared pipeline skips already-applied ones.
       const migrationsInput = migrationsInputOf(news);
       const migrations = migrationsInput
         ? yield* runDatabaseMigrations({

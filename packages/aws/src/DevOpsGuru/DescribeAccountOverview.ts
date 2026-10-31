@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:DescribeAccountOverview`.
  *
- * Summarizes the insights created and the mean time to recover over a time range — the account's operational scorecard for a reporting window.
+ * Summarizes the insights created and the mean time to recover over a time range -- the account's operational scorecard for a reporting window.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.DescribeAccountOverviewHttp)`.
  * ### Account Health
  * **Example:** Summarize a Time Range
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeAccountOverview = yield* AWS.DevOpsGuru.DescribeAccountOverview();
  *
  * // runtime

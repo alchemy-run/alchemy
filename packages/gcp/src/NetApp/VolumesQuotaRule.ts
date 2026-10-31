@@ -34,7 +34,7 @@ export type VolumesQuotaRuleProps = {
   /**
    * Parent volume. Full name
    * `projects/{project}/locations/{location}/volumes/{volume}` or the
-   * volume id (combined with `location`). Immutable — changing it
+   * volume id (combined with `location`). Immutable -- changing it
    * replaces the rule.
    */
   volume: string;
@@ -46,11 +46,11 @@ export type VolumesQuotaRuleProps = {
   /**
    * Quota rule id (the `{quotaRule}` segment). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   quotaRuleId?: string;
   /**
-   * Quota type. Immutable — changing it replaces the rule.
+   * Quota type. Immutable -- changing it replaces the rule.
    * @default "DEFAULT_USER_QUOTA"
    */
   type?: netapp.QuotaRuleTypeEnum | (string & {});
@@ -61,7 +61,7 @@ export type VolumesQuotaRuleProps = {
   diskLimitMib?: number;
   /**
    * Unix UID/GID, Windows SID, or omitted for a default quota.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   target?: string;
   /**

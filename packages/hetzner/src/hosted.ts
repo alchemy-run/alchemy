@@ -56,7 +56,7 @@ export interface HostedProgramProps {
   build?: HetznerBuildOptions;
   /**
    * Extra host directories packed into the unit archive (framework
-   * client assets, Next.js `.next`, …). Hashed into `code.hash` so
+   * client assets, Next.js `.next`, ...). Hashed into `code.hash` so
    * asset changes update the unit. Destination is relative to the
    * unit root.
    */
@@ -176,7 +176,7 @@ const collectExtraFiles = Effect.fn(function* (extraFiles: ReadonlyArray<ExtraFi
 
 /**
  * The generated entry for `Hetzner.Service` units: a shim importing only
- * `@alchemy.run/hetzner/Bootstrap` plus the user's `main` — see that
+ * `@alchemy.run/hetzner/Bootstrap` plus the user's `main` -- see that
  * module for why the entry never imports alchemy's own dependencies.
  */
 const makeBunBootstrap =
@@ -472,14 +472,14 @@ WantedBy=multi-user.target
           `  mounted=0`,
           `  for i in 1 2 3 4 5 6 7 8 9 10; do`,
           // A sibling Service sharing the same (volume, path) may have
-          // mounted it between iterations — that IS the desired state.
+          // mounted it between iterations -- that IS the desired state.
           `    if findmnt -n ${pathLit} >/dev/null 2>&1; then`,
           `      mounted=1`,
           `      break`,
           `    fi`,
           `    if [ -e ${deviceLit} ]; then`,
           // A previous attach with automount (or a leaked mount from an
-          // interrupted run) may hold the device at /mnt/HC_Volume_* —
+          // interrupted run) may hold the device at /mnt/HC_Volume_* --
           // "already mounted" would fail our mount at the service path.
           `      current="$(findmnt -n -o TARGET ${deviceLit} 2>/dev/null || true)"`,
           `      if [ -n "$current" ] && [ "$current" != ${pathLit} ]; then`,

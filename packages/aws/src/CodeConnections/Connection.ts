@@ -59,7 +59,7 @@ export interface Connection extends Resource<
  *
  * A connection is created in the `PENDING` state. Completing it requires a
  * one-time OAuth handshake performed **manually** in the AWS console (the
- * "Update pending connection" flow) — there is no API to finish the
+ * "Update pending connection" flow) -- there is no API to finish the
  * handshake. Once completed the connection becomes `AVAILABLE` and can be
  * referenced by a CodePipeline `CodeStarSourceConnection` action.
  * ### Creating a Connection
@@ -117,7 +117,7 @@ export const ConnectionProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // Provider type and host are immutable — replace on change.
+          // Provider type and host are immutable -- replace on change.
           if (
             (news?.providerType ?? undefined) !== (olds?.providerType ?? undefined) ||
             (news?.hostArn ?? undefined) !== (olds?.hostArn ?? undefined)
@@ -142,12 +142,12 @@ export const ConnectionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = output?.connectionArn
             ? yield* getByArn(output.connectionArn)
             : yield* findByName(name);
 
-          // 2. Ensure — connections are immutable; create if missing. The
+          // 2. Ensure -- connections are immutable; create if missing. The
           // connection is created in PENDING and its OAuth handshake is
           // completed manually.
           if (observed?.ConnectionArn === undefined) {
@@ -168,7 +168,7 @@ export const ConnectionProvider = () =>
             }
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncResourceTags(observed.ConnectionArn!, desiredTags);
 
           // 4. Return fresh attributes.

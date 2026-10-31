@@ -1,5 +1,5 @@
 import type { MySQLConfig } from "@alchemy.run/sql/MySQL";
-// `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
+// `@effect/sql-mysql2` (and mysql2 underneath) are optional peers -- value
 // imports are deferred to first use so `@alchemy.run/drizzle` resolves without
 // them installed.
 import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
@@ -43,7 +43,7 @@ export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = neve
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzleMySqlConfig<TRelations> & {
     /**
-     * Overrides for the underlying `@effect/sql-mysql2` client — pool
+     * Overrides for the underlying `@effect/sql-mysql2` client -- pool
      * options (e.g. `poolConfig.ssl` for a direct TLS connection),
      * `disablePreparedStatements`, `maxConnections`, and friends.
      */

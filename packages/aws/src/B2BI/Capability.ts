@@ -151,7 +151,7 @@ export const CapabilityProvider = () =>
               capabilityId: created.capabilityId,
             });
           } else {
-            // 3. Sync — converge name, configuration, and instruction docs.
+            // 3. Sync -- converge name, configuration, and instruction docs.
             const nameDrift = live.name !== news.name;
             const configDrift =
               JSON.stringify(live.configuration) !== JSON.stringify(news.configuration);

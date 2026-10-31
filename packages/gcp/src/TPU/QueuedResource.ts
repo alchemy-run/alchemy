@@ -28,7 +28,7 @@ import { toNodeBody, type NodeProps } from "./Node.ts";
 
 export type MultisliceParams = {
   /**
-   * Prefix for generated node ids (`np` → `np-0`, `np-1`, …). Defaults to
+   * Prefix for generated node ids (`np` -> `np-0`, `np-1`, ...). Defaults to
    * the queued resource id.
    */
   nodeIdPrefix?: string;
@@ -81,7 +81,7 @@ export type QueueingPolicy = {
 
 export type Guaranteed = {
   /**
-   * Minimum duration the resources must be allocated (`3600s`, …).
+   * Minimum duration the resources must be allocated (`3600s`, ...).
    */
   minDuration?: string;
 };
@@ -91,11 +91,11 @@ export type QueuedResourceProps = {
    * Queued resource id (the `{queuedResource}` segment of
    * `projects/{project}/locations/{location}/queuedResources/{queuedResource}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the resource.
+   * and logical id. Immutable -- changing it replaces the resource.
    */
   queuedResourceId?: string;
   /**
-   * Zone (`us-central1-c`, …). Immutable — changing it replaces the
+   * Zone (`us-central1-c`, ...). Immutable -- changing it replaces the
    * resource.
    * @default "us-central1-c"
    */
@@ -155,7 +155,7 @@ export type QueuedResource = Resource<
     queueingPolicy: QueueingPolicy | undefined;
     /** Node specification currently stored on the request. */
     nodeSpec: NodeSpec[];
-    /** Server-reported state (`ACCEPTED`, `WAITING_FOR_RESOURCES`, …). */
+    /** Server-reported state (`ACCEPTED`, `WAITING_FOR_RESOURCES`, ...). */
     state: string | undefined;
     /** Who initiated the current state (`USER`, `SERVICE`). */
     stateInitiator: string | undefined;
@@ -172,7 +172,7 @@ export type QueuedResource = Resource<
  * A Cloud TPU queued resource request. The request sits in a queue until
  * capacity is available, then provisions the requested TPU node(s).
  *
- * Queued resources have no labels field — Alchemy stamps ownership onto
+ * Queued resources have no labels field -- Alchemy stamps ownership onto
  * each nested `nodeSpec.node` labels and description so `list` / nuke can
  * find them. The resource is create-only: changing identity or the node
  * spec replaces it.

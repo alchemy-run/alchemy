@@ -23,13 +23,13 @@ export type ServiceProps = {
   /**
    * Parent namespace. Full name
    * `projects/{project}/locations/{location}/namespaces/{namespace}` or
-   * the namespace id (combined with `location`). Immutable — changing it
+   * the namespace id (combined with `location`). Immutable -- changing it
    * replaces the service.
    */
   namespace: string;
   /**
    * Location of the service (e.g. `us-central1`). Used when `namespace`
-   * is a bare id. Immutable — changing it replaces the service.
+   * is a bare id. Immutable -- changing it replaces the service.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -40,14 +40,14 @@ export type ServiceProps = {
    * `projects/{project}/locations/{location}/namespaces/{namespace}/services/{service}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and match
-   * `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`. Immutable — changing it
+   * `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`. Immutable -- changing it
    * replaces the service.
    */
   serviceId?: string;
   /**
    * User annotations consumed by service clients. Alchemy ownership
    * keys (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) are merged
-   * in automatically — Service Directory services have no labels field.
+   * in automatically -- Service Directory services have no labels field.
    * The entire map may contain at most 2000 characters.
    */
   annotations?: Record<string, string>;
@@ -79,7 +79,7 @@ export type Service = Resource<
 >;
 
 /**
- * A Service Directory service — a named registration that holds
+ * A Service Directory service -- a named registration that holds
  * endpoints and client-facing annotations.
  *
  * Changing `serviceId`, `namespace`, or `location` replaces the service.

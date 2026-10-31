@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateForecast` — generate a fresh forecast
+ * Runtime binding for `forecast:CreateForecast` -- generate a fresh forecast
  * from a trained predictor, the scheduled step that keeps the queryable
  * forecast current after each retraining or data import.
  *

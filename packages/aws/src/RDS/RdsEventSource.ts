@@ -71,7 +71,7 @@ export interface RdsEventSourceProps extends EventRouteProps {
   /**
    * Restrict to events about specific instances, clusters, or snapshots
    * (matched against the event's top-level `resources`, which carries the
-   * resource ARNs). Strongly recommended — the `aws.rds` source also
+   * resource ARNs). Strongly recommended -- the `aws.rds` source also
    * carries events for Neptune and DocumentDB resources in the account.
    */
   resourceArns?: readonly string[];
@@ -80,12 +80,12 @@ export interface RdsEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting RDS notifications to the hosting compute. RDS
  * publishes instance, cluster, snapshot, parameter-group, and proxy
- * lifecycle events — failovers, maintenance, completed backups,
- * configuration changes — to the account's default EventBridge bus (source
+ * lifecycle events -- failovers, maintenance, completed backups,
+ * configuration changes -- to the account's default EventBridge bus (source
  * `aws.rds`); this subscribes the host Function to those events so it can
  * alert on failovers or react to completed snapshots.
  *
- * RDS publishes to EventBridge automatically — no additional resource is
+ * RDS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Because the
  * `aws.rds` source is shared with Neptune and DocumentDB, pass
  * `resourceArns` (e.g. the cluster ARN) to scope the rule to your RDS

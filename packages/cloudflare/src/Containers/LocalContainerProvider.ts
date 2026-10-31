@@ -36,9 +36,9 @@ import { ContainerPlatform } from "./ContainerPlatform.ts";
  * Local (dev) provider for Cloudflare Container applications.
  *
  * The Docker build/run is owned by `@alchemy.run/cloudflare-runtime/core`; this
- * provider's only job is to resolve the `dev` image the runtime should use —
+ * provider's only job is to resolve the `dev` image the runtime should use --
  * a build context to `docker build` (Effect-native `main` or a user-supplied
- * Dockerfile) or a remote image to `docker pull` — mirroring the three image
+ * Dockerfile) or a remote image to `docker pull` -- mirroring the three image
  * variants of the live provider's `computeImage`.
  *
  * Everything else on the attributes is a placeholder: the real
@@ -60,7 +60,7 @@ export const LocalContainerProvider = () =>
       // diffs/reconciles in a single dev session don't re-bundle or re-hash.
       //
       // IMPORTANT: the cached result must stay env-free. The cache is warmed
-      // by `precreate`, which runs against unresolved props — binding-derived
+      // by `precreate`, which runs against unresolved props -- binding-derived
       // env values (e.g. an ApiToken's value/accountId) are still unresolved
       // `Output`s there and get skipped. Caching env here would freeze that
       // incomplete env and start the container without its bindings;
@@ -68,7 +68,7 @@ export const LocalContainerProvider = () =>
       const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
           yield* validateContainerImageProps(id, news);
-          // Variant 1 — Effect-native program. Bundle `main` and write it
+          // Variant 1 -- Effect-native program. Bundle `main` and write it
           // (plus the generated Dockerfile) into a stable build context
           // directory. `Docker.build` in cloudflare-runtime reads `dockerfile`
           // as a file path and uses `context` as the build context, so we
@@ -85,7 +85,7 @@ export const LocalContainerProvider = () =>
             };
           }
 
-          // Variant 2 — pre-built remote image. The runtime pulls it
+          // Variant 2 -- pre-built remote image. The runtime pulls it
           // directly; there is nothing to build.
           if (news.image) {
             return {
@@ -94,7 +94,7 @@ export const LocalContainerProvider = () =>
             };
           }
 
-          // Variant 3a — inline Dockerfile content: materialize into the
+          // Variant 3a -- inline Dockerfile content: materialize into the
           // same stable generated context the live provider uses and point
           // the runtime's build at it.
           if (news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)) {
@@ -102,7 +102,7 @@ export const LocalContainerProvider = () =>
             if (typeof content !== "string") {
               return yield* Effect.die(
                 new Error(
-                  "Inline `dockerfile` content is an unresolved Output at image-build time — its dependencies have not resolved yet. Break the cycle or inline the resolved value.",
+                  "Inline `dockerfile` content is an unresolved Output at image-build time \u2014 its dependencies have not resolved yet. Break the cycle or inline the resolved value.",
                 ),
               );
             }
@@ -117,7 +117,7 @@ export const LocalContainerProvider = () =>
             };
           }
 
-          // Variant 3b — user-supplied Dockerfile path + build context
+          // Variant 3b -- user-supplied Dockerfile path + build context
           // directory. The runtime builds the user's Dockerfile against the
           // (real-path'd) context, exactly like the live provider's
           // `external` variant.
@@ -143,8 +143,8 @@ export const LocalContainerProvider = () =>
 
       /**
        * The props that decide what the dev IMAGE is, picked off the
-       * possibly-unresolved plan-time props — or `undefined` when any of
-       * them has not resolved yet. Everything else (env, instances, …) may
+       * possibly-unresolved plan-time props -- or `undefined` when any of
+       * them has not resolved yet. Everything else (env, instances, ...) may
        * still carry Outputs/Effects (the `.make` form's `exports` impl
        * Effect never resolves at all) without disabling the content check.
        */
@@ -277,7 +277,7 @@ export const LocalContainerProvider = () =>
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.
-          // Compare the recomputed image hash instead — and gate only on
+          // Compare the recomputed image hash instead -- and gate only on
           // the IMAGE inputs being resolved, not the whole props bag: the
           // platform `.make` form carries an `exports` impl Effect that is
           // never "resolved", and requiring full resolution silently
@@ -288,7 +288,7 @@ export const LocalContainerProvider = () =>
               return output.image !== undefined ? { action: "update" } : undefined;
             }
             // Recompute fresh on every plan. `prepareImage` is memoized so
-            // a plan's diff→precreate→reconcile chain bundles once — but
+            // a plan's diff->precreate->reconcile chain bundles once -- but
             // this provider runs in the RPC sidecar, whose `ArtifactStore`
             // outlives every run, so without this eviction the FIRST run's
             // hash would be compared forever.

@@ -21,7 +21,7 @@ export type NetworkProps = {
    */
   networkName?: string;
   /**
-   * User description. Immutable — changing it replaces the network.
+   * User description. Immutable -- changing it replaces the network.
    * Alchemy ownership labels are stamped into the description (VPC networks
    * have no `labels` field) so `list` / nuke can find the resource.
    */
@@ -29,12 +29,12 @@ export type NetworkProps = {
   /**
    * When `true`, GCP creates a subnet in every region (auto mode). When
    * `false`, the VPC is custom mode and you add subnets yourself. Immutable
-   * — changing it replaces the network.
+   * -- changing it replaces the network.
    * @default false
    */
   autoCreateSubnetworks?: boolean;
   /**
-   * Maximum transmission unit in bytes (1300–8896).
+   * Maximum transmission unit in bytes (1300-8896).
    * @default 1460
    */
   mtu?: number;
@@ -63,19 +63,19 @@ export type NetworkProps = {
    */
   networkFirewallPolicyEnforcementOrder?: compute.NetworkNetworkFirewallPolicyEnforcementOrderEnum;
   /**
-   * Enable ULA internal IPv6 (`fd20::/20`). Immutable — changing it
+   * Enable ULA internal IPv6 (`fd20::/20`). Immutable -- changing it
    * replaces the network.
    * @default false
    */
   enableUlaInternalIpv6?: boolean;
   /**
    * Optional `/48` from `fd20::/20` used when ULA IPv6 is enabled.
-   * Immutable — changing it replaces the network.
+   * Immutable -- changing it replaces the network.
    */
   internalIpv6Range?: string;
   /**
    * Full or partial URL of a network profile. Set only at create time.
-   * Immutable — changing it replaces the network.
+   * Immutable -- changing it replaces the network.
    */
   networkProfile?: string;
 };

@@ -2,7 +2,7 @@ import * as Namespace from "alchemy/Namespace";
 import type { ResourceBinding } from "alchemy/Resource";
 import * as AlchemyTelemetry from "alchemy/Telemetry";
 /**
- * Cloudflare Workers Observability tracer as a binding layer — the
+ * Cloudflare Workers Observability tracer as a binding layer -- the
  * platform-native counterpart of `Axiom.Telemetry`.
  */
 import * as Data from "effect/Data";
@@ -44,8 +44,8 @@ export interface CloudflareTelemetryProps {
    */
   enabled?: boolean;
   /**
-   * Head-based sampling rate for Workers Traces (`0`–`1`).
-   * Omitted unless set — Cloudflare's default applies.
+   * Head-based sampling rate for Workers Traces (`0`-`1`).
+   * Omitted unless set -- Cloudflare's default applies.
    */
   headSamplingRate?: number;
   /**
@@ -90,7 +90,7 @@ export const assertCloudflareTelemetryCompatibility = (
  * host Worker (the same path as `Cloudflare.cache()`) and registers a
  * per-event Effect Tracer. Cloudflare auto-instruments fetch/KV/R2/D1;
  * `Effect.withSpan` / `Effect.fn` frames nest in that waterfall. Cloudflare
- * owns sampling and export — no OTLP URL, flush, or Wrangler block.
+ * owns sampling and export -- no OTLP URL, flush, or Wrangler block.
  *
  * Until the global default compatibility date is raised past 2026-07-28,
  * pin `compatibility: { date: "2026-08-25" }` (or later) or deploy fails.
@@ -132,7 +132,7 @@ export const assertCloudflareTelemetryCompatibility = (
  * Effect.provide(
  *   Layer.mergeAll(
  *     Cloudflare.Telemetry(),
- *     // omit `traces` — Cloudflare.Telemetry provides the Tracer
+ *     // omit `traces` -- Cloudflare.Telemetry provides the Tracer
  *     Axiom.Telemetry({ token: Ingest, logs: Logs, metrics: Metrics }),
  *   ),
  * )

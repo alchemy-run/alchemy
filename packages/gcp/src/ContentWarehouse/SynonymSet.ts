@@ -29,12 +29,12 @@ export type SynonymSetProps = {
   /**
    * Context id (the `{context}` segment of
    * `projects/{project}/locations/{location}/synonymSets/{context}`).
-   * If omitted, a unique RFC1035 context is generated. Immutable —
+   * If omitted, a unique RFC1035 context is generated. Immutable --
    * changing it replaces the synonym set.
    */
   context?: string;
   /**
-   * Multi-region location (`us` or `eu`). Immutable — changing it
+   * Multi-region location (`us` or `eu`). Immutable -- changing it
    * replaces the synonym set. `US` is accepted and normalized to `us`.
    * @default "us"
    */
@@ -67,8 +67,8 @@ export type SynonymSet = Resource<
 const DEFAULT_SYNONYMS: Synonym[] = [{ words: ["sale", "invoice", "bill"] }];
 
 /**
- * A Document AI Warehouse synonym set — custom search synonyms for a
- * query context (`sales`, `engineering`, …).
+ * A Document AI Warehouse synonym set -- custom search synonyms for a
+ * query context (`sales`, `engineering`, ...).
  *
  * Synonym sets have no labels field; Alchemy identifies one by its
  * context. Without state, a set found under an explicit `context` is

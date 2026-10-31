@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListScheduledActions` operation (IAM action
  * `es:ListScheduledActions`).
  *
- * Lists the actions scheduled on a domain — service software updates, blue/green Auto-Tune changes — with their scheduled time and severity. Provide the implementation with
+ * Lists the actions scheduled on a domain -- service software updates, blue/green Auto-Tune changes -- with their scheduled time and severity. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.ListScheduledActionsHttp)`.
  * ### Auto-Tune and Scheduled Actions
  * **Example:** List a Domain's Scheduled Actions
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const listScheduledActions = yield* OpenSearch.ListScheduledActions();
  *
  * const result = yield* listScheduledActions({ DomainName: name });
- * // result.ScheduledActions → pending actions
+ * // result.ScheduledActions -> pending actions
  * ```
  *
  * @binding

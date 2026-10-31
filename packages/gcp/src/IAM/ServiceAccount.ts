@@ -29,7 +29,7 @@ export type ServiceAccountProps = {
   displayName?: string;
   /**
    * Human-readable description. Service accounts have no labels, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from the `description` attribute. The marker and this text share the
    * API's 256-byte limit; overflow is truncated.
    */
@@ -212,7 +212,7 @@ export const ServiceAccountProvider = () =>
       // Observe
       let current = yield* getByName(name);
 
-      // Ensure — `Conflict` is a create race; adopt the winner.
+      // Ensure -- `Conflict` is a create race; adopt the winner.
       if (current === undefined) {
         current = yield* iam
           .createProjectsServiceAccounts({

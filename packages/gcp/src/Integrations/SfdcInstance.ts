@@ -30,12 +30,12 @@ export type SfdcInstanceProps = {
   /**
    * Instance id (the `{sfdcInstance}` segment of
    * `projects/{project}/locations/{location}/sfdcInstances/{sfdcInstance}`).
-   * Server-assigned on create when omitted. Immutable — changing it
+   * Server-assigned on create when omitted. Immutable -- changing it
    * replaces the instance.
    */
   sfdcInstanceId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -47,12 +47,12 @@ export type SfdcInstanceProps = {
   displayName?: string;
   /**
    * Human-readable description. SFDC instances have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
   /**
-   * Salesforce org id (`00D…`). Stored on the instance; Application
+   * Salesforce org id (`00D...`). Stored on the instance; Application
    * Integration uses it when opening channels.
    */
   sfdcOrgId?: string;
@@ -104,7 +104,7 @@ export type SfdcInstance = Resource<
  * identity and the AuthConfigs used to open SFDC channels.
  *
  * Instances have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Location and id are identity — changing
+ * description for `list` / nuke. Location and id are identity -- changing
  * them replaces the instance. Display name, description, org id, auth
  * configs, and service authority update in place.
  *

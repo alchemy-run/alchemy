@@ -31,7 +31,7 @@ export interface IPSetProps {
    */
   ipSetName?: string;
   /**
-   * Scope of the IP set — `REGIONAL` (ambient region) or `CLOUDFRONT`
+   * Scope of the IP set -- `REGIONAL` (ambient region) or `CLOUDFRONT`
    * (pinned to `us-east-1`). Must match the scope of the web ACLs and rule
    * groups that reference it. Changing the scope replaces the IP set.
    * @default "REGIONAL"
@@ -45,7 +45,7 @@ export interface IPSetProps {
   ipAddressVersion?: WAFV2.IPAddressVersion;
   /**
    * IP addresses and ranges in CIDR notation (e.g. `192.0.2.44/32`,
-   * `2620:0:2d0:200::/64`). Mutable — updated in place.
+   * `2620:0:2d0:200::/64`). Mutable -- updated in place.
    */
   addresses: string[];
   /**
@@ -71,7 +71,7 @@ export interface IPSet extends Resource<
      */
     ipSetId: string;
     /**
-     * ARN of the IP set — reference it from a rule's
+     * ARN of the IP set -- reference it from a rule's
      * `IPSetReferenceStatement`.
      */
     ipSetArn: string;
@@ -93,7 +93,7 @@ export interface IPSet extends Resource<
 > {}
 
 /**
- * An AWS WAFv2 IP set — a named collection of IP addresses and CIDR ranges
+ * An AWS WAFv2 IP set -- a named collection of IP addresses and CIDR ranges
  * referenced from web ACL and rule group rules via
  * `IPSetReferenceStatement`.
  *
@@ -276,7 +276,7 @@ export const IPSetProvider = () =>
           // 1. Observe.
           let observed = yield* findIPSet(scope, name, output?.ipSetId);
 
-          // 2. Ensure — tolerate a duplicate-create race and re-read.
+          // 2. Ensure -- tolerate a duplicate-create race and re-read.
           if (!observed?.IPSet) {
             yield* withWafScope(
               scope,
@@ -304,7 +304,7 @@ export const IPSetProvider = () =>
           yield* session.note(ipSet.ARN);
 
           // 3. Sync addresses + description against OBSERVED state. WAF
-          //    returns addresses in arbitrary order — compare as sets.
+          //    returns addresses in arbitrary order -- compare as sets.
           const drifted = !deepEqual(
             {
               Addresses: sortedAddresses(ipSet.Addresses),
@@ -351,7 +351,7 @@ export const IPSetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const scope = output.scope;
           // An IP set still referenced by a web ACL rule (deletion
-          // propagation) surfaces WAFAssociatedItemException — retry it.
+          // propagation) surfaces WAFAssociatedItemException -- retry it.
           yield* Effect.gen(function* () {
             const found = yield* withWafScope(
               scope,

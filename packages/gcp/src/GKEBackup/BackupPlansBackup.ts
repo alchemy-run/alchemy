@@ -31,7 +31,7 @@ export type BackupPlansBackupProps = {
   /**
    * Parent BackupPlan. Full name
    * `projects/{project}/locations/{location}/backupPlans/{backupPlan}`
-   * or the plan id (combined with `location`). Immutable — changing it
+   * or the plan id (combined with `location`). Immutable -- changing it
    * replaces the backup.
    */
   backupPlan: string;
@@ -42,12 +42,12 @@ export type BackupPlansBackupProps = {
   location?: string;
   /**
    * Backup id (the `{backup}` segment). If omitted, a unique RFC1035 name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the backup.
    */
   backupId?: string;
   /**
-   * Minimum age in days before this Backup can be deleted (`0`–`90`).
+   * Minimum age in days before this Backup can be deleted (`0`-`90`).
    * May only be increased after create. Defaults to the parent plan's
    * `backupDeleteLockDays`.
    */
@@ -116,7 +116,7 @@ export type BackupPlansBackup = Resource<
 >;
 
 /**
- * A Backup for GKE backup — a point-in-time capture of a cluster under
+ * A Backup for GKE backup -- a point-in-time capture of a cluster under
  * a BackupPlan.
  *
  * Changing `backupId`, `backupPlan`, or `location` replaces the backup.

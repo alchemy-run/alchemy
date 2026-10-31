@@ -6,16 +6,16 @@ import type { ComponentVersion } from "./ComponentVersion.ts";
 /**
  * Runtime binding for `greengrass:DescribeComponent`.
  *
- * Reads the bound {@link ComponentVersion}'s cloud metadata — publisher,
+ * Reads the bound {@link ComponentVersion}'s cloud metadata -- publisher,
  * description, lifecycle `status` (`DEPLOYABLE`, `FAILED`, `DEPRECATED`),
- * platforms, and tags — so a function can audit component health before
+ * platforms, and tags -- so a function can audit component health before
  * rolling out a deployment. The component version ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.DescribeComponentHttp)`.
  * ### Reading Components
  * **Example:** Check A Component's State
  * ```typescript
- * // init — bind the operation to the component version
+ * // init -- bind the operation to the component version
  * const describeComponent = yield* AWS.GreengrassV2.DescribeComponent(component);
  *
  * // runtime

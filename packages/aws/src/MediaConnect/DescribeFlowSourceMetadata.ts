@@ -6,8 +6,8 @@ import type { Flow } from "./Flow.ts";
 /**
  * Runtime binding for `mediaconnect:DescribeFlowSourceMetadata`.
  *
- * Reads the bound {@link Flow}'s ingest transport-stream metadata — the
- * programs and their video/audio/data streams — plus status messages about
+ * Reads the bound {@link Flow}'s ingest transport-stream metadata -- the
+ * programs and their video/audio/data streams -- plus status messages about
  * the source. Useful for confidence monitoring of what is actually
  * arriving at the flow. A flow whose source is not currently receiving
  * content answers with `Messages` instead of media info. The flow ARN is
@@ -16,7 +16,7 @@ import type { Flow } from "./Flow.ts";
  * ### Observing Flows
  * **Example:** Inspect the Incoming Transport Stream
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const sourceMetadata = yield* AWS.MediaConnect.DescribeFlowSourceMetadata(flow);
  *
  * // runtime

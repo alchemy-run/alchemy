@@ -6,7 +6,7 @@ import type { Detector } from "./Detector.ts";
 /**
  * Runtime binding for `guardduty:AcceptAdministratorInvitation`.
  *
- * Accepts a GuardDuty administrator invitation — the member-account side of the invitation handshake.
+ * Accepts a GuardDuty administrator invitation -- the member-account side of the invitation handshake.
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.AcceptAdministratorInvitationHttp)`.

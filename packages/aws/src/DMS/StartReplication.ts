@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:StartReplication`.
  *
  * Bind this operation (account-level) to start a DMS Serverless replication
- * for a replication config by ARN — DMS provisions the required capacity
+ * for a replication config by ARN -- DMS provisions the required capacity
  * and begins replicating. The serverless counterpart of
  * {@link StartReplicationTask}. Provide the implementation with
  * `Effect.provide(AWS.DMS.StartReplicationHttp)`.
  * ### Orchestrating Serverless Replications
  * **Example:** Start a Serverless Replication
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const startReplication = yield* AWS.DMS.StartReplication();
  *
  * // runtime

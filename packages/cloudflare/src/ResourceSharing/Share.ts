@@ -24,13 +24,13 @@ export type ShareableResourceType =
   | "idp-federation-grant";
 
 /**
- * Lifecycle status of a share. Deletion is asynchronous — a deleted share
- * transitions `active → deleting → deleted`.
+ * Lifecycle status of a share. Deletion is asynchronous -- a deleted share
+ * transitions `active -> deleting -> deleted`.
  */
 export type ShareStatus = "active" | "deleting" | "deleted";
 
 /**
- * A recipient of a share — exactly one of `accountId` / `organizationId`.
+ * A recipient of a share -- exactly one of `accountId` / `organizationId`.
  */
 export type ShareRecipientInput = {
   /**
@@ -79,7 +79,7 @@ export type ShareProps = {
   /**
    * Recipients of the share. The create API requires at least one. Changes
    * are reconciled via the recipient sub-API (add/remove deltas). Do not mix
-   * with standalone `ShareRecipient` resources on the same share — the Share
+   * with standalone `ShareRecipient` resources on the same share -- the Share
    * provider treats this list as the full desired set.
    */
   recipients: ShareRecipientInput[];
@@ -88,7 +88,7 @@ export type ShareProps = {
    * Changes are reconciled via the resource sub-API (`meta` updates in place;
    * changing `resourceType`/`resourceId` of an entry deletes and recreates
    * that entry). Do not mix with standalone `ShareResource` resources on the
-   * same share — the Share provider treats this list as the full desired set.
+   * same share -- the Share provider treats this list as the full desired set.
    */
   resources: ShareResourceInput[];
 };
@@ -135,14 +135,14 @@ export type ShareAttributes = {
 export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers>;
 
 /**
- * A Cloudflare resource share — shares account-level configuration (gateway
- * policies, custom rulesets, IdP federation grants, …) with another account
+ * A Cloudflare resource share -- shares account-level configuration (gateway
+ * policies, custom rulesets, IdP federation grants, ...) with another account
  * or organization.
  *
  * The create API requires at least one recipient and one resource, so both
  * are seeded inline. Post-create changes to those arrays are reconciled
  * through the recipient/resource sub-APIs; only `name` is mutable on the
- * share itself. Deletion is asynchronous (`active → deleting → deleted`).
+ * share itself. Deletion is asynchronous (`active -> deleting -> deleted`).
  * ### Creating a Share
  * **Example:** Share a gateway policy with another account
  * ```typescript
@@ -189,7 +189,7 @@ export const isShare = (value: unknown): value is Share =>
 export const ShareProvider = () =>
   Provider.succeed(Share, {
     stables: ["shareId", "accountId", "organizationId", "created"],
-    // Account collection — enumerate every share this account sends
+    // Account collection -- enumerate every share this account sends
     // (the ones we own and can delete), exhaustively paginated, mapped
     // into the same Attributes shape `read` returns. Deleted shares are
     // excluded since they no longer exist.
@@ -224,7 +224,7 @@ export const ShareProvider = () =>
         const observed = yield* getShare(acct, output.shareId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name among shares we sent. Names are not unique on
       // Cloudflare's side; an exact match is the best identity we have.
       const name = yield* createShareName(id, olds?.name);
@@ -245,7 +245,7 @@ export const ShareProvider = () =>
         meta: r.meta ?? {},
       }));
 
-      // Observe — the shareId cached on `output` is a hint, not a
+      // Observe -- the shareId cached on `output` is a hint, not a
       // guarantee: a missing (or fully deleted) share falls through and
       // we recreate.
       const observed = output?.shareId
@@ -253,7 +253,7 @@ export const ShareProvider = () =>
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): the create API
+        // Ensure -- greenfield (or out-of-band delete): the create API
         // requires both arrays, so seed them inline. Share names are not
         // unique so there is no AlreadyExists race to tolerate.
         const created = yield* resourceSharing.createResourceSharing({
@@ -267,7 +267,7 @@ export const ShareProvider = () =>
 
       const acct = output?.accountId ?? accountId;
 
-      // Sync name — the only share-level mutable field.
+      // Sync name -- the only share-level mutable field.
       if (observed.name !== name) {
         yield* resourceSharing.updateResourceSharing({
           accountId: acct,
@@ -276,7 +276,7 @@ export const ShareProvider = () =>
         });
       }
 
-      // Sync recipients — diff observed cloud state against desired and
+      // Sync recipients -- diff observed cloud state against desired and
       // apply add/remove deltas through the recipient sub-API.
       const observedRecipients = yield* resourceSharing.listRecipients
         .items({ accountId: acct, shareId: observed.id, perPage: 50 })
@@ -315,7 +315,7 @@ export const ShareProvider = () =>
         }
       }
 
-      // Sync resources — keyed by (resourceType, resourceId): create
+      // Sync resources -- keyed by (resourceType, resourceId): create
       // missing entries, update `meta` in place, delete extras.
       const observedResources = yield* resourceSharing.listResources
         .items({ accountId: acct, shareId: observed.id, perPage: 50 })
@@ -363,12 +363,12 @@ export const ShareProvider = () =>
         }
       }
 
-      // Return — re-read for fresh attributes after the sub-API syncs.
+      // Return -- re-read for fresh attributes after the sub-API syncs.
       const fresh = yield* getShare(acct, observed.id);
       return fresh ? toAttributes(fresh, acct) : toAttributes(observed, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // Deletion is asynchronous (`active → deleting → deleted`); the
+      // Deletion is asynchronous (`active -> deleting -> deleted`); the
       // DELETE call itself is idempotent against a missing share.
       yield* resourceSharing
         .deleteResourceSharing({

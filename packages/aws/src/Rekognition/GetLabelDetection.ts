@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetLabelDetection` — get the results of an asynchronous labels detection job started by StartLabelDetection.
+ * Runtime binding for `rekognition:GetLabelDetection` -- get the results of an asynchronous labels detection job started by StartLabelDetection.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetLabelDetection` on `*` (Rekognition data-plane resources such

@@ -3,15 +3,15 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 /**
- * Cloudflare dev transport — HOST half.
+ * Cloudflare dev transport -- HOST half.
  *
  * Runs in the alchemy / e2e-harness process: opens `cloudflare-runtime`'s
  * platform proxy (a local workerd instance hosting the configured binding
  * hooks behind the internal proxy worker) and produces the
  * {@link NuxtDevPlatform} the framework half injects into `loadNuxt`
- * overrides — the dev-only nitro plugin (`./plugin.ts`) plus the
+ * overrides -- the dev-only nitro plugin (`./plugin.ts`) plus the
  * `runtimeConfig` connect info. The proxy's entire client state is
- * `connectInfo: { url, token }` — two plain strings — which is what lets
+ * `connectInfo: { url, token }` -- two plain strings -- which is what lets
  * the nitro dev SSR worker THREAD reconstruct the platform over HTTP
  * (`platform-proxy/connect`) with live-shared binding state.
  */
@@ -23,7 +23,7 @@ import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "./shared.ts";
  * The runtime-free client subpath of `cloudflare-runtime` the dev plugin is
  * built on. Resolved HOST-side (this package depends on
  * `cloudflare-runtime`) to an absolute path the dev worker imports
- * directly — the worker itself cannot resolve the bare specifier when
+ * directly -- the worker itself cannot resolve the bare specifier when
  * `cloudflare-runtime` is only a transitive dependency of the project.
  */
 export const CLIENT_MODULE_SPECIFIER =
@@ -133,7 +133,7 @@ const literalEnv = (
 };
 
 /**
- * The Cloudflare target's dev platform: open the proxy (scoped — closing
+ * The Cloudflare target's dev platform: open the proxy (scoped -- closing
  * the Scope disposes the workerd instance) and hand the framework half the
  * nitro plugin + `runtimeConfig` connect info to inject.
  */
@@ -173,7 +173,7 @@ export const makeCloudflareDevPlatform =
           new DeployTargetError({
             platform: "cloudflare",
             message:
-              `Failed to resolve "${CLIENT_MODULE_SPECIFIER}" — the Nuxt dev bridge ` +
+              `Failed to resolve "${CLIENT_MODULE_SPECIFIER}" \u2014 the Nuxt dev bridge ` +
               "requires @alchemy.run/cloudflare-runtime/core (a dependency of this package)",
             cause,
           }),

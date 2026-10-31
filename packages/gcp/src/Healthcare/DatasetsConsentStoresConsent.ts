@@ -36,7 +36,7 @@ export type DatasetsConsentStoresConsentProps = {
   /**
    * Parent consent store. Full name
    * `.../consentStores/{consentStore}` or the store id (combined with
-   * `dataset` and `location`). Immutable — changing it replaces the
+   * `dataset` and `location`). Immutable -- changing it replaces the
    * consent.
    */
   consentStore: string;

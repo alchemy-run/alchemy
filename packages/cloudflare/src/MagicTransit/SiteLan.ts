@@ -93,7 +93,7 @@ export interface MagicSiteLanProps {
   vlanTag?: number;
   /**
    * Mark true to use this LAN for HA probing. Only works for sites with
-   * HA turned on; only one LAN can be the ha_link. Create-only — changing
+   * HA turned on; only one LAN can be the ha_link. Create-only -- changing
    * it triggers a replacement.
    */
   haLink?: boolean;
@@ -149,15 +149,15 @@ export type MagicSiteLan = Resource<
 >;
 
 /**
- * A LAN attached to a Magic WAN site — describes a local network segment
+ * A LAN attached to a Magic WAN site -- describes a local network segment
  * behind a Magic WAN Connector port (VLAN, addressing, routed subnets,
  * NAT).
  *
- * Requires a Magic WAN subscription — accounts without it receive a typed
+ * Requires a Magic WAN subscription -- accounts without it receive a typed
  * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
  * (code 1101, "forbidden: feature not enabled").
  *
- * `siteId` and `haLink` are create-only — changing either triggers a
+ * `siteId` and `haLink` are create-only -- changing either triggers a
  * replacement. Everything else is updated in place.
  * ### Creating a LAN
  * **Example:** Untagged LAN with DHCP
@@ -211,7 +211,7 @@ export const MagicSiteLanProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      // ha_link is create-only — the update API has no such field.
+      // ha_link is create-only -- the update API has no such field.
       if ((olds.haLink ?? false) !== (news.haLink ?? false)) {
         return { action: "replace" } as const;
       }
@@ -228,7 +228,7 @@ export const MagicSiteLanProvider = () =>
         const observed = yield* getLan(acct, siteId, output.lanId);
         if (observed) return toAttributes(observed, siteId, acct);
       }
-      // Cold read — match the deterministic physical name. LANs carry no
+      // Cold read -- match the deterministic physical name. LANs carry no
       // ownership markers; report as Unowned so takeover is gated behind
       // the adopt policy.
       const name = yield* createLanName(id, olds?.name);
@@ -243,13 +243,13 @@ export const MagicSiteLanProvider = () =>
       const siteId = news.siteId as string;
       const name = yield* createLanName(id, news.name);
 
-      // Observe — the id on `output` is a hint; fall back to a name scan.
+      // Observe -- the id on `output` is a hint; fall back to a name scan.
       let observed = output?.lanId ? yield* getLan(accountId, siteId, output.lanId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, name);
       }
 
-      // Ensure — create when missing. The create API returns the site's
+      // Ensure -- create when missing. The create API returns the site's
       // LAN list; pick the created LAN by name.
       if (!observed) {
         const created = yield* magicTransit.createSiteLan({
@@ -278,7 +278,7 @@ export const MagicSiteLanProvider = () =>
         });
       }
 
-      // Sync — the update API is a PUT; send the full desired state, but
+      // Sync -- the update API is a PUT; send the full desired state, but
       // skip the call entirely on a no-op of the observable fields.
       const dirty =
         (observed.name ?? undefined) !== name ||
@@ -330,8 +330,8 @@ export const MagicSiteLanProvider = () =>
     // exhaustively paginate the LANs of each site (bounded concurrency) and
     // hydrate into the same Attributes shape `read` returns. Accounts (or
     // individual sites) without Magic WAN entitlement reject with the typed
-    // `MagicWanUnauthorized` (code 1025) or `MagicWanNotEnabled` (code 1101) — nothing to enumerate,
-    // so skip → [].
+    // `MagicWanUnauthorized` (code 1025) or `MagicWanNotEnabled` (code 1101) -- nothing to enumerate,
+    // so skip -> [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 

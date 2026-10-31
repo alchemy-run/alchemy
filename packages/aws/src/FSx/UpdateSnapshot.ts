@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `UpdateSnapshot` operation (IAM action
- * `fsx:UpdateSnapshot` on `*` — runtime-created snapshots have ARNs
+ * `fsx:UpdateSnapshot` on `*` -- runtime-created snapshots have ARNs
  * unknowable at deploy time).
  *
- * Renames an OpenZFS volume snapshot — the management half of a runtime
+ * Renames an OpenZFS volume snapshot -- the management half of a runtime
  * snapshot rotation built with {@link CreateSnapshot}. A missing snapshot
  * surfaces the typed `UpdateSnapshotNotFound` (FSx reports it as a wire
  * `BadRequest`; the distilled patch carves out the typed tag by message).

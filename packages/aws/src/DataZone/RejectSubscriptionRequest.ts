@@ -17,7 +17,7 @@ export interface RejectSubscriptionRequestRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** Reject a Request
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const rejectSubscriptionRequest = yield* AWS.DataZone.RejectSubscriptionRequest(domain);
  *
  * // runtime

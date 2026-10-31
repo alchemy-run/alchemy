@@ -204,7 +204,7 @@ function withStorageTransaction<A, E, R>(
 }
 
 // ---------------------------------------------------------------------------
-// SqlStorage — Effect-native wrapper around cf.SqlStorage
+// SqlStorage -- Effect-native wrapper around cf.SqlStorage
 // ---------------------------------------------------------------------------
 
 export type SqlStorageValue = cf.SqlStorageValue;

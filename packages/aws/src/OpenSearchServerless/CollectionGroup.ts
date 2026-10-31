@@ -93,7 +93,7 @@ export interface CollectionGroup extends Resource<
 
 /**
  * An Amazon OpenSearch Serverless collection group. Collection groups manage
- * OpenSearch Compute Units (OCUs) at a group level — multiple collections
+ * OpenSearch Compute Units (OCUs) at a group level -- multiple collections
  * share the group's capacity limits instead of each collection scaling
  * independently.
  *
@@ -159,7 +159,7 @@ export const CollectionGroupProvider = () =>
           desired.minIndexingCapacityInOCU !== observed?.minIndexingCapacityInOCU ||
           desired.minSearchCapacityInOCU !== observed?.minSearchCapacityInOCU);
 
-      // batchGetCollectionGroup does not return the group's tags — read them
+      // batchGetCollectionGroup does not return the group's tags -- read them
       // via listTagsForResource (the authoritative tag store).
       const observeTags = Effect.fn(function* (arn: string) {
         return yield* aoss
@@ -239,10 +239,10 @@ export const CollectionGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let detail = yield* observeByName(name);
 
-          // 2. ENSURE — create if missing; tolerate a concurrent create race
+          // 2. ENSURE -- create if missing; tolerate a concurrent create race
           if (detail === undefined) {
             const created = yield* aoss
               .createCollectionGroup({
@@ -258,7 +258,7 @@ export const CollectionGroupProvider = () =>
               );
             detail = created !== undefined ? { ...created } : yield* observeByName(name);
           } else {
-            // 3. SYNC — description/capacityLimits when observed drifts
+            // 3. SYNC -- description/capacityLimits when observed drifts
             const descriptionDrift =
               news.description !== undefined && news.description !== detail.description;
             const limitsDrift = capacityDrift(news.capacityLimits, detail.capacityLimits);
@@ -277,7 +277,7 @@ export const CollectionGroupProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags (read via
+          // 3b. SYNC TAGS -- diff against observed cloud tags (read via
           // listTagsForResource on every path: adoption may bring foreign
           // tags, and a create race may have dropped ours).
           yield* syncTags(detail.arn, yield* observeTags(detail.arn), desiredTags);
@@ -288,7 +288,7 @@ export const CollectionGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A group with collections still in it (or tearing down) surfaces
-          // ConflictException — retry through the teardown window.
+          // ConflictException -- retry through the teardown window.
           yield* retryWhileConflict(
             aoss.deleteCollectionGroup({ id: output.collectionGroupId }),
           ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));

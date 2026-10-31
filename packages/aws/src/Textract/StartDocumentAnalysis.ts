@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:StartDocumentAnalysis` — start an
+ * Runtime binding for `textract:StartDocumentAnalysis` -- start an
  * asynchronous analysis job for a (possibly multi-page) document stored in
  * S3. Poll the returned `JobId` with `GetDocumentAnalysis`, or pass a
  * `NotificationChannel` to receive the completion event on an SNS topic

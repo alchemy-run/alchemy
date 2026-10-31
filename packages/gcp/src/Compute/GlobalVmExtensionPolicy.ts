@@ -28,7 +28,7 @@ export type GlobalVmExtensionPolicyProps = {
   policyName?: string;
   /**
    * Optional description. Global VM extension policies have no labels
-   * field — Alchemy ownership is stored in a `[alchemy …]` prefix for
+   * field -- Alchemy ownership is stored in a `[alchemy ...]` prefix for
    * `list` / nuke.
    */
   description?: string;

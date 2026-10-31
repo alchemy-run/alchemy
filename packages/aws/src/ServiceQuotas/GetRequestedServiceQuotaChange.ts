@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:GetRequestedServiceQuotaChange` — read
+ * Runtime binding for `servicequotas:GetRequestedServiceQuotaChange` -- read
  * the status of a quota increase request from inside a Function (e.g. to
  * poll a request submitted with
  * {@link RequestServiceQuotaIncrease | RequestServiceQuotaIncrease}).

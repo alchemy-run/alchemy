@@ -172,7 +172,7 @@ const root = Command.make("alchemy", {}, () =>
  * How this CLI process is running, appended to `--version` in a checkout
  * for debugging the launcher's implicit mode selection (`bin/cli.js`): the
  * runtime, and whether we're executing `.ts` source (bun, or node with type
- * stripping + the Oxc register hook) or built output — `node <x>, lib` is
+ * stripping + the Oxc register hook) or built output -- `node <x>, lib` is
  * the tell for the old-node fallback that still needs a build. Published
  * installs print the plain version string.
  */
@@ -203,7 +203,7 @@ const services = Layer.mergeAll(
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
-  // Debug run log in the project's .alchemy/log — the console noise floor stays at
+  // Debug run log in the project's .alchemy/log -- the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
   Layer.provide(GlobalLogLive, PlatformServices),

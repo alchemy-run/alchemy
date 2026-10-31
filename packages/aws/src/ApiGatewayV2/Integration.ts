@@ -25,11 +25,11 @@ export interface IntegrationProps {
   /**
    * The integration endpoint:
    *
-   * - `AWS_PROXY` on an HTTP API — the Lambda function ARN.
-   * - `AWS_PROXY` on a WebSocket API — the full invocation URI
+   * - `AWS_PROXY` on an HTTP API -- the Lambda function ARN.
+   * - `AWS_PROXY` on a WebSocket API -- the full invocation URI
    *   (`arn:aws:apigateway:{region}:lambda:path/2015-03-31/functions/{functionArn}/invocations`).
-   * - `HTTP_PROXY` — the HTTP URL.
-   * - private integrations — the ELB listener / Cloud Map service ARN.
+   * - `HTTP_PROXY` -- the HTTP URL.
+   * - private integrations -- the ELB listener / Cloud Map service ARN.
    */
   integrationUri?: string;
   /**
@@ -40,7 +40,7 @@ export interface IntegrationProps {
   /**
    * The Lambda event payload format for HTTP API `AWS_PROXY` integrations.
    * `2.0` is the modern shape (same as Lambda Function URLs).
-   * @default "2.0" for HTTP AWS_PROXY (AWS defaults to "1.0" — the wrapper does not override; set explicitly)
+   * @default "2.0" for HTTP AWS_PROXY (AWS defaults to "1.0" -- the wrapper does not override; set explicitly)
    */
   payloadFormatVersion?: string;
   /**
@@ -77,8 +77,8 @@ export interface IntegrationProps {
   templateSelectionExpression?: string;
   /**
    * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
-   * a bare number is milliseconds). 50–29000 ms for WebSocket APIs,
-   * 50–30000 ms for HTTP APIs. Sent to the API in whole milliseconds
+   * a bare number is milliseconds). 50-29000 ms for WebSocket APIs,
+   * 50-30000 ms for HTTP APIs. Sent to the API in whole milliseconds
    * (`TimeoutInMillis`).
    */
   timeout?: Duration.Input;
@@ -120,7 +120,7 @@ export interface IntegrationType extends Resource<
 > {}
 
 /**
- * An API Gateway v2 Integration — the backend target a Route forwards to.
+ * An API Gateway v2 Integration -- the backend target a Route forwards to.
  *
  * For HTTP APIs the common integration is `AWS_PROXY` with payload format
  * `2.0`, pointing directly at a Lambda function ARN. For WebSocket APIs the
@@ -253,7 +253,7 @@ export const IntegrationProvider = () =>
                       .filter((integ) => integ.IntegrationId != null)
                       .map((integ) => snapshotFromIntegration(api.ApiId!, integ)),
                   ),
-                  // API deleted between list and getIntegrations — skip it.
+                  // API deleted between list and getIntegrations -- skip it.
                   Effect.catchTag("NotFoundException", () =>
                     Effect.succeed([] as IntegrationType["Attributes"][]),
                   ),
@@ -294,7 +294,7 @@ export const IntegrationProvider = () =>
             return snapshotFromIntegration(apiId, observed);
           }
 
-          // 3. SYNC — compare the observed snapshot against desired and
+          // 3. SYNC -- compare the observed snapshot against desired and
           //    update only on drift.
           const snapshot = snapshotFromIntegration(apiId, observed);
           const desired = desiredRequest(news);

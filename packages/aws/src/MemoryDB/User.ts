@@ -31,14 +31,14 @@ export class MemoryDBUserUnexpectedResponse extends Data.TaggedError(
 export interface UserAuthenticationMode {
   /**
    * How the user authenticates:
-   * - `"password"` — one or two SHA-256 passwords (supplied in `passwords`).
-   * - `"iam"` — IAM authentication; the username must match the IAM identity.
-   * - `"no-password"` — the user has no password (typically the default user).
+   * - `"password"` -- one or two SHA-256 passwords (supplied in `passwords`).
+   * - `"iam"` -- IAM authentication; the username must match the IAM identity.
+   * - `"no-password"` -- the user has no password (typically the default user).
    */
   type: "password" | "iam" | "no-password";
   /**
    * One or two passwords (16-128 printable characters each). Required when
-   * `type` is `"password"`. Passwords are write-only — the API never returns
+   * `type` is `"password"`. Passwords are write-only -- the API never returns
    * them, so changes to `passwords` alone are not auto-detected on update;
    * change `type` (or replace the user) to force a credential reset.
    */
@@ -91,7 +91,7 @@ export interface User extends Resource<
 > {}
 
 /**
- * A MemoryDB user — an RBAC identity that authenticates to a cluster and is
+ * A MemoryDB user -- an RBAC identity that authenticates to a cluster and is
  * granted permissions through an access string. Users are grouped into
  * {@link ACL}s, which are attached to clusters.
  *
@@ -171,7 +171,7 @@ export const UserProvider = () =>
         };
       });
 
-      // Distilled types `Passwords` as sensitive — pass the Redacted values
+      // Distilled types `Passwords` as sensitive -- pass the Redacted values
       // through as-is so they stay redacted in traces and logs.
       const toWireAuth = (mode: UserAuthenticationMode): memorydb.AuthenticationMode => ({
         Type: mode.type,
@@ -202,10 +202,10 @@ export const UserProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readUser(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* memorydb
               .createUser({
@@ -231,7 +231,7 @@ export const UserProvider = () =>
             });
           }
 
-          // 3. Sync — access string is observable; auth passwords are not, so
+          // 3. Sync -- access string is observable; auth passwords are not, so
           // only re-apply the auth mode when its observable TYPE changed.
           const update: memorydb.UpdateUserRequest = { UserName: name };
           let mutated = false;
@@ -248,7 +248,7 @@ export const UserProvider = () =>
             observed = (yield* waitUntilActive(name)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
@@ -270,7 +270,7 @@ export const UserProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           const name = output.userName;
-          // A user mid-modify rejects deletion — settle first (bounded), then
+          // A user mid-modify rejects deletion -- settle first (bounded), then
           // delete. NotFound is success (idempotent delete).
           yield* waitUntilActive(name).pipe(Effect.catch(() => Effect.void));
           yield* memorydb.deleteUser({ UserName: name }).pipe(
@@ -292,7 +292,7 @@ export const UserProvider = () =>
                     user.Name !== undefined &&
                     user.ARN !== undefined &&
                     // `default` is the AWS-managed default user that always
-                    // exists and can never be deleted — keep it out of
+                    // exists and can never be deleted -- keep it out of
                     // enumeration for account-wide teardown (nuke).
                     user.Name !== "default",
                 ),

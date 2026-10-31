@@ -4,7 +4,7 @@ import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import { ListNamedShadowsForThing } from "./ListNamedShadowsForThing.ts";
 
 /**
- * HTTP implementation of the {@link ListNamedShadowsForThing} capability —
+ * HTTP implementation of the {@link ListNamedShadowsForThing} capability --
  * grants `iot:ListNamedShadowsForThing` on the thing ARN and calls the IoT
  * data-plane `ListNamedShadowsForThing` API.
  */

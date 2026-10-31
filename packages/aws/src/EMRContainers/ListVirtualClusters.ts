@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `emr-containers:ListVirtualClusters`.
  *
  * Enumerates the account's EMR on EKS virtual clusters, optionally filtered
- * by state, container provider, or creation time. Account-level — no
+ * by state, container provider, or creation time. Account-level -- no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.EMRContainers.ListVirtualClustersHttp)`.
  * ### Virtual Clusters
  * **Example:** List Running Virtual Clusters
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listVirtualClusters = yield* AWS.EMRContainers.ListVirtualClusters();
  *
  * // runtime

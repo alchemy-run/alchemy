@@ -40,7 +40,7 @@ export interface ViteChildConfig {
     /** The zone outbound `fetch()`es report in `CF-Worker`. */
     zone?: string;
     bindingDescriptors: WorkerBinding[];
-    /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
+    /** Binding name -> opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;
     /** Simulated Cloudflare Access config (`dev: { access: ... }`). */
     devAccess?: { aud?: string; identity?: Record<string, unknown> };
@@ -78,7 +78,7 @@ export interface ViteBuildChildConfig {
   /** Absolute project root; also the child process's working directory. */
   rootDir: string;
   /**
-   * `VITE_`-prefixed env entries — the only ones the build consumes
+   * `VITE_`-prefixed env entries -- the only ones the build consumes
    * (inlined as `import.meta.env.*` defines).
    */
   env: Record<string, unknown>;

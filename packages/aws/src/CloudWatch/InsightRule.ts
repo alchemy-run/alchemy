@@ -89,8 +89,8 @@ export interface InsightRule extends Resource<
 > {}
 
 /**
- * A CloudWatch Contributor Insights rule — analyzes log group entries to
- * surface the top-N contributors (IPs, user IDs, …) to a metric derived
+ * A CloudWatch Contributor Insights rule -- analyzes log group entries to
+ * surface the top-N contributors (IPs, user IDs, ...) to a metric derived
  * from structured logs.
  * ### Creating Insight Rules
  * **Example:** Rule Definition
@@ -115,7 +115,7 @@ export interface InsightRule extends Resource<
  * ### Reading Reports at Runtime
  * **Example:** Fetch the Rule's Top Contributors from a Function
  * ```typescript
- * // init — bind the rule to the function (see GetInsightRuleReport)
+ * // init -- bind the rule to the function (see GetInsightRuleReport)
  * const getInsightRuleReport = yield* AWS.CloudWatch.GetInsightRuleReport(rule);
  *
  * // runtime
@@ -210,13 +210,13 @@ export const InsightRuleProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // Observe — pin the physical name from `output` if present;
+          // Observe -- pin the physical name from `output` if present;
           // otherwise derive from desired props. Read whatever exists in
           // CloudWatch so we have a baseline for tag-diffing on adoption.
           const name = output?.ruleName ?? (yield* createRuleName(id, news));
           const existing = yield* readInsightRule(name);
 
-          // Ensure — `putInsightRule` is an upsert; sending the full
+          // Ensure -- `putInsightRule` is an upsert; sending the full
           // desired config every reconcile converges the cloud.
           yield* retryConcurrent(
             cloudwatch.putInsightRule({
@@ -225,7 +225,7 @@ export const InsightRuleProvider = () =>
             }),
           );
 
-          // Sync tags — diff against `olds.tags` when we have prior state,
+          // Sync tags -- diff against `olds.tags` when we have prior state,
           // otherwise fall back to what we observed. Adoption flows take
           // the latter path.
           const tags = yield* updateResourceTags({

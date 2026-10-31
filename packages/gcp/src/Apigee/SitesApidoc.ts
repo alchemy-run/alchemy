@@ -16,24 +16,24 @@ const MAX_TITLE_LENGTH = 255;
 export type SitesApidocProps = {
   /**
    * Portal site id (the `{site}` segment of
-   * `organizations/{org}/sites/{site}`). Required. Immutable — changing
+   * `organizations/{org}/sites/{site}`). Required. Immutable -- changing
    * it replaces the catalog item.
    */
   siteId: string;
   /**
-   * Name of the backing API product. Required and immutable — a portal
+   * Name of the backing API product. Required and immutable -- a portal
    * may have only one catalog item per API product. Changing it replaces
    * the catalog item.
    */
   apiProductName: string;
   /**
-   * Apigee organization id. Defaults to the stack GCP project. Immutable —
+   * Apigee organization id. Defaults to the stack GCP project. Immutable --
    * changing it replaces the catalog item.
    */
   organization?: string;
   /**
    * Server-assigned catalog item id. Set when adopting an existing item.
-   * Immutable — changing it replaces the catalog item.
+   * Immutable -- changing it replaces the catalog item.
    */
   apiDocId?: string;
   /**
@@ -114,9 +114,9 @@ export type SitesApidoc = Resource<
  * API docs have no labels field and every text field is shown to portal
  * users, so Alchemy finds its item by API product: `read` reports an item
  * as owned only when it carries the generated title (an explicit `title`
- * is reported as unowned — adopt it with `--adopt`), and nuke cannot
+ * is reported as unowned -- adopt it with `--adopt`), and nuke cannot
  * discover items. `siteId`, `organization`, and
- * `apiProductName` are identity — changing any of them replaces the item.
+ * `apiProductName` are identity -- changing any of them replaces the item.
  * Title, description, publish flags, image, and categories update in
  * place.
  *

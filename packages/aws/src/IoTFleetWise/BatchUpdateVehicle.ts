@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `BatchUpdateVehicle` operation (IAM action
  * `iotfleetwise:BatchUpdateVehicle`), account-level.
  *
- * Updates up to 10 vehicles in one call — attributes, manifest
+ * Updates up to 10 vehicles in one call -- attributes, manifest
  * associations, and state-template associations. Per-item failures are
  * returned in the response `errors` list, not the error channel. Provide
  * the implementation with

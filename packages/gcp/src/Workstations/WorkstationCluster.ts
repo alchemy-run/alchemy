@@ -64,11 +64,11 @@ export type WorkstationClusterProps = {
    * Cluster id (the `{workstationCluster}` segment of
    * `projects/{project}/locations/{location}/workstationClusters/{workstationCluster}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the cluster.
+   * and logical id. Immutable -- changing it replaces the cluster.
    */
   workstationClusterId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the cluster. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -77,14 +77,14 @@ export type WorkstationClusterProps = {
   /**
    * VPC network. Full name
    * `projects/{project}/global/networks/{network}` or a network id.
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    * @default "default"
    */
   network?: string;
   /**
    * Subnetwork. Full name
    * `projects/{project}/regions/{region}/subnetworks/{subnetwork}` or a
-   * subnetwork id (combined with `location`). Immutable — changing it
+   * subnetwork id (combined with `location`). Immutable -- changing it
    * replaces the cluster.
    * @default "default"
    */
@@ -178,7 +178,7 @@ export type WorkstationCluster = Resource<
 >;
 
 /**
- * A Cloud Workstations cluster — a regional group of workstations
+ * A Cloud Workstations cluster -- a regional group of workstations
  * attached to a VPC network.
  *
  * Changing `workstationClusterId`, `location`, `network`, `subnetwork`,

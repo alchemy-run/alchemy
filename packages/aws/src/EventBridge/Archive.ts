@@ -24,7 +24,7 @@ export interface ArchiveProps {
   name?: ArchiveName;
 
   /**
-   * ARN of the event bus whose events are archived. Immutable — changing it
+   * ARN of the event bus whose events are archived. Immutable -- changing it
    * replaces the archive.
    */
   eventSourceArn: string;
@@ -123,7 +123,7 @@ export const ArchiveProvider = () =>
       const awaitSettled = (archiveName: string) =>
         eventbridge.describeArchive({ ArchiveName: archiveName }).pipe(
           // A describe fired immediately after create can be eventually
-          // consistent — absorb NotFound briefly before polling the state.
+          // consistent -- absorb NotFound briefly before polling the state.
           Effect.retry({
             while: (e): boolean => e._tag === "ResourceNotFoundException",
             schedule: Schedule.spaced("1 second"),
@@ -198,14 +198,14 @@ export const ArchiveProvider = () =>
           const eventPattern = news.eventPattern ? JSON.stringify(news.eventPattern) : undefined;
           const retentionDays = toWireDays(news.retention);
 
-          // Observe — live cloud state is authoritative; a vanished archive
+          // Observe -- live cloud state is authoritative; a vanished archive
           // falls through to create.
           const observed = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ArchiveArn) {
-            // Ensure — create the archive; tolerate an AlreadyExists race
+            // Ensure -- create the archive; tolerate an AlreadyExists race
             // with a peer reconciler and converge via the update below.
             yield* eventbridge
               .createArchive({
@@ -218,7 +218,7 @@ export const ArchiveProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
-            // Sync — updateArchive overwrites description, pattern,
+            // Sync -- updateArchive overwrites description, pattern,
             // retention, and KMS key in one shot (idempotent on matching
             // values).
             yield* eventbridge.updateArchive({

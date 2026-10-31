@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:DescribeAccountHealth`.
  *
- * Returns the number of open reactive and proactive insights, analyzed metrics, and resource hours for the account — the top line of an operations dashboard.
+ * Returns the number of open reactive and proactive insights, analyzed metrics, and resource hours for the account -- the top line of an operations dashboard.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.DescribeAccountHealthHttp)`.
  * ### Account Health
  * **Example:** Read Open Insight Counts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeAccountHealth = yield* AWS.DevOpsGuru.DescribeAccountHealth();
  *
  * // runtime

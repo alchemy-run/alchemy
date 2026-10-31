@@ -26,12 +26,12 @@ export type NamespaceProps = {
    * `projects/{project}/locations/{location}/namespaces/{namespace}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and match
-   * `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`. Immutable — changing it
+   * `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`. Immutable -- changing it
    * replaces the namespace.
    */
   namespaceId?: string;
   /**
-   * Location of the namespace (e.g. `us-central1`). Immutable — changing
+   * Location of the namespace (e.g. `us-central1`). Immutable -- changing
    * it replaces the namespace. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -66,7 +66,7 @@ export type Namespace = Resource<
 >;
 
 /**
- * A Service Directory namespace — a location-scoped container for
+ * A Service Directory namespace -- a location-scoped container for
  * services.
  *
  * Changing `namespaceId` or `location` replaces the namespace.

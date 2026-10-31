@@ -27,7 +27,7 @@ import {
 export type EnterprisesWebAppProps = {
   /**
    * Parent enterprise (`enterprises/{enterprise}` or `{enterprise}`).
-   * Immutable — changing it replaces the web app.
+   * Immutable -- changing it replaces the web app.
    */
   parent: string;
   /**
@@ -85,7 +85,7 @@ export type EnterprisesWebApp = Resource<
  * Web apps have no labels field, so Alchemy tracks the web app by its
  * resource name; without state it is found by title, and one found under
  * an explicit (non-generated) title is reported as unowned. `parent` is
- * identity — changing it
+ * identity -- changing it
  * replaces the web app. Title, start URL, display mode, and icons
  * update in place. At least one icon is required by the API; a 1x1 PNG
  * is sent when `icons` is omitted.

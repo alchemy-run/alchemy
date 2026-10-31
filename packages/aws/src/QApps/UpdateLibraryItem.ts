@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link UpdateLibraryItem} — `instanceId` is injected from the bound Q App.
+ * Request for {@link UpdateLibraryItem} -- `instanceId` is injected from the bound Q App.
  */
 export interface UpdateLibraryItemRequest extends Omit<
   qapps.UpdateLibraryItemInput,
@@ -19,7 +19,7 @@ export interface UpdateLibraryItemRequest extends Omit<
  * ### Library Items
  * **Example:** Disable a Library Item
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const updateLibraryItem = yield* AWS.QApps.UpdateLibraryItem(app);
  *
  * // runtime

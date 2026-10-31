@@ -5,8 +5,8 @@ import type { ManagedThing } from "./ManagedThing.ts";
 /**
  * Shared scaffolding for the AWS IoT Managed Integrations HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and (for the
  * thing-scoped builder) the injected identifier field is boilerplate.
  */
@@ -42,7 +42,7 @@ export const makeManagedThingHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: ManagedThing) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const ManagedThingId = yield* thing.managedThingId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.IoTManagedIntegrations.${options.capability}(${thing})`({
@@ -69,7 +69,7 @@ export const makeManagedThingHttpBinding = <
 /**
  * Build the impl Effect for an account-level IoT Managed Integrations
  * operation (device discovery, the schema catalog, the custom endpoint, and
- * connector events — per the `iotmanagedintegrations` service authorization
+ * connector events -- per the `iotmanagedintegrations` service authorization
  * reference these authorize account-wide, so the grant is on
  * `Resource: ["*"]`).
  */

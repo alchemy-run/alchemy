@@ -33,13 +33,13 @@ export type ServicePerimeterType = acm.ServicePerimeterPerimeterTypeEnum;
 export type AccessPoliciesServicePerimeterProps = {
   /**
    * Parent access policy (`accessPolicies/{policy}` or the policy id).
-   * Immutable — changing it replaces the perimeter.
+   * Immutable -- changing it replaces the perimeter.
    */
   policy: string;
   /**
    * Service perimeter id (the `{service_perimeter}` segment). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
-   * Must begin with a letter, then alphanumeric or `_`. Immutable —
+   * Must begin with a letter, then alphanumeric or `_`. Immutable --
    * changing it replaces the perimeter.
    */
   servicePerimeterId?: string;
@@ -49,12 +49,12 @@ export type AccessPoliciesServicePerimeterProps = {
   title?: string;
   /**
    * Description of the perimeter. Service perimeters have no labels, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
   /**
-   * Perimeter type. Immutable — changing it replaces the perimeter.
+   * Perimeter type. Immutable -- changing it replaces the perimeter.
    * @default "PERIMETER_TYPE_REGULAR"
    */
   perimeterType?: ServicePerimeterType | (string & {});

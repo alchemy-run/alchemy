@@ -145,7 +145,7 @@ export class DevCli {
       ...options,
       diagnostics: () => this.outputTail,
       // A dev child that died (crash, failed apply) never produces what we're
-      // waiting for — fail immediately with its output instead of sitting
+      // waiting for -- fail immediately with its output instead of sitting
       // through the full poll budget.
       abandonIf: () => {
         const child = this.#process;

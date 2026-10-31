@@ -14,7 +14,7 @@ import { type LakeFormationResourceSpec, toWireResource } from "./ResourceSpec.t
 
 export interface PermissionsProps {
   /**
-   * The principal receiving the permissions — an IAM user/role ARN, an
+   * The principal receiving the permissions -- an IAM user/role ARN, an
    * external account id, or the `IAM_ALLOWED_PRINCIPALS` group. Changing it
    * replaces the grant.
    */
@@ -54,13 +54,13 @@ export interface Permissions extends Resource<
 > {}
 
 /**
- * A Lake Formation permission grant — gives a principal permissions on a
+ * A Lake Formation permission grant -- gives a principal permissions on a
  * Data Catalog resource (database, table, data location, LF-tag, or LF-tag
  * policy expression). The resource owns the full permission set for its
  * principal/resource pair: permissions removed from the props are revoked.
  *
  * The caller must be a Lake Formation data lake administrator (or hold the
- * grant option on the resource) — see
+ * grant option on the resource) -- see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
  * ### Granting Permissions
@@ -138,7 +138,7 @@ export const PermissionsProvider = () =>
           }
           const catalogId = output?.catalogId ?? olds?.catalogId;
           const current = yield* observePrincipalPermissions(principal, resource, catalogId).pipe(
-            // a deleted IAM principal surfaces as "Invalid principal" — the
+            // a deleted IAM principal surfaces as "Invalid principal" -- the
             // grant is effectively gone.
             Effect.catchTag("InvalidLakeFormationPrincipal", () =>
               Effect.succeed({
@@ -171,7 +171,7 @@ export const PermissionsProvider = () =>
           if ((news.catalogId ?? undefined) !== (olds.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // permissions / permissionsWithGrantOption → update
+          // permissions / permissionsWithGrantOption -> update
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -182,14 +182,14 @@ export const PermissionsProvider = () =>
           const desired = dedupeSort(news.permissions);
           const desiredGrant = dedupeSort(news.permissionsWithGrantOption ?? []);
 
-          // 1. OBSERVE — retry through IAM propagation of a fresh principal.
+          // 1. OBSERVE -- retry through IAM propagation of a fresh principal.
           let current = yield* observePrincipalPermissions(
             news.principal,
             resource,
             news.catalogId,
           ).pipe(retryWhileInvalidPrincipal);
 
-          // 2. SYNC — revoke stale grants, then grant the desired set
+          // 2. SYNC -- revoke stale grants, then grant the desired set
           //    (GrantPermissions is an idempotent upsert).
           const stale = current.permissions.filter((p) => !desired.includes(p));
           if (stale.length > 0) {
@@ -243,7 +243,7 @@ export const PermissionsProvider = () =>
 
           // 3. RETURN fresh state
           current = yield* observePrincipalPermissions(news.principal, resource, news.catalogId);
-          yield* session.note(`${news.principal} ← [${current.permissions.join(", ")}]`);
+          yield* session.note(`${news.principal} \u2190 [${current.permissions.join(", ")}]`);
           return {
             principal: news.principal,
             resource,

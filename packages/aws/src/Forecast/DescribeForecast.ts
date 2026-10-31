@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DescribeForecast` — poll a forecast
+ * Runtime binding for `forecast:DescribeForecast` -- poll a forecast
  * generation started by {@link CreateForecast} until its `Status` reaches
  * `ACTIVE` and it becomes queryable.
  *

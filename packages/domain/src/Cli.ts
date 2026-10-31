@@ -71,7 +71,7 @@ export type Failure<E = never> = CallRejected | CliError.UserError | E;
 
 /**
  * The command-line name of a command, view, stream, aggregate, operation or field: kebab-case
- * (`AccountSummary` → `account-summary`, `commandId` → `command-id`).
+ * (`AccountSummary` -> `account-summary`, `commandId` -> `command-id`).
  */
 export const kebab = (name: string): string =>
   name
@@ -393,7 +393,7 @@ const commandOf = <E, R>(
  * its HTTP protocol, so a person or an agent in a terminal can run any
  * request/response call. The tree is read from what the Api serves:
  *
- * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
+ * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` ->
  *   `account-summary`). A command runs as that subcommand; a view, an
  *   aggregate or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.

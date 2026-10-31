@@ -30,11 +30,11 @@ export type MachineImageProps = {
   /**
    * Source instance URL used to create the machine image
    * (`projects/{project}/zones/{zone}/instances/{instance}` or a full
-   * self-link). Immutable — changing it replaces the machine image.
+   * self-link). Immutable -- changing it replaces the machine image.
    */
   sourceInstance: string;
   /**
-   * Optional description. Immutable — changing it replaces the machine
+   * Optional description. Immutable -- changing it replaces the machine
    * image (the API has no patch).
    */
   description?: string;
@@ -45,7 +45,7 @@ export type MachineImageProps = {
   labels?: Record<string, string>;
   /**
    * Cloud Storage locations for the machine image (`us-central1`, `us`,
-   * …). Immutable — changing it replaces the machine image.
+   * ...). Immutable -- changing it replaces the machine image.
    */
   storageLocations?: string[];
   /**
@@ -65,7 +65,7 @@ export type MachineImage = Resource<
     machineImageId: string | undefined;
     /** Project id. */
     project: string;
-    /** Server-reported status (`CREATING`, `READY`, `DELETING`, …). */
+    /** Server-reported status (`CREATING`, `READY`, `DELETING`, ...). */
     status: string | undefined;
     /** Description. */
     description: string | undefined;

@@ -121,7 +121,7 @@ export const ResourceStatusChanged = Schema.Struct({
    */
   providerMode: Schema.optionalKey(ProviderMode),
   /**
-   * Set only on mode-switch replacements (local ⇄ live): the mode the OLD
+   * Set only on mode-switch replacements (local <-> live): the mode the OLD
    * generation was created with. Always differs from `providerMode`.
    */
   fromProviderMode: Schema.optionalKey(ProviderMode),
@@ -133,7 +133,7 @@ export type ApplyEvent = ResourceAnnotated | ResourceStatusChanged;
 /** Every event the engine and the Alchemist operations emit. */
 export const Event = Schema.Union([
   /**
-   * The planning pipeline crossed a work boundary. Carries no display text —
+   * The planning pipeline crossed a work boundary. Carries no display text --
    * wording is the renderer's job.
    */
   Schema.Struct({ type: Schema.Literal("plan.phase"), phase: PlanningPhase }),

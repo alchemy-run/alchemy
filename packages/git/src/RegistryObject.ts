@@ -1,13 +1,13 @@
 /**
  * The singleton Registry Durable Object (DESIGN.md §2.1, §3.1).
  *
- * The Registry is the control-plane authority for the `owner/name → repoId`
+ * The Registry is the control-plane authority for the `owner/name -> repoId`
  * mapping: uniqueness CAS at creation, the listing surface, and the
  * fork-lineage ledger (`fork_of`, `fork_count`). It is addressed as a
  * singleton via `getByName(REGISTRY_DO_NAME)`; the sharding seam
  * (`getByName("registry:" + owner)`) changes no RPC interface.
  *
- * Repo ids are ULIDs minted here at creation — **not** `owner/name` — so
+ * Repo ids are ULIDs minted here at creation -- **not** `owner/name` -- so
  * renames never move data and a deleted-then-recreated name gets a fresh
  * Repo DO (no zombie state).
  *
@@ -28,16 +28,16 @@ import { RepoAlreadyExists, ValidationError } from "./Api.ts";
 import { StoreError } from "./Protocol/Store.ts";
 import { initRegistrySchema, makeSqlClient, type RegistryRepoRow } from "./Store/Sql.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // ULID
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** Crockford base32 alphabet used by ULIDs. */
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /**
  * Mints a ULID (48-bit millisecond timestamp + 80 random bits, Crockford
- * base32, 26 chars). Used for repo ids, token ids, and push ids —
+ * base32, 26 chars). Used for repo ids, token ids, and push ids --
  * lexicographically sortable by creation time and safe as an R2 key prefix.
  */
 export const ulid = (): Effect.Effect<string> =>
@@ -57,9 +57,9 @@ export const ulid = (): Effect.Effect<string> =>
     return chars.join("");
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Contract
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The singleton Registry instance name: `registry.getByName(REGISTRY_DO_NAME)`.
@@ -67,7 +67,7 @@ export const ulid = (): Effect.Effect<string> =>
 export const REGISTRY_DO_NAME = "registry" as const;
 
 /**
- * The reserved owner name — `/api/v1/**` must never collide with a repo URL,
+ * The reserved owner name -- `/api/v1/**` must never collide with a repo URL,
  * so the Registry rejects `api` at creation (DESIGN.md §2.2).
  */
 export const RESERVED_OWNERS: ReadonlySet<string> = new Set(["api"]);
@@ -123,7 +123,7 @@ export interface ListReposInput {
   readonly owner?: string | undefined;
   readonly cursor?: string | undefined;
   readonly limit?: number | undefined;
-  /** Restrict to public repos — the anonymous/non-admin listing. */
+  /** Restrict to public repos -- the anonymous/non-admin listing. */
   readonly publicOnly?: boolean | undefined;
 }
 
@@ -136,7 +136,7 @@ export interface ListReposResult {
 
 /**
  * The Registry DO's typed RPC surface. Note the platform gotcha: no method
- * may be named `delete` (reserved by Cloudflare's RPC stub proxy) — row
+ * may be named `delete` (reserved by Cloudflare's RPC stub proxy) -- row
  * removal is `removeRow`.
  */
 export interface RegistryShape {
@@ -184,7 +184,7 @@ export interface RegistryShape {
    */
   readonly markDeleted: (repoId: string) => Effect.Effect<void, StoreError, RuntimeContext>;
   /**
-   * Hard-removes a row after purge — the last step of repo deletion, which
+   * Hard-removes a row after purge -- the last step of repo deletion, which
    * frees the `owner/name` for reuse. Also decrements the fork parent's
    * `fork_count` when the removed repo was a fork.
    */
@@ -200,9 +200,9 @@ export interface RegistryShape {
   ) => Effect.Effect<void, StoreError, RuntimeContext>;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Implementation
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 export const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
   owner: row.owner,
@@ -239,7 +239,7 @@ export const decodeCursor = (
 export const DEFAULT_LIST_LIMIT = 50;
 
 /**
- * The singleton Registry Durable Object class (modular form — the runtime
+ * The singleton Registry Durable Object class (modular form -- the runtime
  * implementation lives in {@link RegistryLive}, provided by `GitWorker`).
  */
 export class Registry extends Cloudflare.DurableObject<Registry, RegistryShape>()("GitRegistry", {
@@ -248,18 +248,18 @@ export class Registry extends Cloudflare.DurableObject<Registry, RegistryShape>(
 }) {}
 
 /**
- * `Git.RegistryStore` — the repo *index* as a swappable block: the
+ * `Git.RegistryStore` -- the repo *index* as a swappable block: the
  * `owner/name -> repoId` mapping, uniqueness, and listing.
  *
  * The rest of the service depends on this contract, never on a
  * particular backend, so the index can be chosen at assembly:
  *
- * - {@link RegistryDurableObject} — one Durable Object. Zero extra
+ * - {@link RegistryDurableObject} -- one Durable Object. Zero extra
  *   infrastructure, and the strongest consistency (a single-threaded
  *   `transactionSync` makes create a true CAS). It is also one object
  *   for the whole service, so reads funnel through a single thread in a
  *   single region.
- * - `Git.RegistryD1` — a D1 database. Reads scale out (D1 replicates
+ * - `Git.RegistryD1` -- a D1 database. Reads scale out (D1 replicates
  *   them) and `WHERE owner = ?` listing is what a relational store is
  *   for; uniqueness comes from the `PRIMARY KEY (owner, name)` instead
  *   of from single-threading.
@@ -283,7 +283,7 @@ export const RegistryLive = Registry.make(
 
     return Effect.gen(function* () {
       const sql = makeSqlClient(state);
-      // Constructor effects cannot fail — schema init failure is a defect.
+      // Constructor effects cannot fail -- schema init failure is a defect.
       yield* initRegistrySchema(sql).pipe(Effect.orDie);
 
       const shape: RegistryShape = {
@@ -445,7 +445,7 @@ export const RegistryLive = Registry.make(
             repoId,
           );
           if (row === undefined) {
-            return; // idempotent — purge re-runs are expected
+            return; // idempotent -- purge re-runs are expected
           }
           yield* sql.run(`DELETE FROM repos WHERE repo_id = ?`, repoId);
           if (row.fork_of !== null) {
@@ -463,7 +463,7 @@ export const RegistryLive = Registry.make(
 );
 
 /**
- * {@link RegistryStore} backed by the singleton Registry Durable Object —
+ * {@link RegistryStore} backed by the singleton Registry Durable Object --
  * the default. Registers the DO implementation and resolves the store to
  * its stub, so callers never name the instance.
  *

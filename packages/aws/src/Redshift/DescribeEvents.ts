@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  *
  * Lists recent events (maintenance, resizes, snapshots, security changes)
  * for the account's Redshift clusters and related resources over the last 14
- * days — the audit trail for operational tooling. For push delivery of the
+ * days -- the audit trail for operational tooling. For push delivery of the
  * same events see {@link EventSubscription}. Provide the implementation with
  * `Effect.provide(AWS.Redshift.DescribeEventsHttp)`.
  * ### Monitoring Clusters

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link DescribeImages} — `repositoryName` is injected from the
+ * Request for {@link DescribeImages} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface DescribeImagesRequest extends Omit<

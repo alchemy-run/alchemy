@@ -14,7 +14,7 @@ export const DEFAULT_THROUGHPUT_CAPACITY = "4";
 export const DEFAULT_PARTITION_COUNT = "1";
 export const DEFAULT_PUBLISH_MIB = 4;
 export const DEFAULT_SUBSCRIBE_MIB = 4;
-/** 30 GiB — Pub/Sub Lite minimum storage per partition. */
+/** 30 GiB -- Pub/Sub Lite minimum storage per partition. */
 export const DEFAULT_PER_PARTITION_BYTES = "32212254720";
 
 export const LIST_LOCATIONS = [

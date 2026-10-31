@@ -123,11 +123,11 @@ export interface App extends Resource<
  * ### Deploying and Observing From a Function
  * **Example:** Manual Deploy Pipeline (CreateDeployment + StartDeployment)
  * ```typescript
- * // init — bind the deployment operations to the app
+ * // init -- bind the deployment operations to the app
  * const createDeployment = yield* AWS.Amplify.CreateDeployment(app);
  * const startDeployment = yield* AWS.Amplify.StartDeployment(app);
  *
- * // runtime — stage, upload, release
+ * // runtime -- stage, upload, release
  * const { jobId, zipUploadUrl } = yield* createDeployment({
  *   branchName: "main",
  * });
@@ -180,7 +180,7 @@ export const AppProvider = () =>
         );
 
       // Find an app we own (matching physical name + internal Alchemy tags).
-      // Used to recover from a timed-out CreateApp whose outcome is unknown —
+      // Used to recover from a timed-out CreateApp whose outcome is unknown --
       // the backend may have created the app even though the front door gave
       // up on the response.
       const findOwnApp = Effect.fn(function* (id: string, name: string) {
@@ -243,7 +243,7 @@ export const AppProvider = () =>
             // throttle (see amplifyWriteRetrySchedule). Its API Gateway
             // front door can also time out a slow CreateApp (typed
             // TimeoutException, "Endpoint request timed out") with the
-            // outcome unknown — the backend may still have created the
+            // outcome unknown -- the backend may still have created the
             // app. Observe by name + internal tags before every (re)try so
             // a retry never creates a duplicate app.
             app = yield* findOwnApp(id, name).pipe(
@@ -272,7 +272,7 @@ export const AppProvider = () =>
               }),
             );
           } else {
-            // UpdateApp is idempotent — retry front-door timeouts and the
+            // UpdateApp is idempotent -- retry front-door timeouts and the
             // "Rate exceeded" throttle with bounded backoff.
             yield* amplify
               .updateApp({
@@ -324,7 +324,7 @@ export const AppProvider = () =>
             }));
           }),
         delete: Effect.fn(function* ({ output }) {
-          // DeleteApp is idempotent — retry front-door timeouts and the
+          // DeleteApp is idempotent -- retry front-door timeouts and the
           // account-wide "Rate exceeded" throttle; a timed-out delete that
           // actually landed resolves to NotFoundException on the retry,
           // which is swallowed below.

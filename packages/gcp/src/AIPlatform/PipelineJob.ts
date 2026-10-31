@@ -41,12 +41,12 @@ export type PipelineRuntimeConfig = {
 export type PipelineJobProps = {
   /**
    * Job id. If omitted, a unique RFC1035 name is generated. Less than
-   * 128 characters, matching `/[a-z0-9-]+/`. Immutable — changing it
+   * 128 characters, matching `/[a-z0-9-]+/`. Immutable -- changing it
    * replaces the job (a new run is started).
    */
   pipelineJobId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -109,7 +109,7 @@ export type PipelineJob = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Pipeline state (`PIPELINE_STATE_RUNNING`, …). */
+    /** Pipeline state (`PIPELINE_STATE_RUNNING`, ...). */
     state: string | undefined;
     /** Template URI. */
     templateUri: string | undefined;
@@ -129,7 +129,7 @@ export type PipelineJob = Resource<
 >;
 
 /**
- * A Vertex AI PipelineJob — a compiled Kubeflow pipeline that runs
+ * A Vertex AI PipelineJob -- a compiled Kubeflow pipeline that runs
  * immediately on create.
  *
  * There is no update API. Changing identity (`pipelineJobId`, `location`)
@@ -207,7 +207,7 @@ const cancelUntilTerminal = (name: string) =>
       Effect.catchTags({
         NotFound: () => Effect.void,
         // The job can reach a terminal state between the read above and the
-        // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
+        // cancel ("... is in state JOB_STATE_FAILED and cannot be canceled");
         // the wait below re-reads the state and still fails if it is not
         // terminal.
         BadRequest: () => Effect.void,

@@ -103,11 +103,11 @@ export interface Snapshot extends Resource<
 > {}
 /**
  * A point-in-time backup of an EBS {@link Volume}, stored in S3. Snapshots are
- * incremental and immutable — you create new {@link Volume}s from them via
+ * incremental and immutable -- you create new {@link Volume}s from them via
  * `snapshotId`.
  *
  * A snapshot is immutable once created; changing the source `volumeId` replaces
- * it. Creation is asynchronous — the resource waits for the snapshot to reach
+ * it. Creation is asynchronous -- the resource waits for the snapshot to reach
  * the `completed` state before returning.
  *
  * ### Creating a Snapshot
@@ -133,7 +133,7 @@ export interface Snapshot extends Resource<
  * ```
  *
  * Pass a snapshot's `snapshotId` to {@link Volume} to provision a new volume
- * pre-populated with the snapshot's data — the standard backup/restore and
+ * pre-populated with the snapshot's data -- the standard backup/restore and
  * clone-across-AZ pattern.
  *
  * @resource
@@ -157,7 +157,7 @@ export const SnapshotProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          // A snapshot is an immutable copy of one volume — changing the source
+          // A snapshot is an immutable copy of one volume -- changing the source
           // volume requires a fresh snapshot.
           if (olds.volumeId !== news.volumeId) {
             return { action: "replace" };
@@ -169,7 +169,7 @@ export const SnapshotProvider = () =>
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = { ...alchemyTags, ...news.tags };
 
-          // 1. OBSERVE — output is only an id cache.
+          // 1. OBSERVE -- output is only an id cache.
           let snapshot: ec2.Snapshot | undefined;
           if (output?.snapshotId) {
             const lookup = yield* ec2
@@ -182,7 +182,7 @@ export const SnapshotProvider = () =>
             snapshot = lookup.Snapshots?.[0];
           }
 
-          // 2. ENSURE — create the snapshot when missing, then wait until it is
+          // 2. ENSURE -- create the snapshot when missing, then wait until it is
           //    completed.
           if (snapshot === undefined) {
             const created = yield* ec2.createSnapshot({
@@ -203,7 +203,7 @@ export const SnapshotProvider = () =>
 
           const snapshotId = snapshot.SnapshotId! as SnapshotId;
 
-          // 3. SYNC TAGS — diff against observed cloud tags.
+          // 3. SYNC TAGS -- diff against observed cloud tags.
           const currentTags = Object.fromEntries(
             (snapshot.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -227,7 +227,7 @@ export const SnapshotProvider = () =>
         }),
 
         // Enumerate every snapshot owned by this account (never public/shared
-        // snapshots — scope to "self").
+        // snapshots -- scope to "self").
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;

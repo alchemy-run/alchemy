@@ -67,7 +67,7 @@ export interface SqlExecutor {
     params?: ReadonlyArray<unknown>,
   ) => Effect.Effect<Array<Record<string, unknown>>, MigrationError>;
   /**
-   * Execute one or more statements as a unit — a transaction where the
+   * Execute one or more statements as a unit -- a transaction where the
    * target supports one (pg/mysql), a single batched query on D1 (which has
    * no transactions over HTTP).
    */
@@ -92,7 +92,7 @@ export class DrizzleV0LayoutError extends Data.TaggedError("DrizzleV0LayoutError
 /**
  * A row recorded in an applied-migrations table (ours, or a foreign one
  * being converted) matches no local migration file. Guessing would corrupt
- * history, so this is a hard error — migrations were applied to the
+ * history, so this is a hard error -- migrations were applied to the
  * database that the local environment does not have.
  */
 export class MigrationHistoryConflictError extends Data.TaggedError(

@@ -17,7 +17,7 @@ export type StreamSinkError = Kinesis.PutRecordsError | BatchRetryExhaustedError
  * control of `PartitionKey` and optional `ExplicitHashKey`.
  *
  * Records the API reports as failed (`FailedRecordCount > 0`, per-record
- * `ErrorCode` — throughput exceeded or internal failure) are re-submitted on
+ * `ErrorCode` -- throughput exceeded or internal failure) are re-submitted on
  * a bounded schedule; exhausting retries fails the sink with a typed
  * `BatchRetryExhaustedError` carrying the stranded records.
  *
@@ -25,10 +25,10 @@ export type StreamSinkError = Kinesis.PutRecordsError | BatchRetryExhaustedError
  * ### Writing Streams of Records
  * **Example:** Run an Effect Stream into a Kinesis Stream
  * ```typescript
- * // init — bind the sink to the stream
+ * // init -- bind the sink to the stream
  * const sink = yield* AWS.Kinesis.StreamSink(stream);
  *
- * // runtime — batches into PutRecords calls of up to 500 records / 5 MiB
+ * // runtime -- batches into PutRecords calls of up to 500 records / 5 MiB
  * yield* Stream.fromIterable(
  *   orders.map((order) => ({
  *     PartitionKey: order.id,

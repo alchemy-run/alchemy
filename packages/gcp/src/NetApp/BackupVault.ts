@@ -57,28 +57,28 @@ export type BackupVaultProps = {
    * Backup vault id (the `{backupVault}` segment of
    * `projects/{project}/locations/{location}/backupVaults/{backupVault}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the vault.
+   * and logical id. Immutable -- changing it replaces the vault.
    */
   backupVaultId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the vault. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
-   * Vault type. Immutable — changing it replaces the vault.
+   * Vault type. Immutable -- changing it replaces the vault.
    * @default "IN_REGION"
    */
   backupVaultType?: netapp.BackupVaultBackupVaultTypeEnum | (string & {});
   /**
    * Region that stores backups for a cross-region vault. Full location
-   * name or id. Immutable — changing it replaces the vault.
+   * name or id. Immutable -- changing it replaces the vault.
    */
   backupRegion?: string;
   /**
-   * KMS config used to encrypt backups. Full name or id. Immutable —
+   * KMS config used to encrypt backups. Full name or id. Immutable --
    * changing it replaces the vault.
    */
   kmsConfig?: string;

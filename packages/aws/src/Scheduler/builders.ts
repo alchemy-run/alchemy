@@ -80,7 +80,7 @@ export interface LambdaTargetProps {
 }
 
 /**
- * Target options for `.toQueue(queue, payload, props)` — note the message
+ * Target options for `.toQueue(queue, payload, props)` -- note the message
  * payload is passed as `.toQueue`'s second argument, not via `input`.
  */
 export interface QueueTargetProps {
@@ -104,8 +104,8 @@ export interface EcsTaskTargetProps {
    * Task definition and the roles Scheduler passes to it.
    *
    * This is a builder argument (not resource Props), so the fields are
-   * `Input`-typed explicitly: an `AWS.ECS.Task` resource — whose attributes
-   * are `Output`s — is directly assignable here.
+   * `Input`-typed explicitly: an `AWS.ECS.Task` resource -- whose attributes
+   * are `Output`s -- is directly assignable here.
    */
   task: {
     /** ARN of the task definition to run. */

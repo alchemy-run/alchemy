@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetMediaAnalysisJob` — get the status and results location of a media analysis job.
+ * Runtime binding for `rekognition:GetMediaAnalysisJob` -- get the status and results location of a media analysis job.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetMediaAnalysisJob` on `*` (Rekognition data-plane resources such

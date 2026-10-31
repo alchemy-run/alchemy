@@ -4,14 +4,14 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:DescribeStep` — reads one step of the bound cluster — status, config, and failure details.
+ * Runtime binding for `elasticmapreduce:DescribeStep` -- reads one step of the bound cluster -- status, config, and failure details.
  * ### Running Steps
  * **Example:** Poll a Step's State
  * ```typescript
  * const describeStep = yield* AWS.EMR.DescribeStep(cluster);
  *
  * const { Step } = yield* describeStep({ StepId: stepId });
- * // Step.Status.State: PENDING | RUNNING | COMPLETED | FAILED | …
+ * // Step.Status.State: PENDING | RUNNING | COMPLETED | FAILED | ...
  * ```
  *
  * @binding

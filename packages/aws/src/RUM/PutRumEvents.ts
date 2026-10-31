@@ -15,7 +15,7 @@ export interface PutRumEventsRequest extends Omit<
 }
 
 /**
- * Runtime binding for `rum:PutRumEvents` — send a batch of telemetry events
+ * Runtime binding for `rum:PutRumEvents` -- send a batch of telemetry events
  * from one user session to the bound {@link AppMonitor}'s data plane (the
  * same operation the RUM web client uses); the monitor id and details are
  * injected automatically.
@@ -25,7 +25,7 @@ export interface PutRumEventsRequest extends Omit<
  * ### Sending RUM Events
  * **Example:** Send a Session's Events Server-Side
  * ```typescript
- * // init — grants rum:PutRumEvents on the monitor
+ * // init -- grants rum:PutRumEvents on the monitor
  * const putRumEvents = yield* AWS.RUM.PutRumEvents(monitor);
  *
  * // runtime

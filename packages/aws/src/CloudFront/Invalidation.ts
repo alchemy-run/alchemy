@@ -204,7 +204,7 @@ export const InvalidationProvider = () =>
             return output;
           }
 
-          // Ensure — issue the invalidation. CloudFront uses
+          // Ensure -- issue the invalidation. CloudFront uses
           // `CallerReference` (= `version`) for idempotency: the same
           // version submitted twice returns the same invalidation.
           const invalidation = yield* createInvalidation(news);

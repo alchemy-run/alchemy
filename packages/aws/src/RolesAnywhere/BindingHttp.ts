@@ -10,8 +10,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * at runtime, so every binding is account-level and grants its action(s) on
  * `Resource: ["*"]`.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeRolesAnywhereHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeRolesAnywhereHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */

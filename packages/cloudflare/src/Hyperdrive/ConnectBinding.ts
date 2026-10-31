@@ -51,8 +51,8 @@ export const ConnectBinding = Layer.effect(
 /**
  * The `hyperdrives` dev channel for `connection` bound to `host`. Only the
  * local worker provider reads it, so it is contributed only when the host
- * runs locally — its registration-captured `Mode` (`Alchemy.remote()` →
- * `"live"`) or the run default (`alchemy dev` → `"local"`), the same
+ * runs locally -- its registration-captured `Mode` (`Alchemy.remote()` ->
+ * `"live"`) or the run default (`alchemy dev` -> `"local"`), the same
  * resolution the planner applies to the host. A live host (`alchemy deploy`,
  * or a `remote()` worker in dev) never evaluates the dev origin, so an
  * Access-protected origin without a `dev` override deploys.

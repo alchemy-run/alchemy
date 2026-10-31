@@ -6,7 +6,7 @@ import { DRIZZLE_DIR_PATTERN } from "./Utils.ts";
 
 /**
  * The on-disk layout of a migrations directory. `directory` covers both
- * drizzle-kit v1 and Prisma layouts (`<ts>_<name>/migration.sql` — records
+ * drizzle-kit v1 and Prisma layouts (`<ts>_<name>/migration.sql` -- records
  * key by directory name); `flat` is plain `.sql` files (records key by file
  * path).
  */

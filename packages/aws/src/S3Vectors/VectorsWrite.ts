@@ -26,11 +26,11 @@ export interface WriteVectorsClient {
 }
 
 /**
- * Write-only runtime binding for the S3 Vectors data plane — insert and
+ * Write-only runtime binding for the S3 Vectors data plane -- insert and
  * delete vectors in a bound {@link Index}.
  *
  * Grants only `s3vectors:PutVectors` and `s3vectors:DeleteVectors` on
- * exactly the bound index's ARN — the least-privilege choice for ingestion
+ * exactly the bound index's ARN -- the least-privilege choice for ingestion
  * pipelines that write embeddings but never query them. Provide the
  * implementation with `Effect.provide(AWS.S3Vectors.VectorsWriteHttp)`.
  *

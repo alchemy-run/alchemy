@@ -57,22 +57,22 @@ export type DeployPolicyResourceSelector = {
 };
 
 export type TimeOfDay = {
-  /** Hours of day in 24-hour format (`0`–`23`, or `24` for end of day). */
+  /** Hours of day in 24-hour format (`0`-`23`, or `24` for end of day). */
   hours?: number;
-  /** Minutes of hour (`0`–`59`). */
+  /** Minutes of hour (`0`-`59`). */
   minutes?: number;
-  /** Seconds of minute (`0`–`59`). */
+  /** Seconds of minute (`0`-`59`). */
   seconds?: number;
   /** Fractional seconds, in nanoseconds. */
   nanos?: number;
 };
 
 export type CalendarDate = {
-  /** Year (`1`–`9999`), or `0` to omit. */
+  /** Year (`1`-`9999`), or `0` to omit. */
   year?: number;
-  /** Month (`1`–`12`), or `0` to omit. */
+  /** Month (`1`-`12`), or `0` to omit. */
   month?: number;
-  /** Day (`1`–`31`), or `0` to omit. */
+  /** Day (`1`-`31`), or `0` to omit. */
   day?: number;
 };
 
@@ -135,11 +135,11 @@ export type DeployPolicyProps = {
    * Deploy policy id (the `{deployPolicy}` segment of
    * `projects/{project}/locations/{location}/deployPolicies/{deployPolicy}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the policy.
+   * and logical id. Immutable -- changing it replaces the policy.
    */
   deployPolicyId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)

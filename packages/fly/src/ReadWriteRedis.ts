@@ -7,7 +7,7 @@ import type { WriteRedisClient } from "./WriteRedis.ts";
 /**
  * Bind a {@link Redis} database with read + write access.
  *
- * `ReadWriteRedis` is the Context tag, the type, and the callable —
+ * `ReadWriteRedis` is the Context tag, the type, and the callable --
  * `yield* Fly.ReadWriteRedis(Cache)`. Provide {@link ReadWriteRedisHttp}.
  *
  *

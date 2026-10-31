@@ -27,7 +27,7 @@ export type TargetInstanceProps = {
   targetInstanceName?: string;
   /**
    * Zone the target instance lives in (e.g. `us-central1-a`). Must match
-   * the backend VM's zone. Immutable — changing it replaces the resource.
+   * the backend VM's zone. Immutable -- changing it replaces the resource.
    * When omitted, Alchemy uses the zone from `instance` if that value is a
    * URL, otherwise `us-central1-a`.
    * @default "us-central1-a"
@@ -36,26 +36,26 @@ export type TargetInstanceProps = {
   /**
    * Backend VM that terminates traffic. Accepts an instance name, a
    * `projects/{project}/zones/{zone}/instances/{instance}` path, or a
-   * self-link. Immutable — changing it replaces the resource.
+   * self-link. Immutable -- changing it replaces the resource.
    */
   instance: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute TargetInstance has
-   * no labels field). Immutable — changing it replaces the resource.
+   * no labels field). Immutable -- changing it replaces the resource.
    */
   description?: string;
   /**
    * Network used to forward traffic. Accepts a network name
    * (`default`), a partial URL (`global/networks/default`), or a full
    * self-link. When omitted, traffic is forwarded on the VM's default
-   * network interface. Immutable — changing it replaces the resource.
+   * network interface. Immutable -- changing it replaces the resource.
    */
   network?: string;
   /**
-   * NAT policy applied to forwarded packets. Must be `NO_NAT` — protocol
+   * NAT policy applied to forwarded packets. Must be `NO_NAT` -- protocol
    * forwarding preserves the destination IP of the forwarding rule.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    * @default "NO_NAT"
    */
   natPolicy?: TargetInstanceNatPolicy | (string & {});
@@ -104,7 +104,7 @@ export type TargetInstance = Resource<
  *
  * Target instances terminate protocol-forwarding traffic (ESP, AH, TCP,
  * UDP) for one or more forwarding rules. The backend VM should enable IP
- * forwarding (`canIpForward`). Compute TargetInstance has no labels field —
+ * forwarding (`canIpForward`). Compute TargetInstance has no labels field --
  * Alchemy ownership is stored in the description so nuke can find leaked
  * resources. Name, zone, instance, network, NAT policy, and description are
  * immutable; only `securityPolicy` updates in place.

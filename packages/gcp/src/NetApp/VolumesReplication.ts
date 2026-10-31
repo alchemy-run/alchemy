@@ -90,12 +90,12 @@ export type VolumesReplicationProps = {
   /**
    * Source volume. Full name
    * `projects/{project}/locations/{location}/volumes/{volume}` or the
-   * volume id (combined with `location`). Immutable — changing it
+   * volume id (combined with `location`). Immutable -- changing it
    * replaces the replication.
    */
   volume: string;
   /**
-   * Region used when `volume` is a bare id. Immutable — changing it
+   * Region used when `volume` is a bare id. Immutable -- changing it
    * replaces the replication. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -105,7 +105,7 @@ export type VolumesReplicationProps = {
    * Replication id (the `{replication}` segment of
    * `.../volumes/{volume}/replications/{replication}`). If omitted, a
    * unique RFC1035 name is generated from the stack, stage, and logical
-   * id. Immutable — changing it replaces the replication.
+   * id. Immutable -- changing it replaces the replication.
    */
   replicationId?: string;
   /**
@@ -152,7 +152,7 @@ export type VolumesReplicationProps = {
   deleteDestinationVolume?: boolean;
   /**
    * Wait until `mirrorState` is MIRRORED (or STOPPED when disabling).
-   * Baseline transfers can take hours — leave false unless the volume
+   * Baseline transfers can take hours -- leave false unless the volume
    * is empty.
    * @default false
    */
@@ -187,9 +187,9 @@ export type VolumesReplication = Resource<
     sourceVolume: string | undefined;
     /** SOURCE or DESTINATION. */
     role: string | undefined;
-    /** Mirror state (PREPARING, MIRRORED, STOPPED, …). */
+    /** Mirror state (PREPARING, MIRRORED, STOPPED, ...). */
     mirrorState: string | undefined;
-    /** Resource state (CREATING, READY, …). */
+    /** Resource state (CREATING, READY, ...). */
     state: string | undefined;
     /** Server-reported state details. */
     stateDetails: string | undefined;

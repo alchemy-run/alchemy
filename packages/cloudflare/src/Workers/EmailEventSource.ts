@@ -19,9 +19,9 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * Effect-native wrapper around Cloudflare's
  * [`ForwardableEmailMessage`](https://developers.cloudflare.com/email-routing/email-workers/runtime-api/#forwardableemailmessage).
  *
- * Follows the same shape as the other Cloudflare bindings (R2, KV, …):
+ * Follows the same shape as the other Cloudflare bindings (R2, KV, ...):
  *
- * - `raw` is the underlying `cf.ForwardableEmailMessage` — an escape
+ * - `raw` is the underlying `cf.ForwardableEmailMessage` -- an escape
  *   hatch for any field or future API not yet wrapped.
  * - Ergonomic fields (`from`, `to`, `headers`, `body`, `bodySize`) are
  *   forwarded verbatim.
@@ -29,7 +29,7 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *   instead of `Promise`/`void`.
  */
 export interface ForwardableEmailMessage {
-  /** Underlying Cloudflare message — escape hatch for unwrapped APIs. */
+  /** Underlying Cloudflare message -- escape hatch for unwrapped APIs. */
   readonly raw: cf.ForwardableEmailMessage;
   /** Envelope From address. */
   readonly from: string;
@@ -96,7 +96,7 @@ const wrap = (raw: cf.ForwardableEmailMessage): ForwardableEmailMessage => ({
 });
 
 /**
- * Whether a subscription's matchers describe the zone's catch-all — either
+ * Whether a subscription's matchers describe the zone's catch-all -- either
  * omitted entirely (the documented default) or a lone `{ type: "all" }`.
  * Cloudflare models that as a per-zone singleton behind `/rules/catch_all`,
  * so it maps to `Email.CatchAll` rather than `Email.Rule`.
@@ -108,7 +108,7 @@ const formatCause = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
 /**
- * Settings for {@link email} — both halves of the consumer in one place.
+ * Settings for {@link email} -- both halves of the consumer in one place.
  * `zone` opts in to the deploy-time setup: an `Email.Routing` toggle on the
  * zone plus the routing resource that hands matched mail to the host
  * Worker. Omit `zone` to manage routing yourself.
@@ -147,7 +147,7 @@ export interface EmailSubscribeProps {
   ruleName?: string;
   /**
    * Priority of the auto-created `Email.Rule`. Lower numbers run first.
-   * Ignored for a catch-all subscription — the catch-all is always
+   * Ignored for a catch-all subscription -- the catch-all is always
    * evaluated last.
    *
    * @default 0
@@ -171,8 +171,8 @@ export interface EmailSubscribeProps {
  *   action methods (`forward`, `reply`, `setReject`) return `Effect`s.
  * - **Deploy-time** (when `zone` is set): yields a
  *   `Cloudflare.Email.Routing` toggle on the zone plus the routing
- *   resource whose `actions: [{ type: "worker", … }]` targets this
- *   Worker — `Cloudflare.Email.CatchAll` for a catch-all subscription,
+ *   resource whose `actions: [{ type: "worker", ... }]` targets this
+ *   Worker -- `Cloudflare.Email.CatchAll` for a catch-all subscription,
  *   `Cloudflare.Email.Rule` for anything more specific. No manual
  *   wiring needed in `alchemy.run.ts`.
  *
@@ -180,14 +180,14 @@ export interface EmailSubscribeProps {
  *
  * **Failure semantics**: a failing handler is logged and the failure is
  * re-raised. Cloudflare turns that into a temporary SMTP failure, so the
- * sending server keeps the message and retries later — mail is never
+ * sending server keeps the message and retries later -- mail is never
  * accepted and then silently dropped. Handle the failures you consider
  * final inside the handler (`Effect.retry`, `Effect.catchTag`, or
  * `message.setReject(...)` to bounce permanently); anything you let
  * escape becomes a retryable delivery failure.
  *
  * ### Subscribing to Inbound Mail
- * **Example:** Catch-all on a zone — auto-creates routing + catch-all
+ * **Example:** Catch-all on a zone -- auto-creates routing + catch-all
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as Effect from "effect/Effect";
@@ -219,7 +219,7 @@ export interface EmailSubscribeProps {
  * );
  * ```
  *
- * **Example:** Bring-your-own routing — no `zone`, no auto-create
+ * **Example:** Bring-your-own routing -- no `zone`, no auto-create
  * ```typescript
  * // Manage `Email.Routing` / `Email.Rule` yourself in alchemy.run.ts.
  * yield* Cloudflare.email().subscribe((message) =>
@@ -285,7 +285,7 @@ export const EmailEventSourceLive = Layer.effect(
             // endpoint ("Invalid rule operation"), so creating it as an
             // `Email.Rule` would produce a row the engine cannot delete.
             // Route an all-matcher subscription to `Email.CatchAll`
-            // instead — the resource that owns that endpoint.
+            // instead -- the resource that owns that endpoint.
             if (isCatchAll(matchers)) {
               yield* CatchAll("EmailCatchAll", {
                 zone,

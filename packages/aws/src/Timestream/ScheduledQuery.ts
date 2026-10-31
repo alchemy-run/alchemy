@@ -54,7 +54,7 @@ export interface ScheduledQueryProps {
    */
   queryString: string;
   /**
-   * When to run the query — a cron (`cron(0 12 * * ? *)`) or rate
+   * When to run the query -- a cron (`cron(0 12 * * ? *)`) or rate
    * (`rate(1 hour)`) expression.
    */
   scheduleExpression: string;
@@ -118,7 +118,7 @@ export interface ScheduledQuery extends Resource<
 > {}
 
 /**
- * An Amazon Timestream for LiveAnalytics scheduled query — a SQL query
+ * An Amazon Timestream for LiveAnalytics scheduled query -- a SQL query
  * Timestream runs on a cron/rate schedule, materializing results into a
  * target table and notifying an SNS topic after each run.
  *
@@ -258,7 +258,7 @@ export const ScheduledQueryProvider = () =>
           if (!isResolved(news) || olds === undefined) return;
           const oldName = yield* createScheduledQueryName(id, olds);
           const newName = yield* createScheduledQueryName(id, news);
-          // Only State is mutable via UpdateScheduledQuery — every other
+          // Only State is mutable via UpdateScheduledQuery -- every other
           // aspect requires a replacement.
           const changed = (a: unknown, b: unknown) =>
             JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
@@ -285,13 +285,13 @@ export const ScheduledQueryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached ARN; fall back to a name lookup so a
+          // Observe -- prefer the cached ARN; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.scheduledQueryArn
             ? yield* readScheduledQuery(output.scheduledQueryArn)
             : yield* findScheduledQueryByName(name);
 
-          // Ensure — create if missing; tolerate a ConflictException race.
+          // Ensure -- create if missing; tolerate a ConflictException race.
           if (state === undefined) {
             yield* withQueryEndpoint(
               TSQ.createScheduledQuery({
@@ -328,7 +328,7 @@ export const ScheduledQueryProvider = () =>
             }
           }
 
-          // Sync state — the only in-place mutable aspect.
+          // Sync state -- the only in-place mutable aspect.
           const desiredState = news.state ?? "ENABLED";
           if (state.state !== desiredState) {
             yield* withQueryEndpoint(
@@ -340,7 +340,7 @@ export const ScheduledQueryProvider = () =>
             yield* session.note(`Updated scheduled query ${name} state to ${desiredState}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* withQueryEndpoint(

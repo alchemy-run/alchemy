@@ -7,8 +7,8 @@ import type { Queue } from "./Queue.ts";
 /**
  * Shared scaffolding for AWS Deadline Cloud HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifiers is boilerplate.
  */
@@ -18,7 +18,7 @@ import type { Queue } from "./Queue.ts";
  * injects the bound {@link Queue}'s `farmId` and `queueId` into every
  * request; the deploy-time half grants `actions` on the queue's ARN and on
  * its jobs (`{queueArn}/job/*`), since Deadline authorizes job-level actions
- * (GetJob, UpdateJob, ListSteps, …) against the job resource.
+ * (GetJob, UpdateJob, ListSteps, ...) against the job resource.
  */
 export const makeDeadlineQueueHttpBinding = <
   I extends { farmId: string; queueId: string },

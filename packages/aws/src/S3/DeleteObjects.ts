@@ -9,17 +9,17 @@ export interface DeleteObjectsRequest extends Omit<S3.DeleteObjectsRequest, "Buc
  * Runtime binding for `s3:DeleteObjects` (batch delete).
  *
  * Bind this operation to a bucket to get a callable that deletes up to 1,000
- * objects in a single request — the bucket name is injected automatically and
+ * objects in a single request -- the bucket name is injected automatically and
  * `s3:DeleteObject`/`s3:DeleteObjectVersion` are granted on the bucket's
  * objects. Provide the implementation with
  * `Effect.provide(AWS.S3.DeleteObjectsHttp)`.
  * ### Deleting Objects
  * **Example:** Delete Several Objects at Once
  * ```typescript
- * // init — bind the operation to the bucket
+ * // init -- bind the operation to the bucket
  * const deleteObjects = yield* AWS.S3.DeleteObjects(bucket);
  *
- * // runtime — per-key failures are reported in `Errors`, not thrown
+ * // runtime -- per-key failures are reported in `Errors`, not thrown
  * const result = yield* deleteObjects({
  *   Delete: {
  *     Objects: [{ Key: "a.txt" }, { Key: "b.txt" }],

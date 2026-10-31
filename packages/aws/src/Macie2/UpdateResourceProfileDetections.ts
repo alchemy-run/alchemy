@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:UpdateResourceProfileDetections`.
  *
  * Updates the sensitivity scoring settings for an S3 bucket.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.UpdateResourceProfileDetectionsHttp)`.
  * ### Automated Discovery
  * **Example:** Suppress a Detection on a Bucket
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateResourceProfileDetections = yield* AWS.Macie2.UpdateResourceProfileDetections();
  *
  * // runtime

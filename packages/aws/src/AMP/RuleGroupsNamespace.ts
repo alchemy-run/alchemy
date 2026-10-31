@@ -52,7 +52,7 @@ export interface RuleGroupsNamespace extends Resource<
 
 /**
  * A rule groups namespace inside an Amazon Managed Service for Prometheus
- * workspace — a container of Prometheus recording and alerting rules,
+ * workspace -- a container of Prometheus recording and alerting rules,
  * supplied as a YAML definition.
  *
  * ### Creating a Rule Groups Namespace
@@ -85,7 +85,7 @@ export const RuleGroupsNamespaceProvider = () =>
         status: ns.status.statusCode,
       });
 
-      /** Describe the namespace; typed not-found → undefined. */
+      /** Describe the namespace; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string, name: string) {
         const response = yield* amp
           .describeRuleGroupsNamespace({ workspaceId, name })
@@ -146,10 +146,10 @@ export const RuleGroupsNamespaceProvider = () =>
           const desiredTags = { ...internalTags, ...news!.tags };
           const desiredData = yield* encodeDefinition(news!.definition);
 
-          // 1. Observe — the live namespace is authoritative.
+          // 1. Observe -- the live namespace is authoritative.
           const ns = yield* describe(workspaceId, name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (ns === undefined) {
             yield* amp.createRuleGroupsNamespace({
               workspaceId,
@@ -158,7 +158,7 @@ export const RuleGroupsNamespaceProvider = () =>
               tags: desiredTags,
             });
           } else {
-            // 3. Sync definition — put only when the YAML drifts. `data` is
+            // 3. Sync definition -- put only when the YAML drifts. `data` is
             // present once the namespace is ACTIVE (omitted while CREATING).
             const currentDefinition =
               ns.data !== undefined ? yield* decodeDefinition(ns.data) : undefined;
@@ -174,7 +174,7 @@ export const RuleGroupsNamespaceProvider = () =>
           // Wait for ACTIVE so the ARN, status, and data blob are settled.
           const fresh = yield* waitActive(workspaceId, name);
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAmpTags(fresh.arn, desiredTags);
 
           yield* session.note(`${workspaceId}/${name}`);
@@ -196,7 +196,7 @@ export const RuleGroupsNamespaceProvider = () =>
             );
         }),
 
-        // Sub-resource keyed by its parent workspace — not independently
+        // Sub-resource keyed by its parent workspace -- not independently
         // enumerable across the account.
         list: () => Effect.succeed([]),
       };

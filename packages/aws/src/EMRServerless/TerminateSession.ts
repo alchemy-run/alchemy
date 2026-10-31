@@ -13,7 +13,7 @@ export type TerminateSessionInput = Omit<emr.TerminateSessionRequest, "applicati
  * Runtime binding for `emr-serverless:TerminateSession`.
  *
  * Terminates an interactive session on the bound {@link Application},
- * releasing its workers — e.g. a cost-control function reaping sessions
+ * releasing its workers -- e.g. a cost-control function reaping sessions
  * left idle past a policy window. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.TerminateSessionHttp)`.
  * ### Interactive Sessions

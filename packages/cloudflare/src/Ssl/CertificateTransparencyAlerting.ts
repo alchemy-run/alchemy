@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export type CertificateTransparencyAlertingProps = {
   /**
-   * Zone whose Certificate Transparency alerting is managed. Stable —
+   * Zone whose Certificate Transparency alerting is managed. Stable --
    * changing the zone triggers a replacement (the old zone's subscription
    * is restored to what it was before Alchemy managed it).
    */

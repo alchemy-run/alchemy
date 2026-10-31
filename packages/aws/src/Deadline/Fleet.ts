@@ -106,7 +106,7 @@ export interface ServiceManagedEc2FleetConfiguration extends Omit<
 }
 
 /**
- * Fleet configuration — either `customerManaged` (you run the workers) or
+ * Fleet configuration -- either `customerManaged` (you run the workers) or
  * `serviceManagedEc2` (Deadline provisions EC2 instances).
  */
 export type FleetConfiguration =
@@ -215,7 +215,7 @@ export interface FleetProps {
    */
   maxWorkerCount: number;
   /**
-   * Fleet configuration — either `customerManaged` (you run the workers) or
+   * Fleet configuration -- either `customerManaged` (you run the workers) or
    * `serviceManagedEc2` (Deadline provisions EC2 instances).
    */
   configuration: FleetConfiguration;
@@ -279,7 +279,7 @@ export interface Fleet extends Resource<
 > {}
 
 /**
- * An AWS Deadline Cloud fleet — a group of workers (customer-managed hosts
+ * An AWS Deadline Cloud fleet -- a group of workers (customer-managed hosts
  * or service-managed EC2 instances) that run render jobs from associated
  * queues.
  *
@@ -388,7 +388,7 @@ const findFleetByDisplayName = Effect.fn(function* (
 });
 
 /**
- * A fleet still transitioning toward the awaited state — retried by the
+ * A fleet still transitioning toward the awaited state -- retried by the
  * bounded wait schedules below.
  */
 class FleetNotReady extends Data.TaggedError("FleetNotReady")<{
@@ -461,7 +461,7 @@ export const FleetProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["farmId", "fleetId", "fleetArn", "roleArn"],
-        // Keyed by a parent farm — sub-resource list() convention.
+        // Keyed by a parent farm -- sub-resource list() convention.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
@@ -500,7 +500,7 @@ export const FleetProvider = () =>
             ? yield* readFleetById(farmId, output.fleetId, arnOf)
             : yield* findFleetByDisplayName(farmId, displayName, arnOf);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* deadline
               .createFleet({
@@ -519,7 +519,7 @@ export const FleetProvider = () =>
             state = yield* waitForFleetActive(farmId, created.fleetId, arnOf);
           }
 
-          // Sync mutable settings — only when drifted from OBSERVED state.
+          // Sync mutable settings -- only when drifted from OBSERVED state.
           const described = state.described;
           const needsUpdate =
             displayName !== described.displayName ||
@@ -550,7 +550,7 @@ export const FleetProvider = () =>
             yield* session.note(`Updated fleet ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncDeadlineTags(state.attrs.fleetArn, desiredTags);
 
           yield* session.note(state.attrs.fleetArn);

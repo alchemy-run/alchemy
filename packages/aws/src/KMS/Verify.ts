@@ -16,7 +16,7 @@ export interface VerifyRequest extends Omit<kms.VerifyRequest, "KeyId"> {}
  * IAM/CloudTrail.
  *
  * A mismatched signature surfaces as the typed
- * `KMSInvalidSignatureException` — a valid signature returns
+ * `KMSInvalidSignatureException` -- a valid signature returns
  * `SignatureValid: true`.
  *
  * ### Signing

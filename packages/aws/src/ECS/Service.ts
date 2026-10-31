@@ -79,9 +79,9 @@ export const isService = (value: any): value is Service =>
   "Type" in value &&
   value.Type === "AWS.ECS.Service";
 
-// ───────────────────────────────────────────────────────────────────────────
-// Managed load balancer (owned + shared) — types
-// ───────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Managed load balancer (owned + shared) -- types
+// ---------------------------------------------------------------------------
 
 /** ALB (layer-7) listener protocols. */
 export type ServiceApplicationProtocol = "http" | "https";
@@ -130,7 +130,7 @@ export interface ServiceLoadBalancerRule {
    */
   redirect?: ServiceListenSpec;
   /**
-   * Name of the container receiving traffic — the main container by default,
+   * Name of the container receiving traffic -- the main container by default,
    * or a sidecar's container name.
    */
   container?: string;
@@ -143,9 +143,9 @@ export interface ServiceLoadBalancerRule {
   /** Match on query-string key/value pairs. */
   query?: { key?: string; value: string }[];
   /**
-   * The rule's evaluation priority (1–50000, lower first). When omitted, a
+   * The rule's evaluation priority (1-50000, lower first). When omitted, a
    * deterministic priority is derived by hashing the rule's namespaced
-   * logical id — stable across deploys and distinct across services. On a
+   * logical id -- stable across deploys and distinct across services. On a
    * live collision the deploy fails with a typed
    * `ListenerRulePriorityInUse` error naming the priority; set an explicit
    * `priority` to resolve it (the engine never probes for free slots).
@@ -175,7 +175,7 @@ export interface ServiceDomainConfig {
    * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
    * 53 (a matching public hosted zone must exist; alias `A` + `AAAA`
    * records). Pass `Cloudflare.DNS.Adapter()` or `Hetzner.DNS.Adapter()`
-   * for a domain whose DNS lives there — each name gets a `CNAME` to the
+   * for a domain whose DNS lives there -- each name gets a `CNAME` to the
    * load balancer and the certificate is validated through that host.
    */
   dns?: DnsConfig;
@@ -205,7 +205,7 @@ export interface ServiceLoadBalancerConfig {
   /**
    * Default (shared) listener for rules that omit `listen`. Referencing an
    * `ELBv2.Listener` means the service only creates target groups and
-   * listener rules — the ALB and listener belong to whoever composed them.
+   * listener rules -- the ALB and listener belong to whoever composed them.
    */
   listener?: Listener;
   /** Routing rules. Defaults to a single catch-all (`path: "/*"`) rule when a `listener` is referenced. */
@@ -231,7 +231,7 @@ export interface ServiceLoadBalancerConfig {
   domain?: string | ServiceDomainConfig;
   /**
    * Per-target-group health-check overrides, keyed by the target's
-   * `"{port}/{protocol}"` spec — the rule's `forward` spec, or
+   * `"{port}/{protocol}"` spec -- the rule's `forward` spec, or
    * `"{containerPort}/http"` (`/tcp` for network load balancers) for the
    * default target group. Overrides the fast-converge defaults
    * (10s interval / 2 healthy / 2 unhealthy). A key matching no target
@@ -242,7 +242,7 @@ export interface ServiceLoadBalancerConfig {
 
 /**
  * @internal Resolved managed-ingress wiring computed by the Service factory's
- * composition step — never set by hand. Carries the composed (or shared)
+ * composition step -- never set by hand. Carries the composed (or shared)
  * ELBv2 child-resource outputs into the core service provider.
  */
 export interface ServiceManagedIngress {
@@ -364,7 +364,7 @@ export class ServiceDidNotStabilize extends Data.TaggedError("ServiceDidNotStabi
 }> {}
 
 /**
- * Derive a deterministic listener-rule priority (1–50000) from the rule's
+ * Derive a deterministic listener-rule priority (1-50000) from the rule's
  * namespaced logical id (FNV-1a 32-bit). Stable across deploys for the same
  * id and distinct for distinct ids; on a live `PriorityInUse` collision the
  * deploy fails with a typed error rather than probing for a free slot.
@@ -400,7 +400,7 @@ export interface ServiceScalingConfig {
   memoryUtilization?: number;
   /**
    * Target `ALBRequestCountPerTarget` to track. Requires a managed load
-   * balancer target group ({@link ServicePropsBase.loadBalancer}) — a typed
+   * balancer target group ({@link ServicePropsBase.loadBalancer}) -- a typed
    * error ({@link RequestCountScalingRequiresLoadBalancer}) otherwise.
    */
   requestCount?: number;
@@ -444,7 +444,7 @@ export type ServiceCapacityConfig =
  */
 export interface ServiceRegistryConfig {
   /**
-   * The Cloud Map namespace to register in — an
+   * The Cloud Map namespace to register in -- an
    * `AWS.CloudMap.PrivateDnsNamespace` or `HttpNamespace` (anything with a
    * `namespaceId`).
    */
@@ -480,7 +480,7 @@ export type ServiceLoggingConfig = LogRetentionConfig;
 /** EFS volume sugar for {@link ImageOwningServicePropsBase.volumes}. */
 export interface ServiceEfsVolume {
   /**
-   * The EFS file system to mount — an `AWS.EFS.FileSystem` (anything with a
+   * The EFS file system to mount -- an `AWS.EFS.FileSystem` (anything with a
    * `fileSystemId`), or `{ fileSystem, accessPoint }` to mount through an
    * `AWS.EFS.AccessPoint`. Transit encryption is always enabled.
    */
@@ -540,7 +540,7 @@ export interface ServicePropsBase extends PlatformProps {
 
   /**
    * Whether the service ENIs should receive public IPs.
-   * @default false — but `true` when networking defaulted to the default
+   * @default false -- but `true` when networking defaulted to the default
    * VPC (public subnets need a public IP to pull images without a NAT).
    */
   assignPublicIp?: boolean;
@@ -586,7 +586,7 @@ export interface ServicePropsBase extends PlatformProps {
   serviceRegistry?: ServiceRegistryConfig;
 
   /**
-   * Load balancer target groups to wire to the service. **User-supplied** —
+   * Load balancer target groups to wire to the service. **User-supplied** --
    * Alchemy does NOT create these. Each entry references an existing ELBv2
    * target group (or CLB) plus the container/port that receives traffic.
    * Updated in place for rolling deployments.
@@ -607,15 +607,15 @@ export interface ServicePropsBase extends PlatformProps {
    * `AWS.ELBv2.LoadBalancer` / `Listener` / `TargetGroup` / `ListenerRule`
    * child resources under the service's namespace:
    *
-   * - `true` — the service OWNS a public ALB with a single HTTP listener
+   * - `true` -- the service OWNS a public ALB with a single HTTP listener
    *   forwarding to the container port. The `url` attribute is populated
    *   from the ALB's DNS name.
-   * - an `ELBv2.Listener` reference — the listener (and its ALB) are SHARED:
+   * - an `ELBv2.Listener` reference -- the listener (and its ALB) are SHARED:
    *   the service only creates a target group and a catch-all
    *   (`path: "/*"`) listener rule on that listener. Destroying the service
    *   removes its rules and target groups; the shared listener/ALB are never
    *   touched.
-   * - an object — `listener` (default shared listener) + `rules` (path/host/
+   * - an object -- `listener` (default shared listener) + `rules` (path/host/
    *   header/query routing, `forward`/`redirect` actions) + `public`
    *   (owned-only; `false` composes an internal ALB). Rules with
    *   `"80/http"`-style `listen` strings make the service own the ALB and
@@ -625,7 +625,7 @@ export interface ServicePropsBase extends PlatformProps {
    * Migration note: services deployed before composed ingress recorded their
    * inline-created ALB/TG/listener/security group in the service's own
    * attributes. The first deploy under the composed shape performs a
-   * breaking redeploy — new composed resources are created and the legacy
+   * breaking redeploy -- new composed resources are created and the legacy
    * inline infrastructure is reaped (deleted) so nothing is stranded.
    * @default false
    */
@@ -682,7 +682,7 @@ export interface ServicePropsBase extends PlatformProps {
 
   /**
    * Deployment controller (`ECS`, `CODE_DEPLOY`, `EXTERNAL`). The controller
-   * type is immutable — changing it replaces the service.
+   * type is immutable -- changing it replaces the service.
    */
   deploymentController?: ecs.DeploymentController;
 
@@ -698,7 +698,7 @@ export interface ServicePropsBase extends PlatformProps {
 
   /**
    * Scheduling strategy. `REPLICA` runs and maintains `desiredCount` copies;
-   * `DAEMON` runs one task per eligible instance. Immutable — changing it
+   * `DAEMON` runs one task per eligible instance. Immutable -- changing it
    * replaces the service.
    * @default "REPLICA"
    */
@@ -739,7 +739,7 @@ export interface ServicePropsBase extends PlatformProps {
 
   /**
    * IAM role for the ELB integration (only for non-awsvpc / CLB services).
-   * Immutable — changing it replaces the service.
+   * Immutable -- changing it replaces the service.
    */
   role?: string;
 
@@ -800,7 +800,7 @@ export interface ImageOwningServicePropsBase
 
   /**
    * Secrets injected into the primary container as environment variables:
-   * env-var name → SSM Parameter Store parameter ARN or Secrets Manager
+   * env-var name -> SSM Parameter Store parameter ARN or Secrets Manager
    * secret ARN. Wired as container `secrets` (`valueFrom`), with the
    * execution role granted `ssm:GetParameters` /
    * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
@@ -832,7 +832,7 @@ export interface DockerfileServiceProps
 export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
 
 /**
- * Service props — either reference an existing task definition (`task:`) or
+ * Service props -- either reference an existing task definition (`task:`) or
  * own the image via exactly one of `main` / `context` / `image` (the
  * Service then synthesizes its own task definition).
  */
@@ -874,7 +874,7 @@ export interface Service extends Resource<
     /**
      * URL of the service through its managed ingress. Owned load balancers
      * use the composed ALB's DNS name; shared listeners derive it from the
-     * foreign listener's ALB DNS + protocol/port (best-effort — undefined
+     * foreign listener's ALB DNS + protocol/port (best-effort -- undefined
      * when not derivable).
      */
     url?: string;
@@ -904,7 +904,7 @@ export interface Service extends Resource<
     /**
      * @internal Marks attrs written by the composed-ingress shape ("owned" |
      * "shared"). Absent on legacy state rows whose ALB/TG/listener were
-     * created inline by the provider — the marker gates the migration reap
+     * created inline by the provider -- the marker gates the migration reap
      * and the legacy delete path.
      */
     ingressKind?: "owned" | "shared";
@@ -968,10 +968,10 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of four sources:
  *
- * - `image` — run a pre-built registry image, mirrored into ECR.
- * - `context` — build your own Dockerfile.
- * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
- * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service
+ * - `image` -- run a pre-built registry image, mirrored into ECR.
+ * - `context` -- build your own Dockerfile.
+ * - `main` -- bundle an inline Effect program (servers return `{ fetch }`).
+ * - `task:` -- deploy an existing `AWS.ECS.Task`'s definition; the Service
  *   adds `desiredCount` / load balancing / deployment configuration.
  *
  * With any of the first three the Service synthesizes its own task
@@ -982,9 +982,9 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * Most configuration is updated **in place** via `updateService`
  * (desiredCount, task definition, network, deployment config, placement,
- * exec, load balancers, tags). Only truly-immutable aspects — `serviceName`,
- * `cluster`, launchType↔capacityProviderStrategy switch, `deploymentController`
- * type, `schedulingStrategy`, `enableECSManagedTags`, `role` — replace the
+ * exec, load balancers, tags). Only truly-immutable aspects -- `serviceName`,
+ * `cluster`, launchType<->capacityProviderStrategy switch, `deploymentController`
+ * type, `schedulingStrategy`, `enableECSManagedTags`, `role` -- replace the
  * service.
  * ### Creating Services
  * **Example:** Remote Image Behind a Load Balancer
@@ -1094,7 +1094,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * **Example:** Owned ALB with Routing Rules and an HTTP → HTTPS Redirect
+ * **Example:** Owned ALB with Routing Rules and an HTTP -> HTTPS Redirect
  * ```typescript
  * // `"80/http"`-style `listen` strings mean the service OWNS the ALB and
  * // these listeners (mixing them with shared listener references is a
@@ -1416,9 +1416,9 @@ const ecsTagRecord = (tags: ecs.Tag[] | undefined): Record<string, string> =>
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
-// ───────────────────────────────────────────────────────────────────────────
-// Managed load balancer — composition (the StaticSite pattern)
-// ───────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Managed load balancer -- composition (the StaticSite pattern)
+// ---------------------------------------------------------------------------
 
 const isELBv2Listener = (value: unknown): value is Listener =>
   typeof value === "object" &&
@@ -1454,7 +1454,7 @@ const parseListenSpec = (serviceId: string, spec: string, kind: string) =>
       return yield* new UnsupportedListenerProtocol({
         serviceId,
         spec,
-        message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' — expected "<port>/<protocol>" with protocol one of http, https (ALB) or tcp, udp, tcp_udp, tls (NLB)`,
+        message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' \u2014 expected "<port>/<protocol>" with protocol one of http, https (ALB) or tcp, udp, tcp_udp, tls (NLB)`,
       });
     }
     return { port, protocol } as ParsedListen;
@@ -1478,7 +1478,7 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   if (!vpc?.VpcId) {
     return yield* Effect.die(
       new Error(
-        "AWS.ECS.Service: no default VPC in this account/region — pass `vpcId` and `subnets` explicitly",
+        "AWS.ECS.Service: no default VPC in this account/region \u2014 pass `vpcId` and `subnets` explicitly",
       ),
     );
   }
@@ -1498,7 +1498,7 @@ const lookupDefaultNetwork = Effect.gen(function* () {
   if (subnetIds.length === 0) {
     return yield* Effect.die(
       new Error(
-        "AWS.ECS.Service: the default VPC has no default subnets — pass `subnets` explicitly",
+        "AWS.ECS.Service: the default VPC has no default subnets \u2014 pass `subnets` explicitly",
       ),
     );
   }
@@ -1508,7 +1508,7 @@ const lookupDefaultNetwork = Effect.gen(function* () {
 const toValuesArray = (value: string | string[] | undefined) =>
   value === undefined ? undefined : Array.isArray(value) ? value : [value];
 
-/** Flat rule conditions → the `ELBv2.ListenerRule` condition shape. */
+/** Flat rule conditions -> the `ELBv2.ListenerRule` condition shape. */
 const ruleConditionsOf = (rule: ServiceLoadBalancerRule): ListenerRuleCondition[] => {
   const conditions: ListenerRuleCondition[] = [];
   const path = toValuesArray(rule.path);
@@ -1535,7 +1535,7 @@ interface ManagedSgPort {
 
 /**
  * Ingress rules for the managed security group. `dynamicPort` is the main
- * container's port when it is only known as an Output (the `task:` form) —
+ * container's port when it is only known as an Output (the `task:` form) --
  * the rule list is then computed at resolve time so ports can be deduped.
  */
 const managedSgIngress = (
@@ -1637,8 +1637,8 @@ const composeServiceRegistry = (id: string, props: ServiceProps) =>
   });
 
 /**
- * The `transformProps` hook: normalize the `capacity` sugar, then — when
- * service discovery or managed load balancing is requested — compose the
+ * The `transformProps` hook: normalize the `capacity` sugar, then -- when
+ * service discovery or managed load balancing is requested -- compose the
  * Cloud Map / ELBv2 (and security group) child resources under the service's
  * namespace and rewrite the props to reference their outputs (the internal
  * `ingress` prop and `serviceRegistries`). A no-op at runtime.
@@ -1648,7 +1648,7 @@ const transformServiceProps = (
   props: ServiceProps,
 ): Effect.Effect<ServiceProps, unknown, any> =>
   Effect.gen(function* () {
-    // Composition is a plan/deploy concern — never runs inside bundles.
+    // Composition is a plan/deploy concern -- never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return props;
     }
@@ -1696,14 +1696,14 @@ const composeManagedIngress = (
       lbProp === true ? {} : isELBv2Listener(lbProp) ? { listener: lbProp } : lbProp;
     const rules = config.rules ?? (config.listener !== undefined ? [{}] : []);
 
-    // ── classify ownership ───────────────────────────────────────────────
+    // -- classify ownership -----------------------------------------------
     const hasSharedRefs =
       config.listener !== undefined || rules.some((rule) => isELBv2Listener(rule.listen));
     const hasOwnedStrings = rules.some((rule) => typeof rule.listen === "string");
     if (hasSharedRefs && hasOwnedStrings) {
       return yield* new MixedListenerOwnership({
         serviceId: id,
-        message: `AWS.ECS.Service "${id}": rules mix owned "<port>/<protocol>" listen strings with shared ELBv2.Listener references — a service either owns its ALB (strings only) or attaches rules to shared listeners (references only)`,
+        message: `AWS.ECS.Service "${id}": rules mix owned "<port>/<protocol>" listen strings with shared ELBv2.Listener references \u2014 a service either owns its ALB (strings only) or attaches rules to shared listeners (references only)`,
       });
     }
     const owned = !hasSharedRefs;
@@ -1711,14 +1711,14 @@ const composeManagedIngress = (
       return yield* new OwnedOnlyLoadBalancerOption({
         serviceId: id,
         option: "public",
-        message: `AWS.ECS.Service "${id}": \`public\` only applies to an owned load balancer — the shared listener's ALB controls its own scheme`,
+        message: `AWS.ECS.Service "${id}": \`public\` only applies to an owned load balancer \u2014 the shared listener's ALB controls its own scheme`,
       });
     }
     // `true`, a bare `{}`, or an owned config with zero rules: single default
     // listener forwarding to the container port.
     const trueLike = owned && rules.length === 0;
 
-    // ── protocol family: ALB (http/https) vs NLB (tcp/udp/tls/tcp_udp) ──
+    // -- protocol family: ALB (http/https) vs NLB (tcp/udp/tls/tcp_udp) --
     const families = new Set<"application" | "network">();
     for (const rule of rules) {
       const specs: [string | Listener | undefined, string][] = [
@@ -1736,7 +1736,7 @@ const composeManagedIngress = (
     if (families.size > 1) {
       return yield* new MixedLoadBalancerProtocols({
         serviceId: id,
-        message: `AWS.ECS.Service "${id}": rules mix application (http/https) and network (tcp/udp/tls/tcp_udp) protocols — one service composes exactly one load balancer type`,
+        message: `AWS.ECS.Service "${id}": rules mix application (http/https) and network (tcp/udp/tls/tcp_udp) protocols \u2014 one service composes exactly one load balancer type`,
       });
     }
     const lbType: "application" | "network" = families.has("network") ? "network" : "application";
@@ -1755,7 +1755,7 @@ const composeManagedIngress = (
       if (!owned) {
         return yield* failNetworkRule(
           0,
-          "uses network (tcp/udp/tls/tcp_udp) protocols with a shared listener — NLB listeners have no rules, so network ingress is always owned",
+          "uses network (tcp/udp/tls/tcp_udp) protocols with a shared listener \u2014 NLB listeners have no rules, so network ingress is always owned",
         );
       }
       const seenPorts = new Set<number>();
@@ -1763,11 +1763,14 @@ const composeManagedIngress = (
         if (typeof rule.listen !== "string") {
           return yield* failNetworkRule(
             index,
-            "must declare an explicit `listen` — network listeners have no default",
+            "must declare an explicit `listen` \u2014 network listeners have no default",
           );
         }
         if (rule.redirect !== undefined) {
-          return yield* failNetworkRule(index, "sets `redirect` — NLB listeners cannot redirect");
+          return yield* failNetworkRule(
+            index,
+            "sets `redirect` \u2014 NLB listeners cannot redirect",
+          );
         }
         if (
           rule.path !== undefined ||
@@ -1777,21 +1780,21 @@ const composeManagedIngress = (
         ) {
           return yield* failNetworkRule(
             index,
-            "sets routing conditions — NLB listeners route by port alone",
+            "sets routing conditions \u2014 NLB listeners route by port alone",
           );
         }
         const { port } = yield* parseListenSpec(id, rule.listen, "listen");
         if (seenPorts.has(port)) {
           return yield* failNetworkRule(
             index,
-            `re-declares listener port ${port} — a network listener forwards to exactly one target group`,
+            `re-declares listener port ${port} \u2014 a network listener forwards to exactly one target group`,
           );
         }
         seenPorts.add(port);
       }
     }
 
-    // ── custom domain (owned only): hosted zones + certificate ──────────
+    // -- custom domain (owned only): hosted zones + certificate ----------
     const domain =
       config.domain === undefined
         ? undefined
@@ -1802,7 +1805,7 @@ const composeManagedIngress = (
       return yield* new OwnedOnlyLoadBalancerOption({
         serviceId: id,
         option: "domain",
-        message: `AWS.ECS.Service "${id}": \`domain\` only applies to an owned load balancer — the shared listener's ALB owns its DNS and certificates`,
+        message: `AWS.ECS.Service "${id}": \`domain\` only applies to an owned load balancer \u2014 the shared listener's ALB owns its DNS and certificates`,
       });
     }
     let certificateArn: string | undefined = props.certificateArn;
@@ -1819,7 +1822,7 @@ const composeManagedIngress = (
           return yield* new ServiceHostedZoneNotFound({
             serviceId: id,
             domainName: name,
-            message: `AWS.ECS.Service "${id}": no public Route 53 hosted zone contains '${name}' — create the hosted zone first (alias records land in it)`,
+            message: `AWS.ECS.Service "${id}": no public Route 53 hosted zone contains '${name}' \u2014 create the hosted zone first (alias records land in it)`,
           });
         }
         domainZones.set(name, zoneId);
@@ -1846,7 +1849,7 @@ const composeManagedIngress = (
       }
     }
 
-    // ── normalize rules + target-group specs ────────────────────────────
+    // -- normalize rules + target-group specs ----------------------------
     const byoTask = taskRefOf(props);
     const defaultContainerPort: unknown =
       byoTask !== undefined ? byoTask.port : ((props as { port?: number }).port ?? 3000);
@@ -1907,7 +1910,7 @@ const composeManagedIngress = (
         return yield* new ServiceRuleActionConflict({
           serviceId: id,
           ruleIndex: index,
-          message: `AWS.ECS.Service "${id}": rule ${index} sets both \`forward\` and \`redirect\` — they are mutually exclusive`,
+          message: `AWS.ECS.Service "${id}": rule ${index} sets both \`forward\` and \`redirect\` \u2014 they are mutually exclusive`,
         });
       }
       const listen =
@@ -1948,7 +1951,7 @@ const composeManagedIngress = (
       ensureTgSpec(undefined, undefined);
     }
 
-    // ── owned listener specs ────────────────────────────────────────────
+    // -- owned listener specs --------------------------------------------
     // Network rules always declare an explicit `listen` (validated above),
     // so the implicit default listener is application-only.
     const defaultOwnedListen: ParsedListen = {
@@ -1968,7 +1971,7 @@ const composeManagedIngress = (
             return yield* new UnsupportedListenerProtocol({
               serviceId: id,
               spec: `${spec.port}/${spec.protocol}`,
-              message: `AWS.ECS.Service "${id}": port ${spec.port} is declared with both "${existing.protocol}" and "${spec.protocol}" — one protocol per listener port`,
+              message: `AWS.ECS.Service "${id}": port ${spec.port} is declared with both "${existing.protocol}" and "${spec.protocol}" \u2014 one protocol per listener port`,
             });
           }
           ownedListenSpecs.set(spec.port, spec);
@@ -1982,7 +1985,7 @@ const composeManagedIngress = (
           return yield* new MissingListenerCertificate({
             serviceId: id,
             spec: `${spec.port}/${spec.protocol}`,
-            message: `AWS.ECS.Service "${id}": listener "${spec.port}/${spec.protocol}" requires a certificate — pass \`certificateArn\` or a \`domain\``,
+            message: `AWS.ECS.Service "${id}": listener "${spec.port}/${spec.protocol}" requires a certificate \u2014 pass \`certificateArn\` or a \`domain\``,
           });
         }
       }
@@ -1994,13 +1997,13 @@ const composeManagedIngress = (
         ? (r.listen as ParsedListen).port
         : defaultOwnedListen.port;
 
-    // ── network (VPC for TGs + SG, subnets for an owned ALB) ────────────
+    // -- network (VPC for TGs + SG, subnets for an owned ALB) ------------
     const network =
       props.vpcId !== undefined && props.subnets !== undefined
         ? { vpcId: props.vpcId, subnets: props.subnets }
         : yield* lookupDefaultNetwork;
 
-    // ── managed security group ──────────────────────────────────────────
+    // -- managed security group ------------------------------------------
     const staticPorts: ManagedSgPort[] = [
       ...(owned
         ? [...ownedListenSpecs.values()].flatMap((spec) =>
@@ -2032,7 +2035,7 @@ const composeManagedIngress = (
           tags: props.tags,
         });
 
-    // ── target groups (one per distinct forward + container pair) ───────
+    // -- target groups (one per distinct forward + container pair) -------
     // Per-TG health overrides are keyed by the target's "{port}/{protocol}"
     // spec: the rule's `forward` spec, or the container port + the LB
     // type's default protocol for the default target group.
@@ -2094,7 +2097,7 @@ const composeManagedIngress = (
         return yield* new ServiceHealthTargetNotFound({
           serviceId: id,
           key,
-          message: `AWS.ECS.Service "${id}": \`health\` key '${key}' matches no target group — valid keys: ${validKeys.length > 0 ? validKeys.join(", ") : "(none statically derivable)"}`,
+          message: `AWS.ECS.Service "${id}": \`health\` key '${key}' matches no target group \u2014 valid keys: ${validKeys.length > 0 ? validKeys.join(", ") : "(none statically derivable)"}`,
         });
       }
     }
@@ -2117,7 +2120,7 @@ const composeManagedIngress = (
             ],
           };
 
-    // ── owned ALB + listeners ───────────────────────────────────────────
+    // -- owned ALB + listeners -------------------------------------------
     let alb: LoadBalancer | undefined;
     const ownedListeners = new Map<number, Listener>();
     /** Rules absorbed into a listener's default action (no ListenerRule). */
@@ -2184,7 +2187,7 @@ const composeManagedIngress = (
       }
     }
 
-    // ── domain: alias records pointing at the owned load balancer ───────
+    // -- domain: alias records pointing at the owned load balancer -------
     if (domain !== undefined && alb !== undefined) {
       for (const name of domainNames) {
         const sanitizedName = name.replaceAll(/[^a-zA-Z0-9-]/g, "-");
@@ -2208,7 +2211,7 @@ const composeManagedIngress = (
       }
     }
 
-    // ── listener rules ──────────────────────────────────────────────────
+    // -- listener rules --------------------------------------------------
     const chain = yield* Namespace.CurrentChain;
     const namespacePrefix = [...chain].reverse().join("/");
     for (const r of normalized) {
@@ -2216,7 +2219,7 @@ const composeManagedIngress = (
         continue;
       }
       const ruleId = `Rule-${r.index}`;
-      // A conditionless rule still needs at least one ELBv2 condition — use
+      // A conditionless rule still needs at least one ELBv2 condition -- use
       // the catch-all path (this is also the bare-listener default rule).
       const conditions =
         r.conditions.length > 0 ? r.conditions : [{ pathPattern: { values: ["/*"] } }];
@@ -2235,7 +2238,7 @@ const composeManagedIngress = (
       });
     }
 
-    // ── primary listener (attrs + URL derivation) ───────────────────────
+    // -- primary listener (attrs + URL derivation) -----------------------
     const primary = owned
       ? (() => {
           const spec =
@@ -2282,9 +2285,9 @@ const composeManagedIngress = (
     } as ServiceProps;
   });
 
-// ───────────────────────────────────────────────────────────────────────────
-// Autoscaling — composition (the `onCreate` hook)
-// ───────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Autoscaling -- composition (the `onCreate` hook)
+// ---------------------------------------------------------------------------
 
 /**
  * Compose the Application Auto Scaling resources for the `scaling` prop:
@@ -2299,7 +2302,7 @@ const composeServiceScaling = (
   props: ServiceProps | undefined,
 ): Effect.Effect<void, unknown, any> =>
   Effect.gen(function* () {
-    // Composition is a plan/deploy concern — never runs inside bundles.
+    // Composition is a plan/deploy concern -- never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
       return;
     }
@@ -2316,7 +2319,7 @@ const composeServiceScaling = (
     ) {
       return yield* new RequestCountScalingRequiresLoadBalancer({
         serviceId: id,
-        message: `AWS.ECS.Service "${id}": \`scaling.requestCount\` tracks ALBRequestCountPerTarget, which needs a managed target group — set \`loadBalancer\``,
+        message: `AWS.ECS.Service "${id}": \`scaling.requestCount\` tracks ALBRequestCountPerTarget, which needs a managed target group \u2014 set \`loadBalancer\``,
       });
     }
     yield* Effect.gen(function* () {
@@ -2372,7 +2375,7 @@ const composeServiceScaling = (
       }
       if (scaling.requestCount !== undefined) {
         // ALBRequestCountPerTarget's ResourceLabel is
-        // `app/{lb-name}/{lb-id}/targetgroup/{tg-name}/{tg-id}` — both
+        // `app/{lb-name}/{lb-id}/targetgroup/{tg-name}/{tg-id}` -- both
         // halves parsed from the managed-ingress ARNs on the service.
         const loadBalancerPart = Output.map(
           service.loadBalancerArn as unknown as Output.Output<string>,
@@ -2398,9 +2401,9 @@ const composeServiceScaling = (
     }).pipe(Namespace.push(id));
   });
 
-// ───────────────────────────────────────────────────────────────────────────
-// Task-definition sugar (secrets / logging / volumes) — helpers
-// ───────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Task-definition sugar (secrets / logging / volumes) -- helpers
+// ---------------------------------------------------------------------------
 
 const SECRETS_POLICY_NAME = "alchemy-secrets";
 
@@ -2742,12 +2745,12 @@ export const ServiceProvider = () =>
               lowercase: true,
             });
 
-      // ── networking ────────────────────────────────────────────────────
+      // -- networking ----------------------------------------------------
 
       /**
        * Resolve the VPC + subnets the service runs in. Explicit props win;
        * otherwise fall back to the account's default VPC and its per-AZ
-       * default subnets (public — so `assignPublicIp` then defaults to true
+       * default subnets (public -- so `assignPublicIp` then defaults to true
        * to allow image pulls without a NAT).
        */
       const resolveNetwork = Effect.fn(function* (news: {
@@ -2770,7 +2773,7 @@ export const ServiceProvider = () =>
         };
       });
 
-      // ── managed ingress (composed ELBv2 resources) ────────────────────
+      // -- managed ingress (composed ELBv2 resources) --------------------
 
       /**
        * Best-effort public URL for managed ingress: resolve the (owned or
@@ -2842,7 +2845,7 @@ export const ServiceProvider = () =>
           return;
         }
         yield* session.note(
-          "Migrating to composed load balancer resources — deleting the legacy inline ALB/TG/listener",
+          "Migrating to composed load balancer resources \u2014 deleting the legacy inline ALB/TG/listener",
         );
         if (output.listenerArn) {
           yield* elbv2
@@ -2882,7 +2885,7 @@ export const ServiceProvider = () =>
         }
       });
 
-      // ── task definition synthesis (image-owning forms) ────────────────
+      // -- task definition synthesis (image-owning forms) ----------------
 
       /**
        * Synthesize (or roll) the service-owned task definition from the
@@ -2946,7 +2949,7 @@ export const ServiceProvider = () =>
           output?.taskRoleArn ?? (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
 
         // `taskRoleManagedPolicyArns` is part of the inherited
-        // `TaskDefinitionConfig` surface — attach it like the standalone
+        // `TaskDefinitionConfig` surface -- attach it like the standalone
         // Task provider does (its sibling `executionRoleManagedPolicyArns`
         // is already honored below). `attachRolePolicy` is idempotent for
         // already-attached ARNs; a `LimitExceededException` means the
@@ -3159,12 +3162,12 @@ export const ServiceProvider = () =>
         stables: ["serviceArn", "serviceName", "clusterArn"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
-          // serviceName change → delete-first replace (name is the identity).
+          // serviceName change -> delete-first replace (name is the identity).
           if ((yield* toServiceName(id, olds ?? {})) !== (yield* toServiceName(id, news ?? {}))) {
             return { action: "replace", deleteFirst: true } as const;
           }
-          // cluster change → replace (a service can't move clusters). Only
-          // when both sides are known — a half-created state row may have
+          // cluster change -> replace (a service can't move clusters). Only
+          // when both sides are known -- a half-created state row may have
           // lost an Output-valued `cluster` (see `clusterArnOf`), and an
           // unknown old cluster must fall through to the create/update
           // recovery path rather than force a replacement.
@@ -3179,12 +3182,12 @@ export const ServiceProvider = () =>
           }
           // Truly-immutable post-create fields. Everything else (desiredCount,
           // taskDefinition, network, deployment config, placement, loadBalancers,
-          // exec, tags, …) is applied in place by `updateService`.
+          // exec, tags, ...) is applied in place by `updateService`.
           if (
             olds !== undefined &&
             !deepEqual(
               {
-                // launchType ↔ capacityProviderStrategy switch is immutable.
+                // launchType <-> capacityProviderStrategy switch is immutable.
                 usesStrategy: !!olds.capacityProviderStrategy,
                 schedulingStrategy: olds.schedulingStrategy ?? "REPLICA",
                 deploymentControllerType: olds.deploymentController?.type ?? "ECS",
@@ -3220,7 +3223,7 @@ export const ServiceProvider = () =>
             // No attributes and no recoverable cluster from the persisted
             // props (an Output-valued `cluster` doesn't survive a
             // `creating`-state round-trip). We can't locate the service, so
-            // report "not found" — the engine re-drives the create and
+            // report "not found" -- the engine re-drives the create and
             // reconcile converges on any half-created service by name.
             return undefined;
           }
@@ -3342,14 +3345,14 @@ export const ServiceProvider = () =>
 
           // Managed ingress: the composed child-resource outputs arrive via
           // the internal `ingress` prop (written by the factory's
-          // composition step). The managed security group — when composed —
+          // composition step). The managed security group -- when composed --
           // is attached to the service ENIs as well.
           const ingress = news.ingress;
           const securityGroups =
             news.securityGroups ??
             (ingress?.securityGroupId ? [ingress.securityGroupId] : undefined);
 
-          // Observe — describe service in target cluster. The cluster may
+          // Observe -- describe service in target cluster. The cluster may
           // not yet exist on first reconcile, so we tolerate
           // `ClusterNotFoundException`.
           const described = yield* ecs
@@ -3396,7 +3399,7 @@ export const ServiceProvider = () =>
             const created = yield* ecs.createService({
               ...mutableInput(news, task, network, securityGroups),
               // With autoscaling, `desiredCount` is only the initial size
-              // (defaulting to `scaling.min`) — the scalable target owns it
+              // (defaulting to `scaling.min`) -- the scalable target owns it
               // from then on.
               desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
               serviceName,
@@ -3426,11 +3429,11 @@ export const ServiceProvider = () =>
             });
             const stableService = stable.service!;
             // Legacy inline ingress recorded in prior attrs (service itself
-            // was missing — e.g. recreated) is stale now: reap it.
+            // was missing -- e.g. recreated) is stale now: reap it.
             yield* reapLegacyIngress({ output, session });
             // Synthesizing registered a NEW revision; reap the superseded
             // one so revisions don't accumulate ACTIVE forever (same-family
-            // guarded — a prior BYO `task:` reference is left untouched).
+            // guarded -- a prior BYO `task:` reference is left untouched).
             if (owned !== undefined) {
               yield* reapSupersededTaskDefinitionRevision({
                 previousArn: output?.taskDefinitionArn,
@@ -3450,7 +3453,7 @@ export const ServiceProvider = () =>
             };
           }
 
-          // Sync — apply in-place mutable fields via updateService. Force a new
+          // Sync -- apply in-place mutable fields via updateService. Force a new
           // deployment so a changed task definition (same revision-less ARN) or
           // load-balancer wiring rolls out.
           const updated = yield* ecs
@@ -3480,7 +3483,7 @@ export const ServiceProvider = () =>
             .pipe(
               // The service may still be transitioning (e.g. a prior
               // deployment settling). updateService rejects with
-              // ServiceNotActiveException until it returns to ACTIVE — retry
+              // ServiceNotActiveException until it returns to ACTIVE -- retry
               // bounded.
               Effect.retry({
                 while: (e) => e._tag === "ServiceNotActiveException",
@@ -3500,7 +3503,7 @@ export const ServiceProvider = () =>
           });
           const stableService = stable.service!;
 
-          // Sync tags — diff observed service tags against desired.
+          // Sync tags -- diff observed service tags against desired.
           const observedTags = Object.fromEntries(
             (observed.tags ?? [])
               .filter(
@@ -3529,8 +3532,8 @@ export const ServiceProvider = () =>
           yield* reapLegacyIngress({ output, session });
 
           // Synthesizing registered a NEW revision and `updateService` above
-          // rolled the service onto it — reap the superseded revision so
-          // revisions don't accumulate ACTIVE forever (same-family guarded —
+          // rolled the service onto it -- reap the superseded revision so
+          // revisions don't accumulate ACTIVE forever (same-family guarded --
           // a prior BYO `task:` reference is left untouched).
           if (owned !== undefined) {
             yield* reapSupersededTaskDefinitionRevision({
@@ -3562,7 +3565,7 @@ export const ServiceProvider = () =>
             })
             .pipe(
               // `ServiceNotActiveException` means the service is DRAINING or
-              // INACTIVE — an earlier, interrupted delete already issued
+              // INACTIVE -- an earlier, interrupted delete already issued
               // `deleteService`. Neither status ever returns to ACTIVE, so
               // there is nothing to scale: fall through to the drain/delete
               // waits below, which treat both as progress toward "gone".
@@ -3602,7 +3605,7 @@ export const ServiceProvider = () =>
           // Inline ingress teardown applies ONLY to legacy state rows (no
           // `ingressKind` marker) whose ALB/TG/listener/SG were created
           // inline by the pre-composition provider. Composed ingress is made
-          // of real child resources the engine deletes itself — and in the
+          // of real child resources the engine deletes itself -- and in the
           // shared form the listener/ALB recorded here belong to someone
           // else entirely and must never be touched.
           if (output.ingressKind === undefined) {

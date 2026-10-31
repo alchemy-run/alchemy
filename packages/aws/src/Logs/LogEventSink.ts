@@ -7,7 +7,7 @@ import type { LogGroup } from "./LogGroup.ts";
 
 export interface LogEventSinkProps {
   /**
-   * Name of the target log stream. The stream must already exist — declare an
+   * Name of the target log stream. The stream must already exist -- declare an
    * `AWS.Logs.LogStream` alongside the log group.
    */
   readonly logStreamName: string;
@@ -28,7 +28,7 @@ export type LogEventSinkError =
  *
  * Events the API reports via `rejectedLogEventsInfo` (older than 14 days or
  * the group's retention period, expired, or more than 2 hours in the future)
- * are **permanently** rejected — they are dropped and surfaced with a
+ * are **permanently** rejected -- they are dropped and surfaced with a
  * warning, never retried. The remaining valid events in the batch are still
  * ingested by the API.
  *

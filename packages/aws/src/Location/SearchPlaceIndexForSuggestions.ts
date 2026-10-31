@@ -29,7 +29,7 @@ export interface SearchPlaceIndexForSuggestionsRequest extends Omit<
  *   BiasPosition: [-122.3493, 47.6205],
  *   MaxResults: 5,
  * });
- * // results.Results → [{ Text, PlaceId }, …]
+ * // results.Results -> [{ Text, PlaceId }, ...]
  * ```
  *
  * @binding

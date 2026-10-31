@@ -16,7 +16,7 @@ export type ApiToken = Resource<
     /**
      * The bearer token. Returned only by `create` (and `regenerate`); Axiom
      * does not return it on subsequent reads. Persisted in resource state via
-     * `Redacted` — handle with care.
+     * `Redacted` -- handle with care.
      */
     token: Redacted.Redacted<string>;
   },
@@ -25,7 +25,7 @@ export type ApiToken = Resource<
 >;
 
 /**
- * An Axiom API token — a scoped bearer token used to authenticate API
+ * An Axiom API token -- a scoped bearer token used to authenticate API
  * requests (ingest, query, admin). Capabilities are pinned at creation time;
  * changing any field triggers a **replacement** because Axiom does not
  * expose an update endpoint.
@@ -33,7 +33,7 @@ export type ApiToken = Resource<
  * The raw token value is returned only by `create`. After that, Axiom
  * never echoes it back, so it is captured into `output.token` (as a
  * {@link Redacted}) on initial create and persisted in resource state.
- * Treat resource state as sensitive — anyone with read access can recover
+ * Treat resource state as sensitive -- anyone with read access can recover
  * the token. Pair with a secret store for downstream consumption.
  * @see https://axiom.co/docs/reference/tokens
  *
@@ -97,8 +97,8 @@ export const ApiTokenProvider = () =>
         // account-wide `GET /v2/tokens` collection op (no pagination), so we
         // fetch it once and hydrate each row into the exact `read` Attributes
         // shape. The bearer secret is returned by Axiom only at creation and is
-        // never echoed back on enumeration, so — matching `read`, which sources
-        // the secret from cached state — we surface an empty Redacted token
+        // never echoed back on enumeration, so -- matching `read`, which sources
+        // the secret from cached state -- we surface an empty Redacted token
         // here rather than the real value.
         list: () =>
           Effect.gen(function* () {
@@ -110,7 +110,7 @@ export const ApiTokenProvider = () =>
           }),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
-          // First create — let the engine create normally.
+          // First create -- let the engine create normally.
           if (output == null) return undefined;
           // Axiom has no update endpoint for tokens, so any actual change
           // to the inputs forces a replacement (which mints a new bearer
@@ -120,19 +120,19 @@ export const ApiTokenProvider = () =>
           return { action: "replace" } as const;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — Axiom does not expose an update endpoint for tokens,
+          // Observe -- Axiom does not expose an update endpoint for tokens,
           // so any actual change to the inputs is forced to a replacement
           // by `diff` above. That means by the time `reconcile` runs we
           // are either (a) creating fresh, or (b) re-reconciling identical
           // inputs against an existing token.
           if (output !== undefined) {
-            // Identical inputs — Axiom does not echo the bearer back, so
+            // Identical inputs -- Axiom does not echo the bearer back, so
             // the cached `output` (with the persisted Redacted token) is
             // the authoritative current state.
             return output;
           }
 
-          // Ensure — mint a new token. Axiom returns the bearer exactly
+          // Ensure -- mint a new token. Axiom returns the bearer exactly
           // once; capture it into Redacted state for downstream consumers.
           const result = yield* create(news);
           if (!result.token) {

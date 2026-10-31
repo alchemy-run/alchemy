@@ -17,7 +17,7 @@ export interface ConverseStreamRequest extends Omit<bedrock.ConverseStreamReques
 }
 
 /**
- * Runtime binding for `bedrock-runtime:ConverseStream` — the streaming
+ * Runtime binding for `bedrock-runtime:ConverseStream` -- the streaming
  * variant of {@link Converse}. The response arrives as an event `Stream` of
  * `ConverseStreamOutput` events (`messageStart`, `contentBlockDelta`,
  * `messageStop`, `metadata`, ...) instead of a single message.
@@ -28,7 +28,7 @@ export interface ConverseStreamRequest extends Omit<bedrock.ConverseStreamReques
  * cross-region inference profile id (e.g. `us.amazon.nova-micro-v1:0`), or a
  * full Bedrock ARN.
  *
- * Model access is an account entitlement — enable the model in the Bedrock
+ * Model access is an account entitlement -- enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`.
  *

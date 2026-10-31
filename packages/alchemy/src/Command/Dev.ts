@@ -59,15 +59,15 @@ export interface Dev extends Resource<
 /**
  * A long-lived shell process scoped to a stack instance, started during
  * `alchemy dev` and restarted when its inputs change. During `alchemy deploy`
- * this is a no-op — `Dev` resources only run in dev mode.
+ * this is a no-op -- `Dev` resources only run in dev mode.
  *
  * The child process runs inside the dev sidecar (see `Command/Local.ts`) so it
- * survives user-code HMR — Alchemy's user process can restart without killing
+ * survives user-code HMR -- Alchemy's user process can restart without killing
  * your `npm run dev` server. Its stdout/stderr are mirrored to the terminal
- * (preserving colored output) and scanned for an `http(s)://…` URL, favoring
+ * (preserving colored output) and scanned for an `http(s)://...` URL, favoring
  * a `localhost`/IP URL (the dev server's own address) over any unrelated URL
  * the command prints first. The result is exposed as the `url` output
- * attribute — useful for surfacing a dev server's local URL back out to
+ * attribute -- useful for surfacing a dev server's local URL back out to
  * whatever resource declared this `Dev`.
  *
  *
@@ -114,7 +114,7 @@ export interface Dev extends Resource<
  * ```
  *
  * ### Working Directory
- * Use `cwd` to run the command in a subdirectory — useful in
+ * Use `cwd` to run the command in a subdirectory -- useful in
  * monorepos where each package has its own dev server.
  *
  * **Example:** Monorepo package
@@ -204,7 +204,7 @@ export const DevProviderLocal = () =>
 
           let buffer = "";
           // A non-local URL seen so far (docs link, error page, update notice,
-          // …). Held as a fallback so that if the dev server never prints a
+          // ...). Held as a fallback so that if the dev server never prints a
           // localhost/IP URL we still surface something, but a localhost URL
           // always wins if one shows up. See issue #695.
           let fallbackUrl: string | undefined;
@@ -225,7 +225,7 @@ export const DevProviderLocal = () =>
                   if (!url) return;
                   Deferred.doneUnsafe(anyUrl, Effect.void);
                   if (isLocalUrl(url)) {
-                    // The dev server's own address — resolve immediately.
+                    // The dev server's own address -- resolve immediately.
                     Deferred.doneUnsafe(deferred, Effect.succeed(url));
                   } else {
                     // Keep scanning: a localhost/IP URL may still appear.
@@ -288,7 +288,7 @@ export const DevProviderLocal = () =>
   );
 
 // Matches an http(s) URL whose host is `localhost`, an IPv4 address, or a
-// bracketed IPv6 address — i.e. the shape a dev server prints for its own
+// bracketed IPv6 address -- i.e. the shape a dev server prints for its own
 // local address. Preferred over any other URL a command might print first
 // (docs links, error pages, update notices). See issue #695.
 const LOCAL_URL_REGEX =
@@ -311,8 +311,8 @@ export const extractUrl = (text: string) => {
   const url = clean.match(LOCAL_URL_REGEX)?.[0] ?? clean.match(URL_REGEX)?.[0];
   // Some dev servers print their *bind* address (Nuxt: `http://0.0.0.0:3000`),
   // which is not a connectable host. Normalize the unspecified address to
-  // `localhost` so consumers of `url` — browser links, Router dev routing,
-  // the emulated CloudFront edge dialing the origin — can actually reach it.
+  // `localhost` so consumers of `url` -- browser links, Router dev routing,
+  // the emulated CloudFront edge dialing the origin -- can actually reach it.
   return url?.replace(
     /^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+:0+:0+:0+:0+:0+:0+:0+\])(?=[:/]|$)/,
     "$1localhost",

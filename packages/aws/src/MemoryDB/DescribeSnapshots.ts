@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:DescribeSnapshots`).
  *
  * Lists the account's cluster snapshots, optionally filtered by cluster or
- * snapshot name — e.g. verifying a backup completed before a migration.
+ * snapshot name -- e.g. verifying a backup completed before a migration.
  * Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.DescribeSnapshotsHttp)`.
  * ### Managing Snapshots

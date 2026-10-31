@@ -29,7 +29,7 @@ export interface LFTagAssignmentSpec {
 }
 
 /**
- * Lake Formation returns per-tag failures with a 200 response — surfaced as
+ * Lake Formation returns per-tag failures with a 200 response -- surfaced as
  * a typed error so partial failures fail the deploy.
  */
 export class LFTagAssociationError extends Data.TaggedError("LFTagAssociationError")<{
@@ -39,7 +39,7 @@ export class LFTagAssociationError extends Data.TaggedError("LFTagAssociationErr
 
 export interface LFTagAssociationProps {
   /**
-   * The Data Catalog resource to tag — a database, table, or
+   * The Data Catalog resource to tag -- a database, table, or
    * tableWithColumns variant. Changing it replaces the association.
    */
   resource: LakeFormationResourceSpec;
@@ -72,7 +72,7 @@ export interface LFTagAssociation extends Resource<
  * columns) for Lake Formation tag-based access control.
  *
  * Requires the caller to be a data lake administrator (or hold `ASSOCIATE`
- * on the LF-tags) — see
+ * on the LF-tags) -- see
  * {@link DataLakeSettings | AWS.LakeFormation.DataLakeSettings}.
  *
  * ### Tagging Resources
@@ -147,7 +147,7 @@ export const LFTagAssociationProvider = () =>
       });
 
       return LFTagAssociation.Provider.of({
-        // Associations are keyed by their parent Data Catalog resource —
+        // Associations are keyed by their parent Data Catalog resource --
         // there is no account-wide enumeration API.
         list: () => Effect.succeed([]),
 
@@ -181,7 +181,7 @@ export const LFTagAssociationProvider = () =>
           if ((news.catalogId ?? undefined) !== (olds.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // lfTags → update
+          // lfTags -> update
         }),
 
         reconcile: Effect.fn(function* ({ news, olds, session }) {
@@ -190,7 +190,7 @@ export const LFTagAssociationProvider = () =>
           // 1. OBSERVE
           const observed = yield* observe(resource, news.catalogId);
 
-          // 2. SYNC — detach keys we previously managed that were removed
+          // 2. SYNC -- detach keys we previously managed that were removed
           //    from the props.
           const newKeys = news.lfTags.map((t) => t.tagKey);
           const removedKeys = (olds?.lfTags ?? [])
@@ -211,7 +211,7 @@ export const LFTagAssociationProvider = () =>
           }
 
           //    Assign missing/changed values (AddLFTagsToResource overwrites
-          //    a key's existing value — verified live).
+          //    a key's existing value -- verified live).
           const toApply = news.lfTags.filter(
             (t) =>
               JSON.stringify(sortedValues(observed.get(t.tagKey))) !==
@@ -247,7 +247,7 @@ export const LFTagAssociationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Observe first — only detach keys that are actually still
+          // Observe first -- only detach keys that are actually still
           // assigned (the tag or the parent resource may already be gone).
           const observed = yield* observe(output.resource, output.catalogId);
           const keys = output.lfTags.map((t) => t.tagKey).filter((k) => observed.has(k));

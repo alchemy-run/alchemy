@@ -155,7 +155,7 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
-       * platform's manifest is pushed (`docker push --platform`) — with the
+       * platform's manifest is pushed (`docker push --platform`) -- with the
        * containerd image store, a bare push sends every locally-present
        * variant of a multi-arch tag, so a stale other-arch variant in the
        * local cache would otherwise reach the registry. Engines whose store
@@ -403,7 +403,7 @@ export declare namespace Docker {
   /**
    * A reference to the Docker engine an operation runs against: a context
    * name, a `Docker.Context` resource, or a `Docker.Swarm` resource
-   * (narrowed structurally by its `nodeId` attribute) — passing the swarm
+   * (narrowed structurally by its `nodeId` attribute) -- passing the swarm
    * also orders the operation after the swarm is initialized.
    */
   export type EngineRef = ContextRef | { nodeId: string; context?: string };
@@ -720,7 +720,7 @@ const makeDocker = (options: DockerOptions) =>
         // through the shared `osxkeychain`/`desktop` credential helper *regardless*
         // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
         // keychain (`The specified item already exists in the keychain (-25299)`) or
-        // land the credential in the helper — leaving this isolated config without
+        // land the credential in the helper -- leaving this isolated config without
         // an `auths` entry, so the subsequent `docker push` fails with "no basic
         // auth credentials". Embedding the base64 `auth` inline (the same thing
         // `docker login` would write when no credsStore is configured) makes each

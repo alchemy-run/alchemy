@@ -54,18 +54,18 @@ export type ConversationProps = {
    * Conversation id (the `{conversation}` segment of
    * `projects/{project}/locations/{location}/conversations/{conversation}`).
    * If omitted, a unique id is generated. Must match `^[a-z0-9-]{4,64}$`.
-   * Immutable — changing it replaces the conversation.
+   * Immutable -- changing it replaces the conversation.
    */
   conversationId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * conversation. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Conversation medium. Immutable — changing it replaces the
+   * Conversation medium. Immutable -- changing it replaces the
    * conversation.
    * @default "CHAT"
    */
@@ -149,7 +149,7 @@ export type Conversation = Resource<
 /**
  * A Contact Center AI Insights conversation (chat or phone call).
  *
- * `create` does not transcribe or redact audio — use `conversations.upload`
+ * `create` does not transcribe or redact audio -- use `conversations.upload`
  * for that. Location, id, and medium are immutable. Labels, agent id,
  * language, and expiry update in place.
  *

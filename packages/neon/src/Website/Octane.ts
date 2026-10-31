@@ -5,7 +5,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export type OctaneProps = FrameworkSiteProps & {};
 
 /**
- * Octane SSR and client assets on Neon Functions. Select node() from @alchemy.run/frontend-frameworks/octane/node-adapter in the project’s octane.config.ts.
+ * Octane SSR and client assets on Neon Functions. Select node() from @alchemy.run/frontend-frameworks/octane/node-adapter in the project's octane.config.ts.
  *
  * Native framework development and HMR run without Neon cloud resources.
  * Apply `Alchemy.remote()` to use the live Function deployment during dev.

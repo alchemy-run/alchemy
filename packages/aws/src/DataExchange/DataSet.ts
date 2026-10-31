@@ -12,7 +12,7 @@ import type { Providers } from "../Providers.ts";
 import { readDataExchangeTags, syncDataExchangeTags } from "./internal.ts";
 
 /**
- * The type of assets a data set can hold. Immutable — changing it replaces
+ * The type of assets a data set can hold. Immutable -- changing it replaces
  * the data set.
  */
 export type DataSetAssetType =
@@ -25,14 +25,14 @@ export type DataSetAssetType =
 export interface DataSetProps {
   /**
    * Name of the data set. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. The name is mutable — changing it updates the
+   * app, stage, and logical ID. The name is mutable -- changing it updates the
    * data set in place.
    */
   name?: string;
   /**
    * The type of assets the data set holds. `S3_SNAPSHOT` (static files
    * snapshotted from S3) is the most common.
-   * Immutable — changing it replaces the data set.
+   * Immutable -- changing it replaces the data set.
    * @default "S3_SNAPSHOT"
    */
   assetType?: DataSetAssetType;
@@ -68,7 +68,7 @@ export interface DataSet extends Resource<
      */
     assetType: string;
     /**
-     * The origin of the data set — `OWNED` for data sets created by this
+     * The origin of the data set -- `OWNED` for data sets created by this
      * account, `ENTITLED` for data sets obtained through a subscription.
      */
     origin: string;
@@ -78,7 +78,7 @@ export interface DataSet extends Resource<
 > {}
 
 /**
- * An AWS Data Exchange data set — the top-level container that data providers
+ * An AWS Data Exchange data set -- the top-level container that data providers
  * publish revisions of data into. An owned data set holds revisions, each of
  * which holds assets (e.g. S3 snapshot files) that subscribers receive.
  *
@@ -123,7 +123,7 @@ export const DataSetProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 98 }));
       });
 
-      /** Get a data set by id; typed not-found → undefined. */
+      /** Get a data set by id; typed not-found -> undefined. */
       const getById = Effect.fn(function* (dataSetId: string) {
         return yield* dataexchange
           .getDataSet({ DataSetId: dataSetId })
@@ -186,14 +186,14 @@ export const DataSetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — the output id is only a cache; fall back to the
+          // 1. Observe -- the output id is only a cache; fall back to the
           //    deterministic name when it's missing or stale.
           let dataSet = output?.dataSetId ? yield* getById(output.dataSetId) : undefined;
           if (dataSet === undefined) {
             dataSet = yield* findByName(name);
           }
 
-          // 2. Ensure — create when missing. Data set names are not unique in
+          // 2. Ensure -- create when missing. Data set names are not unique in
           //    DataExchange, so there is no AlreadyExists race to tolerate.
           if (dataSet === undefined) {
             dataSet = yield* dataexchange.createDataSet({
@@ -204,7 +204,7 @@ export const DataSetProvider = () =>
             });
           }
 
-          // 3. Sync — name and description are mutable in place.
+          // 3. Sync -- name and description are mutable in place.
           if (dataSet.Name !== name || dataSet.Description !== description) {
             dataSet = yield* dataexchange.updateDataSet({
               DataSetId: dataSet.Id!,

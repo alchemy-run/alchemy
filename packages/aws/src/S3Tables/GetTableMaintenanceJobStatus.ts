@@ -7,8 +7,8 @@ import type { Table } from "./Table.ts";
  * Runtime binding for the `GetTableMaintenanceJobStatus` operation (IAM
  * action `s3tables:GetTableMaintenanceJobStatus` on the table ARN).
  *
- * Reads the status of the bound {@link Table}'s managed maintenance jobs —
- * Iceberg compaction and snapshot management — including when each job last
+ * Reads the status of the bound {@link Table}'s managed maintenance jobs --
+ * Iceberg compaction and snapshot management -- including when each job last
  * ran and whether it succeeded. Useful for compute that monitors table
  * health at runtime. Provide the implementation with
  * `Effect.provide(AWS.S3Tables.GetTableMaintenanceJobStatusHttp)`.

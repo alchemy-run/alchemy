@@ -35,19 +35,19 @@ export type GatewayAdvertisedRouteRecipient =
 export type SpokesGatewayAdvertisedRouteProps = {
   /**
    * Parent gateway spoke resource name
-   * `projects/{project}/locations/{location}/spokes/{spoke}`. Immutable —
+   * `projects/{project}/locations/{location}/spokes/{spoke}`. Immutable --
    * changing it replaces the route.
    */
   parent: string;
   /**
    * Route id (the `{gateway_advertised_route}` segment). If omitted, a
-   * unique name is generated. Immutable — changing it replaces the
+   * unique name is generated. Immutable -- changing it replaces the
    * route.
    */
   gatewayAdvertisedRouteId?: string;
   /**
    * Advertised CIDR (`"10.0.0.0/24"` or a single IP, interpreted as
-   * `/32` or `/128`). Immutable — changing it replaces the route.
+   * `/32` or `/128`). Immutable -- changing it replaces the route.
    */
   ipRange: string;
   /**
@@ -60,13 +60,13 @@ export type SpokesGatewayAdvertisedRouteProps = {
    */
   recipient?: GatewayAdvertisedRouteRecipient;
   /**
-   * Human-readable description. Immutable — changing it replaces the
+   * Human-readable description. Immutable -- changing it replaces the
    * route (GCP rejects `description` in PATCH).
    */
   description?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * Immutable — changing them replaces the route.
+   * Immutable -- changing them replaces the route.
    */
   labels?: Record<string, string>;
 };

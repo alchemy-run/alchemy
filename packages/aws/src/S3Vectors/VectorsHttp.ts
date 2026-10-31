@@ -10,7 +10,7 @@ import {
 import { type VectorsClient, Vectors } from "./Vectors.ts";
 
 /**
- * HTTP implementation of {@link Vectors} — calls the S3 Vectors data plane
+ * HTTP implementation of {@link Vectors} -- calls the S3 Vectors data plane
  * with the host Function's own credentials, granting the full read+write
  * action set on the bound index. Composes the read- and write-level client
  * builders.

@@ -14,7 +14,7 @@ export interface ListDataAutomationLibraryEntitiesRequest extends Omit<
 
 /**
  * Runtime binding for the `ListDataAutomationLibraryEntities` operation (IAM
- * action `bedrock:ListDataAutomationLibraryEntities` on the library ARN) —
+ * action `bedrock:ListDataAutomationLibraryEntities` on the library ARN) --
  * page through the bound library's entities of a given type from a deployed
  * Function.
  *
@@ -23,11 +23,11 @@ export interface ListDataAutomationLibraryEntitiesRequest extends Omit<
  * ### Library Entities
  * **Example:** List Vocabulary Entities
  * ```typescript
- * // deploy time — bind the library
+ * // deploy time -- bind the library
  * const listEntities =
  *   yield* AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities(library);
  *
- * // runtime — first page of vocabulary entities
+ * // runtime -- first page of vocabulary entities
  * const { entities } = yield* listEntities({
  *   entityType: "VOCABULARY",
  *   maxResults: 25,

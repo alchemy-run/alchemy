@@ -31,10 +31,10 @@ const rdsDbUserArn = (sourceArn: string, resourceId: string, username: string): 
 /**
  * The `rds-db:connect` resource for IAM database authentication.
  *
- * - DBCluster — the cluster's `DbClusterResourceId` (`cluster-XXXX`).
- * - DBInstance — the instance's `DbiResourceId` (`db-XXXX`).
- * - DBProxy — the proxy id (`prx-XXXX`), the last segment of the proxy ARN.
- * - DBProxyEndpoint — the parent proxy's `prx-` id is not an endpoint
+ * - DBCluster -- the cluster's `DbClusterResourceId` (`cluster-XXXX`).
+ * - DBInstance -- the instance's `DbiResourceId` (`db-XXXX`).
+ * - DBProxy -- the proxy id (`prx-XXXX`), the last segment of the proxy ARN.
+ * - DBProxyEndpoint -- the parent proxy's `prx-` id is not an endpoint
  *   attribute, so the resource id is wildcarded to the account/region
  *   (still scoped to the exact `username`).
  */
@@ -80,7 +80,7 @@ export const ConnectHttp = Layer.effect(
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
     const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
-    // Ambient AWS identity for the IAM-auth token presign — captured at
+    // Ambient AWS identity for the IAM-auth token presign -- captured at
     // layer build so the runtime client stays `RuntimeContext`-colored.
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
@@ -115,7 +115,7 @@ export const ConnectHttp = Layer.effect(
             ? yield* resource.endpointPort
             : undefined;
       // Engine flavor drives the connection-URL scheme. Proxy endpoints
-      // carry no engine attribute — they default to postgres below.
+      // carry no engine attribute -- they default to postgres below.
       const Engine =
         resource.Type === "AWS.RDS.DBCluster" || resource.Type === "AWS.RDS.DBInstance"
           ? yield* resource.engine
@@ -197,7 +197,7 @@ export const ConnectHttp = Layer.effect(
               password: token,
               ssl,
               // RDS certificates chain to a private AWS CA that Node's
-              // trust store doesn't carry — `no-verify` keeps TLS on
+              // trust store doesn't carry -- `no-verify` keeps TLS on
               // (mandatory for IAM auth) with libpq `require` semantics.
               sslMode: "no-verify",
             }),
@@ -242,7 +242,7 @@ export const ConnectHttp = Layer.effect(
             username: secret.username,
             password: secret.password,
             ssl,
-            // See the IAM branch — RDS certs chain to a private CA.
+            // See the IAM branch -- RDS certs chain to a private CA.
             sslMode: "no-verify",
           }),
         };

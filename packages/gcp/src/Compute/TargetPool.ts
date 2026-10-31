@@ -21,12 +21,12 @@ export type TargetPoolSessionAffinity = "NONE" | "CLIENT_IP" | "CLIENT_IP_PROTO"
 export type TargetPoolProps = {
   /**
    * Target pool name (RFC1035, 1-63 characters). If omitted, a unique
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the pool.
    */
   targetPoolName?: string;
   /**
-   * Region the pool lives in. Immutable — changing it replaces the pool.
+   * Region the pool lives in. Immutable -- changing it replaces the pool.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -34,12 +34,12 @@ export type TargetPoolProps = {
   /**
    * Optional description. Compute target pools have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke. Immutable —
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke. Immutable --
    * changing the user-facing description replaces the pool.
    */
   description?: string;
   /**
-   * Session affinity. Immutable — changing it replaces the pool.
+   * Session affinity. Immutable -- changing it replaces the pool.
    * `NONE` spreads connections. `CLIENT_IP` pins by client IP.
    * `CLIENT_IP_PROTO` pins by client IP and protocol.
    * @default "NONE"
@@ -59,7 +59,7 @@ export type TargetPoolProps = {
   failoverRatio?: number;
   /**
    * Legacy HttpHealthCheck URLs or names (at most one). Only the
-   * `httpHealthChecks` collection is supported — modern HealthCheck
+   * `httpHealthChecks` collection is supported -- modern HealthCheck
    * resources cannot be attached. When omitted, existing checks are
    * left as-is; pass `[]` to detach.
    */
@@ -122,7 +122,7 @@ export type TargetPool = Resource<
  * Target pools are the backend for external network load balancers
  * (target-pool forwarding rules). Members are zonal instances in the
  * same region. Health checking uses legacy HttpHealthCheck resources
- * only. Compute TargetPool has no labels field — Alchemy ownership is
+ * only. Compute TargetPool has no labels field -- Alchemy ownership is
  * stored in the description so nuke can find leaked pools.
  *
  * ### Creating a Target Pool

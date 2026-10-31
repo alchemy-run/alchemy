@@ -17,7 +17,7 @@ export interface GenerateDataKeyRequest extends Omit<kms.GenerateDataKeyRequest,
  * data). Decrypt the stored blob later with the `Decrypt` binding.
  *
  * The `Plaintext` data key in the response is wrapped in `Redacted` so it
- * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
+ * never leaks into logs -- unwrap with `Redacted.value(...)` at the point of
  * use and discard it as soon as the envelope operation is done.
  *
  * ### Envelope Encryption
@@ -30,7 +30,7 @@ export interface GenerateDataKeyRequest extends Omit<kms.GenerateDataKeyRequest,
  * const response = yield* generateDataKey({ KeySpec: "AES_256" });
  * const dataKey = Redacted.isRedacted(response.Plaintext)
  *   ? Redacted.value(response.Plaintext)
- *   : response.Plaintext; // 32-byte Uint8Array — use, then discard
+ *   : response.Plaintext; // 32-byte Uint8Array -- use, then discard
  * const stored = response.CiphertextBlob; // persist next to the data
  * ```
  *
@@ -49,7 +49,7 @@ export interface GenerateDataKeyRequest extends Omit<kms.GenerateDataKeyRequest,
  * ### Wiring
  * **Example:** Provide the Implementation on a Lambda Function
  * ```typescript
- * // Envelope encryption pairs GenerateDataKey with Decrypt — provide
+ * // Envelope encryption pairs GenerateDataKey with Decrypt -- provide
  * // both HTTP layers on the Function's init Effect.
  * export default EnvelopeFunction.make(
  *   { main: import.meta.url, functionUrl: true },

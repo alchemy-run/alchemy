@@ -7,7 +7,7 @@ import type { Server } from "./Server.ts";
  * Runtime binding for `transfer:StartServer`.
  *
  * Brings a stopped {@link Server} from `OFFLINE` back to `ONLINE` so it can
- * accept file transfers again — the `ServerId` is injected from the binding.
+ * accept file transfers again -- the `ServerId` is injected from the binding.
  * Paired with {@link StopServer} this enables runtime schedules that park
  * the endpoint outside business hours. The call is asynchronous: the server
  * passes through `STARTING`; observe progress with {@link DescribeServer}.
@@ -17,7 +17,7 @@ import type { Server } from "./Server.ts";
  * ### Controlling Server Availability
  * **Example:** Bring the Server Online
  * ```typescript
- * // init — bind the operation to the server
+ * // init -- bind the operation to the server
  * const startServer = yield* AWS.Transfer.StartServer(server);
  *
  * // runtime

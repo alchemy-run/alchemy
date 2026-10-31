@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:DeleteTimelineEvent`.
  *
- * Deletes a custom timeline event from an incident (idempotent — deleting an
+ * Deletes a custom timeline event from an incident (idempotent -- deleting an
  * event that does not exist succeeds). Timeline events live under runtime
  * incident-record ARNs, so the deploy-time grant is account-level
  * (`Resource: "*"`).

@@ -92,7 +92,7 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 
 /**
  * ALWAYS exit once the main effect completes. The platform `runMain` default
- * only force-exits on failure or signal interruption — a *successful*
+ * only force-exits on failure or signal interruption -- a *successful*
  * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
  * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
  * pin the event loop until the remote side closes them. All Effect finalizers
@@ -115,7 +115,7 @@ export const runMain = <E, A>(
   },
 ): void => {
   // Every alchemy process (CLI, exec child, sidecar, build/dev runners)
-  // runs concurrent effects that depend on a stable working directory —
+  // runs concurrent effects that depend on a stable working directory --
   // forbid cross-spawn's transient process-wide chdir (see Util/Node.ts).
   disableCrossSpawnChdir();
   const opts = {

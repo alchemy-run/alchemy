@@ -115,13 +115,13 @@ export const KeyValueStoreProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.keyValueStoreName ?? (yield* createName(id, news));
 
-          // Observe — describe the store, falling back to a list lookup
+          // Observe -- describe the store, falling back to a list lookup
           // by name. Trust live state, not stale `olds`.
           const observed = yield* cloudfront
             .describeKeyValueStore({ Name: name })
             .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
 
-          // Ensure — create the store if it's missing. Tolerate
+          // Ensure -- create the store if it's missing. Tolerate
           // `EntityAlreadyExists` (race with a peer reconciler).
           if (!observed?.KeyValueStore) {
             const created = yield* cloudfront
@@ -146,7 +146,7 @@ export const KeyValueStoreProvider = () =>
             return toAttrs(created.KeyValueStore, name);
           }
 
-          // Sync — patch the observed comment via `updateKeyValueStore`
+          // Sync -- patch the observed comment via `updateKeyValueStore`
           // using the freshly observed ETag.
           const updated = yield* cloudfront.updateKeyValueStore({
             Name: observed.KeyValueStore.Name,

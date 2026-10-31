@@ -28,7 +28,7 @@ import { Subscription } from "./Subscription.ts";
  * Railway, Hetzner, Docker). Requires a `ReadSubscription` implementation.
  *
  * :::note
- * TODO: Workers cannot consume K2 yet — K2 has no push consumers (they are
+ * TODO: Workers cannot consume K2 yet -- K2 has no push consumers (they are
  * on Cloudflare's roadmap), so no Worker layer ships.
  * :::
  * ### Providing the Layer

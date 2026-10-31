@@ -55,7 +55,7 @@ export const DiscoveryProvider = () =>
         stables: ["accountId", "region"],
 
         read: Effect.fn(function* ({ output }) {
-          // There is no API to observe whether discovery is enabled — echo
+          // There is no API to observe whether discovery is enabled -- echo
           // the recorded state; a lost state falls through to a (harmless,
           // idempotent) re-enable on the next reconcile.
           return output;
@@ -71,7 +71,7 @@ export const DiscoveryProvider = () =>
         }),
 
         delete: Effect.fn(function* () {
-          // Discovery cannot be disabled via API — deletion is a no-op
+          // Discovery cannot be disabled via API -- deletion is a no-op
           // (CloudFormation's AWS::ApplicationSignals::Discovery behaves the
           // same way).
         }),

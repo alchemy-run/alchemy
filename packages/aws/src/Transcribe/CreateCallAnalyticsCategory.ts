@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:CreateCallAnalyticsCategory` — create a Call Analytics category whose rules automatically flag matching calls (e.g. long silence, specific phrases, negative sentiment).
+ * Runtime binding for `transcribe:CreateCallAnalyticsCategory` -- create a Call Analytics category whose rules automatically flag matching calls (e.g. long silence, specific phrases, negative sentiment).
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:CreateCallAnalyticsCategory` on `*`.

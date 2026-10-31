@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeClusterSnapshots` operation (IAM action
  * `redshift:DescribeClusterSnapshots`).
  *
- * Lists the account's cluster snapshots (manual and automated) — e.g. a
+ * Lists the account's cluster snapshots (manual and automated) -- e.g. a
  * snapshot-rotation job that finds manual snapshots older than the retention
  * window before deleting them. Provide the implementation with
  * `Effect.provide(AWS.Redshift.DescribeClusterSnapshotsHttp)`.

@@ -55,36 +55,36 @@ export type RealmProps = {
   /**
    * Realm id (the `{realm}` segment of
    * `projects/{project}/locations/{location}/realms/{realm}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it
+   * a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the realm.
    */
   realmId?: string;
   /**
-   * Location of the realm. Cloud Number Registry is global — `global`
-   * is the only supported value. Immutable — changing it replaces the
+   * Location of the realm. Cloud Number Registry is global -- `global`
+   * is the only supported value. Immutable -- changing it replaces the
    * realm.
    * @default "global"
    */
   location?: string;
   /**
    * Registry book that claims this realm. Accepts a book id or a full
-   * resource name. Immutable — changing it replaces the realm.
+   * resource name. Immutable -- changing it replaces the realm.
    */
   registryBook: string;
   /**
    * Traffic type of the realm (`PRIVATE`, `INTERNET`, `LINKLOCAL`,
-   * `UNSET`). Immutable — changing it replaces the realm.
+   * `UNSET`). Immutable -- changing it replaces the realm.
    * @default "PRIVATE"
    */
   trafficType?: cnr.RealmTrafficTypeEnum | (string & {});
   /**
    * Who manages the realm (`USER` for custom ranges, `CNR` for
-   * discovered resources). Immutable — changing it replaces the realm.
+   * discovered resources). Immutable -- changing it replaces the realm.
    * @default "USER"
    */
   managementType?: cnr.RealmManagementTypeEnum | (string & {});
   /**
-   * IP version (`IPV4` or `IPV6`). Immutable — changing it replaces
+   * IP version (`IPV4` or `IPV6`). Immutable -- changing it replaces
    * the realm.
    * @default "IPV4"
    */
@@ -131,7 +131,7 @@ export type Realm = Resource<
 >;
 
 /**
- * A Cloud Number Registry realm — a routing domain of IP ranges that
+ * A Cloud Number Registry realm -- a routing domain of IP ranges that
  * must not overlap (unless one range is the parent of another). Custom
  * ranges can only be added to user-managed realms.
  *

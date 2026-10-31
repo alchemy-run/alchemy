@@ -52,7 +52,7 @@ export const StartReplayHttp = Layer.effect(
         return yield* startReplay({
           ...request,
           EventSourceArn: yield* ArchiveArn,
-          // Default the destination to the archive's source bus — the only
+          // Default the destination to the archive's source bus -- the only
           // destination EventBridge accepts for a replay.
           Destination: request.Destination ?? {
             Arn: yield* EventSourceArn,

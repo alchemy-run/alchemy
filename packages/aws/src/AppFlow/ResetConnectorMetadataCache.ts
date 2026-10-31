@@ -22,11 +22,11 @@ export interface ResetConnectorMetadataCacheRequest extends Omit<
  * ### Discovering Connector Entities
  * **Example:** Refresh Cached Entity Metadata
  * ```typescript
- * // init — bind the operation to the connector profile
+ * // init -- bind the operation to the connector profile
  * const resetConnectorMetadataCache =
  *   yield* AWS.AppFlow.ResetConnectorMetadataCache(profile);
  *
- * // runtime — drop the cache before re-listing entities
+ * // runtime -- drop the cache before re-listing entities
  * yield* resetConnectorMetadataCache();
  * const fresh = yield* listConnectorEntities();
  * ```

@@ -16,7 +16,7 @@ export type SearchNamespaceProps = {
    * Namespace name. Lowercase letters, digits, and hyphens; must start and
    * end with an alphanumeric character; 1-28 characters. The name is the
    * namespace's identity (it appears in the API path) and cannot be
-   * renamed — changing it triggers a replacement. If omitted, a unique
+   * renamed -- changing it triggers a replacement. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -56,12 +56,12 @@ export type SearchNamespace = Resource<
 >;
 
 /**
- * A Cloudflare.AI. Search namespace — a logical grouping for AI Search
+ * A Cloudflare.AI. Search namespace -- a logical grouping for AI Search
  * instances within an account.
  *
  * Namespaces partition AI Search (formerly AutoRAG) instances: each
  * namespace owns its own set of namespace-scoped instances and can be
- * searched or queried as a unit. The namespace `name` is its identity —
+ * searched or queried as a unit. The namespace `name` is its identity --
  * changing it triggers a replacement; only the `description` is mutable
  * in place.
  *
@@ -195,7 +195,7 @@ export const SearchNamespaceProvider = () =>
         return { action: "replace" } as const;
       }
       // The name is the namespace's identity (it is the API path
-      // parameter) — renaming is a replacement. Props are all optional, so a
+      // parameter) -- renaming is a replacement. Props are all optional, so a
       // no-props resource resolves `news`/`olds` to `undefined` at runtime.
       const oldName = output?.name ?? (yield* createNamespaceName(id, olds?.name));
       // Auto-generated names are engine-owned: the deployed name stays
@@ -204,7 +204,7 @@ export const SearchNamespaceProvider = () =>
       const newName = news?.name ?? oldName;
       if (newName !== oldName) {
         // A user-pinned name collides with the still-existing old
-        // namespace only when both resolve to the same string — they
+        // namespace only when both resolve to the same string -- they
         // don't here, so create-before-delete is safe.
         return { action: "replace" } as const;
       }
@@ -224,17 +224,17 @@ export const SearchNamespaceProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       // Props are all optional, so a no-props resource resolves `news` to
-      // `undefined` at runtime — fall back to the empty desired shape.
+      // `undefined` at runtime -- fall back to the empty desired shape.
       const props = news ?? {};
       const name = output?.name ?? (yield* createNamespaceName(id, props.name));
 
-      // Observe — `output.name` is a cache, not a guarantee: a missing
+      // Observe -- `output.name` is a cache, not a guarantee: a missing
       // namespace falls through to create.
       let observed = yield* getNamespace(acct, name);
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). A concurrent
-        // create surfaces as `NamespaceAlreadyExists` — treat it as a
+        // Ensure -- greenfield (or out-of-band delete). A concurrent
+        // create surfaces as `NamespaceAlreadyExists` -- treat it as a
         // race and fall through to the sync path against the observed
         // namespace.
         const ensured = yield* aisearch
@@ -267,7 +267,7 @@ export const SearchNamespaceProvider = () =>
         return toAttributes(observed, acct);
       }
 
-      // Sync — the description is the only mutable aspect. Diff observed
+      // Sync -- the description is the only mutable aspect. Diff observed
       // cloud state against desired; skip the PUT entirely on a no-op.
       const observedDescription = normalize(observed.description);
       if (observedDescription === props.description) {
@@ -301,7 +301,7 @@ export const SearchNamespaceProvider = () =>
       // tear it down, so its delete is a no-op.
       if (output.name === "default") return;
       // A missing namespace (already deleted) is success. Instances inside
-      // the namespace must be deleted first — the engine orders that via
+      // the namespace must be deleted first -- the engine orders that via
       // the `namespace` reference on dependent resources.
       yield* aisearch
         .deleteNamespace({ accountId: output.accountId, name: output.name })

@@ -111,7 +111,7 @@ export interface InfrastructureConfiguration extends Resource<
 > {}
 
 /**
- * An EC2 Image Builder infrastructure configuration — the environment
+ * An EC2 Image Builder infrastructure configuration -- the environment
  * (instance profile, instance types, network, logging) in which images are
  * built and tested.
  * ### Creating an Infrastructure Configuration
@@ -151,7 +151,7 @@ export const InfrastructureConfiguration = Resource<InfrastructureConfiguration>
  * A freshly created IAM instance profile takes a few seconds to become
  * visible to Image Builder, which rejects it with
  * `InvalidParameterValueException` ("The provided instance profile does not
- * exist") in the interim — retry through the propagation window (bounded).
+ * exist") in the interim -- retry through the propagation window (bounded).
  */
 const retryThroughIamPropagation = <
   A,
@@ -241,19 +241,19 @@ export const InfrastructureConfigurationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // One idempotency token per reconcile — retries within this run
+          // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
           const name = output?.infrastructureConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the configuration ARN is deterministic from the
+          // 1. Observe -- the configuration ARN is deterministic from the
           //    name; cloud state is authoritative.
           const arn = output?.infrastructureConfigurationArn ?? (yield* toArn(name));
           let observed = yield* getConfiguration(arn);
 
-          // 2. Ensure — create if missing; tolerate an AlreadyExists race
+          // 2. Ensure -- create if missing; tolerate an AlreadyExists race
           //    by re-observing.
           if (observed === undefined) {
             const created = yield* retryThroughIamPropagation(
@@ -283,9 +283,9 @@ export const InfrastructureConfigurationProvider = () =>
             }
           }
 
-          // 3. Sync — compare OBSERVED cloud state against the desired
+          // 3. Sync -- compare OBSERVED cloud state against the desired
           //    props; a full-PUT update converges any drift (including
-          //    props the user removed since the last deploy — `olds` is
+          //    props the user removed since the last deploy -- `olds` is
           //    only a hint for removals).
           const drifted = mutableKeys.some(
             (key) =>
@@ -312,7 +312,7 @@ export const InfrastructureConfigurationProvider = () =>
             observed = (yield* getConfiguration(observed.arn)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           if (observed.arn) {
             yield* syncImageBuilderTags(observed.arn, desiredTags);
           }

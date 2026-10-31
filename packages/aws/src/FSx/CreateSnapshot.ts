@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `CreateSnapshot` operation (IAM actions
- * `fsx:CreateSnapshot` and `fsx:TagResource` on `*` — snapshots target
+ * `fsx:CreateSnapshot` and `fsx:TagResource` on `*` -- snapshots target
  * OpenZFS volumes whose ARNs are typically runtime values).
  *
- * Takes a point-in-time snapshot of an FSx for OpenZFS volume — e.g.
+ * Takes a point-in-time snapshot of an FSx for OpenZFS volume -- e.g.
  * before applying a batch of writes so they can be rolled back with
  * {@link RestoreVolumeFromSnapshot}. Pass a `ClientRequestToken` to make
  * the call idempotent. Provide the implementation with

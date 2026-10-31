@@ -37,21 +37,21 @@ export type GatewaySecurityPoliciesRuleProps = {
   /**
    * Parent GatewaySecurityPolicy resource name
    * (`projects/{project}/locations/{location}/gatewaySecurityPolicies/{gatewaySecurityPolicy}`)
-   * or the policy id. Immutable — changing it replaces the rule.
+   * or the policy id. Immutable -- changing it replaces the rule.
    */
   gatewaySecurityPolicy: string;
   /**
    * Rule id (the `{rule}` segment of
    * `.../gatewaySecurityPolicies/{gatewaySecurityPolicy}/rules/{rule}`).
    * If omitted, a unique RFC1035 name is generated. Must be 4-63
-   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable --
    * changing it replaces the rule.
    */
   gatewaySecurityPolicyRuleId?: string;
   /**
    * Region of the parent policy. Inferred from
    * `gatewaySecurityPolicy` when that value is a full resource name.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
@@ -84,7 +84,7 @@ export type GatewaySecurityPoliciesRuleProps = {
   tlsInspectionEnabled?: boolean;
   /**
    * Human-readable description. Rules have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;

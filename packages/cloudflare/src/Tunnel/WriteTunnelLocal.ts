@@ -3,7 +3,7 @@ import { makeLocalTunnelClient } from "./TunnelLocalBinding.ts";
 import { WriteTunnel, writeClient } from "./WriteTunnel.ts";
 
 /**
- * Local implementation of the {@link WriteTunnel} binding — creates, updates,
+ * Local implementation of the {@link WriteTunnel} binding -- creates, updates,
  * and deletes Cloudflare Tunnels over the cfd_tunnel HTTP API using the
  * **current credentials** instead of a native Worker binding
  * (`WriteTunnelBinding`) or a scoped API token. No `host.bind`, no minted

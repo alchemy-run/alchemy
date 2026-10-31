@@ -43,7 +43,7 @@ export interface LoggingConfigurationProps {
   destinationConfiguration: LoggingConfigurationDestination;
   /**
    * Name of the logging configuration (not unique). If omitted, a
-   * deterministic physical name is generated. Mutable — changing the
+   * deterministic physical name is generated. Mutable -- changing the
    * name updates the configuration in place.
    */
   loggingConfigurationName?: string;
@@ -80,7 +80,7 @@ export interface LoggingConfiguration extends Resource<
 > {}
 
 /**
- * An Amazon IVS Chat logging configuration — records the chat messages of
+ * An Amazon IVS Chat logging configuration -- records the chat messages of
  * the rooms it is attached to into S3, CloudWatch Logs, or a Kinesis
  * Data Firehose delivery stream.
  * ### Creating Logging Configurations
@@ -153,7 +153,7 @@ const toWireDestination = (
 
 /**
  * Explicitly-typed pipeable poll helper: repeat a read until the
- * configuration reaches a settled state (bounded — ~60s).
+ * configuration reaches a settled state (bounded -- ~60s).
  */
 const pollUntilSettled = <A extends { state?: string | undefined } | undefined, E, R>(
   self: Effect.Effect<A, E, R>,
@@ -204,7 +204,7 @@ export const LoggingConfigurationProvider = () =>
         );
       });
 
-      /** No name filter on ListLoggingConfigurations — enumerate + match. */
+      /** No name filter on ListLoggingConfigurations -- enumerate + match. */
       const findByName = Effect.fn(function* (name: string) {
         const summaries = yield* ivschat.listLoggingConfigurations.pages({}).pipe(
           Stream.runCollect,
@@ -239,13 +239,13 @@ export const LoggingConfigurationProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredDestination = yield* toWireDestination(news.destinationConfiguration);
 
-          // 1. Observe — and wait out any in-flight state transition so
+          // 1. Observe -- and wait out any in-flight state transition so
           // the sync step below is allowed to mutate.
           let observed = output?.loggingConfigurationArn
             ? yield* pollUntilSettled(getByIdentifier(output.loggingConfigurationArn))
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing, then wait for ACTIVE (a
+          // 2. Ensure -- create if missing, then wait for ACTIVE (a
           // configuration is created in state CREATING).
           if (observed === undefined) {
             const created = yield* ivschat
@@ -266,7 +266,7 @@ export const LoggingConfigurationProvider = () =>
             });
           }
 
-          // 3. Sync — name and destination are mutable via
+          // 3. Sync -- name and destination are mutable via
           // UpdateLoggingConfiguration (allowed only in a settled state;
           // Conflict retried through a bounded window).
           const patch: Partial<ivschat.UpdateLoggingConfigurationRequest> = {};
@@ -282,7 +282,7 @@ export const LoggingConfigurationProvider = () =>
               .pipe(retryWhileThrottled, retryWhileConflict);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncIvsChatTags(arn, desiredTags);
 
           // 4. Return fresh, settled attributes.
@@ -297,7 +297,7 @@ export const LoggingConfigurationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Deleting mid-transition raises ConflictException — retry
+          // Deleting mid-transition raises ConflictException -- retry
           // through a bounded window, then tolerate already-gone.
           yield* ivschat
             .deleteLoggingConfiguration({
@@ -318,7 +318,7 @@ export const LoggingConfigurationProvider = () =>
               Effect.forEach(
                 (summary) =>
                   toAttrs(summary).pipe(
-                    // Tolerate a malformed/deleted summary — drop it.
+                    // Tolerate a malformed/deleted summary -- drop it.
                     Effect.catchTag("IvsChatLoggingConfigurationInvalid", () => Effect.undefined),
                   ),
                 { concurrency: 5 },

@@ -47,24 +47,24 @@ export type FederationProps = {
    * `projects/{project}/locations/{location}/federations/{federation}`).
    * If omitted, a unique RFC1035 name is generated. Must be 2-63
    * characters, start with a letter, and end with a letter or number.
-   * Immutable — changing it replaces the federation.
+   * Immutable -- changing it replaces the federation.
    */
   federationId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * federation. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Apache Hive metastore version of the federation. All backends must
-   * be compatible. Immutable — changing it replaces the federation.
+   * be compatible. Immutable -- changing it replaces the federation.
    * @default "3.1.2"
    */
   version?: string;
   /**
    * Ranked backends used to resolve database names at query time. Keys
-   * are ranks (`0`, `1`, …); lower ranks are evaluated first. When
+   * are ranks (`0`, `1`, ...); lower ranks are evaluated first. When
    * omitted, a BigQuery backend for the current project is used.
    */
   backendMetastores?: Record<string, BackendMetastore>;

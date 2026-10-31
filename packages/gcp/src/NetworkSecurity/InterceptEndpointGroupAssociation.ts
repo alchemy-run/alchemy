@@ -30,7 +30,7 @@ const COLLECTION = "interceptEndpointGroupAssociations";
 export type InterceptEndpointGroupAssociationLocationDetail = {
   /** Cloud location, e.g. `us-central1-a`. */
   location: string | undefined;
-  /** Association state in this location (`ACTIVE`, `OUT_OF_SYNC`, …). */
+  /** Association state in this location (`ACTIVE`, `OUT_OF_SYNC`, ...). */
   state: string | undefined;
 };
 
@@ -39,24 +39,24 @@ export type InterceptEndpointGroupAssociationProps = {
    * Association id (the `{interceptEndpointGroupAssociation}` segment of
    * `projects/{project}/locations/{location}/interceptEndpointGroupAssociations/{interceptEndpointGroupAssociation}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the association.
+   * and logical id. Immutable -- changing it replaces the association.
    */
   interceptEndpointGroupAssociationId?: string;
   /**
-   * Location of the association. Associations are global — always
-   * `"global"`. Immutable — changing it replaces the association.
+   * Location of the association. Associations are global -- always
+   * `"global"`. Immutable -- changing it replaces the association.
    * `GLOBAL` is accepted and normalized to `global`.
    * @default "global"
    */
   location?: string;
   /**
    * Endpoint group this association is connected to, as a full resource
-   * name. Immutable — changing it replaces the association.
+   * name. Immutable -- changing it replaces the association.
    */
   interceptEndpointGroup: string;
   /**
    * VPC to associate, as a name (`app-vpc`), resource path, or Compute
-   * self-link. Immutable — changing it replaces the association.
+   * self-link. Immutable -- changing it replaces the association.
    */
   network: string;
   /**
@@ -87,7 +87,7 @@ export type InterceptEndpointGroupAssociation = Resource<
     networkCookie: number | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether the API is still reconciling intended vs actual state. */
     reconciling: boolean;
@@ -105,7 +105,7 @@ export type InterceptEndpointGroupAssociation = Resource<
 >;
 
 /**
- * A Network Security Integration intercept endpoint-group association —
+ * A Network Security Integration intercept endpoint-group association --
  * the link between a VPC and an intercept endpoint group.
  *
  * Creating an association does not enable intercept by itself; a firewall

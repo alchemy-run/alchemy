@@ -40,18 +40,18 @@ export type SacRealmProps = {
    * Realm id (the `{sacRealm}` segment of
    * `projects/{project}/locations/global/sacRealms/{sacRealm}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the realm.
+   * and logical id. Immutable -- changing it replaces the realm.
    */
   sacRealmId?: string;
   /**
-   * Location of the realm. Realms are global — always `"global"`.
-   * Immutable — changing it replaces the realm. `GLOBAL` is accepted
+   * Location of the realm. Realms are global -- always `"global"`.
+   * Immutable -- changing it replaces the realm. `GLOBAL` is accepted
    * and normalized to `global`.
    * @default "global"
    */
   location?: string;
   /**
-   * SSE service provider associated with the realm. Immutable —
+   * SSE service provider associated with the realm. Immutable --
    * changing it replaces the realm.
    * @default "PALO_ALTO_PRISMA_ACCESS"
    */
@@ -94,7 +94,7 @@ export type SacRealm = Resource<
 >;
 
 /**
- * A Secure Access Connect (SAC) realm — the handshake between a Google
+ * A Secure Access Connect (SAC) realm -- the handshake between a Google
  * Cloud project and an SSE partner such as Palo Alto Prisma Access.
  *
  * The create API has no patch; changing `sacRealmId`, `location`,

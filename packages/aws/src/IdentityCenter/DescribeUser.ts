@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Looking Up Users
  * **Example:** Read a User's Profile
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const describeUser = yield* AWS.IdentityCenter.DescribeUser(instance);
  *
  * // runtime

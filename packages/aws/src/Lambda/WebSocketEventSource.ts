@@ -21,7 +21,7 @@ export const isWebSocketEvent = (event: any): event is lambda.APIGatewayProxyWeb
   typeof event?.requestContext?.routeKey === "string" &&
   event?.requestContext?.messageDirection === "IN";
 
-/** `$connect` → `connect` for stable, readable logical ids. */
+/** `$connect` -> `connect` for stable, readable logical ids. */
 const sanitizeRouteKey = (routeKey: string) => routeKey.replace(/[^A-Za-z0-9]+/g, "") || "route";
 
 /**

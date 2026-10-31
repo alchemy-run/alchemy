@@ -159,9 +159,9 @@ const ownershipHash = (labels: Record<string, string>) =>
 
 /**
  * Prefix `displayName` with the ownership marker. When the full
- * `[alchemy stack=… stage=… id=…]` marker would push the name past
+ * `[alchemy stack=... stage=... id=...]` marker would push the name past
  * Vertex AI's 128-character limit (long stack names), a fixed-width
- * `[alchemy alchemy-hash=…]` marker is used instead so it is never cut.
+ * `[alchemy alchemy-hash=...]` marker is used instead so it is never cut.
  */
 export const encodeDisplayName = (
   labels: Record<string, string>,

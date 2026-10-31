@@ -9,7 +9,7 @@ export interface ListResourcesForWebACLRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `wafv2:ListResourcesForWebACL` — list the regional
+ * Runtime binding for `wafv2:ListResourcesForWebACL` -- list the regional
  * resources (ALBs, API Gateway stages, AppSync APIs, ...) associated with
  * the bound {@link WebACL}; the web ACL ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface ListResourcesForWebACLRequest extends Omit<
  * ### Inspecting Associations
  * **Example:** List Protected Resources
  * ```typescript
- * // init — grants wafv2:ListResourcesForWebACL on the web ACL
+ * // init -- grants wafv2:ListResourcesForWebACL on the web ACL
  * const listResources = yield* AWS.WAFv2.ListResourcesForWebACL(acl);
  *
  * // runtime

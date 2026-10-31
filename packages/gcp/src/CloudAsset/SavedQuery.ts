@@ -37,14 +37,14 @@ export type SavedQueryProps = {
    * Saved query id (the `{savedQuery}` segment of
    * `projects/{project}/savedQueries/{savedQuery}`). If omitted, a
    * unique RFC1035 name is generated (4-63 characters, `a-z0-9-`).
-   * Immutable — changing it replaces the query.
+   * Immutable -- changing it replaces the query.
    */
   savedQueryId?: string;
   /**
    * Parent project, folder, or organization
    * (`projects/{project}`, `folders/{folder}`,
    * `organizations/{organization}`). Defaults to the current project.
-   * Immutable — changing it replaces the query.
+   * Immutable -- changing it replaces the query.
    */
   parent?: string;
   /**

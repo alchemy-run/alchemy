@@ -58,7 +58,7 @@ export interface CustomVerificationEmailTemplate extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 custom verification email template — the branded email SES
+ * An Amazon SES v2 custom verification email template -- the branded email SES
  * sends when you verify a new email-address identity via
  * `SendCustomVerificationEmail`.
  *
@@ -97,10 +97,10 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * ### Sending the Verification Email
  * **Example:** Verify a New Address from a Lambda Function
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const sendVerification = yield* SES.SendCustomVerificationEmail();
  *
- * // runtime — SES emails the branded template to the address, and the
+ * // runtime -- SES emails the branded template to the address, and the
  * // address becomes a verified identity once the recipient clicks through.
  * const { MessageId } = yield* sendVerification({
  *   EmailAddress: "new-user@example.com",
@@ -119,7 +119,7 @@ const toTagRecord = (
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 // getCustomVerificationEmailTemplate returns no ARN, so the ARN
-// listTagsForResource needs is derived — verified live against SES.
+// listTagsForResource needs is derived -- verified live against SES.
 const templateArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:custom-verification-email-template/${name}`;
 
@@ -141,7 +141,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
       });
 
       // The get returns no tags, so ownership costs a second API call. Only
-      // `read` pays it — `list` deletes by name.
+      // `read` pays it -- `list` deletes by name.
       const getTemplateTags = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
         return yield* sesv2
@@ -197,11 +197,11 @@ export const CustomVerificationEmailTemplateProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* getTemplate(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create; AlreadyExists is a race → converge via update.
+            // 2. ENSURE -- create; AlreadyExists is a race -> converge via update.
             yield* sesv2
               .createCustomVerificationEmailTemplate({
                 TemplateName: name,
@@ -231,7 +231,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
             observed.SuccessRedirectionURL !== news.successRedirectionURL ||
             observed.FailureRedirectionURL !== news.failureRedirectionURL
           ) {
-            // 3. SYNC — a single full-replace update converges the template.
+            // 3. SYNC -- a single full-replace update converges the template.
             yield* sesv2.updateCustomVerificationEmailTemplate({
               TemplateName: name,
               FromEmailAddress: news.fromEmailAddress,
@@ -242,7 +242,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
             });
           }
 
-          // 4. SYNC TAGS — diff against OBSERVED cloud tags so an adopted
+          // 4. SYNC TAGS -- diff against OBSERVED cloud tags so an adopted
           //    template gets branded and stops reading as Unowned.
           const observedTags = yield* getTemplateTags(name);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

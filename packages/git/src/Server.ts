@@ -92,12 +92,12 @@ const sha256 = (input: string): Uint8Array => {
 const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
   Effect.sync(() => crypto.timingSafeEqual(sha256(a), sha256(b)));
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Constants
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 // The Worker
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The git-service Worker. Hosts the `GitRepo` and `GitRegistry` Durable
@@ -106,7 +106,7 @@ const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
  * management plane and the git smart-HTTP wire protocol.
  *
  * Requires `nodejs_compat` (node:zlib / node:crypto in the DO) and a
- * raised CPU limit (`cpu_ms: 300_000`) — pack inflation cannot run under
+ * raised CPU limit (`cpu_ms: 300_000`) -- pack inflation cannot run under
  * the free plan's 10 ms budget (DESIGN.md §1).
  */
 /**
@@ -126,14 +126,14 @@ export const GIT_WORKER_OPTIONS = {
 };
 
 const makeCore = Effect.gen(function* () {
-  // ── init: DO namespaces ────────────────────────────────────────────────
-  // RPC-boundary tagged errors are reconstructed by the stubs themselves —
+  // -- init: DO namespaces ------------------------------------------------
+  // RPC-boundary tagged errors are reconstructed by the stubs themselves --
   // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
   const repos = yield* RepoStore;
   // The Worker streams clone bundles straight out of R2 (DESIGN.md §11):
   // the DO plans the clone, the bytes bypass it entirely.
   // The Worker-side view of the blob store (clone-bundle splice reads)
-  // — the same BlobStore layer the Repo DO consumes.
+  // -- the same BlobStore layer the Repo DO consumes.
   const workerBlobs = yield* BlobStore;
   const engine = yield* Engine;
   const internalSecret = yield* InternalSecret;
@@ -187,7 +187,7 @@ const makeCore = Effect.gen(function* () {
   /**
    * Wraps pack bytes as a complete upload-pack result (NAK, optional
    * sideband framing, flush). `shape` distinguishes a bundle streamed
-   * verbatim from one spliced with a delta — surfaced on
+   * verbatim from one spliced with a delta -- surfaced on
    * `x-git-served-by` so which plane answered is observable, and
    * assertable in the benchmarks.
    */
@@ -213,7 +213,7 @@ const makeCore = Effect.gen(function* () {
     };
     // Native path (DESIGN §22): R2's own stream pipes into the Response
     // through web streams only. The bundle bytes never enter an Effect
-    // stream, so there is no fiber hand-off per chunk — that hand-off
+    // stream, so there is no fiber hand-off per chunk -- that hand-off
     // was measured as the ceiling on clone throughput. Sideband framing
     // is a TransformStream emitting 5-byte headers + subarrays (no copy);
     // the raw case is an IdentityTransformStream, which workerd pipes
@@ -254,7 +254,7 @@ const makeCore = Effect.gen(function* () {
     readonly refsHash: string;
     readonly objectCount: number;
     readonly sideband: boolean;
-    /** Which plane produced the plan — observability + bench assertions. */
+    /** Which plane produced the plan -- observability + bench assertions. */
     readonly via: "do-bundle" | "head-snapshot";
   }) {
     if (options.sideband) {
@@ -288,12 +288,12 @@ const makeCore = Effect.gen(function* () {
   /**
    * The DO-less read path (DESIGN.md §21): the upload-pack
    * advertisement and bundle-covered full clones served straight from
-   * the repo's head snapshot in the BlobStore — the Repo DO never
+   * the repo's head snapshot in the BlobStore -- the Repo DO never
    * wakes, so read throughput scales with Workers + blob storage
    * instead of one single-threaded object.
    *
    * `undefined` = not eligible; the caller forwards to the DO. Access
-   * was decided before the route ran, by the middleware applied to its route layer — this changes WHERE the bytes come from, never who
+   * was decided before the route ran, by the middleware applied to its route layer -- this changes WHERE the bytes come from, never who
    * gets them.
    */
   const headSnapshotFastPath = Effect.fn(function* (
@@ -307,7 +307,7 @@ const makeCore = Effect.gen(function* () {
       target.searchParams.get("service") === "git-upload-pack";
     const isUploadPack = request.method === "POST" && target.pathname.endsWith("/git-upload-pack");
     if (!isAdvertisement && !isUploadPack) return undefined;
-    // Compressed bodies carry big negotiation rounds — the DO owns
+    // Compressed bodies carry big negotiation rounds -- the DO owns
     // those (and the gunzip) anyway.
     if (isUploadPack && request.headers["content-encoding"] !== undefined) {
       return undefined;
@@ -398,7 +398,7 @@ const makeCore = Effect.gen(function* () {
     // Clone-bundle splice (DESIGN.md §11): the DO answered with a marker
     // naming an immutable R2 object rather than the pack itself. Stream
     // those bytes to the client from here, so the pack never transits
-    // the Durable Object — this is what makes clone bandwidth scale with
+    // the Durable Object -- this is what makes clone bandwidth scale with
     // Workers/R2 instead of with one single-threaded object.
     const bundleKeyHeader = response.headers[BUNDLE_KEY_HEADER];
     if (bundleKeyHeader === undefined) {
@@ -411,14 +411,14 @@ const makeCore = Effect.gen(function* () {
       sideband: response.headers[BUNDLE_SIDEBAND_HEADER] === "1",
       via: "do-bundle",
     });
-    // The bundle vanished (GC raced us): fall back to a plain 500 — git
+    // The bundle vanished (GC raced us): fall back to a plain 500 -- git
     // retries, and the next attempt re-plans against a fresh bundle or
     // the dynamic path.
     return served ?? internalError;
   });
 
   /**
-   * POST git-receive-pack — the push pipeline (DESIGN §22.10). It runs
+   * POST git-receive-pack -- the push pipeline (DESIGN §22.10). It runs
    * HERE, in the stateless Worker: the body streams into the hasher
    * fan-out and the blob-store spill as it arrives, and the Repo DO
    * receives only staged ROWS (`stagePush`, promoted rows are coordinates
@@ -468,7 +468,7 @@ const makeCore = Effect.gen(function* () {
     });
 
   /**
-   * `GET /api/v1/repos/:owner/:repo/blobs/:oid/raw` — raw blob bytes,
+   * `GET /api/v1/repos/:owner/:repo/blobs/:oid/raw` -- raw blob bytes,
    * octet-stream, no size cap (the per-object 64 MiB ingest cap is the
    * outer bound). Outside HttpApi schema-land by design (DESIGN.md §5).
    */
@@ -502,7 +502,7 @@ const makeCore = Effect.gen(function* () {
   });
 
   /**
-   * `GET /api/v1/repos/:owner/:repo/file?ref=<refname|oid>&path=<path>` —
+   * `GET /api/v1/repos/:owner/:repo/file?ref=<refname|oid>&path=<path>` --
    * file-at-path bytes via tree walk, octet-stream (DESIGN.md §2.2).
    */
   const fileRoute = Effect.gen(function* () {
@@ -620,7 +620,7 @@ const makeCore = Effect.gen(function* () {
         contentType: "application/octet-stream",
       });
     }
-    // Two frames: the scan now, the part once its upload has finished —
+    // Two frames: the scan now, the part once its upload has finished --
     // the open response stream keeps this invocation alive meanwhile.
     const { readable, writable } = new IdentityTransformStream();
     const tScan = Date.now();
@@ -761,8 +761,8 @@ export const InternalApiLive = HttpApiBuilder.layer(InternalApi).pipe(Layer.prov
 /**
  * Hosts the `GitRepo` Durable Object (refs, objects, pulls, the wire
  * protocol) and provides {@link RepoStore} over its namespace. Requires a
- * {@link BlobStore} — provide `Git.BlobStoreR2(yourBucket)` in the same
- * layer graph; one provision serves this DO and the Worker-side reads —
+ * {@link BlobStore} -- provide `Git.BlobStoreR2(yourBucket)` in the same
+ * layer graph; one provision serves this DO and the Worker-side reads --
  * plus the {@link Hasher} and the registry.
  *
  * @layer

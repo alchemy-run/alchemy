@@ -44,7 +44,7 @@ export const resolveLibSQLConfig = Effect.fn(function* <E = never, R = never>(
 
 /**
  * Open an `@effect/sql-libsql` client over a SQLite database through
- * libSQL — a Turso database, any other libSQL server, or a local
+ * libSQL -- a Turso database, any other libSQL server, or a local
  * `file:` database.
  *
  * Accepts the client returned by `Turso.Connect(db)` (or any
@@ -65,8 +65,8 @@ export const resolveLibSQLConfig = Effect.fn(function* <E = never, R = never>(
  *
  * The client is built lazily on the first query and memoized on the
  * current execution's `Scope` (via {@link makeExecutionMemo}), so it's
- * created at most once per execution — a Worker `fetch`/`queue`/`scheduled`
- * event, a Durable Object call, a Workflow run, or a Lambda invocation — and
+ * created at most once per execution -- a Worker `fetch`/`queue`/`scheduled`
+ * event, a Durable Object call, a Workflow run, or a Lambda invocation -- and
  * closed when the event settles. Resolving the URL and token is likewise
  * deferred, so deploy / plan-time invocations never connect.
  *

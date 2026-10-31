@@ -8,7 +8,7 @@ import type { ScalableTarget } from "./ScalableTarget.ts";
  * The `detail` payload Application Auto Scaling delivers to EventBridge for a
  * `Application Auto Scaling Scaling Activity State Change` event. Emitted
  * when a scale-out reaches the scalable target's maximum capacity
- * (`scaledToMax: true`) — further demand cannot be absorbed until the
+ * (`scaledToMax: true`) -- further demand cannot be absorbed until the
  * target's `maxCapacity` is raised.
  */
 export interface ScalingActivityEventDetail {
@@ -108,7 +108,7 @@ export const consumeScalingActivityEvents = <StreamReq = never, Req = never>(
 ) =>
   // The pattern uses only literal `source` + `detail-type` so it round-trips
   // through both the deploy-time rule and the runtime matcher (Output values
-  // cannot appear in the pattern — they don't resolve inside the deployed
+  // cannot appear in the pattern -- they don't resolve inside the deployed
   // bundle).
   consumeBusEvents(
     `${props.id ?? target.LogicalId}-ScalingActivityEvents`,

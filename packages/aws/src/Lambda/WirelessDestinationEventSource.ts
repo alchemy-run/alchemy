@@ -14,7 +14,7 @@ import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
 /**
- * An IoT Wireless uplink invocation — the envelope IoT Core for LoRaWAN
+ * An IoT Wireless uplink invocation -- the envelope IoT Core for LoRaWAN
  * delivers to a destination's rule: the base64 `PayloadData` plus the
  * sending device's id.
  */

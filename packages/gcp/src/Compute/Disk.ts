@@ -28,14 +28,14 @@ export type DiskProps = {
    */
   diskName?: string;
   /**
-   * Zone the disk lives in (e.g. `us-central1-a`). Immutable — changing it
+   * Zone the disk lives in (e.g. `us-central1-a`). Immutable -- changing it
    * replaces the disk.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
    * Persistent disk type (`pd-standard`, `pd-balanced`, `pd-ssd`,
-   * `pd-extreme`, `hyperdisk-balanced`, …). Immutable — changing it
+   * `pd-extreme`, `hyperdisk-balanced`, ...). Immutable -- changing it
    * replaces the disk.
    * @default "pd-standard"
    */
@@ -54,27 +54,27 @@ export type DiskProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Source image used to create the disk. Immutable — changing it replaces
+   * Source image used to create the disk. Immutable -- changing it replaces
    * the disk.
    */
   sourceImage?: string;
   /**
-   * Source snapshot used to create the disk. Immutable — changing it
+   * Source snapshot used to create the disk. Immutable -- changing it
    * replaces the disk.
    */
   sourceSnapshot?: string;
   /**
-   * Source disk used to create this disk. Immutable — changing it replaces
+   * Source disk used to create this disk. Immutable -- changing it replaces
    * the disk.
    */
   sourceDisk?: string;
   /**
-   * CPU architecture (`ARM64` or `X86_64`). Immutable — changing it
+   * CPU architecture (`ARM64` or `X86_64`). Immutable -- changing it
    * replaces the disk.
    */
   architecture?: string;
   /**
-   * Physical block size in bytes (typically `4096`). Immutable — changing
+   * Physical block size in bytes (typically `4096`). Immutable -- changing
    * it replaces the disk.
    */
   physicalBlockSizeBytes?: number;
@@ -87,7 +87,7 @@ export type DiskProps = {
    */
   provisionedThroughput?: number;
   /**
-   * Whether confidential compute is enabled. Immutable — changing it
+   * Whether confidential compute is enabled. Immutable -- changing it
    * replaces the disk.
    */
   enableConfidentialCompute?: boolean;
@@ -109,7 +109,7 @@ export type Disk = Resource<
     type: string;
     /** Size in GB. */
     sizeGb: number;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;

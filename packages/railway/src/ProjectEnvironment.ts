@@ -94,8 +94,8 @@ const resolveEnvironmentProps = (
 
 /**
  * A Railway.Environment is an extra deploy environment under a Project
- * (staging, preview, …). The production environment is created with the
- * Project — do not recreate it as an Environment resource.
+ * (staging, preview, ...). The production environment is created with the
+ * Project -- do not recreate it as an Environment resource.
  *
  * @see https://docs.railway.com/guides/environments
  *

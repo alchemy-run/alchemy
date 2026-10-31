@@ -18,7 +18,7 @@ export interface GetTemporaryGluePartitionCredentialsRequest
  * ### Vending Data Access Credentials
  * **Example:** Vend Partition-Scoped S3 Credentials
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getPartitionCredentials =
  *   yield* AWS.LakeFormation.GetTemporaryGluePartitionCredentials();
  *

@@ -39,7 +39,7 @@ export type ProjectProps = {
    * Globally unique project id. 6-30 lowercase letters, digits, or
    * hyphens; must start with a letter and must not end with a hyphen.
    * If omitted, a unique id is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the project.
+   * logical id. Immutable -- changing it replaces the project.
    */
   projectId?: string;
   /**
@@ -92,7 +92,7 @@ export type Project = Resource<
 >;
 
 /**
- * A Google Cloud project — the container for APIs, IAM, billing, and
+ * A Google Cloud project -- the container for APIs, IAM, billing, and
  * other resources.
  *
  * `projectId` is globally unique and immutable; changing it replaces

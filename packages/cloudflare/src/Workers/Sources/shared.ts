@@ -19,7 +19,7 @@ import type {
  * Convert a Worker `main` entry (a plain path or a `file://` URL) to a
  * filesystem path, without resolving it.
  *
- * Internal to `Workers/Sources/` — not exported from the package index.
+ * Internal to `Workers/Sources/` -- not exported from the package index.
  */
 export const mainToPath = (main: string) =>
   Effect.sync(() => {
@@ -37,10 +37,10 @@ export const mainToPath = (main: string) =>
  * canonical location.
  *
  * Deliberately distinct from `Bundle/TempRoot.ts`'s same-named helper,
- * which canonicalizes through `fs.realPath` — the rolldown bundler wants
+ * which canonicalizes through `fs.realPath` -- the rolldown bundler wants
  * the real path, the byte-for-byte readers (python, prebuilt) do not.
  *
- * Internal to `Workers/Sources/` — not exported from the package index.
+ * Internal to `Workers/Sources/` -- not exported from the package index.
  */
 export const resolveMainPath = (main: string) =>
   mainToPath(main).pipe(Effect.map((p) => path.resolve(p)));
@@ -48,14 +48,14 @@ export const resolveMainPath = (main: string) =>
 /**
  * A {@link SourceProvider} that only produces a server bundle: no static
  * assets, and `bundle` as its single hash slot. Every built-in source
- * except vite has this shape — they differ only in how they produce the
+ * except vite has this shape -- they differ only in how they produce the
  * bundle and how they watch it for local dev.
  *
  * `build` is used for both `build()` and `hash()`; implementations that
  * are expensive route it through `Artifacts.cached` so diff and reconcile
  * build once per run.
  *
- * Internal to `Workers/Sources/` — not exported from the package index.
+ * Internal to `Workers/Sources/` -- not exported from the package index.
  */
 export const bundleSource = (spec: {
   readonly build: (
@@ -86,10 +86,10 @@ export const bundleSource = (spec: {
  * local dev consumes either stream interchangeably.
  *
  * Used by the sources that read their bundle byte-for-byte off disk
- * (python, prebuilt) rather than bundling it — the re-read never goes
+ * (python, prebuilt) rather than bundling it -- the re-read never goes
  * through rolldown, preserving their byte-for-byte contract.
  *
- * Internal to `Workers/Sources/` — not exported from the package index.
+ * Internal to `Workers/Sources/` -- not exported from the package index.
  */
 export const watchBundleDirectory = <R>(options: {
   readonly main: string;

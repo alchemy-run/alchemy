@@ -15,12 +15,12 @@ export interface WebACLAssociationProps {
    */
   webAclArn: string;
   /**
-   * ARN of the regional resource to protect — an Application Load
+   * ARN of the regional resource to protect -- an Application Load
    * Balancer, API Gateway REST API stage, AppSync GraphQL API, Cognito
    * user pool, App Runner service, Amplify application or Verified Access
    * instance. Changing the resource replaces the association.
    *
-   * CloudFront distributions are NOT associated this way — set the
+   * CloudFront distributions are NOT associated this way -- set the
    * distribution's `webAclId` property to the web ACL's ARN instead.
    */
   resourceArn: string;
@@ -51,7 +51,7 @@ export interface WebACLAssociation extends Resource<
  * A resource can have at most one web ACL association; associating a
  * different web ACL overwrites the previous association in place.
  * CloudFront distributions are protected by setting
- * `Distribution.webAclId` instead — never through this resource.
+ * `Distribution.webAclId` instead -- never through this resource.
  *
  * ### Associating Web ACLs
  * **Example:** Protect a Cognito User Pool
@@ -79,7 +79,7 @@ export const WebACLAssociationProvider = () =>
       // Read the ARN of the web ACL currently protecting a resource
       // (undefined when the resource has no association or is gone). A
       // freshly created protected resource (e.g. a Cognito user pool) can
-      // surface WAFUnavailableEntityException until WAF can "retrieve" it —
+      // surface WAFUnavailableEntityException until WAF can "retrieve" it --
       // retry through propagation.
       const observeAssociation = Effect.fn(function* (resourceArn: string) {
         const response = yield* retryUnavailableEntity(
@@ -105,7 +105,7 @@ export const WebACLAssociationProvider = () =>
           if (olds.resourceArn !== news.resourceArn) {
             return { action: "replace" } as const;
           }
-          // webAclArn changes apply in place — associateWebACL overwrites.
+          // webAclArn changes apply in place -- associateWebACL overwrites.
         }),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -123,10 +123,10 @@ export const WebACLAssociationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. Observe — what protects the resource right now?
+          // 1. Observe -- what protects the resource right now?
           const observed = yield* observeAssociation(news.resourceArn);
 
-          // 2. Ensure — associate when missing or pointing elsewhere.
+          // 2. Ensure -- associate when missing or pointing elsewhere.
           //    associateWebACL is an upsert; a freshly created web ACL or
           //    protected resource (e.g. a new Cognito user pool) can be
           //    unavailable well past 90s, so retry on the long budget.

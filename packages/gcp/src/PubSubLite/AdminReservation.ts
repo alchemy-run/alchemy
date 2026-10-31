@@ -32,13 +32,13 @@ export type AdminReservationProps = {
    * `projects/{project}/locations/{location}/reservations/{reservation}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Pub/Sub Lite has no labels field, so Alchemy stamps
-   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable —
+   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable --
    * changing it replaces the reservation.
    */
   reservationId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Reservations are regional.
-   * Immutable — changing it replaces the reservation. `US-CENTRAL1` is
+   * Region (`us-central1`, `us-east1`, ...). Reservations are regional.
+   * Immutable -- changing it replaces the reservation. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -61,7 +61,7 @@ export type AdminReservation = Resource<
     reservationId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Reserved throughput capacity. */
     throughputCapacity: string | undefined;
@@ -71,7 +71,7 @@ export type AdminReservation = Resource<
 >;
 
 /**
- * A Pub/Sub Lite throughput reservation — a regional pool of publish
+ * A Pub/Sub Lite throughput reservation -- a regional pool of publish
  * and subscribe capacity that topics can consume.
  *
  * Pub/Sub Lite reservations have no labels. Alchemy stamps

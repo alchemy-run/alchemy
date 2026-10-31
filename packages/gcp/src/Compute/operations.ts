@@ -14,7 +14,7 @@ const INTERVAL = "2 seconds";
 export interface WaitComputeOptions {
   /**
    * Compute error codes (`error.errors[].code`) that mean the desired state
-   * already holds — e.g. `RESOURCE_ALREADY_EXISTS` on an insert or
+   * already holds -- e.g. `RESOURCE_ALREADY_EXISTS` on an insert or
    * `RESOURCE_NOT_FOUND` on a delete. The settled operation is returned
    * instead of failing with `GCP.OperationFailed`.
    */

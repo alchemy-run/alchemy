@@ -9,7 +9,7 @@ export interface ListMapRunsRequest extends sfn.ListMapRunsInput {}
  * Runtime binding for `states:ListMapRuns`.
  *
  * Lists the Distributed Map Runs started by an execution of the bound
- * {@link StateMachine} — use the returned `mapRunArn`s with
+ * {@link StateMachine} -- use the returned `mapRunArn`s with
  * `DescribeMapRun` / `UpdateMapRun`. IAM access is scoped to executions of
  * the bound state machine.
  * ### Distributed Map Runs

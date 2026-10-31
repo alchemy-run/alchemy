@@ -213,14 +213,14 @@ export interface ApplicationProps {
    * starts the application and waits for `RUNNING`; when `false` (default)
    * a running application is force-stopped back to `READY`.
    *
-   * Starting requires the code object to be a real Flink application jar —
+   * Starting requires the code object to be a real Flink application jar --
    * a placeholder zip passes creation but fails to start.
    * @default false
    */
   start?: boolean;
   /**
    * Start of the 8-hour daily window in which the service may apply
-   * maintenance (patching) to the application, as `"HH:mm"` UTC — e.g.
+   * maintenance (patching) to the application, as `"HH:mm"` UTC -- e.g.
    * `"02:00"`. When omitted the service-assigned window is left unchanged.
    */
   maintenanceWindowStartTime?: string;
@@ -307,16 +307,16 @@ export interface Application extends Resource<
  * A Managed Service for Apache Flink (Kinesis Data Analytics v2)
  * application.
  *
- * `Application` owns the application definition — runtime environment, code
+ * `Application` owns the application definition -- runtime environment, code
  * location in S3, runtime properties, Flink settings, optional VPC
- * connectivity and tags — and converges each aspect in place via
+ * connectivity and tags -- and converges each aspect in place via
  * `UpdateApplication`. Unless you supply `serviceExecutionRole`, an IAM role
  * is auto-created granting the service read access to the code bucket and
  * CloudWatch Logs delivery.
  *
  * The application is created in `READY` and does not run (or bill KPUs)
  * until started. Set `start: true` to have the reconciler start the job and
- * wait for `RUNNING` — this requires the code object to be a real Flink
+ * wait for `RUNNING` -- this requires the code object to be a real Flink
  * application jar.
  * ### Creating Applications
  * **Example:** Flink application from S3 code
@@ -411,7 +411,7 @@ export class ApplicationNotStable extends Data.TaggedError("ApplicationNotStable
 
 /**
  * `start: true` was requested but the application failed to reach `RUNNING`
- * — either the start rolled back (bad jar, bad configuration) or the
+ * -- either the start rolled back (bad jar, bad configuration) or the
  * bounded wait elapsed.
  */
 export class ApplicationStartFailed extends Data.TaggedError("ApplicationStartFailed")<{
@@ -435,13 +435,13 @@ const createApplicationName = (id: string, props: { applicationName?: string | u
 
 /**
  * Data-FIRST `Effect.retry(self, options)` wrapped with an explicit return
- * annotation — inlining `Effect.retry` with an options object in provider
+ * annotation -- inlining `Effect.retry` with an options object in provider
  * lifecycle code leaves `Retry.Return`'s conditional type unresolved in the
  * provider's inferred layer type, which TypeScript's declaration emit widens
- * to an `unknown` R — poisoning `AWS.providers()` for every downstream
+ * to an `unknown` R -- poisoning `AWS.providers()` for every downstream
  * consumer (see `retryThroughDeletionWindow` in SecretsManager/Secret.ts).
  *
- * Retries `InvalidArgumentException`s that mention the IAM role — a freshly
+ * Retries `InvalidArgumentException`s that mention the IAM role -- a freshly
  * created role takes a few seconds to become assumable by the
  * kinesisanalytics service principal, and `CreateApplication` surfaces that
  * propagation window as a role-related `InvalidArgumentException`.
@@ -531,7 +531,7 @@ const readApplication = Effect.fn(function* ({
     return undefined;
   }
   // The application can vanish between the describe above and the tag read
-  // (e.g. a concurrent destroy) — a typed `ResourceNotFoundException` here
+  // (e.g. a concurrent destroy) -- a typed `ResourceNotFoundException` here
   // just means it's gone.
   const tagsResponse = yield* analytics
     .listTagsForResource({ ResourceARN: detail.ApplicationARN })
@@ -547,7 +547,7 @@ const readApplication = Effect.fn(function* ({
 });
 
 // Configuration updates settle fast (the app stays READY); 2s × 45 bounds
-// the wait at 90s. RUNNING is also stable — a started app being updated
+// the wait at 90s. RUNNING is also stable -- a started app being updated
 // passes through UPDATING and returns to RUNNING.
 const waitForApplicationStable = (applicationName: string) =>
   Effect.gen(function* () {
@@ -573,7 +573,7 @@ const waitForApplicationStable = (applicationName: string) =>
     ),
   );
 
-// A Flink job start submits the jar to a fresh cluster — several minutes is
+// A Flink job start submits the jar to a fresh cluster -- several minutes is
 // normal. 10s × 57 bounds the wait at 570s. A start that rolls back
 // (ROLLED_BACK / back to READY after STARTING) fails fast with a typed error.
 const waitForApplicationRunning = (applicationName: string) =>
@@ -649,7 +649,7 @@ const toWirePropertyGroups = (
     PropertyMap: group.propertyMap,
   }));
 
-// Canonical string form for observed-vs-desired comparison — order of
+// Canonical string form for observed-vs-desired comparison -- order of
 // groups and of keys within a group is not significant.
 const canonicalPropertyGroups = (groups: ReadonlyArray<analytics.PropertyGroup> | undefined) =>
   JSON.stringify(
@@ -952,14 +952,14 @@ export const ApplicationProvider = () =>
             });
           }
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only a
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only a
           // cache for the physical name.
           const observed = yield* describeApplicationDetail(applicationName);
 
-          // 2. ENSURE — create the application if it's missing. Tolerate the
+          // 2. ENSURE -- create the application if it's missing. Tolerate the
           // already-exists race (`ResourceInUseException`), retry through the
           // fresh role's IAM propagation window, and retry
-          // `ConcurrentModificationException` — recreating an application
+          // `ConcurrentModificationException` -- recreating an application
           // under a recently-deleted name fails with "Tags are already
           // registered for this resource ARN ... please retry later".
           if (observed === undefined) {
@@ -1010,7 +1010,7 @@ export const ApplicationProvider = () =>
             yield* create(createRequest).pipe(
               // The lingering tag registration on a recently-deleted name can
               // outlive the bounded retry window. AWS's own guidance in the
-              // error text: create without tags, then TagResource — the tag
+              // error text: create without tags, then TagResource -- the tag
               // sync below applies the desired tags right after.
               Effect.catchTag("ConcurrentModificationException", () =>
                 create({ ...createRequest, Tags: undefined }),
@@ -1019,11 +1019,11 @@ export const ApplicationProvider = () =>
             yield* session.note(`Creating application ${applicationName}...`);
           }
 
-          // Both a fresh create and a crashed prior run land here — wait for
+          // Both a fresh create and a crashed prior run land here -- wait for
           // a stable status before syncing (bounded).
           yield* waitForApplicationStable(applicationName);
 
-          // 3. SYNC — read OBSERVED state fresh on every attempt (the
+          // 3. SYNC -- read OBSERVED state fresh on every attempt (the
           // version id is a compare-and-set token), compute the delta from
           // `news`, and apply a single UpdateApplication call. Retried
           // through ConcurrentModification/ResourceInUse with a re-read.
@@ -1128,7 +1128,7 @@ export const ApplicationProvider = () =>
           yield* retryWhileInUse(syncConfiguration);
           yield* waitForApplicationStable(applicationName);
 
-          // 3b. SYNC maintenance window — separate API from
+          // 3b. SYNC maintenance window -- separate API from
           // UpdateApplication; only applied when the caller pins a window
           // (otherwise the service-assigned window is left as-is).
           if (news.maintenanceWindowStartTime !== undefined) {
@@ -1150,7 +1150,7 @@ export const ApplicationProvider = () =>
             yield* retryWhileInUse(syncMaintenanceWindow);
           }
 
-          // 3c. SYNC VPC attach/detach — separate APIs from
+          // 3c. SYNC VPC attach/detach -- separate APIs from
           // UpdateApplication; each re-reads the fresh version id.
           const syncVpcAttachment = Effect.gen(function* () {
             const detail = yield* describeApplicationDetail(applicationName);
@@ -1179,7 +1179,7 @@ export const ApplicationProvider = () =>
           yield* retryWhileInUse(syncVpcAttachment);
           const stable = yield* waitForApplicationStable(applicationName);
 
-          // 3d. SYNC run state — start when `start: true`, force-stop a
+          // 3d. SYNC run state -- start when `start: true`, force-stop a
           // running application when `start` is absent/false.
           if (news.start === true && stable.ApplicationStatus !== "RUNNING") {
             yield* retryWhileInUse(
@@ -1203,7 +1203,7 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationStopped(applicationName);
           }
 
-          // 3e. SYNC TAGS — diff against OBSERVED cloud tags (adoption may
+          // 3e. SYNC TAGS -- diff against OBSERVED cloud tags (adoption may
           // bring an application with foreign tags), never olds/output.
           const applicationArn = stable.ApplicationARN;
           const observedTagsResponse = yield* analytics
@@ -1248,7 +1248,7 @@ export const ApplicationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteApplication requires the application's CreateTimestamp —
+          // DeleteApplication requires the application's CreateTimestamp --
           // observe it fresh rather than trusting persisted state. Missing
           // application means the delete already happened.
           const detail = yield* describeApplicationDetail(output.applicationName);
@@ -1264,7 +1264,7 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationDeleted(output.applicationName);
           }
 
-          // Remove the synthesized IAM role (idempotent — it may already be
+          // Remove the synthesized IAM role (idempotent -- it may already be
           // gone from a previous partial delete).
           if (output.roleName) {
             yield* deleteRoleIfExists(output.roleName);

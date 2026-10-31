@@ -8,7 +8,7 @@
  * A single `browser` service hosts the Browser Rendering HTTP surface
  * (`/v1/acquire`, `/v1/sessions`, `/v1/devtools/...`). Each acquired session
  * maps to a real headless Chrome process launched on the Node side through
- * the loopback route (`/browser/launch` etc. — see `Browser.ts`); the
+ * the loopback route (`/browser/launch` etc. -- see `Browser.ts`); the
  * `BrowserSession` Durable Object (one instance per session id, in-memory
  * storage) holds the session state and proxies WebSocket/JSON DevTools
  * traffic to Chrome's CDP endpoint.
@@ -40,12 +40,12 @@ function chromeBaseUrl(wsEndpoint: string): string {
 // a transient connection failure and are safe to retry. Matched
 // case-insensitively against `Error.message`.
 const RETRYABLE_FETCH_ERROR_SUBSTRINGS = [
-  // kj/async-io-win32.c++ ConnectEx (#1225) — the remote socket refused us.
+  // kj/async-io-win32.c++ ConnectEx (#1225) -- the remote socket refused us.
   // Surfaces on Windows when Chrome announced the DevTools URL but isn't
   // quite accepting connections yet.
   "connection refused",
   "remote computer refused",
-  // kj/async-io-win32.c++ WSARecv (#64) — the connection went away mid-read.
+  // kj/async-io-win32.c++ WSARecv (#64) -- the connection went away mid-read.
   "network name is no longer available",
   // Generic workerd disconnect classifications.
   "network connection lost",
@@ -95,7 +95,7 @@ async function parseJsonResponse<T = unknown>(resp: Response, context: string): 
 }
 
 /**
- * Wrapper around `fetch` that retries on transient connection failures — the
+ * Wrapper around `fetch` that retries on transient connection failures -- the
  * first fetches to a freshly-launched Chrome can fail spuriously (especially
  * on Windows) even after the node-side readiness probe succeeded.
  */

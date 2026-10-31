@@ -6,7 +6,7 @@ import type { Task } from "./Task.ts";
 /**
  * Runtime binding for `datasync:StartTaskExecution`.
  *
- * Starts a run of the bound {@link Task} — the moment data actually moves.
+ * Starts a run of the bound {@link Task} -- the moment data actually moves.
  * The task ARN is injected from the binding; pass `OverrideOptions`,
  * `Includes`/`Excludes`, or a `ManifestConfig` to shape the individual run.
  * Returns the new execution's ARN for use with `DescribeTaskExecution` /
@@ -15,7 +15,7 @@ import type { Task } from "./Task.ts";
  * ### Running Transfers
  * **Example:** Kick Off A Transfer
  * ```typescript
- * // init — bind the operation to the task
+ * // init -- bind the operation to the task
  * const startTaskExecution = yield* AWS.DataSync.StartTaskExecution(task);
  *
  * // runtime

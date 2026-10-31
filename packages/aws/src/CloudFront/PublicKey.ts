@@ -82,7 +82,7 @@ export interface PublicKey extends Resource<
  * Public keys are uploaded ahead of being grouped into a {@link KeyGroup} and
  * used by Distributions for signed URL or signed cookie verification.
  *
- * The key body is immutable after creation — changing `encodedKey` triggers
+ * The key body is immutable after creation -- changing `encodedKey` triggers
  * a replacement (CloudFront returns no API to rotate a key in place).
  * ### Creating Public Keys
  * **Example:** PEM-encoded RSA public key
@@ -179,7 +179,7 @@ export const PublicKeyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
-          // Compare only when the old key is known — an Output-valued
+          // Compare only when the old key is known -- an Output-valued
           // `encodedKey` doesn't survive a `creating`-state round-trip (it
           // deserializes as `undefined`).
           if (
@@ -203,7 +203,7 @@ export const PublicKeyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // Observe — locate the public key by id (cached on `output`)
+          // Observe -- locate the public key by id (cached on `output`)
           // or by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.publicKeyId
             ? yield* getById(output.publicKeyId).pipe(
@@ -214,7 +214,7 @@ export const PublicKeyProvider = () =>
             observed = yield* getByName(name);
           }
 
-          // Ensure — create the public key if it's missing. Tolerate
+          // Ensure -- create the public key if it's missing. Tolerate
           // `PublicKeyAlreadyExists` (race with a peer reconciler).
           if (!observed) {
             const callerReference = name;
@@ -254,7 +254,7 @@ export const PublicKeyProvider = () =>
             return toAttrs(created.PublicKey.Id, created.PublicKey.PublicKeyConfig, created.ETag);
           }
 
-          // Sync — patch the comment via `updatePublicKey`. The key body
+          // Sync -- patch the comment via `updatePublicKey`. The key body
           // is immutable (replacement is forced in `diff`), and the
           // CallerReference is observed from the live config rather than
           // re-derived. The freshly observed ETag handles optimistic

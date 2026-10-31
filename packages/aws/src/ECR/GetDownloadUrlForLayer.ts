@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link GetDownloadUrlForLayer} — `repositoryName` is injected from the
+ * Request for {@link GetDownloadUrlForLayer} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface GetDownloadUrlForLayerRequest extends Omit<
@@ -15,14 +15,14 @@ export interface GetDownloadUrlForLayerRequest extends Omit<
 /**
  * Runtime binding for `ecr:GetDownloadUrlForLayer`.
  *
- * Resolves a pre-signed S3 download URL for an image layer in the bound repository — the blob-download half of a registry pull. Provide the implementation with
+ * Resolves a pre-signed S3 download URL for an image layer in the bound repository -- the blob-download half of a registry pull. Provide the implementation with
  * `Effect.provide(AWS.ECR.GetDownloadUrlForLayerHttp)`.
  * ### Pulling Images
  * **Example:** Download a Layer Blob
  * ```typescript
  * const getDownloadUrl = yield* AWS.ECR.GetDownloadUrlForLayer(repository);
  *
- * const res = yield* getDownloadUrl({ layerDigest: "sha256:…" });
+ * const res = yield* getDownloadUrl({ layerDigest: "sha256:..." });
  * console.log(res.downloadUrl);
  * ```
  *

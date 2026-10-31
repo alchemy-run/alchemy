@@ -6,7 +6,7 @@ import type { Flow } from "./Flow.ts";
 /**
  * Runtime binding for `mediaconnect:RevokeFlowEntitlement`.
  *
- * Revokes an entitlement previously granted on the bound {@link Flow} —
+ * Revokes an entitlement previously granted on the bound {@link Flow} --
  * the content immediately becomes unavailable to the subscriber and the
  * associated output is removed from the flow. The flow ARN is injected
  * from the binding; the entitlement to revoke is passed at runtime.
@@ -18,7 +18,7 @@ import type { Flow } from "./Flow.ts";
  * ### Managing Entitlements
  * **Example:** Revoke a Subscriber's Access
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const revokeEntitlement = yield* AWS.MediaConnect.RevokeFlowEntitlement(flow);
  *
  * // runtime

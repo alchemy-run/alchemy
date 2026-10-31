@@ -12,7 +12,7 @@ export interface StartViewerSessionRevocationRequest extends Omit<
  * Runtime binding for `ivs:StartViewerSessionRevocation`.
  *
  * Starts revoking the viewer session for a given viewer ID on the bound
- * {@link Channel} — used with private channels to eject a viewer whose
+ * {@link Channel} -- used with private channels to eject a viewer whose
  * playback authorization token carries that `viewerId`. Optionally revoke
  * every session at or below a token version. The channel ARN is injected
  * from the binding. Provide the implementation with
@@ -20,7 +20,7 @@ export interface StartViewerSessionRevocationRequest extends Omit<
  * ### Revoking Viewer Sessions
  * **Example:** Eject a Banned Viewer
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const revokeViewerSession = yield* AWS.IVS.StartViewerSessionRevocation(channel);
  *
  * // runtime

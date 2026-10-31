@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `GetPendingMaintenanceAction` operation (IAM
  * action `docdb-elastic:GetPendingMaintenanceAction`).
  *
- * Reads the pending maintenance actions for one resource (a cluster ARN) —
+ * Reads the pending maintenance actions for one resource (a cluster ARN) --
  * the action name, opt-in status, and apply dates. Provide the
  * implementation with
  * `Effect.provide(AWS.DocDBElastic.GetPendingMaintenanceActionHttp)`.

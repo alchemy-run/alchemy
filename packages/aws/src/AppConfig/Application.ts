@@ -42,7 +42,7 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An AWS AppConfig application — the top-level container that groups the
+ * An AWS AppConfig application -- the top-level container that groups the
  * environments and configuration profiles for one application's configuration.
  *
  * ### Creating an Application
@@ -121,7 +121,7 @@ export const ApplicationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only a cache.
+          // 1. Observe -- cloud state is authoritative; output is only a cache.
           let observed = output?.applicationId
             ? yield* readApplication(output.applicationId)
             : undefined;
@@ -129,7 +129,7 @@ export const ApplicationProvider = () =>
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed?.Id === undefined) {
             observed = yield* appconfig.createApplication({
               Name: name,
@@ -137,7 +137,7 @@ export const ApplicationProvider = () =>
               Tags: desiredTags,
             });
           } else if (news.description !== undefined && observed.Description !== news.description) {
-            // 3. Sync — description is mutable in place.
+            // 3. Sync -- description is mutable in place.
             observed = yield* appconfig.updateApplication({
               ApplicationId: observed.Id,
               Description: news.description,
@@ -146,7 +146,7 @@ export const ApplicationProvider = () =>
 
           const arn = applicationArn(region, accountId, observed.Id!);
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAppConfigTags(arn, desiredTags);
 
           yield* session.note(name);
@@ -161,7 +161,7 @@ export const ApplicationProvider = () =>
           // An application cannot be deleted while environments or
           // configuration profiles still exist under it ("Cannot delete
           // application ..., because there are still environments existing
-          // under it" — surfaced as BadRequestException). Children are
+          // under it" -- surfaced as BadRequestException). Children are
           // deleted first by the engine/nuke, but their deletion is
           // eventually consistent, so absorb the window with a bounded retry.
           yield* appconfig.deleteApplication({ ApplicationId: output.applicationId }).pipe(

@@ -4,8 +4,8 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `GetDataAutomationStatus` operation (IAM action
- * `bedrock:GetDataAutomationStatus` on `*` — invocation ARNs are minted at
- * runtime) — poll the status of an asynchronous Bedrock Data Automation job
+ * `bedrock:GetDataAutomationStatus` on `*` -- invocation ARNs are minted at
+ * runtime) -- poll the status of an asynchronous Bedrock Data Automation job
  * from a deployed Function.
  *
  * Provide the implementation with
@@ -13,10 +13,10 @@ import type * as Effect from "effect/Effect";
  * ### Polling Job Status
  * **Example:** Check An Async Job's Status
  * ```typescript
- * // deploy time — account-level binding
+ * // deploy time -- account-level binding
  * const getStatus = yield* AWS.BedrockDataAutomation.GetDataAutomationStatus();
  *
- * // runtime — poll the invocation returned by InvokeDataAutomationAsync
+ * // runtime -- poll the invocation returned by InvokeDataAutomationAsync
  * const { status, outputConfiguration } = yield* getStatus({ invocationArn });
  * if (status === "Success") {
  *   yield* Effect.log(`results at ${outputConfiguration?.s3Uri}`);

@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:GetCostEstimation`.
  *
- * Returns the result of the most recent cost estimation started with `StartCostEstimation` — the estimated monthly cost of DevOps Guru analyzing the candidate resource collection.
+ * Returns the result of the most recent cost estimation started with `StartCostEstimation` -- the estimated monthly cost of DevOps Guru analyzing the candidate resource collection.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.GetCostEstimationHttp)`.
  * ### Cost Estimation
  * **Example:** Read the Latest Estimate
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getCostEstimation = yield* AWS.DevOpsGuru.GetCostEstimation();
  *
  * // runtime

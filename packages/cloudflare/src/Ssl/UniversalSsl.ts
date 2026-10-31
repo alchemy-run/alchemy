@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 export type UniversalSslProps = {
   /**
-   * Zone whose Universal SSL setting is managed. Stable — changing the
+   * Zone whose Universal SSL setting is managed. Stable -- changing the
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
@@ -24,11 +24,11 @@ export type UniversalSslProps = {
    *
    * Disabling removes any currently active Universal SSL certificates
    * for the zone from the edge and prevents future Universal SSL
-   * certificates from being ordered — visitors will see TLS errors
+   * certificates from being ordered -- visitors will see TLS errors
    * unless the zone has advanced/custom certificates covering its
    * hostnames.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   enabled: boolean;
 };
@@ -58,7 +58,7 @@ export type UniversalSsl = Resource<
  * The Universal SSL setting of a Cloudflare zone
  * (`/zones/{zone_id}/ssl/universal/settings`).
  *
- * Universal SSL is a zone singleton — the setting always exists (Cloudflare
+ * Universal SSL is a zone singleton -- the setting always exists (Cloudflare
  * defaults it to enabled), so this resource never creates or deletes
  * anything physical. Reconcile patches the setting when the observed value
  * differs from the desired one; destroy restores the value the setting had
@@ -101,7 +101,7 @@ export const isUniversalSsl = (value: unknown): value is UniversalSsl =>
 /**
  * The Universal SSL "edit setting" endpoint enforces its OWN per-zone,
  * per-operation rate limit ("Rate limit reached for the update operation.
- * Please try again in a minute") — much longer than the engine's blanket
+ * Please try again in a minute") -- much longer than the engine's blanket
  * retry budget (~40s). Ride it out patiently on the typed `TooManyRequests`
  * within a bounded number of attempts (~120s total) so a concurrent or
  * recent patch on the same zone's singleton doesn't fail the operation.
@@ -122,7 +122,7 @@ export const UniversalSslProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -143,7 +143,7 @@ export const UniversalSslProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      // news is Input<Props> during plan — only compare once resolved.
+      // news is Input<Props> during plan -- only compare once resolved.
       if (!isResolved(news)) return undefined;
       // zoneId is the resource's identity; it is Input<string>, so
       // compare only once both sides are concrete.
@@ -159,13 +159,13 @@ export const UniversalSslProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* ssl.getUniversalSetting({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       const enabled = observedEnabled(observed);
       // Universal SSL is a singleton that always exists with a
-      // Cloudflare default — there is nothing to "own", so a cold read
+      // Cloudflare default -- there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed value at adoption
       // time becomes the `initialEnabled` restored on destroy.
       const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
@@ -176,17 +176,17 @@ export const UniversalSslProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* ssl.getUniversalSetting({ zoneId });
       const enabled = observedEnabled(observed);
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
 
-      // 3. Sync — patch only when the observed value differs.
+      // 3. Sync -- patch only when the observed value differs.
       if (enabled === news.enabled) {
         return { zoneId, enabled, initialEnabled };
       }
@@ -199,7 +199,7 @@ export const UniversalSslProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialEnabled } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* ssl
         .getUniversalSetting({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
@@ -215,7 +215,7 @@ export const UniversalSslProvider = () =>
 
 /**
  * Normalize the distilled response's `enabled?: boolean | null` to a
- * concrete boolean — Cloudflare's default for Universal SSL is enabled.
+ * concrete boolean -- Cloudflare's default for Universal SSL is enabled.
  */
 const observedEnabled = (
   setting: ssl.GetUniversalSettingResponse | ssl.PatchUniversalSettingResponse,

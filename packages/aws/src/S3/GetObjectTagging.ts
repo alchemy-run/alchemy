@@ -9,7 +9,7 @@ export interface GetObjectTaggingRequest extends Omit<S3.GetObjectTaggingRequest
  * Runtime binding for `s3:GetObjectTagging`.
  *
  * Bind this operation to a bucket to get a callable that reads an object's
- * tag set — the bucket name is injected automatically and
+ * tag set -- the bucket name is injected automatically and
  * `s3:GetObjectTagging`/`s3:GetObjectVersionTagging` are granted on the
  * bucket's objects. Provide the implementation with
  * `Effect.provide(AWS.S3.GetObjectTaggingHttp)`.

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:DeleteIncidentRecord`.
  *
- * Deletes an incident record (idempotent — deleting a record that does not
+ * Deletes an incident record (idempotent -- deleting a record that does not
  * exist succeeds). Incident-record ARNs only exist at runtime, so the
  * deploy-time grant is account-level (`Resource: "*"`).
  * Provide the implementation with

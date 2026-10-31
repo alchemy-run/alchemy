@@ -18,7 +18,7 @@ export interface DestinationProps {
    */
   destinationName?: string;
   /**
-   * ARN of the physical target that receives the log events — a Kinesis
+   * ARN of the physical target that receives the log events -- a Kinesis
    * stream in this account.
    */
   targetArn: string;
@@ -50,7 +50,7 @@ export interface Destination extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs destination — a cross-account subscription target that
+ * A CloudWatch Logs destination -- a cross-account subscription target that
  * forwards log events to a Kinesis stream. Producers in other accounts create
  * subscription filters whose `destinationArn` points at this destination;
  * the `accessPolicy` controls which accounts may subscribe.
@@ -83,7 +83,7 @@ export const Destination = Resource<Destination>("AWS.Logs.Destination");
  * at call time; when the role was created in the same deploy this fails with
  * `InvalidParameterException` until IAM propagates. Bounded retry.
  *
- * NOTE: explicit return annotation is load-bearing — an inlined `Effect.retry`
+ * NOTE: explicit return annotation is load-bearing -- an inlined `Effect.retry`
  * in provider lifecycle code widens the provider layer during declaration emit
  * (see PATTERNS.md §7).
  */
@@ -169,7 +169,7 @@ export const DestinationProvider = () =>
           const destinationName = output?.destinationName ?? (yield* toDestinationName(id, news));
           const desiredPolicy = toPolicyString(news.accessPolicy);
 
-          // Observe — putDestination upserts by name; skip when target/role
+          // Observe -- putDestination upserts by name; skip when target/role
           // already match.
           let observed = yield* observe(destinationName);
           if (observed?.targetArn !== news.targetArn || observed?.roleArn !== news.roleArn) {

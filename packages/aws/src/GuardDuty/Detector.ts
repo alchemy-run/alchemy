@@ -40,7 +40,7 @@ export interface Detector extends Resource<
   {
     /** The auto-generated detector ID (unique per account/region). */
     detectorId: string;
-    /** ARN of the detector — the IAM resource for detector-scoped actions. */
+    /** ARN of the detector -- the IAM resource for detector-scoped actions. */
     detectorArn: string;
     /** Current status of the detector (`ENABLED` / `DISABLED`). */
     status: string | undefined;
@@ -52,7 +52,7 @@ export interface Detector extends Resource<
 > {}
 
 /**
- * A GuardDuty detector — the account/region singleton that enables Amazon
+ * A GuardDuty detector -- the account/region singleton that enables Amazon
  * GuardDuty threat detection. Only one detector can exist per region, so this
  * resource is a capture-and-restore singleton: adopting a pre-existing detector
  * that Alchemy did not create requires `--adopt`.
@@ -137,12 +137,12 @@ export const DetectorProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredEnable = news.enable ?? true;
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id cache.
           let detectorId = output?.detectorId ?? (yield* firstDetectorId);
           let live = detectorId ? yield* getDetector(detectorId) : undefined;
 
           if (!detectorId || !live) {
-            // 2. ENSURE — create the detector with tags applied inline.
+            // 2. ENSURE -- create the detector with tags applied inline.
             const created = yield* guardduty.createDetector({
               Enable: desiredEnable,
               FindingPublishingFrequency: news.findingPublishingFrequency,
@@ -150,7 +150,7 @@ export const DetectorProvider = () =>
             });
             detectorId = created.DetectorId!;
           } else {
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const observedEnabled = live.Status === "ENABLED";
             const settingsChanged =
               observedEnabled !== desiredEnable ||
@@ -164,7 +164,7 @@ export const DetectorProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
             const arn = detectorArn(region, accountId, detectorId);
             if (upsert.length > 0) {

@@ -45,8 +45,8 @@ export interface EventTopic extends Resource<
 /**
  * An association between an AWS Directory Service {@link Directory} and an
  * Amazon SNS topic. The directory publishes a status message to the topic
- * whenever it changes stage — e.g. from `Active` to `Impaired` or
- * `Inoperable`, and back to `Active` — which is Directory Service's native
+ * whenever it changes stage -- e.g. from `Active` to `Impaired` or
+ * `Inoperable`, and back to `Active` -- which is Directory Service's native
  * event mechanism.
  *
  * To consume the notifications from a Lambda function, use
@@ -113,14 +113,14 @@ export const EventTopicProvider = () =>
         }),
 
         // Existence-only resource: the association has no mutable aspects,
-        // so reconcile is observe → ensure.
+        // so reconcile is observe -> ensure.
         reconcile: Effect.fn(function* ({ news, session }) {
           const props = news!;
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readEventTopic(props.directoryId, props.topicName);
 
-          // 2. Ensure — register if missing. Re-registering an existing
+          // 2. Ensure -- register if missing. Re-registering an existing
           //    association is treated as a race and tolerated by
           //    re-observing below.
           if (observed === undefined) {
@@ -147,7 +147,7 @@ export const EventTopicProvider = () =>
               TopicName: output.topicName,
             })
             .pipe(
-              // The association — or the whole parent directory — being
+              // The association -- or the whole parent directory -- being
               // gone is success.
               Effect.catchTag("EntityDoesNotExistException", () => Effect.void),
             );

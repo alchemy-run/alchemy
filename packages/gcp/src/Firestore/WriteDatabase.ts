@@ -73,7 +73,7 @@ export interface WriteDatabaseClient {
  * );
  * yield* db.update("users/alice", { visits: 1, lastSeen: new Date() });
  * yield* db.delete("users/bob");
- * // …provided with Effect.provide(GCP.Firestore.WriteDatabaseHttp)
+ * // ...provided with Effect.provide(GCP.Firestore.WriteDatabaseHttp)
  * ```
  *
  * @binding

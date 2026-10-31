@@ -14,7 +14,7 @@ import {
 
 /**
  * The specifier of the Octane source-provider module. The package must be
- * installed in the user's project — `loadSource` fails with a
+ * installed in the user's project -- `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
 const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
@@ -43,7 +43,7 @@ export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends O
    *
    * Octane's intended routing is asset-first with SSR on miss: exact files
    * in `dist/client` serve without invoking the Worker, and every miss
-   * reaches Octane SSR. Leave `notFoundHandling` unset (`"none"`) — both
+   * reaches Octane SSR. Leave `notFoundHandling` unset (`"none"`) -- both
    * `"single-page-application"` and `"404-page"` would prevent
    * browser-navigation misses from reaching SSR.
    */
@@ -77,13 +77,13 @@ export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends O
  * by default for every Worker) is required.
  *
  * A client-only Octane SPA (no `octane.config.ts` routes) is a plain Vite
- * project — deploy it with {@link Vite | Cloudflare.Website.Vite} instead,
+ * project -- deploy it with {@link Vite | Cloudflare.Website.Vite} instead,
  * where the `octane()` compiler plugin composes with the injected
  * Cloudflare Vite plugin.
  *
  *
  * ### Deploying an Octane App
- * A single call builds and deploys the app — server-rendered routes,
+ * A single call builds and deploys the app -- server-rendered routes,
  * server (API) routes, and client assets included. Define the app's routes
  * in `octane.config.ts`; `Cloudflare.Website.Octane` selects the Worker build:
  *
@@ -148,9 +148,9 @@ export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends O
  *
  * ### Dev
  * `alchemy dev` runs Octane's own Vite dev server (the plugin's in-process
- * SSR middleware — rendering, server routes, and RPC with full HMR).
+ * SSR middleware -- rendering, server routes, and RPC with full HMR).
  * NOTE: Octane's dev middleware does not supply request-scoped platform
- * bindings (`context.platform` is `undefined` in dev — an upstream
+ * bindings (`context.platform` is `undefined` in dev -- an upstream
  * limitation), so code touching `platform.env` must tolerate `undefined`
  * during dev; bindings are live in deployed Workers.
  *
@@ -172,7 +172,7 @@ export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends O
  * Calling `Octane` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -236,7 +236,7 @@ export const Octane: {
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
           // Octane's server bundle externalizes `node:` modules for
-          // workerd's native node-compat — `getCompatibility` already
+          // workerd's native node-compat -- `getCompatibility` already
           // adds `nodejs_compat` to every non-python Worker.
           main: undefined!,
           source: {

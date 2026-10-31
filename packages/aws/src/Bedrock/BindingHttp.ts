@@ -10,8 +10,8 @@ import { bedrockModelArns } from "./ModelArns.ts";
 /**
  * Shared scaffolding for Bedrock HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier(s) is boilerplate. Genuinely-different bindings
  * (e.g. `Rerank`, which grants a wildcard `bedrock:Rerank` alongside
@@ -229,7 +229,7 @@ export const makeAgentAliasScopedHttpBinding = <
  * `bedrock:RetrieveAndGenerate` on the bound {@link KnowledgeBase} plus
  * `bedrock:InvokeModel` scoped to the named generation models (or all
  * foundation models + cross-region inference profiles when none are named).
- * The request passes through unchanged — the knowledge base is referenced
+ * The request passes through unchanged -- the knowledge base is referenced
  * inside `retrieveAndGenerateConfiguration`.
  */
 export const makeRagHttpBinding = <I, A, E, R>(options: {

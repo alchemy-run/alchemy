@@ -15,7 +15,7 @@ export interface StartJobRequest extends Omit<location.StartJobRequest, "Executi
  *
  * Runtime binding for the `StartJob` operation (IAM action `geo:StartJob`).
  * Bind the IAM {@link Role} Location assumes to read the S3 input and write
- * the S3 output — its ARN is injected as `ExecutionRoleArn` and the host is
+ * the S3 output -- its ARN is injected as `ExecutionRoleArn` and the host is
  * additionally granted `iam:PassRole` on it. Jobs are named at runtime so
  * the `geo:StartJob` grant is on `*`. Provide the implementation with
  * `Effect.provide(AWS.Location.StartJobHttp)`.
@@ -30,7 +30,7 @@ export interface StartJobRequest extends Omit<location.StartJobRequest, "Executi
  *   InputOptions: { Format: "CSV", Location: "s3://my-bucket/addresses.csv" },
  *   OutputOptions: { Format: "CSV", Location: "s3://my-bucket/results/" },
  * });
- * // job.JobId → poll with Location.GetJob
+ * // job.JobId -> poll with Location.GetJob
  * ```
  *
  * @binding

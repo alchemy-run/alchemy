@@ -47,7 +47,7 @@ export type GroupProps = {
    * Cloud Identity customer or identity source, as
    * `customers/{customer}` (the id must start with `C`) or
    * `identitysources/{identity_source}`. `customers/my_customer`
-   * refers to the caller's customer. Immutable — changing it replaces
+   * refers to the caller's customer. Immutable -- changing it replaces
    * the group.
    * @default "customers/my_customer"
    */
@@ -55,7 +55,7 @@ export type GroupProps = {
   /**
    * Group email (`group@example.com`) or identity-source id. If
    * omitted, a unique local part is generated and combined with
-   * `domain` when set. Immutable — changing it replaces the group.
+   * `domain` when set. Immutable -- changing it replaces the group.
    */
   groupKeyId?: string;
   /**

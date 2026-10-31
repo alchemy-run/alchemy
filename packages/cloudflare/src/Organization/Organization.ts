@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Business profile attached to an organization. All fields are required
- * when a profile is present — the API stores the profile as a unit.
+ * when a profile is present -- the API stores the profile as a unit.
  */
 export interface Profile {
   /**
@@ -40,7 +40,7 @@ export interface Profile {
 }
 
 /**
- * Feature flags Cloudflare sets on an organization. Read-only —
+ * Feature flags Cloudflare sets on an organization. Read-only --
  * controlled by the organization's entitlements.
  */
 export interface Flags {
@@ -75,7 +75,7 @@ export interface Props {
   name?: string;
   /**
    * ID of the parent organization, for building an organization
-   * hierarchy. Changing the parent triggers a replacement — re-parenting
+   * hierarchy. Changing the parent triggers a replacement -- re-parenting
    * is gated by the organization's `accountMobility`/flags and is not
    * supported in place.
    */
@@ -120,12 +120,12 @@ export interface Attributes {
 export type Organization = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare Organization — the hierarchical container above accounts.
+ * A Cloudflare Organization -- the hierarchical container above accounts.
  *
  * Organizations group accounts (and sub-organizations) under a single
  * management umbrella; an account's `managedBy.parentOrgId` points at its
  * owning organization. The feature is entitlement-gated: only tenant /
- * organizations-enabled customers can create organizations — on a standard
+ * organizations-enabled customers can create organizations -- on a standard
  * account every `/organizations` call fails with the typed `Forbidden`
  * error.
  *
@@ -193,7 +193,7 @@ export const OrganizationProvider = () =>
 
     // Enumerate every organization reachable by the credentials. Cloudflare's
     // `/organizations` collection is account-wide (no per-account scoping
-    // beyond the token), so there is no env scope to resolve — just paginate
+    // beyond the token), so there is no env scope to resolve -- just paginate
     // exhaustively and map each row to the same `Attributes` shape `read`
     // returns. The op is entitlement-gated: on an unentitled account it
     // rejects with the typed `Forbidden` error, which `list()` tolerates
@@ -204,16 +204,16 @@ export const OrganizationProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) => (page.result ?? []).map(toAttributes)),
         ),
-        // Organizations are a Tenant/reseller feature — a regular account
+        // Organizations are a Tenant/reseller feature -- a regular account
         // token gets `Forbidden` ("Authentication error"). Nothing to list.
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       ),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      // `news` may still carry unresolved plan-time expressions — defer
+      // `news` may still carry unresolved plan-time expressions -- defer
       // to the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
-      // Re-parenting is not supported in place — hierarchy moves are
+      // Re-parenting is not supported in place -- hierarchy moves are
       // gated by `accountMobility`/flags, so a parent change replaces.
       const oldParent = output?.parent?.id ?? (olds?.parent as string | undefined);
       const newParent = news.parent;
@@ -234,7 +234,7 @@ export const OrganizationProvider = () =>
         return observed ? toAttributes(observed) : undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name (+ parent). Organization names are not guaranteed
       // unique and carry no ownership markers, so report the match as
       // `Unowned`: the engine refuses to take it over unless `adopt` is
@@ -250,14 +250,14 @@ export const OrganizationProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const parent = news.parent as string | undefined;
 
-      // Observe — the organization id cached on `output` is a hint, not
+      // Observe -- the organization id cached on `output` is a hint, not
       // a guarantee: a missing organization falls through to create.
       const observed = output?.organizationId
         ? yield* getOrganization(output.organizationId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* organizations.createOrganization({
@@ -268,7 +268,7 @@ export const OrganizationProvider = () =>
         return toAttributes(created);
       }
 
-      // Sync — diff observed cloud state against desired; the update API
+      // Sync -- diff observed cloud state against desired; the update API
       // is a PUT requiring `name`, so send the full desired shape, but
       // skip the call entirely on a no-op. The desired profile keeps the
       // observed one when the props omit it (the PUT would otherwise
@@ -291,7 +291,7 @@ export const OrganizationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Deletion is refused while the organization still manages
-      // accounts or sub-organizations — that's a genuine dependency
+      // accounts or sub-organizations -- that's a genuine dependency
       // violation, so it propagates. Already-gone is success.
       yield* organizations
         .deleteOrganization({ organizationId: output.organizationId })
@@ -335,7 +335,7 @@ const createOrganizationName = (id: string, name: string | undefined) =>
 
 /**
  * Compare the observed profile against the desired one. An omitted
- * desired profile is "keep whatever is there" — never a diff.
+ * desired profile is "keep whatever is there" -- never a diff.
  */
 const sameProfile = (observed: Profile | null | undefined, desired: Profile | undefined) =>
   desired === undefined ||

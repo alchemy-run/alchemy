@@ -45,7 +45,7 @@ export type FolderBucketProps = {
   /**
    * Folder id (`folders/{folder}` or the numeric id). When omitted, the
    * stack project is used so the same distilled folder-location APIs can
-   * manage project buckets. Immutable — changing it replaces the bucket.
+   * manage project buckets. Immutable -- changing it replaces the bucket.
    */
   folderId?: string;
   /**
@@ -53,19 +53,19 @@ export type FolderBucketProps = {
    * `{parent}/locations/{location}/buckets/{bucket}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Limited to
    * 100 characters: letters, digits, underscores, hyphens, periods; first
-   * character must be alphanumeric. Immutable — changing it replaces the
+   * character must be alphanumeric. Immutable -- changing it replaces the
    * bucket.
    */
   bucketId?: string;
   /**
    * Location that stores log entries. `global` leaves placement unspecified.
-   * Immutable after create — changing it replaces the bucket.
+   * Immutable after create -- changing it replaces the bucket.
    * @default "global"
    */
   location?: string;
   /**
    * Human-readable description. Log buckets have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -131,7 +131,7 @@ export type FolderBucket = Resource<
     indexConfigs: FolderBucketIndexConfig[];
     /** CMEK key name, if configured. */
     cmekSettings: FolderBucketCmekSettings | undefined;
-    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, …). */
+    /** Bucket lifecycle (`ACTIVE`, `DELETE_REQUESTED`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. Unset on GCP default buckets. */
     createTime: string | undefined;
@@ -148,7 +148,7 @@ export type FolderBucket = Resource<
  * Uses the folder-location Logging APIs (`createFoldersLocationsBuckets`
  * and siblings). Log buckets have no labels field, so Alchemy stamps
  * ownership into the description for `list` / nuke. `folderId`, `bucketId`,
- * and `location` are identity — changing any of them replaces the bucket.
+ * and `location` are identity -- changing any of them replaces the bucket.
  * Delete marks the bucket `DELETE_REQUESTED`; GCP purges it after 7 days.
  *
  * ### Creating a Folder Bucket

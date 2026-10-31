@@ -111,7 +111,7 @@ export type BucketLifecycleRule = {
 export type BucketCorsRule = {
   /**
    * Optional label for this rule, shown in the Cloudflare dashboard. Not
-   * used to correlate rules across updates — the CORS configuration is
+   * used to correlate rules across updates -- the CORS configuration is
    * always replaced as a whole.
    */
   id?: string;
@@ -219,7 +219,7 @@ export type BucketProps = {
    * to disable it.
    *
    * Once enabled, the hostname is reported on `publicDomain`. This
-   * endpoint is rate-limited and intended for non-production use — use
+   * endpoint is rate-limited and intended for non-production use -- use
    * `domains` for production public access.
    *
    * @default false
@@ -267,7 +267,7 @@ export type BucketProps = {
    * Allow alchemy to delete every object in the bucket when the bucket
    * itself is deleted.
    *
-   * R2 refuses to delete a bucket that still has objects in it — that
+   * R2 refuses to delete a bucket that still has objects in it -- that
    * refusal is the last line of defense for your data, so alchemy does not
    * bypass it by default: destroying a non-empty bucket fails with
    * `BucketNotEmpty` and both the bucket and its objects survive. Set this
@@ -417,7 +417,7 @@ export type Bucket = Resource<
  * Enable Cloudflare's managed `r2.dev` domain so objects are publicly
  * readable without attaching a custom domain. The hostname is reported
  * on `publicDomain`. This endpoint is rate-limited and intended for
- * non-production use — use `domains` for production public access.
+ * non-production use -- use `domains` for production public access.
  *
  * **Example:** Enable public access at r2.dev
  * ```typescript
@@ -730,7 +730,7 @@ export const ProviderLive = () =>
         jurisdiction: Bucket.Jurisdiction,
         // `NoSuchBucket` after a *create* is endpoint-consistency lag worth
         // retrying. During *enumeration* (`list`), a bucket that 404s is one a
-        // parallel suite just deleted — it's genuinely gone, so retrying the
+        // parallel suite just deleted -- it's genuinely gone, so retrying the
         // consistency schedule only burns ~3s per churned bucket and is what
         // pushes an account-wide `list` past its timeout. Default to retrying
         // (the reconcile path); opt out for enumeration.
@@ -978,7 +978,7 @@ export const ProviderLive = () =>
                 location: normalizeLocation(b.location),
               });
             }
-            // Terminate on the RAW page length — the filtered length can be
+            // Terminate on the RAW page length -- the filtered length can be
             // shorter on a full page (nameless entries), which would end the
             // walk early and silently drop the remaining buckets.
             if (raw.length < perPage || page.length === 0) break;
@@ -1047,7 +1047,7 @@ export const ProviderLive = () =>
             .pipe(
               Effect.map((response) => (response.rules ?? []).map(toCorsRule)),
               // A bucket with no CORS configuration is a typed error, not an
-              // empty rule list — normalize it to [] for the diff below.
+              // empty rule list -- normalize it to [] for the diff below.
               Effect.catchTag("NoCorsConfiguration", () => Effect.succeed([] as Bucket.CorsRule[])),
               Effect.retry({
                 while: (e) => e._tag === "NoSuchBucket",
@@ -1180,7 +1180,7 @@ export const ProviderLive = () =>
             const { accountId } = yield* yield* CloudflareEnvironment;
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
-            // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
+            // jurisdiction (e.g. `fedramp`) reject the route -- treat as empty.
             const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "us", "fedramp"];
             const perJurisdiction = yield* Effect.forEach(
               jurisdictions,
@@ -1188,7 +1188,7 @@ export const ProviderLive = () =>
                 listBucketsInJurisdiction(accountId, jurisdiction).pipe(
                   // An account not entitled to a jurisdiction rejects the list
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
-                  // — there are simply no buckets there, so treat as empty.
+                  // -- there are simply no buckets there, so treat as empty.
                   Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
                 ),
               { concurrency: jurisdictions.length },
@@ -1202,7 +1202,7 @@ export const ProviderLive = () =>
               buckets,
               (bucket) =>
                 Effect.gen(function* () {
-                  // The hydration reads are independent — issue them
+                  // The hydration reads are independent -- issue them
                   // concurrently so each bucket costs one round-trip of wall
                   // clock instead of four (a large leaked-bucket census can
                   // otherwise blow the nuke scan's per-provider timeout).
@@ -1261,7 +1261,7 @@ export const ProviderLive = () =>
                   // retries each call's transient blips; don't stack another
                   // retry here (the budgets multiply into minutes per bucket).
                   // A bucket that still 500s must not abort the account-wide
-                  // enumeration (nuke would then see ZERO buckets) — degrade
+                  // enumeration (nuke would then see ZERO buckets) -- degrade
                   // it to an un-hydrated shape; delete can still tear the
                   // bucket down.
                   Effect.catchTag("InternalServerError", () =>
@@ -1348,7 +1348,7 @@ export const ProviderLive = () =>
             });
           }
 
-          // Observe — fetch the bucket. R2 reports a deleted bucket as
+          // Observe -- fetch the bucket. R2 reports a deleted bucket as
           // `NoSuchBucket`; tolerate that so the reconciler falls
           // through to the create path.
           let observed = yield* r2
@@ -1359,7 +1359,7 @@ export const ProviderLive = () =>
             })
             .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
 
-          // Ensure — create if missing. R2 reports a concurrent create
+          // Ensure -- create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
           // `BucketAlreadyExists`; tolerate by re-fetching the bucket.
           if (!observed) {
@@ -1381,7 +1381,7 @@ export const ProviderLive = () =>
                     })
                     .pipe(
                       // The create lost a race, but the winning create may not
-                      // be readable yet — ride out the consistency lag.
+                      // be readable yet -- ride out the consistency lag.
                       Effect.retry({
                         while: (e) => e._tag === "NoSuchBucket",
                         schedule: r2BucketEndpointConsistencySchedule,
@@ -1391,11 +1391,11 @@ export const ProviderLive = () =>
               );
           }
 
-          // Sync — storage class is the only mutable bucket property
+          // Sync -- storage class is the only mutable bucket property
           // (location and jurisdiction are immutable; the diff flags those
           // as `replace`). PATCH carries the class in the
           // `cf-r2-storage-class` header. Address the bucket by the
-          // RESOLVED name, never `observed.name` — a response missing the
+          // RESOLVED name, never `observed.name` -- a response missing the
           // name would collapse the URI to the collection path, which the
           // control plane rejects with `PATCH not supported for requested
           // URI`. Only patch when the desired class drifts from observed.
@@ -1497,14 +1497,14 @@ export const ProviderLive = () =>
           );
 
           // Whether we may destroy the bucket's CONTENTS.
-          // - `olds.forceDestroy` — the user opted in on the resource props.
-          // - `force` — set only by `alchemy unsafe nuke`, an explicitly
+          // - `olds.forceDestroy` -- the user opted in on the resource props.
+          // - `force` -- set only by `alchemy unsafe nuke`, an explicitly
           //   operator-confirmed account teardown. Nuke enumerates buckets
           //   straight from the cloud (its `olds` is Attributes, not Props),
           //   so `forceDestroy` is never present there.
           //
           // Without either, the objects are left alone and R2's own refusal
-          // to delete a non-empty bucket (`BucketNotEmpty`) stands — that
+          // to delete a non-empty bucket (`BucketNotEmpty`) stands -- that
           // refusal is the data protection users rely on, and emptying the
           // bucket to get past it is how a stack teardown turns into
           // irreversible data loss (#1248).
@@ -1542,7 +1542,7 @@ export const ProviderLive = () =>
             // Incomplete multipart uploads also hold a bucket, and the
             // object listing doesn't show them. Only R2's S3 API can abort
             // them, which works when alchemy is authenticated with an API
-            // token — try that once, best effort, then re-empty and retry.
+            // token -- try that once, best effort, then re-empty and retry.
             Effect.catchTag("BucketNotEmpty", () =>
               Effect.gen(function* () {
                 const result = yield* abortMultipartUploads(
@@ -1614,11 +1614,11 @@ export const ProviderLive = () =>
   );
 
 /**
- * Local (dev) provider — the bucket is purely virtual: a `dev:`-prefixed
+ * Local (dev) provider -- the bucket is purely virtual: a `dev:`-prefixed
  * bucket name keyed into the local workerd R2 simulator (data under
  * `.alchemy/local/r2`). `toRuntimeBinding` lowers an `r2_bucket` binding
  * whose bucket name is `dev:`-prefixed onto the local R2 service. R2 has no
- * opaque id — the name IS the identity — so the `dev:` marker rides on the
+ * opaque id -- the name IS the identity -- so the `dev:` marker rides on the
  * name (a `:` can never appear in a real R2 bucket name).
  *
  * Custom domains, lifecycle rules, CORS, lock rules, and the managed r2.dev
@@ -1638,7 +1638,7 @@ export const ProviderLocal = () =>
       // Fall through to the engine's default prop diff.
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ news = {}, output }) {
@@ -1659,7 +1659,7 @@ export const ProviderLocal = () =>
     }),
     delete: Effect.fn(function* () {
       // The simulator's on-disk data is keyed by the dev name; dropping the
-      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+      // state row is enough -- orphaned blobs are reclaimed with `.alchemy`.
     }),
   });
 
@@ -1679,7 +1679,7 @@ export const BucketProvider = () =>
  */
 /**
  * A `forceDestroy` delete emptied the bucket, but R2 still refuses to delete
- * it — usually because incomplete multipart uploads hold it.
+ * it -- usually because incomplete multipart uploads hold it.
  */
 class BucketNotEmpty extends Data.TaggedError("BucketNotEmpty")<{
   bucketName: string;

@@ -13,7 +13,7 @@ import type { Namespace } from "./Namespace.ts";
  * ### Restoring Data
  * **Example:** Restore One Table from a Recovery Point
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const restoreTable = yield* AWS.RedshiftServerless.RestoreTableFromRecoveryPoint(namespace);
  *
  * yield* restoreTable({

@@ -19,7 +19,7 @@ export interface LogEntry {
 }
 
 /**
- * The body of a test. Always an Effect — plain-function tests are wrapped
+ * The body of a test. Always an Effect -- plain-function tests are wrapped
  * at registration time. The Effect must be self-contained (R = never);
  * wrapping (scope, TestClock/TestConsole, shared layers) happens in the
  * harness closures, NOT in the runner.
@@ -38,7 +38,7 @@ export interface Hook {
   /**
    * `true` takes the whole-process write lock for this hook. A label (e.g.
    * `"hetzner"`) only serializes the hook with tests and hooks holding the
-   * same label — use it for deploys that consume a scarce cloud quota.
+   * same label -- use it for deploys that consume a scarce cloud quota.
    */
   readonly exclusive?: Exclusive;
 }
@@ -56,11 +56,11 @@ export interface TestCase {
   /**
    * `true` runs this test with the whole-process write lock: no other test
    * in the run executes concurrently with it. Required for tests that mutate
-   * process-global state (e.g. `process.env.PATH`) — the runner executes
+   * process-global state (e.g. `process.env.PATH`) -- the runner executes
    * everything in ONE bun process, so such mutations are visible everywhere.
    *
    * A label (e.g. `"hetzner"`) only serializes the test with others holding
-   * the same label — use it for a shared cloud quota, not global state.
+   * the same label -- use it for a shared cloud quota, not global state.
    */
   readonly exclusive?: Exclusive;
   /** Override the run-wide retry budget for this test. */
@@ -132,7 +132,7 @@ export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
     if (current.parent !== undefined || current.type === "test") {
       parts.unshift(current.name);
     } else if (current.parent === undefined && current.type === "suite") {
-      // file root — stop
+      // file root -- stop
     }
     current = current.parent;
   }

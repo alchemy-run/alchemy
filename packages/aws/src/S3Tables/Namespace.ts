@@ -38,7 +38,7 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * A namespace within an Amazon S3 Tables {@link TableBucket} — a logical
+ * A namespace within an Amazon S3 Tables {@link TableBucket} -- a logical
  * grouping of {@link Table}s, equivalent to a database in an Iceberg catalog.
  * ### Creating Namespaces
  * **Example:** Basic Namespace
@@ -68,8 +68,8 @@ const createNamespaceName = (id: string, props: { namespace?: string | undefined
     if (props.namespace) {
       return props.namespace;
     }
-    // Namespace names allow lowercase letters, numbers, and underscores only —
-    // no hyphens — so translate the DNS-style physical name. Namespace names
+    // Namespace names allow lowercase letters, numbers, and underscores only --
+    // no hyphens -- so translate the DNS-style physical name. Namespace names
     // must not start with the reserved prefix `aws`.
     const base = yield* createPhysicalName({
       id,
@@ -118,14 +118,14 @@ export const NamespaceProvider = () =>
       const tableBucketArn = news.tableBucket as string;
       const namespace = output?.namespace ?? (yield* createNamespaceName(id, news));
 
-      // Observe — read live state; the namespace may have been removed
+      // Observe -- read live state; the namespace may have been removed
       // out-of-band even if `output` cached it.
       let ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
         Effect.map((n) => n),
         Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
-      // Ensure — create if missing, tolerating a concurrent create.
+      // Ensure -- create if missing, tolerating a concurrent create.
       if (ns === undefined) {
         yield* s3tables
           .createNamespace({
@@ -164,7 +164,7 @@ export const NamespaceProvider = () =>
         })
         .pipe(
           // Table deletes are eventually consistent; a namespace delete that
-          // races them reports ConflictException — ride out the window.
+          // races them reports ConflictException -- ride out the window.
           Effect.retry({
             while: (e) => e._tag === "ConflictException",
             schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),

@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncOmicsTags } from "./internal.ts";
 
-// Annotation/variant store names must match `[a-z]([a-z0-9_]){0,254}` — the
+// Annotation/variant store names must match `[a-z]([a-z0-9_]){0,254}` -- the
 // generated physical name (hyphens, mixed case) is coerced to fit.
 const toStoreName = (raw: string) => {
   const sanitized = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
@@ -32,13 +32,13 @@ export interface AnnotationStoreProps {
    */
   description?: string;
   /**
-   * The annotation file format of the store. Immutable — changing it replaces
+   * The annotation file format of the store. Immutable -- changing it replaces
    * the store.
    */
   storeFormat: "GFF" | "TSV" | "VCF";
   /**
    * The genome reference for the store, as a reference ARN. Required for
-   * `GFF` and `VCF` stores. Immutable — changing it replaces the store.
+   * `GFF` and `VCF` stores. Immutable -- changing it replaces the store.
    */
   reference?: {
     /** ARN of a reference in a HealthOmics reference store. */
@@ -100,12 +100,12 @@ export interface AnnotationStore extends Resource<
 > {}
 
 /**
- * An Amazon HealthOmics annotation store — a container for genome annotation
+ * An Amazon HealthOmics annotation store -- a container for genome annotation
  * data (GFF, TSV, or VCF) aligned to a reference genome.
  *
  * An annotation store name is auto-generated from the app, stage, and logical
  * ID unless you provide one. The `storeFormat`, `reference`, `storeOptions`,
- * and `sseConfig` are immutable — changing any of them replaces the store.
+ * and `sseConfig` are immutable -- changing any of them replaces the store.
  * `description` is updated in place.
  * ### Creating an Annotation Store
  * **Example:** VCF Annotation Store
@@ -204,12 +204,12 @@ export const AnnotationStoreProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — annotation stores are addressable by name.
+          // OBSERVE -- annotation stores are addressable by name.
           let store = yield* omics
             .getAnnotationStore({ name })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // ENSURE — create if missing, tolerating a create race, then wait
+          // ENSURE -- create if missing, tolerating a create race, then wait
           // for the async provisioning to reach a terminal state.
           if (store === undefined) {
             yield* omics
@@ -228,7 +228,7 @@ export const AnnotationStoreProvider = () =>
             store = yield* waitUntilActive(name);
           }
 
-          // SYNC — description is the only mutable field.
+          // SYNC -- description is the only mutable field.
           if (news.description !== undefined && news.description !== store.description) {
             yield* omics.updateAnnotationStore({
               name,
@@ -237,7 +237,7 @@ export const AnnotationStoreProvider = () =>
             store = yield* omics.getAnnotationStore({ name });
           }
 
-          // SYNC TAGS — diff against observed cloud tags so adoption converges.
+          // SYNC TAGS -- diff against observed cloud tags so adoption converges.
           yield* syncOmicsTags(store.storeArn, desiredTags);
 
           yield* session.note(store.id);

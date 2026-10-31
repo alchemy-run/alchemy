@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBSnapshots` operation (IAM action
  * `rds:DescribeDBSnapshots`).
  *
- * Lists the account's DB instance snapshots — the discovery half of a
+ * Lists the account's DB instance snapshots -- the discovery half of a
  * snapshot-rotation or verification function. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeDBSnapshotsHttp)`.
  * ### Managing Instance Snapshots

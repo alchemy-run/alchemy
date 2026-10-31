@@ -147,7 +147,7 @@ export const listWindow = (
 
 /**
  * Horizontal window over variable-width items (tab chips): expands around
- * `active` — alternating right/left so the selection stays roughly centered —
+ * `active` -- alternating right/left so the selection stays roughly centered --
  * until `available` columns are exhausted. Returns `[start, end)` like
  * {@link listWindow}; `active` is always inside the window.
  */
@@ -180,7 +180,7 @@ export const tabsWindow = (
 };
 
 /**
- * Window for prompt lists that render "↑ N more"/"↓ N more" indicator rows:
+ * Window for prompt lists that render "^ N more"/"v N more" indicator rows:
  * reserves two of `visibleCount`'s rows for the indicators when overflowing so
  * the widget stays within the requested height.
  */

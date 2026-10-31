@@ -93,7 +93,7 @@ export interface ContainerProcess {
 }
 
 /**
- * The container bound to the current Durable Object — what `yield* Sandbox`
+ * The container bound to the current Durable Object -- what `yield* Sandbox`
  * returns. Binding never starts the container: call {@link start} before
  * using it. `start` is idempotent and coordinated across every handle in the
  * Durable Object, so calling it at the top of each operation is cheap.
@@ -187,10 +187,10 @@ const containerError = (cause: unknown) =>
 
 // Every constant below is taken from Cloudflare's own `@cloudflare/containers`
 // runtime (`dist/lib/container.js`) so readiness matches `startAndWaitForPorts`:
-//   INSTANCE_POLL_INTERVAL_MS   = 300    → fixed poll interval
-//   PING_TIMEOUT_MS             = 5_000  → per-probe cap
-//   TIMEOUT_TO_GET_CONTAINER_MS = 8_000  → find + start an instance
-//   TIMEOUT_TO_GET_PORTS_MS     = 20_000 → wait for the port to listen
+//   INSTANCE_POLL_INTERVAL_MS   = 300    -> fixed poll interval
+//   PING_TIMEOUT_MS             = 5_000  -> per-probe cap
+//   TIMEOUT_TO_GET_CONTAINER_MS = 8_000  -> find + start an instance
+//   TIMEOUT_TO_GET_PORTS_MS     = 20_000 -> wait for the port to listen
 const READINESS_POLL_INTERVAL = Duration.millis(300);
 const READINESS_PROBE_TIMEOUT = Duration.seconds(5);
 const GET_CONTAINER_RETRIES = Math.ceil(8_000 / 300);

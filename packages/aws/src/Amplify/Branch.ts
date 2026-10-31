@@ -243,7 +243,7 @@ export const BranchProvider = () =>
             // throttle (see amplifyWriteRetrySchedule). Its API Gateway
             // front door can also time out a slow CreateBranch (typed
             // TimeoutException, "Endpoint request timed out") with the
-            // outcome unknown — re-observe before every (re)try so a
+            // outcome unknown -- re-observe before every (re)try so a
             // retry converges on the branch the timed-out call created.
             branch = yield* observe(news.appId, branchName).pipe(
               Effect.flatMap((existing) =>
@@ -266,7 +266,7 @@ export const BranchProvider = () =>
               }),
             );
           } else {
-            // UpdateBranch is idempotent — retry front-door timeouts and
+            // UpdateBranch is idempotent -- retry front-door timeouts and
             // the "Rate exceeded" throttle with bounded backoff.
             const updated = yield* amplify
               .updateBranch({
@@ -324,7 +324,7 @@ export const BranchProvider = () =>
             return branches;
           }),
         delete: Effect.fn(function* ({ output }) {
-          // DeleteBranch is idempotent — retry front-door timeouts and the
+          // DeleteBranch is idempotent -- retry front-door timeouts and the
           // account-wide "Rate exceeded" throttle; a timed-out delete that
           // actually landed resolves to NotFoundException on the retry,
           // which is swallowed below.

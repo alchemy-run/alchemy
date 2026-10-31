@@ -56,7 +56,7 @@ export type VolumeEnvironment = { readonly environmentId: string };
 /**
  * Service identity a Volume can attach to at create time. Accepts a
  * `Railway.Service` or a `{ serviceId }` stub. Subsequent attach is
- * `MountVolume` — omit `service` to leave the volume disconnected.
+ * `MountVolume` -- omit `service` to leave the volume disconnected.
  */
 export type VolumeService = { readonly serviceId: string };
 
@@ -78,13 +78,13 @@ export interface VolumeProps {
    */
   mountPath: string;
   /**
-   * Region for the volume instance (`us-west2`, `us-east4`, …). If
+   * Region for the volume instance (`us-west2`, `us-east4`, ...). If
    * omitted, Railway picks the default. Changing it replaces the Volume.
    */
   region?: string;
   /**
    * Service to attach the volume to. If omitted, the volume is
-   * disconnected — attach later with MountVolume. Accepts a
+   * disconnected -- attach later with MountVolume. Accepts a
    * `Railway.Service` or `{ serviceId }`. Updating it attaches or moves
    * the volume in place.
    */
@@ -93,7 +93,7 @@ export interface VolumeProps {
    * Requested provisioned size in megabytes (Railway IaC parity).
    *
    * The public GraphQL `VolumeCreateInput` has no `size`/`sizeMB` field,
-   * and `VolumeInstanceUpdateInput` cannot grow a volume — growing is
+   * and `VolumeInstanceUpdateInput` cannot grow a volume -- growing is
    * Pro-dashboard-only. Alchemy records this prop and reports the cloud
    * plan default on the observed `sizeMB` attribute. Changing it does
    * not call an API.
@@ -121,7 +121,7 @@ export type Volume = Resource<
     region: string | undefined;
     /** Attached service id, if any. */
     serviceId: string | undefined;
-    /** Observed instance state (`READY`, `UPDATING`, …). */
+    /** Observed instance state (`READY`, `UPDATING`, ...). */
     state: VolumeState | undefined;
     /**
      * Observed provisioned size in MB. Railway picks this from the
@@ -239,7 +239,7 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * ### Size
  * `sizeMB` on attributes is the observed plan default. Railway's public
  * `VolumeCreateInput` has no size field; growing is Pro-dashboard-only.
- * Passing `sizeMB` on props is IaC-parity documentation — it is not
+ * Passing `sizeMB` on props is IaC-parity documentation -- it is not
  * applied.
  *
  * **Example:** Observed size
@@ -276,7 +276,7 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  *
  * ### Backups
  * Snapshot a mounted volume with {@link VolumeBackup}. Railway only
- * backups attached volumes. Restore is destructive — see
+ * backups attached volumes. Restore is destructive -- see
  * `restoreVolumeBackup`.
  *
  * **Example:** Manual snapshot

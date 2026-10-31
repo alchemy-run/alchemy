@@ -10,13 +10,13 @@ export interface SearchDatabasesByLFTagsRequest extends lf.SearchDatabasesByLFTa
 /**
  * Runtime binding for `lakeformation:SearchDatabasesByLFTags`.
  *
- * Finds Glue databases whose LF-tags match an expression — tag-driven data
+ * Finds Glue databases whose LF-tags match an expression -- tag-driven data
  * discovery at runtime. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.SearchDatabasesByLFTagsHttp)`.
  * ### Searching by LF-Tags
  * **Example:** Find Databases Tagged prod
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const searchDatabases = yield* AWS.LakeFormation.SearchDatabasesByLFTags();
  *
  * // runtime

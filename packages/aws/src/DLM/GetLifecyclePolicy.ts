@@ -6,16 +6,16 @@ import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
 /**
  * Runtime binding for `dlm:GetLifecyclePolicy`.
  *
- * Reads the bound {@link LifecyclePolicy}'s full detail — state (including
+ * Reads the bound {@link LifecyclePolicy}'s full detail -- state (including
  * the observed-only `ERROR`), status message, execution role, and the
- * complete policy document — so an ops function can audit backup coverage
+ * complete policy document -- so an ops function can audit backup coverage
  * or alert on a policy that stopped running. The policy id is injected from
  * the binding. Provide the implementation with
  * `Effect.provide(AWS.DLM.GetLifecyclePolicyHttp)`.
  * ### Monitoring Lifecycle Policies
  * **Example:** Check A Policy's State
  * ```typescript
- * // init — bind the operation to the lifecycle policy
+ * // init -- bind the operation to the lifecycle policy
  * const getLifecyclePolicy = yield* AWS.DLM.GetLifecyclePolicy(policy);
  *
  * // runtime

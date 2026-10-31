@@ -19,7 +19,7 @@ export interface CertificateValidation extends Resource<
   {
     /** ARN of the issued certificate. */
     certificateArn: string;
-    /** Certificate status — `ISSUED` once reconciled. */
+    /** Certificate status -- `ISSUED` once reconciled. */
     status: string | undefined;
     /** When the certificate was issued. */
     issuedAt: Date | undefined;
@@ -35,7 +35,7 @@ export interface CertificateValidation extends Resource<
  *
  * Pair it with an `AWS.ACM.Certificate` requested with
  * `dnsValidation: "external"` whose validation records are published
- * elsewhere — typically through a DNS adapter (see
+ * elsewhere -- typically through a DNS adapter (see
  * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Resources that
  * need an issued certificate (a CloudFront distribution, an HTTPS
  * listener, an API Gateway domain) take this resource's `certificateArn`,

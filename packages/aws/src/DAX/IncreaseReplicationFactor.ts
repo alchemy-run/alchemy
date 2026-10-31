@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `IncreaseReplicationFactor` operation (IAM action
  * `dax:IncreaseReplicationFactor`), scoped to one {@link Cluster}.
  *
- * Adds read-replica nodes to the bound DAX cluster — the building block of
+ * Adds read-replica nodes to the bound DAX cluster -- the building block of
  * scale-out automation (e.g. a Lambda reacting to a CloudWatch alarm on
  * cluster CPU or cache-miss rate). Provide the implementation with
  * `Effect.provide(AWS.DAX.IncreaseReplicationFactorHttp)`.
@@ -20,7 +20,7 @@ import type { Cluster } from "./Cluster.ts";
  * const result = yield* increaseReplicationFactor({
  *   NewReplicationFactor: 3,
  * });
- * // result.Cluster?.TotalNodes → 3 (new nodes provision asynchronously)
+ * // result.Cluster?.TotalNodes -> 3 (new nodes provision asynchronously)
  * ```
  *
  * @binding

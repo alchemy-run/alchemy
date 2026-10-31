@@ -17,7 +17,7 @@ export interface ListSubscriptionsRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** List Approved Subscriptions
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const listSubscriptions = yield* AWS.DataZone.ListSubscriptions(domain);
  *
  * // runtime

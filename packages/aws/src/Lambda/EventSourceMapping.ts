@@ -95,7 +95,7 @@ export interface EventSourceMappingProps {
    * A list of current response type enums applied to the event source mapping.
    * Defaults to `["ReportBatchItemFailures"]` for SQS, Kinesis and DynamoDB
    * Streams sources, and for other sources (e.g. Kafka/MSK) only when
-   * `provisionedPollerConfig.MinimumPollers` is set — they reject it otherwise.
+   * `provisionedPollerConfig.MinimumPollers` is set -- they reject it otherwise.
    * @default ["ReportBatchItemFailures"] (SQS, Kinesis, DynamoDB Streams)
    */
   functionResponseTypes?: FunctionResponseType[];
@@ -197,8 +197,8 @@ export interface EventSourceMapping extends Resource<
 > {}
 
 /**
- * Connects an event source — an SQS queue, Kinesis stream, DynamoDB stream,
- * Amazon MQ broker, or Kafka topic — to a Lambda function so that records are
+ * Connects an event source -- an SQS queue, Kinesis stream, DynamoDB stream,
+ * Amazon MQ broker, or Kafka topic -- to a Lambda function so that records are
  * polled from the source and delivered to the function in batches.
  *
  * Most stacks create mappings indirectly through the higher-level event-source
@@ -233,7 +233,7 @@ export interface EventSourceMapping extends Resource<
  *
  * This delivers up to 10 messages per invocation, waiting up to 5 seconds to
  * fill a batch before invoking. Increasing the batching window trades latency
- * for fewer, larger invocations — useful for amortizing cold starts or
+ * for fewer, larger invocations -- useful for amortizing cold starts or
  * downstream write costs on bursty queues.
  *
  * ### Streaming from Kinesis & DynamoDB
@@ -260,7 +260,7 @@ export interface EventSourceMapping extends Resource<
  * ```
  *
  * `startingPosition: "LATEST"` skips any backlog and only processes records
- * written after the mapping is created — the right choice for live event
+ * written after the mapping is created -- the right choice for live event
  * pipelines where replaying history would be wasteful or incorrect.
  *
  * **Example:** Replay a DynamoDB stream from the beginning
@@ -283,7 +283,7 @@ export interface EventSourceMapping extends Resource<
  *
  * `TRIM_HORIZON` starts at the oldest record still in the stream, so the
  * function processes the full available history before catching up to new
- * writes — use it when every change matters (e.g. building a projection).
+ * writes -- use it when every change matters (e.g. building a projection).
  *
  * **Example:** Start reading from a specific timestamp
  * ```typescript
@@ -363,7 +363,7 @@ export interface EventSourceMapping extends Resource<
  *
  * `functionResponseTypes: ["ReportBatchItemFailures"]` lets the function return
  * only the IDs of records it failed to process, so Lambda retries just those
- * instead of the whole batch — avoiding redundant reprocessing of records that
+ * instead of the whole batch -- avoiding redundant reprocessing of records that
  * already succeeded.
  *
  * ### Filtering Records
@@ -403,7 +403,7 @@ export interface EventSourceMapping extends Resource<
  * });
  * ```
  *
- * With `enabled: false` the mapping exists but pulls no records — flip it back
+ * With `enabled: false` the mapping exists but pulls no records -- flip it back
  * to `true` to resume. This is handy for maintenance windows or for staging a
  * consumer before turning on traffic.
  *
@@ -524,7 +524,7 @@ export const EventSourceMappingProvider = () =>
 
       // ReportBatchItemFailures and MetricsConfig are only accepted for
       // SQS / Kinesis / DynamoDB Streams, or for other sources (Kafka/MSK)
-      // in provisioned-poller mode — MSK rejects them otherwise ("... is only
+      // in provisioned-poller mode -- MSK rejects them otherwise ("... is only
       // available for provisioned mode"). Only default them where valid.
       const supportsDefaults = (props: EventSourceMappingProps): boolean =>
         /^arn:[^:]+:(sqs|kinesis|dynamodb):/.test(String(props.eventSourceArn)) ||
@@ -602,7 +602,7 @@ export const EventSourceMappingProvider = () =>
         KMSKeyArn: props.kmsKeyArn,
         MetricsConfig: defaultMetricsConfig(props),
         ProvisionedPollerConfig: props.provisionedPollerConfig,
-        // ConsumerGroupId is create-only — UpdateEventSourceMapping rejects it
+        // ConsumerGroupId is create-only -- UpdateEventSourceMapping rejects it
         // ("Unsupported '...consumerGroupId' parameter"); changing it replaces.
         AmazonManagedKafkaEventSourceConfig: withoutConsumerGroupId(
           props.amazonManagedKafkaEventSourceConfig,
@@ -785,7 +785,7 @@ export const EventSourceMappingProvider = () =>
           const functionName = news.functionName as string;
           const eventSourceArn = news.eventSourceArn as string;
 
-          // Observe — find the existing mapping. UUIDs are server-assigned
+          // Observe -- find the existing mapping. UUIDs are server-assigned
           // so we either trust `output.uuid` (fast path) or scan
           // `listEventSourceMappings` and confirm ownership via tags
           // (recovery from a state-persistence failure or adoption).
@@ -830,7 +830,7 @@ export const EventSourceMappingProvider = () =>
               );
           }
 
-          // Ensure — create if no live mapping exists. Tolerate
+          // Ensure -- create if no live mapping exists. Tolerate
           // `ResourceConflictException` (peer reconciler raced ahead) by
           // re-scanning to find the mapping by tag ownership.
           if (!config?.UUID) {
@@ -888,7 +888,7 @@ export const EventSourceMappingProvider = () =>
           }
           const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
-          // Sync configuration — `updateEventSourceMapping` is a full PUT
+          // Sync configuration -- `updateEventSourceMapping` is a full PUT
           // for mutable fields. We always send the full desired config so
           // observed state converges. Retry `ResourceInUseException`
           // (mapping is transitioning) and known IAM-propagation errors.
@@ -904,7 +904,7 @@ export const EventSourceMappingProvider = () =>
 
           // Wait for the mapping to settle into its desired terminal state.
           // A fresh mapping sits in `Creating` for up to ~a minute before
-          // Lambda actually starts polling — and for stream sources with
+          // Lambda actually starts polling -- and for stream sources with
           // `startingPosition: LATEST`, records written before polling
           // starts are silently skipped. Returning early would hand the
           // caller a mapping that looks deployed but drops events.
@@ -926,7 +926,7 @@ export const EventSourceMappingProvider = () =>
                   ),
                 ),
               }),
-              // Never wedge a deploy on a mapping stuck in transition —
+              // Never wedge a deploy on a mapping stuck in transition --
               // surface the observed state in the attributes instead.
               Effect.catchTag("MappingNotSettled", () =>
                 lambda.getEventSourceMapping({ UUID: uuid }),
@@ -934,7 +934,7 @@ export const EventSourceMappingProvider = () =>
             );
           }
 
-          // Sync tags — diff observed cloud tags against desired so
+          // Sync tags -- diff observed cloud tags against desired so
           // adoption rewrites ownership tags correctly.
           const observedTagsResp = yield* lambda
             .listTags({ Resource: mappingArn })
@@ -971,12 +971,12 @@ export const EventSourceMappingProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* deleteMapping(output.uuid);
         }),
-        // `list()` — AWS account/region collection (§4a). Exhaustively
+        // `list()` -- AWS account/region collection (§4a). Exhaustively
         // paginate `listEventSourceMappings` with no `FunctionName` filter to
         // enumerate every mapping in the current region, hydrating each into
         // the exact `Attributes` shape `reconcile`/`configToAttrs` returns.
         // The list response carries full `EventSourceMappingConfiguration`
-        // objects, so there is no per-item `getEventSourceMapping` to issue —
+        // objects, so there is no per-item `getEventSourceMapping` to issue --
         // hence no bounded fan-out or per-item `ResourceNotFoundException`
         // handling is required. We drop any partial entry missing a required
         // identifier field rather than emitting a malformed `Attributes`.

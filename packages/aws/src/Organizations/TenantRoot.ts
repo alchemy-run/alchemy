@@ -69,7 +69,7 @@ export interface TenantPolicySpec {
    */
   type?: organizations.PolicyType;
   /**
-   * Policy content — a typed {@link ServiceControlPolicyDocument} for
+   * Policy content -- a typed {@link ServiceControlPolicyDocument} for
    * SCP/RCP policies, or a raw JSON `string` for other policy types
    * (tag, backup, ...) and as the escape hatch.
    */

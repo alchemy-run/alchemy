@@ -22,12 +22,12 @@ export type IdentityMappingStoreProps = {
   /**
    * Identity Mapping Store id (the last path segment). If omitted, a
    * unique id is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the store. Generated ids are
+   * Immutable -- changing it replaces the store. Generated ids are
    * prefixed with `alch` so `list` / nuke can find them.
    */
   identityMappingStoreId?: string;
   /**
-   * Location (`global`, `us`, `eu`). Immutable — changing it replaces
+   * Location (`global`, `us`, `eu`). Immutable -- changing it replaces
    * the store.
    * @default "global"
    */
@@ -72,7 +72,7 @@ export type IdentityMappingStore = Resource<
  * A Vertex AI Search Identity Mapping Store.
  *
  * Stores have no labels or display name, so generated ids are prefixed
- * with `alch` for `list` / nuke. Location, id, and CMEK are identity —
+ * with `alch` for `list` / nuke. Location, id, and CMEK are identity --
  * changing them replaces the store. There is nothing mutable to sync.
  *
  * ### Creating an Identity Mapping Store

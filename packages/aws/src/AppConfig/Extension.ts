@@ -99,7 +99,7 @@ export interface Extension extends Resource<
 > {}
 
 /**
- * An AWS AppConfig extension — a set of actions AppConfig performs at
+ * An AWS AppConfig extension -- a set of actions AppConfig performs at
  * specific points of the configuration workflow (before a version is
  * created, before/while/after a deployment). Actions can invoke Lambda
  * functions, publish to SNS/SQS, or emit EventBridge events.
@@ -202,7 +202,7 @@ export const ExtensionProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
         );
-        // listExtensions returns one summary per version — take the latest.
+        // listExtensions returns one summary per version -- take the latest.
         const latest = summaries.reduce(
           (acc: appconfig.ExtensionSummary | undefined, summary: appconfig.ExtensionSummary) =>
             acc === undefined || (summary.VersionNumber ?? 0) > (acc.VersionNumber ?? 0)
@@ -255,7 +255,7 @@ export const ExtensionProvider = () =>
 
           // 2. Ensure. A freshly created invoke role may not be assumable
           // yet (IAM propagation), which AppConfig surfaces as
-          // BadRequestException — absorb that window with a bounded retry.
+          // BadRequestException -- absorb that window with a bounded retry.
           if (observed?.Id === undefined) {
             observed = yield* appconfig
               .createExtension({
@@ -277,7 +277,7 @@ export const ExtensionProvider = () =>
             stableJson(observed.Actions ?? {}) !== stableJson(desiredActions) ||
             stableJson(observed.Parameters ?? {}) !== stableJson(desiredParameters ?? {})
           ) {
-            // 3. Sync — description, actions, and parameters are mutable
+            // 3. Sync -- description, actions, and parameters are mutable
             // (AppConfig records the change as a new extension version).
             observed = yield* appconfig.updateExtension({
               ExtensionIdentifier: observed.Id,
@@ -317,7 +317,7 @@ export const ExtensionProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             );
-            // One summary per version — keep the latest version per id.
+            // One summary per version -- keep the latest version per id.
             const latest = new Map<string, appconfig.ExtensionSummary>();
             for (const summary of summaries) {
               if (summary.Id === undefined) continue;

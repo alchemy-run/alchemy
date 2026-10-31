@@ -71,7 +71,7 @@ export interface IdNamespace extends Resource<
 > {}
 
 /**
- * An AWS Entity Resolution ID namespace — a wrapper around an input dataset
+ * An AWS Entity Resolution ID namespace -- a wrapper around an input dataset
  * used by ID mapping workflows. A `SOURCE` namespace holds the records to be
  * translated; a `TARGET` namespace holds the dataset (and the rule-based
  * matching configuration) they are mapped onto.
@@ -128,7 +128,7 @@ export const IdNamespaceProvider = () =>
         return props.idNamespaceName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
-      /** Get an ID namespace by name; typed not-found → undefined. */
+      /** Get an ID namespace by name; typed not-found -> undefined. */
       const getByName = Effect.fn(function* (idNamespaceName: string) {
         return yield* entityresolution
           .getIdNamespace({ idNamespaceName })
@@ -146,7 +146,7 @@ export const IdNamespaceProvider = () =>
             idNamespaceName: namespace.idNamespaceName,
             idNamespaceArn: namespace.idNamespaceArn,
           };
-          // getIdNamespace returns tags — use the observed tags for the
+          // getIdNamespace returns tags -- use the observed tags for the
           // ownership check.
           const tags = toTagRecord(namespace.tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -156,7 +156,7 @@ export const IdNamespaceProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          // The name is the identity, and `type` is create-only —
+          // The name is the identity, and `type` is create-only --
           // updateIdNamespace does not accept it.
           if (oldName !== newName || olds.type !== news.type) {
             return { action: "replace" } as const;
@@ -168,10 +168,10 @@ export const IdNamespaceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — names are unique, so the name IS the identity.
+          // 1. Observe -- names are unique, so the name IS the identity.
           let namespace = yield* getByName(name);
 
-          // 2. Ensure — create when missing. A freshly-created IAM role is
+          // 2. Ensure -- create when missing. A freshly-created IAM role is
           //    transiently rejected while IAM propagates; tolerate the
           //    concurrent-create race, then re-observe.
           if (namespace === undefined) {
@@ -194,7 +194,7 @@ export const IdNamespaceProvider = () =>
             });
           }
 
-          // 3. Sync — everything except name/type updates in place via a
+          // 3. Sync -- everything except name/type updates in place via a
           //    full-PUT update. Only call the API on an actual delta between
           //    OBSERVED and desired configuration.
           const desired = {
@@ -233,7 +233,7 @@ export const IdNamespaceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // deleteIdNamespace succeeds even when the namespace is already
           // gone; it conflicts while an ID mapping workflow still references
-          // it (the engine deletes dependents first — retry the
+          // it (the engine deletes dependents first -- retry the
           // eventual-consistency window).
           yield* entityresolution
             .deleteIdNamespace({ idNamespaceName: output.idNamespaceName })

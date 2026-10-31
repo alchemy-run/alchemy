@@ -42,7 +42,7 @@ export type SecurityPolicyProps = {
    */
   securityPolicyName?: string;
   /**
-   * Intended use of the policy. Set only at create time — changing it
+   * Intended use of the policy. Set only at create time -- changing it
    * replaces the policy.
    * @default "CLOUD_ARMOR"
    */
@@ -100,7 +100,7 @@ export type SecurityPolicy = Resource<
     securityPolicyName: string;
     /** Project id. */
     project: string;
-    /** Policy type (`CLOUD_ARMOR`, `CLOUD_ARMOR_EDGE`, …). */
+    /** Policy type (`CLOUD_ARMOR`, `CLOUD_ARMOR_EDGE`, ...). */
     type: string;
     /** Description. */
     description: string | undefined;
@@ -140,7 +140,7 @@ export type SecurityPolicy = Resource<
  * targeting backend services (and, for `CLOUD_ARMOR_EDGE`, backend
  * buckets).
  *
- * Type is immutable — changing it replaces the policy. Name is
+ * Type is immutable -- changing it replaces the policy. Name is
  * immutable. Description, advanced options, Adaptive Protection,
  * reCAPTCHA, DDoS config, and user-defined fields update in place via
  * `securityPolicies.patch`. Rules are synced with `addRule` /

@@ -7,8 +7,8 @@ import type { Environment } from "./Environment.ts";
 /**
  * Shared scaffolding for Amazon DataZone HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate: DataZone authorizes every action on the domain resource, so
  * the deploy-time half always grants `actions` on the bound domain's ARN.

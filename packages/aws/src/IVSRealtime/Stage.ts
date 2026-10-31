@@ -46,7 +46,7 @@ export interface StageProps {
   /**
    * Name of the stage (letters, digits, `-` and `_`; not unique). If
    * omitted, a deterministic physical name is generated. Stage names are
-   * mutable — changing the name updates the stage in place.
+   * mutable -- changing the name updates the stage in place.
    */
   stageName?: string;
   /**
@@ -95,7 +95,7 @@ export interface Stage extends Resource<
 > {}
 
 /**
- * An Amazon IVS Real-Time stage — a virtual space where participants
+ * An Amazon IVS Real-Time stage -- a virtual space where participants
  * exchange audio and video in real time (sub-300ms latency).
  *
  * Participants join a stage with participant tokens minted at runtime via
@@ -150,7 +150,7 @@ const recordingConfigDrifted = (
   desired: ivsrealtime.AutoParticipantRecordingConfiguration | undefined,
   observed: ivsrealtime.AutoParticipantRecordingConfiguration | undefined,
 ): boolean => {
-  if (desired === undefined) return false; // unspecified — leave alone
+  if (desired === undefined) return false; // unspecified -- leave alone
   if (observed === undefined) return true;
   if (desired.storageConfigurationArn !== observed.storageConfigurationArn) {
     return true;
@@ -210,7 +210,7 @@ export const StageProvider = () =>
       });
 
       /**
-       * ListStages has no name filter — enumerate and match exactly.
+       * ListStages has no name filter -- enumerate and match exactly.
        * Only used when the output ARN cache is unavailable.
        */
       const findByName = Effect.fn(function* (name: string) {
@@ -248,7 +248,7 @@ export const StageProvider = () =>
             ? yield* getByArn(output.stageArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             const created = yield* ivsrealtime
               .createStage({
@@ -266,7 +266,7 @@ export const StageProvider = () =>
           }
           const arn = observed.arn;
 
-          // 3. Sync — name and recording configuration are mutable via
+          // 3. Sync -- name and recording configuration are mutable via
           // UpdateStage; apply only on drift.
           const patch: Partial<ivsrealtime.UpdateStageRequest> = {};
           if (observed.name !== name) patch.name = name;
@@ -281,7 +281,7 @@ export const StageProvider = () =>
               .pipe(retryWhileThrottled, retryWhileConflict);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncIvsRealtimeTags(arn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -297,7 +297,7 @@ export const StageProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Deleting a stage with an active session raises
-          // ConflictException — retry through a bounded window.
+          // ConflictException -- retry through a bounded window.
           yield* ivsrealtime.deleteStage({ arn: output.stageArn }).pipe(
             retryWhileThrottled,
             retryWhileConflict,

@@ -27,12 +27,12 @@ export type LogScopeProps = {
    * `projects/{project}/locations/{location}/logScopes/{logScope}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the log scope.
    */
   logScopeId?: string;
   /**
-   * Location. Log scopes are only available in `global`. Immutable —
+   * Location. Log scopes are only available in `global`. Immutable --
    * changing it replaces the log scope.
    * @default "global"
    */
@@ -47,7 +47,7 @@ export type LogScopeProps = {
   resourceNames: string[];
   /**
    * Human-readable description (max 8000 characters). Log scopes have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -79,12 +79,12 @@ export type LogScope = Resource<
 >;
 
 /**
- * A Cloud Logging log scope — a named collection of projects and log
+ * A Cloud Logging log scope -- a named collection of projects and log
  * views to query together.
  *
  * Log scopes exist only in the `global` location. They have no labels
  * field, so Alchemy stamps ownership into the description for `list` /
- * nuke. `logScopeId` and `location` are identity — changing either
+ * nuke. `logScopeId` and `location` are identity -- changing either
  * replaces the scope. `resourceNames` and description update in place.
  *
  * ### Creating a Log Scope

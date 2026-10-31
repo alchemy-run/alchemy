@@ -18,7 +18,7 @@ type TypeId = typeof TypeId;
 export type MagicSiteAclProtocol = "tcp" | "udp" | "icmp";
 
 /**
- * One side of a Magic WAN site ACL — selects a LAN and optionally narrows
+ * One side of a Magic WAN site ACL -- selects a LAN and optionally narrows
  * the match to specific ports, port ranges, and subnets.
  */
 export interface MagicSiteAclLan {
@@ -67,7 +67,7 @@ export interface MagicSiteAclProps {
   protocols?: MagicSiteAclProtocol[];
   /**
    * If `true`, the policy allows traffic in one direction only
-   * (lan1 → lan2); if `false`, traffic is bidirectional.
+   * (lan1 -> lan2); if `false`, traffic is bidirectional.
    * @default false
    */
   unidirectional?: boolean;
@@ -101,15 +101,15 @@ export type MagicSiteAcl = Resource<
 >;
 
 /**
- * An ACL between two LANs of a Magic WAN site — allows traffic between
+ * An ACL between two LANs of a Magic WAN site -- allows traffic between
  * LAN segments behind a Magic WAN Connector (all inter-LAN traffic is
  * denied by default).
  *
- * Requires a Magic WAN subscription — accounts without it receive a typed
+ * Requires a Magic WAN subscription -- accounts without it receive a typed
  * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
  * (code 1101, "forbidden: feature not enabled").
  *
- * `siteId` is create-only — changing it triggers a replacement. Everything
+ * `siteId` is create-only -- changing it triggers a replacement. Everything
  * else is updated in place.
  * ### Creating an ACL
  * **Example:** Allow TCP between two LANs
@@ -177,7 +177,7 @@ export const MagicSiteAclProvider = () =>
         const observed = yield* getAcl(acct, siteId, output.aclId);
         if (observed) return toAttributes(observed, siteId, acct);
       }
-      // Cold read — match by name within the site. ACLs carry no
+      // Cold read -- match by name within the site. ACLs carry no
       // ownership markers; report as Unowned so takeover is gated behind
       // the adopt policy.
       const name = output?.name ?? olds?.name;
@@ -195,13 +195,13 @@ export const MagicSiteAclProvider = () =>
       const lan1 = toLanRequest(news.lan1);
       const lan2 = toLanRequest(news.lan2);
 
-      // Observe — the id on `output` is a hint; fall back to a name scan.
+      // Observe -- the id on `output` is a hint; fall back to a name scan.
       let observed = output?.aclId ? yield* getAcl(accountId, siteId, output.aclId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, news.name);
       }
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createSiteAcl({
           accountId,
@@ -217,7 +217,7 @@ export const MagicSiteAclProvider = () =>
         return toAttributes(created, siteId, accountId);
       }
 
-      // Sync — the update API is a PUT; send the full desired state, but
+      // Sync -- the update API is a PUT; send the full desired state, but
       // skip the call entirely on a no-op.
       const dirty =
         (observed.name ?? undefined) !== news.name ||
@@ -264,7 +264,7 @@ export const MagicSiteAclProvider = () =>
     // scope), then list ACLs per site with bounded concurrency, paginating
     // each list exhaustively. Magic WAN-gated accounts (and partial-scope
     // tokens) reject these routes with the typed `MagicWanUnauthorized`
-    // (code 1025) / `Forbidden` tags — treat those as "nothing to list".
+    // (code 1025) / `Forbidden` tags -- treat those as "nothing to list".
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -290,7 +290,7 @@ export const MagicSiteAclProvider = () =>
                 (page.result ?? []).map((acl) => toAttributes(acl, siteId, accountId)),
               ),
             ),
-            // Site vanished or became inaccessible mid-enumeration — skip it.
+            // Site vanished or became inaccessible mid-enumeration -- skip it.
             Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
               Effect.succeed([] as MagicSiteAclAttributes[]),
             ),

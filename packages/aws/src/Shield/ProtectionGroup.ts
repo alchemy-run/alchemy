@@ -35,7 +35,7 @@ export type ProtectedResourceType =
 export interface ProtectionGroupProps {
   /**
    * Identifier of the protection group (alphanumeric and `-`, max 36 chars).
-   * Immutable — changing it replaces the group. If omitted, a unique id is
+   * Immutable -- changing it replaces the group. If omitted, a unique id is
    * generated.
    */
   protectionGroupId?: string;
@@ -91,7 +91,7 @@ export interface ProtectionGroup extends Resource<
 > {}
 
 /**
- * An AWS Shield Advanced Protection Group — a collective of protected
+ * An AWS Shield Advanced Protection Group -- a collective of protected
  * resources whose traffic Shield Advanced monitors as a unit, improving
  * detection accuracy and reducing false positives.
  *
@@ -215,10 +215,10 @@ export const ProtectionGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let group = yield* observeGroup(groupId);
 
-          // 2. ENSURE — create if missing; tolerate the AlreadyExists race.
+          // 2. ENSURE -- create if missing; tolerate the AlreadyExists race.
           if (!group) {
             yield* shield
               .createProtectionGroup({
@@ -240,7 +240,7 @@ export const ProtectionGroupProvider = () =>
               });
             }
           } else {
-            // 3. SYNC settings — diff observed against desired; update only
+            // 3. SYNC settings -- diff observed against desired; update only
             //    on an actual delta.
             const changed =
               group.Aggregation !== news.aggregation ||
@@ -259,7 +259,7 @@ export const ProtectionGroupProvider = () =>
             }
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           yield* syncTags(group!.ProtectionGroupArn!, desiredTags);
 
           // 4. RETURN fresh attributes.

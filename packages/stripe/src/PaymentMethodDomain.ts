@@ -44,7 +44,7 @@ export interface PaymentMethodDomainProps {
    * Domain name this payment method domain represents (e.g.
    * `"checkout.example.com"`). If omitted, a unique hostname is generated
    * from the stack, stage, and logical id under `.example.com`. Create-only
-   * — changing it replaces the domain. Stripe domain names are unique per
+   * -- changing it replaces the domain. Stripe domain names are unique per
    * account, including disabled domains.
    */
   domainName?: string;
@@ -61,7 +61,7 @@ export type PaymentMethodDomain = Resource<
   "Stripe.PaymentMethodDomain",
   PaymentMethodDomainProps,
   {
-    /** Stripe payment method domain id (`pmd_…`). */
+    /** Stripe payment method domain id (`pmd_...`). */
     id: string;
     /** Domain name this object represents. */
     domainName: string;
@@ -89,7 +89,7 @@ export type PaymentMethodDomain = Resource<
 >;
 
 /**
- * A Stripe Payment Method Domain — a web domain registered so Stripe
+ * A Stripe Payment Method Domain -- a web domain registered so Stripe
  * Elements and Embedded Checkout can show domain-gated payment methods
  * (Apple Pay, Google Pay, Link, PayPal, Klarna, Amazon Pay). `enabled`
  * updates in place. `domainName` is create-only and changing it replaces
@@ -185,7 +185,7 @@ const toAttrs = (domain: StripePaymentMethodDomain): PaymentMethodDomainAttribut
 
 const isMissingDomain = isMissingStripeResource;
 
-/** Stripe-hosted domains (`buy.stripe.com`, …) Stripe registers itself. */
+/** Stripe-hosted domains (`buy.stripe.com`, ...) Stripe registers itself. */
 const isStripeManagedDomain = (domainName: string) =>
   domainName === "stripe.com" || domainName.endsWith(".stripe.com");
 

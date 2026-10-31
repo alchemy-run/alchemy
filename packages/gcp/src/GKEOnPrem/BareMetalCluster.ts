@@ -56,11 +56,11 @@ export type BareMetalClusterProps = {
   /**
    * Cluster id (the `{bareMetalCluster}` segment). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    */
   bareMetalClusterId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the cluster. `US-CENTRAL1` is accepted and normalized.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -68,7 +68,7 @@ export type BareMetalClusterProps = {
   /**
    * Admin cluster Hub membership this user cluster belongs to. Full name
    * `projects/{project}/locations/global/memberships/{membership}` or a
-   * membership id. Immutable — changing it replaces the cluster.
+   * membership id. Immutable -- changing it replaces the cluster.
    */
   adminClusterMembership: string;
   /**
@@ -84,7 +84,7 @@ export type BareMetalClusterProps = {
    */
   storage: BareMetalStorageConfig;
   /**
-   * Cluster network configuration (island-mode CIDRs, SR-IOV, …).
+   * Cluster network configuration (island-mode CIDRs, SR-IOV, ...).
    */
   networkConfig: BareMetalNetworkConfig;
   /**
@@ -93,7 +93,7 @@ export type BareMetalClusterProps = {
   loadBalancer: BareMetalLoadBalancerConfig;
   /**
    * Human-readable description. Clusters have no GCP labels field, so
-   * Alchemy stamps ownership into annotations and a `[alchemy …]`
+   * Alchemy stamps ownership into annotations and a `[alchemy ...]`
    * description prefix and strips both from attributes.
    */
   description?: string;
@@ -229,8 +229,8 @@ export type BareMetalCluster = Resource<
  * membership) and on-prem hardware.
  *
  * Clusters have no GCP labels field, so Alchemy stamps ownership into
- * annotations and a `[alchemy …]` description prefix for `list` / nuke.
- * Cluster id, location, and admin membership are identity — changing
+ * annotations and a `[alchemy ...]` description prefix for `list` / nuke.
+ * Cluster id, location, and admin membership are identity -- changing
  * them replaces the cluster. Other fields update in place.
  *
  * ### Creating a Bare Metal Cluster

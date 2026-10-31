@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for the `DeleteGraphSnapshot` operation (IAM action `neptune-graph:DeleteGraphSnapshot`).
  *
- * Deletes a graph snapshot by id — e.g. a retention Lambda pruning old backups found via {@link ListGraphSnapshots}. Provide the implementation with
+ * Deletes a graph snapshot by id -- e.g. a retention Lambda pruning old backups found via {@link ListGraphSnapshots}. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.DeleteGraphSnapshotHttp)`.
  * ### Managing Snapshots
  * **Example:** Prune an old snapshot

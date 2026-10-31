@@ -19,12 +19,12 @@ export interface VariableProps {
   name?: string;
   /**
    * The data type of the variable: `STRING`, `INTEGER`, `FLOAT`, `BOOLEAN`, or
-   * `DATETIME`. Immutable — changing it replaces the variable.
+   * `DATETIME`. Immutable -- changing it replaces the variable.
    */
   dataType: string;
   /**
    * The source of the variable's value: `EVENT`, `MODEL_SCORE`, or
-   * `EXTERNAL_MODEL_SCORE`. Immutable — changing it replaces the variable.
+   * `EXTERNAL_MODEL_SCORE`. Immutable -- changing it replaces the variable.
    */
   dataSource: string;
   /**
@@ -65,7 +65,7 @@ export interface Variable extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector variable — a named input to fraud-detection models
+ * An Amazon Fraud Detector variable -- a named input to fraud-detection models
  * and rules, typed and sourced from event data or model scores. Variables are
  * cheap metadata objects.
  *
@@ -92,7 +92,7 @@ export const VariableProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
-      /** Look a variable up by name; typed not-found → undefined. */
+      /** Look a variable up by name; typed not-found -> undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getVariables({ name })
@@ -137,10 +137,10 @@ export const VariableProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let variable = yield* get(name);
 
-          // 2. Ensure — create if missing (createVariable rejects duplicates
+          // 2. Ensure -- create if missing (createVariable rejects duplicates
           //    with ValidationException; tolerate the race by re-reading).
           if (variable === undefined) {
             yield* frauddetector
@@ -159,7 +159,7 @@ export const VariableProvider = () =>
               .pipe(Effect.catchTag("ValidationException", () => Effect.void));
             variable = yield* get(name);
           } else {
-            // 3. Sync mutable aspects — update on drift.
+            // 3. Sync mutable aspects -- update on drift.
             const defaultDrift =
               (variable.defaultValue ?? undefined) !== (news.defaultValue ?? undefined);
             const descriptionDrift =
@@ -176,7 +176,7 @@ export const VariableProvider = () =>
                 variableType: news.variableType,
               });
             }
-            // 3b. Sync tags — diff against OBSERVED cloud tags.
+            // 3b. Sync tags -- diff against OBSERVED cloud tags.
             yield* syncFraudDetectorTags(variable.arn!, desiredTags);
           }
 

@@ -45,7 +45,7 @@ export type DatasetsHl7V2StoreProps = {
   /**
    * Parent dataset. Full name
    * `projects/{project}/locations/{location}/datasets/{dataset}` or the
-   * dataset id (combined with `location`). Immutable — changing it
+   * dataset id (combined with `location`). Immutable -- changing it
    * replaces the HL7v2 store.
    */
   dataset: string;
@@ -56,7 +56,7 @@ export type DatasetsHl7V2StoreProps = {
   location?: string;
   /**
    * HL7v2 store id. Must match letters, numbers, underscores, hyphens,
-   * and periods; 1-256 characters. Immutable — changing it replaces the
+   * and periods; 1-256 characters. Immutable -- changing it replaces the
    * store.
    */
   hl7V2StoreId?: string;

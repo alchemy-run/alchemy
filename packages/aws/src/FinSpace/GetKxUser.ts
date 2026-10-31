@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxUser` — reads one kdb user of the bound environment — user ARN and mapped IAM role.
+ * Runtime binding for `finspace:GetKxUser` -- reads one kdb user of the bound environment -- user ARN and mapped IAM role.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxUserHttp)`.
  * ### Managing kdb Users

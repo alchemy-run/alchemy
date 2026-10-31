@@ -42,7 +42,7 @@ export type PdfInstruction = {
 
 export type CsvInstruction = {
   /**
-   * Cloud Storage URI of the CSV (`gs://...`). Deprecated — the API
+   * Cloud Storage URI of the CSV (`gs://...`). Deprecated -- the API
    * only accepts PDF instructions.
    */
   gcsFileUri?: string;
@@ -52,34 +52,34 @@ export type InstructionProps = {
   /**
    * Instruction id (the last segment of
    * `projects/{project}/instructions/{instruction}`). Server-assigned
-   * on create. Immutable — changing it replaces the instruction.
+   * on create. Immutable -- changing it replaces the instruction.
    */
   instructionId?: string;
   /**
    * Display name. Maximum 64 characters. Required by the API; Alchemy
-   * falls back to a generated name. Immutable — changing it replaces
+   * falls back to a generated name. Immutable -- changing it replaces
    * the instruction.
    */
   displayName?: string;
   /**
    * Data type this instruction applies to (`IMAGE`, `VIDEO`, `TEXT`,
-   * `GENERAL_DATA`). Immutable — changing it replaces the instruction.
+   * `GENERAL_DATA`). Immutable -- changing it replaces the instruction.
    */
   dataType: InstructionDataType | (string & {});
   /**
    * Human-readable description. Instructions have no labels field, so
-   * Alchemy stamps ownership into this field. Immutable — changing it
+   * Alchemy stamps ownership into this field. Immutable -- changing it
    * replaces the instruction.
    */
   description?: string;
   /**
    * PDF instruction stored in Cloud Storage. Currently the only
-   * supported instruction format. Immutable — changing it replaces the
+   * supported instruction format. Immutable -- changing it replaces the
    * instruction.
    */
   pdfInstruction?: PdfInstruction;
   /**
-   * Deprecated CSV instruction. Immutable — changing it replaces the
+   * Deprecated CSV instruction. Immutable -- changing it replaces the
    * instruction.
    */
   csvInstruction?: CsvInstruction;
@@ -123,7 +123,7 @@ export type Instruction = Resource<
  *
  * Instruction ids are server-assigned. There is no labels API, so
  * Alchemy stamps ownership into `description` so `list` / nuke can find
- * them. All input fields are immutable — changing them replaces the
+ * them. All input fields are immutable -- changing them replaces the
  * instruction.
  *
  * ### Creating an Instruction

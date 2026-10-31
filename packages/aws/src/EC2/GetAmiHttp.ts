@@ -7,7 +7,7 @@ import type { FindImageOptions } from "./Image.ts";
 
 // Bespoke (not the shared scaffold): the lookup filters and sorts the
 // paginated image list to pick the newest available match, and the binding
-// is account-scoped — there is no resource to bind, only options.
+// is account-scoped -- there is no resource to bind, only options.
 export const GetAmiHttp = Layer.effect(
   GetAmi,
   Effect.gen(function* () {

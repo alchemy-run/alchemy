@@ -35,13 +35,13 @@ export type DatasetProps = {
    * Dataset id (the `{datasetId}` segment of
    * `projects/{project}/datasets/{datasetId}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must contain only
-   * letters, numbers, and underscores; max 1024 characters. Immutable —
+   * letters, numbers, and underscores; max 1024 characters. Immutable --
    * changing it replaces the dataset.
    */
   datasetId?: string;
   /**
-   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
-   * Immutable — changing it replaces the dataset.
+   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, ...).
+   * Immutable -- changing it replaces the dataset.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
@@ -145,7 +145,7 @@ export type Dataset = Resource<
     kmsKeyName: string | undefined;
     /** Access control entries currently on the dataset. */
     access: DatasetAccess[];
-    /** Dataset type (`DEFAULT`, `LINKED`, `EXTERNAL`, …). */
+    /** Dataset type (`DEFAULT`, `LINKED`, `EXTERNAL`, ...). */
     type: string | undefined;
     /** Self-link URL. */
     selfLink: string | undefined;
@@ -161,7 +161,7 @@ export type Dataset = Resource<
 >;
 
 /**
- * A Google BigQuery dataset — a container for tables, views, and routines.
+ * A Google BigQuery dataset -- a container for tables, views, and routines.
  *
  * Changing `datasetId` or `location` replaces the dataset. Labels,
  * description, expiration, collation, encryption, and access update in

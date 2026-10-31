@@ -19,7 +19,7 @@ export interface BudgetSubscriber {
    */
   subscriptionType: "EMAIL" | "SNS" | (string & {});
   /**
-   * The destination — an email address (for `EMAIL`) or an SNS topic ARN
+   * The destination -- an email address (for `EMAIL`) or an SNS topic ARN
    * (for `SNS`).
    */
   address: string;
@@ -153,7 +153,7 @@ export interface BudgetProps {
   budgetLimit?: {
     /** The amount, as a string, e.g. `"100"`. */
     amount: string;
-    /** The unit — `"USD"` for cost budgets, or the usage unit. */
+    /** The unit -- `"USD"` for cost budgets, or the usage unit. */
     unit: string;
   };
   /**
@@ -199,7 +199,7 @@ export interface Budget extends Resource<
 > {}
 
 /**
- * An AWS Budget — tracks cost or usage against a defined limit over a time
+ * An AWS Budget -- tracks cost or usage against a defined limit over a time
  * period and notifies subscribers when configured thresholds are crossed.
  *
  * Budgets are a global (account-level) resource; they are free and take
@@ -286,7 +286,7 @@ const toCostTypes = (c: BudgetCostTypes): budgets.CostTypes => ({
 
 /**
  * Distilled marks `Subscriber.Address` sensitive, so observed subscribers
- * come back as `Redacted` — unwrap before diffing, or every observed
+ * come back as `Redacted` -- unwrap before diffing, or every observed
  * subscriber compares as `<redacted>` and gets torn down (and deleting the
  * last subscriber deletes the whole notification).
  */
@@ -344,7 +344,7 @@ export const BudgetProvider = () =>
             Address: s.address,
           }));
           if (!currentKeys.has(notificationKey(notif))) {
-            // The notification listing is eventually consistent — right after
+            // The notification listing is eventually consistent -- right after
             // `createBudget(NotificationsWithSubscribers)` it can come back
             // empty, so an already-created notification surfaces here as a
             // DuplicateRecordException race.
@@ -358,7 +358,7 @@ export const BudgetProvider = () =>
               .pipe(Effect.catchTag("DuplicateRecordException", () => Effect.void));
             continue;
           }
-          // The notification already exists — converge its subscribers by
+          // The notification already exists -- converge its subscribers by
           // diffing the OBSERVED subscriber list against the desired one.
           const observedSubscribers = yield* budgets
             .describeSubscribersForNotification({
@@ -477,7 +477,7 @@ export const BudgetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const budgetBody = buildBudget(name, news);
 
-          // OBSERVE — cloud state is authoritative.
+          // OBSERVE -- cloud state is authoritative.
           const live = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
             .pipe(
@@ -486,7 +486,7 @@ export const BudgetProvider = () =>
             );
 
           if (!live) {
-            // ENSURE — create; tolerate a DuplicateRecord race.
+            // ENSURE -- create; tolerate a DuplicateRecord race.
             yield* budgets
               .createBudget({
                 AccountId: accountId,
@@ -512,14 +512,14 @@ export const BudgetProvider = () =>
                 ),
               );
           } else {
-            // SYNC — updateBudget is a full replace of the budget definition.
+            // SYNC -- updateBudget is a full replace of the budget definition.
             yield* budgets.updateBudget({
               AccountId: accountId,
               NewBudget: budgetBody,
             });
           }
 
-          // SYNC notifications — the budget update does not touch these.
+          // SYNC notifications -- the budget update does not touch these.
           yield* syncNotifications(accountId, name, news.notifications ?? []);
 
           // SYNC tags against observed cloud tags.

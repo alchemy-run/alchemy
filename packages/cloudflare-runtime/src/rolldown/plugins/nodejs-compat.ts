@@ -154,7 +154,7 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
           await Promise.all(
             Object.values(server.environments).flatMap(async (environment) => {
               // Framework-owned Node-side environments (e.g. Astro's `astro`
-              // and `prerender`) must be left untouched — this is a
+              // and `prerender`) must be left untouched -- this is a
               // server-level hook, so `applyToEnvironment` cannot gate it.
               if (isSkippedEnvironment(options, environment.name)) return;
               const depsOptimizer = environment.depsOptimizer;

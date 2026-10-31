@@ -223,12 +223,12 @@ export interface VpcEndpoint extends Resource<
  * internet, a NAT gateway, or an internet gateway.
  *
  * The `vpcEndpointType` selects how the connection is realized:
- * - `"Gateway"` — for S3 and DynamoDB; traffic is directed by adding routes to
+ * - `"Gateway"` -- for S3 and DynamoDB; traffic is directed by adding routes to
  *   the route tables in `routeTableIds` (no hourly cost).
- * - `"Interface"` — for most other AWS services; provisions elastic network
+ * - `"Interface"` -- for most other AWS services; provisions elastic network
  *   interfaces in `subnetIds`, guarded by `securityGroupIds`, and optionally
  *   resolves the service's public DNS name privately via `privateDnsEnabled`.
- * - `"GatewayLoadBalancer"` — routes traffic through a third-party appliance
+ * - `"GatewayLoadBalancer"` -- routes traffic through a third-party appliance
  *   fleet fronted by a Gateway Load Balancer.
  *
  * Changing `vpcId`, `serviceName`, or `vpcEndpointType` replaces the endpoint;
@@ -437,7 +437,7 @@ export const VpcEndpointProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the VPC endpoint via cached id, else fall through
+          // Observe -- find the VPC endpoint via cached id, else fall through
           // to create.
           let ep: ec2.VpcEndpoint | undefined;
           if (output?.vpcEndpointId) {
@@ -456,7 +456,7 @@ export const VpcEndpointProvider = () =>
             }
           }
 
-          // Ensure — create the endpoint when missing.
+          // Ensure -- create the endpoint when missing.
           if (ep === undefined) {
             yield* session.note(`Creating VPC Endpoint for ${news.serviceName}...`);
             const result = yield* ec2.createVpcEndpoint({
@@ -496,7 +496,7 @@ export const VpcEndpointProvider = () =>
           const vpcEndpointId = ep.VpcEndpointId!;
           const observedType = ep.VpcEndpointType ?? news.vpcEndpointType;
 
-          // Sync mutable configuration — diff observed cloud state against
+          // Sync mutable configuration -- diff observed cloud state against
           // desired, then issue a single modifyVpcEndpoint call carrying only
           // the deltas.
           const modifications: Parameters<typeof ec2.modifyVpcEndpoint>[0] = {
@@ -562,7 +562,7 @@ export const VpcEndpointProvider = () =>
           if (news.policyDocument !== undefined) {
             if (!policyDocumentEquals(observedPolicy, news.policyDocument)) {
               // AWS rejects passing both a policy document and the reset flag
-              // in the same call — choose exactly one.
+              // in the same call -- choose exactly one.
               modifications.PolicyDocument = news.policyDocument;
               hasModifications = true;
             }
@@ -570,14 +570,14 @@ export const VpcEndpointProvider = () =>
             // An absent `policyDocument` means "the default full-access
             // policy". AWS attaches exactly that default to every fresh
             // endpoint, so only reset when a custom policy is actually
-            // present — issuing a ResetPolicy no-op immediately after create
+            // present -- issuing a ResetPolicy no-op immediately after create
             // races the new endpoint id's propagation and previously failed
             // the whole reconcile with InvalidVpcEndpointId.NotFound.
             modifications.ResetPolicy = true;
             hasModifications = true;
           }
 
-          // An unspecified `ipAddressType`/`dnsOptions` means "AWS default" —
+          // An unspecified `ipAddressType`/`dnsOptions` means "AWS default" --
           // the observed value on a fresh endpoint (e.g. "not-specified", or
           // populated DNS defaults) must not be diffed against `undefined`,
           // which previously caused a spurious modify on every reconcile.
@@ -607,7 +607,7 @@ export const VpcEndpointProvider = () =>
           if (hasModifications) {
             yield* ec2.modifyVpcEndpoint(modifications).pipe(
               // The endpoint id is known-valid here (we just observed or
-              // created it) — NotFound is describe/modify-plane propagation
+              // created it) -- NotFound is describe/modify-plane propagation
               // lag, not a missing endpoint.
               Effect.retry({
                 while: (e) => e._tag === "InvalidVpcEndpointId.NotFound",
@@ -620,7 +620,7 @@ export const VpcEndpointProvider = () =>
             }
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (ep.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -718,7 +718,7 @@ const waitForVpcEndpointAvailable = (vpcEndpointId: string, session: ScopedPlanS
     const ep = result.VpcEndpoints?.[0];
 
     if (!ep) {
-      // Fresh id not visible to describe yet — retry.
+      // Fresh id not visible to describe yet -- retry.
       return yield* new VpcEndpointPending({
         vpcEndpointId,
         state: "propagating",

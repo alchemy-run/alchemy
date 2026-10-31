@@ -45,7 +45,7 @@ export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = 
  * Excludes `RemoteBindings` so the tests don't require Cloudflare API
  * credentials. Workers configured here may use any local binding (Json,
  * Text, Data, KvNamespace local, Loopback, DurableObjectNamespace, etc.)
- * but **must not** register a remote binding — that would attempt to
+ * but **must not** register a remote binding -- that would attempt to
  * deploy a preview script and fail without credentials.
  */
 export const makeLocalRuntimeLayer = (options: { fileSystemSupportsWatcher?: boolean } = {}) =>

@@ -6,18 +6,18 @@ import * as Effect from "effect/Effect";
  * Runtime binding for `secretsmanager:GetRandomPassword`.
  *
  * Account-level operation (no target secret): bind it with no arguments to
- * get a callable that generates cryptographically strong random passwords —
+ * get a callable that generates cryptographically strong random passwords --
  * typically paired with `PutSecretValue` for rotation. Provide the
  * implementation with
  * `Effect.provide(AWS.SecretsManager.GetRandomPasswordHttp)`.
  * ### Generating Passwords
  * **Example:** Generate and Store a New Password
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const getRandomPassword = yield* AWS.SecretsManager.GetRandomPassword();
  * const putSecretValue = yield* AWS.SecretsManager.PutSecretValue(secret);
  *
- * // runtime — generate, then rotate the secret to it
+ * // runtime -- generate, then rotate the secret to it
  * const generated = yield* getRandomPassword({
  *   PasswordLength: 32,
  *   ExcludePunctuation: true,

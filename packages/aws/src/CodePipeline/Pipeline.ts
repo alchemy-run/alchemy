@@ -36,7 +36,7 @@ export interface PipelineArtifactStore {
 }
 
 /**
- * A single action within a stage — a source pull, a build, a deploy, etc.
+ * A single action within a stage -- a source pull, a build, a deploy, etc.
  */
 export interface PipelineActionConfig {
   /** Unique name of the action within its stage. */
@@ -137,14 +137,14 @@ export interface Pipeline extends Resource<
 
 /**
  * An AWS CodePipeline continuous-delivery pipeline: an ordered set of
- * stages, each running one or more actions (source → build → deploy), with
+ * stages, each running one or more actions (source -> build -> deploy), with
  * an S3 artifact store carrying outputs between them.
  *
  * Defining and updating the pipeline is instant. Pipelines that use a git
  * source require a CodeConnections connection whose OAuth handshake is
- * completed manually — use an S3 source to avoid the handshake.
+ * completed manually -- use an S3 source to avoid the handshake.
  * ### Creating a Pipeline
- * **Example:** S3-Source → CodeBuild Pipeline
+ * **Example:** S3-Source -> CodeBuild Pipeline
  * ```typescript
  * const pipeline = yield* CodePipeline.Pipeline("Release", {
  *   roleArn: role.roleArn,
@@ -331,10 +331,10 @@ export const PipelineProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const declaration = toWireDeclaration(name, news);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getPipeline(name);
 
-          // 2. Ensure — create if missing; tolerate the name-in-use race.
+          // 2. Ensure -- create if missing; tolerate the name-in-use race.
           if (observed === undefined) {
             yield* retryIamPropagation(
               codepipeline.createPipeline({
@@ -347,7 +347,7 @@ export const PipelineProvider = () =>
             ).pipe(Effect.catchTag("PipelineNameInUseException", () => Effect.void));
             observed = yield* getPipeline(name);
           } else {
-            // 3. Sync — updatePipeline is a full upsert of the declaration.
+            // 3. Sync -- updatePipeline is a full upsert of the declaration.
             yield* retryIamPropagation(codepipeline.updatePipeline({ pipeline: declaration }));
             observed = yield* getPipeline(name);
           }
@@ -356,7 +356,7 @@ export const PipelineProvider = () =>
             observed?.metadata?.pipelineArn ??
             `arn:aws:codepipeline:${region}:${accountId}:${name}`;
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(arn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -369,7 +369,7 @@ export const PipelineProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // deletePipeline is idempotent — a missing pipeline returns success.
+          // deletePipeline is idempotent -- a missing pipeline returns success.
           yield* codepipeline.deletePipeline({ name: output.pipelineName });
         }),
 

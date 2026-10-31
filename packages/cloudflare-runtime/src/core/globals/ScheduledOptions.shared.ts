@@ -5,9 +5,9 @@
  *
  * Query parameters (all optional, matching Miniflare's
  * `workers/core/scheduled.ts`):
- * - `cron` — the cron expression reported on `controller.cron`
- * - `time` — epoch milliseconds reported on `controller.scheduledTime`
- * - `format=json` — respond with the full `FetcherScheduledResult` JSON
+ * - `cron` -- the cron expression reported on `controller.cron`
+ * - `time` -- epoch milliseconds reported on `controller.scheduledTime`
+ * - `format=json` -- respond with the full `FetcherScheduledResult` JSON
  *   instead of the plain-text outcome
  */
 export const PATH_SCHEDULED = "/cdn-cgi/local/scheduled";

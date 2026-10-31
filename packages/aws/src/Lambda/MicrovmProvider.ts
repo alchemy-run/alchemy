@@ -86,14 +86,14 @@ interface ResolvedArtifact {
 
 /**
  * The content half of an image's artifact identity, before any upload: the
- * bundled program (or packaged context) plus the hash that names THAT —
+ * bundled program (or packaged context) plus the hash that names THAT --
  * independent of the props, which fold into the full `hash` later.
  */
 type ArtifactContent = {
   /** Stored on the attrs; compared by `diff`. */
   readonly contentHash: string;
   /**
-   * The raw content identity the full `hash` is derived from — kept
+   * The raw content identity the full `hash` is derived from -- kept
    * separate so that formula stays byte-identical to what deployed images
    * already carry (`sha256(identity + ":" + propsId)`).
    */
@@ -116,9 +116,9 @@ type ContentInputs = Pick<
 
 /**
  * Pick the content inputs off the plan-time props, or `undefined` when they
- * cannot be read yet. At plan time the props may be unresolved — the build
- * role, env, … are Outputs, and the whole object may itself be an
- * Output/Effect/Config — so only a plain object whose content inputs have
+ * cannot be read yet. At plan time the props may be unresolved -- the build
+ * role, env, ... are Outputs, and the whole object may itself be an
+ * Output/Effect/Config -- so only a plain object whose content inputs have
  * all resolved qualifies.
  */
 const resolvedContentInputs = (news: Input<MicrovmImageProps>): ContentInputs | undefined => {
@@ -137,7 +137,7 @@ const resolvedContentInputs = (news: Input<MicrovmImageProps>): ContentInputs | 
   };
   if (!isResolved(picked)) return undefined;
   // `isResolved` has verified every field; the cast only re-states that
-  // for a type the guard cannot express on a mapped `Input<…>` object.
+  // for a type the guard cannot express on a mapped `Input<...>` object.
   const resolved = picked as ContentInputs;
   // An Effect/Config-shaped props object has none of these set.
   if (!resolved.main && !resolved.context && !resolved.codeArtifact?.uri) {
@@ -149,7 +149,7 @@ const resolvedContentInputs = (news: Input<MicrovmImageProps>): ContentInputs | 
 const resolveName = (id: string, name?: string) =>
   name ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 64, delimiter: "-" });
 
-// `getMicrovmImage` requires an ARN or ID — it rejects a plain name with a
+// `getMicrovmImage` requires an ARN or ID -- it rejects a plain name with a
 // `ValidationException` ("Invalid ARN format"). Only call it with an
 // ARN/ID.
 const getImage = (identifier: string) =>
@@ -186,7 +186,7 @@ const defaultBaseImageArn = Effect.fn(function* () {
  * calls this before the props have resolved (the build role is an Output
  * at plan time) to see a content-only edit of the in-VM program, and
  * `reconcile` calls it again for the archive to upload. Memoized per
- * resource for the run so a diff→reconcile cycle bundles once.
+ * resource for the run so a diff->reconcile cycle bundles once.
  */
 const artifactContent = (
   id: string,
@@ -230,7 +230,7 @@ const artifactContent = (
           .pipe(Effect.orElseSucceed(() => undefined));
         if (content) files.push({ path: "Dockerfile", content });
       }
-      // Hash the BYTES, not `path:byteLength` — a same-length edit (a
+      // Hash the BYTES, not `path:byteLength` -- a same-length edit (a
       // flipped version string, a swapped constant) must count as a change.
       const contentId = (yield* Effect.forEach(
         [...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
@@ -401,8 +401,8 @@ export const MicrovmImageProvider = () =>
       // so the engine's structural diff would call it a noop and the image
       // would never rebuild. Bundle (memoized for the run) and compare the
       // CONTENT hash, exactly as the Lambda Function diff does. This runs
-      // before the props resolve — the build role is an Output at plan
-      // time — which is fine because only the plain content inputs are
+      // before the props resolve -- the build role is an Output at plan
+      // time -- which is fine because only the plain content inputs are
       // read. Rows persisted before `contentHash` existed skip the check
       // until their next reconcile stamps it.
       const previousContentHash = output?.codeArtifact?.contentHash;
@@ -453,7 +453,7 @@ export const MicrovmImageProvider = () =>
       // Resolve + upload the artifact and compute its build identity.
       const artifact = yield* resolveArtifact(id, news, session);
 
-      // Observe — prefer the cached ARN; otherwise look up by name (a name
+      // Observe -- prefer the cached ARN; otherwise look up by name (a name
       // is not a valid `getMicrovmImage` identifier).
       const observed = output?.imageArn
         ? yield* getImage(output.imageArn)
@@ -473,7 +473,7 @@ export const MicrovmImageProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output, session }) {
-      // An image can't be deleted while it still has MicroVMs running — tear
+      // An image can't be deleted while it still has MicroVMs running -- tear
       // them down first and wait for them to disappear.
       yield* terminateRunningMicrovms(output.imageArn, session);
       yield* session.note(`Deleting MicroVM image ${output.name}...`);
@@ -518,7 +518,7 @@ const listActiveMicrovms = (imageArn: string) =>
   );
 
 // Terminate every running MicroVM launched from this image and wait until none
-// remain active — a prerequisite for deleting the image.
+// remain active -- a prerequisite for deleting the image.
 const terminateRunningMicrovms = Effect.fn(function* (
   imageArn: string,
   session: ScopedPlanStatusSession,
@@ -530,7 +530,7 @@ const terminateRunningMicrovms = Effect.fn(function* (
     active,
     (m) =>
       microvms.terminateMicrovm({ microvmIdentifier: m.microvmId }).pipe(
-        // Already gone or mid-transition — the wait below converges anyway.
+        // Already gone or mid-transition -- the wait below converges anyway.
         Effect.catchTag(
           ["ResourceNotFoundException", "ConflictException", "ValidationException"],
           () => Effect.void,
@@ -564,7 +564,7 @@ const buildFailureReason = Effect.fn(function* (
     .pipe(Effect.orElseSucceed(() => undefined));
   // A version fans out to one build per architecture/chipset; report the reason
   // from each build that actually FAILED (keyed by architecture so multi-platform
-  // failures are distinguishable). `buildState` is the reliable signal — don't
+  // failures are distinguishable). `buildState` is the reliable signal -- don't
   // guess via timestamps.
   const builds = yield* microvms.listMicrovmImageBuilds
     .items({ imageIdentifier: imageArn, imageVersion })

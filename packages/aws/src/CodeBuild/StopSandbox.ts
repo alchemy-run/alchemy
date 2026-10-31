@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StopSandbox` — stops a running sandbox of
+ * Runtime binding for `codebuild:StopSandbox` -- stops a running sandbox of
  * the bound project by sandbox id.
  * ### Sandboxes
  * **Example:** Stop a Sandbox

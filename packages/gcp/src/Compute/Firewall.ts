@@ -48,7 +48,7 @@ export type FirewallProps = {
   firewallName?: string;
   /**
    * VPC network the rule belongs to. Accepts a name (`default`), a partial
-   * URL (`global/networks/default`), or a full URL. Immutable — changing it
+   * URL (`global/networks/default`), or a full URL. Immutable -- changing it
    * replaces the rule.
    * @default "global/networks/default"
    */
@@ -66,7 +66,7 @@ export type FirewallProps = {
    */
   priority?: number;
   /**
-   * Traffic direction. Immutable — changing it replaces the rule.
+   * Traffic direction. Immutable -- changing it replaces the rule.
    * @default "INGRESS"
    */
   direction?: "INGRESS" | "EGRESS";
@@ -173,7 +173,7 @@ export type Firewall = Resource<
  * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) into the
  * description so `read` and `list` (and `pnpm nuke:gcp`) can find them.
  *
- * Name, network, direction, and allow-vs-deny are immutable — changing any
+ * Name, network, direction, and allow-vs-deny are immutable -- changing any
  * of them replaces the rule.
  *
  * ### Creating a Firewall

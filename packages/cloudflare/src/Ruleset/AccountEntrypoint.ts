@@ -14,7 +14,7 @@ const TypeId = "Cloudflare.Rulesets.AccountEntrypoint" as const;
 type TypeId = typeof TypeId;
 
 /**
- * A rule inside an account phase entrypoint — same shape Cloudflare accepts
+ * A rule inside an account phase entrypoint -- same shape Cloudflare accepts
  * on the entrypoint PUT endpoint.
  */
 export type AccountEntrypointRule = NonNullable<rulesets.PutPhasForAccountRequest["rules"]>[number];
@@ -23,14 +23,14 @@ export type AccountEntrypointProps = {
   /**
    * Ruleset phase entrypoint to own (e.g. `http_request_firewall_custom`,
    * `ddos_l4`, `magic_transit`). Changing the phase triggers a
-   * replacement. Most account-level phases are Enterprise-gated — on lower
+   * replacement. Most account-level phases are Enterprise-gated -- on lower
    * plans, deploys fail with the typed `PhaseNotEntitled` error.
    * `http_request_redirect` (Bulk Redirects) is available on every plan.
    */
   phase: Phase;
   /**
    * The full list of rules in the phase entrypoint. This resource owns the
-   * entire entrypoint — rules managed elsewhere in the same phase are
+   * entire entrypoint -- rules managed elsewhere in the same phase are
    * overwritten on deploy. For the Enterprise WAF deployment workflow, use
    * `execute` rules referencing `Cloudflare.Ruleset.CustomRuleset` ids.
    */
@@ -50,7 +50,7 @@ export type AccountEntrypointAttributes = {
   /** The unique ID of the entrypoint ruleset (Cloudflare `id`). */
   rulesetId: string;
   /**
-   * Account the phase entrypoint belongs to. Alchemy-flattened identifier —
+   * Account the phase entrypoint belongs to. Alchemy-flattened identifier --
    * not part of Cloudflare's phase-entrypoint response.
    */
   accountId: string;
@@ -84,7 +84,7 @@ export type AccountEntrypoint = Resource<
  * The account-level counterpart of `Cloudflare.Ruleset.Ruleset`: it owns the entire
  * ruleset for an account phase entrypoint (e.g. deploying custom WAF
  * rulesets across zones with `execute` rules, or configuring `ddos_l4` /
- * `magic_transit` rules). The entrypoint is a per-phase singleton — destroy
+ * `magic_transit` rules). The entrypoint is a per-phase singleton -- destroy
  * empties its rules rather than deleting the phase.
  *
  * Most account-level phases require an Enterprise plan; on lower plans
@@ -218,7 +218,7 @@ export const AccountEntrypointProvider = () =>
       );
       return rows.filter(
         (row): row is AccountEntrypointAttributes =>
-          // An entrypoint with zero rules is inert — it's what destroy
+          // An entrypoint with zero rules is inert -- it's what destroy
           // leaves behind after emptying the rules we own. Don't surface
           // it as a resource.
           row !== undefined && row.rules.length > 0,
@@ -230,7 +230,7 @@ export const AccountEntrypointProvider = () =>
       const phase = output?.phase ?? olds?.phase;
       if (phase === undefined) return undefined;
       // The entrypoint is a per-phase singleton that Cloudflare creates
-      // lazily — there is nothing to "own", so a cold read adopts freely
+      // lazily -- there is nothing to "own", so a cold read adopts freely
       // (mirrors the zone-level `Cloudflare.Ruleset.Ruleset`).
       return yield* rulesets.getPhasForAccount({ accountId, rulesetPhase: phase }).pipe(
         Effect.map((ruleset) => toAttributes(accountId, ruleset)),
@@ -241,7 +241,7 @@ export const AccountEntrypointProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
-      // PUT is a true upsert on the phase entrypoint — one call observes
+      // PUT is a true upsert on the phase entrypoint -- one call observes
       // nothing and converges everything, whether the entrypoint exists yet
       // or not.
       const ruleset = yield* rulesets.putPhasForAccount({
@@ -255,7 +255,7 @@ export const AccountEntrypointProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      // The entrypoint itself is a singleton — "delete" means emptying the
+      // The entrypoint itself is a singleton -- "delete" means emptying the
       // rules we own. Idempotent: an entrypoint that never materialized (or
       // was removed out-of-band) is not an error.
       yield* rulesets

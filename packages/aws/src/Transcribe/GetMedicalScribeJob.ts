@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:GetMedicalScribeJob` — read a Medical Scribe job's status and, once complete, the clinical note and transcript locations.
+ * Runtime binding for `transcribe:GetMedicalScribeJob` -- read a Medical Scribe job's status and, once complete, the clinical note and transcript locations.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:GetMedicalScribeJob` on `*`.

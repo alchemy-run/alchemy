@@ -57,5 +57,5 @@ export const truncate = (value: string, width: number): string => {
     total += segmentWidth;
     kept += segment;
   }
-  return `${kept}…`;
+  return `${kept}\u2026`;
 };

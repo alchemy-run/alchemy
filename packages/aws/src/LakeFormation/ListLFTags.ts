@@ -15,7 +15,7 @@ export interface ListLFTagsRequest extends lf.ListLFTagsRequest {}
  * ### Reading LF-Tags
  * **Example:** List Visible Tag Definitions
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listLFTags = yield* AWS.LakeFormation.ListLFTags();
  *
  * // runtime

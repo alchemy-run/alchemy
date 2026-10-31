@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Working with Recovery Points
  * **Example:** Inspect a Recovery Point
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const getRecoveryPoint = yield* AWS.RedshiftServerless.GetRecoveryPoint();
  *
  * const { recoveryPoint } = yield* getRecoveryPoint({ recoveryPointId });

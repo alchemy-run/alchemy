@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetContextKeysForPrincipalPolicy` — list the
+ * Runtime binding for `iam:GetContextKeysForPrincipalPolicy` -- list the
  * condition context keys referenced by all policies attached to an existing
  * IAM user, group, or role, so a principal simulation can be primed with the
  * right `ContextEntries`.

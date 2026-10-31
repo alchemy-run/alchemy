@@ -15,7 +15,7 @@ export interface GetPolicyRequest extends fms.GetPolicyRequest {}
  * ### Reading Policies
  * **Example:** Read a Policy
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getPolicy = yield* AWS.FMS.GetPolicy();
  *
  * // runtime

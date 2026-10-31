@@ -33,7 +33,7 @@ export interface ContactListProps {
   description?: string;
   /**
    * The interest topics contacts can subscribe to. Replaced wholesale when
-   * set — pass the full desired set. Leave undefined to keep whatever SES
+   * set -- pass the full desired set. Leave undefined to keep whatever SES
    * currently has.
    */
   topics?: ContactListTopic[];
@@ -57,7 +57,7 @@ export interface ContactList extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 contact list — a named audience of email contacts with
+ * An Amazon SES v2 contact list -- a named audience of email contacts with
  * subscription topics, used with SES's list-management and unsubscribe
  * handling.
  *
@@ -66,7 +66,7 @@ export interface ContactList extends Resource<
  *
  * SES allows only **one contact list per AWS account**, so renaming a list
  * replaces it by deleting the old list (and its contacts) before creating the
- * new one — a create-then-delete replacement would exceed the account limit.
+ * new one -- a create-then-delete replacement would exceed the account limit.
  * ### Creating Contact Lists
  * **Example:** Basic Contact List
  * ```typescript
@@ -223,12 +223,12 @@ export const ContactListProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getList(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create with the full desired set; AlreadyExists is a
-            //    race → converge via update.
+            // 2. ENSURE -- create with the full desired set; AlreadyExists is a
+            //    race -> converge via update.
             yield* sesv2
               .createContactList({
                 ContactListName: name,
@@ -256,7 +256,7 @@ export const ContactListProvider = () =>
               }),
             ))!;
           } else {
-            // 3. SYNC — only the aspects the caller manages. An omitted prop
+            // 3. SYNC -- only the aspects the caller manages. An omitted prop
             //    keeps whatever SES currently has, matching every sibling
             //    resource in this service; updateContactList replaces each
             //    field it is given, so observed values are echoed back for the
@@ -276,7 +276,7 @@ export const ContactListProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

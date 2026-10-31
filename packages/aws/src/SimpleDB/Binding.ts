@@ -5,7 +5,7 @@ import type { Domain } from "./Domain.ts";
 /**
  * Shared scaffolding for SimpleDB per-operation bindings.
  *
- * INTERNAL — deliberately not exported from the service `index.ts`.
+ * INTERNAL -- deliberately not exported from the service `index.ts`.
  *
  * Every SimpleDB data-plane operation follows the same shape: it targets a
  * single {@link Domain}, requires the IAM action `sdb:{Operation}` on

@@ -45,7 +45,7 @@ const services = Layer.mergeAll(
   // Dev runs live in this exec child, not the `alchemy` CLI process, so
   // without this layer they'd export no telemetry at all. No root
   // `cli.dev` span though: dev remains alive across reloads, so a wrapping
-  // span would not end (and export) until shutdown — plan/apply spans are the
+  // span would not end (and export) until shutdown -- plan/apply spans are the
   // trace roots instead.
   TelemetryLive,
   ConsoleLogLive,
@@ -109,7 +109,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
 
 /**
  * Resolves with the files behind the next debounced change batch. The
- * listener detaches itself on delivery — `Effect.callback` only runs its
+ * listener detaches itself on delivery -- `Effect.callback` only runs its
  * cleanup on interruption, so a listener left behind would fire once per
  * past generation on every later change.
  */
@@ -218,14 +218,14 @@ const runBunDevWatcher = (options: DevOptions) =>
 
 /**
  * A run that ended by itself with nothing but interruptions in its cause was
- * cancelled from the inside — a provider or engine race, never the user —
+ * cancelled from the inside -- a provider or engine race, never the user --
  * so it must be reported like any other failure. Ctrl+C is different: it
  * interrupts the fiber running this code, so `catchCause` never gets to
  * park it (a parked `Effect.never` is interrupted straight away too).
  */
 const describeFailure = (what: string, cause: Cause.Cause<unknown>, next: string) =>
   Cause.hasInterruptsOnly(cause)
-    ? `alchemy dev: ${what} was interrupted internally (a bug in a provider or the engine — please report it with the trace below); ${next}.\n${Cause.pretty(cause)}`
+    ? `alchemy dev: ${what} was interrupted internally (a bug in a provider or the engine \u2014 please report it with the trace below); ${next}.\n${Cause.pretty(cause)}`
     : `alchemy dev: ${what} failed; ${next}.\n${Cause.pretty(cause)}`;
 
 // A mid-edit import or planning failure must keep the watch process alive so

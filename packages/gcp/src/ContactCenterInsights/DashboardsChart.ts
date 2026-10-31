@@ -27,12 +27,12 @@ export type DashboardsChartProps = {
   /**
    * Parent Dashboard resource name
    * (`projects/{project}/locations/{location}/dashboards/{dashboard}`).
-   * Immutable — changing it replaces the chart.
+   * Immutable -- changing it replaces the chart.
    */
   parent: string;
   /**
    * Chart id (the `{chart}` segment). If omitted, a unique id is generated.
-   * Immutable — changing it replaces the chart. 4-64 characters matching
+   * Immutable -- changing it replaces the chart. 4-64 characters matching
    * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
    */
   chartId?: string;
@@ -42,7 +42,7 @@ export type DashboardsChartProps = {
   displayName?: string;
   /**
    * Chart description. Charts have no labels field, so Alchemy ownership
-   * is stored in a `[alchemy …]` prefix and stripped from attributes.
+   * is stored in a `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -58,7 +58,7 @@ export type DashboardsChartProps = {
    */
   height?: number;
   /**
-   * Visualization (`BAR`, `LINE`, `AREA`, `PIE`, `TABLE`, …).
+   * Visualization (`BAR`, `LINE`, `AREA`, `PIE`, `TABLE`, ...).
    */
   chartVisualizationType?:
     | "CHART_VISUALIZATION_TYPE_UNSPECIFIED"
@@ -133,7 +133,7 @@ export type DashboardsChart = Resource<
  * A chart widget on a Contact Center Insights dashboard.
  *
  * Parent dashboard and chart id are immutable. Charts have no labels
- * field — Alchemy stamps ownership into the description. Display name,
+ * field -- Alchemy stamps ownership into the description. Display name,
  * description, filter, size, visualization, and data source update in
  * place.
  *

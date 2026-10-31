@@ -33,7 +33,7 @@ export interface ExpiryEventSourceProps extends EventRouteProps {
   id?: string;
   /**
    * Restrict to events about specific certificates (matched against the
-   * event's top-level `resources` — the certificate ARNs).
+   * event's top-level `resources` -- the certificate ARNs).
    */
   certificateArns?: readonly string[];
 }
@@ -43,12 +43,12 @@ export interface ExpiryEventSourceProps extends EventRouteProps {
  * hosting compute. ACM publishes one `ACM Certificate Approaching
  * Expiration` event per day per certificate to the account's default
  * EventBridge bus (source `aws.acm`) starting `daysBeforeExpiry` days before
- * each certificate expires — the threshold managed by the
+ * each certificate expires -- the threshold managed by the
  * {@link AccountConfiguration} resource. This subscribes the host Function
  * to those events so it can alert on, rotate, or re-import certificates
  * before they lapse.
  *
- * ACM publishes to EventBridge automatically — no additional resource is
+ * ACM publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. EventBridge rules
  * are regional: deploy the consuming Function in the certificate's region
  * (`us-east-1` for certificates created by the {@link Certificate}

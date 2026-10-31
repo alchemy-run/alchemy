@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-maps:GetSprites` — fetch a map style's sprite
+ * Runtime binding for `geo-maps:GetSprites` -- fetch a map style's sprite
  * sheet (PNG) or sprite index (JSON) used to render map iconography.
  *
  * geo-maps is a standalone, pay-per-call Amazon Location API with no resource
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getSprites = yield* AWS.GeoMaps.GetSprites();
  *
- * // runtime — FileName follows `sprites(@2x)?.(png|json)`
+ * // runtime -- FileName follows `sprites(@2x)?.(png|json)`
  * const sprites = yield* getSprites({
  *   FileName: "sprites.png",
  *   Style: "Standard",

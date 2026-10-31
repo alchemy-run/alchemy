@@ -30,23 +30,23 @@ export type BillingBucketsLinkProps = {
    * `billingAccounts/{billingAccount}/locations/{location}/buckets/{bucket}/links/{link}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be alphanumeric plus underscores (BigQuery dataset
-   * naming). Immutable — changing it replaces the link.
+   * naming). Immutable -- changing it replaces the link.
    */
   linkId?: string;
   /**
    * Analytics-enabled bucket id that owns this link. A bucket may have
-   * only one link. Immutable — changing it replaces the link.
+   * only one link. Immutable -- changing it replaces the link.
    */
   bucketId: string;
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the link.
    */
   billingAccountId?: string;
   /**
-   * Location of the parent bucket. Immutable — changing it replaces the
+   * Location of the parent bucket. Immutable -- changing it replaces the
    * link.
    * @default "global"
    */
@@ -54,7 +54,7 @@ export type BillingBucketsLinkProps = {
   /**
    * Human-readable description (max 8000 characters). Links have no
    * labels or update API, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix at create time and stripped from attributes.
+   * `[alchemy ...]` prefix at create time and stripped from attributes.
    */
   description?: string;
 };
@@ -77,7 +77,7 @@ export type BillingBucketsLink = Resource<
     description: string | undefined;
     /** Linked BigQuery dataset id, if reported. */
     bigqueryDatasetId: string | undefined;
-    /** Link lifecycle (`ACTIVE`, `CREATING`, …). */
+    /** Link lifecycle (`ACTIVE`, `CREATING`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -92,7 +92,7 @@ export type BillingBucketsLink = Resource<
  * Creating a link asynchronously provisions a BigQuery dataset (and views
  * for each log view) so Log Analytics queries can run against the bucket.
  * A bucket may currently contain only one link. Links have no update API
- * — they are existence-only after create. Alchemy stamps ownership into
+ * -- they are existence-only after create. Alchemy stamps ownership into
  * the description at create time for `list` / nuke. `linkId`, `bucketId`,
  * `location`, and `billingAccountId` are identity.
  *

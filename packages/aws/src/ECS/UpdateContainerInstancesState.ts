@@ -13,7 +13,7 @@ export interface UpdateContainerInstancesStateRequest extends Omit<
  *
  * Bind this operation to a `Cluster` inside a function runtime to get a
  * callable that transitions container instances between `ACTIVE` and
- * `DRAINING` — the canonical building block of an Auto Scaling
+ * `DRAINING` -- the canonical building block of an Auto Scaling
  * lifecycle-hook drain function that gracefully migrates tasks off an
  * instance before it terminates. The cluster ARN is injected automatically
  * and the host is granted `ecs:UpdateContainerInstancesState` on the

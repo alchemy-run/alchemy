@@ -56,7 +56,7 @@ export type AppAttributes = {
 export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
- * A Cloudflare Flagship app — a container for feature flags.
+ * A Cloudflare Flagship app -- a container for feature flags.
  *
  * Flagship is Cloudflare's feature flag service. Flags are organized into
  * apps that map to your projects or services; the app's `appId` is what a
@@ -217,7 +217,7 @@ export const AppProviderLive = () =>
         const observed = yield* getApp(acct, output.appId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. App names are not unique on Cloudflare's side; an
       // exact match on our generated/explicit name is the best identity we
       // have. Pick the oldest match for determinism.
@@ -229,20 +229,20 @@ export const AppProviderLive = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
-      // Observe — the appId cached on `output` is a hint, not a guarantee:
+      // Observe -- the appId cached on `output` is a hint, not a guarantee:
       // a missing app falls through and we recreate.
       const observed = output?.appId
         ? yield* getApp(output.accountId ?? accountId, output.appId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). App names are not
+        // Ensure -- greenfield (or out-of-band delete). App names are not
         // unique so there is no AlreadyExists race to tolerate.
         const created = yield* flagship.createApp({ accountId, name });
         return toAttributes(created, accountId);
       }
 
-      // Sync — the only mutable aspect is the name; skip the API on a no-op.
+      // Sync -- the only mutable aspect is the name; skip the API on a no-op.
       if (observed.name === name) {
         return toAttributes(observed, accountId);
       }
@@ -260,8 +260,8 @@ export const AppProviderLive = () =>
     }),
     // Account-scoped collection (pattern b): enumerate every app in the
     // ambient account via the paginated listApps op. Cloudflare's list
-    // index can contain ghost rows — apps that were deleted but survive in
-    // the listing while GET/DELETE both return "App not found" — so each
+    // index can contain ghost rows -- apps that were deleted but survive in
+    // the listing while GET/DELETE both return "App not found" -- so each
     // row is validated via getApp and ghosts are dropped (otherwise census
     // tooling re-discovers an undeletable app forever).
     list: Effect.fn(function* () {
@@ -283,7 +283,7 @@ export const AppProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the app is purely virtual: a `dev:` id keyed into
+ * Local (dev) provider -- the app is purely virtual: a `dev:` id keyed into
  * the local workerd Flagship simulator. The local `Flag` provider seeds
  * definitions under that id, and `toRuntimeBinding` lowers a `flagship`
  * binding whose app id is `dev:`-prefixed onto the local evaluator; data
@@ -300,7 +300,7 @@ export const AppProviderLocal = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {

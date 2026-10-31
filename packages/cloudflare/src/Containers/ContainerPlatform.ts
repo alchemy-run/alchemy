@@ -27,7 +27,7 @@ const toHttpUrl = (url: string) =>
 
 /**
  * workerd container ports reject TLS outright ("Connecting to a container
- * using HTTPS is not currently supported") — but the common proxy pattern
+ * using HTTPS is not currently supported") -- but the common proxy pattern
  * forwards the incoming Worker request, whose production URL is `https://`,
  * straight to the port. The hop into the container is already secure, so
  * downgrade the scheme before forwarding, exactly like Cloudflare's own
@@ -149,7 +149,7 @@ export const ContainerPlatform: Platform<
             return key;
           }),
         get: <T>(key: string) =>
-          // Read straight from `process.env` — see `unpackEnvValue` for why
+          // Read straight from `process.env` -- see `unpackEnvValue` for why
           // this must never resolve through `Config.String`.
           Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: ((effect: Effect.Effect<void, never, any>) =>

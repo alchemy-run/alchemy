@@ -109,7 +109,7 @@ export interface WebExperience extends Resource<
 > {}
 
 /**
- * An Amazon Q Business web experience — the hosted chat UI end users open
+ * An Amazon Q Business web experience -- the hosted chat UI end users open
  * to converse with an application.
  *
  * ### Creating Web Experiences
@@ -171,7 +171,7 @@ const readWebExperienceById = Effect.fn(function* (applicationId: string, webExp
 });
 
 /**
- * A web experience still transitioning toward a settled status — retried by
+ * A web experience still transitioning toward a settled status -- retried by
  * {@link waitForWebExperienceSettled}'s bounded schedule.
  */
 class WebExperienceNotReady extends Data.TaggedError("WebExperienceNotReady")<{
@@ -190,7 +190,7 @@ export class WebExperienceProvisioningFailed extends Data.TaggedError(
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -204,7 +204,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   });
 
 // A web experience without identity-provider auth settles in
-// PENDING_AUTH_CONFIG rather than ACTIVE — both are converged states.
+// PENDING_AUTH_CONFIG rather than ACTIVE -- both are converged states.
 const waitForWebExperienceSettled = (
   applicationId: string,
   webExperienceId: string,
@@ -245,13 +245,13 @@ export const WebExperienceProvider = () =>
       return {
         stables: ["webExperienceId", "applicationId", "webExperienceArn"],
         // Keyed by a parent application; cannot be enumerated account-wide
-        // without iterating every application — treated as a sub-resource per
+        // without iterating every application -- treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           // Web experience summaries carry no display name, so there is no
-          // name-based fallback — without a cached id the resource is
+          // name-based fallback -- without a cached id the resource is
           // treated as missing.
           if (applicationId === undefined || output?.webExperienceId === undefined) {
             return undefined;
@@ -280,13 +280,13 @@ export const WebExperienceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — the cached id is the only handle (summaries carry no
+          // Observe -- the cached id is the only handle (summaries carry no
           // display name to search by).
           let state = output?.webExperienceId
             ? yield* readWebExperienceById(applicationId, output.webExperienceId)
             : undefined;
 
-          // Ensure — create if missing, then wait for a settled status.
+          // Ensure -- create if missing, then wait for a settled status.
           if (state === undefined) {
             const created = yield* qbusiness.createWebExperience({
               applicationId,
@@ -319,7 +319,7 @@ export const WebExperienceProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateWebExperience — only when
+          // Sync mutable settings via UpdateWebExperience -- only when
           // drifted.
           const described = state.described;
           const needsUpdate =
@@ -355,7 +355,7 @@ export const WebExperienceProvider = () =>
             yield* session.note(`Updated web experience ${id}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* qbusiness.untagResource({

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListSecurityControlDefinitions`.
  *
  * Lists all security control definitions, optionally restricted to one standard.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListSecurityControlDefinitionsHttp)`.
  * ### Standards & Controls
  * **Example:** List Control Definitions
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSecurityControlDefinitions = yield* AWS.SecurityHub.ListSecurityControlDefinitions();
  *
  * // runtime

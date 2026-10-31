@@ -8,10 +8,10 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { canonicalizePolicy, retryWhileConflict, stringifyPolicy } from "./internal.ts";
 
-/** The kind of security policy — encryption at rest or network access. */
+/** The kind of security policy -- encryption at rest or network access. */
 export type SecurityPolicyType = "encryption" | "network";
 
-/** A security policy document — a JSON object/array or a pre-serialized string. */
+/** A security policy document -- a JSON object/array or a pre-serialized string. */
 export type SecurityPolicyDocument = string | Record<string, unknown> | readonly unknown[];
 
 export interface SecurityPolicyProps {
@@ -24,10 +24,10 @@ export interface SecurityPolicyProps {
   policyName?: string;
   /**
    * The policy kind:
-   * - `encryption` — encryption-at-rest policy (a single JSON object with
+   * - `encryption` -- encryption-at-rest policy (a single JSON object with
    *   `Rules` and either `AWSOwnedKey` or `KmsARN`). Every collection MUST be
    *   matched by exactly one encryption policy before it can be created.
-   * - `network` — network-access policy (a JSON array of rules controlling
+   * - `network` -- network-access policy (a JSON array of rules controlling
    *   public/VPC access to the collection and Dashboards endpoints).
    *
    * Changing the type replaces the policy.
@@ -76,7 +76,7 @@ export interface SecurityPolicy extends Resource<
  * more collections, matched by a resource pattern such as
  * `collection/my-collection`.
  *
- * An **encryption** policy is a prerequisite for every collection — a
+ * An **encryption** policy is a prerequisite for every collection -- a
  * collection whose name is not covered by an encryption policy fails to
  * create. A **network** policy controls whether the collection's data and
  * OpenSearch Dashboards endpoints are reachable from public networks or only
@@ -187,7 +187,7 @@ export const SecurityPolicyProvider = () =>
           if (found?.securityPolicyDetail === undefined) {
             return undefined;
           }
-          // Security policies carry no tags, so ownership cannot be gated —
+          // Security policies carry no tags, so ownership cannot be gated --
           // an existing same-name policy is adopted.
           return toAttributes(found.securityPolicyDetail);
         }),
@@ -216,7 +216,7 @@ export const SecurityPolicyProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
 
-          // 2. ENSURE — create if missing; tolerate a concurrent create race
+          // 2. ENSURE -- create if missing; tolerate a concurrent create race
           if (detail === undefined) {
             detail = yield* aoss
               .createSecurityPolicy({
@@ -234,7 +234,7 @@ export const SecurityPolicyProvider = () =>
                 ),
               );
           } else {
-            // 3. SYNC — update policy/description when observed drifts from desired
+            // 3. SYNC -- update policy/description when observed drifts from desired
             const policyDrift = canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
             const descriptionDrift =
               news.description !== undefined && news.description !== detail.description;

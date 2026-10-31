@@ -35,11 +35,11 @@ export type ServiceBindingProps = {
    * Binding id (the `{serviceBinding}` segment of
    * `projects/{project}/locations/{location}/serviceBindings/{serviceBinding}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the binding.
+   * logical id. Immutable -- changing it replaces the binding.
    */
   serviceBindingId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the binding. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -53,7 +53,7 @@ export type ServiceBindingProps = {
    * Service Directory service resource name
    * `projects/{project}/locations/{location}/namespaces/{namespace}/services/{service}`.
    * This field is for the deprecated Service Directory integration.
-   * Immutable — changing it replaces the binding.
+   * Immutable -- changing it replaces the binding.
    */
   service?: string;
   /**
@@ -72,7 +72,7 @@ export type ServiceBinding = Resource<
     serviceBindingId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link BatchGetImage} — `repositoryName` is injected from the
+ * Request for {@link BatchGetImage} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface BatchGetImageRequest extends Omit<
@@ -15,7 +15,7 @@ export interface BatchGetImageRequest extends Omit<
 /**
  * Runtime binding for `ecr:BatchGetImage`.
  *
- * Fetches image manifests from the bound repository — the read half of a registry pull, and the first step of re-tagging an image (`BatchGetImage` → `PutImage` with a new tag). Provide the implementation with
+ * Fetches image manifests from the bound repository -- the read half of a registry pull, and the first step of re-tagging an image (`BatchGetImage` -> `PutImage` with a new tag). Provide the implementation with
  * `Effect.provide(AWS.ECR.BatchGetImageHttp)`.
  * ### Pulling Images
  * **Example:** Fetch an Image Manifest

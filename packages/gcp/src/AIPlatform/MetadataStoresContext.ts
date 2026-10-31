@@ -33,7 +33,7 @@ export type MetadataStoresContextProps = {
   /**
    * Parent MetadataStore resource name
    * `projects/{project}/locations/{location}/metadataStores/{metadatastore}`.
-   * Immutable — changing it replaces the context.
+   * Immutable -- changing it replaces the context.
    */
   metadataStore: string;
   /**

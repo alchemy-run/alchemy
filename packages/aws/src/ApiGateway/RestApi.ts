@@ -56,7 +56,7 @@ export interface RestApiProps {
  * These bindings are the mechanism by which Methods, Resources, Authorizers,
  * and other REST-API-scoped children declare a reverse dependency on the API
  * itself. The presence of any such binding is what forces `RestApi.create` to
- * run *after* every child has been created — which is exactly the ordering
+ * run *after* every child has been created -- which is exactly the ordering
  * CloudFormation asks users to write manually via `DependsOn`.
  *
  * Consumers should not construct these directly; the child resource
@@ -109,7 +109,7 @@ export interface RestApi extends Resource<
  * An Amazon API Gateway REST API (v1).
  *
  * `RestApi` is the root of an API Gateway v1 stack. Every other ApiGateway
- * resource — `Resource`, `Method`, `Authorizer`, `Deployment`, `Stage` —
+ * resource -- `Resource`, `Method`, `Authorizer`, `Deployment`, `Stage` --
  * hangs off a `RestApi`. The only identity you need to thread through your
  * stack is the `RestApi` value itself: child resources accept `restApi: api`
  * and register themselves back onto the API so that deployments and stages
@@ -151,7 +151,7 @@ export interface RestApi extends Resource<
  * `RestApiBinding` back onto the API. The Alchemy scheduler sees those
  * bindings as reverse edges from children into the API, and `Deployment`
  * reads them to express a transitive dependency on every child. You never
- * have to write a `DependsOn` list or a `triggers` hash — adding a new
+ * have to write a `DependsOn` list or a `triggers` hash -- adding a new
  * `Method` automatically orders it before the next `Deployment`.
  *
  * ### Private REST APIs
@@ -300,7 +300,7 @@ export const RestApiProvider = () =>
   Provider.effect(
     RestApi,
     Effect.gen(function* () {
-      // Ensure — create the REST API in full and return its snapshot. Used by
+      // Ensure -- create the REST API in full and return its snapshot. Used by
       // `precreate` (cycle members) and by `reconcile` when the API is
       // missing (greenfield outside a cycle, or deleted out of band).
       const createApi = Effect.fn(function* (
@@ -383,10 +383,10 @@ export const RestApiProvider = () =>
         }),
         // The REST API is brought up in two phases. `precreate` creates the
         // REST API in full so child resources (`Method`, `Resource`, etc.)
-        // can resolve `api.restApiId` and start their own creates — this is
+        // can resolve `api.restApiId` and start their own creates -- this is
         // the cycle-breaker that lets children register themselves back onto
-        // the API via `restApi.bind`. `create` then runs last — after every
-        // bound child — and is effectively a no-op that re-reads the API to
+        // the API via `restApi.bind`. `create` then runs last -- after every
+        // bound child -- and is effectively a no-op that re-reads the API to
         // publish the final snapshot. The key property is that any
         // `Deployment` referencing `api.*` outputs will see a value produced
         // only after every bound child has settled, because the bindings on
@@ -405,7 +405,7 @@ export const RestApiProvider = () =>
           }
           const news = newsIn as RestApiProps;
 
-          // Observe — fetch live cloud state. `output` is treated as a
+          // Observe -- fetch live cloud state. `output` is treated as a
           // cache for the stable id only. Only cycle members are precreated,
           // so a greenfield create outside a cycle arrives without one.
           const observed = output?.restApiId
@@ -413,13 +413,13 @@ export const RestApiProvider = () =>
                 .getRestApi({ restApiId: output.restApiId })
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
-          // Ensure — create the API when it is missing.
+          // Ensure -- create the API when it is missing.
           const observedSnapshot = observed?.id
             ? snapshotFromApi(observed)
             : yield* createApi(id, news, session);
           const restApiId = observedSnapshot.restApiId;
 
-          // Sync mutable scalar fields — diff observed cloud state against
+          // Sync mutable scalar fields -- diff observed cloud state against
           // desired and emit only the delta as PATCH operations.
           const patches = buildUpdatePatches(news, observedSnapshot);
           if (patches.length > 0) {
@@ -431,7 +431,7 @@ export const RestApiProvider = () =>
             );
           }
 
-          // Sync tags — observed ↔ desired so adoption converges without
+          // Sync tags -- observed <-> desired so adoption converges without
           // fighting the existing tag set.
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };

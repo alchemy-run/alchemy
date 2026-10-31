@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:DetectEntitiesV2` — extract medical
+ * Runtime binding for `comprehendmedical:DetectEntitiesV2` -- extract medical
  * entities (medications, medical conditions, anatomy, PHI, tests/treatments)
  * and their attributes and traits from clinical text.
  *
  * Comprehend Medical is a pure pay-per-call service with no resource to
  * manage: the binding takes no arguments and grants the function
  * `comprehendmedical:DetectEntitiesV2` (the action has no resource-level
- * IAM). Pass the clinical note as raw text — no marshalling.
+ * IAM). Pass the clinical note as raw text -- no marshalling.
  *
  * ### Detecting Medical Entities
  * **Example:** Detect Entities in a Clinical Note

@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `CopyBackup` operation (IAM actions
- * `fsx:CopyBackup` + `fsx:TagResource` on `*` — both the source and the new
+ * `fsx:CopyBackup` + `fsx:TagResource` on `*` -- both the source and the new
  * backup's ARNs are unknowable at deploy time).
  *
- * Copies an FSx backup within a region or from another region — the
+ * Copies an FSx backup within a region or from another region -- the
  * cross-region disaster-recovery half of a runtime backup rotation built
  * with {@link CreateBackup}. A missing source backup surfaces the typed
  * `BackupNotFound`. Provide the implementation with

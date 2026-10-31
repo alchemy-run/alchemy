@@ -55,7 +55,7 @@ export interface AstroConfigSettings {
  * Deploy composites call this at plan time: whether a site is assets-only
  * decides which resources exist, and Astro gives no way to tell an explicit
  * file-level `output: "static"` apart from its own `"static"` default once
- * the config resolves. The file loads the way Astro loads it — a native
+ * the config resolves. The file loads the way Astro loads it -- a native
  * import for `.js`/`.mjs`, otherwise through the project's Vite module
  * runner.
  */

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { Group } from "./Group.ts";
 
-/** Request for {@link UngroupResources} — the group is injected from the binding. */
+/** Request for {@link UngroupResources} -- the group is injected from the binding. */
 export type UngroupResourcesRequest = Omit<resourcegroups.UngroupResourcesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:UngroupResources`.
  *
  * Removes the specified resources from the bound {@link Group} (the inverse
- * of {@link GroupResources} — supported for the same application /
+ * of {@link GroupResources} -- supported for the same application /
  * host-management / capacity-reservation-pool group types). Ungrouping is
  * asynchronous; track the reported `Pending` ARNs with
  * {@link ListGroupingStatuses}. The group name is injected from the binding.
@@ -19,7 +19,7 @@ export type UngroupResourcesRequest = Omit<resourcegroups.UngroupResourcesInput,
  * ### Managing Group Membership
  * **Example:** Remove A Resource From An Application Group
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const ungroupResources = yield* AWS.ResourceGroups.UngroupResources(group);
  *
  * // runtime

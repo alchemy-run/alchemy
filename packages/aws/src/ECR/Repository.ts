@@ -46,7 +46,7 @@ export interface RepositoryProps {
   lifecyclePolicyText?: string;
   /**
    * Repository permission policy controlling access from other AWS
-   * principals — either a structured IAM {@link PolicyDocument} or a raw
+   * principals -- either a structured IAM {@link PolicyDocument} or a raw
    * JSON string (escape hatch / adoption of an existing policy). Omitting
    * the prop removes any repository policy.
    */
@@ -146,7 +146,7 @@ export const RepositoryProvider = () =>
         );
 
       // The lifecycle policy is managed only when declared, so it is only
-      // observed then (canonical JSON — ECR may reformat the document).
+      // observed then (canonical JSON -- ECR may reformat the document).
       const readLifecyclePolicy = (repositoryName: string, declared: string | undefined) =>
         declared === undefined
           ? Effect.undefined
@@ -158,7 +158,7 @@ export const RepositoryProvider = () =>
               ),
             );
 
-      // Sync the repository policy — compare the OBSERVED policy against the
+      // Sync the repository policy -- compare the OBSERVED policy against the
       // desired one via `normalizePolicyDocument` (key order / whitespace
       // insensitive) so a re-deploy of an equivalent document is a no-op.
       const syncPolicy = Effect.fn(function* (repositoryName: string, desired: string | undefined) {
@@ -230,7 +230,7 @@ export const RepositoryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live cloud state. We never trust prior `output`
+          // Observe -- fetch live cloud state. We never trust prior `output`
           // blindly: the repository may have been deleted out-of-band.
           let described = yield* ecr
             .describeRepositories({
@@ -239,7 +239,7 @@ export const RepositoryProvider = () =>
             .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
           let repository = described?.repositories?.[0];
 
-          // Ensure — create the repository if missing. Tolerate
+          // Ensure -- create the repository if missing. Tolerate
           // `RepositoryAlreadyExistsException` as a race with a peer
           // reconciler: re-describe and continue with the sync path.
           if (!repository?.repositoryArn || !repository.repositoryUri) {
@@ -297,7 +297,7 @@ export const RepositoryProvider = () =>
             });
           }
 
-          // Sync lifecycle policy — observed ↔ desired.
+          // Sync lifecycle policy -- observed <-> desired.
           if (news.lifecyclePolicyText) {
             yield* ecr.putLifecyclePolicy({
               repositoryName,
@@ -305,11 +305,11 @@ export const RepositoryProvider = () =>
             });
           }
 
-          // Sync repository policy — normalized observed ↔ desired.
+          // Sync repository policy -- normalized observed <-> desired.
           const desiredPolicy = toPolicyText(news.policy);
           yield* syncPolicy(repositoryName, desiredPolicy);
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const listedTags = yield* ecr.listTagsForResource({
             resourceArn: repositoryArn,
           });

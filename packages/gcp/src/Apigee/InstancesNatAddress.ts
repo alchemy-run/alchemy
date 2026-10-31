@@ -17,12 +17,12 @@ const MAX_NAME_LENGTH = 32;
 export type InstancesNatAddressProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the NAT address.
+   * Immutable -- changing it replaces the NAT address.
    */
   organization?: string;
   /**
    * Parent instance id or full name
-   * (`organizations/{org}/instances/{instance}`). Immutable — changing it
+   * (`organizations/{org}/instances/{instance}`). Immutable -- changing it
    * replaces the NAT address.
    */
   instance: string;
@@ -30,7 +30,7 @@ export type InstancesNatAddressProps = {
    * NAT address id (the `{nataddress}` segment of
    * `organizations/{org}/instances/{instance}/natAddresses/{nataddress}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the NAT address.
+   * logical id. Immutable -- changing it replaces the NAT address.
    */
   natAddressId?: string;
   /**
@@ -67,8 +67,8 @@ export type InstancesNatAddress = Resource<
  *
  * NAT addresses have no labels or description. `list` enumerates
  * addresses on alchemy-owned instances so `pnpm nuke:gcp` can find
- * leaked rows. Organization, instance, and name are identity — changing
- * them replaces the address. `activate` updates in place (RESERVED →
+ * leaked rows. Organization, instance, and name are identity -- changing
+ * them replaces the address. `activate` updates in place (RESERVED ->
  * ACTIVE) and cannot be reversed.
  *
  * ### Creating a NAT Address

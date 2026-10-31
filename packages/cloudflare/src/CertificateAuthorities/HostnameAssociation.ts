@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export type HostnameAssociationProps = {
   /**
-   * Zone whose hostnames should enforce mTLS. Stable — the zone is part of
+   * Zone whose hostnames should enforce mTLS. Stable -- the zone is part of
    * the association's identity, so changing it triggers a replacement (the
    * old zone's association is cleared).
    */
@@ -24,7 +24,7 @@ export type HostnameAssociationProps = {
    * `ca: true`). When omitted, the hostnames are associated with the zone's
    * active Cloudflare Managed CA instead.
    *
-   * Stable — the certificate keys the association, so changing it triggers
+   * Stable -- the certificate keys the association, so changing it triggers
    * a replacement (the old certificate's hostname list is cleared).
    *
    * @default the active Cloudflare Managed CA
@@ -32,7 +32,7 @@ export type HostnameAssociationProps = {
   mtlsCertificateId?: string;
   /**
    * Fully-qualified hostnames in the zone that enforce mTLS for the keyed
-   * certificate authority. Mutable — the desired list replaces the current
+   * certificate authority. Mutable -- the desired list replaces the current
    * one in full on update.
    */
   hostnames: Array<string>;
@@ -63,7 +63,7 @@ export type HostnameAssociation = Resource<
  * keyed by an uploaded mTLS CA certificate.
  *
  * Cloudflare models this as a settings singleton per
- * `(zone, mtls_certificate_id)` pair — a pure GET/PUT API over
+ * `(zone, mtls_certificate_id)` pair -- a pure GET/PUT API over
  * `/zones/{zone_id}/certificate_authorities/hostname_associations`. With no
  * `mtlsCertificateId`, the hostnames are associated with the zone's active
  * Cloudflare Managed CA; with one, they are associated with that uploaded CA
@@ -71,7 +71,7 @@ export type HostnameAssociation = Resource<
  * empty hostname list).
  *
  * Safety: when there is no prior state but the keyed association already has
- * hostnames, `read` reports the existing list as `Unowned` — the engine
+ * hostnames, `read` reports the existing list as `Unowned` -- the engine
  * refuses to take it over (and would otherwise clobber a hand-managed list)
  * unless `--adopt` or `adopt(true)` is set.
  *
@@ -137,7 +137,7 @@ export const HostnameAssociationProvider = () =>
             Effect.map((observed): HostnameAssociationAttributes | undefined => {
               const hostnames = [...(observed.hostnames ?? [])];
               // An empty list is the singleton's "unconfigured"
-              // state — nothing exists to enumerate (matches `read`).
+              // state -- nothing exists to enumerate (matches `read`).
               if (hostnames.length === 0) return undefined;
               return {
                 zoneId: zone.id,
@@ -162,7 +162,7 @@ export const HostnameAssociationProvider = () =>
       if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
-      // mtlsCertificateId keys the association — `undefined` (Managed CA)
+      // mtlsCertificateId keys the association -- `undefined` (Managed CA)
       // is itself an identity value.
       const oldCertId =
         output !== undefined
@@ -171,7 +171,7 @@ export const HostnameAssociationProvider = () =>
             ? o.mtlsCertificateId
             : undefined;
       // A presence flip (Managed CA <-> uploaded CA) is decidable even when
-      // the new side is an unresolved Input reference — the reference itself
+      // the new side is an unresolved Input reference -- the reference itself
       // proves a certificate now keys (or no longer keys) the association.
       if ((oldCertId === undefined) !== (n.mtlsCertificateId === undefined)) {
         return { action: "replace" } as const;
@@ -199,7 +199,7 @@ export const HostnameAssociationProvider = () =>
         mtlsCertificateId,
       });
       const hostnames = [...(observed.hostnames ?? [])];
-      // An empty list is the singleton's "unconfigured" state — nothing
+      // An empty list is the singleton's "unconfigured" state -- nothing
       // exists to refresh or adopt.
       if (hostnames.length === 0) return undefined;
       const attrs: HostnameAssociationAttributes = {
@@ -208,7 +208,7 @@ export const HostnameAssociationProvider = () =>
         hostnames,
       };
       // Cold read with a non-empty pre-existing list: the association
-      // carries no ownership markers, so we cannot prove we created it —
+      // carries no ownership markers, so we cannot prove we created it --
       // gate the takeover behind the adopt policy.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -219,7 +219,7 @@ export const HostnameAssociationProvider = () =>
       const mtlsCertificateId = news.mtlsCertificateId as string | undefined;
       const desired = (news.hostnames ?? []) as Array<string>;
 
-      // 1. Observe — the association always "exists" (possibly empty);
+      // 1. Observe -- the association always "exists" (possibly empty);
       //    read the live hostname list.
       const observed = yield* certificateAuthorities.getHostnameAssociation({
         zoneId,
@@ -227,7 +227,7 @@ export const HostnameAssociationProvider = () =>
       });
       const current = [...(observed.hostnames ?? [])];
 
-      // 2. Sync — full PUT of the desired list; skip when the observed
+      // 2. Sync -- full PUT of the desired list; skip when the observed
       //    set already matches (order is not significant).
       if (hostnameSetEquals(current, desired)) {
         return { zoneId, mtlsCertificateId, hostnames: current };
@@ -245,7 +245,7 @@ export const HostnameAssociationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The association is a settings singleton — "delete" means clearing
+      // The association is a settings singleton -- "delete" means clearing
       // the hostname list. PUT of an empty list is naturally idempotent.
       yield* certificateAuthorities.putHostnameAssociation({
         zoneId: output.zoneId,

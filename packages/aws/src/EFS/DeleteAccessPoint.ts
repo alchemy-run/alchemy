@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteAccessPoint` operation (IAM action
  * `elasticfilesystem:DeleteAccessPoint`).
  *
- * Deletes an access point by ID — the teardown half of the runtime
+ * Deletes an access point by ID -- the teardown half of the runtime
  * multi-tenant pattern built with {@link CreateAccessPoint}. The action
  * authorizes on the access point's own ARN, which for runtime-created
  * access points is unknowable at deploy time, so the grant is on `*`.

@@ -15,10 +15,10 @@ import type { Schema } from "./Schema.ts";
  * ### Code Bindings
  * **Example:** Download The Generated Package
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const getCodeBindingSource = yield* AWS.Schemas.GetCodeBindingSource(schema);
  *
- * // runtime — Body is a Stream of Uint8Array chunks (a zip archive)
+ * // runtime -- Body is a Stream of Uint8Array chunks (a zip archive)
  * const { Body } = yield* getCodeBindingSource({ Language: "Python36" });
  * const bytes = yield* Stream.runFold(Body!, 0, (n, chunk) => n + chunk.length);
  * ```

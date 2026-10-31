@@ -7,7 +7,7 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
  * Runtime binding for `globalaccelerator:AddEndpoints`.
  *
  * Registers additional endpoints (ALB/NLB ARNs, EC2 instance IDs, or Elastic
- * IP allocation IDs) on the bound {@link EndpointGroup} at runtime — the
+ * IP allocation IDs) on the bound {@link EndpointGroup} at runtime -- the
  * dynamic-scaling counterpart to declaring `endpoints` in the resource
  * props. Unlike a full `UpdateEndpointGroup`, adding endpoints does not
  * touch the group's other endpoints or its health-check configuration. The
@@ -17,7 +17,7 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
  * ### Managing Endpoints
  * **Example:** Register an Endpoint Dynamically
  * ```typescript
- * // init — bind the operation to the endpoint group
+ * // init -- bind the operation to the endpoint group
  * const addEndpoints = yield* AWS.GlobalAccelerator.AddEndpoints(group);
  *
  * // runtime

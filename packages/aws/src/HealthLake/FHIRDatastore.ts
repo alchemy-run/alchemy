@@ -17,7 +17,7 @@ export class FHIRDatastoreNotReady extends Data.TaggedError("FHIRDatastoreNotRea
 
 export interface FHIRDatastoreIdentityProviderProps {
   /**
-   * Authorization strategy for the data store — `"AWS_AUTH"` (SigV4, the
+   * Authorization strategy for the data store -- `"AWS_AUTH"` (SigV4, the
    * default), `"SMART_ON_FHIR"` or `"SMART_ON_FHIR_V1"`.
    */
   authorizationStrategy: healthlake.AuthorizationStrategy;
@@ -60,7 +60,7 @@ export interface FHIRDatastoreProps {
    */
   kmsKeyId?: string;
   /**
-   * Preload the data store with synthetic sample data on creation —
+   * Preload the data store with synthetic sample data on creation --
    * `"SYNTHEA"` loads ~100k synthetic patient records. Changing this
    * replaces the data store.
    * @default no preloaded data
@@ -102,13 +102,13 @@ export interface FHIRDatastore extends Resource<
 > {}
 
 /**
- * An AWS HealthLake FHIR-enabled data store — a HIPAA-eligible, managed
+ * An AWS HealthLake FHIR-enabled data store -- a HIPAA-eligible, managed
  * store for FHIR R4 health data with a FHIR REST endpoint plus bulk
  * import/export.
  *
- * Data stores take roughly 15-30 minutes to provision (`CREATING` →
+ * Data stores take roughly 15-30 minutes to provision (`CREATING` ->
  * `ACTIVE`) and are billed while they exist; deletion is also asynchronous
- * (`DELETING` → gone). Destroy data stores you are not using.
+ * (`DELETING` -> gone). Destroy data stores you are not using.
  * ### Creating a Data Store
  * **Example:** Basic FHIR R4 Data Store
  * ```typescript
@@ -182,8 +182,8 @@ export const FHIRDatastoreProvider = () =>
         return tags;
       });
 
-      // Describe by id; typed not-found → undefined. A data store in
-      // DELETED status still describes for a while — callers decide how to
+      // Describe by id; typed not-found -> undefined. A data store in
+      // DELETED status still describes for a while -- callers decide how to
       // treat terminal/transitional statuses.
       const readDatastore = Effect.fn(function* (datastoreId: string) {
         const response = yield* healthlake
@@ -255,7 +255,7 @@ export const FHIRDatastoreProvider = () =>
         );
       });
 
-      // Deletion is asynchronous (DELETING → gone); wait until the data
+      // Deletion is asynchronous (DELETING -> gone); wait until the data
       // store is fully gone. Budget ~35 min (70 * 30s).
       const waitUntilGone = Effect.fn(function* (datastoreId: string) {
         const properties = yield* readDatastore(datastoreId).pipe(
@@ -324,14 +324,14 @@ export const FHIRDatastoreProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           //    id cache. A deleted/deleting instance is treated as missing.
           let observed = output?.datastoreId ? yield* readDatastore(output.datastoreId) : undefined;
           if (isGoneOrGoing(observed)) {
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing, then wait (bounded) for ACTIVE.
+          // 2. Ensure -- create if missing, then wait (bounded) for ACTIVE.
           //    ClientToken is an idempotency token filled in by distilled.
           if (observed === undefined) {
             const created = yield* healthlake.createFHIRDatastore({
@@ -360,7 +360,7 @@ export const FHIRDatastoreProvider = () =>
             observed = yield* waitForActive(observed.DatastoreId);
           }
 
-          // 3. Sync mutable aspects — compute the update delta from
+          // 3. Sync mutable aspects -- compute the update delta from
           //    OBSERVED state; skip the API entirely on no-op.
           const update: healthlake.UpdateFHIRDatastoreRequest = {
             DatastoreId: observed.DatastoreId,
@@ -383,7 +383,7 @@ export const FHIRDatastoreProvider = () =>
             observed = yield* waitForActive(observed.DatastoreId);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readDatastoreTags(observed.DatastoreArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -406,7 +406,7 @@ export const FHIRDatastoreProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const datastoreId = output.datastoreId;
           // A data store mid-create/update rejects deletion with
-          // ConflictException — wait (bounded) for it to settle first.
+          // ConflictException -- wait (bounded) for it to settle first.
           const settled = yield* waitUntilSettled(datastoreId).pipe(
             Effect.orElseSucceed(() => undefined),
           );
@@ -422,7 +422,7 @@ export const FHIRDatastoreProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           }
-          // Deletion is asynchronous — wait until the data store is gone so
+          // Deletion is asynchronous -- wait until the data store is gone so
           // dependent resources (e.g. the KMS key) can be deleted next.
           yield* waitUntilGone(datastoreId);
         }),

@@ -142,12 +142,12 @@ export type CertificateTemplateProps = {
    * Template id (the `{certificateTemplate}` segment of
    * `projects/{project}/locations/{location}/certificateTemplates/{certificateTemplate}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it
+   * logical id. Must match `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it
    * replaces the template.
    */
   certificateTemplateId?: string;
   /**
-   * Location of the template (`us-central1`, …). Immutable — changing it
+   * Location of the template (`us-central1`, ...). Immutable -- changing it
    * replaces the template. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -219,7 +219,7 @@ export type CertificateTemplate = Resource<
 >;
 
 /**
- * A Certificate Authority Service certificate template — reusable issuance
+ * A Certificate Authority Service certificate template -- reusable issuance
  * policy (identity constraints, X.509 defaults, and allowed extensions)
  * applied when issuing certificates from a CaPool.
  *

@@ -6,12 +6,12 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `controltower:GetBaseline`.
  *
  * An account-level operation that reads one entry of the Control Tower
- * baseline catalog by its ARN — its name and description. Provide the
+ * baseline catalog by its ARN -- its name and description. Provide the
  * implementation with `Effect.provide(AWS.ControlTower.GetBaselineHttp)`.
  * ### Browsing the Baseline Catalog
  * **Example:** Read a Baseline's Details
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getBaseline = yield* AWS.ControlTower.GetBaseline();
  *
  * // runtime

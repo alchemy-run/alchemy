@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `eks:ListAccessPolicies`.
  *
- * Enumerates the AWS-managed EKS access policies (`AmazonEKSAdminPolicy`, `AmazonEKSViewPolicy`, …) that can be associated with access entries.
- * `eks:ListAccessPolicies` is granted on `*` — the operation is account-scoped and takes no resource.
+ * Enumerates the AWS-managed EKS access policies (`AmazonEKSAdminPolicy`, `AmazonEKSViewPolicy`, ...) that can be associated with access entries.
+ * `eks:ListAccessPolicies` is granted on `*` -- the operation is account-scoped and takes no resource.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListAccessPoliciesHttp)`.
  * ### Discovering Clusters

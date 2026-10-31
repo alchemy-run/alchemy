@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * action `rds:DescribePendingMaintenanceActions`).
  *
  * Lists pending maintenance actions (engine patches, system updates) for the
- * account's Neptune resources — pair with
+ * account's Neptune resources -- pair with
  * {@link ApplyPendingMaintenanceAction} for maintenance automation. Provide
  * the implementation with
  * `Effect.provide(AWS.Neptune.DescribePendingMaintenanceActionsHttp)`.

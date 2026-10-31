@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `greengrass:GetConnectivityInfo`.
  *
- * Reads a core device's connectivity information — the endpoints and ports
+ * Reads a core device's connectivity information -- the endpoints and ports
  * where client devices can reach the core's local MQTT broker (the same data
  * the IoT Greengrass discovery API serves). The caller supplies the core
  * device's thing name at runtime. Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Client Devices
  * **Example:** Read A Core's Broker Endpoints
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getConnectivityInfo = yield* AWS.GreengrassV2.GetConnectivityInfo();
  *
  * // runtime

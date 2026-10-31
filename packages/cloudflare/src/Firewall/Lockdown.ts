@@ -34,43 +34,43 @@ export interface LockdownProps {
   /**
    * Zone the lockdown rule applies to.
    *
-   * Stable — moving a rule between zones triggers a replacement.
+   * Stable -- moving a rule between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * The URLs to lock down. Each entry is escaped before use, so only simple
    * wildcard patterns are supported (e.g. `shop.example.com/admin*`).
    *
-   * Mutable — updated in place via PUT.
+   * Mutable -- updated in place via PUT.
    */
   urls: string[];
   /**
    * The IP addresses and CIDR ranges that are allowed to access the URLs.
    * Everyone else is blocked.
    *
-   * Mutable — updated in place via PUT.
+   * Mutable -- updated in place via PUT.
    */
   configurations: LockdownConfiguration[];
   /**
    * An informative summary of the rule. Sanitized server-side (HTML tags
    * are removed).
    *
-   * Mutable — updated in place via PUT.
+   * Mutable -- updated in place via PUT.
    */
   description?: string;
   /**
    * When true, the rule is disabled without being deleted.
    *
-   * Mutable — updated in place via PUT.
+   * Mutable -- updated in place via PUT.
    *
    * @default false
    */
   paused?: boolean;
   /**
-   * Processing order — a lower number indicates higher priority. Rules
+   * Processing order -- a lower number indicates higher priority. Rules
    * without a priority are processed before rules with one.
    *
-   * Mutable — updated in place via PUT.
+   * Mutable -- updated in place via PUT.
    */
   priority?: number;
 }
@@ -105,7 +105,7 @@ export type Lockdown = Resource<
 >;
 
 /**
- * A Cloudflare Zone Lockdown rule — restrict one or more URL patterns on a
+ * A Cloudflare Zone Lockdown rule -- restrict one or more URL patterns on a
  * zone so that only an allow-list of IP addresses and CIDR ranges can access
  * them. Every other visitor receives an "Access Denied" page.
  *
@@ -178,7 +178,7 @@ export const LockdownProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as LockdownProps;
       const n = news as LockdownProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.zoneId === undefined) return undefined;
       // zoneId is Input<string>; compare only once both are concrete.
       if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
@@ -197,7 +197,7 @@ export const LockdownProvider = () =>
         if (observed) return toAttributes(observed, zoneId);
       }
 
-      // Adoption path: a rule covering the same URLs may already exist —
+      // Adoption path: a rule covering the same URLs may already exist --
       // Cloudflare rejects overlapping duplicates, so the URL set is the
       // rule's identity within the zone. Lockdown rules carry no ownership
       // markers, so brand a match `Unowned` and let the engine gate
@@ -214,20 +214,20 @@ export const LockdownProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the lockdown id cached on `output` is a hint, not a
+      // 1. Observe -- the lockdown id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the URL scan and
       //    then to create.
       let observed = output?.lockdownId ? yield* getLockdown(zoneId, output.lockdownId) : undefined;
 
       // 2. Fall back to scanning the zone for a rule with the same URL
-      //    set. Ownership has already been verified upstream — `read`
+      //    set. Ownership has already been verified upstream -- `read`
       //    reports existing rules as `Unowned` and the engine gates
       //    takeover behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByUrls(zoneId, news.urls);
       }
 
-      // 3. Ensure — create when missing. A concurrent create surfaces as
+      // 3. Ensure -- create when missing. A concurrent create surfaces as
       //    `DuplicateLockdown` (Cloudflare code 10009): converge by
       //    re-scanning for the rule that won the race.
       if (!observed) {
@@ -251,7 +251,7 @@ export const LockdownProvider = () =>
           );
       }
 
-      // 4. Sync — diff observed cloud state against desired; skip the PUT
+      // 4. Sync -- diff observed cloud state against desired; skip the PUT
       //    entirely on a no-op. Undefined optional props are treated as
       //    "no constraint" so adoption doesn't clobber foreign settings.
       const dirty =
@@ -279,7 +279,7 @@ export const LockdownProvider = () =>
     // enumerate every zone and exhaustively paginate its lockdown rules,
     // hydrating each into the same Attributes shape `read` returns. Zone
     // Lockdown is a Pro+ feature, so plan-gated zones reject the route with a
-    // typed `Forbidden` — skip those rather than failing the whole list.
+    // typed `Forbidden` -- skip those rather than failing the whole list.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -298,7 +298,7 @@ export const LockdownProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare's DELETE is naturally idempotent (an already-gone rule
-      // answers HTTP 200 echoing the id) — the typed catch covers the rare
+      // answers HTTP 200 echoing the id) -- the typed catch covers the rare
       // not-found envelope race.
       yield* firewall
         .deleteLockdown({
@@ -356,7 +356,7 @@ const toAttributes = (rule: ObservedLockdown, zoneId: string): LockdownAttribute
   zoneId,
   urls: [...rule.urls],
   configurations: rule.configurations.map((c) => ({
-    // Distilled types each union variant's target/value as optional —
+    // Distilled types each union variant's target/value as optional --
     // Cloudflare always echoes both for a persisted rule.
     target: (c.target ?? "ip") as LockdownConfiguration["target"],
     value: c.value ?? "",

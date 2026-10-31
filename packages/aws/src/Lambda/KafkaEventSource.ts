@@ -24,7 +24,7 @@ export const isMSKEvent = (event: any): event is lambda.MSKEvent =>
 // same cluster path; MSK IAM auth grants data-plane access via these ARNs.
 const topicArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":topic/")}/*`;
 const groupArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":group/")}/*`;
-// `arn:{partition}:kafka:{region}:{account}:cluster/...` →
+// `arn:{partition}:kafka:{region}:{account}:cluster/...` ->
 // `arn:{partition}:ec2:{region}:{account}:`
 const ec2ArnPrefix = (clusterArn: string) => {
   const [arn, partition, , region, account] = clusterArn.split(":");
@@ -167,7 +167,7 @@ export const KafkaEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isMSKEvent(event)) {
-              // `event.records` maps `topic-partition` → MSKRecord[]; flatten
+              // `event.records` maps `topic-partition` -> MSKRecord[]; flatten
               // to a single stream of records.
               const records = Object.values(event.records).flat() as MSKRecord[];
               if (records.length > 0) {

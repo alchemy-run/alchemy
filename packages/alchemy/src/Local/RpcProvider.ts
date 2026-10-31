@@ -44,7 +44,7 @@ import { RpcProviderProxy } from "./RpcProviderProxy.ts";
  * ```
  *
  * @param cls - The tag of the resource class to construct a provider for.
- * @param providersUrl - URL of the module whose default export is the provider group's layer (the layer this provider is registered in). When the provider runs in the dev sidecar, the sidecar imports that module on first use — see `Local/Sidecar.ts`. Typically `import.meta.resolve("./Local.ts")`.
+ * @param providersUrl - URL of the module whose default export is the provider group's layer (the layer this provider is registered in). When the provider runs in the dev sidecar, the sidecar imports that module on first use -- see `Local/Sidecar.ts`. Typically `import.meta.resolve("./Local.ts")`.
  * @param eff - The Effect to use to construct the provider.
  * @returns A layer containing the RpcProvider.
  */
@@ -103,7 +103,7 @@ type RpcProviderService<
  * provider already implements `list` (enumerating its local runtime state) it
  * is returned untouched; otherwise a safe default that enumerates nothing
  * (`() => Effect.succeed([])`) is injected. Local/dev providers have no cloud
- * enumeration API, so `[]` is the correct default — never throw.
+ * enumeration API, so `[]` is the correct default -- never throw.
  */
 const withDefaultList = <
   R extends ResourceLike,

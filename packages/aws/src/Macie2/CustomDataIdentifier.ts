@@ -14,7 +14,7 @@ export interface CustomDataIdentifierProps {
   /**
    * Custom name for the identifier (1-128 characters). Must be unique per
    * account. If omitted, a unique name is generated from the app/stage/logical
-   * ID. Changing this replaces the identifier — custom data identifiers are
+   * ID. Changing this replaces the identifier -- custom data identifiers are
    * immutable once created.
    */
   name?: string;
@@ -39,7 +39,7 @@ export interface CustomDataIdentifierProps {
   keywords?: string[];
 
   /**
-   * Words to exclude from the results — a match containing one of these is
+   * Words to exclude from the results -- a match containing one of these is
    * ignored (up to 10 entries, each 4-90 UTF-8 characters). Changing this
    * replaces the identifier.
    */
@@ -82,7 +82,7 @@ export interface CustomDataIdentifier extends Resource<
 > {}
 
 /**
- * An Amazon Macie custom data identifier — a regex-based detection criterion
+ * An Amazon Macie custom data identifier -- a regex-based detection criterion
  * (with optional keywords, ignore words, and severity thresholds) that
  * classification jobs and automated discovery use to detect organization-
  * specific sensitive data. Requires Macie to be enabled for the account (see
@@ -120,7 +120,7 @@ export { CustomDataIdentifierResource as CustomDataIdentifier };
 const createName = (id: string, props: Partial<CustomDataIdentifierProps>) =>
   props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
-// The whole definition is immutable — any change replaces.
+// The whole definition is immutable -- any change replaces.
 const fingerprint = (props: Partial<CustomDataIdentifierProps>) =>
   JSON.stringify({
     description: props.description,
@@ -143,7 +143,7 @@ export const CustomDataIdentifierProvider = () =>
     Effect.gen(function* () {
       const getIdentifier = (id: string) =>
         macie2.getCustomDataIdentifier({ id }).pipe(
-          // Deleting is a soft delete — a deleted identifier still answers,
+          // Deleting is a soft delete -- a deleted identifier still answers,
           // flagged `deleted: true`. Treat it (and a disabled Macie session)
           // as gone.
           Effect.map((d) => (d.deleted ? undefined : d)),
@@ -197,12 +197,12 @@ export const CustomDataIdentifierProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const name = output?.name ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the id.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the id.
           let identifierId = output?.id;
           let live = identifierId ? yield* getIdentifier(identifierId) : undefined;
 
           if (!live || identifierId === undefined) {
-            // 2. ENSURE — create the identifier (retry through enablement lag).
+            // 2. ENSURE -- create the identifier (retry through enablement lag).
             const created = yield* retryThroughEnablement(
               macie2.createCustomDataIdentifier({
                 name,
@@ -217,7 +217,7 @@ export const CustomDataIdentifierProvider = () =>
             );
             identifierId = created.customDataIdentifierId!;
           } else {
-            // 3. SYNC tags — the definition is immutable; only tags mutate.
+            // 3. SYNC tags -- the definition is immutable; only tags mutate.
             const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
@@ -242,7 +242,7 @@ export const CustomDataIdentifierProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent soft delete — the identifier may already be gone, or
+          // Idempotent soft delete -- the identifier may already be gone, or
           // Macie may already be disabled for the account.
           yield* macie2.deleteCustomDataIdentifier({ id: output.id }).pipe(
             Effect.catchTags({

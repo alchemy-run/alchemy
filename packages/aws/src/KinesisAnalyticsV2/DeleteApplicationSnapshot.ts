@@ -9,7 +9,7 @@ export interface DeleteApplicationSnapshotRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:DeleteApplicationSnapshot` —
+ * Runtime binding for `kinesisanalytics:DeleteApplicationSnapshot` --
  * deletes a snapshot of the bound application, e.g. pruning old savepoints
  * on a retention schedule. The `SnapshotCreationTimestamp` acts as a
  * compare-and-set token; read it fresh with

@@ -26,30 +26,30 @@ import {
 
 export type MattersExportProps = {
   /**
-   * Parent matter id. Immutable — changing it replaces the export.
+   * Parent matter id. Immutable -- changing it replaces the export.
    */
   matterId: string;
   /**
-   * Server-assigned export id. Leave blank on create. Immutable —
+   * Server-assigned export id. Leave blank on create. Immutable --
    * changing it replaces the export.
    */
   exportId?: string;
   /**
    * Export name (max 100 characters including Alchemy's ownership
    * marker). Do not use `~!$'(),;@:/?`. Vault exports have no labels
-   * field, so ownership is stored in a `[alchemy …]` prefix and stripped
-   * from attributes. Vault has no export update API — changing the name
+   * field, so ownership is stored in a `[alchemy ...]` prefix and stripped
+   * from attributes. Vault has no export update API -- changing the name
    * replaces the export.
    */
   name?: string;
   /**
    * Search query used to create the export. Required on create. Vault
-   * has no export update API — changing the query replaces the export.
+   * has no export update API -- changing the query replaces the export.
    */
   query: vault.Query;
   /**
    * Additional export options (format, region). Vault has no export
-   * update API — changing options replaces the export.
+   * update API -- changing options replaces the export.
    */
   exportOptions?: vault.ExportOptions;
 };
@@ -89,7 +89,7 @@ export type MattersExport = Resource<
  * A Google Vault export on a matter.
  *
  * Vault exports have no labels field, so Alchemy stamps ownership into
- * `name` for `list` / nuke. There is no update API — changing the query,
+ * `name` for `list` / nuke. There is no update API -- changing the query,
  * options, or name replaces the export (delete-first).
  *
  * ### Creating an Export

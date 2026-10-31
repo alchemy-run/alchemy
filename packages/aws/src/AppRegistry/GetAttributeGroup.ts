@@ -7,13 +7,13 @@ import type { AttributeGroup } from "./AttributeGroup.ts";
  * Runtime binding for `servicecatalog:GetAttributeGroup`.
  *
  * Reads the bound attribute group's user-defined JSON metadata (the
- * `attributes` string) along with its description and tags — the primary
+ * `attributes` string) along with its description and tags -- the primary
  * way for a running function to consume AppRegistry metadata. Provide the
  * implementation with `Effect.provide(AWS.AppRegistry.GetAttributeGroupHttp)`.
  * ### Reading Attribute Group Metadata
  * **Example:** Read Attributes at Runtime
  * ```typescript
- * // init — bind the operation to the attribute group
+ * // init -- bind the operation to the attribute group
  * const getAttributeGroup = yield* AWS.AppRegistry.GetAttributeGroup(group);
  *
  * // runtime

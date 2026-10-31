@@ -24,13 +24,13 @@ export interface SubscriberIdentity {
 }
 
 /**
- * A log source a subscriber consumes — either a natively supported AWS source
+ * A log source a subscriber consumes -- either a natively supported AWS source
  * or a custom source.
  */
 export type SubscriberSource = securitylake.LogSourceResource;
 
 /**
- * How the subscriber accesses the data — direct S3 access or Lake Formation
+ * How the subscriber accesses the data -- direct S3 access or Lake Formation
  * (query) access.
  */
 export type SubscriberAccessType = "LAKEFORMATION" | "S3";
@@ -102,7 +102,7 @@ export interface Subscriber extends Resource<
 > {}
 
 /**
- * A Security Lake subscriber — a consumer (account or service) granted access
+ * A Security Lake subscriber -- a consumer (account or service) granted access
  * to data in the Security Lake data lake for specific log sources.
  *
  * ### Creating a Subscriber
@@ -198,7 +198,7 @@ export const SubscriberProvider = () =>
           Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
-      // Subscriber names are unique per account/region — find the live
+      // Subscriber names are unique per account/region -- find the live
       // subscriber carrying our deterministic name when state was lost.
       const findByName = (subscriberName: string) =>
         securitylake.listSubscribers.items({}).pipe(
@@ -211,7 +211,7 @@ export const SubscriberProvider = () =>
       return {
         read: Effect.fn(function* ({ id, olds, output }) {
           // An account that never onboarded Security Lake rejects subscriber
-          // APIs with UnauthorizedException — that means "no subscriber".
+          // APIs with UnauthorizedException -- that means "no subscriber".
           const subscriber = yield* (
             output?.subscriberId
               ? getById(output.subscriberId)
@@ -253,11 +253,11 @@ export const SubscriberProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — by cached id first, then by deterministic name.
+          // 1. OBSERVE -- by cached id first, then by deterministic name.
           let subscriber = output?.subscriberId ? yield* getById(output.subscriberId) : undefined;
           subscriber ??= yield* findByName(subscriberName);
 
-          // 2. ENSURE — create when missing; a ConflictException means a
+          // 2. ENSURE -- create when missing; a ConflictException means a
           // concurrent create won the race, so re-observe by name.
           if (subscriber === undefined) {
             subscriber = yield* securitylake
@@ -277,7 +277,7 @@ export const SubscriberProvider = () =>
               return yield* new SubscriberCreateFailed({ subscriberName });
             }
           } else {
-            // 3. SYNC mutable settings — observed ↔ desired.
+            // 3. SYNC mutable settings -- observed <-> desired.
             const changed =
               subscriber.subscriberName !== subscriberName ||
               (subscriber.subscriberDescription ?? "") !== (news.subscriberDescription ?? "") ||
@@ -299,7 +299,7 @@ export const SubscriberProvider = () =>
                 );
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const observedTags = yield* readSecurityLakeTags(subscriber.subscriberArn);
             const { upsert, removed } = diffTags(observedTags, desiredTags);
             if (upsert.length > 0) {

@@ -15,7 +15,7 @@ export interface PutOptedOutNumberRequest extends Omit<
 /**
  * Runtime binding for `sms-voice:PutOptedOutNumber`.
  *
- * Adds a destination phone number to the bound opt-out list — further
+ * Adds a destination phone number to the bound opt-out list -- further
  * messages to it through numbers using this list are suppressed. Use it
  * to honor opt-out requests arriving through channels other than the
  * carrier keywords (support tickets, web forms). The deploy-time half

@@ -61,12 +61,12 @@ export type SecuritySettingProps = {
   /**
    * Security settings id (the `{securitySettings}` segment of
    * `projects/{project}/locations/{location}/securitySettings/{id}`).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * settings.
    */
   securitySettingsId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the settings. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -149,7 +149,7 @@ export type SecuritySetting = Resource<
  * Dialogflow CX security settings for data redaction and retention.
  *
  * Security settings live at a location (not under an agent) and have no
- * labels field — Alchemy stamps ownership into `displayName` so `list` /
+ * labels field -- Alchemy stamps ownership into `displayName` so `list` /
  * nuke can find them. Location and id are immutable. Display name,
  * redaction, DLP templates, purge types, export settings, and retention
  * update in place.

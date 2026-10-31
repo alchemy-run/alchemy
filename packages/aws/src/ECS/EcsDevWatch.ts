@@ -1,7 +1,7 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 /**
- * INTERNAL — shared change-trigger and task-restart machinery for the floci
+ * INTERNAL -- shared change-trigger and task-restart machinery for the floci
  * ECS dev providers ([FlociTaskProvider](./FlociTaskProvider.ts),
  * [FlociServiceProvider](./FlociServiceProvider.ts)). NOT exported from the
  * service `index.ts`.
@@ -19,11 +19,11 @@ const familyOfArn = (arn: string | undefined) => arn?.split("/").pop()?.split(":
  * Restart every RUNNING task of `family` that is not yet on
  * `nextTaskDefinitionArn`:
  *
- * - **standalone** tasks (launched via `RunTask`, `startedBy` ≠ the service
+ * - **standalone** tasks (launched via `RunTask`, `startedBy` != the service
  *   scheduler) are stopped and re-run on the new revision in the same
  *   cluster/launch type;
  * - **service-managed** tasks (`startedBy: "ecs-svc/<deployment>"`) are only
- *   stopped — the service scheduler relaunches them on the service's
+ *   stopped -- the service scheduler relaunches them on the service's
  *   current (freshly-updated) task definition.
  *
  * Bounded: one `listClusters` page, one `listTasks`/`describeTasks` round

@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeInsightsRefresh`.
  *
- * Reads the status of the bound cluster's insights refresh — whether an on-demand refresh (kicked off via {@link StartInsightsRefresh}) is in progress, completed, or failed.
+ * Reads the status of the bound cluster's insights refresh -- whether an on-demand refresh (kicked off via {@link StartInsightsRefresh}) is in progress, completed, or failed.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeInsightsRefresh` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeInsightsRefreshHttp)`.

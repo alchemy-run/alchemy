@@ -23,7 +23,7 @@ export type { GcpIamResourceKind } from "./IamPolicy.ts";
 /**
  * IAM grant a binding attaches to a GCP runtime host (Cloud Run
  * Service/Job/WorkerPool, Cloud Function, or a `Kubernetes.Deployment` /
- * `Kubernetes.Job` on GKE) — the GCP analog of an AWS binding's
+ * `Kubernetes.Job` on GKE) -- the GCP analog of an AWS binding's
  * `policyStatements`. The role is granted to the host's runtime identity:
  * the runtime service account, or on GKE the Kubernetes ServiceAccount's
  * Workload Identity Federation principal.
@@ -131,9 +131,9 @@ const fnv1a64 = (input: string): string => {
 };
 
 /**
- * RFC1035 account id (6–30 chars) for the runtime service account Alchemy
+ * RFC1035 account id (6-30 chars) for the runtime service account Alchemy
  * mints for one physical host. The hash covers the host type and full
- * resource name, so two hosts never share an account — not across
+ * resource name, so two hosts never share an account -- not across
  * stages, not a Service and a Job with the same id, and not the two
  * generations of a create-before-delete replacement.
  */

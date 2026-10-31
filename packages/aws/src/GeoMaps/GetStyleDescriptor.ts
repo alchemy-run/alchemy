@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-maps:GetStyleDescriptor` — fetch the MapLibre
+ * Runtime binding for `geo-maps:GetStyleDescriptor` -- fetch the MapLibre
  * style descriptor (JSON) for a map style, optionally customized with
  * political view, terrain, traffic, and building options.
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getStyleDescriptor = yield* AWS.GeoMaps.GetStyleDescriptor();
  *
- * // runtime — Style is one of "Standard" | "Monochrome" | "Hybrid" | "Satellite"
+ * // runtime -- Style is one of "Standard" | "Monochrome" | "Hybrid" | "Satellite"
  * const descriptor = yield* getStyleDescriptor({ Style: "Standard" });
  * const json = new TextDecoder().decode(descriptor.Blob); // MapLibre style JSON
  * ```

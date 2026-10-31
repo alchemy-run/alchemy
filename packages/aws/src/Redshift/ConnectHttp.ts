@@ -40,7 +40,7 @@ export const ConnectHttp = Layer.effect(
       const DbName = yield* cluster.dbName;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // `arn:aws:redshift:{region}:{acct}` — the cluster ARN minus its
+        // `arn:aws:redshift:{region}:{acct}` -- the cluster ARN minus its
         // `:cluster:{id}` suffix; base for the dbname/dbuser/dbgroup ARNs
         // that scope the GetClusterCredentials* actions.
         const arnBase = Output.map(cluster.clusterArn, (arn) =>
@@ -91,7 +91,7 @@ export const ConnectHttp = Layer.effect(
                 ],
           env: {
             [`${prefix}_HOST`]: cluster.endpointAddress,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${cluster.endpointPort}`,
           },
         });

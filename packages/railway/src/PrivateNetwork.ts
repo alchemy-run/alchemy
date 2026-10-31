@@ -551,7 +551,7 @@ export type PrivateNetworkEndpoint = Resource<
     environmentId: string;
     /** Parent Railway project id, if known. */
     projectId: string | undefined;
-    /** Observed Railway sync status (`ACTIVE`, `CREATING`, …). */
+    /** Observed Railway sync status (`ACTIVE`, `CREATING`, ...). */
     syncStatus: PrivateNetworkEndpointSyncStatus;
     /** Observed tags. */
     tags: string[];

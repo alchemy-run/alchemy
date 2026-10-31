@@ -28,25 +28,25 @@ export type FirewallPolicyProps = {
   /**
    * User-provided RFC1035 name (`shortName`). Unique within the parent
    * organization or folder. If omitted, a unique name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the policy. After create, GCP also assigns a numeric `name`.
    */
   shortName?: string;
   /**
    * Parent folder or organization. Format `folders/{folder}` or
    * `organizations/{organization}`. If omitted, Alchemy uses the project
-   * parent from Cloud Resource Manager. Immutable — changing it replaces
+   * parent from Cloud Resource Manager. Immutable -- changing it replaces
    * the policy.
    */
   parent?: string;
   /**
    * Optional description. Hierarchical firewall policies have no labels
    * field, so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
-   * Policy type. Set only at create time — changing it replaces the
+   * Policy type. Set only at create time -- changing it replaces the
    * policy.
    * @default "VPC_POLICY"
    */
@@ -105,7 +105,7 @@ export type FirewallPolicy = Resource<
  *
  * Policies live under `locations/global/firewallPolicies` and are
  * identified by a server-assigned numeric id. The user-facing name is
- * `shortName`. Parent and `shortName` are immutable — changing either
+ * `shortName`. Parent and `shortName` are immutable -- changing either
  * replaces the policy. Description updates in place via
  * `firewallPolicies.patch`. Rules are synced with `addRule` /
  * `patchRule` / `removeRule`.

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:DeleteSlackWorkspaceAuthorization`.
  *
- * Revokes AWS Chatbot's authorization for an entire Slack workspace — the
+ * Revokes AWS Chatbot's authorization for an entire Slack workspace -- the
  * drastic end of offboarding automation. Existing channel configurations
  * for the workspace stop working until it is re-authorized via the console
  * OAuth flow. Provide the implementation with

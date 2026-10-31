@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `FailoverShard` operation (IAM action
  * `memorydb:FailoverShard`), scoped to one {@link Cluster}.
  *
- * Fails over a shard's primary node to a replica — designed for testing how
+ * Fails over a shard's primary node to a replica -- designed for testing how
  * your application behaves during a MemoryDB failover (chaos testing), not
  * as a production remediation tool. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.FailoverShardHttp)`.
@@ -17,7 +17,7 @@ import type { Cluster } from "./Cluster.ts";
  * const failoverShard = yield* MemoryDB.FailoverShard(cluster);
  *
  * const result = yield* failoverShard({ ShardName: "0001" });
- * // result.Cluster.Status → "updating"
+ * // result.Cluster.Status -> "updating"
  * ```
  *
  * @binding

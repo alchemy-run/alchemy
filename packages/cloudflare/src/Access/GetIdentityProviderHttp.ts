@@ -37,8 +37,8 @@ interface AccessIdpAuth {
  * When bound inside a Worker, it mints a scoped {@link AccountApiToken}
  * with the `Access: Organizations, Identity Providers, and Groups Read`
  * permission and binds its outputs into the Worker so runtime code can
- * call the Access API. Hostless — the plan-time `execute` data source
- * ({@link getIdentityProvider}) or an Action — it runs with the ambient
+ * call the Access API. Hostless -- the plan-time `execute` data source
+ * ({@link getIdentityProvider}) or an Action -- it runs with the ambient
  * current credentials instead; no token is minted.
  */
 export const GetIdentityProviderHttp = Layer.effect(
@@ -54,8 +54,8 @@ export const GetIdentityProviderHttp = Layer.effect(
       // caller's context, so a Worker host is visible here during the
       // Worker's init phase (plan and runtime) even though the layer
       // itself may have been built (and memoized) hostless by
-      // `providers()`. Hostless callers — the plan-time `execute` data
-      // source — resolve `undefined`.
+      // `providers()`. Hostless callers -- the plan-time `execute` data
+      // source -- resolve `undefined`.
       const host = yield* Binding.Host;
       if (isWorker(host)) {
         // Worker-hosted: mint the scoped token, attach the read policy
@@ -86,7 +86,7 @@ export const GetIdentityProviderHttp = Layer.effect(
         );
       }
 
-      // Hostless — plan-time data source: run with the ambient credentials
+      // Hostless -- plan-time data source: run with the ambient credentials
       // (refresh-aware, provided by the stack's providers layer).
       if (ambientCredentials === undefined) {
         return yield* Effect.die(

@@ -31,12 +31,12 @@ export type SharedflowProps = {
    * Shared flow id (the `{sharedflow}` segment of
    * `organizations/{org}/sharedflows/{sharedflow}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Restrict
-   * characters to `A-Za-z0-9._-`. Immutable — changing it replaces the
+   * characters to `A-Za-z0-9._-`. Immutable -- changing it replaces the
    * shared flow.
    */
   sharedflowId?: string;
   /**
-   * Apigee organization id. Defaults to the stack GCP project. Immutable —
+   * Apigee organization id. Defaults to the stack GCP project. Immutable --
    * changing it replaces the shared flow.
    */
   organization?: string;
@@ -89,12 +89,12 @@ export type Sharedflow = Resource<
 >;
 
 /**
- * An Apigee shared flow — a reusable sequence of policies that API
+ * An Apigee shared flow -- a reusable sequence of policies that API
  * proxies (or other shared flows) invoke with a FlowCallout.
  *
  * Shared flows have no labels field, so Alchemy stamps ownership into
  * the bundle `Description` for `list` / nuke. `sharedflowId` and
- * `organization` are identity — changing either replaces the shared
+ * `organization` are identity -- changing either replaces the shared
  * flow. Uploading a bundle or changing `description` creates a new
  * revision. `space` is moved in place.
  *

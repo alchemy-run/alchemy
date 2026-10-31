@@ -12,10 +12,10 @@ type TypeId = typeof TypeId;
 export type AccountSettingProps = {
   /**
    * Default usage model applied to new Workers in this account (e.g.
-   * `"standard"`). Mostly legacy since Workers Standard pricing — new
+   * `"standard"`). Mostly legacy since Workers Standard pricing -- new
    * accounts only support `"standard"`.
    *
-   * Mutable — updated in place. When omitted, the account's current value
+   * Mutable -- updated in place. When omitted, the account's current value
    * is left untouched.
    * @default keep the account's current value
    */
@@ -25,7 +25,7 @@ export type AccountSettingProps = {
    * scheduled (cron) Workers run only on hardware powered by renewable
    * energy.
    *
-   * Mutable — updated in place. When omitted, the account's current value
+   * Mutable -- updated in place. When omitted, the account's current value
    * is left untouched.
    * @default keep the account's current value
    */
@@ -64,7 +64,7 @@ export type AccountSetting = Resource<
  * (`/accounts/{account_id}/workers/account-settings`): the default usage
  * model for new Workers and the Green Compute flag for scheduled Workers.
  *
- * This is a singleton — it always exists on every account with Cloudflare
+ * This is a singleton -- it always exists on every account with Cloudflare
  * defaults, so this resource never creates or deletes anything physical.
  * Reconcile PUTs the settings when the observed values differ from the
  * desired ones; destroy restores the values the account had before Alchemy
@@ -118,7 +118,7 @@ export const AccountSettingProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const observed = yield* workers.getAccountSetting({ accountId: acct });
-      // The settings singleton always exists with Cloudflare defaults —
+      // The settings singleton always exists with Cloudflare defaults --
       // there is nothing to "own", so a cold read adopts freely (never
       // `Unowned`). The observed values at adoption time become the
       // initial values restored on destroy.
@@ -132,7 +132,7 @@ export const AccountSettingProvider = () =>
       );
     }),
 
-    // Account-scoped singleton: there is no collection API — the settings
+    // Account-scoped singleton: there is no collection API -- the settings
     // object always exists once per account. Read the single live object and
     // return it as a one-element array, exactly mirroring `read` (a cold
     // observation where the observed values are the initial values).
@@ -152,10 +152,10 @@ export const AccountSettingProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the singleton always exists; read its live values.
+      // 1. Observe -- the singleton always exists; read its live values.
       const observed = yield* workers.getAccountSetting({ accountId });
 
-      // 2. Capture — the pre-management values, restored on destroy.
+      // 2. Capture -- the pre-management values, restored on destroy.
       //    `output` (including an adoption read) already carries them;
       //    otherwise this is our first touch and the observed values are
       //    the account's originals.
@@ -166,7 +166,7 @@ export const AccountSettingProvider = () =>
       const initialGreenCompute =
         output !== undefined ? output.initialGreenCompute : (observed.greenCompute ?? undefined);
 
-      // 3. Sync — desired = news merged over observed (unspecified props
+      // 3. Sync -- desired = news merged over observed (unspecified props
       //    keep the account's current value); PUT only when dirty.
       const desired = {
         defaultUsageModel: news.defaultUsageModel ?? observed.defaultUsageModel ?? undefined,
@@ -182,7 +182,7 @@ export const AccountSettingProvider = () =>
       }
 
       yield* workers.putAccountSetting({ accountId, ...desired });
-      // 4. Return — the PUT is authoritative for what we just wrote. We do
+      // 4. Return -- the PUT is authoritative for what we just wrote. We do
       //    NOT re-read here: `getAccountSetting` is eventually consistent and
       //    can briefly echo the pre-write values right after a PUT (observed
       //    under concurrent load), which would surface a stale `greenCompute`
@@ -198,7 +198,7 @@ export const AccountSettingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialDefaultUsageModel, initialGreenCompute } = output;
-      // There is no DELETE API — destroy restores the pre-management
+      // There is no DELETE API -- destroy restores the pre-management
       // values. Skip the call when the live values already match
       // (idempotent re-delete after a crashed run).
       const observed = yield* workers.getAccountSetting({ accountId });

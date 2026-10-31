@@ -9,7 +9,7 @@ export interface RegisterApplicationRevisionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codedeploy:RegisterApplicationRevision` — registers
+ * Runtime binding for `codedeploy:RegisterApplicationRevision` -- registers
  * a revision (S3 bundle or inline AppSpec) with the bound application so it
  * shows up for deployment.
  * ### Managing Revisions

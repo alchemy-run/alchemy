@@ -12,7 +12,7 @@ export interface BatchPutDocumentRequest extends Omit<kendra.BatchPutDocumentReq
  * Runtime binding for the `BatchPutDocument` operation (IAM action
  * `kendra:BatchPutDocument`), scoped to one {@link Index}.
  *
- * Adds documents directly to the index (inline blobs or S3 paths) —
+ * Adds documents directly to the index (inline blobs or S3 paths) --
  * the push-API alternative to a data-source sync. Check the response's
  * `FailedDocuments` for per-document errors; documents index
  * asynchronously (poll with {@link BatchGetDocumentStatus}).

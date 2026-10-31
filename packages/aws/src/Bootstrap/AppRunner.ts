@@ -1,6 +1,6 @@
 /**
  * Process bootstrap for `AWS.AppRunner.Service` containers. The generated
- * entry imports this module and the user's `main`, nothing else — see
+ * entry imports this module and the user's `main`, nothing else -- see
  * `alchemy/Runtime/Bootstrap` for why.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";

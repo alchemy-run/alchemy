@@ -1,7 +1,7 @@
 /**
  * Runtime-free platform-proxy client: {@link connect} reconstructs the
  * Node-side proxies (`env`, `cf`, `ctx`, `caches`) of an ALREADY-RUNNING
- * platform proxy from its {@link ConnectInfo} — two plain strings
+ * platform proxy from its {@link ConnectInfo} -- two plain strings
  * (`{ url, token }`, exposed on `PlatformProxyInstance.connectInfo` by
  * {@link ./PlatformProxy.ts | PlatformProxy.open} / `getPlatformProxy`).
  *
@@ -352,7 +352,7 @@ const passthroughFetch = async (
 };
 
 const stubDescription = (binding: string, chain: ReadonlyArray<ChainSegment>): string =>
-  `[platform-proxy stub ${binding}${chain.map((segment) => `.${segment.method}(…)`).join("")}]`;
+  `[platform-proxy stub ${binding}${chain.map((segment) => `.${segment.method}(\u2026)`).join("")}]`;
 
 /**
  * A lazy expression-tree proxy: property accesses build up a method chain,
@@ -564,7 +564,7 @@ const fetchEnvDescriptor = async (client: ProxyClient): Promise<EnvDescriptor> =
     });
   } catch (cause) {
     throw new Error(
-      `platform-proxy: could not reach the proxy worker at ${client.url.toString()} — ` +
+      `platform-proxy: could not reach the proxy worker at ${client.url.toString()} \u2014 ` +
         "the instance may have been disposed or restarted.",
       { cause },
     );
@@ -600,7 +600,7 @@ const buildEnv = (client: ProxyClient, descriptor: EnvDescriptor): Record<string
  * const proxy = await getPlatformProxy({ bindings: [...] });
  * send(proxy.connectInfo); // two plain strings
  *
- * // process/thread B — binding state is SHARED with process A
+ * // process/thread B -- binding state is SHARED with process A
  * const { env, cf, ctx, caches } = await connect(received);
  * await env.KV.get("key");
  * ```

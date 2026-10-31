@@ -111,7 +111,7 @@ export type ExecutionConfig = {
    * `PREDEPLOY`, `POSTDEPLOY`, `ANALYSIS`).
    */
   usages?: Array<clouddeploy.ExecutionConfigUsagesItemEnum | (string & {})>;
-  /** Cloud Build execution timeout (10m–24h, seconds format). */
+  /** Cloud Build execution timeout (10m-24h, seconds format). */
   executionTimeout?: string;
   /** Default Cloud Build pool. */
   defaultPool?: DefaultPool;
@@ -135,11 +135,11 @@ export type TargetProps = {
    * Target id (the `{target}` segment of
    * `projects/{project}/locations/{location}/targets/{target}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the target.
+   * and logical id. Immutable -- changing it replaces the target.
    */
   targetId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the target. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -184,7 +184,7 @@ export type TargetProps = {
    */
   deployParameters?: Record<string, string>;
   /**
-   * Associated entities keyed by entity id (Gateway API canary, …).
+   * Associated entities keyed by entity id (Gateway API canary, ...).
    */
   associatedEntities?: clouddeploy.AssociatedEntitiesMap;
   /**
@@ -251,7 +251,7 @@ export type Target = Resource<
 >;
 
 /**
- * A Cloud Deploy target — a location a Skaffold configuration can be
+ * A Cloud Deploy target -- a location a Skaffold configuration can be
  * deployed to (GKE, Cloud Run, Anthos, a custom target type, or a
  * multi-target).
  *

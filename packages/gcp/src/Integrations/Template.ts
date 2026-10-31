@@ -63,12 +63,12 @@ export type TemplateProps = {
   /**
    * Template id (the `{template}` segment of
    * `projects/{project}/locations/{location}/templates/{template}`).
-   * Server-assigned on create when omitted. Immutable — changing it
+   * Server-assigned on create when omitted. Immutable -- changing it
    * replaces the template.
    */
   templateId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -80,7 +80,7 @@ export type TemplateProps = {
   displayName?: string;
   /**
    * Description (max 255 characters). Templates have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
@@ -200,7 +200,7 @@ export const defaultTemplateBundle = (): TemplateBundle => ({
  * metadata (categories, tags, visibility).
  *
  * Templates have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Location and id are identity — changing
+ * description for `list` / nuke. Location and id are identity -- changing
  * them replaces the template. Display name, description, bundle, tags,
  * categories, and visibility update in place.
  *

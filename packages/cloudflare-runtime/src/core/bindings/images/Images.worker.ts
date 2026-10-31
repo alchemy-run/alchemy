@@ -285,7 +285,7 @@ export default class ImagesService extends WorkerEntrypoint<Env> {
     // Forward transform/info operations to Node.js via the loopback, where
     // Sharp runs. The `loopback:fetcher` designator stamps the route
     // target/secret headers, so the request is forwarded unmodified (the URL
-    // path — `/info` vs anything else — selects the operation).
+    // path -- `/info` vs anything else -- selects the operation).
     return this.env[BINDING_IMAGES_LOOPBACK].fetch(request);
   }
 }

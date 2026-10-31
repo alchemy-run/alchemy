@@ -28,18 +28,18 @@ import {
 export type DevelopersAppProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the app.
+   * current GCP project id. Immutable -- changing it replaces the app.
    */
   organization?: string;
   /**
    * Parent developer email or `organizations/{org}/developers/{email}`.
-   * Immutable — changing it replaces the app.
+   * Immutable -- changing it replaces the app.
    */
   developer: string;
   /**
    * App name (the `{app}` segment of
    * `organizations/{org}/developers/{email}/apps/{app}`). If omitted, a
-   * unique name is generated. Immutable — changing it replaces the app.
+   * unique name is generated. Immutable -- changing it replaces the app.
    */
   appName?: string;
   /**
@@ -119,7 +119,7 @@ export type DevelopersApp = Resource<
  *
  * Apigee developer apps have no labels field, so Alchemy stamps ownership
  * into custom attributes for `list` / nuke. Name and parent developer are
- * identity — changing `appName` or `developer` replaces the app. Callback
+ * identity -- changing `appName` or `developer` replaces the app. Callback
  * URL, products, scopes, status, and attributes update in place.
  *
  * ### Creating a Developer App

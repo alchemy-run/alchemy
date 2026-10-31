@@ -45,11 +45,11 @@ export type ProcessProps = {
    * `projects/{project}/locations/{location}/processes/{process}`). If
    * omitted, a unique name is generated from the stack, stage, and logical
    * id. Max 200 characters: letters, digits, underscores, hyphens, colons,
-   * periods. Immutable — changing it replaces the process.
+   * periods. Immutable -- changing it replaces the process.
    */
   processId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * process. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -96,11 +96,11 @@ export type Process = Resource<
 >;
 
 /**
- * A Data Lineage process — the definition of a data transformation.
+ * A Data Lineage process -- the definition of a data transformation.
  *
  * Processes have no labels field, so Alchemy stamps ownership into
  * `attributes` for `list` / nuke. `processId` and `location` are identity
- * — changing either replaces the process. Display name, origin, and
+ * -- changing either replaces the process. Display name, origin, and
  * attributes update in place.
  *
  * ### Creating a Process

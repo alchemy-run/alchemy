@@ -20,12 +20,12 @@ import { waitForOperation } from "./operations.ts";
 export type DataStoreProps = {
   /**
    * Data store id (the `{dataStore}` segment of the resource name). If
-   * omitted, a unique RFC-1034 id is generated. Immutable — changing it
+   * omitted, a unique RFC-1034 id is generated. Immutable -- changing it
    * replaces the data store.
    */
   dataStoreId?: string;
   /**
-   * Location (`global`, `us`, `eu`, …). Immutable — changing it replaces
+   * Location (`global`, `us`, `eu`, ...). Immutable -- changing it replaces
    * the data store.
    * @default "global"
    */
@@ -36,12 +36,12 @@ export type DataStoreProps = {
    */
   displayName?: string;
   /**
-   * Industry vertical. Immutable — changing it replaces the data store.
+   * Industry vertical. Immutable -- changing it replaces the data store.
    * @default "GENERIC"
    */
   industryVertical?: discoveryengine.GoogleCloudDiscoveryengineV1DataStoreIndustryVerticalEnum;
   /**
-   * Content config. Immutable — changing it replaces the data store.
+   * Content config. Immutable -- changing it replaces the data store.
    * @default "NO_CONTENT"
    */
   contentConfig?: discoveryengine.GoogleCloudDiscoveryengineV1DataStoreContentConfigEnum;
@@ -116,7 +116,7 @@ export type DataStore = Resource<
 >;
 
 /**
- * A Discovery Engine DataStore — a container for Documents.
+ * A Discovery Engine DataStore -- a container for Documents.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
  * resource it finds without prior state as unowned (adopt it with `--adopt`).

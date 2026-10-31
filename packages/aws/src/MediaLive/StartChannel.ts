@@ -7,7 +7,7 @@ import type { Channel } from "./Channel.ts";
  * Runtime binding for `medialive:StartChannel`.
  *
  * Starts the bound {@link Channel}, transitioning it from `IDLE` through
- * `STARTING` to `RUNNING`. A RUNNING channel encodes and bills hourly —
+ * `STARTING` to `RUNNING`. A RUNNING channel encodes and bills hourly --
  * pair with {@link StopChannel} to control encoding cost (e.g. a
  * scheduler Lambda that runs the channel only during broadcast windows).
  * The channel id is injected from the binding. Provide the implementation
@@ -15,7 +15,7 @@ import type { Channel } from "./Channel.ts";
  * ### Controlling Channels
  * **Example:** Start the Channel for a Broadcast Window
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const startChannel = yield* AWS.MediaLive.StartChannel(channel);
  *
  * // runtime

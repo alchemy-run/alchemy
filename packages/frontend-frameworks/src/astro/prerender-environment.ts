@@ -1,13 +1,13 @@
 /**
  * Build-side wiring for the `prerender` environment when it runs under
- * workerd (`prerenderEnvironment: "workerd"`, the default — the analogue of
+ * workerd (`prerenderEnvironment: "workerd"`, the default -- the analogue of
  * upstream `@astrojs/cloudflare`'s `experimental.prerenderWorker` on
  * `@cloudflare/vite-plugin`).
  *
  * Astro builds the `prerender` environment before the `ssr` environment
  * (`buildApp` in astro's static build). When a custom prerenderer is
  * registered, astro core deliberately does not set the environment's build
- * input (its stock node entry `astro/entrypoints/prerender` would be wrong) —
+ * input (its stock node entry `astro/entrypoints/prerender` would be wrong) --
  * the adapter must supply it. This plugin points the input at the same
  * vendored Worker server entrypoint the `ssr` environment builds, wrapped in
  * the rolldown plugin's worker-entry virtual module so the bundle gets the
@@ -19,7 +19,7 @@
  * The rest of the worker treatment (workerd resolve conditions, `cloudflare:`
  * externals, nodejs-compat polyfills) comes from listing `prerender` as a
  * child worker environment of the Cloudflare vite plugin instead of skipping
- * it — see `makeIntegrationPluginOptions`.
+ * it -- see `makeIntegrationPluginOptions`.
  */
 import { WORKER_ENTRY_PREFIX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
 import type * as vite from "vite";

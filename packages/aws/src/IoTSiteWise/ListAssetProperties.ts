@@ -13,7 +13,7 @@ export interface ListAssetPropertiesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotsitewise:ListAssetProperties` — page through the
+ * Runtime binding for `iotsitewise:ListAssetProperties` -- page through the
  * bound asset's property summaries (ids, aliases, paths) from a deployed
  * Lambda or Task.
  *

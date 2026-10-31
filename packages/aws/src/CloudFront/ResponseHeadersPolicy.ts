@@ -224,7 +224,7 @@ export const ResponseHeadersPolicyProvider = () =>
         list: () =>
           Effect.gen(function* () {
             // CloudFront is global; paginate via Marker/NextMarker. Only
-            // `Type: "custom"` policies are ours — AWS-managed ones are
+            // `Type: "custom"` policies are ours -- AWS-managed ones are
             // shared and not deletable, so they are skipped.
             const items: ReturnType<typeof toAttrs>[] = [];
             let marker: string | undefined = undefined;
@@ -249,7 +249,7 @@ export const ResponseHeadersPolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // Observe — locate the policy by id (cached on `output`) or
+          // Observe -- locate the policy by id (cached on `output`) or
           // by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.responseHeadersPolicyId
             ? yield* getById(output.responseHeadersPolicyId).pipe(
@@ -262,7 +262,7 @@ export const ResponseHeadersPolicyProvider = () =>
             observed = yield* getByName(name);
           }
 
-          // Ensure — create the policy if it's missing. Tolerate
+          // Ensure -- create the policy if it's missing. Tolerate
           // `ResponseHeadersPolicyAlreadyExists` (race with a peer
           // reconciler).
           if (!observed) {
@@ -306,7 +306,7 @@ export const ResponseHeadersPolicyProvider = () =>
             );
           }
 
-          // Sync — patch the observed config to the desired state. The
+          // Sync -- patch the observed config to the desired state. The
           // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateResponseHeadersPolicy({
             Id: observed.id,

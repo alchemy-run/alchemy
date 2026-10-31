@@ -24,20 +24,20 @@ export type InstantSnapshotGroupProps = {
    */
   instantSnapshotGroupName?: string;
   /**
-   * Zone of the group (e.g. `us-central1-a`). Immutable — changing it
+   * Zone of the group (e.g. `us-central1-a`). Immutable -- changing it
    * replaces the group. Inferred from `sourceConsistencyGroup` when
    * omitted.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
-   * Disk consistency-group resource policy URL or name. Immutable —
+   * Disk consistency-group resource policy URL or name. Immutable --
    * changing it replaces the group.
    */
   sourceConsistencyGroup: string;
   /**
-   * Optional description. Instant snapshot groups have no labels field —
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Optional description. Instant snapshot groups have no labels field --
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;

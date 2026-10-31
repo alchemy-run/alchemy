@@ -9,12 +9,12 @@ export interface GetTopPathStatisticsByTrafficRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `wafv2:GetTopPathStatisticsByTraffic` — read
+ * Runtime binding for `wafv2:GetTopPathStatisticsByTraffic` -- read
  * aggregated statistics about the URI paths receiving the most bot traffic
  * on the bound {@link WebACL}; the web ACL ARN and scope are injected
  * automatically.
  *
- * Requires a pricing plan that includes bot statistics — accounts without
+ * Requires a pricing plan that includes bot statistics -- accounts without
  * it receive the typed `WAFFeatureNotIncludedInPricingPlanException`.
  *
  * Provide `WAFv2.GetTopPathStatisticsByTrafficHttp` on the hosting Lambda
@@ -22,7 +22,7 @@ export interface GetTopPathStatisticsByTrafficRequest extends Omit<
  * ### Inspecting Traffic
  * **Example:** Read Top Bot-Trafficked Paths
  * ```typescript
- * // init — grants wafv2:GetTopPathStatisticsByTraffic on the web ACL
+ * // init -- grants wafv2:GetTopPathStatisticsByTraffic on the web ACL
  * const getTopPaths = yield* AWS.WAFv2.GetTopPathStatisticsByTraffic(acl);
  *
  * // runtime

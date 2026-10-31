@@ -16,7 +16,7 @@ type ProductInput = string | Product;
 
 /**
  * HTTP implementation of {@link RetrieveProduct}. Provide it on the
- * Function or Worker Effect. Accepts a Product resource, a `prod_…` id
+ * Function or Worker Effect. Accepts a Product resource, a `prod_...` id
  * string, or an Effect resolving to a Product.
  *
  * @layer

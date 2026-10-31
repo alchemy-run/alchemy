@@ -111,7 +111,7 @@ export const DelegatedAdministratorProvider = () =>
           const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (accountId === undefined || servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
-            // (they deserialize as `undefined`) — report "not found" so the
+            // (they deserialize as `undefined`) -- report "not found" so the
             // engine re-drives the create.
             return undefined;
           }
@@ -124,7 +124,7 @@ export const DelegatedAdministratorProvider = () =>
           Effect.gen(function* () {
             // Enumerate every delegated administrator account in the org. If
             // this account isn't an org management account (or lacks access),
-            // Organizations enumeration isn't available here — return [].
+            // Organizations enumeration isn't available here -- return [].
             const admins = yield* retryOrganizations(
               collectPages(
                 (NextToken) => organizations.listDelegatedAdministrators({ NextToken }),
@@ -164,7 +164,7 @@ export const DelegatedAdministratorProvider = () =>
                     (page) => page.DelegatedServices,
                   ),
                 ).pipe(
-                  // The account may be deregistered between the two calls — skip.
+                  // The account may be deregistered between the two calls -- skip.
                   Effect.catchTags({
                     AccountNotFoundException: () =>
                       Effect.succeed<organizations.DelegatedService[]>([]),
@@ -200,12 +200,12 @@ export const DelegatedAdministratorProvider = () =>
             return rows.flat();
           }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — look up the live delegation. Replacement-only props
+          // Observe -- look up the live delegation. Replacement-only props
           // (`accountId`, `servicePrincipal`) mean the diff handles identity
           // changes; we just check whether the registration exists.
           let state = yield* readDelegatedAdministrator(news);
 
-          // Ensure — register if missing. Tolerate
+          // Ensure -- register if missing. Tolerate
           // `AccountAlreadyRegisteredException` for idempotency under races
           // between observe and register.
           if (!state) {

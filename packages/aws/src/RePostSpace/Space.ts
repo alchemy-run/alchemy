@@ -47,7 +47,7 @@ export interface SpaceProps {
    */
   subdomain?: string;
   /**
-   * Pricing tier of the private re:Post — `"BASIC"` or `"STANDARD"`.
+   * Pricing tier of the private re:Post -- `"BASIC"` or `"STANDARD"`.
    * Updated in place.
    * @default "BASIC"
    */
@@ -158,7 +158,7 @@ export interface Space extends Resource<
 > {}
 
 /**
- * An AWS re:Post Private space — a private, organization-scoped version of
+ * An AWS re:Post Private space -- a private, organization-scoped version of
  * AWS re:Post with curated Q&A, articles, and selected public content.
  *
  * re:Post Private is a paid feature (Basic or Standard tier) that requires
@@ -379,7 +379,7 @@ export const SpaceProvider = () =>
           const desiredTags = { ...internalTags, ...props.tags };
           const desiredTier = props.tier ?? DEFAULT_TIER;
 
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           //    id cache. Fall through to a by-name lookup when the cached
           //    space no longer exists.
           let spaceId = output?.spaceId;
@@ -394,7 +394,7 @@ export const SpaceProvider = () =>
             spaceId = found?.spaceId;
           }
 
-          // 2. Ensure — create if missing; a ConflictException means a peer
+          // 2. Ensure -- create if missing; a ConflictException means a peer
           //    created it concurrently (or the name/subdomain is taken), so
           //    fall back to the by-name lookup.
           if (spaceId === undefined) {
@@ -425,11 +425,11 @@ export const SpaceProvider = () =>
             yield* session.note(`created space ${spaceId}, provisioning...`);
           }
 
-          // Provisioning is asynchronous — wait (bounded) for the space to
+          // Provisioning is asynchronous -- wait (bounded) for the space to
           // become usable before syncing mutable aspects.
           let observed = yield* waitForCreated(spaceId);
 
-          // 3. Sync — compute the update delta from OBSERVED state and call
+          // 3. Sync -- compute the update delta from OBSERVED state and call
           //    updateSpace only when something actually changed.
           const update: {
             description?: string;
@@ -471,7 +471,7 @@ export const SpaceProvider = () =>
             if (refreshed !== undefined) observed = refreshed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 3b. Sync tags -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = yield* readSpaceTags(observed.arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);

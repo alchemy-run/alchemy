@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeCopyJob` operation (IAM action
  * `backup:DescribeCopyJob`).
  *
- * Returns the details of a copy job by its ID — poll a job started with
+ * Returns the details of a copy job by its ID -- poll a job started with
  * `StartCopyJob` until it completes. Provide the implementation with
  * `Effect.provide(AWS.Backup.DescribeCopyJobHttp)`.
  * ### Copying Recovery Points

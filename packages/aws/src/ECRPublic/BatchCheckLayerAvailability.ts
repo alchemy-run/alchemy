@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { PublicRepository } from "./Repository.ts";
 
 /**
- * Request for {@link BatchCheckLayerAvailability} — `repositoryName` is
+ * Request for {@link BatchCheckLayerAvailability} -- `repositoryName` is
  * injected.
  */
 export interface BatchCheckLayerAvailabilityRequest extends Omit<

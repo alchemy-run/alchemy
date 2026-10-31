@@ -4949,6 +4949,6 @@ let cachedProviders: ReturnType<typeof makeProviders> | undefined;
 /**
  * The GCP provider layer. Memoized: constructing it instantiates ~1,000
  * provider layers (several MB), and a Layer is an immutable description,
- * so every caller — each test file, each stack — shares one instance.
+ * so every caller -- each test file, each stack -- shares one instance.
  */
 export const providers = () => (cachedProviders ??= makeProviders());

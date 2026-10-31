@@ -33,12 +33,12 @@ export type PreferenceSetProps = {
   /**
    * Preference set id (the `{preferenceSet}` segment of
    * `projects/{project}/locations/{location}/preferenceSets/{preferenceSet}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the preference set.
    */
   preferenceSetId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * preference set. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -51,7 +51,7 @@ export type PreferenceSetProps = {
   displayName?: string;
   /**
    * Free-text description. Preference sets have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -101,7 +101,7 @@ const DEFAULT_VM: VirtualMachinePreferences = {
  * A Migration Center preference set capturing target-product, region, and
  * sizing assumptions used when generating reports.
  *
- * Preference sets have no labels field — Alchemy stamps ownership into
+ * Preference sets have no labels field -- Alchemy stamps ownership into
  * the description so `list` / nuke can find them. Id and location are
  * immutable. Display name, description, and VM preferences update in
  * place.

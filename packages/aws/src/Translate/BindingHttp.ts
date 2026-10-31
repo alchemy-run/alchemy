@@ -6,8 +6,8 @@ import type { Role } from "../IAM/Role.ts";
 /**
  * Shared scaffolding for AWS Translate HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate. The bindings take terminology/parallel-data/job identifiers
  * at runtime (not as bound resources), so grants are on `Resource: ["*"]`.
@@ -54,10 +54,10 @@ export const makeTranslateHttpBinding = <I, A, E, R>(options: {
  * assumes to read input documents from S3 and write results; its trust
  * policy must allow `translate.amazonaws.com`). The role's ARN is injected
  * as `DataAccessRoleArn` on every runtime request, and the deploy-time half
- * grants `actions` on `*` plus `iam:PassRole` on the role — without the
+ * grants `actions` on `*` plus `iam:PassRole` on the role -- without the
  * PassRole grant, the start call fails only at runtime with an AccessDenied.
  * `ClientToken` is optional on the runtime request (the AWS SDK also
- * auto-generates it) — a UUID is generated per call when omitted.
+ * auto-generates it) -- a UUID is generated per call when omitted.
  */
 export const makeTranslateStartJobHttpBinding = <
   I extends { DataAccessRoleArn: string; ClientToken: string },

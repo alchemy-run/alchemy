@@ -43,7 +43,7 @@ export interface RoomBinding {
 export interface RoomProps {
   /**
    * Name of the room (not unique). If omitted, a deterministic physical
-   * name is generated. Room names are mutable — changing the name
+   * name is generated. Room names are mutable -- changing the name
    * updates the room in place.
    */
   roomName?: string;
@@ -61,7 +61,7 @@ export interface RoomProps {
   /**
    * A Lambda-backed handler that reviews (and can modify or deny)
    * messages before delivery. Prefer wiring it through
-   * `IVSChat.onReviewMessage` — the event source also creates the invoke
+   * `IVSChat.onReviewMessage` -- the event source also creates the invoke
    * Permission and registers the runtime handler.
    * @default no review handler
    */
@@ -99,7 +99,7 @@ export interface Room extends Resource<
 > {}
 
 /**
- * An Amazon IVS Chat room — a virtual space where chat participants
+ * An Amazon IVS Chat room -- a virtual space where chat participants
  * exchange messages over WebSocket connections.
  *
  * Clients connect with chat tokens minted at runtime via
@@ -137,7 +137,7 @@ export interface Room extends Resource<
  * ### Message Review
  * **Example:** Review Messages with a Lambda Handler
  * ```typescript
- * // inside a Lambda Function's effect — the handler reviews every message
+ * // inside a Lambda Function's effect -- the handler reviews every message
  * // sent to the room before delivery (allow / modify / deny)
  * const room = yield* IVSChat.Room("LiveChat");
  * yield* IVSChat.onReviewMessage(room, (event) =>
@@ -165,7 +165,7 @@ export class IvsChatRoomIncomplete extends Data.TaggedError("IvsChatRoomIncomple
 
 /**
  * Two different Lambda functions were registered as the same room's message
- * review handler — IVS Chat supports exactly one handler per room.
+ * review handler -- IVS Chat supports exactly one handler per room.
  */
 export class ConflictingRoomMessageReviewHandler extends Data.TaggedError(
   "ConflictingRoomMessageReviewHandler",
@@ -276,7 +276,7 @@ export const RoomProvider = () =>
             ? yield* getByIdentifier(output.roomArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             observed = yield* ivschat
               .createRoom({
@@ -296,7 +296,7 @@ export const RoomProvider = () =>
             });
           }
 
-          // 3. Sync — every room setting is mutable via UpdateRoom; apply
+          // 3. Sync -- every room setting is mutable via UpdateRoom; apply
           // only the drifted fields.
           const patch: Partial<ivschat.UpdateRoomRequest> = {};
           if (observed.name !== name) patch.name = name;
@@ -313,7 +313,7 @@ export const RoomProvider = () =>
             patch.maximumMessageLength = news.maximumMessageLength;
           }
           // Handler sync: `uri: ""` disassociates, and the API defaults
-          // fallbackResult to ALLOW — compare normalized values so a
+          // fallbackResult to ALLOW -- compare normalized values so a
           // no-handler desire converges from either direction.
           const observedHandlerUri = observed.messageReviewHandler?.uri ?? "";
           const desiredHandlerUri = messageReviewHandler?.uri ?? "";
@@ -338,7 +338,7 @@ export const RoomProvider = () =>
               .pipe(retryWhileThrottled, retryWhileHandlerPermissionPropagating);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncIvsChatTags(arn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -367,7 +367,7 @@ export const RoomProvider = () =>
               Effect.forEach(
                 (summary) =>
                   toAttrs(summary).pipe(
-                    // Tolerate a malformed/deleted summary — drop it.
+                    // Tolerate a malformed/deleted summary -- drop it.
                     Effect.catchTag("IvsChatRoomIncomplete", () => Effect.undefined),
                   ),
                 { concurrency: 5 },

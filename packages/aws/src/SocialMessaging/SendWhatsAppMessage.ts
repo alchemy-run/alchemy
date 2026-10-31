@@ -8,7 +8,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  *
  * Sends a WhatsApp message (text, template, media, or interactive) from one
  * of the linked account's phone numbers. The `message` blob is the raw Meta
- * Cloud API message payload and is sensitive — pass it as a `Uint8Array` or
+ * Cloud API message payload and is sensitive -- pass it as a `Uint8Array` or
  * `Redacted<Uint8Array>`.
  *
  * The caller addresses one of the bound account's phone numbers per
@@ -19,7 +19,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * ### Sending Messages
  * **Example:** Send a Text Message
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const sendMessage = yield* AWS.SocialMessaging.SendWhatsAppMessage(account);
  *
  * // runtime

@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeIdentityProviderConfig`.
  *
- * Reads one OIDC identity provider configuration associated with the bound cluster — issuer URL, client ID, claim mappings, and association status.
+ * Reads one OIDC identity provider configuration associated with the bound cluster -- issuer URL, client ID, claim mappings, and association status.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeIdentityProviderConfig` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeIdentityProviderConfigHttp)`.

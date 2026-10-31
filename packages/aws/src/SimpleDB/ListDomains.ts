@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sdb:ListDomains`.
  *
- * Account-level operation — invoked with no resource argument. Lists the
+ * Account-level operation -- invoked with no resource argument. Lists the
  * domain names in the current region, one page (up to 100 names) per call;
  * pass the response's `NextToken` back to continue. Useful for the classic
  * SimpleDB domain-sharding pattern where an application spreads items across
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Domain Introspection
  * **Example:** List Domain Names
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listDomains = yield* AWS.SimpleDB.ListDomains();
  *
  * // runtime

@@ -15,7 +15,7 @@ import { syncAmpTags, toTagRecord } from "./internal.ts";
 
 /**
  * Tolerance band around the expected value inside which deviations are not
- * flagged — either an absolute `amount` or a `ratio` of the expected value.
+ * flagged -- either an absolute `amount` or a `ratio` of the expected value.
  */
 export type AnomalyDetectorIgnoreNearExpected = { amount: number } | { ratio: number };
 
@@ -97,7 +97,7 @@ export interface AnomalyDetector extends Resource<
 
 /**
  * A Random Cut Forest anomaly detector inside an Amazon Managed Service for
- * Prometheus workspace — continuously evaluates a PromQL query and emits
+ * Prometheus workspace -- continuously evaluates a PromQL query and emits
  * anomaly scores as new metrics in the same workspace.
  *
  * ### Creating an Anomaly Detector
@@ -129,7 +129,7 @@ export const AnomalyDetectorProvider = () =>
         status: detector.status.statusCode,
       });
 
-      /** Describe a detector by id; typed not-found → undefined. */
+      /** Describe a detector by id; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string, anomalyDetectorId: string) {
         const response = yield* amp
           .describeAnomalyDetector({ workspaceId, anomalyDetectorId })
@@ -139,7 +139,7 @@ export const AnomalyDetectorProvider = () =>
 
       /**
        * Find a detector by its alias (the deterministic identity within a
-       * workspace) — used when no id is cached in `output`.
+       * workspace) -- used when no id is cached in `output`.
        */
       const findByAlias = Effect.fn(function* (workspaceId: string, alias: string) {
         const summary = yield* amp.listAnomalyDetectors.items({ workspaceId, alias }).pipe(
@@ -180,7 +180,7 @@ export const AnomalyDetectorProvider = () =>
 
       /**
        * Detect drift between desired props and the observed detector.
-       * Only user-specified fields participate — omitted optional fields
+       * Only user-specified fields participate -- omitted optional fields
        * defer to service defaults and never force a (full-retrain) put.
        */
       const configDrifts = (
@@ -247,13 +247,13 @@ export const AnomalyDetectorProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news!.tags };
 
-          // 1. Observe — by cached id, falling back to the alias.
+          // 1. Observe -- by cached id, falling back to the alias.
           let detector =
             output?.anomalyDetectorId !== undefined
               ? yield* describe(workspaceId, output.anomalyDetectorId)
               : yield* findByAlias(workspaceId, news!.alias);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (detector === undefined) {
             const created = yield* amp.createAnomalyDetector({
               workspaceId,
@@ -266,7 +266,7 @@ export const AnomalyDetectorProvider = () =>
             });
             detector = yield* waitSettled(workspaceId, created.anomalyDetectorId);
           } else if (configDrifts(news!, detector)) {
-            // 3. Sync — `putAnomalyDetector` triggers a full retrain, so it
+            // 3. Sync -- `putAnomalyDetector` triggers a full retrain, so it
             // is only called when an observed aspect actually drifts.
             yield* amp.putAnomalyDetector({
               workspaceId,
@@ -279,7 +279,7 @@ export const AnomalyDetectorProvider = () =>
             detector = yield* waitSettled(workspaceId, detector.anomalyDetectorId);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAmpTags(detector.arn, desiredTags);
 
           yield* session.note(`${workspaceId}/${detector.anomalyDetectorId}`);
@@ -302,7 +302,7 @@ export const AnomalyDetectorProvider = () =>
             );
         }),
 
-        // Sub-resource keyed by its parent workspace — not independently
+        // Sub-resource keyed by its parent workspace -- not independently
         // enumerable across the account.
         list: () => Effect.succeed([]),
       };

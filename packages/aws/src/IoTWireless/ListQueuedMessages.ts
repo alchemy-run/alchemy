@@ -10,7 +10,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
 export interface ListQueuedMessagesRequest extends Omit<iotw.ListQueuedMessagesRequest, "Id"> {}
 
 /**
- * Runtime binding for `iotwireless:ListQueuedMessages` — list the downlink
+ * Runtime binding for `iotwireless:ListQueuedMessages` -- list the downlink
  * messages queued for the bound wireless device from a deployed Lambda or
  * Task.
  *

@@ -50,19 +50,19 @@ export type InterceptEndpointGroupProps = {
    * Endpoint group id (the `{interceptEndpointGroup}` segment of
    * `projects/{project}/locations/{location}/interceptEndpointGroups/{interceptEndpointGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   interceptEndpointGroupId?: string;
   /**
-   * Location of the group. Endpoint groups are global — always
-   * `"global"`. Immutable — changing it replaces the group. `GLOBAL` is
+   * Location of the group. Endpoint groups are global -- always
+   * `"global"`. Immutable -- changing it replaces the group. `GLOBAL` is
    * accepted and normalized to `global`.
    * @default "global"
    */
   location?: string;
   /**
    * Deployment group this endpoint group is connected to, as a full
-   * resource name. Immutable — changing it replaces the group.
+   * resource name. Immutable -- changing it replaces the group.
    */
   interceptDeploymentGroup: string;
   /**
@@ -93,7 +93,7 @@ export type InterceptEndpointGroup = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether the API is still reconciling intended vs actual state. */
     reconciling: boolean;
@@ -111,7 +111,7 @@ export type InterceptEndpointGroup = Resource<
 >;
 
 /**
- * A Network Security Integration intercept endpoint group — the consumer
+ * A Network Security Integration intercept endpoint group -- the consumer
  * frontend for an intercept deployment group.
  *
  * Changing `interceptEndpointGroupId`, `location`, or

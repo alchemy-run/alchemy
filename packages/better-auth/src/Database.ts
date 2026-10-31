@@ -17,7 +17,7 @@ export type Provider = "sqlite" | "postgres" | "mysql";
 export type DatabaseInput = NonNullable<BetterAuthOptions["database"]>;
 
 /**
- * The Kysely-resolvable subset of {@link DatabaseInput} — raw driver objects
+ * The Kysely-resolvable subset of {@link DatabaseInput} -- raw driver objects
  * and dialect forms, excluding adapter factories.
  *
  * This is the only shape `migrate.connect` may yield: Better Auth's
@@ -33,8 +33,8 @@ export interface DatabaseService {
   /**
    * Build the runtime `options.database` input. Evaluated once per
    * execution (memoized on the execution Scope by {@link BetterAuth}), so
-   * disposable resources acquired with `Effect.acquireRelease` — pg/mysql
-   * pools — are closed when the event settles. That is the only legal
+   * disposable resources acquired with `Effect.acquireRelease` -- pg/mysql
+   * pools -- are closed when the event settles. That is the only legal
    * pooling shape on workerd (sockets are IoContext-pinned).
    *
    * Deploy/plan evaluation never runs this effect: construction is deferred
@@ -50,7 +50,7 @@ export interface DatabaseService {
   readonly migrate?: {
     /**
      * Non-secret, canonically-hashable identity of the target database
-     * (resource Outputs allowed) — part of the migration Action's input, so
+     * (resource Outputs allowed) -- part of the migration Action's input, so
      * migrations re-run when the target database is replaced.
      *
      * MUST NOT contain the connection string: Action input is persisted to
@@ -61,7 +61,7 @@ export interface DatabaseService {
      * Two-stage connection for the migration Action.
      *
      * The OUTER effect is the Action's *init* half: it runs at stack-eval
-     * time under the Action's capture context — this is where resource
+     * time under the Action's capture context -- this is where resource
      * Outputs (`database.databaseId`, a connection-string attr) MUST be
      * yielded so the engine records them as dependency captures and
      * resolves them at apply. No I/O here.

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListCustomDataIdentifiers`.
  *
  * Retrieves a subset of information about the custom data identifiers for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListCustomDataIdentifiersHttp)`.
  * ### Custom Data Identifiers & Lists
  * **Example:** List Custom Data Identifiers
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listCustomDataIdentifiers = yield* AWS.Macie2.ListCustomDataIdentifiers();
  *
  * // runtime

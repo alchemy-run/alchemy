@@ -14,7 +14,7 @@ export type GetSessionEndpointInput = Omit<emr.GetSessionEndpointRequest, "appli
  *
  * Resolves the connection endpoint and short-lived auth token for an
  * interactive session on the bound {@link Application}. The `authToken` in
- * the response is `Redacted` — unwrap it with `Redacted.value` only at the
+ * the response is `Redacted` -- unwrap it with `Redacted.value` only at the
  * point of use. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.GetSessionEndpointHttp)`.
  * ### Interactive Sessions

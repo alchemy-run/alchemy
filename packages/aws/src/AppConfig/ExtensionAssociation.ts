@@ -57,7 +57,7 @@ export interface ExtensionAssociation extends Resource<
 > {}
 
 /**
- * An AWS AppConfig extension association — attaches an {@link Extension} to an
+ * An AWS AppConfig extension association -- attaches an {@link Extension} to an
  * application, environment, or configuration profile so the extension's
  * actions fire for that resource's workflow events.
  *
@@ -194,7 +194,7 @@ export const ExtensionAssociationProvider = () =>
               Tags: desiredTags,
             });
           } else {
-            // 3. Sync — parameter values are mutable in place.
+            // 3. Sync -- parameter values are mutable in place.
             const observedParameters = toTagRecord(observed.Parameters);
             const desiredParameters = news.parameters ?? {};
             const { removed, upsert } = diffTags(observedParameters, desiredParameters);

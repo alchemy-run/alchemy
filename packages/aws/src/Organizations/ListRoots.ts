@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListRoots`.
  *
  * Lists the roots of the organization, including the policy types enabled on each root. The root id is the starting point for walking the organization tree.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListRootsHttp)`.
  * ### Reading the Organization Tree
  * **Example:** Find the Root Id
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listRoots = yield* AWS.Organizations.ListRoots();
  *
  * // runtime

@@ -34,12 +34,12 @@ export const formatPlanPreview = (
   phases: Extract<import("./Reporter.ts").TestEvent, { _tag: "PlanPreview" }>["phases"],
 ): string =>
   [
-    "Dry run — no tests or hooks executed",
+    "Dry run \u2014 no tests or hooks executed",
     ...phases.flatMap((branches, index) => [
       `Phase ${index + 1}${branches.length > 1 ? " (parallel)" : ""}:`,
       ...branches.map(
         (branch, i) =>
-          `  Branch ${i + 1}: tags=${JSON.stringify(branch.tags)}, concurrency=${branch.concurrency} — ${branch.tests} tests in ${branch.files} files${branch.skipped ? ` (${branch.skipped} skipped/todo)` : ""}`,
+          `  Branch ${i + 1}: tags=${JSON.stringify(branch.tags)}, concurrency=${branch.concurrency} \u2014 ${branch.tests} tests in ${branch.files} files${branch.skipped ? ` (${branch.skipped} skipped/todo)` : ""}`,
       ),
     ]),
   ].join("\n");

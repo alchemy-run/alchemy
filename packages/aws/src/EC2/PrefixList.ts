@@ -42,14 +42,14 @@ export interface PrefixListProps {
 
   /**
    * The IP address family of the prefix list. Determines the CIDR format
-   * accepted in `entries`. Immutable — changing it replaces the list.
+   * accepted in `entries`. Immutable -- changing it replaces the list.
    * @default "IPv4"
    */
   addressFamily?: "IPv4" | "IPv6";
 
   /**
    * The maximum number of entries the prefix list can hold. Required by AWS.
-   * Can be increased in place (not decreased) — a decrease replaces the list.
+   * Can be increased in place (not decreased) -- a decrease replaces the list.
    */
   maxEntries: number;
 
@@ -282,7 +282,7 @@ export const PrefixListProvider = () =>
           if (news.maxEntries < olds.maxEntries) {
             return { action: "replace" };
           }
-          // prefixListName, maxEntries (increase), entries, tags → in-place.
+          // prefixListName, maxEntries (increase), entries, tags -> in-place.
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -291,13 +291,13 @@ export const PrefixListProvider = () =>
           const desiredFamily = news.addressFamily ?? "IPv4";
           const desiredEntries = news.entries ?? [];
 
-          // Observe — find the list via the cached id, else fall through.
+          // Observe -- find the list via the cached id, else fall through.
           let pl: ec2.ManagedPrefixList | undefined;
           if (output?.prefixListId) {
             pl = yield* describePrefixList(output.prefixListId);
           }
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (pl === undefined) {
             yield* session.note("Creating managed prefix list...");
             const result = yield* ec2.createManagedPrefixList({
@@ -322,7 +322,7 @@ export const PrefixListProvider = () =>
 
           const prefixListId = pl!.PrefixListId!;
 
-          // Sync max-entries — an increase is a standalone modify (AWS forbids
+          // Sync max-entries -- an increase is a standalone modify (AWS forbids
           // changing size and entries in the same call).
           pl = yield* waitStable(prefixListId);
           if ((pl?.MaxEntries ?? 0) < news.maxEntries) {
@@ -335,7 +335,7 @@ export const PrefixListProvider = () =>
             pl = yield* waitStable(prefixListId);
           }
 
-          // Sync entries + name — diff observed entries against desired.
+          // Sync entries + name -- diff observed entries against desired.
           const currentEntries = yield* getEntries(prefixListId);
           const currentByCidr = new Map(currentEntries.map((e) => [e.Cidr!, e.Description ?? ""]));
           const desiredByCidr = new Map(desiredEntries.map((e) => [e.cidr, e.description ?? ""]));
@@ -363,7 +363,7 @@ export const PrefixListProvider = () =>
             pl = yield* waitStable(prefixListId);
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({

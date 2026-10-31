@@ -37,11 +37,11 @@ export type ReasoningEngineProps = {
   /**
    * Engine id (the `{reasoning_engine}` segment). Vertex assigns this on
    * create. Pass the value from a previous deploy to target the same
-   * engine. Immutable — changing it replaces the engine.
+   * engine. Immutable -- changing it replaces the engine.
    */
   reasoningEngineId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the engine.
+   * Vertex AI location. Immutable -- changing it replaces the engine.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -66,7 +66,7 @@ export type ReasoningEngineProps = {
    */
   contextSpec?: ReasoningEngineContextSpec;
   /**
-   * Customer-managed encryption key. Immutable — changing it replaces
+   * Customer-managed encryption key. Immutable -- changing it replaces
    * the engine.
    */
   encryptionSpec?: ReasoningEngineEncryptionSpec;
@@ -104,7 +104,7 @@ export type ReasoningEngine = Resource<
 >;
 
 /**
- * A Vertex AI Reasoning Engine (Agent Engine) — a customizable runtime
+ * A Vertex AI Reasoning Engine (Agent Engine) -- a customizable runtime
  * for models that choose which actions to take and in which order.
  *
  * Changing `reasoningEngineId`, `location`, or `encryptionSpec` replaces

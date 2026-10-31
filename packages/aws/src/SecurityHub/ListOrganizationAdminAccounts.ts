@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListOrganizationAdminAccounts`.
  *
  * Lists the organization's delegated Security Hub administrator accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListOrganizationAdminAccountsHttp)`.
  * ### Members & Organization
  * **Example:** List Delegated Administrators
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listOrganizationAdminAccounts = yield* AWS.SecurityHub.ListOrganizationAdminAccounts();
  *
  * // runtime

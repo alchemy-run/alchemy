@@ -27,7 +27,7 @@ export type NoteProps = {
   /**
    * Note id (the `{note}` segment of
    * `projects/{project}/notes/{note}`). If omitted, a unique RFC1035 id is
-   * generated. Immutable — changing it replaces the note.
+   * generated. Immutable -- changing it replaces the note.
    */
   noteId?: string;
   /**
@@ -174,7 +174,7 @@ export type Note = Resource<
  * container image.
  *
  * Notes have no labels field, so Alchemy stamps ownership into
- * `longDescription` for `list` / nuke. `noteId` is identity — changing it
+ * `longDescription` for `list` / nuke. `noteId` is identity -- changing it
  * replaces the note. Descriptions, related URLs, and kind payloads update
  * in place. Switching the analysis kind replaces the note.
  *

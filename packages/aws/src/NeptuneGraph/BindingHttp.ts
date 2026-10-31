@@ -8,8 +8,8 @@ import type { Graph } from "./Graph.ts";
  * Shared scaffolding for the AWS NeptuneGraph (Neptune Analytics) HTTP
  * bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * identifier plumbing is boilerplate.
  */
@@ -33,7 +33,7 @@ export const IMPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:import-task/*
 export const EXPORT_TASK_ARN_WILDCARD = "arn:aws:neptune-graph:*:*:export-task/*";
 
 /**
- * `iam:PassRole` restricted to Neptune Analytics — required by the
+ * `iam:PassRole` restricted to Neptune Analytics -- required by the
  * import/export bindings, whose requests hand the service a data-access
  * role (`roleArn`) chosen at runtime.
  */
@@ -107,7 +107,7 @@ export const makeNeptuneGraphGraphHttpBinding = <
 /**
  * Build the impl Effect for an account-level operation (snapshot reads and
  * deletes, import/export task polling and cancellation). The deploy-time
- * half grants `actions` on `resources` (default `*`) — these operations
+ * half grants `actions` on `resources` (default `*`) -- these operations
  * address snapshots and tasks by identifiers that are runtime data.
  */
 export const makeNeptuneGraphAccountHttpBinding = <I, A, E, R>(options: {

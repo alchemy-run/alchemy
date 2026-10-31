@@ -17,13 +17,13 @@ import {
 
 export type CollectionsDataStoresServingConfigProps = {
   /**
-   * Parent data store resource name. Immutable — changing it replaces
+   * Parent data store resource name. Immutable -- changing it replaces
    * the serving config.
    */
   dataStore: string;
   /**
    * Serving config id (4-63 characters, `[a-zA-Z0-9_]`). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the serving
+   * unique id is generated. Immutable -- changing it replaces the serving
    * config.
    */
   servingConfigId?: string;

@@ -19,7 +19,7 @@ export function handleWebSocket(
   const upstreamBase = typeof address === "string" ? new URL(address) : address;
 
   // Sockets hijacked by an `upgrade` are not reaped by `server.closeAllConnections()`,
-  // yet `server.close()` still waits on them — so a lingering proxied WebSocket blocks
+  // yet `server.close()` still waits on them -- so a lingering proxied WebSocket blocks
   // the HTTP server from closing on restart. Track live sockets and destroy them in the
   // cleanup function to close deterministically.
   const sockets = new Set<Duplex>();
@@ -55,7 +55,7 @@ export function handleWebSocket(
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
 
-    // The URL — and thus the Sandbox-origin check below — is built from the
+    // The URL -- and thus the Sandbox-origin check below -- is built from the
     // resolved (forwarded) host, not the raw `Host` header. This diverges from
     // upstream, which keys the origin off `Host`; here it's intentional so a
     // tunnel-fronted Sandbox preview still matches. Direct Sandbox hits carry no
@@ -218,7 +218,7 @@ const isClaimed = (socket: Duplex, before: SocketActivity) => {
  *
  * Pattern: https?://<port(4+ digits)>-<id(no dots)>-<token>.localhost
  *
- * IMPORTANT: The token segment is [a-z0-9_]+ (no hyphens) to prevent ReDoS — two adjacent
+ * IMPORTANT: The token segment is [a-z0-9_]+ (no hyphens) to prevent ReDoS -- two adjacent
  * [^.]+ groups separated by - cause quadratic backtracking on hyphen-heavy input. Tokens
  * are documented as letters/digits/underscores only.
  */

@@ -17,7 +17,7 @@ export interface LoggingConfigurationProps {
   /**
    * ARN of the CloudWatch Logs log group that receives the workspace's rule
    * evaluation and alerting (vended) logs. AMP expects the ARN with a
-   * trailing `:*` — one is appended automatically when missing.
+   * trailing `:*` -- one is appended automatically when missing.
    */
   logGroupArn: string;
 }
@@ -36,7 +36,7 @@ export interface LoggingConfiguration extends Resource<
 
 /**
  * The rules/alerting logging configuration of an Amazon Managed Service for
- * Prometheus workspace — ships rule evaluation failures and Alertmanager
+ * Prometheus workspace -- ships rule evaluation failures and Alertmanager
  * delivery errors to a CloudWatch Logs log group. A workspace has at most
  * one.
  *
@@ -61,7 +61,7 @@ export const LoggingConfigurationProvider = () =>
   Provider.effect(
     LoggingConfiguration,
     Effect.gen(function* () {
-      /** Describe the configuration; typed not-found → undefined. */
+      /** Describe the configuration; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeLoggingConfiguration({ workspaceId })
@@ -70,7 +70,7 @@ export const LoggingConfigurationProvider = () =>
       });
 
       /**
-       * Bounded wait toward ACTIVE. Returns the last observed metadata —
+       * Bounded wait toward ACTIVE. Returns the last observed metadata --
        * a still-transitioning configuration converges on a later reconcile.
        */
       const waitActive = Effect.fn(function* (workspaceId: string) {
@@ -104,7 +104,7 @@ export const LoggingConfigurationProvider = () =>
           if (!workspaceId) return undefined;
           const meta = yield* describe(workspaceId);
           if (meta === undefined) return undefined;
-          // Logging configurations are not taggable — ownership is implied
+          // Logging configurations are not taggable -- ownership is implied
           // by the owned parent workspace.
           return toAttrs(meta);
         }),
@@ -113,10 +113,10 @@ export const LoggingConfigurationProvider = () =>
           const workspaceId = news!.workspaceId;
           const desiredArn = normalizeAmpLogGroupArn(news!.logGroupArn);
 
-          // 1. Observe — the live configuration is authoritative.
+          // 1. Observe -- the live configuration is authoritative.
           const existing = yield* describe(workspaceId);
 
-          // 2/3. Ensure + sync — create when absent (tolerating a create
+          // 2/3. Ensure + sync -- create when absent (tolerating a create
           // race), update when the log group drifts.
           if (existing === undefined) {
             yield* amp

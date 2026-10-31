@@ -53,18 +53,18 @@ export type VpnTunnelCipherSuiteProps = {
 export type VpnTunnelProps = {
   /**
    * Tunnel name. If omitted, a unique RFC1035 name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the tunnel.
    */
   vpnTunnelName?: string;
   /**
-   * Region the tunnel lives in. Immutable — changing it replaces the
+   * Region the tunnel lives in. Immutable -- changing it replaces the
    * tunnel. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Immutable — changing it replaces the tunnel.
+   * Optional description. Immutable -- changing it replaces the tunnel.
    */
   description?: string;
   /**
@@ -89,7 +89,7 @@ export type VpnTunnelProps = {
    */
   peerExternalGateway?: string;
   /**
-   * Interface id on `peerExternalGateway` (`0`–`3`). Defaults to `0`
+   * Interface id on `peerExternalGateway` (`0`-`3`). Defaults to `0`
    * when `peerExternalGateway` is set. Immutable.
    */
   peerExternalGatewayInterface?: number;
@@ -108,8 +108,8 @@ export type VpnTunnelProps = {
    */
   router?: string;
   /**
-   * IKE pre-shared key (1–96 printable ASCII characters). Write-only —
-   * the API never returns it. Immutable — changing it replaces the
+   * IKE pre-shared key (1-96 printable ASCII characters). Write-only --
+   * the API never returns it. Immutable -- changing it replaces the
    * tunnel.
    */
   sharedSecret: string;

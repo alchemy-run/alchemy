@@ -23,7 +23,7 @@ const LIST_CONCURRENCY = 10;
 
 export interface RadarValueListItemProps {
   /**
-   * Id of the parent Radar value list (`rsl_…`). Changing it replaces
+   * Id of the parent Radar value list (`rsl_...`). Changing it replaces
    * the item.
    */
   valueList: string;
@@ -39,9 +39,9 @@ export type RadarValueListItem = Resource<
   "Stripe.RadarValueListItem",
   RadarValueListItemProps,
   {
-    /** Stripe value list item id (`rsli_…`). */
+    /** Stripe value list item id (`rsli_...`). */
     id: string;
-    /** Id of the parent value list (`rsl_…`). */
+    /** Id of the parent value list (`rsl_...`). */
     valueList: string;
     /** Value stored on the list. */
     value: string;
@@ -57,7 +57,7 @@ export type RadarValueListItem = Resource<
 >;
 
 /**
- * A Stripe Radar Value List Item — one entry on a Radar value list used
+ * A Stripe Radar Value List Item -- one entry on a Radar value list used
  * in Radar rules. Existence-only: there is nothing to update in place;
  * changing `valueList` or `value` replaces the item. Destroy deletes it.
  *

@@ -8,9 +8,9 @@ export interface GetJobRunRequest extends Omit<glue.GetJobRunRequest, "JobName">
 /**
  * Runtime binding for `glue:GetJobRun`.
  *
- * Reads the metadata of a single run of the bound {@link Job} — its
- * `JobRunState` (`RUNNING`, `SUCCEEDED`, `FAILED`, `TIMEOUT`, …), timings,
- * and error message — so a function can poll a run it started to a terminal
+ * Reads the metadata of a single run of the bound {@link Job} -- its
+ * `JobRunState` (`RUNNING`, `SUCCEEDED`, `FAILED`, `TIMEOUT`, ...), timings,
+ * and error message -- so a function can poll a run it started to a terminal
  * state. The job name is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Glue.GetJobRunHttp)`.
  * ### Running Jobs

@@ -20,9 +20,9 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
 /**
  * Open an `@effect/sql-pg` client (a connection pool) from a connection URL.
  *
- * Accepts a plain `Redacted` URL or an Effect of one — e.g.
+ * Accepts a plain `Redacted` URL or an Effect of one -- e.g.
  * `Cloudflare.Hyperdrive.Connect(...)` or `Fly.ConnectPostgres(...)`'s
- * `connectionString` — and returns a
+ * `connectionString` -- and returns a
  * `PgClient` (which implements the generic `SqlClient` interface) wrapped in
  * a chainable Proxy, so it can be resolved once at init and used from any
  * handler:
@@ -40,8 +40,8 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
  *
  * The pool is built lazily on the first query and memoized on the current
  * execution's `Scope` (via {@link makeExecutionMemo}), so it's created at
- * most once per execution — a Worker `fetch`/`queue`/`scheduled` event, a
- * Durable Object call, a Workflow run, or a Lambda invocation — and its
+ * most once per execution -- a Worker `fetch`/`queue`/`scheduled` event, a
+ * Durable Object call, a Workflow run, or a Lambda invocation -- and its
  * `end` finalizer fires when the event settles. Yielding the connection URL
  * is likewise deferred, so deploy / plan-time invocations never connect.
  *

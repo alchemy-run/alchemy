@@ -15,7 +15,7 @@ export interface TreeQuery {
   readonly recursive?: boolean;
 }
 
-/** Deleting a path. The path is required — the root is not deletable. */
+/** Deleting a path. The path is required -- the root is not deletable. */
 export interface TreeDelete {
   readonly path: string;
   /** Delete every descendant when the path identifies a directory. */
@@ -47,7 +47,7 @@ export interface StateDeleted {
  * Enumerating them means `listStacks` then a `listStages` per stack, so the
  * fan-out runs concurrently: against a remote store a serial walk is one
  * round trip per stack before the first stage is even known. A pinned
- * `stack`/`stage` is taken at face value and skips the corresponding call —
+ * `stack`/`stage` is taken at face value and skips the corresponding call --
  * naming a scope is not a claim that it exists, and callers report a missing
  * one from the emptiness of what comes back.
  *

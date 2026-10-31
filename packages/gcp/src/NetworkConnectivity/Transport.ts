@@ -32,7 +32,7 @@ export type TransportProps = {
    * `projects/{project}/locations/{location}/transports/{transport}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * transport.
    */
   transportId?: string;
@@ -40,7 +40,7 @@ export type TransportProps = {
    * Region of the transport (e.g. `us-east4`). Remote transport profiles
    * are location-scoped, so this must match the profile's location.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`. Immutable
-   * — changing it replaces the transport.
+   * -- changing it replaces the transport.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
@@ -48,25 +48,25 @@ export type TransportProps = {
   /**
    * VPC network peered with this transport. Accepts a name (`app-vpc`), a
    * resource path (`projects/{project}/global/networks/{network}`), or a
-   * Compute self-link. Immutable — changing it replaces the transport.
+   * Compute self-link. Immutable -- changing it replaces the transport.
    */
   network: string;
   /**
    * Remote transport profile this transport connects to. Accepts a
    * profile id (`aws-us-east-1`), a resource name, or a full API URL.
-   * Immutable — changing it replaces the transport. Required when
+   * Immutable -- changing it replaces the transport. Required when
    * `providedActivationKey` is omitted.
    */
   remoteProfile?: string;
   /**
    * Partner-supplied activation key (INPUT key flow). Only valid while
-   * the transport is `PENDING_KEY`. Immutable — changing it replaces the
+   * the transport is `PENDING_KEY`. Immutable -- changing it replaces the
    * transport. Required when `remoteProfile` and `bandwidth` are omitted.
    */
   providedActivationKey?: string;
   /**
    * Cloud-service-provider account id associated with `remoteProfile`.
-   * Immutable — changing it replaces the transport.
+   * Immutable -- changing it replaces the transport.
    */
   remoteAccountId?: string;
   /**
@@ -136,7 +136,7 @@ export type Transport = Resource<
      * while the transport is `PENDING_KEY`.
      */
     generatedActivationKey: string | undefined;
-    /** Server-reported lifecycle state (`PENDING_KEY`, `ACTIVE`, …). */
+    /** Server-reported lifecycle state (`PENDING_KEY`, `ACTIVE`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;

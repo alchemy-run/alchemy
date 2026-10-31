@@ -26,7 +26,7 @@ export type IssueModelsIssueProps = {
   /**
    * Parent IssueModel resource name
    * (`projects/{project}/locations/{location}/issueModels/{issue_model}`).
-   * Immutable — changing it replaces the issue.
+   * Immutable -- changing it replaces the issue.
    */
   parent: string;
   /**
@@ -35,7 +35,7 @@ export type IssueModelsIssueProps = {
   displayName?: string;
   /**
    * Representative description. Issues have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayDescription?: string;
@@ -73,7 +73,7 @@ export type IssueModelsIssue = Resource<
 /**
  * An issue under a Contact Center Insights issue model.
  *
- * Parent issue model is immutable. Issues have no labels field — Alchemy
+ * Parent issue model is immutable. Issues have no labels field -- Alchemy
  * stamps ownership into `displayDescription`. Display name and description
  * update in place. Create is a long-running operation; the parent model
  * must be undeployed.

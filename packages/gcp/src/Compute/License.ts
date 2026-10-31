@@ -22,20 +22,20 @@ export type LicenseResourceRequirements = compute.LicenseResourceRequirements;
 export type LicenseProps = {
   /**
    * License name (RFC1035, 1-63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the license.
    */
   licenseName?: string;
   /**
    * Optional description. Compute licenses have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke. Immutable —
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke. Immutable --
    * `licenses.update` rejects it, so changing it replaces the license.
    */
   description?: string;
   /**
    * When `true`, this is an OS license. Only one OS license can be
-   * attached to a disk or image. Immutable — changing it replaces the
+   * attached to a disk or image. Immutable -- changing it replaces the
    * license.
    * @default false
    */
@@ -43,7 +43,7 @@ export type LicenseProps = {
   /**
    * When `false`, licenses are not copied from the source when creating
    * an image from a disk (or disk from snapshot, snapshot from disk).
-   * Immutable — changing it replaces the license.
+   * Immutable -- changing it replaces the license.
    * @default true
    */
   transferable?: boolean;
@@ -58,12 +58,12 @@ export type LicenseProps = {
   removableFromDisk?: boolean;
   /**
    * When `true`, this license can only be used on multi-tenant nodes.
-   * Immutable — changing it replaces the license.
+   * Immutable -- changing it replaces the license.
    */
   multiTenantOnly?: boolean;
   /**
    * When `true`, this license can only be used on sole-tenant nodes.
-   * Immutable — changing it replaces the license.
+   * Immutable -- changing it replaces the license.
    */
   soleTenantOnly?: boolean;
   /**
@@ -71,7 +71,7 @@ export type LicenseProps = {
    */
   minimumRetention?: LicenseDuration;
   /**
-   * License codes that are incompatible with this license. Immutable —
+   * License codes that are incompatible with this license. Immutable --
    * changing it replaces the license.
    */
   incompatibleLicenses?: string[];
@@ -146,7 +146,7 @@ export type License = Resource<
  * Licenses are intended for third-party partners who publish Cloud
  * Marketplace images. Name and `osLicense` are immutable. Description and
  * the attachability flags update in place via `licenses.update`. Compute
- * License has no labels field — Alchemy stamps ownership into the
+ * License has no labels field -- Alchemy stamps ownership into the
  * description so nuke can find leaked licenses.
  *
  * ### Creating a License

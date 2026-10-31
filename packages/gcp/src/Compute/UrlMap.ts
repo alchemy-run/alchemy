@@ -29,7 +29,7 @@ export type UrlMapProps = {
    */
   urlMapName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute UrlMap has no
    * labels field).
    */
@@ -121,7 +121,7 @@ export type UrlMap = Resource<
  * URL maps route hostnames and URL paths to a backend service, backend
  * bucket, or HTTP redirect. This resource maps to the global `urlMaps`
  * collection (`regionUrlMaps` is a separate resource). Compute UrlMap has
- * no labels field — Alchemy ownership is stored in the description so nuke
+ * no labels field -- Alchemy ownership is stored in the description so nuke
  * can find leaked maps.
  *
  * One of `defaultService`, `defaultUrlRedirect`, or

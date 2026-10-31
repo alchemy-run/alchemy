@@ -50,11 +50,11 @@ export type DeploymentGroupProps = {
    * Deployment group id (the `{deploymentGroup}` segment of
    * `projects/{project}/locations/{location}/deploymentGroups/{deploymentGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   deploymentGroupId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -112,7 +112,7 @@ export type DeploymentGroup = Resource<
 >;
 
 /**
- * An Infrastructure Manager deployment group — a DAG of deployment units
+ * An Infrastructure Manager deployment group -- a DAG of deployment units
  * provisioned together.
  *
  * Changing `deploymentGroupId` or `location` replaces the group. Units,

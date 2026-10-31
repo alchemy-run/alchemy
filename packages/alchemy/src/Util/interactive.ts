@@ -23,7 +23,7 @@ const hasNoInputFlag = (): boolean => {
 };
 
 // Known coding-agent env vars, ported from unjs/std-env (src/agents.ts).
-// Best-effort — the isTTY checks at the call sites already catch most cases
+// Best-effort -- the isTTY checks at the call sites already catch most cases
 // since agents typically pipe stdin/stdout. std-env's kiro check
 // (TERM_PROGRAM=kiro gated on no-TTY) is deliberately omitted: both call
 // sites only reach this function when stdin/stdout ARE a TTY, where that
@@ -78,7 +78,7 @@ export const isNonInteractive = (): boolean => {
  * Whether a plain line-based prompt can still read an answer from stdin.
  *
  * Distinct from {@link isNonInteractive}: `ALCHEMY_PLAIN` / `ALCHEMY_NO_TUI`
- * turn off the TUI *rendering*, not input — a human running plain mode in a
+ * turn off the TUI *rendering*, not input -- a human running plain mode in a
  * terminal can still answer a `[y/n]` question. Agents and CI pipe stdin
  * (or set their env markers) and land `false`.
  */

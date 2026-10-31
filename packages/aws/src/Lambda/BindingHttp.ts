@@ -7,8 +7,8 @@ import { qualifiedArnOf } from "./QualifiedArn.ts";
 /**
  * Shared scaffolding for AWS Lambda control/data-plane HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
  * and the granted ARNs is boilerplate. How the host reaches AWS (native vs
  * external, see `AWSBindings.ts`) is handled by `AWSBindings.withCredentials`

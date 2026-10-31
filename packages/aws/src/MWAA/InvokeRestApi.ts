@@ -10,19 +10,19 @@ export interface InvokeRestApiRequest extends Omit<mwaa.InvokeRestApiRequest, "N
  * Runtime binding for `airflow:InvokeRestApi` (Airflow 2.4.3+).
  *
  * Bind an {@link Environment} inside a function runtime to call the Apache
- * Airflow REST API on the environment's webserver — trigger DAG runs, list
- * DAGs, inspect task instances, manage variables and connections — without
+ * Airflow REST API on the environment's webserver -- trigger DAG runs, list
+ * DAGs, inspect task instances, manage variables and connections -- without
  * minting tokens yourself. The IAM grant is scoped to the Airflow RBAC role
- * the call is mapped to (`Admin` by default — pass `{ airflowRole }` to
+ * the call is mapped to (`Admin` by default -- pass `{ airflowRole }` to
  * scope it down). Provide the implementation with
  * `Effect.provide(AWS.MWAA.InvokeRestApiHttp)`.
  * ### Invoking the Airflow REST API
  * **Example:** List DAGs
  * ```typescript
- * // init — bind the operation to the environment
+ * // init -- bind the operation to the environment
  * const invokeRestApi = yield* AWS.MWAA.InvokeRestApi(environment);
  *
- * // runtime — GET /dags through the Airflow REST API
+ * // runtime -- GET /dags through the Airflow REST API
  * const result = yield* invokeRestApi({
  *   Method: "GET",
  *   Path: "/dags",

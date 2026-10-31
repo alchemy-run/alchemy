@@ -85,19 +85,19 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
   // Access enrollment (`access` prop): push this Worker's
   // `worker`/`preview_worker` destinations onto the application's binding
-  // contract. The application deploys with — and converges on — every
+  // contract. The application deploys with -- and converges on -- every
   // enrolled Worker's destinations, including at create time, where
   // Cloudflare requires a self-hosted app to be born with a domain or
   // destinations.
   //
   // Skipped when this Worker runs locally (`alchemy dev`): a local worker
   // has no cloud script (no immutable ID to enroll), and Access cannot
-  // front a localhost URL — the `dev.access` stub covers the runtime
+  // front a localhost URL -- the `dev.access` stub covers the runtime
   // instead. A Worker opted out via `Alchemy.remote()` enrolls normally.
   const accessHostMode = resource.Mode ?? (yield* defaultProviderMode);
   if (props.access && accessHostMode !== "local") {
     const accessInput = props.access;
-    // The shared form is the application itself — as the module-scope
+    // The shared form is the application itself -- as the module-scope
     // declaration Effect (`const App = Cloudflare.Access.Application(...)`)
     // or an already-yielded resource. Resolve the yieldable spelling first,
     // then discriminate.
@@ -108,7 +108,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
     ) as AccessApplication | InputProps<WorkerAccessApplication>;
     const application = isApplication(access)
       ? access
-      : // Dedicated form: declare an application owned by this Worker —
+      : // Dedicated form: declare an application owned by this Worker --
         // per-Worker Access configuration means a per-Worker application
         // (Cloudflare attaches policies to applications, not Workers). It
         // lives in the Worker's namespace: `<Worker>/Access`.
@@ -148,7 +148,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       // A Container bound directly in `env` declares a container-backed
       // Durable Object class: the Container IS the DO namespace binding plus
       // its ContainerApplication. Handled before the generic Effect
-      // resolution below — yielding the Container class would resolve its
+      // resolution below -- yielding the Container class would resolve its
       // *started instance* tag, which only exists inside a Durable Object.
       if (isContainerDecl(bindingEff)) {
         env[bindingName] = bindingEff;
@@ -182,8 +182,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
       // Queue producer bindings may need the dev-mode remote-producer shim
       // (a LOCAL worker binding a LIVE queue): `maybeQueueShim` registers
-      // the shim worker + token resources at eval time — the same idiom as
-      // the WorkflowResource registration below — and contributes their
+      // the shim worker + token resources at eval time -- the same idiom as
+      // the WorkflowResource registration below -- and contributes their
       // outputs to the binding data.
       if (isQueue(binding)) {
         const shim = yield* maybeQueueShim(binding, resource);
@@ -316,7 +316,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
  * Structural check for a `Cloudflare.Container` class declaration. Keyed on
  * the `~alchemy/Container/ClassName` marker (rather than importing from
  * `Containers/Container.ts`) to avoid a value-level import cycle through
- * `ContainerPlatform` → `Worker.ts` → this module.
+ * `ContainerPlatform` -> `Worker.ts` -> this module.
  *
  * A Container declaration is Effect-shaped (yielding it resolves the
  * *started instance* tag, which only exists inside a Durable Object), so
@@ -351,7 +351,7 @@ const isContainerApplicationResource = (value: unknown): value is ContainerAppli
  *    script metadata marks the class as container-backed.
  *
  * The namespace id only exists once the Worker uploads, while the Worker's
- * metadata needs the container class — the same circularity as the
+ * metadata needs the container class -- the same circularity as the
  * Effect-native path (`ContainerPlatform.bind`), resolved through bindings +
  * precreate.
  */
@@ -378,7 +378,7 @@ const bindContainerClass = Effect.fn(function* (
       : undefined;
   if (!isContainerApplicationResource(application)) {
     return yield* Effect.die(
-      `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
+      `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker \u2014 effectful (main) containers require an Effect-native Durable Object host.`,
     );
   }
   if (isDurableObjectContainerResource(application)) {
@@ -392,8 +392,8 @@ const bindContainerClass = Effect.fn(function* (
   // Both halves of the Worker's side describe the same env entry, so they
   // share one `sid`. Binding rows are collapsed by sid (last write wins), so
   // splitting them across two `bind` calls silently drops the namespace
-  // binding whenever the two sids coincide — e.g. the env key and the
-  // Container's logical id match (`Sandbox: Container("Sandbox", …)`). The
+  // binding whenever the two sids coincide -- e.g. the env key and the
+  // Container's logical id match (`Sandbox: Container("Sandbox", ...)`). The
   // Worker then uploads the Container declaration itself as a `json` binding
   // and `env.NAME` is not a DO namespace at runtime.
   yield* resource.bind`${bindingName}`({
@@ -515,7 +515,7 @@ const toValueBinding = (
  * An Output that no native classifier recognized resolves to a plain env
  * value, unknown until the engine resolves it, so its classification
  * (plain_text vs secret_text vs json) is deferred to resolution time via
- * {@link toValueBinding} — classifying eagerly would fall through to the
+ * {@link toValueBinding} -- classifying eagerly would fall through to the
  * `json` fallback and deploy e.g. a resolved `Redacted` secret as an
  * unencrypted json binding. Resource refs never land in the Output arm:
  * they surface their target's `Type` statically, so a native classifier
@@ -693,7 +693,7 @@ const toBinding = (
     };
   } else if (isWorkerEntrypoint(binding)) {
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
-    // Tested BEFORE `isWorker` — the marker carries the Worker rather than
+    // Tested BEFORE `isWorker` -- the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
     if (binding.worker === undefined) {
       // One of this Worker's own named entrypoints: lowered like `Self`.
@@ -825,7 +825,7 @@ const DEFAULT_OBSERVABILITY: WorkerObservability = {
 /**
  * Resolve the observability metadata to upload. An explicit
  * `news.observability.traces` wins; otherwise the traces contributed by
- * `Cloudflare.Telemetry()` (a single binding row — rows are collapsed by
+ * `Cloudflare.Telemetry()` (a single binding row -- rows are collapsed by
  * sid) fill in without clobbering the logs config. A cache-style `??` on
  * the whole object would drop the default `logs.invocationLogs`.
  */

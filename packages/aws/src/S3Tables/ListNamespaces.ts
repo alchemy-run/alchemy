@@ -16,7 +16,7 @@ export interface ListNamespacesRequest extends Omit<
  * Runtime binding for the `ListNamespaces` operation (IAM action
  * `s3tables:ListNamespaces` on the table bucket ARN).
  *
- * Lists the namespaces in the bound {@link TableBucket} — the catalog's
+ * Lists the namespaces in the bound {@link TableBucket} -- the catalog's
  * databases. Useful for compute that discovers tables dynamically at
  * runtime. Provide the implementation with
  * `Effect.provide(AWS.S3Tables.ListNamespacesHttp)`.

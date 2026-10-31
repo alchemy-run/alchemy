@@ -32,7 +32,7 @@ export interface PoolOrigin {
    */
   enabled?: boolean;
   /**
-   * Relative weight of this origin (`0`–`1`) for traffic distribution.
+   * Relative weight of this origin (`0`-`1`) for traffic distribution.
    * @default 1
    */
   weight?: number;
@@ -41,7 +41,7 @@ export interface PoolOrigin {
    */
   port?: number;
   /**
-   * Request headers to send to this origin — typically a `Host` header.
+   * Request headers to send to this origin -- typically a `Host` header.
    */
   header?: { host?: ReadonlyArray<string> };
   /**
@@ -58,11 +58,11 @@ export interface PoolOrigin {
  * Load shedding configuration for a pool.
  */
 export interface PoolLoadShedding {
-  /** Percent (0–100) of new (non-affine) traffic to shed. @default 0 */
+  /** Percent (0-100) of new (non-affine) traffic to shed. @default 0 */
   defaultPercent?: number;
   /** Policy for shedding new traffic. @default "random" */
   defaultPolicy?: "random" | "hash";
-  /** Percent (0–100) of session-affine traffic to shed. @default 0 */
+  /** Percent (0-100) of session-affine traffic to shed. @default 0 */
   sessionPercent?: number;
   /** Policy for shedding session-affine traffic. */
   sessionPolicy?: "hash";
@@ -144,7 +144,7 @@ export interface PoolProps {
    */
   notificationFilter?: PoolNotificationFilter;
   /**
-   * Deprecated upstream — the email address to send health status
+   * Deprecated upstream -- the email address to send health status
    * notifications to. Prefer Cloudflare's centralized notification service.
    */
   notificationEmail?: string;
@@ -170,7 +170,7 @@ export interface PoolAttributes {
 export type Pool = Resource<TypeId, PoolProps, PoolAttributes, never, Providers>;
 
 /**
- * A Cloudflare Load Balancing pool — an account-scoped group of origin
+ * A Cloudflare Load Balancing pool -- an account-scoped group of origin
  * servers that Load Balancers route traffic to. Pools optionally reference
  * a {@link Monitor} for active health checking.
  *
@@ -247,7 +247,7 @@ export const PoolProvider = () =>
         const observed = yield* getPool(acct, output.poolId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // pool name. Pools carry no ownership marker, so the match is
       // reported as Unowned and the engine gates takeover behind --adopt.
       const name = yield* createPoolName(id, olds?.name);
@@ -284,13 +284,13 @@ export const PoolProvider = () =>
       const name = yield* createPoolName(id, news.name);
       const body = buildBody(news, name);
 
-      // 1. Observe — output.poolId is a cache hint; a 404 falls through
+      // 1. Observe -- output.poolId is a cache hint; a 404 falls through
       //    to "missing" and we recreate.
       const observed = output?.poolId
         ? yield* getPool(output.accountId ?? accountId, output.poolId)
         : undefined;
 
-      // 2. Ensure — missing: create with the full desired body.
+      // 2. Ensure -- missing: create with the full desired body.
       if (!observed?.id) {
         const created = yield* loadBalancers.createPool({
           accountId,
@@ -299,7 +299,7 @@ export const PoolProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — the update endpoint is a PUT requiring name + origins;
+      // 3. Sync -- the update endpoint is a PUT requiring name + origins;
       //    diff observed against desired and skip the call on a no-op.
       if (!poolDirty(observed, body)) {
         return toAttributes(observed, accountId);
@@ -313,7 +313,7 @@ export const PoolProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // A pool still referenced by a Load Balancer cannot be deleted — the
+      // A pool still referenced by a Load Balancer cannot be deleted -- the
       // engine deletes the LB first, but eventual consistency may lag, so
       // retry the typed PoolInUse tag with bounded backoff.
       yield* loadBalancers

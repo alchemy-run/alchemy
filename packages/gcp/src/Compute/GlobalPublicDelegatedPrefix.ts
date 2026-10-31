@@ -21,24 +21,24 @@ export type GlobalPublicDelegatedPrefixProps = {
    */
   prefixName?: string;
   /**
-   * Optional description. Public delegated prefixes have no labels field —
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Optional description. Public delegated prefixes have no labels field --
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;
   /**
    * Parent Public Advertised Prefix or Public Delegated Prefix URL.
-   * Immutable — changing it replaces the prefix.
+   * Immutable -- changing it replaces the prefix.
    */
   parentPrefix: string;
   /**
-   * IP range in CIDR format allocated from the parent. Immutable —
+   * IP range in CIDR format allocated from the parent. Immutable --
    * changing it replaces the prefix.
    */
   ipCidrRange: string;
   /**
    * IPv6 allocation mode (`DELEGATION`,
-   * `EXTERNAL_IPV6_FORWARDING_RULE_CREATION`, …). Immutable — changing
+   * `EXTERNAL_IPV6_FORWARDING_RULE_CREATION`, ...). Immutable -- changing
    * it replaces the prefix.
    */
   mode?: compute.PublicDelegatedPrefixModeEnum | (string & {});

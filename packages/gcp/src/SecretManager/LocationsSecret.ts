@@ -30,7 +30,7 @@ export type LocationsSecretProps = {
    */
   secretId?: string;
   /**
-   * Secret Manager location (`us-central1`, `us-east1`, …). Immutable —
+   * Secret Manager location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the secret. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. Regional secrets live only in this
    * location (use {@link Secret} for automatic/user-managed replication).
@@ -91,7 +91,7 @@ export type LocationsSecret = Resource<
     secretId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;

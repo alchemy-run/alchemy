@@ -7,14 +7,14 @@ import type { Collection } from "./Collection.ts";
  * Runtime binding for the `BatchGetCollection` operation scoped to one
  * collection (IAM action `aoss:BatchGetCollection` on the collection ARN).
  *
- * Reads the bound {@link Collection}'s live detail — status, endpoints, KMS
- * key — from inside a function runtime. Useful for discovering the data-plane
+ * Reads the bound {@link Collection}'s live detail -- status, endpoints, KMS
+ * key -- from inside a function runtime. Useful for discovering the data-plane
  * `collectionEndpoint` at runtime. Provide the implementation with
  * `Effect.provide(AWS.OpenSearchServerless.GetCollectionHttp)`.
  * ### Inspecting Collections
  * **Example:** Read the collection's endpoint and status
  * ```typescript
- * // init — bind the operation to the collection
+ * // init -- bind the operation to the collection
  * const getCollection = yield* AWS.OpenSearchServerless.GetCollection(collection);
  *
  * // runtime

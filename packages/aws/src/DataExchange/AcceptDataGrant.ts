@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dataexchange:AcceptDataGrant`.
  *
  * Accepts a data grant another account sent to this account, creating
- * an entitled copy of the granted data set — the receiver-side
+ * an entitled copy of the granted data set -- the receiver-side
  * automation of direct data sharing.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.AcceptDataGrantHttp)`.

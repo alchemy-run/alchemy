@@ -8,7 +8,7 @@ export interface StartReplayRequest extends Omit<
   "EventSourceArn" | "Destination"
 > {
   /**
-   * Replay destination. Defaults to the archive's source event bus — the
+   * Replay destination. Defaults to the archive's source event bus -- the
    * only destination EventBridge allows for a replay. Provide it explicitly
    * to narrow delivery to specific rules via `FilterArns`.
    */
@@ -20,16 +20,16 @@ export interface StartReplayRequest extends Omit<
  *
  * Bind this operation to an {@link Archive} inside a function runtime to get
  * a callable that replays a time window of archived events onto a
- * destination event bus — the runtime half of disaster-recovery and
+ * destination event bus -- the runtime half of disaster-recovery and
  * backfill tooling. Provide the `StartReplayHttp` layer on the Function to
  * satisfy the binding.
  * ### Replaying Events
  * **Example:** Replay a Time Window from the Bound Archive
  * ```typescript
- * // init — bind the archive (provide AWS.EventBridge.StartReplayHttp on the Function)
+ * // init -- bind the archive (provide AWS.EventBridge.StartReplayHttp on the Function)
  * const startReplay = yield* AWS.EventBridge.StartReplay(archive);
  *
- * // runtime — replay yesterday's events back onto the archive's source bus
+ * // runtime -- replay yesterday's events back onto the archive's source bus
  * const replay = yield* startReplay({
  *   ReplayName: "backfill-2026-07-14",
  *   EventStartTime: new Date("2026-07-14T00:00:00Z"),

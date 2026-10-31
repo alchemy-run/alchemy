@@ -39,7 +39,7 @@ export interface AxiomTelemetryProps {
 }
 
 /**
- * Resource declarations are Effects — yield them to get the instance with
+ * Resource declarations are Effects -- yield them to get the instance with
  * attribute Output accessors, same as `Binding.Service`'s callable does for
  * capability bindings.
  */

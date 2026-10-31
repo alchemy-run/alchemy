@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `wafv2:DescribeManagedRuleGroup` — read the rules,
+ * Runtime binding for `wafv2:DescribeManagedRuleGroup` -- read the rules,
  * labels, and WCU capacity of a vendor managed rule group.
  *
  * Provide `WAFv2.DescribeManagedRuleGroupHttp` on the hosting Lambda
@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Managed Rule Group Catalog
  * **Example:** Describe the AWS Common Rule Set
  * ```typescript
- * // init — grants wafv2:DescribeManagedRuleGroup
+ * // init -- grants wafv2:DescribeManagedRuleGroup
  * const describeManagedRuleGroup = yield* AWS.WAFv2.DescribeManagedRuleGroup();
  *
  * // runtime
@@ -39,7 +39,7 @@ export const DescribeManagedRuleGroup = Binding.Service<DescribeManagedRuleGroup
 );
 
 /**
- * Runtime binding for `wafv2:ListAvailableManagedRuleGroups` — list the
+ * Runtime binding for `wafv2:ListAvailableManagedRuleGroups` -- list the
  * vendor managed rule groups available to the account (AWS Managed Rules +
  * subscribed Marketplace groups).
  *
@@ -48,7 +48,7 @@ export const DescribeManagedRuleGroup = Binding.Service<DescribeManagedRuleGroup
  * ### Managed Rule Group Catalog
  * **Example:** List Available Managed Rule Groups
  * ```typescript
- * // init — grants wafv2:ListAvailableManagedRuleGroups
+ * // init -- grants wafv2:ListAvailableManagedRuleGroups
  * const listManagedRuleGroups = yield* AWS.WAFv2.ListAvailableManagedRuleGroups();
  *
  * // runtime
@@ -77,7 +77,7 @@ export const ListAvailableManagedRuleGroups = Binding.Service<ListAvailableManag
 );
 
 /**
- * Runtime binding for `wafv2:ListAvailableManagedRuleGroupVersions` — list
+ * Runtime binding for `wafv2:ListAvailableManagedRuleGroupVersions` -- list
  * the published versions of a vendor managed rule group.
  *
  * Provide `WAFv2.ListAvailableManagedRuleGroupVersionsHttp` on the hosting
@@ -85,7 +85,7 @@ export const ListAvailableManagedRuleGroups = Binding.Service<ListAvailableManag
  * ### Managed Rule Group Catalog
  * **Example:** List Versions of the Common Rule Set
  * ```typescript
- * // init — grants wafv2:ListAvailableManagedRuleGroupVersions
+ * // init -- grants wafv2:ListAvailableManagedRuleGroupVersions
  * const listVersions = yield* AWS.WAFv2.ListAvailableManagedRuleGroupVersions();
  *
  * // runtime
@@ -117,7 +117,7 @@ export const ListAvailableManagedRuleGroupVersions =
   );
 
 /**
- * Runtime binding for `wafv2:DescribeAllManagedProducts` — read the
+ * Runtime binding for `wafv2:DescribeAllManagedProducts` -- read the
  * catalog of managed rule group products from AWS and Marketplace vendors.
  *
  * Provide `WAFv2.DescribeAllManagedProductsHttp` on the hosting Lambda
@@ -125,7 +125,7 @@ export const ListAvailableManagedRuleGroupVersions =
  * ### Managed Rule Group Catalog
  * **Example:** List All Managed Products
  * ```typescript
- * // init — grants wafv2:DescribeAllManagedProducts
+ * // init -- grants wafv2:DescribeAllManagedProducts
  * const describeAllManagedProducts = yield* AWS.WAFv2.DescribeAllManagedProducts();
  *
  * // runtime
@@ -154,7 +154,7 @@ export const DescribeAllManagedProducts = Binding.Service<DescribeAllManagedProd
 );
 
 /**
- * Runtime binding for `wafv2:DescribeManagedProductsByVendor` — read the
+ * Runtime binding for `wafv2:DescribeManagedProductsByVendor` -- read the
  * managed rule group products of a single vendor.
  *
  * Provide `WAFv2.DescribeManagedProductsByVendorHttp` on the hosting
@@ -162,7 +162,7 @@ export const DescribeAllManagedProducts = Binding.Service<DescribeAllManagedProd
  * ### Managed Rule Group Catalog
  * **Example:** List AWS-Vended Managed Products
  * ```typescript
- * // init — grants wafv2:DescribeManagedProductsByVendor
+ * // init -- grants wafv2:DescribeManagedProductsByVendor
  * const describeByVendor = yield* AWS.WAFv2.DescribeManagedProductsByVendor();
  *
  * // runtime

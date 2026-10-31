@@ -35,7 +35,7 @@ export type SourcesDiskMigrationJobProps = {
   /**
    * Parent source. Full name
    * `projects/{project}/locations/{location}/sources/{source}` or the
-   * source id (combined with `location`). Immutable — changing it
+   * source id (combined with `location`). Immutable -- changing it
    * replaces the job.
    */
   source: string;
@@ -46,7 +46,7 @@ export type SourcesDiskMigrationJobProps = {
   location?: string;
   /**
    * Disk migration job id. If omitted, a unique RFC1035 name is
-   * generated. Immutable — changing it replaces the job.
+   * generated. Immutable -- changing it replaces the job.
    */
   diskMigrationJobId?: string;
   /**
@@ -55,7 +55,7 @@ export type SourcesDiskMigrationJobProps = {
    */
   targetDetails: DiskMigrationJobTargetDetails;
   /**
-   * Unattached AWS source disk. Immutable volume id — changing it
+   * Unattached AWS source disk. Immutable volume id -- changing it
    * replaces the job.
    */
   awsSourceDiskDetails?: AwsSourceDiskDetails;
@@ -98,7 +98,7 @@ export type SourcesDiskMigrationJob = Resource<
  * A VM Migration disk migration job that copies an unattached source
  * disk into a Compute Engine persistent disk.
  *
- * The job has no labels field — Alchemy stamps ownership into
+ * The job has no labels field -- Alchemy stamps ownership into
  * `targetDetails.labels` so `list` / nuke can find them. Source, job
  * id, and AWS volume id are immutable. Target details update in place.
  *

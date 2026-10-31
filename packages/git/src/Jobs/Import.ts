@@ -4,7 +4,7 @@
  * A minimal **smart-HTTP protocol v0 client**: fetches and parses the
  * `info/refs?service=git-upload-pack` advertisement, then POSTs a
  * `git-upload-pack` request (wants + optional `deepen`, no haves,
- * immediate `done`, **no side-band** — so the pack follows the `NAK`
+ * immediate `done`, **no side-band** -- so the pack follows the `NAK`
  * verbatim) and returns the raw pack bytes for the Repo DO to feed
  * through the same `ingestPack` path as a push, with the same 50 MiB cap
  * (documented v1 limit: small / depth-limited imports only).
@@ -19,9 +19,9 @@ import * as Schema from "effect/Schema";
 import { concatBytes, isOid, ZERO_OID } from "../Protocol/ObjectCodec.ts";
 import { flushPkt, pktPayloadText, pktText, readPktLineAt } from "../Protocol/Pkt.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Errors & shapes
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Raised when the source remote misbehaves: HTTP failures, non-200s,
@@ -90,9 +90,9 @@ export interface ImportOptions {
 
 const DEFAULT_MAX_PACK = 50 * 1024 * 1024;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Advertisement
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const normalizeBase = (url: string): string => url.replace(/\/+$/, "");
 
@@ -215,9 +215,9 @@ export const fetchAdvertisement = Effect.fn(function* (url: string) {
   return yield* parseAdvertisement(new Uint8Array(body));
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // upload-pack POST
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** Builds the v0 upload-pack request body: wants, optional deepen, done. */
 export const buildUploadPackRequest = (
@@ -346,9 +346,9 @@ export const fetchPack = Effect.fn(function* (
   return parsed;
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Orchestration
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** Resolves `source.ref` (full or short name) against advertised refs. */
 const selectRefs = (
@@ -366,7 +366,7 @@ const selectRefs = (
 };
 
 /**
- * Runs the full import client flow: advertisement → ref selection →
+ * Runs the full import client flow: advertisement -> ref selection ->
  * upload-pack POST. Returns everything the Repo DO's alarm job needs to
  * ingest the history and create the refs. Requires `HttpClient.HttpClient`
  * (provide `FetchHttpClient.layer`).
@@ -388,7 +388,7 @@ export const runImport = Effect.fn(function* (options: ImportOptions) {
       : null;
 
   if (selected.length === 0) {
-    // Empty remote — nothing to fetch.
+    // Empty remote -- nothing to fetch.
     return {
       refs: [],
       defaultBranch,
@@ -397,7 +397,7 @@ export const runImport = Effect.fn(function* (options: ImportOptions) {
     } satisfies ImportResult;
   }
 
-  // Want the peeled targets too? No — wanting the tag object oid pulls the
+  // Want the peeled targets too? No -- wanting the tag object oid pulls the
   // whole chain; peeled lines are advisory.
   const wants = Array.from(new Set(selected.map((r) => r.oid)));
   const { shallow, pack } = yield* fetchPack(source.url, wants, {

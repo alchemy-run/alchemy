@@ -94,7 +94,7 @@ const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
  * ### Generate a key
  * Omit `value` and Fly generates a key via `generateSecretKey`. `type`
  * is Fly's key type (`nacl_sign`, `nacl_box`, `nacl_secretbox`,
- * `hs256`, `hs384`, `hs512`, `xaes256gcm`, `nacl_auth`, `es256`, …).
+ * `hs256`, `hs384`, `hs512`, `xaes256gcm`, `nacl_auth`, `es256`, ...).
  *
  * **Example:** Signing key
  * ```typescript
@@ -153,7 +153,7 @@ const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
  *
  * ### Sign
  * Bind {@link Sign} to a signing key (`nacl_sign`, `hs256`, `es256`,
- * …). The private key never leaves Fly KMS. Provide {@link SignHttp}.
+ * ...). The private key never leaves Fly KMS. Provide {@link SignHttp}.
  *
  * **Example:** Sign a payload
  * ```typescript
@@ -278,7 +278,7 @@ export const SecretKeyProvider = () =>
       if (nameChanged || appChanged || typeChanged) {
         return {
           action: "replace" as const,
-          // Same (app, name) cannot hold two types — delete first.
+          // Same (app, name) cannot hold two types -- delete first.
           deleteFirst: !nameChanged && !appChanged,
         };
       }
@@ -349,7 +349,7 @@ export const SecretKeyProvider = () =>
         return yield* new SecretKeyNotCreated({ appName, secretName: name });
       }
 
-      // Sync — re-set when the caller supplied new material. Observed
+      // Sync -- re-set when the caller supplied new material. Observed
       // cloud never returns private bytes; `olds.value` is only a hint.
       const desiredValue = props.value;
       if (desiredValue !== undefined) {

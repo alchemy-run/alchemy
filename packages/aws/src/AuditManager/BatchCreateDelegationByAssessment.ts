@@ -12,7 +12,7 @@ export interface BatchCreateDelegationByAssessmentRequest extends Omit<
 /**
  * Runtime binding for `auditmanager:BatchCreateDelegationByAssessment`.
  *
- * Creates a batch of delegations — handing control sets of the bound
+ * Creates a batch of delegations -- handing control sets of the bound
  * assessment to reviewers. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.BatchCreateDelegationByAssessmentHttp)`.
  * ### Delegations

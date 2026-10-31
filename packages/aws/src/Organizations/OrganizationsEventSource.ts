@@ -8,7 +8,7 @@ import {
 
 /**
  * The commonly-consumed AWS Organizations event names. Organizations
- * publishes CloudTrail-backed events — `CreateAccountResult` arrives as an
+ * publishes CloudTrail-backed events -- `CreateAccountResult` arrives as an
  * AWS service event when an asynchronous `CreateAccount` request completes;
  * the management operations (account moves, OU changes, policy attachments,
  * handshakes) arrive as AWS API call events.
@@ -41,7 +41,7 @@ export interface OrganizationsEventDetail {
   eventName?: OrganizationsEventName | (string & {});
   /** Always `organizations.amazonaws.com`. */
   eventSource?: string;
-  /** Always `us-east-1` — Organizations is a global service homed there. */
+  /** Always `us-east-1` -- Organizations is a global service homed there. */
   awsRegion?: string;
   /** When the operation completed. */
   eventTime?: string;
@@ -51,7 +51,7 @@ export interface OrganizationsEventDetail {
   responseElements?: Record<string, unknown> | null;
   /**
    * For service events (e.g. `CreateAccountResult`), the asynchronous
-   * outcome — `createAccountStatus.state` is `SUCCEEDED` or `FAILED`.
+   * outcome -- `createAccountStatus.state` is `SUCCEEDED` or `FAILED`.
    */
   serviceEventDetails?: Record<string, unknown>;
   /** Additional CloudTrail record fields (the schema grows over time). */
@@ -77,15 +77,15 @@ export interface OrganizationsEventSourceProps extends EventRouteProps {
 
 /**
  * Event source connecting AWS Organizations events to the hosting compute.
- * Organizations publishes CloudTrail-backed events — asynchronous
+ * Organizations publishes CloudTrail-backed events -- asynchronous
  * account-creation outcomes (`CreateAccountResult`) and every management
  * operation (account moves, OU changes, policy attachments, handshake
- * responses) — to the **management account's** default EventBridge bus in
+ * responses) -- to the **management account's** default EventBridge bus in
  * **us-east-1** (source `aws.organizations`); this subscribes the host
  * Function to those events so it can drive account-vending, baseline, or
  * compliance automation.
  *
- * Organizations publishes to EventBridge automatically — no additional
+ * Organizations publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host. The
  * rule must be deployed in us-east-1 of the management account to receive
  * events. Provide the host-specific implementation layer (e.g.

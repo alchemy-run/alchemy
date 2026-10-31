@@ -130,7 +130,7 @@ export interface AccessPoint extends Resource<
 > {}
 
 /**
- * An Amazon S3 Access Point — a named network endpoint attached to a bucket
+ * An Amazon S3 Access Point -- a named network endpoint attached to a bucket
  * with its own policy, public-access-block settings, and optional VPC
  * restriction. Use access points to manage shared-dataset access at scale
  * instead of maintaining one giant bucket policy.
@@ -197,7 +197,7 @@ export const AccessPoint = Resource<AccessPoint>("AWS.S3Control.AccessPoint");
  * return `NoSuchAccessPoint` for a few seconds after `CreateAccessPoint`
  * succeeds.
  *
- * Explicitly typed at module scope — inlining `Effect.retry` in a lifecycle
+ * Explicitly typed at module scope -- inlining `Effect.retry` in a lifecycle
  * op leaks `Retry.Return`'s conditional type into declaration emit, widening
  * the provider layer to `unknown` and poisoning `AWS.providers()`.
  */
@@ -215,7 +215,7 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  * `NoSuchAccessPoint`). The same control-plane propagation lag that makes
  * `GetAccessPoint`/`TagResource` 404 for a few seconds after create can make
  * `DeleteAccessPoint` 404 for a freshly-created access point WITHOUT deleting
- * it — swallowing that 404 as "already gone" orphans the access point (and
+ * it -- swallowing that 404 as "already gone" orphans the access point (and
  * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
  */
 class AccessPointNotYetDeleted extends Data.TaggedError("AccessPointNotYetDeleted")<{
@@ -347,10 +347,10 @@ export const AccessPointProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.accessPointName ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeAccessPoint(accountId, name);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed AccessPointAlreadyOwnedByYou tag (treated as a race)
           //    and a freshly-created access point can 404 for a few seconds.
           if (live === undefined) {
@@ -380,7 +380,7 @@ export const AccessPointProvider = () =>
 
           const attrs = toAttrs(name, live, region, accountId);
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //    converges. Tagging a fresh access point can race propagation.
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -410,7 +410,7 @@ export const AccessPointProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
           const name = output.accessPointName;
           const deleteOnce = s3control.deleteAccessPoint({ AccountId: accountId, Name: name }).pipe(
-            // Idempotent delete — already gone is success.
+            // Idempotent delete -- already gone is success.
             Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
           );
           yield* deleteOnce;
@@ -418,7 +418,7 @@ export const AccessPointProvider = () =>
           // can spuriously return `NoSuchAccessPoint` for a freshly-created
           // access point (control-plane propagation lag) without deleting
           // it; treating that as success orphans the access point. While
-          // the access point is still observable, delete again — bounded,
+          // the access point is still observable, delete again -- bounded,
           // then fail loudly rather than silently leak.
           yield* retryWhileAccessPointNotYetDeleted(
             observeAccessPoint(accountId, name).pipe(

@@ -3,7 +3,7 @@ import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-/** ARN partition — the testing account is on the standard AWS partition. */
+/** ARN partition -- the testing account is on the standard AWS partition. */
 const PARTITION = "aws";
 
 /** `arn:aws:databrew:{region}:{account}:{type}/{name}` */
@@ -53,11 +53,11 @@ export const syncTags = Effect.fn("AWS.DataBrew.syncTags")(function* (
 });
 
 /**
- * Bounded retry through `ConflictException` — DataBrew rejects mutations
+ * Bounded retry through `ConflictException` -- DataBrew rejects mutations
  * while a conflicting operation is in flight (e.g. deleting a job whose run
  * is still starting, or racing reconciles on the same name). The budget is
  * ~2 minutes because deletes run in parallel: a dataset/recipe delete can
- * legitimately conflict ("is used in job …") for the whole window in which
+ * legitimately conflict ("is used in job ...") for the whole window in which
  * the associated job is still waiting for its last run to wind down before
  * deleting itself. Explicitly typed so the conditional `Retry.Return` type
  * does not leak into the provider's declaration emit and widen
@@ -72,7 +72,7 @@ export const retryWhileConflict = <A, E extends { _tag: string }, R>(
   });
 
 /**
- * Bounded retry through `DataBrewRoleNotAssumable` — a freshly-created IAM
+ * Bounded retry through `DataBrewRoleNotAssumable` -- a freshly-created IAM
  * role is not yet visible to DataBrew (IAM propagation), which surfaces as a
  * message-discriminated `ValidationException` ("DataBrew is not a trusted
  * entity for the data access role ...", patched into a typed tag).
@@ -85,7 +85,7 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
     // A freshly-attached S3 policy on the role also propagates lazily and
     // surfaces as AccessDeniedException ("Access denied to s3:GetObject for
     // arn:...:role/... Error: Forbidden") while DataBrew validates the
-    // dataset source — retry both bounded.
+    // dataset source -- retry both bounded.
     while: (e) => e._tag === "DataBrewRoleNotAssumable" || e._tag === "AccessDeniedException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
@@ -99,7 +99,7 @@ export const cleanMap = (
   );
 
 /**
- * Canonical (key-sorted) JSON — used to compare an observed wire-shaped
+ * Canonical (key-sorted) JSON -- used to compare an observed wire-shaped
  * structure against the desired one so no-op updates can skip API calls
  * and recipe publishing only happens when the working copy actually changed.
  */

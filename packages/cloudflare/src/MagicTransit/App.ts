@@ -49,11 +49,11 @@ export interface MagicAppAttributes {
 export type MagicApp = Resource<TypeId, MagicAppProps, MagicAppAttributes, never, Providers>;
 
 /**
- * A custom Magic WAN app — a named set of hostnames and/or IP subnets used
+ * A custom Magic WAN app -- a named set of hostnames and/or IP subnets used
  * for traffic steering and policy decisions, complementing Cloudflare's
  * managed app definitions.
  *
- * Requires a Magic WAN subscription — accounts without it receive a typed
+ * Requires a Magic WAN subscription -- accounts without it receive a typed
  * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
  * (code 1101, "forbidden: feature not enabled").
  *
@@ -103,7 +103,7 @@ export const MagicAppProvider = () =>
         const observed = yield* getApp(acct, output.appId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — match by name. Apps carry no ownership markers;
+      // Cold read -- match by name. Apps carry no ownership markers;
       // report as Unowned so takeover is gated behind the adopt policy.
       const name = output?.name ?? olds?.name;
       if (name) {
@@ -116,14 +116,14 @@ export const MagicAppProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Observe — there is no getApp endpoint; scan the list by cached id
+      // Observe -- there is no getApp endpoint; scan the list by cached id
       // first, then by name.
       let observed = output?.appId ? yield* getApp(accountId, output.appId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createApp({
           accountId,
@@ -135,7 +135,7 @@ export const MagicAppProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; PATCH only on a
+      // Sync -- diff observed cloud state against desired; PATCH only on a
       // real delta.
       const dirty =
         (observed.name ?? undefined) !== news.name ||
@@ -166,10 +166,10 @@ export const MagicAppProvider = () =>
         .pipe(Effect.catchTag("AppNotFound", () => Effect.void));
     }),
 
-    // Account collection — exhaustively paginate the account-scoped apps list
+    // Account collection -- exhaustively paginate the account-scoped apps list
     // and hydrate each account app into the `read` Attributes shape. Magic WAN
     // is entitlement-gated; unentitled accounts reject with a typed error, in
-    // which case there are no apps to enumerate → [].
+    // which case there are no apps to enumerate -> [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* magicTransit.listApps.pages({ accountId }).pipe(

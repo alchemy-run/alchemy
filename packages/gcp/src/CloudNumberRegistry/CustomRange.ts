@@ -45,36 +45,36 @@ export type CustomRangeProps = {
   /**
    * Custom range id (the `{customRange}` segment of
    * `projects/{project}/locations/{location}/customRanges/{customRange}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the range.
    */
   customRangeId?: string;
   /**
-   * Location of the range. Cloud Number Registry is global — `global`
-   * is the only supported value. Immutable — changing it replaces the
+   * Location of the range. Cloud Number Registry is global -- `global`
+   * is the only supported value. Immutable -- changing it replaces the
    * range.
    * @default "global"
    */
   location?: string;
   /**
    * Parent realm. Accepts a realm id or a full resource name. Mutually
-   * exclusive with `parentRange`. Immutable — changing it replaces the
+   * exclusive with `parentRange`. Immutable -- changing it replaces the
    * range.
    */
   realm?: string;
   /**
    * Parent custom range. Accepts a range id or a full resource name.
-   * Mutually exclusive with `realm` — the child inherits the parent's
-   * realm. Immutable — changing it replaces the range.
+   * Mutually exclusive with `realm` -- the child inherits the parent's
+   * realm. Immutable -- changing it replaces the range.
    */
   parentRange?: string;
   /**
    * IPv4 CIDR (for example `10.0.0.0/22`). Mutually exclusive with
-   * `ipv6CidrRange`. Immutable — changing it replaces the range.
+   * `ipv6CidrRange`. Immutable -- changing it replaces the range.
    */
   ipv4CidrRange?: string;
   /**
-   * IPv6 CIDR. Mutually exclusive with `ipv4CidrRange`. Immutable —
+   * IPv6 CIDR. Mutually exclusive with `ipv4CidrRange`. Immutable --
    * changing it replaces the range.
    */
   ipv6CidrRange?: string;

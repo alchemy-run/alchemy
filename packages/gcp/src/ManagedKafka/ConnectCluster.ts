@@ -42,7 +42,7 @@ export type ConnectNetworkConfig = {
    * `/22`. Defaults to the project's `default` subnet.
    */
   primarySubnet?: string;
-  /** Additional subnets. Deprecated — Connect can reach any endpoint. */
+  /** Additional subnets. Deprecated -- Connect can reach any endpoint. */
   additionalSubnets?: string[];
   /** Extra DNS domain names visible to workers. */
   dnsDomainNames?: string[];
@@ -77,19 +77,19 @@ export type ConnectClusterProps = {
   /**
    * Connect cluster id. Lowercase letters, digits, and hyphens; max 53
    * characters (longer values are truncated). If omitted, a unique RFC1035
-   * name of at most 53 characters is generated. Immutable — changing it
+   * name of at most 53 characters is generated. Immutable -- changing it
    * replaces the cluster.
    */
   connectClusterId?: string;
   /**
-   * Region (`us-central1`, …). Immutable.
+   * Region (`us-central1`, ...). Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Kafka cluster this Connect cluster attaches to
    * (`projects/{project}/locations/{location}/clusters/{cluster}`).
-   * Immutable — changing it replaces the Connect cluster.
+   * Immutable -- changing it replaces the Connect cluster.
    */
   kafkaCluster: string;
   /**

@@ -104,7 +104,7 @@ export type FileShareConfig = {
   /**
    * Share name. 1-16 characters for Basic, 1-63 otherwise. Lowercase
    * letters, numbers, and underscores; must start with a letter.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    * @default "share1"
    */
   name?: string;
@@ -204,20 +204,20 @@ export type InstanceProps = {
    * `projects/{project}/locations/{location}/instances/{instance}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters, start with a letter, and end
-   * with a letter or digit. Immutable — changing it replaces the instance.
+   * with a letter or digit. Immutable -- changing it replaces the instance.
    */
   instanceId?: string;
   /**
    * Location of the instance. Basic, Zonal, and High Scale use a zone
    * (`us-central1-a`). Enterprise and Regional use a region
-   * (`us-central1`). Immutable — changing it replaces the instance.
+   * (`us-central1`). Immutable -- changing it replaces the instance.
    * `US-CENTRAL1-A` is accepted and normalized to `us-central1-a`.
    * @default "us-central1-a" (zonal tiers) or the stack's GCP region
    * (`GCP.Region`, profile region, `us-central1`) for regional tiers
    */
   location?: string;
   /**
-   * Service tier. Immutable — changing it replaces the instance.
+   * Service tier. Immutable -- changing it replaces the instance.
    * `STANDARD` is an alias for `BASIC_HDD`; `PREMIUM` for `BASIC_SSD`.
    * @default "BASIC_HDD"
    */
@@ -241,7 +241,7 @@ export type InstanceProps = {
    */
   fileShares?: FileShareConfig[];
   /**
-   * VPC networks. The API supports a single network. Immutable — changing
+   * VPC networks. The API supports a single network. Immutable -- changing
    * network, modes, connect mode, or reserved range replaces the instance.
    * @default [{ network: "default", modes: ["MODE_IPV4"] }]
    */
@@ -302,7 +302,7 @@ export type Instance = Resource<
     tier: string;
     /** File protocol. */
     protocol: string | undefined;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Extra status text, if any. */
     statusMessage: string | undefined;
@@ -782,7 +782,7 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
- * Wait on a Filestore instance long-running operation (5–20 minutes).
+ * Wait on a Filestore instance long-running operation (5-20 minutes).
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
@@ -873,7 +873,7 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Filestore.InstanceNotReady" ||
         error._tag === "GCP.Filestore.InstanceNotResolved",
-      // Instances take 5–20 minutes to provision.
+      // Instances take 5-20 minutes to provision.
       times: 120,
       schedule: Schedule.spaced("10 seconds"),
     }),

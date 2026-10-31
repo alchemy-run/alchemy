@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:StartQuotaUtilizationReport` — kick off
+ * Runtime binding for `servicequotas:StartQuotaUtilizationReport` -- kick off
  * an asynchronous account-wide quota utilization report from inside a
  * Function. Poll the result with
  * {@link GetQuotaUtilizationReport | GetQuotaUtilizationReport}.

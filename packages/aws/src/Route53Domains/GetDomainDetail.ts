@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetDomainDetailRequest extends route53domains.GetDomainDetailRequest {}
 
 /**
- * Runtime binding for `route53domains:GetDomainDetail` — return detailed
+ * Runtime binding for `route53domains:GetDomainDetail` -- return detailed
  * information (nameservers, contacts, expiry, DNSSEC keys, status list)
  * about a domain registered with the current AWS account.
  *

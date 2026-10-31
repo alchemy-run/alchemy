@@ -11,13 +11,13 @@ import { parentOf, parseResourceName, sessionIdOf, toPhysical } from "./internal
 
 export type CollectionsDataStoresSessionProps = {
   /**
-   * Parent data store resource name. Immutable — changing it replaces
+   * Parent data store resource name. Immutable -- changing it replaces
    * the session.
    */
   dataStore: string;
   /**
    * Session id (`[a-z0-9]`, 1-63 characters). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the session.
+   * generated. Immutable -- changing it replaces the session.
    */
   sessionId?: string;
   /**

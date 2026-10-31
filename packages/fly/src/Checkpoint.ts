@@ -21,7 +21,7 @@ export interface CheckpointClient {
   }) => Effect.Effect<ReadonlyArray<StreamEvent>, CreateCheckpointError, RuntimeContext>;
   /** List checkpoints on the Sprite. */
   list: () => Effect.Effect<ReadonlyArray<FlyCheckpoint>, ListCheckpointsError, RuntimeContext>;
-  /** Get one checkpoint by id (`v1`, `v2`, …). */
+  /** Get one checkpoint by id (`v1`, `v2`, ...). */
   get: (checkpointId: string) => Effect.Effect<FlyCheckpoint, GetCheckpointError, RuntimeContext>;
   /**
    * Restore the Sprite filesystem to a checkpoint. Destructive.

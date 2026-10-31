@@ -37,7 +37,7 @@ export type { TaxonomyActivatedPolicyType };
 
 export type TaxonomyProps = {
   /**
-   * Region (`us-central1`, `us`, …). Immutable — changing it replaces
+   * Region (`us-central1`, `us`, ...). Immutable -- changing it replaces
    * the taxonomy. Policy Tag Manager assigns the taxonomy id; it is not
    * chosen by the caller.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -51,7 +51,7 @@ export type TaxonomyProps = {
   displayName?: string;
   /**
    * Human-readable description (max 2000 bytes). Taxonomies have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -92,7 +92,7 @@ export type Taxonomy = Resource<
 >;
 
 /**
- * A Data Catalog taxonomy — a hierarchy of policy tags used to classify
+ * A Data Catalog taxonomy -- a hierarchy of policy tags used to classify
  * data (for example PII vs financials).
  *
  * Taxonomy ids are assigned by Policy Tag Manager. Location is

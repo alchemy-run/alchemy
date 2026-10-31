@@ -145,13 +145,13 @@ export const DmarcReportsProvider = () =>
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
       const desired = news.enabled ?? true;
 
-      // Observe — the zone's settings always exist; only `enabled` is ours.
+      // Observe -- the zone's settings always exist; only `enabled` is ours.
       const observed = yield* emailAuth.getDmarcReport({ zoneId });
       if ((observed.enabled ?? false) === desired) {
         return toAttributes(zoneId, observed);
       }
 
-      // Sync — enabling also makes Cloudflare upsert the RUA address into
+      // Sync -- enabling also makes Cloudflare upsert the RUA address into
       // the `_dmarc` record; that DNS side effect is expected.
       const result = yield* emailAuth.patchDmarcReport({
         zoneId,

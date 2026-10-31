@@ -9,17 +9,17 @@ import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
  * `Describe*` actions do not support resource-level permissions, so the grant
  * is on `*`).
  *
- * Returns the bound group's live description — capacity, instances and their
- * lifecycle states, suspended processes — or `undefined` if the group no
+ * Returns the bound group's live description -- capacity, instances and their
+ * lifecycle states, suspended processes -- or `undefined` if the group no
  * longer exists. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.DescribeAutoScalingGroupHttp)`.
  * ### Observing the Fleet
  * **Example:** Inspect live capacity and instances
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const describeGroup = yield* AWS.AutoScaling.DescribeAutoScalingGroup(group);
  *
- * // runtime — read the group's live state
+ * // runtime -- read the group's live state
  * const live = yield* describeGroup();
  * const inService = (live?.Instances ?? []).filter(
  *   (i) => i.LifecycleState === "InService",

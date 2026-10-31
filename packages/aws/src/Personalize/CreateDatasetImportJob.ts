@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:CreateDatasetImportJob` — Starts a bulk import of training data from S3 into a dataset — the
+ * Runtime binding for `personalize:CreateDatasetImportJob` -- Starts a bulk import of training data from S3 into a dataset -- the
  * first step of the MLOps retraining loop. Grants
  * `personalize:CreateDatasetImportJob` on `*` plus `iam:PassRole`
  * (conditioned to `personalize.amazonaws.com`) for the data-access role

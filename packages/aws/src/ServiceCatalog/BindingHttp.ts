@@ -18,8 +18,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * with the caller's credentials when the product has no launch-role
  * constraint.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, makeServiceCatalogHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, makeServiceCatalogHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list
  * is boilerplate.
  */

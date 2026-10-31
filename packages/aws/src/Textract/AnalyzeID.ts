@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:AnalyzeID` — synchronous extraction of
- * identity-document fields (name, date of birth, document number, …) from
+ * Runtime binding for `textract:AnalyzeID` -- synchronous extraction of
+ * identity-document fields (name, date of birth, document number, ...) from
  * images of passports, driver licenses, and other government IDs.
  *
  * ### Synchronous Analysis

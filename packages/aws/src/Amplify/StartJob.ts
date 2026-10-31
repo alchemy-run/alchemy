@@ -9,7 +9,7 @@ export interface StartJobRequest extends Omit<amplify.StartJobRequest, "appId"> 
  * Runtime binding for `amplify:StartJob`.
  *
  * Bind an {@link App} in the function's init phase to get a callable that
- * starts a build/deploy job for one of the app's branches — the app id is
+ * starts a build/deploy job for one of the app's branches -- the app id is
  * injected automatically and `amplify:StartJob` is granted on the app's jobs.
  * Provide the implementation with `Effect.provide(AWS.Amplify.StartJobHttp)`.
  *
@@ -18,10 +18,10 @@ export interface StartJobRequest extends Omit<amplify.StartJobRequest, "appId"> 
  * ### Starting Jobs
  * **Example:** Rebuild a Branch on Content Change
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const startJob = yield* AWS.Amplify.StartJob(app);
  *
- * // runtime — kick off a release of the main branch
+ * // runtime -- kick off a release of the main branch
  * const { jobSummary } = yield* startJob({
  *   branchName: "main",
  *   jobType: "RELEASE",

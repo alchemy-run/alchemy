@@ -3,13 +3,13 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GenerateServiceLastAccessedDetails` — start an
+ * Runtime binding for `iam:GenerateServiceLastAccessedDetails` -- start an
  * access-advisor report for an IAM user, group, role, or policy, answering
  * "which services has this entity actually used?". Pair with
  * {@link GetServiceLastAccessedDetails} to poll the returned `JobId`.
  *
- * The target entity (`Arn`) is chosen per request — least-privilege tooling
- * typically iterates entities discovered at runtime — so the binding takes no
+ * The target entity (`Arn`) is chosen per request -- least-privilege tooling
+ * typically iterates entities discovered at runtime -- so the binding takes no
  * arguments and grants `iam:GenerateServiceLastAccessedDetails` on `*`.
  * Provide the implementation with
  * `Effect.provide(AWS.IAM.GenerateServiceLastAccessedDetailsHttp)`.

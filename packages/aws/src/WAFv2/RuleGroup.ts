@@ -35,14 +35,14 @@ export interface RuleGroupProps {
    */
   ruleGroupName?: string;
   /**
-   * Scope of the rule group — `REGIONAL` (ambient region) or `CLOUDFRONT`
+   * Scope of the rule group -- `REGIONAL` (ambient region) or `CLOUDFRONT`
    * (pinned to `us-east-1`). Must match the scope of the web ACLs that
    * reference it. Changing the scope replaces the rule group.
    * @default "REGIONAL"
    */
   scope?: WafScope;
   /**
-   * Web ACL capacity units (WCU) reserved for this rule group. Immutable —
+   * Web ACL capacity units (WCU) reserved for this rule group. Immutable --
    * changing the capacity replaces the rule group.
    */
   capacity: number;
@@ -84,7 +84,7 @@ export interface RuleGroup extends Resource<
      */
     ruleGroupId: string;
     /**
-     * ARN of the rule group — reference it from a web ACL rule's
+     * ARN of the rule group -- reference it from a web ACL rule's
      * `RuleGroupReferenceStatement`.
      */
     ruleGroupArn: string;
@@ -102,7 +102,7 @@ export interface RuleGroup extends Resource<
 > {}
 
 /**
- * An AWS WAFv2 rule group — a reusable, capacity-bounded collection of rules
+ * An AWS WAFv2 rule group -- a reusable, capacity-bounded collection of rules
  * referenced from web ACLs via `RuleGroupReferenceStatement`.
  *
  * The `capacity` (web ACL capacity units, WCU) is fixed at creation;
@@ -312,14 +312,14 @@ export const RuleGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredVisibility = news.visibilityConfig ?? defaultVisibilityConfig(name);
-          // props survive engine serialization as plain JSON — restore
+          // props survive engine serialization as plain JSON -- restore
           // ByteMatchStatement SearchString blobs to Uint8Array
           const desiredRules = normalizeWafRules(news.rules);
 
           // 1. Observe.
           let observed = yield* findRuleGroup(scope, name, output?.ruleGroupId);
 
-          // 2. Ensure — tolerate a duplicate-create race and re-read.
+          // 2. Ensure -- tolerate a duplicate-create race and re-read.
           if (!observed?.RuleGroup) {
             yield* retryUnavailableEntity(
               withWafScope(
@@ -401,7 +401,7 @@ export const RuleGroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const scope = output.scope;
           // A rule group still referenced by a web ACL (deletion propagation)
-          // surfaces WAFAssociatedItemException — retry through it.
+          // surfaces WAFAssociatedItemException -- retry through it.
           yield* Effect.gen(function* () {
             const found = yield* withWafScope(
               scope,

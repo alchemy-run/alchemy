@@ -4,7 +4,7 @@ import * as Stream from "effect/Stream";
 
 /**
  * The JSON message delivered to the handler. This is exactly the payload
- * produced by the rule's SQL `SELECT` — for a `SELECT *` rule it is the raw
+ * produced by the rule's SQL `SELECT` -- for a `SELECT *` rule it is the raw
  * MQTT message body, and for enriched SQL it also carries the selected
  * metadata (`topic()`, `timestamp()`, ...).
  */
@@ -37,7 +37,7 @@ type MessagesHandler<Req> = (stream: Stream.Stream<IoTMessage>) => Effect.Effect
  * filter, by creating an IoT {@link TopicRule} with a Lambda action targeting
  * the current function.
  *
- * Provide the host-specific implementation layer on the Function —
+ * Provide the host-specific implementation layer on the Function --
  * `AWS.Lambda.TopicRuleEventSource` creates the topic rule and dispatches
  * matching invocations to the handler.
  *

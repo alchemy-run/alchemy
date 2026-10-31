@@ -44,20 +44,20 @@ export type SubsetView = {
 export type InstancesTablesAuthorizedViewProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the view.
+   * or the instance id. Immutable -- changing it replaces the view.
    */
   instance: string;
   /**
    * Parent table. Full name
    * `projects/{project}/instances/{instance}/tables/{table}` or the table
-   * id. Immutable — changing it replaces the view.
+   * id. Immutable -- changing it replaces the view.
    */
   table: string;
   /**
    * Authorized view id (the `{authorized_view}` segment of
    * `.../tables/{table}/authorizedViews/{authorized_view}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   authorizedViewId?: string;
   /**
@@ -107,7 +107,7 @@ export type InstancesTablesAuthorizedView = Resource<
 >;
 
 /**
- * A Cloud Bigtable authorized view — a named subset of a table used for
+ * A Cloud Bigtable authorized view -- a named subset of a table used for
  * fine-grained IAM.
  *
  * The parent instance and table must already exist. Changing

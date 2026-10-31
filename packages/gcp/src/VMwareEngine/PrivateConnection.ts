@@ -46,12 +46,12 @@ export type PrivateConnectionProps = {
   /**
    * Connection id (the `{privateConnection}` segment of
    * `projects/{project}/locations/{location}/privateConnections/{id}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the connection.
    */
   privateConnectionId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * connection. `US-CENTRAL1` is accepted and normalized.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -59,14 +59,14 @@ export type PrivateConnectionProps = {
   location?: string;
   /**
    * Connection type (`PRIVATE_SERVICE_ACCESS`, `NETAPP_CLOUD_VOLUMES`,
-   * `DELL_POWERSCALE`, `THIRD_PARTY_SERVICE`). Immutable — changing it
+   * `DELL_POWERSCALE`, `THIRD_PARTY_SERVICE`). Immutable -- changing it
    * replaces the connection.
    */
   type: PrivateConnectionType;
   /**
    * VMware Engine network to attach
    * (`projects/{project}/locations/{location}/vmwareEngineNetworks/{id}`).
-   * Immutable — changing it replaces the connection.
+   * Immutable -- changing it replaces the connection.
    */
   vmwareEngineNetwork: string;
   /**
@@ -74,7 +74,7 @@ export type PrivateConnectionProps = {
    * (`projects/{project}/global/networks/{network}`). For
    * `PRIVATE_SERVICE_ACCESS` this is the Service Networking VPC. For
    * `THIRD_PARTY_SERVICE` it may be a consumer or producer VPC.
-   * Immutable — changing it replaces the connection.
+   * Immutable -- changing it replaces the connection.
    */
   serviceNetwork: string;
   /**
@@ -85,7 +85,7 @@ export type PrivateConnectionProps = {
   routingMode?: PrivateConnectionRoutingMode;
   /**
    * Human-readable description. Private connections have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -115,7 +115,7 @@ export type PrivateConnection = Resource<
     routingMode: string | undefined;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** VPC peering state (`PEERING_ACTIVE`, `PEERING_INACTIVE`). */
     peeringState: string | undefined;

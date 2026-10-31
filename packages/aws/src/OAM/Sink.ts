@@ -49,7 +49,7 @@ export interface Sink extends Resource<
 > {}
 
 /**
- * A CloudWatch cross-account observability **sink** — the attachment point
+ * A CloudWatch cross-account observability **sink** -- the attachment point
  * in a monitoring account that source accounts link to in order to share
  * metrics, logs, traces, and Application Signals data.
  *
@@ -119,8 +119,8 @@ const toPolicyString = (policy: string | Record<string, any>): string =>
   typeof policy === "string" ? policy : JSON.stringify(policy);
 
 /**
- * Semantic policy equality — AWS normalizes documents (e.g. account-ID
- * principals become `arn:aws:iam::…:root`), so a raw string compare would
+ * Semantic policy equality -- AWS normalizes documents (e.g. account-ID
+ * principals become `arn:aws:iam::...:root`), so a raw string compare would
  * re-put an unchanged policy forever. We compare parsed JSON; a normalized
  * difference still re-puts, which is idempotent and harmless.
  */
@@ -137,13 +137,13 @@ export const SinkProvider = () =>
   Provider.effect(
     Sink,
     Effect.gen(function* () {
-      // `props` may be undefined at runtime — all SinkProps fields are
+      // `props` may be undefined at runtime -- all SinkProps fields are
       // optional, so callers can omit the props object entirely.
       const createName = Effect.fn(function* (id: string, props: SinkProps | undefined) {
         return props?.sinkName ?? (yield* createPhysicalName({ id }));
       });
 
-      // Find a sink by name via the (small — quota is 1/region) list API.
+      // Find a sink by name via the (small -- quota is 1/region) list API.
       const findByName = Effect.fn(function* (sinkName: string) {
         const pages = yield* oam.listSinks.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
@@ -194,7 +194,7 @@ export const SinkProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const sinkName = output?.sinkName ?? (yield* createName(id, news));
 
-          // OBSERVE — cloud state is authoritative; `output` is only an
+          // OBSERVE -- cloud state is authoritative; `output` is only an
           // identifier cache. A cached ARN that no longer resolves falls
           // through to "missing".
           let live = output?.sinkArn
@@ -203,7 +203,7 @@ export const SinkProvider = () =>
                 .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(sinkName);
 
-          // ENSURE — create when missing; a ConflictException means a peer
+          // ENSURE -- create when missing; a ConflictException means a peer
           // created the same-named sink concurrently, so re-observe.
           if (live?.Arn == null) {
             live = yield* retryOamMutation(
@@ -213,7 +213,7 @@ export const SinkProvider = () =>
           const sinkArn = live!.Arn!;
           const sinkId = live!.Id!;
 
-          // SYNC policy — diff the OBSERVED sink policy against the desired
+          // SYNC policy -- diff the OBSERVED sink policy against the desired
           // document and put only on change. There is no delete-policy API,
           // so an absent `policy` prop leaves the current policy untouched.
           const desiredPolicy = news?.policy;
@@ -233,7 +233,7 @@ export const SinkProvider = () =>
             }
           }
 
-          // SYNC tags — against observed cloud tags (adoption-safe).
+          // SYNC tags -- against observed cloud tags (adoption-safe).
           yield* syncOamTags(sinkArn, id, news?.tags);
 
           yield* session.note(sinkArn);

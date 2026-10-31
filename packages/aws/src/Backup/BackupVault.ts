@@ -28,7 +28,7 @@ export interface BackupVaultProps {
    * ARN of the KMS key used to encrypt the recovery points stored in this
    * vault. If omitted, AWS Backup uses an AWS-owned key.
    *
-   * The encryption key is fixed at creation — changing it replaces the vault.
+   * The encryption key is fixed at creation -- changing it replaces the vault.
    */
   encryptionKeyArn?: string;
   /**
@@ -62,7 +62,7 @@ export interface BackupVault extends Resource<
 > {}
 
 /**
- * An AWS Backup vault — a logical container that stores and organizes
+ * An AWS Backup vault -- a logical container that stores and organizes
  * recovery points created by backup jobs.
  *
  * A vault name is auto-generated from the app, stage, and logical ID unless
@@ -137,7 +137,7 @@ export const BackupVaultProvider = () =>
                     // Service-managed vaults (e.g. EFS automatic backups'
                     // `aws/efs/automatic-backup-vault`) reject
                     // DeleteBackupVault with a 403 even when empty (verified
-                    // live) — keep them out of enumeration for account-wide
+                    // live) -- keep them out of enumeration for account-wide
                     // teardown (nuke).
                     !v.BackupVaultName.startsWith("aws/"),
                 )
@@ -150,7 +150,7 @@ export const BackupVaultProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.backupVaultName ?? (yield* createName(id, olds ?? {}));
           // AWS Backup returns AccessDeniedException (with an empty message),
-          // not ResourceNotFoundException, when a vault does not exist — it
+          // not ResourceNotFoundException, when a vault does not exist -- it
           // hides existence behind a 403. Treat both as "absent".
           const found = yield* backup
             .describeBackupVault({ BackupVaultName: name })
@@ -186,7 +186,7 @@ export const BackupVaultProvider = () =>
           const name = output?.backupVaultName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
 
-          // OBSERVE — cloud state is authoritative; output is only an id cache.
+          // OBSERVE -- cloud state is authoritative; output is only an id cache.
           // A missing vault surfaces as AccessDeniedException (see read()).
           let live = yield* backup
             .describeBackupVault({ BackupVaultName: name })
@@ -197,7 +197,7 @@ export const BackupVaultProvider = () =>
               ),
             );
 
-          // ENSURE — create if missing; tolerate an AlreadyExists race.
+          // ENSURE -- create if missing; tolerate an AlreadyExists race.
           if (!live?.BackupVaultArn) {
             live = yield* backup
               .createBackupVault({
@@ -213,7 +213,7 @@ export const BackupVaultProvider = () =>
           }
           const backupVaultArn = live.BackupVaultArn!;
 
-          // SYNC access policy — diff observed against desired, comparing
+          // SYNC access policy -- diff observed against desired, comparing
           // canonicalized documents so a re-deploy of an equivalent policy
           // (key order, whitespace) is a no-op.
           const desiredPolicy = toPolicyString(news.accessPolicy);
@@ -240,7 +240,7 @@ export const BackupVaultProvider = () =>
             }
           }
 
-          // SYNC tags — diff against observed cloud tags.
+          // SYNC tags -- diff against observed cloud tags.
           const currentTags = yield* backup.listTags({ ResourceArn: backupVaultArn }).pipe(
             Effect.map((r) => r.Tags ?? {}),
             Effect.orElseSucceed(() => ({}) as Record<string, string | undefined>),
@@ -266,7 +266,7 @@ export const BackupVaultProvider = () =>
           return { backupVaultName: name, backupVaultArn };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // A vault can only be deleted when it is empty — delete any
+          // A vault can only be deleted when it is empty -- delete any
           // remaining recovery points first. Each delete tolerates the point
           // already being gone or being in a state that can't be deleted
           // right now (EXPIRED/continuous points settle on their own).
@@ -298,7 +298,7 @@ export const BackupVaultProvider = () =>
             { discard: true },
           );
           // A missing vault deletes as AccessDeniedException, not
-          // ResourceNotFoundException — both mean "already gone" here.
+          // ResourceNotFoundException -- both mean "already gone" here.
           yield* backup.deleteBackupVault({ BackupVaultName: output.backupVaultName }).pipe(
             Effect.catchTag(
               ["ResourceNotFoundException", "AccessDeniedException"],

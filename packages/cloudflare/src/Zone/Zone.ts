@@ -64,7 +64,7 @@ export type TenantUnit = {
 };
 
 /**
- * Common shape returned by a managed {@link Zone} resource — anything that
+ * Common shape returned by a managed {@link Zone} resource -- anything that
  * needs to point at a Cloudflare Zone can accept this.
  *
  * Mirrors Cloudflare's zone object. `zoneId` and `accountId` are Alchemy's
@@ -129,7 +129,7 @@ export type Attributes = {
 
 export type Props = {
   /**
-   * The fully-qualified zone name (e.g. `example.com`). Stable — changing it
+   * The fully-qualified zone name (e.g. `example.com`). Stable -- changing it
    * triggers a replacement.
    */
   name: string;
@@ -155,7 +155,7 @@ export type Zone = Resource<"Cloudflare.Zone.Zone", Props, Attributes, never, Pr
 /**
  * A Cloudflare Zone (DNS domain) managed by Alchemy.
  *
- * Zones default to **retain** on removal — destroying the stack does NOT
+ * Zones default to **retain** on removal -- destroying the stack does NOT
  * delete the zone in Cloudflare. Opt in to actual deletion by wrapping the
  * resource (or the whole stack) in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
@@ -226,7 +226,7 @@ export const ZoneProvider = () =>
         read: Effect.fn(function* ({ output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = output?.name ?? olds?.name;
-          // Owned path: we have persisted state (our own zoneId) — refresh it.
+          // Owned path: we have persisted state (our own zoneId) -- refresh it.
           if (output?.zoneId) {
             const result = yield* zones
               .getZone({ zoneId: output.zoneId })
@@ -235,7 +235,7 @@ export const ZoneProvider = () =>
           }
           // Adoption path: no state of our own, but a zone with this name
           // already exists in the cloud. Cloudflare zones carry no ownership
-          // markers we can inspect, so we cannot prove we created it — brand
+          // markers we can inspect, so we cannot prove we created it -- brand
           // it `Unowned` so the engine refuses to take over unless `adopt` is
           // set.
           if (name) {
@@ -248,7 +248,7 @@ export const ZoneProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          // 1. Observe — do we have a live zone for this name?
+          // 1. Observe -- do we have a live zone for this name?
           let zoneId = output?.zoneId;
           if (!zoneId) {
             const match = yield* findZoneByName({
@@ -258,7 +258,7 @@ export const ZoneProvider = () =>
             zoneId = match?.id;
           }
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (!zoneId) {
             zoneId = yield* zones
               .createZone({
@@ -269,7 +269,7 @@ export const ZoneProvider = () =>
               .pipe(
                 Effect.map((created) => created.id),
                 // A concurrent deploy (or a prior crashed run) may have created
-                // the zone between our observe and create — recover by resolving
+                // the zone between our observe and create -- recover by resolving
                 // its id rather than failing the reconcile.
                 Effect.catchTag("ZoneAlreadyExists", () =>
                   findZoneByName({ accountId, name: news.name }).pipe(
@@ -287,7 +287,7 @@ export const ZoneProvider = () =>
               );
           }
 
-          // 3. Sync — apply mutable settings (type/paused/vanity NS).
+          // 3. Sync -- apply mutable settings (type/paused/vanity NS).
           const observed = yield* zones.getZone({ zoneId });
           const desiredType = news.type ?? "full";
           const desiredPaused = news.paused ?? false;
@@ -312,7 +312,7 @@ export const ZoneProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           if (!output.zoneId) return;
           yield* zones.deleteZone({ zoneId: output.zoneId }).pipe(
-            // Zone already gone — idempotent delete.
+            // Zone already gone -- idempotent delete.
             Effect.catchTag("InvalidZoneIdentifier", () => Effect.void),
           );
         }),
@@ -345,7 +345,7 @@ export const ZoneProvider = () =>
     }),
   );
 
-/** @internal — shape a distilled zones API result into `Attributes`. */
+/** @internal -- shape a distilled zones API result into `Attributes`. */
 export const toZoneAttributes = (
   result: zones.GetZoneResponse,
   fallbackAccountId: string,

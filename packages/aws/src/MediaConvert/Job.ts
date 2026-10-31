@@ -12,7 +12,7 @@ export interface JobProps {
    */
   role: string;
   /**
-   * The transcode settings for this job — the input file(s) and the output
+   * The transcode settings for this job -- the input file(s) and the output
    * groups to produce. Required unless a `jobTemplate` supplies them.
    */
   settings?: mediaconvert.JobSettings;
@@ -62,12 +62,12 @@ export interface Job extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaConvert transcode job — a one-shot request to convert
+ * An AWS Elemental MediaConvert transcode job -- a one-shot request to convert
  * an input in S3 into one or more outputs. Jobs are immutable once submitted:
  * they run to `COMPLETE`, `ERROR`, or `CANCELED` on their own. Deleting the
  * resource cancels the job only if it is still `SUBMITTED` or `PROGRESSING`.
  *
- * A live job is slow and billable — it requires input/output S3 objects and an
+ * A live job is slow and billable -- it requires input/output S3 objects and an
  * IAM role MediaConvert can assume. Drive it behind an environment gate in
  * tests rather than on every run.
  *
@@ -107,7 +107,7 @@ export const JobProvider = () =>
         queue: job.Queue,
       });
 
-      /** Get a job by id; typed not-found → undefined. */
+      /** Get a job by id; typed not-found -> undefined. */
       const getJob = Effect.fn(function* (id: string) {
         const response = yield* mediaconvert
           .getJob({ Id: id })
@@ -122,7 +122,7 @@ export const JobProvider = () =>
           // Jobs are server-assigned; without an output cache there is no id.
           if (!output?.jobId) return undefined;
           const job = yield* getJob(output.jobId);
-          // A job that has aged out of history is still "done" — keep the
+          // A job that has aged out of history is still "done" -- keep the
           // cached attributes rather than triggering a resubmit.
           if (job === undefined) {
             return {
@@ -137,7 +137,7 @@ export const JobProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Jobs are immutable. If one was already submitted, observe it and
-          // return — never resubmit on an update.
+          // return -- never resubmit on an update.
           if (output?.jobId) {
             const existing = yield* getJob(output.jobId);
             yield* session.note(output.jobId);
@@ -170,7 +170,7 @@ export const JobProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* mediaconvert.cancelJob({ Id: output.jobId }).pipe(
-            // NotFound → already gone; Conflict/BadRequest → the job is already
+            // NotFound -> already gone; Conflict/BadRequest -> the job is already
             // in a terminal state and cannot be canceled. All are idempotent
             // no-ops for deletion.
             Effect.catchTag(
@@ -180,7 +180,7 @@ export const JobProvider = () =>
           );
         }),
 
-        // Jobs are ephemeral, not a managed inventory — enumeration would churn
+        // Jobs are ephemeral, not a managed inventory -- enumeration would churn
         // over transient history, so the engine lists nothing.
         list: () => Effect.succeed([]),
       };

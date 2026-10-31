@@ -6,8 +6,8 @@ import type { FeatureGroup } from "./FeatureGroup.ts";
 /**
  * Shared scaffolding for Amazon SageMaker HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and the
  * request shaping is boilerplate.
  */

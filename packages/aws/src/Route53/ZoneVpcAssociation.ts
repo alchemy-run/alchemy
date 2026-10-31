@@ -56,7 +56,7 @@ export interface ZoneVpcAssociation extends Resource<
  * resolvers can answer from the zone. For a VPC in a different account, the
  * zone owner must first create a `VpcAssociationAuthorization` for it.
  *
- * The initial VPC of a private zone cannot be modeled with this resource —
+ * The initial VPC of a private zone cannot be modeled with this resource --
  * Route 53 refuses to disassociate the last VPC from a private zone.
  * ### Associating VPCs
  * **Example:** Attach a Second VPC
@@ -80,7 +80,7 @@ export const ZoneVpcAssociation = Resource<ZoneVpcAssociation>("AWS.Route53.Zone
 
 /**
  * Route 53 zone-change submissions can collide with other in-flight changes
- * on the same zone (`PriorRequestNotComplete`) — retry on a bounded schedule
+ * on the same zone (`PriorRequestNotComplete`) -- retry on a bounded schedule
  * (~40s).
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -101,7 +101,7 @@ export const ZoneVpcAssociationProvider = () =>
   Provider.effect(
     ZoneVpcAssociation,
     Effect.gen(function* () {
-      // Observe via the zone detail — `getHostedZone` returns every
+      // Observe via the zone detail -- `getHostedZone` returns every
       // associated VPC for a private zone.
       const observe = Effect.fn(function* (hostedZoneId: string, vpcId: string) {
         const detail = yield* route53
@@ -115,7 +115,7 @@ export const ZoneVpcAssociationProvider = () =>
         // Sub-resource: associations are keyed by their parent hosted zone;
         // there is no account-wide enumeration API.
         list: () => Effect.succeed([]),
-        // Existence-only resource — every identifying property change
+        // Existence-only resource -- every identifying property change
         // replaces the association.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -143,7 +143,7 @@ export const ZoneVpcAssociationProvider = () =>
             vpcRegion: observed.VPCRegion ?? output?.vpcRegion ?? olds?.vpcRegion ?? "",
           };
         }),
-        // Existence-only: observe → if missing, associate. There is no sync
+        // Existence-only: observe -> if missing, associate. There is no sync
         // step (an association has no mutable aspects).
         reconcile: Effect.fn(function* ({ news, session }) {
           const observed = yield* observe(news.hostedZoneId, news.vpcId);

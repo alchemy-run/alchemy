@@ -28,7 +28,7 @@ type TypeId = typeof TypeId;
 /**
  * The Cloudflare product whose events the subscription delivers into the
  * Queue. Cloudflare allows a single subscription per source per account,
- * and the source is fixed at creation — changing it triggers a
+ * and the source is fixed at creation -- changing it triggers a
  * replacement.
  */
 export type SubscriptionSource =
@@ -94,7 +94,7 @@ export type SubscriptionProps = {
    * all events of that product in the account, not just the supplied resource.
    * Models, Workers, and Workflows select their deferred physical names.
    * References read persisted state without owning their sources.
-   * Fixed at creation — changing it triggers a replacement. Cloudflare
+   * Fixed at creation -- changing it triggers a replacement. Cloudflare
    * allows at most one subscription per source per account.
    */
   source: SubscriptionSource;
@@ -296,7 +296,7 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
     : Effect.void;
 
 /**
- * A Cloudflare Queues event subscription — delivers platform events
+ * A Cloudflare Queues event subscription -- delivers platform events
  * (R2 bucket events, KV namespace events, Workers Builds, Workflows,
  * etc.) into a Queue as messages.
  *
@@ -564,7 +564,7 @@ export const SubscriptionProvider = () =>
         const observed = yield* getSubscriptionOrUndefined(acct, output.subscriptionId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not enforced unique server-side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createSubscriptionName(id, olds?.name);
@@ -579,7 +579,7 @@ export const SubscriptionProvider = () =>
       const acct = output?.accountId ?? accountId;
       const name = yield* createSubscriptionName(id, news.name);
 
-      // Observe — the subscriptionId cached on `output` is a hint, not a
+      // Observe -- the subscriptionId cached on `output` is a hint, not a
       // guarantee: a missing subscription falls through to create.
       let observed = output?.subscriptionId
         ? yield* getSubscriptionOrUndefined(acct, output.subscriptionId)
@@ -597,7 +597,7 @@ export const SubscriptionProvider = () =>
         });
       }
 
-      // Sync — diff observed cloud state against desired and patch only
+      // Sync -- diff observed cloud state against desired and patch only
       // the delta; skip the API call entirely on a no-op.
       const desired = {
         name,
@@ -632,7 +632,7 @@ export const SubscriptionProvider = () =>
         })
         .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.void));
     }),
-    // Account collection — subscriptions are account-scoped. Exhaustively
+    // Account collection -- subscriptions are account-scoped. Exhaustively
     // paginate `listSubscriptions` (response array is `result`) and hydrate
     // each row into the same Attributes shape `read` returns.
     list: Effect.fn(function* () {
@@ -679,7 +679,7 @@ const createSubscriptionName = (id: string, name: string | undefined) =>
   });
 
 /**
- * The wire shape of a subscription source — a flattened view of the
+ * The wire shape of a subscription source -- a flattened view of the
  * response union (only the member matching `type` carries its name field).
  */
 type WireSource = {

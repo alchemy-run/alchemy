@@ -17,7 +17,7 @@ export interface GetInterpolatedAssetPropertyValuesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotsitewise:GetInterpolatedAssetPropertyValues` —
+ * Runtime binding for `iotsitewise:GetInterpolatedAssetPropertyValues` --
  * compute interpolated values (`LINEAR_INTERPOLATION` or
  * `LOCF_INTERPOLATION`) of one property of the bound asset at a fixed
  * interval from a deployed Lambda or Task.

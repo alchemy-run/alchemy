@@ -7,14 +7,14 @@ import type { Export } from "./Export.ts";
  * Runtime binding for `bcm-data-exports:GetExport`.
  *
  * Bind this operation to an {@link Export} to read the export's live
- * definition — SQL query, table configurations, S3 destination, and refresh
- * cadence — from inside a function runtime. Useful for cost dashboards that
+ * definition -- SQL query, table configurations, S3 destination, and refresh
+ * cadence -- from inside a function runtime. Useful for cost dashboards that
  * surface where their billing data lands. Provide the implementation with
  * `Effect.provide(AWS.BCMDataExports.GetExportHttp)`.
  * ### Inspecting an Export
  * **Example:** Read the Export's Definition
  * ```typescript
- * // init — bind the operation to the export
+ * // init -- bind the operation to the export
  * const getExport = yield* AWS.BCMDataExports.GetExport(cur);
  *
  * // runtime

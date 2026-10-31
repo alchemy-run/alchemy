@@ -181,12 +181,12 @@ export const FunctionProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.functionName ?? (yield* createName(id, news));
 
-          // Observe — describe the function (LIVE stage preferred,
+          // Observe -- describe the function (LIVE stage preferred,
           // DEVELOPMENT fallback). We don't trust `output` because the
           // function may have been deleted out-of-band.
           const observedDevelopment = yield* describe(name, "DEVELOPMENT");
 
-          // Ensure — create the function if it's missing. Tolerate
+          // Ensure -- create the function if it's missing. Tolerate
           // `FunctionAlreadyExists` as a race with a peer reconciler. The
           // newly created function lives in DEVELOPMENT; we publish it to
           // LIVE below, in the same flow that handles already-existing
@@ -226,7 +226,7 @@ export const FunctionProvider = () =>
             ? observedDevelopment.ETag
             : yield* createDevelopmentFunction;
 
-          // Sync — push desired config/code to DEVELOPMENT when the
+          // Sync -- push desired config/code to DEVELOPMENT when the
           // function already existed. Skip when we just created it (the
           // creation already used the desired config).
           let etagToPublish = developmentEtag;
@@ -255,7 +255,7 @@ export const FunctionProvider = () =>
             etagToPublish = updated.ETag;
           }
 
-          // Publish DEVELOPMENT → LIVE so consumers see the desired code.
+          // Publish DEVELOPMENT -> LIVE so consumers see the desired code.
           const live = yield* publish(name, etagToPublish);
           if (!live?.FunctionSummary) {
             return yield* Effect.die("publishFunction returned no function summary");

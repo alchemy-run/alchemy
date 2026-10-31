@@ -12,20 +12,20 @@ export interface CreateSnapshotRequest extends Omit<ec2.CreateSnapshotRequest, "
 /**
  * Runtime binding for the `CreateSnapshot` operation scoped to the bound
  * {@link Volume} (IAM actions `ec2:CreateSnapshot` + `ec2:CreateTags` on the
- * volume ARN and the region-wide snapshot wildcard — snapshot creation
+ * volume ARN and the region-wide snapshot wildcard -- snapshot creation
  * authorizes against both the source volume and the new snapshot).
  *
- * Creates a point-in-time EBS snapshot of the volume — e.g. a Lambda that
+ * Creates a point-in-time EBS snapshot of the volume -- e.g. a Lambda that
  * takes an application-consistent backup before a risky migration. The
  * snapshot is created `pending` and completes asynchronously. Provide the
  * implementation with `Effect.provide(AWS.EC2.CreateSnapshotHttp)`.
  * ### Volume Backups
  * **Example:** Snapshot the bound volume
  * ```typescript
- * // init — bind the operation to the volume
+ * // init -- bind the operation to the volume
  * const createSnapshot = yield* AWS.EC2.CreateSnapshot(volume);
  *
- * // runtime — take a point-in-time backup
+ * // runtime -- take a point-in-time backup
  * const snapshot = yield* createSnapshot({
  *   Description: "pre-migration backup",
  * });

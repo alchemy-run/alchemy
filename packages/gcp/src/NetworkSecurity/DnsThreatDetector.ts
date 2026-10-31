@@ -39,19 +39,19 @@ export type DnsThreatDetectorProps = {
    * DnsThreatDetector id (the `{dnsThreatDetector}` segment of
    * `projects/{project}/locations/global/dnsThreatDetectors/{dnsThreatDetector}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the detector. A project
+   * logical id. Immutable -- changing it replaces the detector. A project
    * may have only one DNS threat detector.
    */
   dnsThreatDetectorId?: string;
   /**
-   * Location. The only supported value is `global`. Immutable —
+   * Location. The only supported value is `global`. Immutable --
    * changing it replaces the detector.
    * @default "global"
    */
   location?: string;
   /**
    * DNS threat analysis provider. Currently only `INFOBLOX` is
-   * supported. Immutable — changing it replaces the detector.
+   * supported. Immutable -- changing it replaces the detector.
    * @default "INFOBLOX"
    */
   provider?: DnsThreatDetectorProvider;
@@ -76,7 +76,7 @@ export type DnsThreatDetector = Resource<
     dnsThreatDetectorId: string;
     /** Project id. */
     project: string;
-    /** Location id — always `"global"`. */
+    /** Location id -- always `"global"`. */
     location: string;
     /** Threat analysis provider (`INFOBLOX`). */
     provider: string | undefined;

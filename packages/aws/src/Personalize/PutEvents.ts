@@ -9,8 +9,8 @@ import type { EventTracker } from "./EventTracker.ts";
 export interface PutEventsRequest extends Omit<personalizeevents.PutEventsRequest, "trackingId"> {}
 
 /**
- * Runtime binding for `personalize:PutEvents`, scoped to one {@link EventTracker} —
- * Records item-interaction events (clicks, views, purchases, …) in real
+ * Runtime binding for `personalize:PutEvents`, scoped to one {@link EventTracker} --
+ * Records item-interaction events (clicks, views, purchases, ...) in real
  * time through the bound {@link EventTracker}. Events stream into the
  * dataset group's Interactions dataset and are used by recommenders as
  * they happen.

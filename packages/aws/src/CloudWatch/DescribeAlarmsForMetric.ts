@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface DescribeAlarmsForMetricRequest extends cloudwatch.DescribeAlarmsForMetricInput {}
 
 /**
- * Runtime binding for `cloudwatch:DescribeAlarmsForMetric` — find the
+ * Runtime binding for `cloudwatch:DescribeAlarmsForMetric` -- find the
  * alarms watching a specific metric.
  *
  * Provide `CloudWatch.DescribeAlarmsForMetricHttp` on the hosting Lambda
@@ -13,7 +13,7 @@ export interface DescribeAlarmsForMetricRequest extends cloudwatch.DescribeAlarm
  * ### Reading Alarm State
  * **Example:** Find Alarms Watching a Metric
  * ```typescript
- * // init — grants cloudwatch:DescribeAlarmsForMetric
+ * // init -- grants cloudwatch:DescribeAlarmsForMetric
  * const describeAlarmsForMetric = yield* AWS.CloudWatch.DescribeAlarmsForMetric();
  *
  * // runtime

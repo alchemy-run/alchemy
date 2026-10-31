@@ -3,13 +3,13 @@ import type * as Effect from "effect/Effect";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
- * The intent inside a code hook event's `sessionState` — the intent Lex is
+ * The intent inside a code hook event's `sessionState` -- the intent Lex is
  * currently eliciting or fulfilling.
  */
 export interface CodeHookIntent {
   /** Name of the intent. */
   name: string;
-  /** Slot values gathered so far (`slotName` → value or `null`). */
+  /** Slot values gathered so far (`slotName` -> value or `null`). */
   slots?: Record<string, unknown>;
   /** `InProgress` | `ReadyForFulfillment` | `Fulfilled` | `Failed` | ... */
   state?: string;
@@ -18,7 +18,7 @@ export interface CodeHookIntent {
 }
 
 /**
- * The `sessionState` envelope shared by code hook events and responses —
+ * The `sessionState` envelope shared by code hook events and responses --
  * the conversation's active intent, dialog action, and session attributes.
  */
 export interface CodeHookSessionState {
@@ -72,7 +72,7 @@ export interface CodeHookEvent {
 }
 
 /**
- * The response a code hook returns to Amazon Lex V2 — the (usually mutated)
+ * The response a code hook returns to Amazon Lex V2 -- the (usually mutated)
  * `sessionState` plus optional messages to relay to the user.
  */
 export interface CodeHookResponse {
@@ -192,7 +192,7 @@ export function onCodeHook<Req = never>(
 
 /**
  * Build a valid code hook response that closes the event's active intent as
- * `Fulfilled` (or `Failed`), optionally relaying a plain-text message —
+ * `Fulfilled` (or `Failed`), optionally relaying a plain-text message --
  * the common shape for a fulfillment code hook.
  *
  * @example Fulfillment hook that confirms the order

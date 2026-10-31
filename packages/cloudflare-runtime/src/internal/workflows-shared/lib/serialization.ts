@@ -27,8 +27,8 @@ function buildCompactView(view: ArrayBufferView): ArrayBufferView {
  * objects, arrays, Maps, and Sets are also compacted. View types are preserved
  * (`Uint8Array` stays `Uint8Array`, `Int16Array` stays `Int16Array`, etc.) so
  * the persisted shape matches the live shape. Class instances and host objects
- * (`Date`, `RegExp`, raw `ArrayBuffer`, streams, `Blob`, …) are passed through
- * unchanged — recursing into them would either fail to reconstruct the
+ * (`Date`, `RegExp`, raw `ArrayBuffer`, streams, `Blob`, ...) are passed through
+ * unchanged -- recursing into them would either fail to reconstruct the
  * original type or trigger their own structured-clone path.
  *
  * @param value The value to normalize for storage.

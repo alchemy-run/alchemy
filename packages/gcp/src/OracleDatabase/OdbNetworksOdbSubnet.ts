@@ -32,7 +32,7 @@ export type OdbNetworksOdbSubnetProps = {
   /**
    * Parent ODB Network. Full name
    * `projects/{project}/locations/{location}/odbNetworks/{odb_network}`
-   * or the network id (combined with `location`). Immutable — changing
+   * or the network id (combined with `location`). Immutable -- changing
    * it replaces the subnet.
    */
   odbNetwork: string;
@@ -44,18 +44,18 @@ export type OdbNetworksOdbSubnetProps = {
   /**
    * ODB Subnet id (the `{odb_subnet}` segment of
    * `.../odbNetworks/{odb_network}/odbSubnets/{odb_subnet}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it
+   * a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the subnet.
    */
   odbSubnetId?: string;
   /**
    * CIDR range of the subnet. Must be RFC1918 and between `/27` and
-   * `/22`. Immutable — changing it replaces the subnet.
+   * `/22`. Immutable -- changing it replaces the subnet.
    */
   cidrRange: string;
   /**
    * Subnet purpose. `CLIENT_SUBNET` is used by databases and GoldenGate;
-   * `BACKUP_SUBNET` is used by Exadata VM Clusters. Immutable —
+   * `BACKUP_SUBNET` is used by Exadata VM Clusters. Immutable --
    * changing it replaces the subnet.
    * @default "CLIENT_SUBNET"
    */

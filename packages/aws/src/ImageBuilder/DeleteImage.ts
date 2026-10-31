@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `imagebuilder:DeleteImage`.
  *
  * Deletes an image build version record (it does NOT deregister the EC2
- * AMIs or delete the ECR container images the build produced — clean those
+ * AMIs or delete the ECR container images the build produced -- clean those
  * up separately). Useful for pruning failed or cancelled builds at runtime.
  * Account-level binding: pass the build version's ARN. Provide the
  * implementation with `Effect.provide(AWS.ImageBuilder.DeleteImageHttp)`.
  * ### Running Builds
  * **Example:** Prune a Cancelled Build
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteImage = yield* AWS.ImageBuilder.DeleteImage();
  *
  * // runtime

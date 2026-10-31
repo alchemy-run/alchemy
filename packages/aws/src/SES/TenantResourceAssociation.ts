@@ -14,7 +14,7 @@ export interface TenantResourceAssociationProps {
    */
   tenantName: string;
   /**
-   * ARN of the resource to associate — an email identity, configuration set,
+   * ARN of the resource to associate -- an email identity, configuration set,
    * or email template. Changing it replaces the association.
    */
   resourceArn: string;
@@ -34,7 +34,7 @@ export interface TenantResourceAssociation extends Resource<
 > {}
 
 /**
- * An association between an Amazon SES v2 tenant and a resource — an email
+ * An association between an Amazon SES v2 tenant and a resource -- an email
  * identity, configuration set, or email template. Once associated, the
  * resource can be used when sending email on behalf of the tenant. A single
  * resource can be associated with multiple tenants.
@@ -122,7 +122,7 @@ export const TenantResourceAssociationProvider = () =>
 
       return TenantResourceAssociation.Provider.of({
         // Deleting an association requires BOTH ends to still exist: the
-        // tenant, and the resource it points at — SES refuses to delete a
+        // tenant, and the resource it points at -- SES refuses to delete a
         // configuration set that still has tenant associations ("Cannot
         // delete <arn> because it has tenant associations"). So every
         // associable type must outlive the associations nuke tears down.
@@ -180,11 +180,11 @@ export const TenantResourceAssociationProvider = () =>
           const tenantName = output?.tenantName ?? news.tenantName;
           const resourceArn = output?.resourceArn ?? news.resourceArn;
 
-          // OBSERVE — associations have no update API, so reconcile is
+          // OBSERVE -- associations have no update API, so reconcile is
           // create-only.
           const found = yield* isAssociated(tenantName, resourceArn);
 
-          // ENSURE — create if missing; AlreadyExists is a race, not a failure.
+          // ENSURE -- create if missing; AlreadyExists is a race, not a failure.
           if (!found) {
             yield* sesv2
               .createTenantResourceAssociation({

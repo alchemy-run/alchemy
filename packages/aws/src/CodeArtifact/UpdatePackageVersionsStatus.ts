@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link UpdatePackageVersionsStatus} — `domain`, `domainOwner`, and
+ * Request for {@link UpdatePackageVersionsStatus} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface UpdatePackageVersionsStatusRequest extends Omit<
@@ -15,7 +15,7 @@ export interface UpdatePackageVersionsStatusRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:UpdatePackageVersionsStatus`.
  *
- * Transitions package versions between statuses (e.g. `Unfinished` → `Published`, or `Published` → `Archived` to hide them from installs). Provide the implementation with
+ * Transitions package versions between statuses (e.g. `Unfinished` -> `Published`, or `Published` -> `Archived` to hide them from installs). Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.UpdatePackageVersionsStatusHttp)`.
  * ### Managing Version Status
  * **Example:** Publish an Unfinished Version

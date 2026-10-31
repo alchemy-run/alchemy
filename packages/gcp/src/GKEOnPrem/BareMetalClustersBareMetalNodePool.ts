@@ -44,7 +44,7 @@ export type BareMetalClustersBareMetalNodePoolProps = {
   /**
    * Parent bare metal user cluster. Full name
    * `projects/{project}/locations/{location}/bareMetalClusters/{cluster}`
-   * or the cluster id (combined with `location`). Immutable — changing
+   * or the cluster id (combined with `location`). Immutable -- changing
    * it replaces the node pool.
    */
   bareMetalCluster: string;
@@ -55,7 +55,7 @@ export type BareMetalClustersBareMetalNodePoolProps = {
   location?: string;
   /**
    * Node pool id (the `{bareMetalNodePool}` segment). If omitted, a unique
-   * RFC1035 name is generated. Immutable — changing it replaces the pool.
+   * RFC1035 name is generated. Immutable -- changing it replaces the pool.
    */
   bareMetalNodePoolId?: string;
   /**
@@ -64,7 +64,7 @@ export type BareMetalClustersBareMetalNodePoolProps = {
   nodePoolConfig: BareMetalNodePoolConfig;
   /**
    * Display name. Node pools have no GCP labels field, so Alchemy stamps
-   * ownership into annotations and a `[alchemy …]` displayName prefix
+   * ownership into annotations and a `[alchemy ...]` displayName prefix
    * and strips both from attributes.
    */
   displayName?: string;
@@ -132,8 +132,8 @@ export type BareMetalClustersBareMetalNodePool = Resource<
  * A worker node pool on an Anthos on bare metal user cluster.
  *
  * Node pools have no GCP labels field, so Alchemy stamps ownership into
- * annotations and a `[alchemy …]` displayName prefix for `list` / nuke.
- * Pool id, location, and parent cluster are identity — changing them
+ * annotations and a `[alchemy ...]` displayName prefix for `list` / nuke.
+ * Pool id, location, and parent cluster are identity -- changing them
  * replaces the pool. Config, display name, and upgrade policy update
  * in place.
  *

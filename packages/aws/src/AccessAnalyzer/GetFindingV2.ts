@@ -8,7 +8,7 @@ export interface GetFindingV2Request extends Omit<aa.GetFindingV2Request, "analy
 
 /**
  * Runtime binding for the `GetFindingV2` operation (IAM action
- * `access-analyzer:GetFinding` — shared with the V1 API).
+ * `access-analyzer:GetFinding` -- shared with the V1 API).
  *
  * Retrieves a single finding with its typed `findingDetails` (external-access
  * or unused-access). Provide the implementation with

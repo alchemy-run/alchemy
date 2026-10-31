@@ -29,7 +29,7 @@ export type GlossariesCategoryProps = {
   /**
    * Parent Glossary. Full name
    * `projects/{project}/locations/{location}/glossaries/{glossary}` or
-   * the glossary id (combined with `location`). Immutable — changing it
+   * the glossary id (combined with `location`). Immutable -- changing it
    * replaces the category.
    */
   glossary: string;
@@ -38,18 +38,18 @@ export type GlossariesCategoryProps = {
    * `.../glossaries/{glossary}/categories/{category}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Must be 1-63 characters, start with a letter, and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * category.
    */
   categoryId?: string;
   /**
-   * Region used when `glossary` is a bare id. Immutable — changing it
+   * Region used when `glossary` is a bare id. Immutable -- changing it
    * replaces the category.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Immediate parent in the glossary hierarchy — the glossary itself
+   * Immediate parent in the glossary hierarchy -- the glossary itself
    * or another category. Defaults to the parent glossary.
    */
   parent?: string;

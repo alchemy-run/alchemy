@@ -83,7 +83,7 @@ export interface JobDefinitionProps extends PlatformProps {
    * Module entrypoint for an Effect-native run-to-completion job (typically
    * `import.meta.url` from an inline Effect program). Alchemy bundles the
    * program, builds a container image, pushes it to a managed ECR
-   * repository, and provisions the job/execution IAM roles — mutually
+   * repository, and provisions the job/execution IAM roles -- mutually
    * exclusive with a caller-supplied `image`.
    */
   main?: string;
@@ -268,13 +268,13 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
 
 /**
  * An AWS Batch job definition for Fargate container jobs. Job definitions are
- * immutable revisions — changing the container configuration registers a new
+ * immutable revisions -- changing the container configuration registers a new
  * revision under the same name (like ECS task definitions); destroying the
  * resource deregisters every active revision.
  *
  * `JobDefinition` is a Platform: alongside the low-level container form
  * (`image` + `executionRoleArn`), it supports Effect-native run-to-completion
- * implementations — an inline Effect program that Alchemy bundles,
+ * implementations -- an inline Effect program that Alchemy bundles,
  * containerizes as the job container's command, pushes to a managed ECR
  * repository, and registers, provisioning the job and execution roles
  * automatically. Capability bindings (e.g. S3 `GetObject`) attach IAM policy
@@ -420,7 +420,7 @@ const toAttributes = (
 
 /**
  * The effective (resolved) container configuration a reconcile wants
- * registered — identical for both forms once the Effect-native form has
+ * registered -- identical for both forms once the Effect-native form has
  * built its image and roles.
  */
 interface EffectiveContainer {
@@ -439,7 +439,7 @@ interface EffectiveContainer {
 }
 
 /**
- * Normalized content fingerprint of a job definition — used to decide whether
+ * Normalized content fingerprint of a job definition -- used to decide whether
  * a new revision must be registered. Only covers the aspects this resource
  * manages.
  */
@@ -542,8 +542,8 @@ export const JobDefinitionProvider = () =>
 
       // Batch caps `containerProperties.image` at 255 characters, and the
       // image ref is `<account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>`
-      // — up to 52 characters of registry prefix plus the 16-character
-      // content tag — so the repository name (ECR itself allows 256) must
+      // -- up to 52 characters of registry prefix plus the 16-character
+      // content tag -- so the repository name (ECR itself allows 256) must
       // stop at 180 to fit in every region.
       const createRepositoryName = (id: string) =>
         createPhysicalName({
@@ -929,7 +929,7 @@ await bootstrap(entrypoint);
             content: file.content,
           })),
         });
-        // Batch Fargate defaults to X86_64 — always build linux/amd64
+        // Batch Fargate defaults to X86_64 -- always build linux/amd64
         // (cross-built via emulation on ARM64 hosts).
         return yield* buildAndPushEcrImage(docker, {
           imageUri,
@@ -1007,7 +1007,7 @@ await bootstrap(entrypoint);
           const name = output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));
           const latest = yield* latestRevision(name);
           if (!latest?.jobDefinitionArn) return undefined;
-          // Managed platform resources (repo, roles) are stable identifiers —
+          // Managed platform resources (repo, roles) are stable identifiers --
           // carry them through from the cached output.
           return toAttributes(latest, observedTagsOf(latest), {
             ...emptyPlatformAttributes,
@@ -1140,7 +1140,7 @@ await bootstrap(entrypoint);
                   Object.entries({
                     ...bindingEnv,
                     ...alchemyEnv,
-                    // Fargate does not inject AWS_REGION — the bundled
+                    // Fargate does not inject AWS_REGION -- the bundled
                     // program's `Region.fromEnv()` needs it.
                     AWS_REGION: region,
                     ...news.env,
@@ -1161,7 +1161,7 @@ await bootstrap(entrypoint);
             };
           } else {
             // Low-level form. If a previous deploy used the Effect-native
-            // form, its managed repo/roles are no longer referenced — reap
+            // form, its managed repo/roles are no longer referenced -- reap
             // them so nothing leaks.
             if (output?.repositoryName || output?.jobRoleName || output?.executionRoleName) {
               yield* cleanupPlatformResources(output);
@@ -1182,10 +1182,10 @@ await bootstrap(entrypoint);
             };
           }
 
-          // Observe — the latest ACTIVE revision is the live state.
+          // Observe -- the latest ACTIVE revision is the live state.
           const latest = yield* latestRevision(name);
 
-          // Ensure/Sync — register a new revision only when managed content
+          // Ensure/Sync -- register a new revision only when managed content
           // differs (revisions are immutable; registration IS the update).
           if (!latest || observedFingerprint(latest) !== desiredFingerprint(effective, news)) {
             const platformCapabilities = news.platformCapabilities ?? ["FARGATE"];
@@ -1234,7 +1234,7 @@ await bootstrap(entrypoint);
             };
           }
 
-          // Content unchanged — sync tags in place on the revision ARN.
+          // Content unchanged -- sync tags in place on the revision ARN.
           const { upsert, removed } = diffTags(observedTagsOf(latest), desiredTags);
           if (upsert.length > 0) {
             yield* batch.tagResource({

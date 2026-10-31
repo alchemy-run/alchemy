@@ -77,10 +77,10 @@ export interface OperationStatusChangeEventSourceProps extends EventRouteProps {
 /**
  * Deliver App Runner service status changes (`aws.apprunner` /
  * `"AppRunner Service Status Change"` EventBridge events) to the host
- * Function — e.g. to alert when a service unexpectedly leaves `RUNNING`.
+ * Function -- e.g. to alert when a service unexpectedly leaves `RUNNING`.
  *
  * The EventBridge pattern matches every App Runner service in the account
- * and region (the pattern must be literal — `Output` values such as
+ * and region (the pattern must be literal -- `Output` values such as
  * `service.serviceId` do not resolve inside the deployed bundle); inspect
  * `event.detail.serviceName` / `event.detail.serviceId` in the handler if
  * multiple services share the Function. Provide `AWS.Lambda.EventSource` on
@@ -122,7 +122,7 @@ export const consumeServiceStatusChanges = <StreamReq = never, Req = never>(
 /**
  * Deliver App Runner operation status changes (`aws.apprunner` /
  * `"AppRunner Service Operation Status Change"` EventBridge events) to the
- * host Function — e.g. to notify a chat channel when a deployment completes
+ * host Function -- e.g. to notify a chat channel when a deployment completes
  * or fails.
  *
  * The EventBridge pattern matches every App Runner service in the account

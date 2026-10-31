@@ -40,7 +40,7 @@ export interface NotificationWebhookProps {
   /**
    * Name of the webhook destination. Included in the request body when a
    * notification is dispatched. If omitted, a unique name is generated.
-   * Mutable — renames are applied in place.
+   * Mutable -- renames are applied in place.
    * @default ${app}-${id}-${stage}-${suffix}
    */
   name?: string;
@@ -48,13 +48,13 @@ export interface NotificationWebhookProps {
    * The POST endpoint Cloudflare calls when dispatching a notification.
    * Cloudflare sends a test request on create/update; the endpoint must
    * respond with a 2xx or the operation fails with `WebhookTestFailed`.
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    */
   url: string;
   /**
    * Optional secret sent in the `cf-webhook-auth` header on every
    * notification dispatch (for generic webhooks). Write-only: Cloudflare
-   * never returns it, so drift cannot be observed — the secret is re-sent
+   * never returns it, so drift cannot be observed -- the secret is re-sent
    * whenever the prop value changes.
    */
   secret?: Redacted.Redacted<string>;
@@ -171,7 +171,7 @@ export const NotificationWebhookProvider = () =>
         if (observed) return toWebhookAttributes(observed, acct);
       }
 
-      // Cold read: no persisted id (state-persistence failure) — find the
+      // Cold read: no persisted id (state-persistence failure) -- find the
       // deterministic physical name in the account's webhook list.
       const name = yield* createWebhookName(id, olds?.name);
       const match = yield* findWebhookByName(acct, name);
@@ -187,7 +187,7 @@ export const NotificationWebhookProvider = () =>
       const url = news.url as string;
       const secret = news.secret === undefined ? undefined : Redacted.value(news.secret);
 
-      // 1. Observe — by cached id first, then by deterministic name.
+      // 1. Observe -- by cached id first, then by deterministic name.
       let observed: ObservedWebhook | undefined;
       if (output?.webhookId) {
         observed = yield* observeWebhook(accountId, output.webhookId);
@@ -196,12 +196,12 @@ export const NotificationWebhookProvider = () =>
         observed = yield* findWebhookByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Cloudflare fires a test POST at
+      // 2. Ensure -- create when missing. Cloudflare fires a test POST at
       //    the URL from an arbitrary PoP; when the destination is a
       //    just-deployed Worker that PoP may not have the fresh
       //    workers.dev subdomain yet and the test POST 404s even though
       //    the URL serves elsewhere. A bounded retry (~2 min, capped
-      //    backoff) rides out edge propagation — fresh workers.dev URLs
+      //    backoff) rides out edge propagation -- fresh workers.dev URLs
       //    have been observed to 404 for well over a minute under heavy
       //    account-wide deploy load; a genuinely broken endpoint still
       //    fails after the budget is exhausted.
@@ -231,13 +231,13 @@ export const NotificationWebhookProvider = () =>
         return toWebhookAttributes(fresh ?? { id: created.id }, accountId);
       }
 
-      // 3. Sync — PUT the full desired body when any observable field
+      // 3. Sync -- PUT the full desired body when any observable field
       //    drifts, or when the (write-only, unobservable) secret prop
       //    changed between olds and news.
       const oldSecret = olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
       const secretChanged = secret !== oldSecret;
       if (observed.name !== name || observed.url !== url || secretChanged) {
-        // The update PUT fires the same test POST as create — ride out edge
+        // The update PUT fires the same test POST as create -- ride out edge
         // propagation of a just-deployed destination URL the same way.
         yield* alerting
           .updateDestinationWebhook({

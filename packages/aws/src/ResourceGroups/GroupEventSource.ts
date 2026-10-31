@@ -18,7 +18,7 @@ export interface GroupEventDetail {
   "event-sequence"?: number;
   /** State-change events: the transition, e.g. `create`, `update`, `delete`. */
   "state-change"?: string;
-  /** The group the event is about (`arn`, `name`, …). */
+  /** The group the event is about (`arn`, `name`, ...). */
   group?: {
     arn?: string;
     name?: string;
@@ -76,7 +76,7 @@ export interface GroupEventSourceProps extends EventRouteProps {
  * leaving a group.
  *
  * Resource Groups publishes to EventBridge automatically once the account
- * setting is active — no additional resource is created besides the
+ * setting is active -- no additional resource is created besides the
  * EventBridge rule targeting the host. Provide the host-specific
  * implementation layer (e.g. `AWS.Lambda.EventSource`) on the Function
  * effect.

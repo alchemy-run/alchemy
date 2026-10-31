@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:ListPoliciesGrantingServiceAccess` — list which
+ * Runtime binding for `iam:ListPoliciesGrantingServiceAccess` -- list which
  * attached/inline policies grant an IAM user, group, or role access to given
  * service namespaces. The companion to access advisor for answering "*why*
  * can this entity reach that service?".

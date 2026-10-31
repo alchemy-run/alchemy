@@ -166,7 +166,7 @@ export interface StateStoreBootstrap {
   readonly status: "created" | "adopted" | "redeployed";
   /** The store's physical name: its Worker, its bucket. */
   readonly store: string;
-  /** Where it lives, e.g. `{ account: "…", region: "us-east-1" }`. */
+  /** Where it lives, e.g. `{ account: "...", region: "us-east-1" }`. */
   readonly location: Readonly<Record<string, string>>;
 }
 

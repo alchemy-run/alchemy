@@ -12,7 +12,7 @@ export interface ListStreamConsumersRequest extends Omit<
  * Runtime binding for `kinesis:ListStreamConsumers`.
  *
  * Bind this operation to a `Stream` to enumerate the enhanced fan-out
- * consumers registered on it — the stream ARN is injected automatically.
+ * consumers registered on it -- the stream ARN is injected automatically.
  * Provide the implementation with
  * `Effect.provide(AWS.Kinesis.ListStreamConsumersHttp)`.
  * ### Enhanced Fan-Out

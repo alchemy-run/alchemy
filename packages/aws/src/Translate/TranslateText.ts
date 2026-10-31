@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:TranslateText` — translate text between
+ * Runtime binding for `translate:TranslateText` -- translate text between
  * a source and a target language.
  *
  * Translate is a pure pay-per-call service with no resource to manage:

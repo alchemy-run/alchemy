@@ -14,7 +14,7 @@ type EmailSecurityTrustedDomainTypeId = typeof EmailSecurityTrustedDomainTypeId;
 export interface TrustedDomainProps {
   /**
    * The domain (or regular expression) to trust. The pattern is the
-   * entry's identity for cold-state recovery — a pre-existing entry with
+   * entry's identity for cold-state recovery -- a pre-existing entry with
    * the same pattern is reported as unowned and only taken over when
    * adoption is enabled.
    */
@@ -27,7 +27,7 @@ export interface TrustedDomainProps {
   isRecent?: boolean;
   /**
    * For partner or other approved domains with similar spelling to your
-   * connected domains — prevents the listed domains from triggering a
+   * connected domains -- prevents the listed domains from triggering a
    * Spoof disposition.
    * @default false
    */
@@ -73,7 +73,7 @@ export type TrustedDomain = Resource<
 >;
 
 /**
- * A Cloudflare Email Security (Area 1) trusted domain — exempts a domain
+ * A Cloudflare Email Security (Area 1) trusted domain -- exempts a domain
  * from recently-registered and lookalike (similarity) detections.
  *
  * All fields are mutable in place. Requires the Email Security enterprise
@@ -120,7 +120,7 @@ export const TrustedDomainProvider = () =>
     // Account-scoped collection. Exhaustively paginate the account's trusted
     // domains and hydrate each into the `read` Attributes shape. Accounts
     // without the Email Security add-on surface the typed
-    // `EmailSecurityNotEntitled` error — treat that as an empty enumeration.
+    // `EmailSecurityNotEntitled` error -- treat that as an empty enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* emailSecurity.listSettingTrustedDomains.pages({ accountId }).pipe(
@@ -135,7 +135,7 @@ export const TrustedDomainProvider = () =>
         // `EmailSecurityNotEntitled`, while a credential lacking the
         // Email Security scope (e.g. Cloudflare OAuth) answers a bare
         // `Forbidden`. Neither can enumerate, so both mean "none
-        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // visible" -- matching `Domain.list()`. Returning `[]` is the
         // safe direction for the callers of `list` (orphan detection
         // never deletes what it cannot see).
         Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
@@ -167,7 +167,7 @@ export const TrustedDomainProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — id hint first, then pattern scan.
+      // 1. Observe -- id hint first, then pattern scan.
       let observed = output?.trustedDomainId
         ? yield* getTrustedDomain(accountId, output.trustedDomainId)
         : undefined;
@@ -175,7 +175,7 @@ export const TrustedDomainProvider = () =>
         observed = yield* findByPattern(accountId, news.pattern);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* emailSecurity.createSettingTrustedDomain({
           accountId,
@@ -188,7 +188,7 @@ export const TrustedDomainProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — patch only on a delta.
+      // 3. Sync -- patch only on a delta.
       const dirty =
         (observed.pattern ?? "") !== news.pattern ||
         (observed.isRecent ?? false) !== (news.isRecent ?? false) ||

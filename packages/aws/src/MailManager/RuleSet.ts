@@ -58,7 +58,7 @@ export interface RuleSet extends Resource<
 > {}
 
 /**
- * An SES Mail Manager rule set — the ordered rules an ingress point applies
+ * An SES Mail Manager rule set -- the ordered rules an ingress point applies
  * to incoming email (drop, archive, write to S3, deliver, bounce, invoke
  * Lambda, ...).
  *
@@ -107,7 +107,7 @@ export interface RuleSet extends Resource<
  * ### Delivering Email Events to Compute
  * **Example:** Invoke a Lambda for Matching Mail
  * ```typescript
- * // Mail Manager has no EventBridge events or event-source mapping — email
+ * // Mail Manager has no EventBridge events or event-source mapping -- email
  * // events reach compute through rule actions: InvokeLambda (direct),
  * // PublishToSns (SNS event source), or WriteToS3 (S3 event source). The
  * // role must be assumable by ses.amazonaws.com with lambda:InvokeFunction.
@@ -146,7 +146,7 @@ export const RuleSetProvider = () =>
           .getRuleSet({ RuleSetId: ruleSetId })
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-      // Rule sets have no name-keyed Get — enumerate and match. The physical
+      // Rule sets have no name-keyed Get -- enumerate and match. The physical
       // name is deterministic, so this recovers identity after a lost state
       // write.
       const findByName = (name: string) =>
@@ -204,7 +204,7 @@ export const RuleSetProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Name and rules both update in place — no replacement triggers, so
+        // Name and rules both update in place -- no replacement triggers, so
         // the engine's default update path applies (no diff needed).
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -213,10 +213,10 @@ export const RuleSetProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredRules = news.rules ?? [];
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let ruleSet = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes by
+          // 2. ENSURE -- create if missing; a Conflict race re-observes by
           //    name instead of failing.
           if (ruleSet === undefined) {
             yield* session.note(`creating rule set ${name}`);
@@ -238,7 +238,7 @@ export const RuleSetProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED name/rules against desired; apply only
+          // 3. SYNC -- diff OBSERVED name/rules against desired; apply only
           //    the delta.
           if (ruleSet.RuleSetName !== name || !sameShape(ruleSet.Rules, desiredRules)) {
             yield* mm.updateRuleSet({
@@ -248,7 +248,7 @@ export const RuleSetProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — against observed cloud tags.
+          // 3b. SYNC TAGS -- against observed cloud tags.
           yield* syncMailManagerTags(ruleSet.RuleSetArn, desiredTags);
 
           yield* session.note(ruleSet.RuleSetId);
@@ -260,10 +260,10 @@ export const RuleSetProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteRuleSet is natively idempotent — deleting a nonexistent
+          // DeleteRuleSet is natively idempotent -- deleting a nonexistent
           // rule set succeeds (verified live by the delete probe test). A
           // rule set stays "in use" while a deleted ingress point finishes
-          // deprovisioning — retry through the Conflict window.
+          // deprovisioning -- retry through the Conflict window.
           yield* retryWhileMailManagerConflict(
             mm.deleteRuleSet({ RuleSetId: output.ruleSetId }),
           ).pipe(Effect.asVoid);

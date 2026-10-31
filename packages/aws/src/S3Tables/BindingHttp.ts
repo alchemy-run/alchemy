@@ -7,8 +7,8 @@ import type { TableBucket } from "./TableBucket.ts";
 /**
  * Shared scaffolding for the S3 Tables runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeS3Tables…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeS3Tables...HttpBinding({ ... }))` over one of the
  * two builders below. Everything except the operation, the IAM action list,
  * and the injected identifiers is boilerplate.
  */
@@ -48,7 +48,7 @@ export const makeS3TablesTableBucketHttpBinding = <
               Resource: [
                 Output.interpolate`${tableBucket.tableBucketArn}`,
                 // List operations authorize against the namespaces/tables
-                // under the bucket, e.g. `…:bucket/name/table/*`.
+                // under the bucket, e.g. `...:bucket/name/table/*`.
                 Output.interpolate`${tableBucket.tableBucketArn}/*`,
               ],
             },

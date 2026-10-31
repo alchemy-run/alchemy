@@ -45,31 +45,31 @@ export type EntryGroupsEntryLinkProps = {
   /**
    * Parent Entry Group. Full name
    * `projects/{project}/locations/{location}/entryGroups/{entryGroup}`
-   * or the entry-group id (combined with `location`). Immutable —
+   * or the entry-group id (combined with `location`). Immutable --
    * changing it replaces the link.
    */
   entryGroup: string;
   /**
    * Entry link id. If omitted, a unique name is generated from the
    * stack, stage, and logical id. Must be 1-63 characters, start with
-   * a letter, and match `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable —
+   * a letter, and match `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable --
    * changing it replaces the link.
    */
   entryLinkId?: string;
   /**
-   * Region used when `entryGroup` is a bare id. Immutable — changing it
+   * Region used when `entryGroup` is a bare id. Immutable -- changing it
    * replaces the link.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Entry link type resource name. Immutable — changing it replaces
+   * Entry link type resource name. Immutable -- changing it replaces
    * the link.
    * @default "projects/dataplex-types/locations/global/entryLinkTypes/related"
    */
   entryLinkType?: string;
   /**
-   * Exactly two entry references (`SOURCE` and `TARGET`). Immutable —
+   * Exactly two entry references (`SOURCE` and `TARGET`). Immutable --
    * changing them replaces the link.
    */
   entryReferences: EntryLinkReference[];

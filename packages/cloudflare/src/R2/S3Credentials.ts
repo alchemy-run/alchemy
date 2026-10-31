@@ -32,7 +32,7 @@ export interface S3CredentialsValue {
    * when deployed, `{worker url}/cdn-cgi/local/r2/s3` under `alchemy dev`.
    */
   endpoint: string;
-  /** Bucket name — the path segment after the endpoint. */
+  /** Bucket name -- the path segment after the endpoint. */
   bucketName: string;
   /** SigV4 signing region. */
   region: "auto";
@@ -57,19 +57,19 @@ export interface S3Credentials extends Effect.Effect<
 
 /**
  * S3 API credentials for an R2 bucket that work unchanged in `alchemy dev`
- * and when deployed — for presigned URLs or any S3 client.
+ * and when deployed -- for presigned URLs or any S3 client.
  *
  * The native R2 binding cannot presign or speak the S3 API: that requires S3
  * credentials and R2's S3 endpoint. `S3Credentials` provides both, resolved
  * per mode:
  *
- * - **Deployed** — Alchemy mints an account API token for the Worker whose
+ * - **Deployed** -- Alchemy mints an account API token for the Worker whose
  *   policy is scoped to this bucket only, and derives S3 credentials from it
  *   (access key id = token id, secret = SHA-256 of the token value). The
  *   endpoint is
  *   `https://{accountId}.r2.cloudflarestorage.com` (`.eu.`/`.fedramp.` for
  *   jurisdictional buckets). The value is injected as a secret.
- * - **`alchemy dev`** — a locally-emulated bucket is served on the Worker's
+ * - **`alchemy dev`** -- a locally-emulated bucket is served on the Worker's
  *   local S3 endpoint (`{worker url}/cdn-cgi/local/r2/s3`) with fixed local
  *   credentials. No token or cloud call is involved, and objects are shared
  *   with the Worker's native bindings of the bucket.

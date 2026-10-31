@@ -72,7 +72,7 @@ export interface Project extends Resource<
 > {}
 
 /**
- * An AWS Glue DataBrew project — the interactive workspace binding a dataset
+ * An AWS Glue DataBrew project -- the interactive workspace binding a dataset
  * to a recipe's working version. The project definition is free; costs only
  * accrue when an interactive session is started in the console.
  * ### Creating Projects
@@ -152,7 +152,7 @@ export const ProjectProvider = () =>
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
-          // UpdateProject only accepts Sample + RoleArn — the dataset and
+          // UpdateProject only accepts Sample + RoleArn -- the dataset and
           // recipe associations are immutable.
           if (olds.datasetName !== news.datasetName) {
             return { action: "replace" } as const;

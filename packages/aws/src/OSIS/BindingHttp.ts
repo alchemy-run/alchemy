@@ -4,18 +4,18 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
 /**
  * Shared scaffolding for Amazon OpenSearch Ingestion (OSIS) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the injected identifier, and the
  * IAM action list is boilerplate:
  *
  * - Pipeline-scoped operations (`osis:GetPipeline`, `osis:StartPipeline`,
- *   `osis:StopPipeline`, …) inject the bound {@link Pipeline}'s name or ARN
+ *   `osis:StopPipeline`, ...) inject the bound {@link Pipeline}'s name or ARN
  *   into the request and are granted on the pipeline ARN.
  * - Account-level operations (`osis:ValidatePipeline`,
- *   `osis:ListPipelineBlueprints`, …) take the caller's request as-is and
- *   are granted on `*` — they are not scoped to a single pipeline resource.
- * - The `osis:Ingest` data plane has no distilled operation — it is a
+ *   `osis:ListPipelineBlueprints`, ...) take the caller's request as-is and
+ *   are granted on `*` -- they are not scoped to a single pipeline resource.
+ * - The `osis:Ingest` data plane has no distilled operation -- it is a
  *   SigV4-signed HTTP POST (service `"osis"`) against the pipeline's ingest
  *   endpoint, made with the host Function's own credentials.
  */
@@ -79,7 +79,7 @@ export const makeOsisPipelineHttpBinding = <
 /**
  * Build the impl Effect for an account-level OSIS operation (config
  * validation, blueprint catalog reads, endpoint-connection listing). The
- * deploy-time half grants `actions` on `*` — these operations are not scoped
+ * deploy-time half grants `actions` on `*` -- these operations are not scoped
  * to a single pipeline resource.
  */
 export const makeOsisAccountHttpBinding = <I, A, E, R>(options: {
@@ -113,7 +113,7 @@ export const makeOsisAccountHttpBinding = <I, A, E, R>(options: {
   });
 
 /**
- * A failed `osis:Ingest` request against a pipeline's ingest endpoint —
+ * A failed `osis:Ingest` request against a pipeline's ingest endpoint --
  * carries the HTTP status and response body returned by Data Prepper.
  */
 export class PipelineIngestError extends Data.TaggedError("OsisPipelineIngestError")<{
@@ -128,7 +128,7 @@ export class PipelineIngestError extends Data.TaggedError("OsisPipelineIngestErr
 /** A single `osis:Ingest` request against the pipeline's ingest endpoint. */
 export interface IngestRequest {
   /**
-   * Path of the pipeline's HTTP source, e.g. `/logs/ingest` — must match the
+   * Path of the pipeline's HTTP source, e.g. `/logs/ingest` -- must match the
    * `path` configured on the `http` (or `otel_*`) source in the pipeline
    * configuration body.
    */

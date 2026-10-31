@@ -25,13 +25,13 @@ import {
 export type ServiceProjectAttachmentProps = {
   /**
    * Service project to attach, as `projects/{project}` or a bare project
-   * id. Immutable — changing it replaces the attachment. The attachment
+   * id. Immutable -- changing it replaces the attachment. The attachment
    * id must equal this project's id. Defaults to the stack project.
    */
   serviceProject?: string;
   /**
    * Attachment id. Must equal the project id of `serviceProject`. If
-   * omitted, that project id is used. Immutable — changing it replaces
+   * omitted, that project id is used. Immutable -- changing it replaces
    * the attachment.
    */
   serviceProjectAttachmentId?: string;

@@ -11,7 +11,7 @@ import type { Postgres } from "./Postgres.ts";
  * `SQL.Postgres`. Alchemy transports the cluster's connection URIs
  * automatically; callers do not configure connection-string env vars.
  *
- * `ConnectPostgres` is the Context tag, the type, and the callable —
+ * `ConnectPostgres` is the Context tag, the type, and the callable --
  * `yield* Fly.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
  *
  * **Example:** Bind Postgres in a Service

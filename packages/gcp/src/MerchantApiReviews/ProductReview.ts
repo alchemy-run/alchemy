@@ -111,7 +111,7 @@ export type ProductReviewAttributesProps = {
 export type ProductReviewProps = {
   /**
    * Merchant Center account id (the `{account}` segment of
-   * `accounts/{account}`). Immutable — changing it replaces the review.
+   * `accounts/{account}`). Immutable -- changing it replaces the review.
    */
   account: string;
   /**
@@ -121,7 +121,7 @@ export type ProductReviewProps = {
   dataSource: string;
   /**
    * Permanent publisher-system product review id. If omitted, a unique
-   * id is generated from the stack, stage, and logical id. Immutable —
+   * id is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the review.
    */
   productReviewId?: string;
@@ -166,7 +166,7 @@ export type ProductReview = Resource<
 /**
  * A Merchant Center product review (Merchant API Reviews).
  *
- * Reviews have no labels field — Alchemy stamps ownership into
+ * Reviews have no labels field -- Alchemy stamps ownership into
  * `customAttributes` (never the review text) so `list` / nuke can find
  * them. `account` and `productReviewId` are identity.
  * `insertAccountsProductReviews` is a full-document upsert, so updates

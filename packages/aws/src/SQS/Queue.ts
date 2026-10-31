@@ -342,7 +342,7 @@ const validateEncryption = (props: QueueProps) =>
     ? Effect.fail(
         new SqsEncryptionConflict({
           message:
-            "kmsMasterKeyId (SSE-KMS) and sqsManagedSseEnabled (SSE-SQS) are mutually exclusive — set only one.",
+            "kmsMasterKeyId (SSE-KMS) and sqsManagedSseEnabled (SSE-SQS) are mutually exclusive \u2014 set only one.",
         }),
       )
     : Effect.void;
@@ -656,7 +656,7 @@ export const QueueProvider = () =>
           const desiredAttributes = createAttributes(news, bindings);
           const internalTags = yield* createInternalTags(id);
 
-          // Sync attributes — diff observed cloud state against desired and
+          // Sync attributes -- diff observed cloud state against desired and
           // apply only the delta. SQS returns all attribute values as strings,
           // and `desiredAttributes` is already string-shaped, so equality
           // comparison is direct.

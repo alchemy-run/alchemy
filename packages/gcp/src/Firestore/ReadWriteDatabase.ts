@@ -18,7 +18,7 @@ export interface ReadWriteDatabaseClient extends ReadDatabaseClient, WriteDataba
  * const doc = yield* db.get("counters/visits");
  * const count = typeof doc?.fields.count === "number" ? doc.fields.count : 0;
  * yield* db.set("counters/visits", { count: count + 1 });
- * // …provided with Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp)
+ * // ...provided with Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp)
  * ```
  *
  * @binding

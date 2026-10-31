@@ -6,15 +6,15 @@ import type { Pipeline } from "./Pipeline.ts";
 /**
  * Runtime binding for `osis:GetPipeline`.
  *
- * Reads the bound {@link Pipeline}'s live detail — status, capacity, ingest
- * endpoint URLs, and destinations — so an ops function can health-check the
+ * Reads the bound {@link Pipeline}'s live detail -- status, capacity, ingest
+ * endpoint URLs, and destinations -- so an ops function can health-check the
  * pipeline or discover its ingest endpoints at runtime. The pipeline name is
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.OSIS.GetPipelineHttp)`.
  * ### Monitoring a Pipeline
  * **Example:** Check the Pipeline's Status
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const getPipeline = yield* AWS.OSIS.GetPipeline(pipeline);
  *
  * // runtime

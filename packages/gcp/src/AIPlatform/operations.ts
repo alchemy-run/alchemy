@@ -25,8 +25,8 @@ export const resourceNameFromOperation = (
  * feature-store provisioning take up to ~30 minutes.
  *
  * An operation that failed with ALREADY_EXISTS (6) counts as done (a lost
- * create race). With `notFoundOk`, NOT_FOUND (5) — or an operation record
- * that is gone — counts as done too (a lost delete race).
+ * create race). With `notFoundOk`, NOT_FOUND (5) -- or an operation record
+ * that is gone -- counts as done too (a lost delete race).
  */
 export const waitForOperation = (
   operation: aiplatform.GoogleLongrunningOperation,
@@ -64,17 +64,17 @@ export const waitForOperation = (
 
 /**
  * Vertex AI hides a resource from `get` / `list` until its create
- * operation finishes. On a freshly provisioned project that took 4–9
+ * operation finishes. On a freshly provisioned project that took 4-9
  * minutes for endpoints, indexes, index endpoints and deployment
  * resource pools, so a deploy interrupted in that window leaves a
- * resource that a plain lookup cannot see — the recovery `read` /
+ * resource that a plain lookup cannot see -- the recovery `read` /
  * `delete` would report it gone and leak it once the create completes.
  *
  * `settlePendingCreates` waits for every unfinished create operation on
  * `{location}/{collection}` (optionally only `{collection}/{resourceId}`)
  * and reports whether any were found, so callers re-run their lookup
- * afterwards. It only waits — it never acts on resources it can't
- * attribute — so it is safe for server-assigned ids, where the pending
+ * afterwards. It only waits -- it never acts on resources it can't
+ * attribute -- so it is safe for server-assigned ids, where the pending
  * operation carries no ownership labels.
  */
 export const settlePendingCreates = (options: {

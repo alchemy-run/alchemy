@@ -154,7 +154,7 @@ export const PolicyProvider = () =>
           } else if (
             normalizeDocument(live.policyDocument) !== normalizeDocument(desiredDocument)
           ) {
-            // SYNC document — a new default version. IoT caps a policy at 5
+            // SYNC document -- a new default version. IoT caps a policy at 5
             // versions, so prune the oldest non-default version first.
             const { policyVersions = [] } = yield* iot.listPolicyVersions({
               policyName,
@@ -189,7 +189,7 @@ export const PolicyProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           const policyName = output.policyName;
-          // Delete all non-default versions first — deletePolicy rejects a
+          // Delete all non-default versions first -- deletePolicy rejects a
           // policy that still has extra versions.
           const { policyVersions = [] } = yield* iot
             .listPolicyVersions({ policyName })

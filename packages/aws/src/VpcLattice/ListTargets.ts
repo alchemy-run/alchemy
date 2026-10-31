@@ -17,7 +17,7 @@ export interface ListTargetsRequest extends Omit<
  * `vpc-lattice:ListTargets` on the target group ARN).
  *
  * Lists the bound {@link TargetGroup}'s registered targets with their health
- * status — useful for health dashboards and for compute that verifies its own
+ * status -- useful for health dashboards and for compute that verifies its own
  * registration. Provide the implementation with
  * `Effect.provide(AWS.VpcLattice.ListTargetsHttp)`.
  * ### Managing Targets at Runtime

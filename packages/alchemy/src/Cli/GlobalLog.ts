@@ -136,7 +136,7 @@ export const ConsoleLogLive = Layer.mergeAll(
   Layer.succeed(MinimumLogLevel, "Debug"),
 );
 
-/** Drops everything — the fallback when the log file cannot be opened. */
+/** Drops everything -- the fallback when the log file cannot be opened. */
 const noopLogger = Logger.make<unknown, void>(() => {});
 
 /**
@@ -221,7 +221,7 @@ export const lazyRunLog = Effect.fn(function* (
  * profiles; see `globalLogs`) go to `~/.alchemy/logs` (relocated by
  * `ALCHEMY_HOME`), everything else to the project's `.alchemy/log`. Every
  * run writes `{timestamp}-pid{pid}.ndjson` (NDJSON log records) at Debug
- * level — failures record their full causes there even though the terminal
+ * level -- failures record their full causes there even though the terminal
  * only shows the friendly message. Console output stays at Info+ unless
  * `--log-level` lowers the floor (see {@link consoleSettings}).
  *

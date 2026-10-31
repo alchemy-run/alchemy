@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `ListKnowledgeBaseDocuments` request with the binding-injected
- * `knowledgeBaseId` and `dataSourceId` removed — they are supplied
+ * `knowledgeBaseId` and `dataSourceId` removed -- they are supplied
  * automatically from the bound {@link DataSource}.
  */
 export interface ListKnowledgeBaseDocumentsRequest extends Omit<
@@ -14,7 +14,7 @@ export interface ListKnowledgeBaseDocumentsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:ListKnowledgeBaseDocuments` — list the
+ * Runtime binding for `bedrock-agent:ListKnowledgeBaseDocuments` -- list the
  * documents tracked in the bound {@link DataSource} together with their
  * ingestion status.
  *

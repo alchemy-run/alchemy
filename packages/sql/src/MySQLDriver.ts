@@ -6,7 +6,7 @@ import type { Pool, PoolOptions } from "mysql2/promise";
 /**
  * Lazily load the `mysql2/promise` driver (an optional peer dependency of
  * alchemy) with a descriptive failure when it isn't installed. The
- * promise flavor is the canonical surface — its `.pool` property exposes
+ * promise flavor is the canonical surface -- its `.pool` property exposes
  * the callback pool for consumers (like Kysely) that drive that API.
  */
 export const importMySql = (): Promise<typeof import("mysql2/promise")> =>
@@ -24,7 +24,7 @@ export const importMySql = (): Promise<typeof import("mysql2/promise")> =>
     });
 
 /**
- * Open a raw `mysql2/promise` pool on the current `Scope` — `pool.end()`
+ * Open a raw `mysql2/promise` pool on the current `Scope` -- `pool.end()`
  * runs when the scope closes. Pair with `makeExecutionMemo` for the
  * one-pool-per-event shape workerd and Lambda require.
  *

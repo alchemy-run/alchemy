@@ -38,12 +38,12 @@ export type ContactCenterProps = {
   /**
    * Contact Center id (the `{contactCenter}` segment of
    * `projects/{project}/locations/{location}/contactCenters/{contactCenter}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the instance.
    */
   contactCenterId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -54,20 +54,20 @@ export type ContactCenterProps = {
    */
   displayName?: string;
   /**
-   * Customer domain prefix (2–16 RFC1035 characters). Used as the
-   * instance subdomain. Immutable — changing it replaces the instance.
+   * Customer domain prefix (2-16 RFC1035 characters). Used as the
+   * instance subdomain. Immutable -- changing it replaces the instance.
    * If omitted, a unique prefix is generated.
    */
   customerDomainPrefix?: string;
   /**
-   * Instance size (`DEV_SMALL`, `STANDARD_SMALL`, `TRIAL_SMALL`, …).
-   * Immutable — changing it replaces the instance.
+   * Instance size (`DEV_SMALL`, `STANDARD_SMALL`, `TRIAL_SMALL`, ...).
+   * Immutable -- changing it replaces the instance.
    * @default "DEV_SMALL"
    */
   instanceSize?: ccaip.InstanceConfigInstanceSizeEnum | (string & {});
   /**
    * Full instance configuration. Wins over `instanceSize` when set.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    */
   instanceConfig?: ccaip.InstanceConfig;
   /**
@@ -83,7 +83,7 @@ export type ContactCenterProps = {
    */
   adminUser?: ccaip.AdminUser;
   /**
-   * Customer-managed KMS key that encrypts user input. Immutable —
+   * Customer-managed KMS key that encrypts user input. Immutable --
    * changing it replaces the instance.
    */
   kmsKey?: string;
@@ -161,7 +161,7 @@ export type ContactCenter = Resource<
     releaseChannel: "early" | "normal" | "critical" | undefined;
     /** Peak hours for the critical channel. */
     critical: ccaip.Critical | undefined;
-    /** Server-reported state (`STATE_DEPLOYED`, …). */
+    /** Server-reported state (`STATE_DEPLOYED`, ...). */
     state: string | undefined;
     /** UJET release version. */
     releaseVersion: string | undefined;

@@ -13,7 +13,7 @@ export interface ListStreamsRequest extends Kinesis.ListStreamsInput {}
  * ### Inspecting Streams
  * **Example:** List Streams in the Region
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listStreams = yield* AWS.Kinesis.ListStreams();
  *
  * // runtime

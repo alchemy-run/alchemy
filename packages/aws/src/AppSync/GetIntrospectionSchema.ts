@@ -4,12 +4,12 @@ import type * as Effect from "effect/Effect";
 import type { GraphqlApi } from "./GraphqlApi.ts";
 
 /**
- * Runtime binding for `appsync:GetIntrospectionSchema` — read a
+ * Runtime binding for `appsync:GetIntrospectionSchema` -- read a
  * {@link GraphqlApi}'s live schema (SDL or introspection JSON) from a Lambda
  * (or other AWS runtime), e.g. for schema registries, codegen services, or
  * federation gateways that discover the schema at runtime.
  *
- * The response `schema` is a streaming body — collect it with
+ * The response `schema` is a streaming body -- collect it with
  * `Stream.mkString(Stream.decodeText(response.schema!))`. Provide
  * `AppSync.GetIntrospectionSchemaHttp` on the hosting function's Effect to
  * implement the binding.

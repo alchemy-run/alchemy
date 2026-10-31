@@ -41,7 +41,7 @@ export type BackupVaultsBackupProps = {
   /**
    * Parent backup vault. Full name
    * `projects/{project}/locations/{location}/backupVaults/{backupVault}`
-   * or the vault id (combined with `location`). Immutable — changing it
+   * or the vault id (combined with `location`). Immutable -- changing it
    * replaces the backup.
    */
   backupVault: string;
@@ -52,12 +52,12 @@ export type BackupVaultsBackupProps = {
   location?: string;
   /**
    * Backup id (the `{backup}` segment). If omitted, a unique RFC1035 name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the backup.
    */
   backupId?: string;
   /**
-   * Source volume name or id. Immutable — changing it replaces the
+   * Source volume name or id. Immutable -- changing it replaces the
    * backup. Either `sourceVolume` or `ontapSource` is required.
    */
   sourceVolume?: string;
@@ -66,7 +66,7 @@ export type BackupVaultsBackupProps = {
    */
   sourceSnapshot?: string;
   /**
-   * ONTAP source details. Immutable — changing it replaces the backup.
+   * ONTAP source details. Immutable -- changing it replaces the backup.
    */
   ontapSource?: OntapSource;
   /**

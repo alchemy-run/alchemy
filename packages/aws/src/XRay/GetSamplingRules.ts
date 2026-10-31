@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetSamplingRulesRequest extends xray.GetSamplingRulesRequest {}
 
 /**
- * Retrieve all X-Ray sampling rules — the first half of the sampling
+ * Retrieve all X-Ray sampling rules -- the first half of the sampling
  * protocol used by custom samplers (poll rules, then report statistics
  * via `GetSamplingTargets`).
  *
@@ -18,7 +18,7 @@ export interface GetSamplingRulesRequest extends xray.GetSamplingRulesRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetSamplingRules
+ * // init -- grants xray:GetSamplingRules
  * const getSamplingRules = yield* XRay.GetSamplingRules();
  *
  * // runtime

@@ -24,7 +24,7 @@ export const toWireTags = (tags: Record<string, string>): rolesanywhere.Tag[] =>
 
 /**
  * Read the observed tags of a RolesAnywhere resource. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readRolesAnywhereTags = Effect.fn(function* (arn: string) {
   const response = yield* rolesanywhere

@@ -39,7 +39,7 @@ export interface LinkProps {
   /**
    * The ARN of the monitoring-account sink to attach to. The sink's policy
    * must permit this account to link. Changing the sink replaces the link.
-   * Must be in a **different** account — OAM rejects a link to a sink in
+   * Must be in a **different** account -- OAM rejects a link to a sink in
    * the same account.
    */
   sinkIdentifier: string;
@@ -85,7 +85,7 @@ export interface Link extends Resource<
 > {}
 
 /**
- * A CloudWatch cross-account observability **link** — created in a source
+ * A CloudWatch cross-account observability **link** -- created in a source
  * account, it attaches to a monitoring-account {@link Sink} and shares the
  * selected telemetry types (metrics, log groups, traces, Application
  * Signals) with that account.
@@ -216,7 +216,7 @@ export const LinkProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // The label template and the target sink are immutable —
+          // The label template and the target sink are immutable --
           // UpdateLink only changes resource types and filters.
           if (news.labelTemplate !== olds.labelTemplate) {
             return { action: "replace" } as const;
@@ -229,7 +229,7 @@ export const LinkProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredConfiguration = toLinkConfiguration(news.linkConfiguration);
 
-          // OBSERVE — the cached ARN is only a hint; a deleted link falls
+          // OBSERVE -- the cached ARN is only a hint; a deleted link falls
           // through to create.
           let live = output?.linkArn ? yield* getLinkByArn(output.linkArn) : undefined;
 
@@ -247,7 +247,7 @@ export const LinkProvider = () =>
           }
           const linkArn = live!.Arn!;
 
-          // SYNC — resource types + filters, diffed against observed state.
+          // SYNC -- resource types + filters, diffed against observed state.
           if (
             !sameResourceTypes(live!.ResourceTypes, news.resourceTypes) ||
             !sameLinkConfiguration(live!.LinkConfiguration, desiredConfiguration)
@@ -261,7 +261,7 @@ export const LinkProvider = () =>
             );
           }
 
-          // SYNC tags — against observed cloud tags (adoption-safe).
+          // SYNC tags -- against observed cloud tags (adoption-safe).
           yield* syncOamTags(linkArn, id, news.tags);
 
           yield* session.note(linkArn);

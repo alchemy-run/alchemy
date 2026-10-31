@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for EventBridge Pipes HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate:
  *
@@ -57,7 +57,7 @@ export const makePipesHttpBinding = <I extends { Name: string }, A, E, R>(option
 
 /**
  * Build the impl Effect for an account-level Pipes operation (pipe listing).
- * The deploy-time half grants `actions` on `*` — these operations are not
+ * The deploy-time half grants `actions` on `*` -- these operations are not
  * scoped to a single pipe resource.
  */
 export const makePipesAccountHttpBinding = <I, A, E, R>(options: {

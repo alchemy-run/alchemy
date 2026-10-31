@@ -6,10 +6,10 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
 /**
  * Shared scaffolding for AWS ElastiCache HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
- * boilerplate. The env-only `ConnectHttp` binding stays bespoke — it attaches
+ * boilerplate. The env-only `ConnectHttp` binding stays bespoke -- it attaches
  * environment variables instead of IAM policy.
  */
 
@@ -23,7 +23,7 @@ export const SERVERLESS_SNAPSHOT_ARN_WILDCARD = "arn:aws:elasticache:*:*:serverl
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
  * cache/event monitoring). The deploy-time half grants `actions` on
- * `resources` (default `*`) — these operations address caches and snapshots
+ * `resources` (default `*`) -- these operations address caches and snapshots
  * by names that are runtime data.
  */
 export const makeElastiCacheAccountHttpBinding = <I, A, E, R>(options: {

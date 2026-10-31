@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `wafv2:CheckCapacity` — compute the web ACL capacity
+ * Runtime binding for `wafv2:CheckCapacity` -- compute the web ACL capacity
  * units (WCU) a set of rules would consume, e.g. before updating an IP set
  * or constructing rules dynamically.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Account Operations
  * **Example:** Check the WCU Cost of a Rule
  * ```typescript
- * // init — grants wafv2:CheckCapacity
+ * // init -- grants wafv2:CheckCapacity
  * const checkCapacity = yield* AWS.WAFv2.CheckCapacity();
  *
  * // runtime

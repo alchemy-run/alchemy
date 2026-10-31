@@ -60,12 +60,12 @@ export interface PostgresRoleProps {
    */
   name?: string;
   /**
-   * PostgreSQL database — string name or {@link PostgresDatabase} resource.
+   * PostgreSQL database -- string name or {@link PostgresDatabase} resource.
    */
   database: string | PostgresDatabase;
 
   /**
-   * Branch — string name or {@link PostgresBranch} resource.
+   * Branch -- string name or {@link PostgresBranch} resource.
    * @default "main"
    */
   branch?: string | PostgresBranch;
@@ -197,7 +197,7 @@ export const PostgresRoleProvider = () =>
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      // Successor is the only updatable property — everything else
+      // Successor is the only updatable property -- everything else
       // requires replacement.
       if (news.ttl !== olds.ttl) {
         return { action: "replace" } as const;
@@ -266,7 +266,7 @@ export const PostgresRoleProvider = () =>
       const successor = resolveSuccessorName(news.successor);
       const desiredName = yield* resolveName(id, news.name);
 
-      // 1. Observe — fetch live state if we know the role id. Roles
+      // 1. Observe -- fetch live state if we know the role id. Roles
       //    can only be looked up by id; without a cached id there is
       //    no way to find the live role, so we fall through to ensure.
       const observed = output?.id
@@ -280,7 +280,7 @@ export const PostgresRoleProvider = () =>
             .pipe(Effect.catchTag("NotFound", () => Effect.undefined))
         : undefined;
 
-      // 2. Ensure — create if missing. Single branch covers both
+      // 2. Ensure -- create if missing. Single branch covers both
       //    greenfield (no output) and out-of-band-deletion (output
       //    cached but cloud lost it). The latter is structurally a
       //    rotation: the new role has fresh id/host/username/plaintext
@@ -291,7 +291,7 @@ export const PostgresRoleProvider = () =>
       //    Planetscale returns the plaintext password value exactly
       //    once on create; on an observe-hit we re-use the cached
       //    plaintext from output (which is why adoption requires
-      //    pre-existing state — see `read`).
+      //    pre-existing state -- see `read`).
       let live: planetscale.GetRoleOutput;
       let plaintext: Redacted.Redacted<string>;
       if (observed) {
@@ -329,7 +329,7 @@ export const PostgresRoleProvider = () =>
         live = created;
       }
 
-      // 3. Sync — only `name` is mutable in place; diff observed
+      // 3. Sync -- only `name` is mutable in place; diff observed
       //    against desired and skip the API call when nothing
       //    changed. Everything else triggers a replace via diff().
       if (live.name !== desiredName) {
@@ -342,7 +342,7 @@ export const PostgresRoleProvider = () =>
         });
       }
 
-      // 4. Return — fresh attrs sourced from observed cloud state,
+      // 4. Return -- fresh attrs sourced from observed cloud state,
       //    with cached or freshly-issued plaintext.
       return buildAttributes(live, plaintext, {
         inheritedRoles: live.inherited_roles as InheritedRole[],
@@ -365,7 +365,7 @@ export const PostgresRoleProvider = () =>
         .pipe(
           Effect.catchTag("NotFound", () => Effect.void),
           // 422 (UnprocessableEntity): role is still referenced. Log a
-          // warning rather than failing — the role will be cleaned up
+          // warning rather than failing -- the role will be cleaned up
           // when the database/branch is deleted.
           Effect.catchIf(
             isKnownError("UnprocessableEntity", "Role is still referenced and cannot be dropped."),
@@ -440,7 +440,7 @@ export const PostgresRoleProvider = () =>
     }),
   });
 
-// Structural shapes for runtime-resolved Resource references — see notes
+// Structural shapes for runtime-resolved Resource references -- see notes
 // in Password.ts.
 type DatabaseRef = string | { name: string; organization?: string };
 type BranchRef = string | { name: string };

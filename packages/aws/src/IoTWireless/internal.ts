@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Read the observed tags for any IoT Wireless resource ARN. Tag reads are
- * best-effort — a race with deletion (or a missing-tags edge) degrades to an
+ * best-effort -- a race with deletion (or a missing-tags edge) degrades to an
  * empty record rather than failing the lifecycle operation.
  */
 export const readIotWirelessTags = (arn: string) =>

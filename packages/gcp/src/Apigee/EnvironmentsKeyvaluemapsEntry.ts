@@ -23,23 +23,23 @@ const MAX_NAME_LENGTH = 255;
 export type EnvironmentsKeyvaluemapsEntryProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the entry.
+   * current GCP project id. Immutable -- changing it replaces the entry.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the entry.
    */
   environment: string;
   /**
    * Parent key value map id or
    * `organizations/{org}/environments/{env}/keyvaluemaps/{map}`. Immutable
-   * — changing it replaces the entry.
+   * -- changing it replaces the entry.
    */
   keyvaluemap: string;
   /**
    * Entry key (last path segment). If omitted, a unique name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the entry.
    */
   entryId?: string;

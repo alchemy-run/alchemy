@@ -6,8 +6,8 @@ import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 /**
  * Shared scaffolding for Application Signals HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and (for
  * SLO-scoped operations) the injected identifier is boilerplate.
  */
@@ -103,7 +103,7 @@ export const makeSloBatchHttpBinding = <I extends { SloIds: string[] }, A, E, R>
   /** IAM actions granted on the SLO ARN. */
   actions: readonly string[];
   /**
-   * Additional IAM actions granted on `*` — dependent permissions the
+   * Additional IAM actions granted on `*` -- dependent permissions the
    * operation exercises with the caller's credentials (e.g. budget reports
    * read the SLI metric via `cloudwatch:GetMetricData`).
    */

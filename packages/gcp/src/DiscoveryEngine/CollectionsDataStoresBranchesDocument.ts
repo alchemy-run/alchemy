@@ -31,7 +31,7 @@ export type CollectionsDataStoresBranchesDocumentProps = {
   /**
    * Parent data store resource name
    * `projects/{project}/locations/{location}/collections/{collection}/dataStores/{data_store}`.
-   * Immutable — changing it replaces the document.
+   * Immutable -- changing it replaces the document.
    */
   dataStore: string;
   /**
@@ -41,7 +41,7 @@ export type CollectionsDataStoresBranchesDocumentProps = {
   branchId?: string;
   /**
    * Document id (RFC-1034, max 128 characters). If omitted, a unique id
-   * is generated. Immutable — changing it replaces the document.
+   * is generated. Immutable -- changing it replaces the document.
    */
   documentId?: string;
   /**

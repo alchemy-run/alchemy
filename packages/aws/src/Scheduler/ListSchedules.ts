@@ -11,9 +11,9 @@ export interface ListSchedulesRequest extends Omit<scheduler.ListSchedulesInput,
  * Pairs with {@link CreateSchedule} for the dynamic-scheduling pattern: a
  * deployed Lambda enumerates the schedules it minted at runtime (sweep
  * pending reminders, count outstanding one-shots). Listing is always scoped
- * to the bound `ScheduleGroup` — or the `default` group when none is given.
+ * to the bound `ScheduleGroup` -- or the `default` group when none is given.
  * Note: IAM evaluates `scheduler:ListSchedules` against the account-wide
- * `schedule/*​/*` pattern (not the group), so the binding grants on that
+ * `schedule/*­/*` pattern (not the group), so the binding grants on that
  * pattern while the request's `GroupName` filter keeps results group-scoped.
  * ### Listing Schedules At Runtime
  * **Example:** Sweep Pending Reminders

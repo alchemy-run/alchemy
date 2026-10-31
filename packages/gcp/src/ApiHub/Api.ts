@@ -38,12 +38,12 @@ export type ApiProps = {
   /**
    * API id (the `{api}` segment of
    * `projects/{project}/locations/{location}/apis/{api}`). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the API.
+   * unique id is generated. Immutable -- changing it replaces the API.
    */
   apiId?: string;
   /**
-   * Location (`us-central1`, …). Must match the ApiHub instance location.
-   * Immutable — changing it replaces the API.
+   * Location (`us-central1`, ...). Must match the ApiHub instance location.
+   * Immutable -- changing it replaces the API.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -53,7 +53,7 @@ export type ApiProps = {
   displayName?: string;
   /**
    * Human-readable description. APIs have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;
@@ -138,7 +138,7 @@ export type Api = Resource<
  *
  * Location and id are immutable. Display name, description, owner,
  * documentation, fingerprint, selected version, and attributes update in
- * place. APIs have no labels field — Alchemy stamps ownership into the
+ * place. APIs have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them.
  *
  * ### Creating an API

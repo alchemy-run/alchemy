@@ -124,7 +124,7 @@ export type PubsubTransport = {
   /**
    * Existing Pub/Sub topic Eventarc uses as the event source, as
    * `projects/{project}/topics/{topic}`. Required for
-   * `google.cloud.pubsub.topic.v1.messagePublished`. Immutable —
+   * `google.cloud.pubsub.topic.v1.messagePublished`. Immutable --
    * changing it replaces the trigger. Eventarc-managed topics are not
    * deleted with the trigger.
    */
@@ -156,11 +156,11 @@ export type TriggerProps = {
    * `projects/{project}/locations/{location}/triggers/{trigger}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63
-   * characters. Immutable — changing it replaces the trigger.
+   * characters. Immutable -- changing it replaces the trigger.
    */
   triggerId?: string;
   /**
-   * Eventarc location (`us-central1`, `us-east1`, …). Immutable —
+   * Eventarc location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the trigger. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -169,7 +169,7 @@ export type TriggerProps = {
   location?: string;
   /**
    * CloudEvents attribute filters. Every event must match all filters.
-   * A `type` filter is required. Immutable — changing filters replaces
+   * A `type` filter is required. Immutable -- changing filters replaces
    * the trigger.
    */
   eventFilters: EventFilter[];
@@ -180,13 +180,13 @@ export type TriggerProps = {
   destination: Destination;
   /**
    * Transport intermediary. For Pub/Sub events, set `pubsub.topic` to an
-   * existing topic. Immutable — changing the topic replaces the trigger.
+   * existing topic. Immutable -- changing the topic replaces the trigger.
    */
   transport?: Transport;
   /**
    * Partner channel,
    * `projects/{project}/locations/{location}/channels/{channel}`.
-   * Required for Eventarc SaaS partner events. Immutable — changing it
+   * Required for Eventarc SaaS partner events. Immutable -- changing it
    * replaces the trigger.
    */
   channel?: string;
@@ -225,7 +225,7 @@ export type Trigger = Resource<
     triggerId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** CloudEvents attribute filters. */
     eventFilters: EventFilter[];
@@ -266,7 +266,7 @@ export type Trigger = Resource<
  * endpoint.
  *
  * `triggerId`, `location`, `eventFilters`, `channel`, and
- * `transport.pubsub.topic` are identity — changing any of them replaces
+ * `transport.pubsub.topic` are identity -- changing any of them replaces
  * the trigger. Destination, service account, content type, retry policy,
  * and labels update in place.
  *

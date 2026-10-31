@@ -24,7 +24,7 @@ export type D1SqlExecutor<E = unknown, R = never> = (
 
 /**
  * Adapt a raw D1 executor into the registry's {@link SqlExecutor} contract
- * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals — the
+ * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals -- the
  * D1 HTTP protocol path here is raw-SQL-only, and the only parametrized
  * queries are the migration formats' own bookkeeping. Batches join into a
  * single multi-statement query: D1 over HTTP has no transactions, so one

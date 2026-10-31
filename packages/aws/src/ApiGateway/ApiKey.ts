@@ -163,7 +163,7 @@ export const ApiKeyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — find the API key. We try the cached id first, fall
+          // Observe -- find the API key. We try the cached id first, fall
           // back to scanning by name with the alchemy ownership filter so
           // the reconciler converges after an out-of-band recreate or an
           // adoption that bypassed our id cache.
@@ -176,7 +176,7 @@ export const ApiKeyProvider = () =>
             observed = yield* readByName(id, name);
           }
 
-          // Ensure — create if missing. Tolerate `ConflictException` as a
+          // Ensure -- create if missing. Tolerate `ConflictException` as a
           // race with a peer reconciler or a stray key with the same name:
           // re-look up by name and treat the alchemy-owned hit as observed.
           if (!observed?.id) {
@@ -186,7 +186,7 @@ export const ApiKeyProvider = () =>
                 description: news.description,
                 enabled: news.enabled,
                 generateDistinctId: news.generateDistinctId,
-                // Distilled's CreateApiKeyRequest.value is SensitiveString —
+                // Distilled's CreateApiKeyRequest.value is SensitiveString --
                 // it accepts the Redacted directly and unwraps on encode, so
                 // the plaintext never passes through alchemy code.
                 value: news.value,
@@ -215,7 +215,7 @@ export const ApiKeyProvider = () =>
 
           const apiKeyId = observed.id!;
 
-          // Sync mutable scalar fields — observed ↔ desired patch list.
+          // Sync mutable scalar fields -- observed <-> desired patch list.
           const patches: ag.PatchOperation[] = [];
           if (news.name !== undefined && news.name !== observed.name) {
             patches.push({
@@ -245,7 +245,7 @@ export const ApiKeyProvider = () =>
             });
           }
 
-          // Sync tags — diff observed cloud tags against desired so adoption
+          // Sync tags -- diff observed cloud tags against desired so adoption
           // converges without fighting whatever tag set was already there.
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {

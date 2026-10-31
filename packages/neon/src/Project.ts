@@ -152,7 +152,7 @@ export type Project = Resource<
     pooledConnectionUri: string;
     /**
      * Parsed connection components ready to feed into a Postgres origin
-     * — e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
+     * -- e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
      * direct (non-pooled) endpoint, which is the recommended target
      * when fronting Neon with another pooler like Hyperdrive.
      */
@@ -244,7 +244,7 @@ export const ProjectProvider = () =>
         (project) =>
           hydrateProjectAttributes(project).pipe(
             // A project can be deleted between the list call and
-            // hydration — skip it rather than fail the whole enumeration.
+            // hydration -- skip it rather than fail the whole enumeration.
             Effect.catchTag("NotFound", () => Effect.undefined),
           ),
         { concurrency: 10 },
@@ -580,8 +580,8 @@ const findProjectByName = (name: string, orgId?: string) =>
         if (p.name === name) matches.push(p);
       }
       const nextCursor = page.pagination?.cursor;
-      // Neon returns a `pagination.cursor` on every response — it's the
-      // `created_at` of the last row, not a "has next page" flag — so we
+      // Neon returns a `pagination.cursor` on every response -- it's the
+      // `created_at` of the last row, not a "has next page" flag -- so we
       // can't loop on cursor presence alone or we spin forever re-fetching
       // empty/identical pages. Stop once a page comes back empty or the
       // cursor stops advancing.
@@ -618,7 +618,7 @@ type ObservedProject = NeonProject | ListProjectsResponse["projects"][number];
 
 /**
  * Hydrate a project summary (from the list API) into the exact `read`
- * Attributes shape — resolving the default branch, its primary database, and
+ * Attributes shape -- resolving the default branch, its primary database, and
  * the direct + pooled connection URIs. Returns `undefined` when the project
  * has no branch or database yet (mirrors `read`).
  */

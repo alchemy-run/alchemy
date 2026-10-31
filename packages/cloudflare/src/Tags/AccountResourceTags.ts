@@ -47,7 +47,7 @@ export interface AccountResourceTagsProps {
    * `kv_namespace`, `worker`, `r2_bucket`, or `account` for the account
    * itself).
    *
-   * Stable — the `(resourceType, resourceId)` pair is the tag set's
+   * Stable -- the `(resourceType, resourceId)` pair is the tag set's
    * identity, so changing it triggers a replacement. Declared as plain
    * `string` (narrowed to {@link AccountTagResourceType}) so `diff` can
    * compare without resolving an `Input`.
@@ -57,19 +57,19 @@ export interface AccountResourceTagsProps {
    * The ID of the resource the tags attach to (e.g. a KV namespace ID or
    * the account ID itself for `resourceType: "account"`).
    *
-   * Stable — changing it triggers a replacement.
+   * Stable -- changing it triggers a replacement.
    */
   resourceId: string;
   /**
    * Worker identifier. Required when `resourceType` is `worker_version`,
    * ignored otherwise.
    *
-   * Stable — changing it triggers a replacement.
+   * Stable -- changing it triggers a replacement.
    */
   workerId?: string;
   /**
    * Key/value tags to attach to the resource. The PUT API replaces the
-   * full tag set, so this is the complete desired set — keys absent here
+   * full tag set, so this is the complete desired set -- keys absent here
    * are removed from the resource on the next reconcile.
    *
    * An empty record is indistinguishable from "no tags" on Cloudflare's
@@ -182,7 +182,7 @@ export const AccountResourceTagsProvider = () =>
         return { action: "replace" } as const;
       }
       // resourceId / workerId are Input<string>; by diff time persisted
-      // olds are concrete strings — compare only when both sides are.
+      // olds are concrete strings -- compare only when both sides are.
       if (
         typeof o.resourceId === "string" &&
         typeof n.resourceId === "string" &&
@@ -203,7 +203,7 @@ export const AccountResourceTagsProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       // At plan time `olds` may still hold unresolved Output proxies (e.g.
-      // an adoption pre-check before the referenced resource deploys) —
+      // an adoption pre-check before the referenced resource deploys) --
       // only fall back to them once resolved.
       const resolvedOlds = olds !== undefined && isResolved(olds) ? olds : undefined;
       const resourceId = output?.resourceId ?? resolvedOlds?.resourceId;
@@ -219,7 +219,7 @@ export const AccountResourceTagsProvider = () =>
       });
       const tags = narrowTags(observed.tags);
       // Cloudflare reports untagged (and unknown) resources as an empty
-      // tag set — that is "gone" for this resource.
+      // tag set -- that is "gone" for this resource.
       if (Object.keys(tags).length === 0) return undefined;
 
       const attrs: AccountResourceTagsAttributes = {
@@ -244,7 +244,7 @@ export const AccountResourceTagsProvider = () =>
       const workerId = news.workerId as string | undefined;
       const desired = resolveTags(news.tags);
 
-      // Observe — cloud state is authoritative. The GET never 404s for a
+      // Observe -- cloud state is authoritative. The GET never 404s for a
       // missing/untagged resource; it returns an empty tag set, so the
       // same call covers greenfield, update, and adoption.
       const observed = yield* resourceTagging.getAccountTag({
@@ -254,7 +254,7 @@ export const AccountResourceTagsProvider = () =>
         workerId,
       });
 
-      // Sync — PUT is a full replace, so the only decision is whether the
+      // Sync -- PUT is a full replace, so the only decision is whether the
       // observed set already equals the desired set (skip the write).
       if (recordsEqual(narrowTags(observed.tags), desired)) {
         return {
@@ -285,7 +285,7 @@ export const AccountResourceTagsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The DELETE endpoint is idempotent — Cloudflare returns 204 even
+      // The DELETE endpoint is idempotent -- Cloudflare returns 204 even
       // for resources that were never tagged.
       yield* resourceTagging.deleteAccountTag({
         accountId: output.accountId,

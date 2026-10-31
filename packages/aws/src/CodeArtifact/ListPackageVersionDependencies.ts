@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link ListPackageVersionDependencies} — `domain`, `domainOwner`, and
+ * Request for {@link ListPackageVersionDependencies} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface ListPackageVersionDependenciesRequest extends Omit<
@@ -15,7 +15,7 @@ export interface ListPackageVersionDependenciesRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:ListPackageVersionDependencies`.
  *
- * Lists the direct dependencies recorded in a package version's manifest (npm `package.json`, maven `pom.xml`, …). Provide the implementation with
+ * Lists the direct dependencies recorded in a package version's manifest (npm `package.json`, maven `pom.xml`, ...). Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.ListPackageVersionDependenciesHttp)`.
  * ### Inspecting Package Versions
  * **Example:** List a Version's Dependencies

@@ -18,7 +18,7 @@ export interface DescribeInstanceStatusRequest extends Omit<
  * `Describe*` actions do not support resource-level permissions, so the grant
  * is on `*`).
  *
- * Reads the instance's system/instance status checks and scheduled events —
+ * Reads the instance's system/instance status checks and scheduled events --
  * e.g. a Lambda that alerts on failed reachability checks. Pass
  * `IncludeAllInstances: true` to also see the status while the instance is
  * stopped. Provide the implementation with
@@ -26,10 +26,10 @@ export interface DescribeInstanceStatusRequest extends Omit<
  * ### Observing Instances
  * **Example:** Check the instance's status checks
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const describeStatus = yield* AWS.EC2.DescribeInstanceStatus(instance);
  *
- * // runtime — read status checks (even while stopped)
+ * // runtime -- read status checks (even while stopped)
  * const result = yield* describeStatus({ IncludeAllInstances: true });
  * console.log(result.InstanceStatuses?.[0]?.InstanceStatus?.Status);
  * ```

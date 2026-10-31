@@ -179,7 +179,7 @@ export const DatasetProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The gateway is a path parameter — a dataset cannot move between
+      // The gateway is a path parameter -- a dataset cannot move between
       // gateways in place. By diff time both sides are resolved strings.
       const oldGatewayId = output?.gatewayId ?? olds?.gatewayId;
       if (
@@ -201,7 +201,7 @@ export const DatasetProvider = () =>
         const observed = yield* getDataset(acct, gatewayId, output.datasetId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createDatasetName(id, olds?.name);
@@ -218,14 +218,14 @@ export const DatasetProvider = () =>
         filters: news.filters ?? [],
       };
 
-      // Observe — the datasetId cached on `output` is a hint, not a
+      // Observe -- the datasetId cached on `output` is a hint, not a
       // guarantee: a missing dataset falls through and we recreate.
       let observed = output?.datasetId
         ? yield* getDataset(output.accountId ?? accountId, gatewayId, output.datasetId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). Cloudflare enforces
+        // Ensure -- greenfield (or out-of-band delete). Cloudflare enforces
         // name uniqueness per gateway, so a name conflict (e.g. a leftover
         // from an interrupted run or a create race) is converged by
         // adopting the existing dataset and syncing it to the desired
@@ -248,7 +248,7 @@ export const DatasetProvider = () =>
         observed = created;
       }
 
-      // Sync — diff observed cloud state against desired; the update API is
+      // Sync -- diff observed cloud state against desired; the update API is
       // a PUT that takes the full body, so send everything, but skip the
       // call entirely on a no-op.
       const observedShape = {
@@ -275,7 +275,7 @@ export const DatasetProvider = () =>
           id: output.datasetId,
         })
         // Cloudflare reports both a missing dataset and a missing gateway
-        // with code 7002 on this endpoint — either way it's already gone.
+        // with code 7002 on this endpoint -- either way it's already gone.
         .pipe(Effect.catchTag("DatasetNotFound", () => Effect.void));
     }),
     list: Effect.fn(function* () {
@@ -298,7 +298,7 @@ export const DatasetProvider = () =>
               ),
             ),
             // A gateway removed between enumeration and its dataset list
-            // is gone — skip it rather than failing the whole listing.
+            // is gone -- skip it rather than failing the whole listing.
             Effect.catchTag("GatewayNotFound", () => Effect.succeed([] as DatasetAttributes[])),
           ),
         { concurrency: 10 },
@@ -309,7 +309,7 @@ export const DatasetProvider = () =>
 
 /**
  * Read a dataset by id, mapping "gone" (`DatasetNotFound`, Cloudflare error
- * code 7002 — which also covers a deleted parent gateway) to `undefined`.
+ * code 7002 -- which also covers a deleted parent gateway) to `undefined`.
  */
 const getDataset = (accountId: string, gatewayId: string, id: string) =>
   aiGateway

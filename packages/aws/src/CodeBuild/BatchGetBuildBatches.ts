@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:BatchGetBuildBatches` — reads the status
+ * Runtime binding for `codebuild:BatchGetBuildBatches` -- reads the status
  * of one or more batch builds of the bound project by batch id.
  * ### Batch Builds
  * **Example:** Poll a Batch Build

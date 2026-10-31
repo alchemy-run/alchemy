@@ -59,7 +59,7 @@ export interface UserPoolPasswordPolicy {
 /**
  * A custom schema attribute added to the user pool. Custom attributes are
  * automatically prefixed with `custom:` by Cognito. Attributes can be added
- * to an existing pool but never removed or changed — removing or modifying a
+ * to an existing pool but never removed or changed -- removing or modifying a
  * declared attribute triggers a replacement.
  */
 export interface UserPoolSchemaAttribute {
@@ -103,7 +103,7 @@ export interface UserPoolSchemaAttribute {
 }
 
 /**
- * The user pool Lambda trigger slots that take a plain function ARN — the
+ * The user pool Lambda trigger slots that take a plain function ARN -- the
  * string-valued keys of the pool's `LambdaConfig`. The versioned custom
  * sender slots are configured separately: `CustomEmailSender` through
  * {@link UserPoolProps.customEmailSender} (+ `kmsKeyId`); `CustomSMSSender`
@@ -144,7 +144,7 @@ export interface UserPoolLambdaConfig extends Partial<Record<UserPoolTriggerName
 
 /**
  * The binding contract of a user pool: event sources contribute
- * `LambdaConfig` trigger entries (trigger slot → function ARN) that the
+ * `LambdaConfig` trigger entries (trigger slot -> function ARN) that the
  * provider merges with `props.lambdaConfig` and syncs onto the pool.
  */
 export interface UserPoolBinding {
@@ -154,7 +154,7 @@ export interface UserPoolBinding {
 
 /**
  * Two different Lambda functions were registered for the same user pool
- * trigger slot — Cognito supports exactly one function per trigger.
+ * trigger slot -- Cognito supports exactly one function per trigger.
  */
 export class ConflictingUserPoolTrigger extends Data.TaggedError("ConflictingUserPoolTrigger")<{
   readonly trigger: string;
@@ -176,7 +176,7 @@ export class InvalidUserPoolConfiguration extends Data.TaggedError("InvalidUserP
 export type UserPoolAuthFactor = "PASSWORD" | "EMAIL_OTP" | "SMS_OTP" | "WEB_AUTHN";
 
 /**
- * The sign-in policy of the pool — which first-factor authentication
+ * The sign-in policy of the pool -- which first-factor authentication
  * methods users may start with (choice-based authentication). Requires the
  * `ESSENTIALS` or `PLUS` feature tier.
  */
@@ -321,7 +321,7 @@ export interface UserPoolProps {
   deletionProtection?: boolean;
   /**
    * When true, only administrators (via `AdminCreateUser`) can create
-   * users — public `SignUp` is disabled.
+   * users -- public `SignUp` is disabled.
    * @default false
    */
   adminCreateUserOnly?: boolean;
@@ -337,9 +337,9 @@ export interface UserPoolProps {
    */
   tier?: "LITE" | "ESSENTIALS" | "PLUS";
   /**
-   * Lambda trigger configuration (trigger slot → function ARN). Merged with
+   * Lambda trigger configuration (trigger slot -> function ARN). Merged with
    * trigger entries injected through the binding contract by
-   * `Cognito.onUserPoolTrigger` / `onPreSignUp` / etc. — prefer those over
+   * `Cognito.onUserPoolTrigger` / `onPreSignUp` / etc. -- prefer those over
    * declaring ARNs here, since the event source also creates the invoke
    * Permission and registers the runtime handler.
    */
@@ -356,7 +356,7 @@ export interface UserPoolProps {
   /**
    * How the pool delivers its email messages: Cognito's built-in delivery
    * (`COGNITO_DEFAULT`, the service default) or a verified SES identity
-   * (`DEVELOPER`) — no custom sender Lambda required. When omitted, an
+   * (`DEVELOPER`) -- no custom sender Lambda required. When omitted, an
    * observed email configuration is preserved rather than reset to the
    * service default.
    */
@@ -365,7 +365,7 @@ export interface UserPoolProps {
    * ARN of the symmetric KMS key Cognito uses to encrypt the codes it
    * passes to the custom sender function(s) (`LambdaConfig.KMSKeyID`).
    * The principal running the deploy must hold `kms:CreateGrant` on the
-   * key — Cognito creates a grant against it when the pool is configured —
+   * key -- Cognito creates a grant against it when the pool is configured --
    * and the sender function's role needs `kms:Decrypt`.
    */
   kmsKeyId?: string;
@@ -391,7 +391,7 @@ export interface UserPool extends Resource<
 > {}
 
 /**
- * An Amazon Cognito user pool — a managed user directory that handles
+ * An Amazon Cognito user pool -- a managed user directory that handles
  * sign-up, sign-in, and token issuance (OIDC-compliant JWTs) for your
  * application.
  * ### Creating a User Pool
@@ -599,7 +599,7 @@ const validateProps = (props: UserPoolProps) =>
     ? Effect.fail(
         new InvalidUserPoolConfiguration({
           reason:
-            "customEmailSender requires kmsKeyId — Cognito encrypts the codes it passes to the custom sender with that KMS key",
+            "customEmailSender requires kmsKeyId \u2014 Cognito encrypts the codes it passes to the custom sender with that KMS key",
         }),
       )
     : props.emailConfiguration?.emailSendingAccount === "DEVELOPER" &&
@@ -607,7 +607,7 @@ const validateProps = (props: UserPoolProps) =>
       ? Effect.fail(
           new InvalidUserPoolConfiguration({
             reason:
-              "emailConfiguration with emailSendingAccount DEVELOPER requires sourceArn — the ARN of the verified SES identity Cognito sends from",
+              "emailConfiguration with emailSendingAccount DEVELOPER requires sourceArn \u2014 the ARN of the verified SES identity Cognito sends from",
           }),
         )
       : props.tier === "LITE" &&
@@ -657,7 +657,7 @@ export const UserPoolProvider = () =>
 
       /**
        * Find a pool by exact name. Pool names are not unique, so return every
-       * candidate — callers disambiguate by ownership tags.
+       * candidate -- callers disambiguate by ownership tags.
        */
       const findPoolsByName = Effect.fn(function* (name: string) {
         const pages = yield* cip.listUserPools.pages({ MaxResults: 60 }).pipe(Stream.runCollect);
@@ -760,10 +760,10 @@ export const UserPoolProvider = () =>
         return desired?.KMSKeyID !== observed?.KMSKeyID;
       };
 
-      /** The update body sent to `updateUserPool` — always the full desired
+      /** The update body sent to `updateUserPool` -- always the full desired
        * state, because Cognito resets any omitted field to its default.
        * Props the user left undefined are "don't care" (see `hasDrift`), so
-       * their OBSERVED value is echoed back rather than dropped — an update
+       * their OBSERVED value is echoed back rather than dropped -- an update
        * to one setting must not reset another to its default. */
       const desiredUpdate = (
         news: UserPoolProps,
@@ -781,7 +781,7 @@ export const UserPoolProvider = () =>
         return {
           LambdaConfig: lambdaConfig,
           // updateUserPool resets an omitted EmailConfiguration to the
-          // service default — echo the OBSERVED configuration back when the
+          // service default -- echo the OBSERVED configuration back when the
           // prop is undefined so unrelated updates never clear it.
           EmailConfiguration:
             news.emailConfiguration === undefined
@@ -799,7 +799,7 @@ export const UserPoolProvider = () =>
               ? observed.AdminCreateUserConfig === undefined
                 ? undefined
                 : {
-                    // never echo the deprecated UnusedAccountValidityDays —
+                    // never echo the deprecated UnusedAccountValidityDays --
                     // Cognito rejects it next to TemporaryPasswordValidityDays
                     AllowAdminCreateUserOnly:
                       observed.AdminCreateUserConfig.AllowAdminCreateUserOnly,
@@ -829,7 +829,7 @@ export const UserPoolProvider = () =>
 
       /** Full password policy with the Cognito API defaults filled in, so a
        * partial desired policy compares fairly against the observed one.
-       * Operates on the wire shape — `temporaryPasswordValidityDays` is a
+       * Operates on the wire shape -- `temporaryPasswordValidityDays` is a
        * whole number of days (desired durations are converted first). */
       const normalizedPasswordPolicy = (
         policy: Omit<UserPoolPasswordPolicy, "temporaryPasswordValidity"> & {
@@ -851,7 +851,7 @@ export const UserPoolProvider = () =>
       });
 
       /** True when the observed pool differs from the desired mutable state.
-       * Props the user left undefined are "don't care" and never drift —
+       * Props the user left undefined are "don't care" and never drift --
        * except `LambdaConfig`, which the provider owns outright (bindings
        * contribute to it), so a trigger or custom sender removed from the
        * program is drift that clears the observed entry. */
@@ -989,7 +989,7 @@ export const UserPoolProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // schema attributes are add-only: removal or mutation ⇒ replace
+          // schema attributes are add-only: removal or mutation => replace
           const oldSchema = olds?.schema ?? [];
           const newSchema = news?.schema ?? [];
           for (const before of oldSchema) {
@@ -1007,12 +1007,12 @@ export const UserPoolProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const triggers = yield* resolveTriggers(news, bindings);
 
-          // 1. OBSERVE — output.userPoolId is only a cache; fall back to a
+          // 1. OBSERVE -- output.userPoolId is only a cache; fall back to a
           //    name search so out-of-band deletes and adoption converge.
           let observed =
             output?.userPoolId !== undefined ? yield* describePool(output.userPoolId) : undefined;
           if (observed === undefined) {
-            // Recover from state loss by name — only take over a pool that
+            // Recover from state loss by name -- only take over a pool that
             // carries our ownership tags (adoption flows arrive with output
             // set, not through this path).
             const candidates = yield* findPoolsByName(name);
@@ -1024,7 +1024,7 @@ export const UserPoolProvider = () =>
             }
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             observed = yield* cip
               .createUserPool({
@@ -1058,7 +1058,7 @@ export const UserPoolProvider = () =>
               })
               .pipe(Effect.map((r) => r.UserPool!));
           } else {
-            // 3. SYNC — updateUserPool resets omitted fields to defaults, so
+            // 3. SYNC -- updateUserPool resets omitted fields to defaults, so
             //    the body is always the full desired mutable state; skip the
             //    call entirely when nothing drifted.
             const lambdaConfig = desiredLambdaConfig(news, triggers, observed.LambdaConfig);
@@ -1069,7 +1069,7 @@ export const UserPoolProvider = () =>
               });
             }
 
-            // 3b. SYNC SCHEMA — custom attributes are add-only.
+            // 3b. SYNC SCHEMA -- custom attributes are add-only.
             const observedNames = new Set(
               (observed.SchemaAttributes ?? [])
                 .map((attribute) => attribute.Name)
@@ -1091,7 +1091,7 @@ export const UserPoolProvider = () =>
           const userPoolId = observed.Id!;
           const userPoolArn = observed.Arn!;
 
-          // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3c. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (never olds/output).
           const observedTags = yield* cip.listTagsForResource({ ResourceArn: userPoolArn }).pipe(
             Effect.map((r) => tagRecordOf(r.Tags)),

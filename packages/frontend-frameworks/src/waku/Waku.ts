@@ -49,7 +49,7 @@ export const WAKU_SERVER_ENTRY_PATH = "dist/lib/vite-entries/entry.server.js";
 export const WAKU_SERVER_ENTRY_MODULE = "server/index.js";
 
 /**
- * The stable importable specifier for waku's server handler — the module a
+ * The stable importable specifier for waku's server handler -- the module a
  * USER worker entry wraps (the deploy-target user-entry seam; precedent:
  * React Router's `virtual:react-router/server-build`). Resolves to waku's
  * rsc server entry ({@link WAKU_SERVER_ENTRY_PATH}), whose default export is
@@ -101,20 +101,20 @@ export interface WakuTargetContext {
  * `framework-core` {@link DeployTarget} seams plus the two
  * hooks a target must implement to slot into waku's toolchain:
  *
- * - `adapter` — the absolute path of the waku server-entry adapter module the
+ * - `adapter` -- the absolute path of the waku server-entry adapter module the
  *   in-memory config selects via `unstable_adapter`. Always required: leaving
  *   `unstable_adapter` unset makes waku silently pick `waku/adapters/node`,
  *   which cannot run on a non-Node target runtime.
- * - `vitePlugins` — vite plugins injected *first* inside waku's
+ * - `vitePlugins` -- vite plugins injected *first* inside waku's
  *   `config.vite.plugins` (waku's `extraPlugins` places user plugins first,
- *   ahead of waku's own environments plugin) — the position upstream
+ *   ahead of waku's own environments plugin) -- the position upstream
  *   documents for `@cloudflare/vite-plugin`, and the only one where a
  *   target's request-proxy middleware registers before waku's Node request
  *   bridge.
  *
  * The Cloudflare implementation ships at `@alchemy.run/frontend-frameworks/waku/cloudflare`
  * (the default). A future target (e.g. AWS) is a new module implementing the
- * same two hooks — no change to this package's orchestration.
+ * same two hooks -- no change to this package's orchestration.
  */
 export interface WakuTarget<Config = unknown> extends DeployTarget<Config> {
   /** Absolute path of the adapter module waku's config selects via `unstable_adapter`. */
@@ -137,7 +137,7 @@ export interface WakuTarget<Config = unknown> extends DeployTarget<Config> {
 /**
  * The context a waku target's wholesale `build` takeover receives: the
  * generic build context plus the inline waku options the framework was
- * constructed with ({@link WakuFrameworkOptions.waku}) — carried so
+ * constructed with ({@link WakuFrameworkOptions.waku}) -- carried so
  * wholesale targets that re-run the framework in a child process (the AWS
  * target) can reconstruct it. Only JSON-serializable fields survive that
  * process boundary.
@@ -163,12 +163,12 @@ export interface WakuHarnessTargetOptions {
  * How the deploy target is passed to the waku integration:
  *
  * - a target value / factory / module-specifier string (a
- *   {@link DeployTargetInput}) — resolved with
+ *   {@link DeployTargetInput}) -- resolved with
  *   `resolveDeployTarget`
  * - the e2e harness's target-scoped carriage
- *   ({@link WakuHarnessTargetOptions}) — selects the default cloudflare
+ *   ({@link WakuHarnessTargetOptions}) -- selects the default cloudflare
  *   target module and hands it `cloudflare.worker` as its config
- * - omitted — the default cloudflare target module with the deprecated
+ * - omitted -- the default cloudflare target module with the deprecated
  *   `vite` alias as its config
  */
 export type WakuTargetOption = DeployTargetInput<WakuTarget, unknown> | WakuHarnessTargetOptions;
@@ -202,7 +202,7 @@ export interface WakuFrameworkOptions {
   /**
    * Extra waku config (`srcDir`, `distDir`, `vite`, ...) merged OVER the
    * project's own `waku.config.ts`/`waku.config.js`, which is always loaded
-   * natively first (same semantics as waku's CLI — see
+   * natively first (same semantics as waku's CLI -- see
    * {@link mergeUserWakuConfig}). `unstable_adapter` is owned by the deploy
    * target and must not be set here or in the config file.
    */
@@ -221,7 +221,7 @@ export interface WakuFrameworkOptions {
 /**
  * The config files waku's CLI probes for, in probe order (see waku's
  * `lib/vite-rsc/loader.ts` `loadConfig`). Only the existence probe uses these
- * names — the actual import goes through vite's resolver as `/waku.config`,
+ * names -- the actual import goes through vite's resolver as `/waku.config`,
  * exactly like upstream.
  */
 export const WAKU_CONFIG_FILES = ["waku.config.ts", "waku.config.js"] as const;
@@ -254,7 +254,7 @@ export interface MergeUserWakuConfigInputs {
  * inline waku options: the file is the base, inline options win per key
  * (mirroring vite's file-config-vs-inline-config precedence), and the `vite`
  * fields are combined with vite's own `mergeConfig` (arrays like `plugins`
- * concatenate — file plugins first, inline plugins after).
+ * concatenate -- file plugins first, inline plugins after).
  */
 export const mergeUserWakuConfig = (inputs: MergeUserWakuConfigInputs): WakuConfig | undefined => {
   const file = definedConfig(inputs.file);
@@ -305,14 +305,14 @@ export interface WakuConfigInputs {
   /**
    * Deploy-target vite plugins injected first inside `vite.plugins` (the
    * target's `vitePlugins` hook). The SSG preview server resolves the same
-   * config — upstream parity: waku's CLI reuses the loaded config's plugin
-   * instances for both `createBuilder` and `vite.preview` — so a target
+   * config -- upstream parity: waku's CLI reuses the loaded config's plugin
+   * instances for both `createBuilder` and `vite.preview` -- so a target
    * whose plugins implement `configurePreviewServer` (the cloudflare
    * target's does) serves SSG through its own runtime.
    */
   readonly plugins?: ReadonlyArray<ViteModule.PluginOption> | undefined;
   /**
-   * The user's waku config — the natively loaded `waku.config.ts`/`.js`
+   * The user's waku config -- the natively loaded `waku.config.ts`/`.js`
    * merged with the integration's inline waku options (see
    * {@link mergeUserWakuConfig}). Its `vite` config is preserved; a user
    * `unstable_adapter` is rejected by the caller before this point (the
@@ -351,7 +351,7 @@ const mergeWorkerEnvironment = (
  *   a user-set adapter is rejected upstream of this function.
  * - The target's vite plugins are injected INSIDE `vite.plugins` (waku's
  *   `extraPlugins` places user plugins first, ahead of waku's own
- *   environments plugin) — the position upstream documents for
+ *   environments plugin) -- the position upstream documents for
  *   `@cloudflare/vite-plugin`, and the only one where the target's proxy
  *   middleware registers before waku's Node request bridge.
  * - `waku` and `hono` are deduped so the adapter module (which lives outside
@@ -388,7 +388,7 @@ export const makeWakuConfigInput = (inputs: WakuConfigInputs): WakuConfig => {
 /**
  * `NODE_ENV` as it was when this module first loaded. Waku's CLI sets
  * `NODE_ENV` before loading anything (waku's environmentsPlugin bakes
- * `process.env.NODE_ENV` into `define`), which we replicate — but a
+ * `process.env.NODE_ENV` into `define`), which we replicate -- but a
  * long-lived process may run both `build` and `dev` (e.g. a playwright worker
  * driving the live and dev servers), and a plain `??=` would leak the first
  * operation's value into the second. Capturing the initial value preserves an
@@ -450,7 +450,7 @@ interface WakuPreviewServer {
  * Replicates waku's `cmd-build.ts` `startPreviewServerImpl`: the SSG step of
  * `builder.buildApp()` (the adapter's `build`) calls
  * `unstable_startPreviewServer`, which throws unless this global is set. The
- * preview server resolves the SAME waku config as the build — upstream
+ * preview server resolves the SAME waku config as the build -- upstream
  * parity: waku's CLI calls `combinedPlugins(config)` for both
  * `createBuilder` and `vite.preview`, reusing the loaded config's plugin
  * instances across the two servers. A deploy target whose vite plugins
@@ -515,7 +515,7 @@ interface ProjectModules {
  *
  * Deploy-target resolution happens per operation: platform-specific halves
  * (adapter module, bundler plugins) come exclusively from the resolved
- * {@link WakuTarget} — this module contains no platform imports.
+ * {@link WakuTarget} -- this module contains no platform imports.
  *
  * Returns the service implementation as an Effect (the alchemy-side
  * `FrameworkModule` contract); use {@link layer} for the `Layer` form the
@@ -597,17 +597,17 @@ export const make = (
      * waku's own CLI does. Waku's loader (`lib/vite-rsc/loader.ts`
      * `loadConfig`) is NOT exported, so its semantics are replicated: an
      * existence probe for {@link WAKU_CONFIG_FILES} at the project root
-     * (waku probes the cwd — its CLI always runs from the project),
+     * (waku probes the cwd -- its CLI always runs from the project),
      * followed by `vite.runnerImport("/waku.config")` with the project's
      * own vite. `runnerImport`'s inline config pins `root` so the
      * root-relative id resolves identically when root !== cwd. `NODE_ENV`
      * is set before this runs, matching waku's CLI ordering (vite#20299).
      *
      * Deliberate divergences from the CLI (host-process concerns):
-     * - no `loadDotEnv()` — the CLI mutates `process.env` from
+     * - no `loadDotEnv()` -- the CLI mutates `process.env` from
      *   `.env.local`/`.env`; here the host (alchemy/e2e) owns the process
      *   environment and worker env comes from bindings.
-     * - no dev-server restart on config-file change — the dev handle is a
+     * - no dev-server restart on config-file change -- the dev handle is a
      *   plain URL; edits to `waku.config.*` need a dev restart.
      */
     const loadUserConfigFile: (
@@ -715,7 +715,7 @@ export const make = (
         const previewPort = yield* FrameworkCore.resolveViteDevPort(project.vite.version);
         // Entry selection (the user-entry seam): when the deploy target
         // carries a user worker entry, the chunk built from it must become
-        // `serverModules[0]` — waku's own `server/index.js` remains an
+        // `serverModules[0]` -- waku's own `server/index.js` remains an
         // ordinary chunk the user entry imports (via
         // `virtual:waku/server-entry`). Without one, waku's own `index`
         // entry chunk is pinned by name as before.
@@ -798,7 +798,7 @@ export const make = (
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
         // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral
-        // port on older Vite — see `resolveViteDevPort`. strictPort stays
+        // port on older Vite -- see `resolveViteDevPort`. strictPort stays
         // off for allocated ports so a probe race just moves to the next
         // ephemeral port.
         const explicitPort = devOptions?.port || options?.port;
@@ -833,7 +833,7 @@ export const make = (
         if (resolved === undefined) {
           return yield* fail("Could not determine the URL of the waku dev server")(undefined);
         }
-        // Vite's `resolvedUrls.local[0]` is `http://host:port/` — strip
+        // Vite's `resolvedUrls.local[0]` is `http://host:port/` -- strip
         // the trailing slash so callers can concatenate paths (`${url}/`)
         // without producing `//`, which waku's router does not match.
         const url = resolved.replace(/\/+$/, "");
@@ -852,11 +852,11 @@ export const make = (
 
     // Waku's toolchain assumes `cwd === root` at dev startup (the html shell
     // and relative inputs resolve from the cwd), so its startup window
-    // chdirs — which must not happen in a process hosting other sites' dev
+    // chdirs -- which must not happen in a process hosting other sites' dev
     // servers (the alchemy dev sidecar). Run the dev server in a dedicated
     // child whose cwd IS the root instead (see core/DevChild.ts). Inside
-    // that child — or when the options cannot cross the process boundary
-    // (e.g. a deploy-target VALUE from the e2e harness) — the in-process
+    // that child -- or when the options cannot cross the process boundary
+    // (e.g. a deploy-target VALUE from the e2e harness) -- the in-process
     // path runs directly.
     const dev: FrameworkCore.Framework["Service"]["dev"] = (devOptions) => {
       if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
@@ -882,7 +882,7 @@ export const make = (
   });
 
 /**
- * The `Layer` form of {@link make} — the shape the e2e harness's framework
+ * The `Layer` form of {@link make} -- the shape the e2e harness's framework
  * factory contract expects (`(options) => Layer<Framework>`).
  */
 export const layer = (

@@ -32,7 +32,7 @@ const LIST_MAX_PAGES = 100;
 /** Whether authorizations can be approved on this card. */
 export type IssuingCardStatus = "active" | "canceled" | "inactive";
 
-/** The type of Issuing card. Create-only — changing it replaces the card. */
+/** The type of Issuing card. Create-only -- changing it replaces the card. */
 export type IssuingCardType = "physical" | "virtual";
 
 /** Why a previous card is being replaced. Create-only. */
@@ -107,13 +107,13 @@ export interface IssuingCardSpendingControls {
 
 export interface IssuingCardProps {
   /**
-   * Id of the Issuing Cardholder this card is issued to (`ich_…`).
-   * Create-only — changing it replaces the card.
+   * Id of the Issuing Cardholder this card is issued to (`ich_...`).
+   * Create-only -- changing it replaces the card.
    */
   cardholder: string;
   /**
    * Three-letter ISO currency code, lowercase. Supported currencies are
-   * `usd` (US), `eur` (EU), and `gbp` (UK). Create-only — changing it
+   * `usd` (US), `eur` (EU), and `gbp` (UK). Create-only -- changing it
    * replaces the card.
    */
   currency: string;
@@ -130,12 +130,12 @@ export interface IssuingCardProps {
    */
   status?: "active" | "inactive";
   /**
-   * Second line printed on the card (max 24 characters). Create-only —
+   * Second line printed on the card (max 24 characters). Create-only --
    * changing it replaces the card.
    */
   secondLine?: string;
   /**
-   * Desired expiration month (1–12) when specifying a custom expiration
+   * Desired expiration month (1-12) when specifying a custom expiration
    * date. Create-only.
    */
   expMonth?: number;
@@ -145,7 +145,7 @@ export interface IssuingCardProps {
    */
   expYear?: number;
   /**
-   * Financial account id this card is attached to. Create-only —
+   * Financial account id this card is attached to. Create-only --
    * changing it replaces the card.
    */
   financialAccount?: string;
@@ -177,9 +177,9 @@ export type IssuingCard = Resource<
   "Stripe.IssuingCard",
   IssuingCardProps,
   {
-    /** Stripe Issuing card id (`ic_…`). */
+    /** Stripe Issuing card id (`ic_...`). */
     id: string;
-    /** Id of the cardholder this card belongs to (`ich_…`). */
+    /** Id of the cardholder this card belongs to (`ich_...`). */
     cardholder: string;
     /** Three-letter ISO currency code. */
     currency: string;
@@ -221,14 +221,14 @@ export type IssuingCard = Resource<
 >;
 
 /**
- * A Stripe Issuing Card — a virtual or physical card issued to a
+ * A Stripe Issuing Card -- a virtual or physical card issued to a
  * Cardholder. `cardholder`, `currency`, `type`, `secondLine`, and
  * custom expiration are immutable (changing them replaces the card).
  * Status, spending controls, personalization design, and metadata
  * update in place.
  *
  * Cards cannot be hard-deleted; destroying this resource cancels the
- * card (`status: canceled`). Canceled cards cannot be reactivated — a
+ * card (`status: canceled`). Canceled cards cannot be reactivated -- a
  * later create with the same logical id provisions a new card.
  *
  * Issuing must be enabled on the Stripe account.
@@ -584,7 +584,7 @@ export const IssuingCardProvider = () =>
         logicalId: id,
       });
       // A previous generation (same logical id, different immutable
-      // fields) must not be reused — Stripe cards cannot change
+      // fields) must not be reused -- Stripe cards cannot change
       // cardholder, currency, type, or printed second line.
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
         current = undefined;

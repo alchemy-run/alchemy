@@ -28,23 +28,23 @@ export type BillingBucketsViewProps = {
    * `billingAccounts/{billingAccount}/locations/{location}/buckets/{bucket}/views/{view}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * and hyphens. Immutable — changing it replaces the view.
+   * and hyphens. Immutable -- changing it replaces the view.
    */
   viewId?: string;
   /**
-   * Bucket id that owns this view. Immutable — changing it replaces the
+   * Bucket id that owns this view. Immutable -- changing it replaces the
    * view.
    */
   bucketId: string;
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the view.
    */
   billingAccountId?: string;
   /**
-   * Location of the parent bucket. Immutable — changing it replaces the
+   * Location of the parent bucket. Immutable -- changing it replaces the
    * view.
    * @default "global"
    */
@@ -56,7 +56,7 @@ export type BillingBucketsViewProps = {
   filter?: string;
   /**
    * Human-readable description. Log views have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -95,7 +95,7 @@ export type BillingBucketsView = Resource<
  * A bucket may contain a maximum of 30 views. Log views have no labels
  * field, so Alchemy stamps ownership into the description for `list` /
  * nuke. `viewId`, `bucketId`, `location`, and `billingAccountId` are
- * identity — changing any replaces the view. Filter and description
+ * identity -- changing any replaces the view. Filter and description
  * update in place.
  *
  * ### Creating a Billing Bucket View

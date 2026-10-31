@@ -53,7 +53,7 @@ export interface SubnetGroup extends Resource<
 > {}
 
 /**
- * A DAX subnet group — the set of VPC subnets a DAX cluster's nodes are
+ * A DAX subnet group -- the set of VPC subnets a DAX cluster's nodes are
  * placed into.
  *
  * Subnet groups are free and provision instantly. A {@link Cluster}
@@ -126,7 +126,7 @@ export const SubnetGroupProvider = () =>
           const group = yield* readGroup(name);
           if (group?.SubnetGroupName === undefined) return undefined;
           // DAX subnet groups do not support tags, so ownership cannot be
-          // verified — return the attributes directly.
+          // verified -- return the attributes directly.
           return toAttrs(group);
         }),
 
@@ -134,10 +134,10 @@ export const SubnetGroupProvider = () =>
           const props = news ?? { subnetIds: [] };
           const name = output?.subnetGroupName ?? (yield* toName(id, props));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* dax
               .createSubnetGroup({
@@ -154,7 +154,7 @@ export const SubnetGroupProvider = () =>
             });
           }
 
-          // 3. Sync — apply description / subnet delta from OBSERVED state.
+          // 3. Sync -- apply description / subnet delta from OBSERVED state.
           const update: dax.UpdateSubnetGroupRequest = {
             SubnetGroupName: name,
           };
@@ -181,7 +181,7 @@ export const SubnetGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A subnet group still attached to a cluster rejects deletion with
-          // SubnetGroupInUseFault — retry (bounded) while the cluster
+          // SubnetGroupInUseFault -- retry (bounded) while the cluster
           // releases it. NotFound is success (idempotent delete).
           yield* dax.deleteSubnetGroup({ SubnetGroupName: output.subnetGroupName }).pipe(
             Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
@@ -194,7 +194,7 @@ export const SubnetGroupProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            // DAX has no paginated distilled ops — hand-roll a bounded loop
+            // DAX has no paginated distilled ops -- hand-roll a bounded loop
             // and treat an empty/absent NextToken as terminal.
             const groups: dax.SubnetGroup[] = [];
             let nextToken: string | undefined;

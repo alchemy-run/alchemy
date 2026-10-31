@@ -36,7 +36,7 @@ export interface RunnerConfig {
   readonly debug?: boolean | undefined;
   /**
    * The command the pipeline runs to build the Next.js app. Defaults (in the
-   * runner) to `npx next build` — NOT the app's `build` script, which by
+   * runner) to `npx next build` -- NOT the app's `build` script, which by
    * fixture convention is `e2e build` and would recurse into this runner.
    */
   readonly buildCommand?: string | undefined;
@@ -81,7 +81,7 @@ export const runnerPath = (): string =>
  * so it must never run inside the calling process.
  *
  * Output is piped and re-emitted through the parent's own
- * `process.stdout`/`process.stderr` JS streams — NOT `stdio: "inherit"`.
+ * `process.stdout`/`process.stderr` JS streams -- NOT `stdio: "inherit"`.
  * `inherit` writes straight to the process file descriptors, bypassing any
  * in-process stdout capture (e.g. a test runner's log file), which silently
  * discards `next build`'s failure output when the pipeline exits non-zero.

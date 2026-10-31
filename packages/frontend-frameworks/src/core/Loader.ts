@@ -42,7 +42,7 @@ const isCommonJsFile = (filePath: string): boolean => {
 };
 
 /**
- * Import a module from a *project's* dependency tree rather than our own —
+ * Import a module from a *project's* dependency tree rather than our own --
  * the project's `vite`, `astro`, `waku`, `next`, etc. must be the instance
  * the framework integration drives, not whatever happens to be hoisted next
  * to this package.
@@ -56,7 +56,7 @@ const isCommonJsFile = (filePath: string): boolean => {
  * every Node child with its Oxc loader (`module.registerHooks`), and once a
  * synchronous `load` hook exists Node's ESM loader runs *imported* CommonJS
  * through a re-invented `require` that lacks `require.extensions` and
- * `require.cache` (nodejs/node#59666) — `next` patches `require.extensions`
+ * `require.cache` (nodejs/node#59666) -- `next` patches `require.extensions`
  * as it loads and dies with "Cannot read properties of undefined (reading
  * '.js')". The real CommonJS loader still consults the hooks, so project
  * TypeScript reached through `require()` keeps transpiling.
@@ -81,7 +81,7 @@ export const loadProjectModule = <T = unknown>(
         // (works for non-linked installs).
         return (await import(/* @vite-ignore */ specifier)) as T;
       } catch (fallback) {
-        // The project-relative attempt is the meaningful failure — surface
+        // The project-relative attempt is the meaningful failure -- surface
         // it as the message and cause; the bare fallback failing only says
         // the specifier isn't in OUR graph, so it rides along in `errors`.
         const error = new AggregateError([primary, fallback], String(primary));
@@ -99,7 +99,7 @@ export const loadProjectModule = <T = unknown>(
  *
  * Prefer `createRequire(<root>/package.json).resolve(name/package.json)`.
  * When that subpath is not exported (ESM-only packages such as `vinext`),
- * search `require.resolve.paths(name)` — Node's CJS lookup, which Vite's
+ * search `require.resolve.paths(name)` -- Node's CJS lookup, which Vite's
  * ESM `import.meta.resolve` hooks do not intercept. Do not use
  * `import.meta.resolve(name, projectPackageJson)`: after `vite.createBuilder`
  * those hooks ignore parentURL and resolve from this package instead.
@@ -147,7 +147,7 @@ const packageDirFromRequirePaths = (
 /**
  * Best-effort version of `packageName` as resolved from `fromDirectory`
  * (`undefined` when unresolvable). Used to feature-detect a dependency of a
- * project package — e.g. the Vite that Astro itself resolves — without
+ * project package -- e.g. the Vite that Astro itself resolves -- without
  * loading the module.
  */
 export const resolveInstalledPackageVersion = (

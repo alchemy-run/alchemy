@@ -7,7 +7,7 @@ import * as Schedule from "effect/Schedule";
 
 /**
  * Bounded wait for a stack to leave an in-progress status. Explicitly-typed
- * pipeable helper — an inline `Effect.retry` in a provider lifecycle op leaks
+ * pipeable helper -- an inline `Effect.retry` in a provider lifecycle op leaks
  * `Retry.Return`'s conditional into declaration emit and widens the provider
  * layer to `unknown` R for every `AWS.providers()` consumer.
  */
@@ -29,9 +29,9 @@ import type { Providers } from "../Providers.ts";
 
 /**
  * Behaviour when stack creation fails.
- * - `ROLLBACK` (default) — roll the stack back and delete created resources.
- * - `DO_NOTHING` — leave created resources in place for inspection.
- * - `DELETE` — delete the stack and all created resources.
+ * - `ROLLBACK` (default) -- roll the stack back and delete created resources.
+ * - `DO_NOTHING` -- leave created resources in place for inspection.
+ * - `DELETE` -- delete the stack and all created resources.
  */
 export type OnFailure = "DO_NOTHING" | "ROLLBACK" | "DELETE";
 
@@ -45,7 +45,7 @@ export interface StackProps {
   stackName?: string;
   /**
    * The CloudFormation template as an inline JSON or YAML string. Mutually
-   * exclusive with `templateURL`. Maximum 51,200 bytes — use `templateURL`
+   * exclusive with `templateURL`. Maximum 51,200 bytes -- use `templateURL`
    * for larger templates.
    */
   templateBody?: string;
@@ -120,7 +120,7 @@ export interface Stack extends Resource<
 > {}
 
 /**
- * An AWS CloudFormation stack — deploy an existing CloudFormation template
+ * An AWS CloudFormation stack -- deploy an existing CloudFormation template
  * from Alchemy as an interop/escape hatch.
  *
  * Create and update are asynchronous: the provider submits the template and
@@ -189,7 +189,7 @@ const isInProgress = (status: string | undefined): boolean =>
 
 /**
  * A ROLLBACK_COMPLETE / ROLLBACK_FAILED create leaves the stack in a
- * non-updatable "created but failed" state — it can only be deleted.
+ * non-updatable "created but failed" state -- it can only be deleted.
  */
 const isFailedCreateRemnant = (status: string | undefined): boolean =>
   status === "ROLLBACK_COMPLETE" || status === "ROLLBACK_FAILED";
@@ -280,7 +280,7 @@ export const StackProvider = () =>
         return stack;
       });
 
-      // Deletion is asynchronous too — wait until the stack reports
+      // Deletion is asynchronous too -- wait until the stack reports
       // DELETE_COMPLETE (or vanishes) so dependencies can be torn down after.
       const waitUntilGone = Effect.fn(function* (stackId: string, stackName: string) {
         yield* retryUntilStackSettled(
@@ -337,7 +337,7 @@ export const StackProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           // cache.
           let observed = yield* describe(output?.stackId ?? name);
 
@@ -349,7 +349,7 @@ export const StackProvider = () =>
             observed = undefined;
           }
 
-          // 2. Ensure — create if missing, then wait for CREATE_COMPLETE.
+          // 2. Ensure -- create if missing, then wait for CREATE_COMPLETE.
           if (observed === undefined) {
             const created = yield* cloudformation.createStack({
               StackName: name,
@@ -376,7 +376,7 @@ export const StackProvider = () =>
             return toAttrs(settled);
           }
 
-          // 3. Sync — submit the desired template/params/tags. An unchanged
+          // 3. Sync -- submit the desired template/params/tags. An unchanged
           // template is a no-op (typed NoUpdateToPerform); skip the wait.
           const didUpdate = yield* cloudformation
             .updateStack({

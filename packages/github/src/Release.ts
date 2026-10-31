@@ -21,7 +21,7 @@ export interface ReleaseProps {
   repository: string;
 
   /**
-   * Git tag name for this release. The tag is the release's identity —
+   * Git tag name for this release. The tag is the release's identity --
    * changing it replaces the release.
    */
   tagName: string;
@@ -70,7 +70,7 @@ export interface ReleaseProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -292,7 +292,7 @@ export const ReleaseProvider = () =>
   Provider.succeed(Release, {
     stables: ["releaseId", "nodeId"],
 
-    // A release belongs to (host, owner, repository, tagName) — changing any
+    // A release belongs to (host, owner, repository, tagName) -- changing any
     // of these replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -368,7 +368,7 @@ export const ReleaseProvider = () =>
       (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
     ),
 
-    // Enumerate every release across the repositories the token can see —
+    // Enumerate every release across the repositories the token can see --
     // releases are keyed by {owner, repository, tagName} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
@@ -386,7 +386,7 @@ export const ReleaseProvider = () =>
             }),
           ).pipe(
             Effect.map((releases) => releases.map(attrsOf)),
-            // Repos where the token lacks release access reject with 403/404 —
+            // Repos where the token lacks release access reject with 403/404 --
             // skip them rather than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

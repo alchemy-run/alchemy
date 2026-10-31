@@ -28,15 +28,15 @@ const LIST_MAX_PAGES = 100;
 
 export interface FileLinkProps {
   /**
-   * Id of the Stripe File this link points at (`file_…`). The file's
+   * Id of the Stripe File this link points at (`file_...`). The file's
    * `purpose` must allow links (for example `dispute_evidence` or
-   * `tax_document_user_upload`). Create-only — changing it replaces
+   * `tax_document_user_upload`). Create-only -- changing it replaces
    * the file link.
    */
   file: string;
   /**
    * Unix timestamp after which the link is unusable. Omit for a link
-   * that never expires. Mutable — pass `undefined` to clear a previously
+   * that never expires. Mutable -- pass `undefined` to clear a previously
    * set expiry. Expired links cannot be updated.
    */
   expiresAt?: number;
@@ -52,9 +52,9 @@ export type FileLink = Resource<
   "Stripe.FileLink",
   FileLinkProps,
   {
-    /** Stripe file link id (`link_…`). */
+    /** Stripe file link id (`link_...`). */
     id: string;
-    /** Id of the File this link points at (`file_…`). */
+    /** Id of the File this link points at (`file_...`). */
     file: string;
     /** Public URL to download the file, if the link is still valid. */
     url: string | undefined;
@@ -74,11 +74,11 @@ export type FileLink = Resource<
 >;
 
 /**
- * A Stripe File Link — a public URL for a File that does not require
+ * A Stripe File Link -- a public URL for a File that does not require
  * Stripe authentication. `file` is create-only; changing it replaces the
  * link. `expiresAt` and `metadata` update in place. Expired links cannot
  * be updated. Destroy expires the link (`expires_at: "now"`) rather than
- * deleting it — Stripe has no file-link delete API.
+ * deleting it -- Stripe has no file-link delete API.
  *
  * @see https://docs.stripe.com/api/file_links
  *

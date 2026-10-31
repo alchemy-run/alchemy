@@ -126,7 +126,7 @@ export const recordStateStoreOp =
  *
  * The `id` is read off the constructed `StateService.id` field, so any
  * third-party state-store implementation gets tracked just by setting
- * a stable slug there. Apply at every `Layer.effect(State, …)` site
+ * a stable slug there. Apply at every `Layer.effect(State, ...)` site
  * exactly once.
  */
 export const recordStateStoreInit = <A extends { readonly id: string }, E, R>(

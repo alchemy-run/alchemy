@@ -112,7 +112,7 @@ export type Template = Resource<
   {
     /** Canonical marketplace template id (UUID). */
     templateId: string;
-    /** Marketplace template code (`postgres`, …), when its metadata is accessible. */
+    /** Marketplace template code (`postgres`, ...), when its metadata is accessible. */
     code: string | undefined;
     /** Marketplace template display name, when its metadata is accessible. */
     name: string | undefined;

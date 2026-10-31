@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Searches the provisioned products the caller has access to, with optional free-text filters and account-level access filters.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.SearchProvisionedProductsHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** List the Caller's Provisioned Products
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const searchProvisionedProducts = yield* AWS.ServiceCatalog.SearchProvisionedProducts();
  *
  * // runtime

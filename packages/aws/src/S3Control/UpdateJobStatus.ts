@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `s3:UpdateJobStatus` (S3 Batch Operations).
  *
  * Confirms a suspended job so it runs (`Ready`) or cancels it
- * (`Cancelled`) — e.g. an approval workflow that releases a bulk delete
+ * (`Cancelled`) -- e.g. an approval workflow that releases a bulk delete
  * only after a human signs off. The account id is resolved once via
  * `sts:GetCallerIdentity`. Provide the implementation with
  * `Effect.provide(AWS.S3Control.UpdateJobStatusHttp)`.
  * ### Running Batch Operations Jobs
  * **Example:** Cancel a Job
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateJobStatus = yield* AWS.S3Control.UpdateJobStatus();
  *
  * // runtime

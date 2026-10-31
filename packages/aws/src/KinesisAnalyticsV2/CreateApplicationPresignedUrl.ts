@@ -9,7 +9,7 @@ export interface CreateApplicationPresignedUrlRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:CreateApplicationPresignedUrl` —
+ * Runtime binding for `kinesisanalytics:CreateApplicationPresignedUrl` --
  * mints a short-lived URL to the bound application's extension (the Flink
  * dashboard, or the Zeppelin UI of a Studio notebook), e.g. to hand an
  * operator a dashboard link from an internal tool. The URL must be used

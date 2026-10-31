@@ -12,13 +12,13 @@ type TypeId = typeof TypeId;
 
 export interface IndicatorFeedPermissionProps {
   /**
-   * The ID of the indicator feed to grant access to — e.g. `feed.feedId`.
-   * Immutable — changing it triggers a replacement.
+   * The ID of the indicator feed to grant access to -- e.g. `feed.feedId`.
+   * Immutable -- changing it triggers a replacement.
    */
   feedId: number;
   /**
    * The Cloudflare account tag of the consumer account being granted
-   * access to the feed. Immutable — changing it triggers a replacement.
+   * access to the feed. Immutable -- changing it triggers a replacement.
    */
   accountTag: string;
 }
@@ -87,14 +87,14 @@ export const IndicatorFeedPermissionProvider = () =>
     // granting account's side, and Cloudflare exposes no provider-side API
     // to enumerate a feed's grantees. The only related collection op
     // (`listIndicatorFeedPermissions`, the `/permissions/view` endpoint)
-    // returns feeds the *calling* account can consume — feed metadata
-    // (id/name/flags) with no `accountTag` — which is the inverse
+    // returns feeds the *calling* account can consume -- feed metadata
+    // (id/name/flags) with no `accountTag` -- which is the inverse
     // relationship and cannot reconstruct the `read` Attributes shape.
     list: () => Effect.succeed<IndicatorFeedPermissionAttributes[]>([]),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
-      // Identity change — both props are the resource's identity, so any
+      // Identity change -- both props are the resource's identity, so any
       // change is a replacement. Compare only once both sides are concrete.
       if (typeof olds?.feedId === "number" && olds.feedId !== news.feedId) {
         return { action: "replace" } as const;
@@ -120,7 +120,7 @@ export const IndicatorFeedPermissionProvider = () =>
       const feedId = news.feedId as number;
       const accountTag = news.accountTag;
 
-      // Ensure — the add endpoint is an idempotent PUT: granting an
+      // Ensure -- the add endpoint is an idempotent PUT: granting an
       // already-granted account succeeds, so there is no race to tolerate
       // and no observe step possible (no provider-side list API).
       yield* intel.createIndicatorFeedPermission({
@@ -137,7 +137,7 @@ export const IndicatorFeedPermissionProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent PUT — removing a grant that is already gone succeeds.
+      // Idempotent PUT -- removing a grant that is already gone succeeds.
       // A feed deleted out-of-band (or never visible) surfaces as the
       // typed IndicatorFeedNotFound, which also means the grant is gone.
       yield* intel

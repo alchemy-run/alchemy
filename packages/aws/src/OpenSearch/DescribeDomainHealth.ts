@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomainHealth` operation (IAM action
  * `es:DescribeDomainHealth`).
  *
- * Reads a domain's cluster health — overall status, master eligibility, per-AZ shard and node distribution — for dashboards and automated health checks. Provide the implementation with
+ * Reads a domain's cluster health -- overall status, master eligibility, per-AZ shard and node distribution -- for dashboards and automated health checks. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainHealthHttp)`.
  * ### Monitoring Domains
  * **Example:** Check Cluster Health
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomainHealth = yield* OpenSearch.DescribeDomainHealth();
  *
  * const result = yield* describeDomainHealth({ DomainName: name });
- * // result.ClusterHealth → "Green"
+ * // result.ClusterHealth -> "Green"
  * ```
  *
  * @binding

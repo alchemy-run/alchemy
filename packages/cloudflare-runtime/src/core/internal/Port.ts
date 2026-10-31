@@ -14,7 +14,7 @@ export const MAX_PORT = 65535;
  * Whether the given Vite version treats `server.port: 0` as a true
  * OS-assigned random port (vitejs/vite#23158, shipped in Vite 8.2.1).
  * Older Vite treats `0` as "no port given" and hunts upward from its 5173
- * default — colliding with (or IPv6-shadowing) user-facing dev ports.
+ * default -- colliding with (or IPv6-shadowing) user-facing dev ports.
  *
  * Callers drive the PROJECT's Vite install, so this is a runtime check on
  * the loaded module's `version` export: prefer `port: 0` (race-free at
@@ -44,7 +44,7 @@ const ADDRESS_IN_USE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EACCES
 /**
  * The bind failed because this host doesn't exist on this machine (e.g. `::`
  * without IPv6). The host can't conflict with anything, so it must not veto
- * the port — otherwise every port would appear "in use" and the search would
+ * the port -- otherwise every port would appear "in use" and the search would
  * scan the whole port space.
  */
 const UNSUPPORTED_HOST_CODES: ReadonlySet<string> = new Set([
@@ -95,12 +95,12 @@ export interface Ports {
   /**
    * Waits for a specific port to become available (uncached probes on a
    * short interval), reserving it on success. Fails with `AddressInUse`
-   * when the grace window elapses — or immediately when the port is
+   * when the grace window elapses -- or immediately when the port is
    * reserved by this process group, since the holder won't release it.
    *
    * This is the allocator for user-configured ports: a dev-session restart
    * races the previous session's teardown, and without a grace window the
-   * configured port silently drifts — cascading every configured port in
+   * configured port silently drifts -- cascading every configured port in
    * the stack up by one in nondeterministic order.
    */
   readonly waitFor: (port: number) => Effect.Effect<number, ConfigError>;
@@ -140,10 +140,10 @@ interface PortsOptions {
  * Every runtime instance constructs its own {@link Ports}, but they all
  * allocate from the same OS port space. With per-instance state, two
  * instances can probe the same free port in the same tick and hand it to
- * two workerd processes — and near-simultaneous `bind()`s BOTH succeed on
+ * two workerd processes -- and near-simultaneous `bind()`s BOTH succeed on
  * macOS (the SO_REUSEADDR bind/listen window), leaving two listeners
  * silently splitting the port's traffic. A shared search lock plus a
- * shared reservation table (port → expiry) makes allocation atomic across
+ * shared reservation table (port -> expiry) makes allocation atomic across
  * instances; the reservation outlives the probe long enough for the
  * winning workerd to establish its listener, after which real binds fail
  * cleanly for everyone else.
@@ -185,7 +185,7 @@ export const make = (options: PortsOptions) =>
             const code = errorCode(error);
             if (isUnsupportedHostError(error, host)) {
               // The host isn't available on this machine, so it can't hold the
-              // port either — treat the probe as a success.
+              // port either -- treat the probe as a success.
               return resume(Effect.succeed(port));
             }
             if (code === undefined || ADDRESS_IN_USE_CODES.has(code)) {
@@ -280,13 +280,13 @@ export const make = (options: PortsOptions) =>
         }),
       );
     }, searchLock.withPermits(1));
-    // Uncached availability probe across all local hosts — `waitFor` polls
+    // Uncached availability probe across all local hosts -- `waitFor` polls
     // with it, so the 30s negative cache must not poison the retries.
     const probe = available;
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {
-          // OS-assigned ephemeral ports are unique by construction — no
+          // OS-assigned ephemeral ports are unique by construction -- no
           // global reservation, so a caller handed one can immediately
           // request it back (e.g. `find(0)` then `serve({ port })`).
           return yield* bind(port).pipe(Effect.tap(reserveLocal));
@@ -297,7 +297,7 @@ export const make = (options: PortsOptions) =>
         Effect.suspend(() =>
           // Reserved in-process (at entry or mid-wait): the holder keeps it
           // for the cache lifetime, so waiting cannot succeed (e.g. two
-          // workers configured the same port) — fail and let the caller
+          // workers configured the same port) -- fail and let the caller
           // fall back. The retry predicate re-checks so a reservation
           // arriving during the grace window also stops the wait.
           isReserved(port) ? Effect.fail(addressInUseError(port)) : probe(port),

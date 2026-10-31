@@ -20,7 +20,7 @@ export interface StartKeyPhrasesDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartKeyPhrasesDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartKeyPhrasesDetectionJob` -- start an asynchronous
  * key-phrase detection job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -35,7 +35,7 @@ export interface StartKeyPhrasesDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous KeyPhrases Detection Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startKeyPhrasesDetectionJob = yield* AWS.Comprehend.StartKeyPhrasesDetectionJob(dataAccessRole);
  *
  * // runtime

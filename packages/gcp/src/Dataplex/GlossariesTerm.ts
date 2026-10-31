@@ -25,12 +25,12 @@ export type GlossariesTermProps = {
   /**
    * Parent glossary. Full name
    * `projects/{project}/locations/{location}/glossaries/{glossary}` or the
-   * glossary id (combined with `location`). Immutable — changing it
+   * glossary id (combined with `location`). Immutable -- changing it
    * replaces the term.
    */
   glossary: string;
   /**
-   * Immediate parent in the glossary tree — the glossary itself or a
+   * Immediate parent in the glossary tree -- the glossary itself or a
    * category
    * `.../glossaries/{glossary}/categories/{category}`. Defaults to
    * `glossary`.
@@ -44,7 +44,7 @@ export type GlossariesTermProps = {
   /**
    * Term id (the `{term}` segment of
    * `.../glossaries/{glossary}/terms/{term}`). If omitted, a unique name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the term.
    */
   termId?: string;
@@ -96,7 +96,7 @@ export type GlossariesTerm = Resource<
 >;
 
 /**
- * A Dataplex glossary term — a defined business concept that can be
+ * A Dataplex glossary term -- a defined business concept that can be
  * attached to catalog entries.
  *
  * Changing `glossary`, `termId`, or `location` replaces the term. Display

@@ -103,7 +103,7 @@ export interface HostedProgramProps {
   build?: FlyBuildOptions;
   /**
    * Extra host directories baked into the image (framework client
-   * assets, Next.js `.next`, …). Hashed into `code.hash` so asset
+   * assets, Next.js `.next`, ...). Hashed into `code.hash` so asset
    * changes rebuild the image.
    */
   extraFiles?: ReadonlyArray<ExtraFile>;
@@ -133,7 +133,7 @@ export class DeployTokenMissing extends Data.TaggedError("Fly.DeployTokenMissing
 
 /**
  * The generated entry for `Fly.Service` / `Fly.Sprite` machines: a shim
- * importing only `@alchemy.run/fly/Bootstrap` plus the user's `main` —
+ * importing only `@alchemy.run/fly/Bootstrap` plus the user's `main` --
  * see that module for why the entry never imports alchemy's own
  * dependencies. The runtime flag is raised BEFORE the user's module is
  * evaluated (hence the dynamic import) so its module-scope code sees it.
@@ -260,7 +260,7 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
 };
 
 /**
- * HTTP 80 → HTTPS redirect plus HTTPS 443 for public Services. Private
+ * HTTP 80 -> HTTPS redirect plus HTTPS 443 for public Services. Private
  * (Flycast-only) Services publish plain HTTP on 80: Fly issues no
  * certificate for `.flycast`, so a redirect to HTTPS would break callers.
  */
@@ -588,7 +588,7 @@ export const createFlyHostedSupport = ({
 
 /**
  * Bundle a Sprite program the same way {@link createFlyHostedSupport}
- * bundles a Service — rolldown + Node bootstrap — without building a
+ * bundles a Service -- rolldown + Node bootstrap -- without building a
  * Docker image. The provider writes the files onto the Sprite.
  */
 export const createSpriteHostedSupport = ({

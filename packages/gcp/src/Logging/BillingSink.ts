@@ -31,14 +31,14 @@ export type BillingSinkProps = {
    * `billingAccounts/{billingAccount}/sinks/{sink}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Limited to
    * 100 characters: letters, digits, underscores, hyphens, periods; first
-   * character must be alphanumeric. Immutable — changing it replaces the
+   * character must be alphanumeric. Immutable -- changing it replaces the
    * sink.
    */
   sinkId?: string;
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the sink.
    */
   billingAccountId?: string;
@@ -58,7 +58,7 @@ export type BillingSinkProps = {
   filter?: string;
   /**
    * Human-readable description (max 8000 characters). Logging sinks have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -131,7 +131,7 @@ export type BillingSink = Resource<
  * destination.
  *
  * Logging sinks have no labels field, so Alchemy stamps ownership into
- * the description for `list` / nuke. Name is identity — changing `sinkId`
+ * the description for `list` / nuke. Name is identity -- changing `sinkId`
  * or `billingAccountId` replaces the sink. Filter, destination,
  * description, disabled flag, exclusions, and BigQuery options update in
  * place.

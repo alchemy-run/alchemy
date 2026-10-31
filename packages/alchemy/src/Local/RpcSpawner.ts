@@ -44,7 +44,7 @@ class InvalidServerEntryUrl extends Data.TaggedError("InvalidServerEntryUrl")<{
 
 /**
  * The spawner forks one child per distinct `serverEntryUrl`. Stack-specific
- * context (stack name/stage, AlchemyContext) is NOT part of the spawn key —
+ * context (stack name/stage, AlchemyContext) is NOT part of the spawn key --
  * it travels per RPC session (see `SESSION_ENV_PARAM`), so many stacks
  * (e.g. every test file in a run) share a single sidecar process.
  */
@@ -131,7 +131,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
       envFile,
     };
     // Sidecar stdio is piped, so toolchains down the chain (vite, workerd,
-    // pretty loggers) detect a non-TTY and drop ANSI colors — but their
+    // pretty loggers) detect a non-TTY and drop ANSI colors -- but their
     // output ultimately renders on THIS process's terminal. Force color
     // through the pipe when that terminal supports it, unless the user
     // already decided (NO_COLOR / FORCE_COLOR). `extendEnv` propagates it
@@ -150,13 +150,13 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         stdout: "pipe",
         // Piped (NOT inherited) so the child's output routes through the
         // Effect Console service: raw writes to the parent's fd corrupt the
-        // test runner's reporter/TUI. The drain below is mandatory — an
+        // test runner's reporter/TUI. The drain below is mandatory -- an
         // unread pipe eventually fills and blocks the child.
         stderr: "pipe",
         // `detached` deliberately unset: the spawner defaults to a new process
         // group on POSIX (and none on Windows, where a detached console child
         // has its own quirks). A terminal Ctrl+C must NOT reach the sidecar
-        // directly — its lifecycle belongs to this process's finalizer (the
+        // directly -- its lifecycle belongs to this process's finalizer (the
         // bounded kill below), and a sidecar tearing itself down concurrently
         // yanks local providers out from under the exec child mid-shutdown.
         // As a group leader the kill also reaps the sidecar's own children
@@ -278,7 +278,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   yield* server.serve(
     Effect.gen(function* () {
       const request = yield* HttpServerRequest;
-      // `request.url` is relative under Node and absolute under Bun —
+      // `request.url` is relative under Node and absolute under Bun --
       // normalize to the pathname before matching.
       const pathname = new URL(request.url, "http://localhost").pathname;
       if (pathname === LOGS_PATH) {
@@ -391,7 +391,7 @@ export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => 
  * renderer, so the records render above the repainting progress region
  * instead of racing it on the shared tty; it forwards them on to the
  * supervisor, which writes the run log. Forks in the ambient scope and never fails: when no spawner is
- * configured (`ALCHEMY_RPC_SPAWNER_URL` absent — plain deploy/destroy) it is
+ * configured (`ALCHEMY_RPC_SPAWNER_URL` absent -- plain deploy/destroy) it is
  * a no-op, and if the connection drops the spawner's own fallback printing
  * takes over.
  */

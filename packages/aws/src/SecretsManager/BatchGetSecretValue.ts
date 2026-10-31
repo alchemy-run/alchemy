@@ -12,7 +12,7 @@ export interface BatchGetSecretValueRequest extends Omit<
  * Runtime binding for `secretsmanager:BatchGetSecretValue`.
  *
  * Bind this operation to a list of `Secret`s to get a callable that reads
- * all of their current values in a single call — the batch counterpart of
+ * all of their current values in a single call -- the batch counterpart of
  * `GetSecretValue`. The bound secrets' ARNs are injected as the
  * `SecretIdList` and each secret is granted `secretsmanager:GetSecretValue`
  * (BatchGetSecretValue authorizes per-secret through GetSecretValue).
@@ -21,13 +21,13 @@ export interface BatchGetSecretValueRequest extends Omit<
  * ### Reading Secret Values
  * **Example:** Read Several Secrets at Once
  * ```typescript
- * // init — bind the operation to the secrets
+ * // init -- bind the operation to the secrets
  * const batchGet = yield* AWS.SecretsManager.BatchGetSecretValue([
  *   dbSecret,
  *   apiKeySecret,
  * ]);
  *
- * // runtime — one call, every current value
+ * // runtime -- one call, every current value
  * const result = yield* batchGet();
  * for (const entry of result.SecretValues ?? []) {
  *   console.log(entry.Name);

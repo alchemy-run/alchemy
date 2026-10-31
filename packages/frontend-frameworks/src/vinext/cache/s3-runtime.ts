@@ -2,7 +2,7 @@
  * vinext data-cache adapter backed by S3. Default export is the factory
  * `virtual:vinext-cache-adapters` calls as `({ env, options }) => CacheHandler`.
  *
- * Uses distilled `@distilled.cloud/aws/s3` — the same client
+ * Uses distilled `@distilled.cloud/aws/s3` -- the same client
  * `AWS.S3.GetObject` / `PutObject` / `DeleteObject` wrap. Credentials come
  * from the Lambda environment (`Credentials.fromEnv`), matching the
  * Function bootstrap. Prerender artifacts are seeded into S3 in the

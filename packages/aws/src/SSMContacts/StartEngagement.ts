@@ -6,7 +6,7 @@ import type { Contact } from "./Contact.ts";
 /**
  * Runtime binding for `ssm-contacts:StartEngagement`.
  *
- * Page the bound contact (or run its escalation plan) — Incident Manager
+ * Page the bound contact (or run its escalation plan) -- Incident Manager
  * works through the contact's engagement plan, sending the subject and
  * content over each stage's channels until the page is acknowledged. The
  * contact's ARN is injected as `ContactId`.
@@ -15,10 +15,10 @@ import type { Contact } from "./Contact.ts";
  * ### Starting Engagements
  * **Example:** Page the On-Call Contact
  * ```typescript
- * // init — bind the operation to the contact
+ * // init -- bind the operation to the contact
  * const startEngagement = yield* AWS.SSMContacts.StartEngagement(oncall);
  *
- * // runtime — page the contact when an alert fires
+ * // runtime -- page the contact when an alert fires
  * const { EngagementArn } = yield* startEngagement({
  *   Sender: "alert-bot",
  *   Subject: "Database CPU at 95%",

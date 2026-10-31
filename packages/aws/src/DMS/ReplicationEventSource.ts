@@ -58,7 +58,7 @@ export interface ReplicationEventSourceProps extends EventRouteProps {
  * Function to those events so it can alert on failures or chain
  * post-migration automation.
  *
- * DMS publishes to EventBridge automatically — no additional resource is
+ * DMS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

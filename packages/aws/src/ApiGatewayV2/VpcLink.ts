@@ -22,12 +22,12 @@ export interface VpcLinkProps {
    */
   name?: string;
   /**
-   * Subnet IDs the VPC link attaches to. Immutable — changing them
+   * Subnet IDs the VPC link attaches to. Immutable -- changing them
    * triggers a replacement.
    */
   subnetIds: string[];
   /**
-   * Security group IDs for the VPC link. Immutable — changing them
+   * Security group IDs for the VPC link. Immutable -- changing them
    * triggers a replacement.
    */
   securityGroupIds?: string[];
@@ -51,7 +51,7 @@ export interface VpcLink extends Resource<
     securityGroupIds: string[];
     /**
      * The provisioning status (`PENDING`, `AVAILABLE`, `DELETING`,
-     * `FAILED`). Provisioning typically takes 1–2 minutes; integrations
+     * `FAILED`). Provisioning typically takes 1-2 minutes; integrations
      * that reference the link only work once it is `AVAILABLE`.
      */
     status: string | undefined;
@@ -62,11 +62,11 @@ export interface VpcLink extends Resource<
 > {}
 
 /**
- * An API Gateway v2 VPC link — lets an HTTP API reach private resources
+ * An API Gateway v2 VPC link -- lets an HTTP API reach private resources
  * (ALB/NLB listeners, Cloud Map services) inside a VPC.
  *
  * Unlike the v1 VPC link (NLB-only, ~10 min provisioning), the v2 link is
- * subnet/security-group based and provisions in ~1–2 minutes.
+ * subnet/security-group based and provisions in ~1-2 minutes.
  * ### Private integrations
  * **Example:** VPC link + private integration
  * ```typescript
@@ -167,7 +167,7 @@ export const VpcLinkProvider = () =>
           }
           const snapshot = snapshotFromVpcLink(observed);
 
-          // 3. SYNC — only the name is mutable.
+          // 3. SYNC -- only the name is mutable.
           if (snapshot.name !== name) {
             yield* retryOnTooManyRequests(
               agw2.updateVpcLink({
@@ -177,7 +177,7 @@ export const VpcLinkProvider = () =>
             );
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (!deepEqual(snapshot.tags, desiredTags)) {
             yield* syncTags({
               resourceArn: vpcLinkArn(region, snapshot.vpcLinkId),
@@ -186,7 +186,7 @@ export const VpcLinkProvider = () =>
             });
           }
 
-          // 4. RETURN fresh state. Provisioning is asynchronous (~1–2 min);
+          // 4. RETURN fresh state. Provisioning is asynchronous (~1-2 min);
           //    the `status` attribute surfaces it rather than blocking the
           //    deploy on AVAILABLE.
           const final = yield* agw2.getVpcLink({

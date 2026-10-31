@@ -136,7 +136,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
               return yield* interaction.task(
                 {
                   label: `Updating Cloudflare State Store '${scriptName}'`,
-                  detail: `v${observed ?? "unknown"} → v${expected}`,
+                  detail: `v${observed ?? "unknown"} \u2192 v${expected}`,
                 },
                 deployStateStore({
                   accountId,
@@ -176,8 +176,8 @@ export const state = (options: CloudflareStateOptions = {}) =>
         if (credentials) {
           // The cached `url`/`authToken` are minted per-account (the `url`
           // encodes the account via its workers.dev subdomain). If the
-          // active account changed since they were written — or the file
-          // predates the `accountId` field — trusting the cache would
+          // active account changed since they were written -- or the file
+          // predates the `accountId` field -- trusting the cache would
           // silently read/write state in the wrong account, so discard it
           // and fall through to re-derivation from the current account.
           if (isStateStoreCredentialsStale(credentials, accountId)) {
@@ -205,7 +205,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
       return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
     }),
   ).pipe(
-    // The Cloudflare API foundation shared with `providers()` —
+    // The Cloudflare API foundation shared with `providers()` --
     // credentials, environment, auth/access, profile + credential
     // store, and the same blanket retry policy. Without the retry
     // policy the init-time subdomain/script/secrets probes run on the
@@ -233,7 +233,7 @@ export interface BootstrapOptions {
  * Report `state.bootstrap.*` progress events around a state-store deploy or
  * upgrade. Bootstrap runs lazily inside the plan's "loading state" phase,
  * can take many seconds (it deploys a worker), and would otherwise be
- * invisible to non-interactive renderers and traces — the Interaction task only
+ * invisible to non-interactive renderers and traces -- the Interaction task only
  * paints the local terminal.
  */
 const withStateBootstrapEvents =
@@ -329,7 +329,7 @@ export interface TeardownOptions {
  * the Secrets Store itself if it is left empty, and drops the locally cached
  * state-store credentials for the profile.
  *
- * Idempotent — missing resources are treated as already-gone, so it is safe to
+ * Idempotent -- missing resources are treated as already-gone, so it is safe to
  * re-run. Intended for reclaiming a throwaway account after testing; on a
  * shared account it only removes resources alchemy created.
  */
@@ -573,7 +573,7 @@ const resolveAccountId = (pinned: string | undefined) =>
  * 4. Persist `{ url, token }` under the `http-state-store`
  *    credentials file.
  *
- * Requirements are covered by the Cloudflare provider stack —
+ * Requirements are covered by the Cloudflare provider stack --
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
@@ -598,7 +598,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       // try and read from the cached credentials first if not forcing (force will always refresh)
       const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
       // Ignore a cache minted for a different account (or a legacy file with
-      // no `accountId`) — reusing it would hand back the wrong account's
+      // no `accountId`) -- reusing it would hand back the wrong account's
       // state-store URL. Fall through to re-derive against `accountId`.
       if (
         credentials &&
@@ -691,7 +691,7 @@ const isStateStoreAvailable = (accountId: string, scriptName: string) =>
       WorkerNotFound: () => Effect.succeed(false),
       InvalidRoute: () => Effect.succeed(false),
       // A worker that exists but has no versions (a previous deploy was
-      // interrupted before any content upload) can't serve — treat it
+      // interrupted before any content upload) can't serve -- treat it
       // as absent so bootstrap redeploys it.
       WorkerHasNoVersions: () => Effect.succeed(false),
     }),
@@ -890,7 +890,7 @@ const unknownVersion = {
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
  * back. Uploaded as an ephemeral edge-preview, called once, then
- * discarded — see {@link readSecretViaEdge}.
+ * discarded -- see {@link readSecretViaEdge}.
  */
 const SECRET_PROBE_SOURCE = `export default {
   async fetch(_request, env) {
@@ -911,7 +911,7 @@ const SECRET_PROBE_SOURCE = `export default {
  * worker bindings can resolve them, so this is the out-of-band path.
  *
  * `scriptName` MUST be a script that is already deployed on the
- * account with workers.dev enabled — the `cf-workers-preview-token`
+ * account with workers.dev enabled -- the `cf-workers-preview-token`
  * header swaps our probe code in for an existing route, it does not
  * create one. Using an undeployed name (or a deployed script that
  * doesn't have workers.dev enabled) makes the workers.dev edge serve

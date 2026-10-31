@@ -32,7 +32,7 @@ export type SiteProps = {
   zoneTag?: string;
   /**
    * If enabled, the JavaScript measurement snippet is automatically
-   * injected for orange-clouded sites — no manual embed needed.
+   * injected for orange-clouded sites -- no manual embed needed.
    * @default false
    */
   autoInstall?: boolean;
@@ -97,8 +97,8 @@ export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>
  * A Cloudflare Web Analytics (RUM) site.
  *
  * A site measures real-user performance for either a plain hostname
- * (gray-clouded — embed the produced `snippet` yourself) or a Cloudflare
- * zone (orange-clouded — set `autoInstall` to inject the snippet at the
+ * (gray-clouded -- embed the produced `snippet` yourself) or a Cloudflare
+ * zone (orange-clouded -- set `autoInstall` to inject the snippet at the
  * edge). The site is identified by its auto-assigned `siteTag`; `host` and
  * `autoInstall` are mutable in place, while switching between `host` and
  * `zoneTag` identity models (or changing `zoneTag`) triggers a replacement.
@@ -111,7 +111,7 @@ export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>
  *   host: "example.com",
  * });
  *
- * // Embed in your HTML — contains the site token:
+ * // Embed in your HTML -- contains the site token:
  * const snippet = site.snippet;
  * ```
  *
@@ -189,7 +189,7 @@ export const SiteProvider = () =>
       // Adoption path: a site measuring the same host/zone may already
       // exist. Web Analytics sites carry no ownership markers (and
       // Cloudflare happily creates duplicates), so we cannot prove we
-      // created it — brand it `Unowned` so the engine refuses to take
+      // created it -- brand it `Unowned` so the engine refuses to take
       // over unless `adopt` is set.
       const host = output?.host ?? olds?.host;
       const zoneTag =
@@ -206,13 +206,13 @@ export const SiteProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneTag = news.zoneTag as string | undefined;
 
-      // 1. Observe — the siteTag cached on `output` is a hint, not a
+      // 1. Observe -- the siteTag cached on `output` is a hint, not a
       //    guarantee: a missing site falls through to create.
       let observed = output?.siteTag
         ? yield* getSite(output.accountId ?? accountId, output.siteTag)
         : undefined;
 
-      // 2. Ensure — create when missing. Cloudflare allows duplicate
+      // 2. Ensure -- create when missing. Cloudflare allows duplicate
       //    sites for the same host/zone, so there is no AlreadyExists
       //    race to tolerate. The create response omits `snippet` and
       //    `ruleset`, so re-read the full site state afterwards (riding
@@ -232,17 +232,17 @@ export const SiteProvider = () =>
             times: 5,
           }),
         );
-        // Greenfield with no post-create settings to apply — done.
+        // Greenfield with no post-create settings to apply -- done.
         if (news.enabled === undefined && news.lite === undefined) {
           return toAttributes(observed, accountId);
         }
       }
 
-      // 3. Sync — diff observed cloud state against desired. The update
+      // 3. Sync -- diff observed cloud state against desired. The update
       //    API is a PUT that requires the full body (host/zoneTag/
       //    autoInstall must be re-sent). `enabled` and `lite` are write-
       //    only (never echoed back by the API), so they are applied
-      //    whenever specified — observation cannot prove them converged.
+      //    whenever specified -- observation cannot prove them converged.
       const dirty =
         (news.host !== undefined && observed.host !== news.host) ||
         (observed.autoInstall ?? false) !== (news.autoInstall ?? false) ||
@@ -275,7 +275,7 @@ export const SiteProvider = () =>
 
     // Account collection: Web Analytics sites are enumerated account-wide
     // via the paginated site-info list. Hydrate each row into the exact
-    // `read` Attributes shape — the list response carries the same fields
+    // `read` Attributes shape -- the list response carries the same fields
     // (siteTag/siteToken/snippet/ruleset/host) so no per-item re-read is
     // needed.
     list: Effect.fn(function* () {
@@ -321,7 +321,7 @@ const findSite = (accountId: string, host: string | undefined, zoneTag: string |
             ? site.host === host
             : // A zone-identity site has no `host`. Host-scoped sites on the
               // zone's subdomains ALSO carry `ruleset.zoneTag`, so a zone
-              // probe must only match true zone sites — otherwise an
+              // probe must only match true zone sites -- otherwise an
               // unrelated host site satisfies the probe and the engine
               // refuses adoption with OwnedBySomeoneElse.
               zoneTag !== undefined && !site.host && site.ruleset?.zoneTag === zoneTag,

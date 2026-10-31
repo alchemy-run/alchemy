@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetServiceLastAccessedDetailsWithEntities` — after
+ * Runtime binding for `iam:GetServiceLastAccessedDetailsWithEntities` -- after
  * an access-advisor job generated for a *group or policy*, drill into which
  * member users/roles actually attempted to use a given service namespace.
  *

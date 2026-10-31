@@ -4,12 +4,12 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for Amazon Macie HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeMacie2HttpBinding({ … }))` over the builder below.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeMacie2HttpBinding({ ... }))` over the builder below.
  * Everything except the operation and the IAM action list is boilerplate.
  *
  * Macie is an account/region singleton service: every operation is implicitly
- * scoped to the caller's Macie session, so there is no identifier to inject —
+ * scoped to the caller's Macie session, so there is no identifier to inject --
  * the caller's request is passed through as-is. Macie2 IAM actions do not
  * support resource-level permissions (the session has no bindable ARN), so
  * the deploy-time half grants `actions` on `*`.

@@ -147,7 +147,7 @@ export class CallbackServerError extends Data.TaggedError("CallbackServerError")
  * `~/.alchemy/credentials/{profile}/<provider>-oauth.json`.
  *
  * `clientId` is optional because files written before the client id was
- * recorded must still parse — {@link OAuthClient.usesCurrentClient} treats a
+ * recorded must still parse -- {@link OAuthClient.usesCurrentClient} treats a
  * missing id as "issued to a previous client", which triggers a clean
  * re-login.
  */
@@ -185,9 +185,9 @@ export interface Authorization {
 }
 
 /**
- * The provider-specific facts an OAuth flow needs. Everything else —
+ * The provider-specific facts an OAuth flow needs. Everything else --
  * state/PKCE generation, the loopback callback server, hosted-relay code
- * extraction, device-code polling, token exchange, refresh, revoke — is
+ * extraction, device-code polling, token exchange, refresh, revoke -- is
  * shared.
  *
  * The browser (authorization-code) flow needs `endpoints.authorize`,
@@ -212,7 +212,7 @@ export interface OAuthClientSpec {
   /**
    * Client authentication. `pkce` for public clients; `clientSecret` for
    * providers whose token endpoint requires client authentication for every
-   * grant (the secret ships in the CLI — same exposure posture as a public
+   * grant (the secret ships in the CLI -- same exposure posture as a public
    * client id, rotated by cutting a release).
    */
   readonly auth:
@@ -706,7 +706,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         server.listen(listenPort, "127.0.0.1");
         return Effect.sync(() => {
           server.close();
-          // `close` only stops new connections — a keep-alive browser
+          // `close` only stops new connections -- a keep-alive browser
           // connection would otherwise hold the process open until its
           // socket timeout after login completes.
           server.closeAllConnections();

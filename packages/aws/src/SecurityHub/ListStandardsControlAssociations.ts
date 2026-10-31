@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListStandardsControlAssociations`.
  *
  * Lists, for one security control, every standard it belongs to and its enablement status there.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListStandardsControlAssociationsHttp)`.
  * ### Standards & Controls
  * **Example:** List a Control's Associations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listStandardsControlAssociations = yield* AWS.SecurityHub.ListStandardsControlAssociations();
  *
  * // runtime

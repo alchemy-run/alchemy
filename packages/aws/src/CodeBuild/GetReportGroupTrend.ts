@@ -4,8 +4,8 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:GetReportGroupTrend` — aggregates a trend
- * statistic (pass rate, duration, …) across the bound report group's most
+ * Runtime binding for `codebuild:GetReportGroupTrend` -- aggregates a trend
+ * statistic (pass rate, duration, ...) across the bound report group's most
  * recent reports.
  * ### Reading Reports
  * **Example:** Read the Pass-Rate Trend

@@ -4,22 +4,22 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for AWS OpenSearch Service HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeOpenSearchHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeOpenSearchHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * The bindings are account-level (the runtime request carries the
  * `DomainName`) rather than domain-scoped: domain names are frequently
- * runtime data — an operator Lambda watches every domain in the account, not
- * one resource-bound domain — and OpenSearch domains take 15-25 minutes to
+ * runtime data -- an operator Lambda watches every domain in the account, not
+ * one resource-bound domain -- and OpenSearch domains take 15-25 minutes to
  * provision, so a deploy-time resource resolution would gate every consumer
  * on a live domain.
  */
 
 /**
  * Build the impl Effect for an OpenSearch configuration-API operation. The
- * deploy-time half grants `actions` on `resources` (default `*` — domain
+ * deploy-time half grants `actions` on `resources` (default `*` -- domain
  * names addressed at runtime are data, so the grant cannot be narrowed to a
  * deploy-time ARN).
  */

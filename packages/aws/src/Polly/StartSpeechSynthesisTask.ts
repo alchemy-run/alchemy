@@ -3,20 +3,20 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:StartSpeechSynthesisTask` — start an
+ * Runtime binding for `polly:StartSpeechSynthesisTask` -- start an
  * asynchronous synthesis task that writes the audio (or speech marks) to an
  * S3 bucket, for texts too long for the synchronous `SynthesizeSpeech`.
  *
  * The binding grants `polly:StartSpeechSynthesisTask`. Polly writes the
  * output with the **caller's** credentials, so the function also needs
- * `s3:PutObject` on the output bucket — compose with
+ * `s3:PutObject` on the output bucket -- compose with
  * `AWS.S3.PutObject(bucket)`. Provide the implementation with
  * `Effect.provide(AWS.Polly.StartSpeechSynthesisTaskHttp)`.
  *
  * ### Asynchronous Synthesis
  * **Example:** Start a synthesis task writing MP3 to S3
  * ```typescript
- * // init — the S3 PutObject binding grants Polly's output write
+ * // init -- the S3 PutObject binding grants Polly's output write
  * yield* AWS.S3.PutObject(bucket);
  * const startSpeechSynthesisTask = yield* AWS.Polly.StartSpeechSynthesisTask();
  *

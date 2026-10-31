@@ -29,7 +29,7 @@ export type ToastProps = StatusProps;
 
 /**
  * Compact application notice. Severity is carried by the status glyph and
- * its colour alone — the same vocabulary as transcript lines — so a notice
+ * its colour alone -- the same vocabulary as transcript lines -- so a notice
  * row never needs a rail of its own.
  */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
@@ -113,7 +113,7 @@ export function KeyBar({
       >
         {keys.map(([key, label], index) => (
           <Box key={`${key}:${label}`}>
-            {index === 0 ? null : <Text tone="muted"> • </Text>}
+            {index === 0 ? null : <Text tone="muted"> &#x2022; </Text>}
             <Text>
               <Text bold color={theme.color.brand}>
                 {key}

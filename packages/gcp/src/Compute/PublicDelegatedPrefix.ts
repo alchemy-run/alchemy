@@ -30,19 +30,19 @@ export type PublicDelegatedPrefixProps = {
    */
   prefixName?: string;
   /**
-   * Region the prefix lives in. Immutable — changing it replaces the
+   * Region the prefix lives in. Immutable -- changing it replaces the
    * prefix. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
    * Parent public advertised prefix or public delegated prefix URL.
-   * Immutable — changing it replaces the prefix.
+   * Immutable -- changing it replaces the prefix.
    */
   parentPrefix: string;
   /**
    * IP address range in CIDR format delegated from the parent. Immutable
-   * — changing it replaces the prefix.
+   * -- changing it replaces the prefix.
    */
   ipCidrRange: string;
   /**
@@ -62,7 +62,7 @@ export type PublicDelegatedPrefixProps = {
   isLiveMigration?: boolean;
   /**
    * Optional description. Public delegated prefixes have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;

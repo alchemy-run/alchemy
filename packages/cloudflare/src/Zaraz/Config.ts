@@ -203,7 +203,7 @@ export const ConfigProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Zaraz config is a zone-level singleton with no account-wide list
-      // API — enumerate every zone and read its config (one per zone).
+      // API -- enumerate every zone and read its config (one per zone).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
         allZones.map((zone) => zone.id),
@@ -246,7 +246,7 @@ export const ConfigProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
-        // before upstream Outputs resolved — report "not found" then.
+        // before upstream Outputs resolved -- report "not found" then.
         output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       return yield* observe(zoneId);

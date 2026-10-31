@@ -17,7 +17,7 @@ import { Credentials } from "./Credentials.ts";
  * alchemy.
  *
  * They read the token and base URL from the distilled {@link Credentials}
- * service — the same service every migrated operation authenticates with —
+ * service -- the same service every migrated operation authenticates with --
  * rather than from `PrismaEnvironment`. `Credentials` holds an *effect*, so a
  * stack layer can carry it without resolving credentials at build time;
  * `PrismaEnvironment` is a resolved value and therefore cannot appear in

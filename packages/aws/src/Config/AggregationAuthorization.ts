@@ -46,7 +46,7 @@ export interface AggregationAuthorization extends Resource<
  * in a specific region permission to collect AWS Config configuration and
  * compliance data from this account.
  *
- * The authorization's identity is the `(account, region)` pair — changing
+ * The authorization's identity is the `(account, region)` pair -- changing
  * either replaces it.
  * ### Authorizing an Aggregator
  * **Example:** Authorize an aggregator account
@@ -72,7 +72,7 @@ export const AggregationAuthorizationProvider = () =>
   Provider.effect(
     AggregationAuthorization,
     Effect.gen(function* () {
-      // There is no Get API — enumerate and match on the (account, region)
+      // There is no Get API -- enumerate and match on the (account, region)
       // identity pair.
       const observeAuthorization = Effect.fn(function* (accountId: string, region: string) {
         return yield* config.describeAggregationAuthorizations.items({}).pipe(
@@ -131,7 +131,7 @@ export const AggregationAuthorizationProvider = () =>
           const tags = yield* observedTags(auth.AggregationAuthorizationArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        // The (account, region) pair IS the resource identity — any change
+        // The (account, region) pair IS the resource identity -- any change
         // replaces it. Tags remain updatable in place.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -146,13 +146,13 @@ export const AggregationAuthorizationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeAuthorization(
             news.authorizedAccountId,
             news.authorizedAwsRegion,
           );
 
-          // 2. ENSURE — PutAggregationAuthorization is idempotent: it
+          // 2. ENSURE -- PutAggregationAuthorization is idempotent: it
           //    creates when missing and is a no-op when present (create-time
           //    tags on an existing authorization are ignored, so tags are
           //    synced separately below).
@@ -168,12 +168,12 @@ export const AggregationAuthorizationProvider = () =>
 
           const arn = live?.AggregationAuthorizationArn;
           if (arn === undefined) {
-            // Extremely unlikely (Put returns the authorization) — fall back
+            // Extremely unlikely (Put returns the authorization) -- fall back
             // to a fresh observation so the attrs are never fabricated.
             live = yield* observeAuthorization(news.authorizedAccountId, news.authorizedAwsRegion);
           }
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //    converges.
           const finalArn = live?.AggregationAuthorizationArn;
           if (finalArn !== undefined) {
@@ -201,7 +201,7 @@ export const AggregationAuthorizationProvider = () =>
           };
         }),
         // DeleteAggregationAuthorization succeeds whether or not the
-        // authorization still exists — idempotent by design.
+        // authorization still exists -- idempotent by design.
         delete: Effect.fn(function* ({ output }) {
           yield* config.deleteAggregationAuthorization({
             AuthorizedAccountId: output.authorizedAccountId,

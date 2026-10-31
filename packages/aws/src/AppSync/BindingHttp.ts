@@ -5,18 +5,18 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
 /**
  * Shared scaffolding for AppSync HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in
- * this service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in
+ * this service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over
  * one of the two builders below. Everything except the operation and the
  * IAM action is boilerplate:
  *
- * - {@link makeAppSyncApiHttpBinding} — control-plane operations scoped to a
+ * - {@link makeAppSyncApiHttpBinding} -- control-plane operations scoped to a
  *   bound {@link GraphqlApi} (`FlushApiCache`, `GetIntrospectionSchema`).
  *   The runtime callable injects the bound API's `apiId`.
- * - {@link makeAppSyncAccountHttpBinding} — account-level pass-through
+ * - {@link makeAppSyncAccountHttpBinding} -- account-level pass-through
  *   operations that bind to no resource (`EvaluateCode`).
  *
- * Both grant on `Resource: "*"` — these AppSync control-plane actions define
+ * Both grant on `Resource: "*"` -- these AppSync control-plane actions define
  * no IAM resource types (per the Service Authorization Reference), so a
  * scoped API ARN is AccessDenied. `GraphQLHttp` stays bespoke: the data
  * plane has no SDK operation, each request is a SigV4-signed POST to the
@@ -42,7 +42,7 @@ export const makeAppSyncApiHttpBinding = <I extends { apiId: string }, A, E, R>(
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (api: GraphqlApi) {
-      // Outputs yield DEFERRED effects — resolving them here registers the
+      // Outputs yield DEFERRED effects -- resolving them here registers the
       // attribute on the host environment; re-yield per invocation below.
       const ApiId = yield* api.apiId;
 
@@ -53,7 +53,7 @@ export const makeAppSyncApiHttpBinding = <I extends { apiId: string }, A, E, R>(
               Effect: "Allow",
               Action: [...options.actions],
               // These AppSync control-plane actions define no IAM resource
-              // types — IAM only authorizes them against "*" (a scoped API
+              // types -- IAM only authorizes them against "*" (a scoped API
               // ARN is AccessDenied).
               Resource: ["*"],
             },

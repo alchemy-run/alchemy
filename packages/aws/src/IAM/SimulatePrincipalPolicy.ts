@@ -3,13 +3,13 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:SimulatePrincipalPolicy` — evaluate how the
+ * Runtime binding for `iam:SimulatePrincipalPolicy` -- evaluate how the
  * policies attached to an existing IAM user, group, or role decide a list of
  * actions. The "can principal X do Y?" primitive behind access-review
  * dashboards and pre-flight permission checks.
  *
- * The principal (`PolicySourceArn`) is chosen per request — audit tooling
- * typically iterates entities discovered at runtime — so the binding takes no
+ * The principal (`PolicySourceArn`) is chosen per request -- audit tooling
+ * typically iterates entities discovered at runtime -- so the binding takes no
  * arguments and grants `iam:SimulatePrincipalPolicy` on `*`. Provide the
  * implementation with `Effect.provide(AWS.IAM.SimulatePrincipalPolicyHttp)`.
  *

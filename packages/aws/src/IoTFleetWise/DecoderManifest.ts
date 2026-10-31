@@ -91,7 +91,7 @@ export interface DecoderManifest extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise decoder manifest — the decoding rules (network
+ * An AWS IoT FleetWise decoder manifest -- the decoding rules (network
  * interfaces + signal decoders) that turn raw bus data from a vehicle
  * modeled by a {@link ModelManifest} into standardized signals.
  *
@@ -219,10 +219,10 @@ export const DecoderManifestProvider = () =>
           const desiredInterfaces = news.networkInterfaces ?? [];
           const desiredDecoders = news.signalDecoders ?? [];
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readManifest(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createDecoderManifest({
@@ -241,7 +241,7 @@ export const DecoderManifestProvider = () =>
             observed = yield* observeAfterWrite(name);
           }
 
-          // 3. Sync interfaces + decoders + description — diff OBSERVED
+          // 3. Sync interfaces + decoders + description -- diff OBSERVED
           //    lists against desired, keyed by interfaceId /
           //    fullyQualifiedName. Structural changes require DRAFT status,
           //    so they run before any DRAFT -> ACTIVE transition.
@@ -323,7 +323,7 @@ export const DecoderManifestProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: deleting a missing manifest succeeds. Vehicles
-          // still detaching surface as ConflictException — retry through
+          // still detaching surface as ConflictException -- retry through
           // the window (bounded).
           yield* iotfleetwise.deleteDecoderManifest({ name: output.decoderManifestName }).pipe(
             inFleetWiseRegion,

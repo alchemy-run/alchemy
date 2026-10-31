@@ -106,7 +106,7 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  * lease expires, and the next deploy can take it.
  *
  * The bucket is created lazily on the first state operation if it does
- * not already exist — nothing touches AWS credentials at layer
+ * not already exist -- nothing touches AWS credentials at layer
  * construction time.
  *
  *
@@ -211,7 +211,7 @@ export const s3State = (options: S3StateOptions = {}) =>
 /**
  * Construct an S3-backed {@link StateService}.
  *
- * Construction itself never touches AWS — environment resolution and
+ * Construction itself never touches AWS -- environment resolution and
  * the ensure-bucket-exists check are deferred into a cached Effect
  * that runs once, on the first state operation.
  */
@@ -382,7 +382,7 @@ export const createStateBucketName = (accountId: string, region: string, name?: 
 const ensureStateBucket = (bucket: string, region: string, options: S3StateOptions) =>
   Effect.gen(function* () {
     // An absent bucket surfaces as either `NotFound` (the HEAD 404) or
-    // `NoSuchBucket` depending on the namespace/path — treat both as "create
+    // `NoSuchBucket` depending on the namespace/path -- treat both as "create
     // it". Catching only `NotFound` let a deleted state bucket (e.g. after a
     // nuke) escape as an uncaught `NoSuchBucket` instead of being recreated.
     const exists = yield* s3.headBucket({ Bucket: bucket }).pipe(
@@ -485,7 +485,7 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
       });
     }
   }).pipe(
-    // The whole observe→create→wait sequence races other first-callers of the
+    // The whole observe->create->wait sequence races other first-callers of the
     // shared bucket; `OperationAborted` (conflicting create) and a transiently
     // absent bucket (`NoSuchBucket`/`NotFound`) are the faces of that race.
     // Retry the entire sequence so a concurrent create that is still settling

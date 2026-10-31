@@ -36,19 +36,19 @@ export type ContentPolicyProps = {
    * Content policy id (the `{contentPolicy}` segment of
    * `projects/{project}/locations/{location}/contentPolicies/{id}`). If
    * omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 100 characters. Immutable — changing it replaces the
+   * is at most 100 characters. Immutable -- changing it replaces the
    * policy.
    */
   contentPolicyId?: string;
   /**
-   * Processing location (`us`, `us-central1`, …). Immutable — changing it
+   * Processing location (`us`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy.
    * @default "us"
    */
   location?: string;
   /**
    * Display name (max 63 characters). Content policies have no labels or
-   * description field, so Alchemy ownership is stored in a `[alchemy …]`
+   * description field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   displayName?: string;
@@ -124,7 +124,7 @@ export type ContentPolicy = Resource<
  *
  * Content policies have no labels field, so Alchemy stamps ownership
  * into the display name for `list` / nuke. Location and id are identity
- * — changing them replaces the policy. Display name, inspect config, and
+ * -- changing them replaces the policy. Display name, inspect config, and
  * rules update in place.
  *
  * ### Creating a Content Policy

@@ -10,7 +10,7 @@ import type { Asset } from "./Asset.ts";
 export interface DescribeAssetRequest extends Omit<sitewise.DescribeAssetRequest, "assetId"> {}
 
 /**
- * Runtime binding for `iotsitewise:DescribeAsset` — read the bound asset's
+ * Runtime binding for `iotsitewise:DescribeAsset` -- read the bound asset's
  * full description (including its properties with their service-assigned
  * ids and names) from a deployed Lambda or Task. Use it to resolve a
  * property's id by name before reading or ingesting values.

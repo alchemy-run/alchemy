@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-contacts:DescribeEngagement`.
  *
- * Read the details of an engagement — sender, subject, content, and the
+ * Read the details of an engagement -- sender, subject, content, and the
  * incident it belongs to.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.DescribeEngagementHttp)`.

@@ -68,7 +68,7 @@ export interface WebFunctionEndpointProps {
   regions?: string[];
   /**
    * Maximum number of execution environments this endpoint uses per Region
-   * (2–10,000). Endpoints scale independently. Changes apply in place.
+   * (2-10,000). Endpoints scale independently. Changes apply in place.
    */
   maxEnvironments?: number;
   /**

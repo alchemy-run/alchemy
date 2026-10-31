@@ -47,7 +47,7 @@ export const makeBucketBinding = <Client>(options: {
  * Helpers shared by both the read and write halves of the binding client.
  *
  * Read-only (`wrapR2Objects`) and write-only (`wrapR2MultipartUpload`) wrappers
- * live in {@link makeRead}/{@link makeWrite} respectively — only the primitives
+ * live in {@link makeRead}/{@link makeWrite} respectively -- only the primitives
  * used by both sides are exposed here.
  */
 export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
@@ -74,7 +74,7 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
 };
 
 /**
- * The `R2Object`/`R2ObjectBody` → Effect-client wrappers, shared by the
+ * The `R2Object`/`R2ObjectBody` -> Effect-client wrappers, shared by the
  * Worker-binding helpers above and the local platform-proxy helpers
  * (`LocalR2Gateway.ts`), which differ only in how `raw`/`use` obtain the
  * native bucket. Only the Worker binding marks its body stream as native:

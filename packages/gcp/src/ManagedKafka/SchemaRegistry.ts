@@ -28,11 +28,11 @@ export type SchemaRegistryProps = {
   /**
    * Schema registry id. Letters, numbers, and underscores; max 63
    * characters; must not start with a number. If omitted, a unique id is
-   * generated. Immutable — changing it replaces the registry.
+   * generated. Immutable -- changing it replaces the registry.
    */
   schemaRegistryId?: string;
   /**
-   * Region (`us-central1`, …). Immutable.
+   * Region (`us-central1`, ...). Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -62,7 +62,7 @@ export type SchemaRegistry = Resource<
  *
  * Schema registries have no labels field, so Alchemy stamps ownership on
  * a reserved `alchemy_ownership` subject. Name and location are identity
- * — changing either replaces the registry.
+ * -- changing either replaces the registry.
  *
  * ### Creating a Schema Registry
  * **Example:** Generated name

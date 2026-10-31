@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:UpdateStandardsControl`.
  *
  * Enables or disables an individual control within an enabled standard.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.UpdateStandardsControlHttp)`.
  * ### Standards & Controls
  * **Example:** Disable a Control
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateStandardsControl = yield* AWS.SecurityHub.UpdateStandardsControl();
  *
  * // runtime

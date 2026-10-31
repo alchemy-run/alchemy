@@ -144,11 +144,11 @@ export interface AcknowledgementEventSourceProps extends EventRouteProps {
 /**
  * Deliver B2BI transformation results (`aws.b2bi` / `"Transformation
  * Completed"` and `"Transformation Failed"` EventBridge events) to the host
- * Function — B2BI emits one for every transformer run, whether started by a
+ * Function -- B2BI emits one for every transformer run, whether started by a
  * capability's S3 trigger or {@link StartTransformerJob}.
  *
  * The EventBridge pattern matches every transformation in the account and
- * region (the pattern must be literal — `Output` values do not resolve
+ * region (the pattern must be literal -- `Output` values do not resolve
  * inside the deployed bundle); inspect `event.detail["trading-partner-id"]`
  * or the resource ARNs in `event.resources` in the handler if multiple
  * partnerships share the Function. Provide `AWS.Lambda.EventSource` on the
@@ -194,7 +194,7 @@ export const consumeTransformationEvents = <StreamReq = never, Req = never>(
 /**
  * Deliver B2BI acknowledgement results (`aws.b2bi` / `"Acknowledgement
  * Completed"` and `"Acknowledgement Failed"` EventBridge events) to the host
- * Function — emitted when B2BI generates (or fails to generate) an X12
+ * Function -- emitted when B2BI generates (or fails to generate) an X12
  * acknowledgement such as a 997 for an inbound document.
  *
  * Provide `AWS.Lambda.EventSource` on the Function effect to implement the

@@ -46,28 +46,28 @@ export type { DeviceConfig, DeviceGrant, DeviceMetadata, FrequencyRange };
 export type CustomersDeviceProps = {
   /**
    * Parent SAS customer, as `customers/{customer}` or the customer id.
-   * Immutable — changing it replaces the device.
+   * Immutable -- changing it replaces the device.
    */
   parent: string;
   /**
    * Server-assigned device resource name
-   * (`customers/{customer}/devices/{device}`). Immutable — changing it
+   * (`customers/{customer}/devices/{device}`). Immutable -- changing it
    * replaces the device.
    */
   name?: string;
   /**
    * Display name. SAS Portal devices have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   displayName?: string;
   /**
-   * Manufacturer serial number. Immutable — changing it replaces the
+   * Manufacturer serial number. Immutable -- changing it replaces the
    * device.
    */
   serialNumber?: string;
   /**
-   * FCC identifier of the CBSD. Immutable — changing it replaces the
+   * FCC identifier of the CBSD. Immutable -- changing it replaces the
    * device.
    */
   fccId?: string;

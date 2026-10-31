@@ -1,7 +1,7 @@
 /**
  * Cloudflare requires a named export on the deployed Worker for every
  * entrypoint, Durable Object, and Workflow class an application defines. Which
- * classes those are cannot be determined statically — the entry module has to
+ * classes those are cannot be determined statically -- the entry module has to
  * be evaluated and its exports classified by prototype chain.
  *
  * The classification runs inside the Worker (see {@link exportTypesModuleSource})

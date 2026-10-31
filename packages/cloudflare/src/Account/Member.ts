@@ -19,7 +19,7 @@ export type MemberStatus = "accepted" | "pending";
 
 /**
  * A scoped access policy attached to an account membership. Policies are an
- * Enterprise alternative to legacy `roles` — they grant a permission group
+ * Enterprise alternative to legacy `roles` -- they grant a permission group
  * over a resource group with an explicit allow/deny.
  */
 export interface MemberPolicy {
@@ -41,13 +41,13 @@ export interface MemberPolicy {
 export interface MemberProps {
   /**
    * The contact email address of the user to invite. The email is the
-   * identity of the membership — there is no API to change it, so updating
+   * identity of the membership -- there is no API to change it, so updating
    * this property triggers a replacement (a new invite is sent and the old
    * membership is removed).
    */
   email: string;
   /**
-   * IDs of legacy account roles to assign to the member. Mutable — role
+   * IDs of legacy account roles to assign to the member. Mutable -- role
    * changes are applied in place via `PUT`. Role IDs can be looked up by
    * name with {@link findAccountRoleByName}.
    *
@@ -56,7 +56,7 @@ export interface MemberProps {
   roles?: string[];
   /**
    * Scoped access policies to attach to the member (Enterprise feature).
-   * Mutable — policy changes are applied in place via `PUT`.
+   * Mutable -- policy changes are applied in place via `PUT`.
    *
    * Exactly one of `roles` or `policies` should be provided.
    */
@@ -108,7 +108,7 @@ export interface MemberAttributes {
 export type Member = Resource<TypeId, MemberProps, MemberAttributes, never, Providers>;
 
 /**
- * A member of a Cloudflare account — an invitation for a user (by email) to
+ * A member of a Cloudflare account -- an invitation for a user (by email) to
  * join the account with a set of roles or scoped policies.
  *
  * The membership's identity is its `email`: there is no API to change the
@@ -138,7 +138,7 @@ export type Member = Resource<TypeId, MemberProps, MemberAttributes, never, Prov
  * ### Changing roles
  * **Example:** Swap the member's role in place
  * ```typescript
- * // Same email — the membership is updated, not replaced.
+ * // Same email -- the membership is updated, not replaced.
  * yield* Cloudflare.Account.Member("Auditor", {
  *   email: "auditor@example.com",
  *   roles: [adminRole.id],
@@ -205,9 +205,9 @@ export const MemberProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<MemberProps>;
       const n = news as MemberProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.email === undefined) return undefined;
-      // The email is the identity of the invite — it cannot be changed.
+      // The email is the identity of the invite -- it cannot be changed.
       if (!sameEmail(o.email, n.email)) {
         return { action: "replace" } as const;
       }
@@ -231,7 +231,7 @@ export const MemberProvider = () =>
 
       // Adoption path: a membership for this email may already exist.
       // Memberships carry no ownership markers, so we cannot prove we
-      // created it — brand it `Unowned` so the engine refuses to take
+      // created it -- brand it `Unowned` so the engine refuses to take
       // over unless `adopt` is set.
       const email = output?.email ?? (olds?.email as string | undefined);
       if (email) {
@@ -246,20 +246,20 @@ export const MemberProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const desiredRoles = news.roles as string[] | undefined;
 
-      // 1. Observe — the membership id cached on `output` is a hint, not
+      // 1. Observe -- the membership id cached on `output` is a hint, not
       //    a guarantee: a missing member falls through to the email scan
       //    and then to create.
       let observed = output?.memberId ? yield* getMember(accountId, output.memberId) : undefined;
 
       // 2. Fall back to scanning the account for the email. Ownership has
-      //    already been verified upstream — `read` reports existing
+      //    already been verified upstream -- `read` reports existing
       //    memberships as `Unowned` and the engine gates takeover behind
       //    the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByEmail(accountId, news.email);
       }
 
-      // 3. Ensure — invite when missing. A concurrent (or orphaned) invite
+      // 3. Ensure -- invite when missing. A concurrent (or orphaned) invite
       //    for the same email surfaces either as a generic validation error
       //    or as the typed `AccountMemberAlreadyExists` (Cloudflare answers
       //    the duplicate with HTTP 400 "Account member already exists for
@@ -286,7 +286,7 @@ export const MemberProvider = () =>
         observed = created;
       }
 
-      // 4. Sync — diff the observed roles/policies against desired; skip
+      // 4. Sync -- diff the observed roles/policies against desired; skip
       //    the PUT entirely on a no-op. `status` is not synced: only the
       //    invitee can accept, and accepted -> pending is a replacement
       //    handled by diff.
@@ -314,7 +314,7 @@ export const MemberProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Removing a member cancels a pending invite or revokes an accepted
       // membership. An already-gone member surfaces as `MemberNotFound`
-      // (Cloudflare error code 1003) — that's success for delete.
+      // (Cloudflare error code 1003) -- that's success for delete.
       yield* accounts
         .deleteMember({
           accountId: output.accountId,
@@ -357,7 +357,7 @@ const getMember = (accountId: string, memberId: string) =>
 
 /**
  * Find a membership by email. Emails are unique within an account, so at
- * most one membership can match. The comparison is case-insensitive —
+ * most one membership can match. The comparison is case-insensitive --
  * Cloudflare normalizes addresses.
  */
 const findByEmail = (accountId: string, email: string) =>

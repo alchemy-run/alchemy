@@ -35,11 +35,11 @@ import {
 export type CustomersConfigurationProps = {
   /**
    * Parent customer (`customers/{customer}` or `{customer}`). Immutable
-   * — changing it replaces the configuration.
+   * -- changing it replaces the configuration.
    */
   parent: string;
   /**
-   * Server-assigned configuration id (last path segment). Immutable —
+   * Server-assigned configuration id (last path segment). Immutable --
    * changing it replaces the configuration.
    */
   configurationId?: string;
@@ -64,7 +64,7 @@ export type CustomersConfigurationProps = {
   companyName: string;
   /**
    * Short admin-facing name. Configurations have no labels field, so
-   * Alchemy stores ownership in a `[alchemy …]` prefix and strips it
+   * Alchemy stores ownership in a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   configurationName?: string;
@@ -129,7 +129,7 @@ export type CustomersConfiguration = Resource<
  *
  * Configurations have no labels field, so Alchemy stamps ownership into
  * `configurationName` for `list` / nuke. Parent customer and
- * configuration id are identity — changing either replaces the
+ * configuration id are identity -- changing either replaces the
  * configuration. Contact fields, DPC, extras, default flag, custom
  * message, and reset timeout update in place. Create requires a
  * zero-touch customer the caller can administer.

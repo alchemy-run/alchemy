@@ -39,14 +39,14 @@ export type FolderSinkBigQueryOptions = {
 export type FolderSinkProps = {
   /**
    * Folder id (`folders/{folder}` or the numeric id). When omitted, the
-   * stack project is used. Immutable — changing it replaces the sink.
+   * stack project is used. Immutable -- changing it replaces the sink.
    */
   folderId?: string;
   /**
    * Sink id (the `{sink}` segment of `{parent}/sinks/{sink}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens,
-   * periods; first character must be alphanumeric. Immutable — changing
+   * periods; first character must be alphanumeric. Immutable -- changing
    * it replaces the sink.
    */
   sinkId?: string;
@@ -66,7 +66,7 @@ export type FolderSinkProps = {
   filter?: string;
   /**
    * Human-readable description (max 8000 characters). Logging sinks have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -157,7 +157,7 @@ export type FolderSink = Resource<
  *
  * Logging sinks have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. `folderId` and `sinkId` are identity
- * — changing either replaces the sink. Filter, destination, description,
+ * -- changing either replaces the sink. Filter, destination, description,
  * disabled flag, exclusions, and BigQuery options update in place.
  *
  * ### Creating a Folder Sink

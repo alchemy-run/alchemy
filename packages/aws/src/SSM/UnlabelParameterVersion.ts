@@ -13,7 +13,7 @@ export interface UnlabelParameterVersionRequest extends Omit<
  *
  * Bind this operation to a `Parameter` inside a function runtime to get a
  * callable that removes labels from a specific version of the bound
- * parameter — the counterpart to `LabelParameterVersion` when moving a label
+ * parameter -- the counterpart to `LabelParameterVersion` when moving a label
  * during a rollout or rollback.
  * ### Labeling Parameter Versions
  * **Example:** Remove a Label From a Version

@@ -30,11 +30,11 @@ import type { ClientCertificate } from "./shared.ts";
 export type ProductsCertificateProps = {
   /**
    * Certificate id (the `{certificate}` segment). Server-assigned on
-   * create. Immutable — changing it replaces the certificate.
+   * create. Immutable -- changing it replaces the certificate.
    */
   certificateId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * certificate. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -43,7 +43,7 @@ export type ProductsCertificateProps = {
   location?: string;
   /**
    * Product id (`IP` for Application Integration, `APIGEE` for Apigee
-   * Integration). Immutable — changing it replaces the certificate.
+   * Integration). Immutable -- changing it replaces the certificate.
    * @default "IP"
    */
   product?: string;
@@ -53,7 +53,7 @@ export type ProductsCertificateProps = {
   displayName?: string;
   /**
    * Human-readable description. Certificates have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -62,7 +62,7 @@ export type ProductsCertificateProps = {
    */
   requestorId?: string;
   /**
-   * Raw client certificate (PEM). Write-only — never returned on
+   * Raw client certificate (PEM). Write-only -- never returned on
    * attributes. Changing it replaces the certificate.
    */
   rawCertificate?: ClientCertificate;
@@ -88,7 +88,7 @@ export type ProductsCertificate = Resource<
     description: string | undefined;
     /** Requestor id. */
     requestorId: string | undefined;
-    /** Certificate status (`ACTIVE`, `EXPIRED`, …). */
+    /** Certificate status (`ACTIVE`, `EXPIRED`, ...). */
     certificateStatus: string | undefined;
     /** RFC3339 start of validity. */
     validStartTime: string | undefined;
@@ -103,7 +103,7 @@ export type ProductsCertificate = Resource<
  * A product-scoped Application Integration client certificate
  * (`projects/.../products/{product}/certificates/{certificate}`).
  *
- * Certificates have no labels field — Alchemy stamps ownership into the
+ * Certificates have no labels field -- Alchemy stamps ownership into the
  * description. Location, product, and id are immutable. Display name
  * and description update in place. The PEM payload is write-only.
  *

@@ -25,7 +25,7 @@ export interface GetDevicePositionRequest extends Omit<
  * const getPosition = yield* Location.GetDevicePosition(tracker);
  *
  * const latest = yield* getPosition({ DeviceId: "vehicle-1" });
- * // latest.Position → [longitude, latitude]
+ * // latest.Position -> [longitude, latitude]
  * ```
  *
  * @binding

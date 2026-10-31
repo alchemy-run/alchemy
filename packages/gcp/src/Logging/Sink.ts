@@ -50,7 +50,7 @@ export type SinkProps = {
    * Sink id (the `{sink}` segment of `projects/{project}/sinks/{sink}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the sink.
    */
   sinkId?: string;
@@ -70,7 +70,7 @@ export type SinkProps = {
   filter?: string;
   /**
    * Human-readable description (max 8000 characters). Logging sinks have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -162,7 +162,7 @@ export type Sink = Resource<
  * A Cloud Logging sink that routes log entries to a destination.
  *
  * Logging sinks have no labels field, so Alchemy stamps ownership into
- * the description for `list` / nuke. Name is identity — changing `sinkId`
+ * the description for `list` / nuke. Name is identity -- changing `sinkId`
  * replaces the sink. Filter, destination, description, disabled flag,
  * exclusions, and BigQuery options update in place.
  *

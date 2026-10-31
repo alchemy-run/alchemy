@@ -28,11 +28,11 @@ export interface GetPredictiveScalingForecastRequest extends Omit<
  * ### Reading Forecasts
  * **Example:** Get the Next 48 Hours of Forecast
  * ```typescript
- * // init — bind the operation to the predictive scaling policy
+ * // init -- bind the operation to the predictive scaling policy
  * const getPredictiveScalingForecast =
  *   yield* AWS.ApplicationAutoScaling.GetPredictiveScalingForecast(policy);
  *
- * // runtime — read the forecast window
+ * // runtime -- read the forecast window
  * const now = yield* Effect.sync(() => Date.now());
  * const forecast = yield* getPredictiveScalingForecast({
  *   StartTime: new Date(now),

@@ -16,7 +16,7 @@ export interface ReadWriteBucketClient extends ReadBucketClient, WriteBucketClie
  * const files = yield* GCP.Storage.ReadWriteBucket(bucket);
  * const source = yield* files.get("in.txt");
  * if (source) yield* files.put("out.txt", source.body);
- * // …provided with Effect.provide(GCP.Storage.ReadWriteBucketHttp)
+ * // ...provided with Effect.provide(GCP.Storage.ReadWriteBucketHttp)
  * ```
  *
  * @binding

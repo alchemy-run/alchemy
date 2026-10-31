@@ -66,7 +66,7 @@ export type ReadinessCheck = {
 };
 
 export type Accelerator = {
-  /** Accelerator type (`nvidia-tesla-p100`, …). */
+  /** Accelerator type (`nvidia-tesla-p100`, ...). */
   type?: string;
   /** Number of accelerator cards. */
   count?: number;
@@ -103,7 +103,7 @@ export type BoostConfig = {
 
 export type GceInstance = {
   /**
-   * Machine type (`e2-standard-4`, …).
+   * Machine type (`e2-standard-4`, ...).
    */
   machineType?: string;
   /**
@@ -141,7 +141,7 @@ export type GceInstance = {
   tags?: string[];
   /**
    * Resource Manager tags bound to the VM
-   * (`tagKeys/{id}` → `tagValues/{id}`).
+   * (`tagKeys/{id}` -> `tagValues/{id}`).
    */
   vmTags?: Record<string, string>;
   /**
@@ -284,14 +284,14 @@ export type WorkstationClustersWorkstationConfigProps = {
   /**
    * Parent workstation cluster. Full name
    * `projects/{project}/locations/{location}/workstationClusters/{workstationCluster}`
-   * or a cluster id (combined with `location`). Immutable — changing it
+   * or a cluster id (combined with `location`). Immutable -- changing it
    * replaces the configuration.
    */
   workstationCluster: string;
   /**
    * Configuration id (the `{workstationConfig}` segment). If omitted, a
    * unique RFC1035 name is generated from the stack, stage, and logical
-   * id. Immutable — changing it replaces the configuration.
+   * id. Immutable -- changing it replaces the configuration.
    */
   workstationConfigId?: string;
   /**
@@ -439,7 +439,7 @@ export type WorkstationClustersWorkstationConfig = Resource<
 >;
 
 /**
- * A Cloud Workstations configuration — the template for workstation VMs
+ * A Cloud Workstations configuration -- the template for workstation VMs
  * (machine type, image, disks, timeouts).
  *
  * Changing `workstationConfigId`, `location`, `workstationCluster`,

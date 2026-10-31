@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:UpdateKxClusterDatabases` — remounts a running cluster's databases at new changesets (with rolling or no-restart deployment) — how ingestion pipelines roll fresh data out to clusters that don't read through dataviews.
+ * Runtime binding for `finspace:UpdateKxClusterDatabases` -- remounts a running cluster's databases at new changesets (with rolling or no-restart deployment) -- how ingestion pipelines roll fresh data out to clusters that don't read through dataviews.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.UpdateKxClusterDatabasesHttp)`.
  * ### Deploying to Clusters

@@ -60,7 +60,7 @@ export const syncBdaTags = Effect.fn(function* (
 /**
  * Key-order-independent structural equality for configuration objects, used
  * to diff observed cloud configuration against the desired props. The server
- * may fill defaulted fields the user never specified — a mismatch then just
+ * may fill defaulted fields the user never specified -- a mismatch then just
  * re-applies the idempotent PUT.
  */
 export const bdaConfigEquals = (a: unknown, b: unknown): boolean =>

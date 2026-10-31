@@ -31,7 +31,7 @@ export interface CustomTrustStoreProps {
   /**
    * Zone the trust store certificate belongs to.
    *
-   * Immutable — moving the certificate to another zone triggers a
+   * Immutable -- moving the certificate to another zone triggers a
    * replacement.
    */
   zoneId: string;
@@ -40,7 +40,7 @@ export interface CustomTrustStoreProps {
    * accepted; intermediate and leaf certificates are rejected by
    * Cloudflare.
    *
-   * Immutable — the API has no update operation, so changing the
+   * Immutable -- the API has no update operation, so changing the
    * certificate triggers a replacement.
    */
   certificate: string;
@@ -81,14 +81,14 @@ export type CustomTrustStore = Resource<
  * store to validate your origin server's certificate when connecting to
  * the origin (e.g. with Full (strict) SSL and a private CA at the origin).
  *
- * Requires the Advanced Certificate Manager entitlement on the zone —
+ * Requires the Advanced Certificate Manager entitlement on the zone --
  * without it every call fails with the typed
  * `AdvancedCertificateManagerRequired` (code 1450) error.
  *
  * The certificate is immutable: there is no update API, so changing the
  * PEM (or the zone) replaces the resource. Trust store certificates carry
  * no ownership markers, so a cold `read` scans the zone for a certificate
- * with the same PEM body and reports it as `Unowned` — the engine refuses
+ * with the same PEM body and reports it as `Unowned` -- the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
  * ### Uploading a root CA
  * **Example:** Trust a private root CA for origin pulls
@@ -130,7 +130,7 @@ export const CustomTrustStoreProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Trust stores live inside a zone (`/zones/{zone_id}/acm/...`) with
-      // no account-wide collection API — enumerate every zone and list
+      // no account-wide collection API -- enumerate every zone and list
       // within each, paginating exhaustively.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -146,7 +146,7 @@ export const CustomTrustStoreProvider = () =>
               ),
             ),
             // Zones without the Advanced Certificate Manager add-on reject
-            // the route with the typed entitlement tag — skip them.
+            // the route with the typed entitlement tag -- skip them.
             Effect.catchTag("AdvancedCertificateManagerRequired", () =>
               Effect.succeed([] as CustomTrustStoreAttributes[]),
             ),
@@ -158,7 +158,7 @@ export const CustomTrustStoreProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The certificate is the resource's identity — no update API exists.
+      // The certificate is the resource's identity -- no update API exists.
       const oldCertificate = olds?.certificate ?? output?.certificate;
       if (
         oldCertificate !== undefined &&
@@ -202,20 +202,20 @@ export const CustomTrustStoreProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing (or async-deleted) certificate falls through to the
       //    PEM scan and then to create.
       let observed = output?.id ? yield* getTrustStore(zoneId, output.id) : undefined;
       if (observed && isGoneStatus(observed.status)) observed = undefined;
 
       // 2. Fall back to scanning the zone for the same PEM body. Ownership
-      //    has already been verified upstream — `read` reports foreign
+      //    has already been verified upstream -- `read` reports foreign
       //    certificates as `Unowned` and the engine gates adoption.
       if (!observed) {
         observed = yield* findByCertificate(zoneId, news.certificate);
       }
 
-      // 3. Ensure — upload when missing. There is no sync step: the
+      // 3. Ensure -- upload when missing. There is no sync step: the
       //    certificate is immutable (diff replaces on any change).
       if (!observed) {
         observed = yield* acm.createCustomTrustStore({
@@ -228,7 +228,7 @@ export const CustomTrustStoreProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Observe first — re-deleting an already-gone certificate is a no-op
+      // Observe first -- re-deleting an already-gone certificate is a no-op
       // (delete must stay idempotent across crashed runs).
       const observed = yield* getTrustStore(output.zoneId, output.id);
       if (!observed || isGoneStatus(observed.status)) return;
@@ -256,7 +256,7 @@ type ObservedTrustStore =
   | acm.ListCustomTrustStoresResponse["result"][number];
 
 /**
- * Deletion is asynchronous — a certificate lingers in `pending_deletion`
+ * Deletion is asynchronous -- a certificate lingers in `pending_deletion`
  * (then `deleted`) after a successful DELETE. Treat both as "gone" so
  * observation does not resurrect a dying certificate.
  */

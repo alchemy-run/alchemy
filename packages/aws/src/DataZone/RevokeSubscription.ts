@@ -17,7 +17,7 @@ export interface RevokeSubscriptionRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** Revoke a Subscription
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const revokeSubscription = yield* AWS.DataZone.RevokeSubscription(domain);
  *
  * // runtime

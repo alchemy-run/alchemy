@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:DisassociateMembers`.
  *
  * Disassociates the specified member accounts from this administrator account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.DisassociateMembersHttp)`.
  * ### Members & Organization
  * **Example:** Disassociate Members
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disassociateMembers = yield* AWS.SecurityHub.DisassociateMembers();
  *
  * // runtime

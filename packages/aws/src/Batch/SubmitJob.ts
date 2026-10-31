@@ -14,7 +14,7 @@ export interface SubmitJobRequest extends Omit<
 > {}
 
 /**
- * Submit a job to an AWS Batch job queue against a bound job definition —
+ * Submit a job to an AWS Batch job queue against a bound job definition --
  * fire-and-forget heavy work from a Lambda or Task.
  *
  * ### Submitting Jobs

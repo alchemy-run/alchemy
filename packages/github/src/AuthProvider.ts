@@ -156,7 +156,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       // Hard-coded host from `providers({ baseUrl })`, resolved once at layer
       // build. Kept as an object so "no option" (undefined) is distinct from
       // "option normalized to the github.com default" ({ baseUrl: undefined })
-      // — both matter: the latter still pins the host and mutes the prompt.
+      // -- both matter: the latter still pins the host and mutes the prompt.
       const fixed =
         authOptions?.baseUrl !== undefined
           ? {
@@ -248,7 +248,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             message: "GitHub authentication method",
             options,
           });
-          // The host prompt is skipped when providers({ baseUrl }) pinned it —
+          // The host prompt is skipped when providers({ baseUrl }) pinned it --
           // nothing is stored in the profile config; `read` re-applies the
           // pinned value from code on every resolution.
           const baseUrl = fixed !== undefined ? undefined : yield* promptBaseUrl;
@@ -463,7 +463,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
   );
 
 /**
- * The default GitHub AuthProvider layer — {@link makeGitHubAuth} with no
+ * The default GitHub AuthProvider layer -- {@link makeGitHubAuth} with no
  * hard-coded host. Use `GitHub.providers({ baseUrl })` (or
  * `makeGitHubAuth({ baseUrl })` directly) to pin a GitHub Enterprise host.
  */

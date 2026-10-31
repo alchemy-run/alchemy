@@ -17,7 +17,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * ### Managing Message Media
  * **Example:** Delete Uploaded Media
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const deleteMedia = yield* AWS.SocialMessaging.DeleteWhatsAppMessageMedia(account);
  *
  * // runtime

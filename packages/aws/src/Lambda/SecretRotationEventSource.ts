@@ -38,7 +38,7 @@ export const isSecretRotationEvent = (event: any): event is SecretRotationEvent 
  *    (`DescribeSecret`, `GetSecretValue`, `PutSecretValue`,
  *    `UpdateSecretVersionStage` on the secret + `GetRandomPassword`).
  * 3. Provisions the {@link RotationSchedule} configuring the secret's
- *    rotation to invoke this function — threaded through the Permission so
+ *    rotation to invoke this function -- threaded through the Permission so
  *    Secrets Manager's invoke-permission validation passes.
  *
  * At runtime it narrows incoming invocations to rotation events for the
@@ -108,7 +108,7 @@ export const SecretRotationEventSource = Layer.effect(
             // Secrets Manager VALIDATES it can invoke the rotation function
             // when `RotateSecret` configures the schedule, so the Permission
             // must exist BEFORE the RotationSchedule. Rotation invocations
-            // carry no SourceArn — scope by account per the Secrets Manager
+            // carry no SourceArn -- scope by account per the Secrets Manager
             // confused-deputy guidance.
             const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
               accountId: string;
@@ -121,7 +121,7 @@ export const SecretRotationEventSource = Layer.effect(
             });
 
             // The Permission echoes the `functionName` prop (the function
-            // ARN) as an attribute — threading it as the rotation Lambda ARN
+            // ARN) as an attribute -- threading it as the rotation Lambda ARN
             // makes the schedule reconcile only AFTER the invoke permission
             // exists.
             yield* Rotation(`${secret.LogicalId}-RotationSchedule`, {

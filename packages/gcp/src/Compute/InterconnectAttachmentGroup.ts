@@ -24,14 +24,14 @@ export type InterconnectAttachmentGroupAttachmentMap =
 export type InterconnectAttachmentGroupProps = {
   /**
    * Group name (RFC1035, 1-63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the group.
    */
   interconnectAttachmentGroupName?: string;
   /**
    * Optional description. Attachment groups have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke. Updated in
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke. Updated in
    * place via `patch`.
    */
   description?: string;
@@ -95,7 +95,7 @@ export type InterconnectAttachmentGroup = Resource<
  * they actually provide. Name is immutable. Description, intent, member
  * attachments, and the optional InterconnectGroup URL update in place via
  * `interconnectAttachmentGroups.patch`. Compute InterconnectAttachmentGroup
- * has no labels field — Alchemy stamps ownership into the description so
+ * has no labels field -- Alchemy stamps ownership into the description so
  * nuke can find leaked groups.
  *
  * ### Creating an Attachment Group

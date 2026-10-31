@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:GetAWSDefaultServiceQuota` — read the
+ * Runtime binding for `servicequotas:GetAWSDefaultServiceQuota` -- read the
  * AWS default value of a quota (the value that applies when no account
  * override exists) from inside a Function.
  *

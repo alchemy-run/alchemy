@@ -28,7 +28,7 @@ export interface ScraperLoggingConfigurationProps {
   scraperId: string;
   /**
    * ARN of the CloudWatch Logs log group that receives the scraper's
-   * component logs. AMP expects the ARN with a trailing `:*` — one is
+   * component logs. AMP expects the ARN with a trailing `:*` -- one is
    * appended automatically when missing.
    */
   logGroupArn: string;
@@ -53,7 +53,7 @@ export interface ScraperLoggingConfiguration extends Resource<
 
 /**
  * The logging configuration of an Amazon Managed Service for Prometheus
- * scraper — ships the scraper's component logs (service discovery,
+ * scraper -- ships the scraper's component logs (service discovery,
  * collection, export) to a CloudWatch Logs log group. A scraper has at most
  * one.
  *
@@ -79,7 +79,7 @@ export const ScraperLoggingConfigurationProvider = () =>
   Provider.effect(
     ScraperLoggingConfiguration,
     Effect.gen(function* () {
-      /** Describe the configuration; typed not-found → undefined. */
+      /** Describe the configuration; typed not-found -> undefined. */
       const describe = Effect.fn(function* (scraperId: string) {
         return yield* amp
           .describeScraperLoggingConfiguration({ scraperId })
@@ -135,7 +135,7 @@ export const ScraperLoggingConfigurationProvider = () =>
           if (!scraperId) return undefined;
           const config = yield* describe(scraperId);
           if (config === undefined) return undefined;
-          // Scraper logging configurations are not taggable — ownership is
+          // Scraper logging configurations are not taggable -- ownership is
           // implied by the owned parent scraper.
           return toAttrs(config);
         }),
@@ -145,10 +145,10 @@ export const ScraperLoggingConfigurationProvider = () =>
           const desiredArn = normalizeAmpLogGroupArn(news!.logGroupArn);
           const desiredComponents = toWireComponents(news!.components);
 
-          // 1. Observe — the live configuration is authoritative.
+          // 1. Observe -- the live configuration is authoritative.
           const observed = yield* describe(scraperId);
 
-          // 2/3. Ensure + sync — `updateScraperLoggingConfiguration` is an
+          // 2/3. Ensure + sync -- `updateScraperLoggingConfiguration` is an
           // upsert (there is no separate create operation); apply it only
           // when the destination or components drift.
           const drifts =
@@ -169,7 +169,7 @@ export const ScraperLoggingConfigurationProvider = () =>
               })
               .pipe(
                 // The scraper (or a previous logging update) may still be
-                // transitioning — retry conflicts briefly.
+                // transitioning -- retry conflicts briefly.
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
                   schedule: Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(15)]),
@@ -177,7 +177,7 @@ export const ScraperLoggingConfigurationProvider = () =>
               );
           }
 
-          // Bounded best-effort wait toward ACTIVE — a still-transitioning
+          // Bounded best-effort wait toward ACTIVE -- a still-transitioning
           // configuration converges on a later reconcile.
           const fresh = yield* amp.describeScraperLoggingConfiguration({ scraperId }).pipe(
             Effect.repeat({

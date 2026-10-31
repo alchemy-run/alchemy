@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `StartDomainMaintenance` operation (IAM action
  * `es:StartDomainMaintenance`).
  *
- * Starts a maintenance action on a domain — reboot a node, restart the search process, or restart Dashboards — e.g. remediation triggered by a health alarm. Provide the implementation with
+ * Starts a maintenance action on a domain -- reboot a node, restart the search process, or restart Dashboards -- e.g. remediation triggered by a health alarm. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.StartDomainMaintenanceHttp)`.
  * ### Domain Maintenance
  * **Example:** Reboot a Data Node
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *   Action: "REBOOT_NODE",
  *   NodeId: nodeId,
  * });
- * // result.MaintenanceId → track with GetDomainMaintenanceStatus
+ * // result.MaintenanceId -> track with GetDomainMaintenanceStatus
  * ```
  *
  * @binding

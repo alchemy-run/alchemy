@@ -24,7 +24,7 @@ import {
 /**
  * The structural slice of the project's `@nuxt/kit` module this package
  * drives. Typed structurally so the package carries no dependency on
- * `@nuxt/kit` — the *project's* install is always the one loaded.
+ * `@nuxt/kit` -- the *project's* install is always the one loaded.
  */
 export interface NuxtKitModule {
   readonly loadNuxt: (options: {
@@ -85,7 +85,7 @@ export interface NuxtNitroContext {
   /**
    * Absolute path of the USER's worker entry (the generic user-entry seam,
    * `target.entry` resolved against the root), when one is configured. The
-   * target maps it onto nitro's entry/exports seam — the user module wraps
+   * target maps it onto nitro's entry/exports seam -- the user module wraps
    * nitro's emitted handler and adds its own exports (Durable Objects, ...).
    */
   readonly entry?: string | undefined;
@@ -118,7 +118,7 @@ export interface NuxtTargetConfig {
   /**
    * The nuxt config overrides the framework half was constructed with
    * ({@link NuxtOptions.nuxt}). Carried on the target config so wholesale
-   * targets that re-run the framework in a child process (the AWS target —
+   * targets that re-run the framework in a child process (the AWS target --
    * `loadNuxt` executes user config/modules that may mutate the process)
    * can reconstruct the framework with the same options.
    */
@@ -130,24 +130,24 @@ export interface NuxtDevPlatformContext {
   /** Absolute project root. */
   readonly root: string;
   /**
-   * Literal env overrides for the dev platform — a same-named literal wins
+   * Literal env overrides for the dev platform -- a same-named literal wins
    * over any platform-served value.
    */
   readonly env?: Record<string, unknown> | undefined;
   /**
    * Target-specific binding specs the dev platform should serve (opaque to
-   * the framework half — the Cloudflare target takes `cloudflare-runtime`
+   * the framework half -- the Cloudflare target takes `cloudflare-runtime`
    * binding hooks and serves them through its platform proxy).
    */
   readonly bindings?: ReadonlyArray<unknown> | undefined;
   /**
    * Pre-built runtime-services context for the dev platform's proxy (opaque
-   * to the framework half — see `NuxtOptions.dev.services`).
+   * to the framework half -- see `NuxtOptions.dev.services`).
    */
   readonly services?: unknown;
   /**
    * Overrides for the dev platform's workerd process (opaque to the
-   * framework half — see `NuxtOptions.dev.workerd`).
+   * framework half -- see `NuxtOptions.dev.workerd`).
    */
   readonly workerd?: unknown;
 }
@@ -167,7 +167,7 @@ export interface NuxtDevPlatform {
 
 /**
  * A deploy target for Nuxt: the generic `DeployTarget` seams plus the
- * framework-specific hooks nitro-driven builds and dev servers need — the
+ * framework-specific hooks nitro-driven builds and dev servers need -- the
  * nitro deployment preset to build with, a last-word pass over the resolved
  * nitro config, and the dev-platform seam.
  */
@@ -185,7 +185,7 @@ export interface NuxtTarget extends DeployTarget<NuxtTargetConfig> {
     | undefined;
   /**
    * The target's dev-platform story: acquire whatever serves the platform
-   * environment in dev (scoped — closing the Scope tears it down AFTER the
+   * environment in dev (scoped -- closing the Scope tears it down AFTER the
    * dev server closes) and return the injection the dev server needs. When
    * absent, `dev` runs the plain framework dev server with no platform
    * bridge.
@@ -200,7 +200,7 @@ export interface NuxtTarget extends DeployTarget<NuxtTargetConfig> {
 /**
  * How a deploy target is passed to this package: a `NuxtTarget` value, a
  * factory `(config) => NuxtTarget`, or a module specifier resolved from the
- * *project's* `node_modules` (default-export — or named export `target` — a
+ * *project's* `node_modules` (default-export -- or named export `target` -- a
  * value or factory).
  */
 export type NuxtTargetInput = DeployTargetInput<NuxtTarget, NuxtTargetConfig>;
@@ -233,7 +233,7 @@ export interface NuxtOptions {
    */
   readonly compatibilityFlags?: Array<string> | undefined;
   /**
-   * The USER's worker entry (the custom-entry carriage — see
+   * The USER's worker entry (the custom-entry carriage -- see
    * {@link NuxtTargetConfig.main}). Relative paths resolve against the root.
    */
   readonly main?: string | undefined;
@@ -251,7 +251,7 @@ export interface NuxtOptions {
         /**
          * Literal values exposed on the dev platform env
          * (`event.context.cloudflare.env` on the Cloudflare target).
-         * Applied on top of the values served for {@link bindings} — a
+         * Applied on top of the values served for {@link bindings} -- a
          * same-named literal always wins.
          */
         readonly env?: Record<string, unknown> | undefined;
@@ -259,7 +259,7 @@ export interface NuxtOptions {
          * Target-specific binding specs the dev platform should serve.
          * Opaque to the framework half; the Cloudflare target accepts
          * `cloudflare-runtime` binding hooks (`Text.local`,
-         * `KvNamespace.local`, …) and serves them into nitro's dev SSR
+         * `KvNamespace.local`, ...) and serves them into nitro's dev SSR
          * worker thread through a workerd-backed platform proxy.
          */
         readonly bindings?: ReadonlyArray<unknown> | undefined;
@@ -267,7 +267,7 @@ export interface NuxtOptions {
          * A pre-built runtime-services context the dev platform should host
          * its proxy in (opaque to the framework half; the Cloudflare target
          * takes a `cloudflare-runtime` `Context<RuntimeServices>`). Embedders
-         * that already run a runtime stack — alchemy's dev sidecar — pass it
+         * that already run a runtime stack -- alchemy's dev sidecar -- pass it
          * so remote()-lowered bindings resolve; without it the platform is
          * local-only.
          */
@@ -289,7 +289,7 @@ const fail = (message: string, cause?: unknown) =>
  * The specifier the project's Nuxt kit is loaded from. `@nuxt/kit` itself is
  * not directly resolvable from a project root under isolated installs (it's
  * nuxt's own dependency), but nuxt's universally-present `./kit` subpath
- * (`nuxt/kit.js`, a plain `export * from "@nuxt/kit"`) is — and it resolves
+ * (`nuxt/kit.js`, a plain `export * from "@nuxt/kit"`) is -- and it resolves
  * the project's own kit instance.
  */
 export const NUXT_KIT_SPECIFIER = "nuxt/kit";
@@ -299,8 +299,8 @@ export const NUXT_KIT_SPECIFIER = "nuxt/kit";
  *
  * - `build` resolves the deploy target, then either delegates wholesale
  *   (`target.build`) or drives the PROJECT's `@nuxt/kit` programmatically:
- *   `loadNuxt({ cwd, dev: false, ready: false, overrides })` — the project's
- *   `nuxt.config.ts` loads natively through c12 — hooks are registered
+ *   `loadNuxt({ cwd, dev: false, ready: false, overrides })` -- the project's
+ *   `nuxt.config.ts` loads natively through c12 -- hooks are registered
  *   BEFORE `nuxt.ready()` (with `ready: true` they'd fire inside `loadNuxt`
  *   and be missed), then `buildNuxt`. The nitro preset is the target's
  *   (`nitro:config` gets the last word); a user-configured foreign preset
@@ -309,13 +309,13 @@ export const NUXT_KIT_SPECIFIER = "nuxt/kit";
  *   `clientDirectory` = `.output/public`, both taken from the resolved
  *   nitro output options (`nitro:init`).
  * - `dev` runs Nuxt's own dev server programmatically (`loadNuxt({ dev:
- *   true, ready: false })` → hooks → `ready()` → `nuxt.server.listen` →
- *   `buildNuxt`, the same flow `nuxi dev` drives), scoped — closing the
+ *   true, ready: false })` -> hooks -> `ready()` -> `nuxt.server.listen` ->
+ *   `buildNuxt`, the same flow `nuxi dev` drives), scoped -- closing the
  *   Scope closes the listener, the Nuxt instance, and then the target's
  *   dev platform. The target's `devPlatform` seam contributes nitro
  *   plugins + `runtimeConfig` (the Cloudflare target injects its
  *   `event.context.cloudflare` bridge served through cloudflare-runtime's
- *   platform proxy — SSR runs in nitro's Node worker THREAD, wrangler-free).
+ *   platform proxy -- SSR runs in nitro's Node worker THREAD, wrangler-free).
  *
  * This module is target-agnostic: everything Cloudflare-specific lives in
  * `@alchemy.run/frontend-frameworks/nuxt/cloudflare`.
@@ -417,7 +417,7 @@ export const make: (
             // The user-entry seam: nitro bundles `options.entry` as THE
             // worker entry, so the user module's exports (default handler +
             // Durable Objects, ...) are the worker's exports. Set on the
-            // INSTANCE options — not the nitro config — because nitro's
+            // INSTANCE options -- not the nitro config -- because nitro's
             // prerenderer clones `options._config` for its Node-preset
             // sub-build, and a workerd-flavored user entry (importing
             // `cloudflare:` modules) must not leak into that clone.
@@ -457,8 +457,8 @@ export const make: (
         Effect.provideService(FileSystem.FileSystem, fs),
       );
 
-      // The finishing-pass seam (none needed for cloudflare_module — the
-      // output is already workerd ESM — but the contract is honored for
+      // The finishing-pass seam (none needed for cloudflare_module -- the
+      // output is already workerd ESM -- but the contract is honored for
       // targets that do post-process).
       return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
         ...targetContext,
@@ -495,7 +495,7 @@ export const make: (
           : undefined;
 
       // The user's nuxt.config.ts loads natively; the dev injection rides
-      // the overrides layer. No nitro preset here — nitro's dev flow runs
+      // the overrides layer. No nitro preset here -- nitro's dev flow runs
       // its own Node dev preset (the SSR worker thread); the deploy preset
       // only matters for `build`. Telemetry/devtools are disabled: this
       // dev server runs headless under alchemy / the e2e harness.
@@ -542,8 +542,8 @@ export const make: (
         return yield* fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)");
       }
       // `nuxt.server.listen` is listhen-backed. listhen hunts upward from
-      // 3000 when NO port is given — colliding with (or IPv6-shadowing)
-      // user-facing `alchemy dev` proxy ports — while an explicit `port: 0`
+      // 3000 when NO port is given -- colliding with (or IPv6-shadowing)
+      // user-facing `alchemy dev` proxy ports -- while an explicit `port: 0`
       // resolves to get-port-please's `getRandomPort`, the same
       // probe-and-release `findEphemeralPort` does. Probe explicitly for
       // uniformity with the Vite-based frameworks (see DevPort's TODO).
@@ -572,7 +572,7 @@ export const make: (
         return yield* fail("Could not determine the dev server URL");
       }
 
-      // The initial dev build — same flow as `nuxi dev` (which awaits
+      // The initial dev build -- same flow as `nuxi dev` (which awaits
       // buildNuxt after wiring its listener); the promise resolves once
       // the dev bundles are ready, watchers keep running in background.
       yield* Effect.tryPromise({
@@ -636,7 +636,7 @@ export interface NitroOutputDirs {
  * Map nitro's on-disk `.output` onto the `BuildOutput` contract:
  * `serverModules` entry-first from the server directory (POSIX names,
  * sha256-hashed), `clientDirectory` = the public directory. The
- * `cloudflare_module` output is already self-contained workerd ESM — no
+ * `cloudflare_module` output is already self-contained workerd ESM -- no
  * finishing pass, and no external workspace roots (nitro inlines workspace
  * imports into the server chunks).
  */
@@ -667,7 +667,7 @@ export const readNitroOutput = (
 
 /**
  * A `Layer` providing framework-core's `Framework` service for a Nuxt
- * project — the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
+ * project -- the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
  * and alchemy's `Website.Nuxt` composite.
  */
 export const layer = (

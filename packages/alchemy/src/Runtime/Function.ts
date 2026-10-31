@@ -5,7 +5,7 @@ import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 export interface FunctionContext extends BaseRuntimeContext {
   /**
    * Register an HTTP handler. The optional `shape` payload is the user's
-   * full default-export shape — Cloudflare Workers use it to expose
+   * full default-export shape -- Cloudflare Workers use it to expose
    * non-handler methods (e.g. `greet`) as RPC methods on the deployed
    * `WorkerEntrypoint`. Other platforms (Lambda, etc.) ignore it.
    */

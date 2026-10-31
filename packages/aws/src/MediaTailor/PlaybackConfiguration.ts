@@ -98,7 +98,7 @@ export interface PlaybackConfigurationLivePreRoll {
 export interface PlaybackConfigurationLogs {
   /**
    * The percentage of session logs MediaTailor sends to CloudWatch Logs
-   * (0–100). Session logs land in the `MediaTailor/PlaybackConfiguration`
+   * (0-100). Session logs land in the `MediaTailor/PlaybackConfiguration`
    * log group (legacy) or the vended-log delivery you configure.
    */
   percentEnabled: number;
@@ -422,7 +422,7 @@ export const PlaybackConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. ENSURE + SYNC — PutPlaybackConfiguration is a full-replace
+          // 1. ENSURE + SYNC -- PutPlaybackConfiguration is a full-replace
           //    upsert: omitted fields are cleared server-side. Because a
           //    prop the user removed must be un-set on the cloud config,
           //    the put is always applied (a subset comparison against the
@@ -435,7 +435,7 @@ export const PlaybackConfigurationProvider = () =>
           });
           const attrs = yield* toAttributes(put);
 
-          // 2. SYNC LOGS — ConfigureLogsForPlaybackConfiguration is a
+          // 2. SYNC LOGS -- ConfigureLogsForPlaybackConfiguration is a
           //    separate API; diff the OBSERVED post-put log configuration
           //    against the desired one and only call the API on a delta.
           //    A removed `logConfiguration` prop converges to percent 0
@@ -464,7 +464,7 @@ export const PlaybackConfigurationProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — diff against the OBSERVED post-put tags so
+          // 3. SYNC TAGS -- diff against the OBSERVED post-put tags so
           //    adoption (which can bring foreign tags the put may not
           //    remove) converges.
           const currentTags = tagRecord(put.Tags);

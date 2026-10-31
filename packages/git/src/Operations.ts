@@ -63,7 +63,7 @@ import {
   type RepoMetaData,
 } from "./RepoObject.ts";
 
-/** TTL of the in-isolate `owner/name → repoId` cache (DESIGN.md §2.1). */
+/** TTL of the in-isolate `owner/name -> repoId` cache (DESIGN.md §2.1). */
 export const RESOLVE_CACHE_TTL_MS = 60_000;
 
 /** Max entries of the in-isolate resolve cache (insertion-order eviction). */
@@ -72,9 +72,9 @@ export const RESOLVE_CACHE_MAX = 1024;
 /** Blobs above this size are 422 on the JSON endpoint (use `/raw`). */
 export const MAX_JSON_BLOB_BYTES = 1024 * 1024;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Pure mapping helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const asOid = (value: string): Oid => value as Oid;
 
@@ -183,7 +183,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     forkOf: entry.forkOf,
     status: entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
-    // No DO to ask (unseeded or mid-purge) — report an empty store.
+    // No DO to ask (unseeded or mid-purge) -- report an empty store.
     objects: ObjectStats.make({
       loose: 0,
       resident: 0,
@@ -200,7 +200,7 @@ export const makeOperations = Effect.gen(function* () {
   // The registry block, whichever backend the assembly provided.
   const registryStub = () => registry;
 
-  // ── owner/name → RegistryEntry, 60 s in-isolate LRU (DESIGN.md §2.1) ──
+  // -- owner/name -> RegistryEntry, 60 s in-isolate LRU (DESIGN.md §2.1) --
   // A stale hit fails safe: the Repo DO stores its own (owner, name) and
   // 404s mismatched requests, and cache entries are dropped on delete.
   interface CacheSlot {
@@ -224,7 +224,7 @@ export const makeOperations = Effect.gen(function* () {
       if (hit !== undefined && hit.expires > now) return hit.entry;
       const entry = yield* registryStub().resolve(owner, repo);
       // Rows mid-purge are transient (removed when the purge alarm
-      // finishes) — never cache them, or a 60 s stale hit would keep
+      // finishes) -- never cache them, or a 60 s stale hit would keep
       // reporting "deleting" after the name has freed.
       if (entry !== undefined && entry.deletedAt === null) {
         yield* Effect.sync(() => {
@@ -243,7 +243,7 @@ export const makeOperations = Effect.gen(function* () {
 
   /**
    * Resolve including rows whose async purge is still draining
-   * (`deletedAt` set) — only `repos.get` (report `status: "deleting"`)
+   * (`deletedAt` set) -- only `repos.get` (report `status: "deleting"`)
    * and `repos.delete` (idempotent 204) want those.
    */
   const resolveIncludingDeleting = (owner: string, repo: string) =>
@@ -273,14 +273,14 @@ export const makeOperations = Effect.gen(function* () {
 
   // Accept decoded fields rather than endpoint metadata so these handlers also
   // work with APIs that add middleware or prefixes.
-  // ── REST handler groups ────────────────────────────────────────────────
+  // -- REST handler groups ------------------------------------------------
 
   /**
    * Inserts the registry row, repairing an ORPHAN first: a row whose Repo
    * DO was never seeded (a create that died between the registry insert
-   * and `initRepo`). An orphan poisons the name permanently — `GET` 404s
+   * and `initRepo`). An orphan poisons the name permanently -- `GET` 404s
    * because the DO has no config, while `POST` 409s because the row
-   * exists — so detect it (registry row present + DO reports
+   * exists -- so detect it (registry row present + DO reports
    * `RepoNotFound`), drop the row, and insert again.
    */
   const insertRepoRow = (input: {
@@ -430,7 +430,7 @@ export const makeOperations = Effect.gen(function* () {
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         // Rendered straight from the Registry's denormalised columns:
         // listing must NOT wake one Durable Object per row (measured at
-        // ~30 ms per row — DESIGN.md §14.1 / §15 bottleneck 7). Live
+        // ~30 ms per row -- DESIGN.md §14.1 / §15 bottleneck 7). Live
         // `objects` stats need the DO, so a listing reports zeros and
         // callers who want them read the repo directly.
         const items = page.items.map(registryFallbackRepo);
@@ -443,7 +443,7 @@ export const makeOperations = Effect.gen(function* () {
     delete: ({ params }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveIncludingDeleting(params.owner, params.repo);
-        // Always (re-)arm the purge — even when the row is already
+        // Always (re-)arm the purge -- even when the row is already
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
         // (crash between markDeleted and the first alarm run).
@@ -453,7 +453,7 @@ export const makeOperations = Effect.gen(function* () {
           .pipe(
             Effect.catchTags({
               StoreError: (error) => Effect.die(error),
-              // The registry row exists but the DO holds no state — an
+              // The registry row exists but the DO holds no state -- an
               // orphan, or a purge that already wiped storage. There is
               // nothing to purge, so free the name directly (never 404:
               // the caller can see this repo, so DELETE must remove it).
@@ -503,7 +503,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTags({
               StoreError: (error) => Effect.die(error),
               // `fork` declares no ValidationError (reserved target
-              // owner) — surface it as the closest declared conflict.
+              // owner) -- surface it as the closest declared conflict.
               ValidationError: () =>
                 Effect.fail(
                   RepoAlreadyExists.make({
@@ -563,7 +563,7 @@ export const makeOperations = Effect.gen(function* () {
           .pipe(
             Effect.catchTags({
               StoreError: (error) => Effect.die(error),
-              // `import` declares no ValidationError — a reserved owner
+              // `import` declares no ValidationError -- a reserved owner
               // is an import that can never succeed.
               ValidationError: (error) => Effect.fail(ImportFailed.make({ reason: error.message })),
             }),
@@ -710,7 +710,7 @@ export const makeOperations = Effect.gen(function* () {
                 ),
             }),
           );
-        // A stored commit that fails to parse is corrupt — a defect.
+        // A stored commit that fails to parse is corrupt -- a defect.
         const parsed = yield* parseCommit(data.content).pipe(Effect.orDie);
         return CommitInfo.make({
           oid: params.oid,

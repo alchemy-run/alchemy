@@ -43,13 +43,13 @@ export type RegistryBookProps = {
   /**
    * Registry book id (the `{registryBook}` segment of
    * `projects/{project}/locations/{location}/registryBooks/{registryBook}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the book.
    */
   registryBookId?: string;
   /**
-   * Location of the registry book. Cloud Number Registry is global —
-   * `global` is the only supported value. Immutable — changing it
+   * Location of the registry book. Cloud Number Registry is global --
+   * `global` is the only supported value. Immutable -- changing it
    * replaces the book.
    * @default "global"
    */
@@ -96,7 +96,7 @@ export type RegistryBook = Resource<
 >;
 
 /**
- * A Cloud Number Registry book — a container for IP address management
+ * A Cloud Number Registry book -- a container for IP address management
  * information. Creating an IPAM admin scope also creates a default book;
  * additional books organize discovered or user-managed realms.
  *

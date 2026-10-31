@@ -15,8 +15,8 @@ export interface GetEventPredictionMetadataRequest extends Omit<
 
 /**
  * Read the full evaluation details of a past prediction made by a bound
- * Amazon Fraud Detector detector — the variables, rule evaluations, and model
- * scores recorded for the prediction — the effectful audit call made from a
+ * Amazon Fraud Detector detector -- the variables, rule evaluations, and model
+ * scores recorded for the prediction -- the effectful audit call made from a
  * deployed Lambda or Task.
  *
  * ### Auditing Predictions

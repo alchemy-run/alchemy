@@ -15,8 +15,8 @@ import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
  * - `loadWranglerEnv`, wrangler config watchers, `previewEntrypoint`, and the
  *   output-wrangler.json patch dropped.
  *   (The `astro:build:done` wrangler.json assets-directory patch is replaced
- *   by the cloudflare target's `finish` pass over `BuildOutput` — see
- *   `cloudflare.ts` — and the vestigial parse of a pre-existing `_redirects`
+ *   by the cloudflare target's `finish` pass over `BuildOutput` -- see
+ *   `cloudflare.ts` -- and the vestigial parse of a pre-existing `_redirects`
  *   file, whose result upstream never uses, is dropped.)
  * - `prerenderEnvironment: 'workerd'` by default like upstream, but the
  *   prerenderer serves the built `prerender` environment through
@@ -67,7 +67,7 @@ export interface DistilledCloudflareOptions {
    * - `'workerd'` (default, matching upstream): the `prerender` environment
    *   is built as a Worker (same treatment as the `ssr` environment) and
    *   served from workerd via `cloudflare-runtime`, so prerendered pages run
-   *   in the production runtime — top-level `cloudflare:*` imports and the
+   *   in the production runtime -- top-level `cloudflare:*` imports and the
    *   configured worker bindings included.
    * - `'node'`: Astro's stock node prerender environment. Fallback for pages
    *   that depend on Node-only APIs at build time.
@@ -95,10 +95,10 @@ export interface DistilledCloudflareOptions {
    * sessions work without any setup: in dev it is appended to the dev worker
    * bindings; at build time (workerd prerendering) it is appended to the
    * prerender environment worker's bindings so session-touching pages can
-   * prerender (the deployed Worker still uses its real KV binding — the
+   * prerender (the deployed Worker still uses its real KV binding -- the
    * prerender KV is ephemeral, matching upstream's local preview bindings).
    * Disable when the bindings already carry a KV binding with that name
-   * (binding names must be unique) — e.g. when an outer toolchain provisions
+   * (binding names must be unique) -- e.g. when an outer toolchain provisions
    * the session namespace itself and passes it through
    * `vite.worker.bindings`.
    * @default true
@@ -161,7 +161,7 @@ const assertSupportedOptions = (options: DistilledCloudflareOptions): void => {
 
 /**
  * Whether the (possibly zero-config-defaulted) session config uses Astro's
- * `cloudflareKVBinding` driver — vendored from upstream
+ * `cloudflareKVBinding` driver -- vendored from upstream
  * (`usesCloudflareKVSessionDriver`).
  */
 const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT = sessionDrivers.cloudflareKVBinding().entrypoint;
@@ -218,7 +218,7 @@ export const withDevSessionKv = (
  * The workerd prerenderer's vite-plugin options (exported for testing): when
  * zero-config sessions resolved to the Cloudflare KV driver, the same
  * in-memory local KV namespace that dev injects is appended to the prerender
- * worker's bindings — session-touching pages can then prerender without the
+ * worker's bindings -- session-touching pages can then prerender without the
  * deployed Worker's real KV namespace existing at build time (upstream's
  * prerender worker receives the local preview bindings the same way). The
  * KV is ephemeral: session state written during prerendering is discarded
@@ -245,7 +245,7 @@ export const withPrerenderSessionKv = (
  *
  * A user `main` (the deploy target's user-entry seam) takes precedence: a
  * Worker entry that wraps the vendored entrypoint's handler (imported from
- * {@link SERVER_ENTRYPOINT}) and adds exports of its own — Durable Object
+ * {@link SERVER_ENTRYPOINT}) and adds exports of its own -- Durable Object
  * classes, a `scheduled` handler. The vite plugin resolves it against the
  * Astro root. The workerd `prerender` environment keeps building the vendored
  * entrypoint: prerendering only needs Astro's handler.
@@ -255,7 +255,7 @@ export const withPrerenderSessionKv = (
  * worker environment instead: it gets the full worker treatment (workerd
  * resolve conditions, unenv polyfills, `cloudflare:` externals) so its
  * output can be loaded into workerd by the prerenderer. In dev, `prerender`
- * stays skipped in both modes — workerd mode has no prerender dev
+ * stays skipped in both modes -- workerd mode has no prerender dev
  * environment at all (prerenderable routes are served through the entry
  * worker's dev-match path).
  */
@@ -297,17 +297,17 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
   let _originalClientDir: URL;
   let _routes: Array<IntegrationResolvedRoute> = [];
   // Whether the (possibly zero-config-defaulted) session config resolved to
-  // the Cloudflare KV driver — set at `astro:config:setup`, read at
+  // the Cloudflare KV driver -- set at `astro:config:setup`, read at
   // `astro:build:start` to give the workerd prerender worker a local
   // session KV.
   let _needsSessionKVBinding = false;
   // Whether WE satisfied `config.adapter`. The user's astro.config.* loads
   // natively and this integration is injected via `integrations`, but
-  // astro's build refuses server output unless `config.adapter` is set — so
+  // astro's build refuses server output unless `config.adapter` is set -- so
   // `astro:config:setup` injects a hookless marker when the config declares
   // no adapter (the real adapter registration is `setAdapter` at
   // `astro:config:done`). When the flag is still false at
-  // `astro:config:done`, the user declared their own adapter — a conflict.
+  // `astro:config:done`, the user declared their own adapter -- a conflict.
   let _injectedAdapterMarker = false;
   return {
     name: "@alchemy.run/frontend-frameworks/astro",
@@ -324,7 +324,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         // Zero-config sessions (mirrors upstream): default the session
         // driver to Cloudflare KV against `sessionKVBindingName` when the
         // user hasn't configured one.
-        // `session: false` is the user explicitly disabling sessions —
+        // `session: false` is the user explicitly disabling sessions --
         // respect it and skip the zero-config defaulting.
         let session = config.session;
         if (sessions && session !== false && !session?.driver) {
@@ -359,7 +359,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
 
         // Same trick as upstream (astro#16332): `build`/`sync` run type
         // generation, which creates a temporary Vite server and fires
-        // `configureServer` — that would boot workerd mid-build. Stripping
+        // `configureServer` -- that would boot workerd mid-build. Stripping
         // the hook degrades our dev environments to runnable stubs, a
         // supported contract of the dev plugin.
         if (isTypeGenPhase) {
@@ -389,7 +389,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           vite: {
             plugins: [
               // Node mode only: in workerd mode dev has no prerender
-              // environment — prerenderable routes are served through the
+              // environment -- prerenderable routes are served through the
               // entry worker's dev-match path, same as upstream.
               ...(command === "dev" && prerenderEnvironment === "node"
                 ? [createNodePrerenderPlugin()]
@@ -529,7 +529,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           throw new Error(
             `@alchemy.run/frontend-frameworks/astro: the Astro config declares the adapter "${config.adapter.name}", ` +
               "but the deploy target already provides the Cloudflare adapter. " +
-              "Remove `adapter` from your astro.config file — user integrations " +
+              "Remove `adapter` from your astro.config file \u2014 user integrations " +
               "(react, mdx, tailwind, ...) are honored, and the adapter is injected by the toolchain.",
           );
         }
@@ -539,7 +539,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         _originalClientDir = new URL(config.build.client.href);
         if (config.base !== "/") {
           // Nest the client build under the base so the assets directory can
-          // be served at the URL root (`/base/foo.css` →
+          // be served at the URL root (`/base/foo.css` ->
           // `dist/client/base/foo.css`). `astro:build:done` moves the special
           // files back up, and the cloudflare target's `finish` pass points
           // `BuildOutput.clientDirectory` back at the original directory.
@@ -637,7 +637,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
             }
           }
           // Upstream also patches the emitted wrangler.json's
-          // `assets.directory` here; this build has no wrangler.json — the
+          // `assets.directory` here; this build has no wrangler.json -- the
           // cloudflare target's `finish` pass rewrites
           // `BuildOutput.clientDirectory` instead (see `cloudflare.ts`).
         }
@@ -645,7 +645,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         // Immutable Cache-Control for the content-hashed assets directory.
         if (_config.build.assetsPrefix) {
           logger.debug(
-            "Skipping Cache-Control injection for assets — `build.assetsPrefix` is set, so assets are served from a different origin.",
+            "Skipping Cache-Control injection for assets \u2014 `build.assetsPrefix` is set, so assets are served from a different origin.",
           );
         } else {
           const headersPath = new URL("./_headers", _originalClientDir);
@@ -659,7 +659,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
           );
           if (result === null) {
             logger.debug(
-              "Skipping Cache-Control injection — _headers already sets Cache-Control on a matching rule.",
+              "Skipping Cache-Control injection \u2014 _headers already sets Cache-Control on a matching rule.",
             );
           } else {
             const tempPath = new URL("./_headers.tmp", _originalClientDir);

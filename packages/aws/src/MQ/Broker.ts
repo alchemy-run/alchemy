@@ -99,29 +99,29 @@ export interface BrokerEncryptionOptions {
 export interface BrokerProps {
   /**
    * Name of the broker (1-50 chars, `a-z A-Z 0-9 _ ~ -`). If omitted a
-   * deterministic physical name is generated. Immutable — changing it
+   * deterministic physical name is generated. Immutable -- changing it
    * replaces the broker.
    */
   brokerName?: string;
   /**
-   * Broker engine. Immutable — changing it replaces the broker.
+   * Broker engine. Immutable -- changing it replaces the broker.
    */
   engineType: "ACTIVEMQ" | "RABBITMQ";
   /**
    * Broker engine version (e.g. `"5.18"` for ActiveMQ, `"3.13"` for
-   * RabbitMQ). Mutable — a change is applied as a pending broker update.
+   * RabbitMQ). Mutable -- a change is applied as a pending broker update.
    */
   engineVersion?: string;
   /**
    * Broker instance type, e.g. `"mq.t3.micro"` (the cheapest) or
-   * `"mq.m5.large"`. Mutable — a change is applied as a pending broker
+   * `"mq.m5.large"`. Mutable -- a change is applied as a pending broker
    * update.
    */
   hostInstanceType: string;
   /**
    * Deployment topology. `SINGLE_INSTANCE` is a single broker (cheapest,
    * no HA); `ACTIVE_STANDBY_MULTI_AZ` (ActiveMQ) and `CLUSTER_MULTI_AZ`
-   * (RabbitMQ) provide HA. Immutable — changing it replaces the broker.
+   * (RabbitMQ) provide HA. Immutable -- changing it replaces the broker.
    * @default "SINGLE_INSTANCE"
    */
   deploymentMode?: "SINGLE_INSTANCE" | "ACTIVE_STANDBY_MULTI_AZ" | "CLUSTER_MULTI_AZ";
@@ -131,7 +131,7 @@ export interface BrokerProps {
    */
   users: BrokerUser[];
   /**
-   * Whether the broker is reachable over the public internet. Immutable —
+   * Whether the broker is reachable over the public internet. Immutable --
    * changing it replaces the broker.
    * @default false
    */
@@ -139,17 +139,17 @@ export interface BrokerProps {
   /**
    * Subnet ids to deploy the broker into. `SINGLE_INSTANCE` needs one
    * subnet; multi-AZ needs two (ActiveMQ) or three (RabbitMQ cluster). If
-   * omitted, a default-VPC subnet is chosen. Immutable — changing it
+   * omitted, a default-VPC subnet is chosen. Immutable -- changing it
    * replaces the broker.
    */
   subnetIds?: string[];
   /**
-   * Security group ids controlling access to the broker. Mutable — a change
+   * Security group ids controlling access to the broker. Mutable -- a change
    * is applied as a pending broker update.
    */
   securityGroups?: string[];
   /**
-   * Authentication strategy. Mutable — a change is applied as a pending
+   * Authentication strategy. Mutable -- a change is applied as a pending
    * broker update.
    * @default "SIMPLE"
    */
@@ -163,11 +163,11 @@ export interface BrokerProps {
   autoMinorVersionUpgrade?: boolean;
   /**
    * Storage type. `EBS` (durable, default) or `EFS` (ActiveMQ multi-AZ
-   * only). Immutable — changing it replaces the broker.
+   * only). Immutable -- changing it replaces the broker.
    */
   storageType?: "EBS" | "EFS";
   /**
-   * A {@link Configuration} revision to apply. Mutable — a change is applied
+   * A {@link Configuration} revision to apply. Mutable -- a change is applied
    * as a pending broker update.
    */
   configuration?: BrokerConfigurationRef;
@@ -180,7 +180,7 @@ export interface BrokerProps {
    */
   maintenanceWindow?: BrokerMaintenanceWindow;
   /**
-   * At-rest encryption options. Immutable — changing it replaces the broker.
+   * At-rest encryption options. Immutable -- changing it replaces the broker.
    */
   encryptionOptions?: BrokerEncryptionOptions;
   /**
@@ -211,7 +211,7 @@ export interface Broker extends Resource<
 > {}
 
 /**
- * An Amazon MQ broker — a managed message broker running Apache ActiveMQ or
+ * An Amazon MQ broker -- a managed message broker running Apache ActiveMQ or
  * RabbitMQ. Amazon MQ handles provisioning, patching, and (for multi-AZ
  * deployments) failover, exposing standard wire protocols (OpenWire, AMQP,
  * MQTT, STOMP, WSS) so existing clients connect unchanged.
@@ -320,7 +320,7 @@ const sameArray = (a: readonly string[] | undefined, b: readonly string[] | unde
 const toWireUsers = (users: BrokerUser[]): mq.User[] =>
   users.map((u) => ({
     Username: u.username,
-    // distilled marks Password sensitive — pass the Redacted value through so
+    // distilled marks Password sensitive -- pass the Redacted value through so
     // it stays redacted until wire encoding.
     Password: u.password,
     ConsoleAccess: u.consoleAccess,
@@ -398,7 +398,7 @@ export const BrokerProvider = () =>
 
       /**
        * Delete the configuration Amazon MQ auto-generated for a broker
-       * created without one. Only that default is touched — a user-managed
+       * created without one. Only that default is touched -- a user-managed
        * `Configuration` (its own resource) is identified by name + the
        * service's "Auto-generated default for <broker>-configuration" revision description
        * and left alone. Best-effort and bounded: the broker delete has
@@ -487,13 +487,13 @@ export const BrokerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = output?.brokerId ? yield* readBroker(output.brokerId) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing. The deterministic CreatorRequestId
+          // 2. Ensure -- create if missing. The deterministic CreatorRequestId
           // makes a retried create idempotent. Tolerate a ConflictException
           // race by re-finding the broker by name.
           if (observed === undefined) {
@@ -573,7 +573,7 @@ export const BrokerProvider = () =>
             });
           }
 
-          // 3. Sync mutable settings — compute an updateBroker request with
+          // 3. Sync mutable settings -- compute an updateBroker request with
           // only the drifted fields (each mutation becomes a pending change).
           const update: Omit<mq.UpdateBrokerRequest, "BrokerId"> = {};
           if (
@@ -644,7 +644,7 @@ export const BrokerProvider = () =>
             yield* mq.updateBroker({ BrokerId: brokerId, ...update });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMqTags(observed.BrokerArn!, toTagRecord(observed.Tags), desiredTags);
 
           // 4. Re-read for fresh attributes (endpoints appear once RUNNING).
@@ -654,7 +654,7 @@ export const BrokerProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // A broker mid-operation rejects deletion — wait for it to settle.
+          // A broker mid-operation rejects deletion -- wait for it to settle.
           yield* waitForSettled(output.brokerId).pipe(Effect.catch(() => Effect.void));
           // Every configuration the broker has referenced. A broker created
           // without `configuration` gets one auto-generated by Amazon MQ

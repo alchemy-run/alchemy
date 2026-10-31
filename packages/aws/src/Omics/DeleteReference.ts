@@ -11,7 +11,7 @@ export interface DeleteReferenceRequest extends Omit<
 /**
  * Runtime binding for `omics:DeleteReference`.
  *
- * Bind this operation to a `ReferenceStore` to get a callable that deletes a reference genome from the store — the
+ * Bind this operation to a `ReferenceStore` to get a callable that deletes a reference genome from the store -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.DeleteReferenceHttp)`.

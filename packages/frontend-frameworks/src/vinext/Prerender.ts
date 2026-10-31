@@ -24,7 +24,7 @@ const exists = (fs: FileSystem.FileSystem, filePath: string) =>
 /**
  * The KV data-cache adapter throws during local prerender (no Worker
  * `env`) and vinext may log a wrangler.jsonc snippet. That hint is
- * wrong on the Alchemy path — drop those lines so deploy logs do not
+ * wrong on the Alchemy path -- drop those lines so deploy logs do not
  * look like a missing Wrangler file.
  */
 const isWranglerKvHint = (text: string) =>
@@ -70,7 +70,7 @@ const withLocalPrerenderLogs = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect
  * configured `vinext({ prerender: true })` (or `{ routes: "*" }`).
  *
  * Alchemy's Website Vite path only runs `vite build`, which vinext does
- * not prerender by itself — that step lives in `vinext build`. This hook
+ * not prerender by itself -- that step lives in `vinext build`. This hook
  * is not a reimplementation: it resolves the project's `vinext` and calls
  * `runPrerender` / `emitPrerenderPathManifest`. The path-table injection
  * is the only Alchemy-owned glue.

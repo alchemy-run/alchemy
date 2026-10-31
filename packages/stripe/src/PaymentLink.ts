@@ -56,8 +56,8 @@ export interface PaymentLinkLineItemAdjustableQuantity {
 
 export interface PaymentLinkLineItem {
   /**
-   * Stripe Price id (`price_…`). Changing the set of prices replaces
-   * the payment link — existing items can only change quantity.
+   * Stripe Price id (`price_...`). Changing the set of prices replaces
+   * the payment link -- existing items can only change quantity.
    */
   price: string;
   /**
@@ -168,7 +168,7 @@ export type PaymentLink = Resource<
   "Stripe.PaymentLink",
   PaymentLinkProps,
   {
-    /** Stripe payment link id (`plink_…`). */
+    /** Stripe payment link id (`plink_...`). */
     id: string;
     /** Public URL customers open to pay. */
     url: string;
@@ -204,7 +204,7 @@ export type PaymentLink = Resource<
 >;
 
 /**
- * A Stripe Payment Link — a shareable URL that opens a hosted Checkout
+ * A Stripe Payment Link -- a shareable URL that opens a hosted Checkout
  * page. Requires at least one `lineItems` price. Quantity, metadata,
  * `active`, and most Checkout options update in place; changing the set
  * of prices replaces the link. Payment links cannot be deleted; destroy

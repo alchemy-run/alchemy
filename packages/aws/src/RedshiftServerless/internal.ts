@@ -27,7 +27,7 @@ export const toWireTags = (tags: Record<string, string>): redshiftserverless.Tag
 
 /**
  * Read the observed tags of a Redshift Serverless resource. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readTags = Effect.fn(function* (arn: string) {
   const response = yield* redshiftserverless

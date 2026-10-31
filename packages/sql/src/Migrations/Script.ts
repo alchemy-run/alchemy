@@ -31,9 +31,9 @@ interface Rules {
   readonly dashCommentNeedsSpace: boolean;
   /** Block comments nest (PostgreSQL). */
   readonly nestedBlockComments: boolean;
-  /** `$tag$ … $tag$` bodies (PostgreSQL). */
+  /** `$tag$ ... $tag$` bodies (PostgreSQL). */
   readonly dollarQuotes: boolean;
-  /** `'''…'''` and `"""…"""` (GoogleSQL). */
+  /** `'''...'''` and `"""..."""` (GoogleSQL). */
   readonly tripleQuotes: boolean;
   /** Quote characters that open a string or quoted identifier. */
   readonly quotes: ReadonlyArray<string>;
@@ -101,8 +101,8 @@ const blockComment = (sql: string, i: number, nested: boolean): Span => {
 /**
  * The end of a quoted span starting at `i`. A doubled closing quote
  * escapes itself in every dialect except GoogleSQL; backslashes escape when
- * the dialect (or a PostgreSQL `E'…'` string) says so, never in a GoogleSQL
- * raw string (`r'…'`).
+ * the dialect (or a PostgreSQL `E'...'` string) says so, never in a GoogleSQL
+ * raw string (`r'...'`).
  */
 const quoted = (
   sql: string,
@@ -204,8 +204,8 @@ export const scanSqlScript = (
       }
     }
     if (rules.quotes.includes(ch)) {
-      // A prefix letter right before the quote: E'…' (PostgreSQL escapes),
-      // r'…' / rb'…' (GoogleSQL raw strings).
+      // A prefix letter right before the quote: E'...' (PostgreSQL escapes),
+      // r'...' / rb'...' (GoogleSQL raw strings).
       const prefix =
         /(?:^|[^A-Za-z0-9_])([A-Za-z]{1,2})$/
           .exec(sql.slice(Math.max(0, i - 3), i))?.[1]

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:UpdateSafetyLeverState`.
  *
- * Engages or disengages the account's safety lever — engaging it stops all
+ * Engages or disengages the account's safety lever -- engaging it stops all
  * running experiments and blocks new ones until it is disengaged, the
  * account-wide chaos kill switch an ops function flips when a stop condition
  * outside FIS's view fires. The account's lever has the well-known id
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### The Safety Lever
  * **Example:** Halt All Experiments
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateSafetyLeverState = yield* AWS.FIS.UpdateSafetyLeverState();
  *
  * // runtime

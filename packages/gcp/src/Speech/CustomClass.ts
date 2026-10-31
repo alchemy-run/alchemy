@@ -32,7 +32,7 @@ export type CustomClassProps = {
   /**
    * Speech-to-Text Adaptation location. The global Speech endpoint
    * accepts `global`; `us` and `eu` need matching regional endpoints.
-   * Immutable — changing it replaces the custom class.
+   * Immutable -- changing it replaces the custom class.
    * @default "global"
    */
   location?: string;
@@ -40,7 +40,7 @@ export type CustomClassProps = {
    * Custom class id (the `{custom_class}` segment of
    * `projects/{project}/locations/{location}/customClasses/{custom_class}`).
    * If omitted, a unique id is generated. Letters, numbers, and hyphens;
-   * 4-63 characters; must start with a letter. Immutable — changing it
+   * 4-63 characters; must start with a letter. Immutable -- changing it
    * replaces the custom class.
    */
   customClassId?: string;
@@ -83,7 +83,7 @@ export type CustomClass = Resource<
  * Speech-to-Text v1 classes have no labels field and Alchemy does not
  * write ownership into the items (they steer recognition). A generated id
  * identifies the class; one with an explicit id that Alchemy has no state
- * for is reported as unowned. Location and custom class id are identity — changing either replaces the class.
+ * for is reported as unowned. Location and custom class id are identity -- changing either replaces the class.
  * `items` update in place.
  *
  * ### Creating a Custom Class

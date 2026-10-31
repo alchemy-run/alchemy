@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:DescribeSlackWorkspaces`.
  *
- * Lists the Slack workspaces authorized with AWS Chatbot in the account —
+ * Lists the Slack workspaces authorized with AWS Chatbot in the account --
  * useful for identity/workspace audit automation. Provide the
  * implementation with
  * `Effect.provide(AWS.Chatbot.DescribeSlackWorkspacesHttp)`.

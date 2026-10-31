@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `observabilityadmin:ListResourceTelemetry` — audits
+ * Runtime binding for `observabilityadmin:ListResourceTelemetry` -- audits
  * which AWS resources (VPCs, Lambda functions, ...) have telemetry such as
  * flow logs configured, and in what state. The account-level telemetry
  * config data plane; requires the account to be onboarded (see
@@ -20,7 +20,7 @@ import type * as Effect from "effect/Effect";
  * ### Auditing Resource Telemetry
  * **Example:** Find VPCs without flow logs
  * ```typescript
- * // init — grants observabilityadmin:ListResourceTelemetry
+ * // init -- grants observabilityadmin:ListResourceTelemetry
  * const listResourceTelemetry = yield* AWS.ObservabilityAdmin.ListResourceTelemetry();
  *
  * // runtime

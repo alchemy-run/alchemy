@@ -10,7 +10,7 @@ import * as Options from "./Options.ts";
 import * as Vite from "./Vite.ts";
 
 /**
- * The built-in Vite implementation of framework-core's `Framework` service —
+ * The built-in Vite implementation of framework-core's `Framework` service --
  * the default when `e2e.config.ts` names no framework. Framework packages
  * (waku/astro/sveltekit/nextjs) provide their own layers with the same shape.
  */
@@ -92,13 +92,13 @@ const toFrameworkLayer: (
 /**
  * Resolve the `Framework` Layer for a fixture from its options:
  *
- * - no `framework` — the built-in Vite implementation over `options.vite`
- * - a string — imported from the fixture's own `node_modules` (via
+ * - no `framework` -- the built-in Vite implementation over `options.vite`
+ * - a string -- imported from the fixture's own `node_modules` (via
  *   framework-core's `loadProjectModule`, so the fixture's installed copy of
  *   the framework is the one driven); its default export (or named export
  *   `framework`) is applied to the options
- * - a factory — applied to the options
- * - a Layer — used as-is
+ * - a factory -- applied to the options
+ * - a Layer -- used as-is
  */
 export const resolve = Effect.fn(function* (options: Options.Options) {
   const input = options.framework;

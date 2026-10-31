@@ -26,7 +26,7 @@ export interface DestinationProps {
    */
   name?: string;
   /**
-   * ARN of the delivery destination that receives events and notifications —
+   * ARN of the delivery destination that receives events and notifications --
    * e.g. a Kinesis Data Stream ARN.
    */
   deliveryDestinationArn: string;
@@ -167,10 +167,10 @@ export const DestinationProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredType = news.deliveryDestinationType ?? "KINESIS";
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let destination = yield* observe(name);
 
-          // Ensure — create if missing; tolerate a concurrent-create race.
+          // Ensure -- create if missing; tolerate a concurrent-create race.
           if (destination === undefined) {
             yield* mi
               .createDestination({
@@ -190,7 +190,7 @@ export const DestinationProvider = () =>
             }
           }
 
-          // Sync mutable settings — apply only the delta.
+          // Sync mutable settings -- apply only the delta.
           if (
             destination.DeliveryDestinationArn !== news.deliveryDestinationArn ||
             destination.DeliveryDestinationType !== desiredType ||
@@ -206,7 +206,7 @@ export const DestinationProvider = () =>
             });
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncManagedIntegrationsTags(
             yield* destinationArn(name),
             toTagRecord(destination.Tags),

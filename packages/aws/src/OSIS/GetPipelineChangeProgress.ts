@@ -8,13 +8,13 @@ import type { Pipeline } from "./Pipeline.ts";
  *
  * Reads progress information for the current change happening on the bound
  * {@link Pipeline} (stage-by-stage status while the pipeline is being
- * created) — useful for surfacing provisioning progress in an operational
+ * created) -- useful for surfacing provisioning progress in an operational
  * dashboard. The pipeline name is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.OSIS.GetPipelineChangeProgressHttp)`.
  * ### Monitoring a Pipeline
  * **Example:** Report Creation Progress
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const getChangeProgress = yield* AWS.OSIS.GetPipelineChangeProgress(pipeline);
  *
  * // runtime

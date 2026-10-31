@@ -42,7 +42,7 @@ export type FeedCondition = {
   title?: string;
   /**
    * Longer description of the expression. Feeds have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix here and
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix here and
    * stripped from attributes.
    */
   description?: string;
@@ -56,14 +56,14 @@ export type FeedProps = {
   /**
    * Feed id (the `{feed}` segment of
    * `projects/{project}/feeds/{feed}`). If omitted, a unique RFC1035
-   * name is generated. Immutable — changing it replaces the feed.
+   * name is generated. Immutable -- changing it replaces the feed.
    */
   feedId?: string;
   /**
    * Parent project, folder, or organization
    * (`projects/{project}`, `folders/{folder}`,
    * `organizations/{organization}`). Defaults to the current project.
-   * Immutable — changing it replaces the feed.
+   * Immutable -- changing it replaces the feed.
    */
   parent?: string;
   /**
@@ -131,7 +131,7 @@ export type Feed = Resource<
 /**
  * A Cloud Asset Inventory feed that publishes asset updates to Pub/Sub.
  *
- * Feeds have no labels field — Alchemy stamps ownership into
+ * Feeds have no labels field -- Alchemy stamps ownership into
  * `condition.description` so `list` / nuke can find them. Feed id and
  * parent are identity. Asset filters, content type, destination topic,
  * and condition update in place.

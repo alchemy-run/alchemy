@@ -57,7 +57,7 @@ const options: Array<{
   {
     value: "oauth",
     label: "OAuth",
-    description: "recommended — browser device login with automatic token refresh",
+    description: "recommended \u2014 browser device login with automatic token refresh",
   },
   {
     value: "stored",
@@ -84,7 +84,7 @@ const withOAuthCredentials = <A, E, R>(
 /**
  * Accounts visible to a user-scoped OAuth token. `GET /accounts` returns an
  * EMPTY list for these tokens (it only lists accounts an account-scoped
- * credential can read), so memberships are the authoritative account list —
+ * credential can read), so memberships are the authoritative account list --
  * the same endpoint wrangler uses. `GET /accounts` remains as a fallback for
  * tokens authorized without `memberships.read` (custom scope selections).
  */
@@ -173,7 +173,7 @@ const storedFields: ReadonlyArray<ConfigureField> = [
 ];
 
 /**
- * Flag-driven configuration methods. OAuth is deliberately absent — it is
+ * Flag-driven configuration methods. OAuth is deliberately absent -- it is
  * interactive-only (browser grant).
  */
 const configureMethods: ReadonlyArray<ConfigureMethod> = [
@@ -318,7 +318,7 @@ export const CloudflareAuth = AuthProviderLayer<
       const accountId = yield* oauthCreds.access.pipe(
         Redacted.value,
         selectAccount,
-        // Keep AuthError messages intact — they carry the actionable
+        // Keep AuthError messages intact -- they carry the actionable
         // diagnosis (e.g. "no accounts visible"); only wrap raw API errors.
         Effect.mapError((e) =>
           Schema.is(AuthError)(e)
@@ -553,7 +553,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 // Any path that falls back to a full browser login rebuilds the
                 // authorize URL from the profile's stored scopes. Those scopes
                 // may predate the current OAuth client (or a catalog change), and
-                // one unknown scope makes the whole authorize URL invalid — so
+                // one unknown scope makes the whole authorize URL invalid -- so
                 // sanitize before generating a URL, never after it fails.
                 const fullLogin = Effect.gen(function* () {
                   const { valid } = partitionOAuthScopes(c.scopes);
@@ -584,7 +584,7 @@ export const CloudflareAuth = AuthProviderLayer<
 
                 // The silent refresh rotates a single-use refresh token, so
                 // its read-refresh-persist section runs under the profile
-                // lock — a concurrent `read` refreshing the same token would
+                // lock -- a concurrent `read` refreshing the same token would
                 // double-spend it. It refreshes with the token stored now,
                 // read under the lock, not the one `config` was read with.
                 // The lock is held only for this API round-trip, never
@@ -656,7 +656,7 @@ export const CloudflareAuth = AuthProviderLayer<
             : configureOAuth(profileName, c),
         ),
         Match.exhaustive,
-        // A blanket mapError must never swallow the NeedsReauth tag —
+        // A blanket mapError must never swallow the NeedsReauth tag --
         // the profile UI matches on it to render "needs re-login".
         Effect.mapError((e) =>
           Schema.is(NeedsReauth)(e) ? e : AuthError.make({ message: "login failed", cause: e }),

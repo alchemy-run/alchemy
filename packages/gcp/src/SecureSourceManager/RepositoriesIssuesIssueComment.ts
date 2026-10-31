@@ -32,7 +32,7 @@ export type RepositoriesIssuesIssueCommentProps = {
   /**
    * Parent issue. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}/issues/{issue}`
-   * or the issue id (combined with `repository`). Immutable — changing
+   * or the issue id (combined with `repository`). Immutable -- changing
    * it replaces the comment.
    */
   issue: string;
@@ -46,7 +46,7 @@ export type RepositoriesIssuesIssueCommentProps = {
    */
   location?: string;
   /**
-   * Server-assigned comment id. Set after create. Immutable — changing
+   * Server-assigned comment id. Set after create. Immutable -- changing
    * it replaces the comment.
    */
   commentId?: string;

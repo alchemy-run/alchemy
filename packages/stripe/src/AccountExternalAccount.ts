@@ -44,11 +44,11 @@ export type AccountExternalAccountObject = "bank_account" | "card";
 export interface AccountExternalAccountProps {
   /**
    * Id of the Connect account this external account is attached to
-   * (`acct_…`). Changing it replaces the external account.
+   * (`acct_...`). Changing it replaces the external account.
    */
   account: string;
   /**
-   * Single-use Stripe token (`btok_…` or `tok_…`) representing a bank
+   * Single-use Stripe token (`btok_...` or `tok_...`) representing a bank
    * account or debit card. Used on create; changing it replaces the
    * external account. Tokens cannot be reused.
    */
@@ -90,9 +90,9 @@ export type AccountExternalAccount = Resource<
   "Stripe.AccountExternalAccount",
   AccountExternalAccountProps,
   {
-    /** Stripe external account id (`ba_…` or `card_…`). */
+    /** Stripe external account id (`ba_...` or `card_...`). */
     id: string;
-    /** Id of the Connect account (`acct_…`). */
+    /** Id of the Connect account (`acct_...`). */
     account: string;
     /** Whether this is a bank account or a card. */
     object: AccountExternalAccountObject;
@@ -110,15 +110,15 @@ export type AccountExternalAccount = Resource<
     accountHolderName: string | undefined;
     /** Type of entity that holds the bank account. */
     accountHolderType: string | undefined;
-    /** Bank account type (`checking`, `savings`, …). */
+    /** Bank account type (`checking`, `savings`, ...). */
     accountType: string | undefined;
     /** Whether this is the default external account for its currency. */
     defaultForCurrency: boolean;
-    /** Status (`new`, `validated`, `errored`, …). */
+    /** Status (`new`, `validated`, `errored`, ...). */
     status: string | undefined;
     /** Card brand (cards only). */
     brand: string | undefined;
-    /** Card funding type (`debit`, `credit`, …) (cards only). */
+    /** Card funding type (`debit`, `credit`, ...) (cards only). */
     funding: string | undefined;
     /** Cardholder name (cards only). */
     name: string | undefined;
@@ -132,7 +132,7 @@ export type AccountExternalAccount = Resource<
 >;
 
 /**
- * A Stripe Account External Account — a bank account or debit card
+ * A Stripe Account External Account -- a bank account or debit card
  * attached to a Connect account as a payout destination. Metadata,
  * account-holder details, and `defaultForCurrency` update in place.
  * Changing `account` or the `externalAccount` token replaces it.

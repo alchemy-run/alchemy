@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetContextKeysForCustomPolicy` — list the condition
- * context keys (`aws:username`, `aws:SourceIp`, …) referenced by a set of
+ * Runtime binding for `iam:GetContextKeysForCustomPolicy` -- list the condition
+ * context keys (`aws:username`, `aws:SourceIp`, ...) referenced by a set of
  * candidate policy documents, so a simulation can be primed with the right
  * `ContextEntries`.
  *

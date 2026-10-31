@@ -10,7 +10,7 @@ import { Flusher } from "effect/observability/OtlpExporter";
 import * as Option from "effect/Option";
 
 /**
- * The AWS Lambda invocation context — the `context` argument Lambda passes
+ * The AWS Lambda invocation context -- the `context` argument Lambda passes
  * to the handler. Provided to every invocation's effect by the Lambda
  * dispatcher (see `Function.ts`).
  */
@@ -22,7 +22,7 @@ export class HandlerContext extends Context.Service<HandlerContext, lambda.Conte
  * Environment variable the deploy side writes and the runtime reads per
  * invocation: the milliseconds between the Function's `timeout` and the
  * timeout Lambda is configured with. The runtime interrupts the handler that
- * long before Lambda would kill it. Unset or `0` → the handler is never
+ * long before Lambda would kill it. Unset or `0` -> the handler is never
  * interrupted.
  */
 export const TIMEOUT_GRACE_ENV = "ALCHEMY_LAMBDA_TIMEOUT_GRACE_MS";
@@ -50,8 +50,8 @@ export const TIMEOUT_IMMINENT_ATTRIBUTE = "aws.lambda.timeout.imminent";
 
 /**
  * The invocation ran past the Function's `timeout`. The runtime interrupts
- * the handler — so `acquireRelease`, `ensuring` and scope finalizers run, and
- * every open span ends — and fails the invocation with this error, which
+ * the handler -- so `acquireRelease`, `ensuring` and scope finalizers run, and
+ * every open span ends -- and fails the invocation with this error, which
  * becomes the status of the root span. The invocation is then held until
  * Lambda's own timeout ends it, so Lambda reports a real timeout.
  *
@@ -100,7 +100,7 @@ class InvocationDeadline extends Context.Service<InvocationDeadline, Deadline>()
 
 /**
  * Parse the grace from its environment variable. Unset, unparseable or
- * negative → `0` (never interrupt).
+ * negative -> `0` (never interrupt).
  */
 export const readTimeoutGrace = (raw: string | undefined): number => {
   if (raw === undefined || raw === "") return 0;
@@ -112,7 +112,7 @@ export const readTimeoutGrace = (raw: string | undefined): number => {
  * Normalize a `Duration` prop (`timeout`, `timeoutMargin`) to whole
  * milliseconds. Handles the state-JSON `Duration` shape
  * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
- * valid `Duration.Input`. Infinite → `undefined` (default).
+ * valid `Duration.Input`. Infinite -> `undefined` (default).
  */
 export const toDurationMillis = (duration: Duration.Duration | undefined): number | undefined => {
   if (duration === undefined) return undefined;
@@ -198,7 +198,7 @@ export const lambdaTimeoutOf = (props: {
  * (`context.getRemainingTimeInMillis()`), and a sandbox only ever handles
  * one invocation at a time, so the timers are race-free:
  *
- * 1. At `remaining - grace` — the Function's `timeout` — the handler is
+ * 1. At `remaining - grace` -- the Function's `timeout` -- the handler is
  *    interrupted. `acquireRelease`, `ensuring` and scope finalizers run;
  *    every open span ends with the interruption, so the trace shows the
  *    call that hung. The invocation fails with {@link InvocationTimeoutError}
@@ -217,7 +217,7 @@ export const lambdaTimeoutOf = (props: {
  *    region, or interruption is off), the current root span is ended with
  *    {@link InvocationTimeoutError} and marked
  *    {@link TIMEOUT_IMMINENT_ATTRIBUTE}, a warning is logged, and every
- *    exporter is drained through the OTLP {@link Flusher} — so the trace is
+ *    exporter is drained through the OTLP {@link Flusher} -- so the trace is
  *    exported even if Lambda kills the process. This step never changes the
  *    invocation's outcome.
  *
@@ -276,7 +276,7 @@ export const withInvocationDeadline: {
       const backstopFlush = Effect.gen(function* () {
         // The root span is still open (that is why we are here); end it so
         // it exports with the timeout as its status. Only `Span`s can be
-        // ended — an external parent (a propagated `traceparent` with no
+        // ended -- an external parent (a propagated `traceparent` with no
         // local span) is skipped.
         const span = yield* Effect.option(Effect.currentSpan);
         if (Option.isSome(span) && span.value.status._tag === "Started") {
@@ -297,8 +297,8 @@ export const withInvocationDeadline: {
         }
       });
 
-      // The backstop inherits this fiber's context — the invocation's
-      // logger, exporters and (on the HTTP path) the root span — and is
+      // The backstop inherits this fiber's context -- the invocation's
+      // logger, exporters and (on the HTTP path) the root span -- and is
       // interrupted when the invocation settles. It is forked outside the
       // timeout below, so it keeps running while a slow finalizer holds up
       // the interrupted handler. The flush itself is uninterruptible so an
@@ -318,8 +318,8 @@ export const withInvocationDeadline: {
 
       const guarded = self.pipe(Effect.provideService(InvocationDeadline, deadline));
       // Interrupt at the Function's `timeout`. The timer loses the race to
-      // the handler once an inner guard claims the deadline — that guard
-      // enforces it closer to the work, at the same instant — so the
+      // the handler once an inner guard claims the deadline -- that guard
+      // enforces it closer to the work, at the same instant -- so the
       // deadline fails the invocation once, from the innermost guard. The
       // race interrupts the handler and waits for its finalizers.
       const timer = Effect.sleep(Duration.millis(budgetMs)).pipe(

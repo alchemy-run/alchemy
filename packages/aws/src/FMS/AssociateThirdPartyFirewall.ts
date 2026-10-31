@@ -17,7 +17,7 @@ export interface AssociateThirdPartyFirewallRequest
  * ### Third-Party Firewalls
  * **Example:** Onboard a Third-Party Firewall Vendor
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const associateThirdPartyFirewall = yield* AWS.FMS.AssociateThirdPartyFirewall();
  *
  * // runtime

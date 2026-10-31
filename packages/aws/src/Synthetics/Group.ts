@@ -54,7 +54,7 @@ export interface Group extends Resource<
 > {}
 
 /**
- * A CloudWatch Synthetics group — associates canaries (including
+ * A CloudWatch Synthetics group -- associates canaries (including
  * cross-Region canaries) so you can view aggregated run results and manage
  * them as a unit. A group can hold as many as 10 canaries, and an account
  * can have as many as 20 groups.
@@ -160,10 +160,10 @@ export const GroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getGroupOrUndefined(groupName);
 
-          // 2. ENSURE — create if missing; tolerate a concurrent-create race.
+          // 2. ENSURE -- create if missing; tolerate a concurrent-create race.
           if (observed === undefined) {
             yield* synthetics
               .createGroup({ Name: groupName, Tags: desiredTags })
@@ -173,7 +173,7 @@ export const GroupProvider = () =>
           }
           const groupArn = observed?.Arn ?? "";
 
-          // 3. SYNC members — diff observed canary associations against the
+          // 3. SYNC members -- diff observed canary associations against the
           // desired members and apply only the delta. Association calls are
           // idempotent per (group, canary) pair.
           const observedMembers = yield* listMembers(groupName);
@@ -208,7 +208,7 @@ export const GroupProvider = () =>
             );
           }
 
-          // 4. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 4. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges (create already applied them).
           const currentTags = filterTags(observed?.Tags);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -234,7 +234,7 @@ export const GroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // The group does not need to be emptied first — deleting a group
+          // The group does not need to be emptied first -- deleting a group
           // never deletes its canaries.
           yield* synthetics.deleteGroup({ GroupIdentifier: output.groupName }).pipe(
             Effect.retry({

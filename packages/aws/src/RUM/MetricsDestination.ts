@@ -30,13 +30,13 @@ export interface MetricDefinition {
    */
   unitLabel?: string;
   /**
-   * Extra dimensions derived from event fields — maps the event field path
+   * Extra dimensions derived from event fields -- maps the event field path
    * (e.g. `metadata.browserName`) to the dimension name (e.g.
    * `BrowserName`).
    */
   dimensionKeys?: Record<string, string>;
   /**
-   * JSON event-pattern filter — only events matching the pattern contribute
+   * JSON event-pattern filter -- only events matching the pattern contribute
    * to the metric. Required for extended metrics, where it must match the
    * metric's event type (e.g.
    * `{"event_type":["com.amazon.rum.session_start_event"]}` for
@@ -107,7 +107,7 @@ export interface MetricsDestination extends Resource<
 > {}
 
 /**
- * A destination for CloudWatch RUM extended and custom metrics — sends
+ * A destination for CloudWatch RUM extended and custom metrics -- sends
  * metrics that a RUM app monitor derives from its telemetry events to
  * CloudWatch or to a CloudWatch Evidently experiment, including the metric
  * definitions themselves.
@@ -195,7 +195,7 @@ export const MetricsDestinationProvider = () =>
     Effect.gen(function* () {
       /**
        * Observe the live destination on the monitor; typed not-found (the
-       * monitor itself is gone) → undefined.
+       * monitor itself is gone) -> undefined.
        */
       const observeDestination = Effect.fn(function* (
         props: Pick<MetricsDestinationProps, "appMonitorName" | "destination" | "destinationArn">,
@@ -244,7 +244,7 @@ export const MetricsDestinationProvider = () =>
           if (!identity) return undefined;
           const observed = yield* observeDestination(identity);
           if (observed === undefined) return undefined;
-          // Metrics destinations are not taggable — ownership is implied by
+          // Metrics destinations are not taggable -- ownership is implied by
           // the owned parent app monitor.
           return {
             appMonitorName: identity.appMonitorName,
@@ -262,12 +262,12 @@ export const MetricsDestinationProvider = () =>
             ...(props.destination === "Evidently" ? { DestinationArn: props.destinationArn } : {}),
           };
 
-          // 1. OBSERVE — the live destination list is authoritative.
+          // 1. OBSERVE -- the live destination list is authoritative.
           const observed = yield* observeDestination(props);
 
-          // 2. ENSURE + SYNC destination — `putRumMetricsDestination` is a
+          // 2. ENSURE + SYNC destination -- `putRumMetricsDestination` is a
           //    true upsert; call it when missing or when the role drifts. A
-          //    concurrent put surfaces as the typed ConflictException — a
+          //    concurrent put surfaces as the typed ConflictException -- a
           //    race, not a failure.
           if (
             observed === undefined ||
@@ -284,7 +284,7 @@ export const MetricsDestinationProvider = () =>
               );
           }
 
-          // 3. SYNC metric definitions — diff the OBSERVED definitions
+          // 3. SYNC metric definitions -- diff the OBSERVED definitions
           //    (keyed by name) against the desired list and apply only the
           //    delta: batch-create missing, update drifted, batch-delete
           //    extraneous.
@@ -356,7 +356,7 @@ export const MetricsDestinationProvider = () =>
                 : {}),
             })
             .pipe(
-              // idempotent — the destination (or its whole monitor) may be gone
+              // idempotent -- the destination (or its whole monitor) may be gone
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
@@ -365,7 +365,7 @@ export const MetricsDestinationProvider = () =>
             );
         }),
 
-        // Sub-resource keyed by its parent app monitor — enumerating it
+        // Sub-resource keyed by its parent app monitor -- enumerating it
         // would require listing every monitor's destinations.
         list: () => Effect.succeed([]),
       };

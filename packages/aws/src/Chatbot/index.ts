@@ -1,4 +1,4 @@
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./Association.ts";
 export * from "./CustomAction.ts";
 export * from "./DeleteMicrosoftTeamsConfiguredTeam.ts";

@@ -17,7 +17,7 @@ export interface ListTimeSeriesDataPointsRequest extends Omit<
  * ### Time Series Metadata
  * **Example:** Read Back Metric History
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const listTimeSeriesDataPoints = yield* AWS.DataZone.ListTimeSeriesDataPoints(domain);
  *
  * // runtime

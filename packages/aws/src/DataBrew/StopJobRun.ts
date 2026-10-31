@@ -6,7 +6,7 @@ import type { Job } from "./Job.ts";
 export interface StopJobRunRequest extends Omit<SVC.StopJobRunRequest, "Name"> {}
 
 /**
- * Runtime binding for `databrew:StopJobRun` — cancels a run of the bound
+ * Runtime binding for `databrew:StopJobRun` -- cancels a run of the bound
  * DataBrew job that is still starting or running.
  * ### Stopping Job Runs
  * **Example:** Stop a Job Run

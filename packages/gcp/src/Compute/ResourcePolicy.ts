@@ -29,7 +29,7 @@ export type ResourcePolicyProps = {
    */
   resourcePolicyName?: string;
   /**
-   * Region the policy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the policy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -38,13 +38,13 @@ export type ResourcePolicyProps = {
   /**
    * Optional description. Compute resource policies have no labels field,
    * so Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
    * Snapshot schedule attached to persistent disks. Mutable in place via
    * `resourcePolicies.patch`. Mutually exclusive with the other policy
-   * kinds — switching kind replaces the resource.
+   * kinds -- switching kind replaces the resource.
    */
   snapshotSchedulePolicy?: SnapshotSchedulePolicy;
   /**
@@ -53,17 +53,17 @@ export type ResourcePolicyProps = {
    */
   instanceSchedulePolicy?: InstanceSchedulePolicy;
   /**
-   * Compact / collocated placement for instances. Immutable — changing it
+   * Compact / collocated placement for instances. Immutable -- changing it
    * replaces the policy.
    */
   groupPlacementPolicy?: GroupPlacementPolicy;
   /**
-   * Workload placement for managed instance groups. Immutable — changing
+   * Workload placement for managed instance groups. Immutable -- changing
    * it replaces the policy.
    */
   workloadPolicy?: WorkloadPolicy;
   /**
-   * Disk consistency-group policy. Immutable — changing it replaces the
+   * Disk consistency-group policy. Immutable -- changing it replaces the
    * policy.
    */
   diskConsistencyGroupPolicy?: DiskConsistencyGroupPolicy;
@@ -83,7 +83,7 @@ export type ResourcePolicy = Resource<
     region: string;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, `DELETING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, `DELETING`, ...). */
     status: string | undefined;
     /** Snapshot schedule, if this is a snapshot policy. */
     snapshotSchedulePolicy: SnapshotSchedulePolicy | undefined;
@@ -111,13 +111,13 @@ export type ResourcePolicy = Resource<
  *
  * Resource policies schedule snapshots, start/stop VMs, or describe
  * placement. Compute Engine has no labels on this resource, so Alchemy
- * stamps ownership into the description (`[alchemy alchemy-stack=…
- * alchemy-stage=… alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find
+ * stamps ownership into the description (`[alchemy alchemy-stack=...
+ * alchemy-stage=... alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find
  * them.
  *
  * Name, region, and policy kind (`snapshotSchedulePolicy` vs
  * `instanceSchedulePolicy` vs placement/workload/consistency) are
- * immutable — changing them replaces the policy. Description and the
+ * immutable -- changing them replaces the policy. Description and the
  * nested snapshot / instance schedules update in place via
  * `resourcePolicies.patch`.
  *

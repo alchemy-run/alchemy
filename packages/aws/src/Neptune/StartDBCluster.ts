@@ -7,14 +7,14 @@ import type { DBCluster } from "./DBCluster.ts";
  * Runtime binding for the `StartDBCluster` operation (IAM action
  * `rds:StartDBCluster`).
  *
- * Starts the bound {@link DBCluster} after it was stopped — e.g. an ops
+ * Starts the bound {@link DBCluster} after it was stopped -- e.g. an ops
  * function that wakes a development cluster on a schedule. The cluster
  * identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Neptune.StartDBClusterHttp)`.
  * ### Operating a Cluster
  * **Example:** Start a Stopped Cluster
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const startDBCluster = yield* AWS.Neptune.StartDBCluster(cluster);
  *
  * // runtime

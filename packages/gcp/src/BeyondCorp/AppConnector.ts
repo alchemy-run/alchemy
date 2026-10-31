@@ -45,18 +45,18 @@ export type AppConnectorProps = {
    * AppConnector id (the `{appConnector}` segment of
    * `projects/{project}/locations/{location}/appConnectors/{appConnector}`).
    * If omitted, a unique RFC1035 name is generated. Must be 4-63
-   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable --
    * changing it replaces the connector.
    */
   appConnectorId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * connector. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Principal identity of the connector. Immutable — changing the
+   * Principal identity of the connector. Immutable -- changing the
    * service account email replaces the connector. Required unless
    * `serviceAccountEmail` is set.
    */
@@ -96,7 +96,7 @@ export type AppConnector = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`CREATED`, `CREATING`, …). */
+    /** Server-reported state (`CREATED`, `CREATING`, ...). */
     state: string | undefined;
     /** Server-generated resource uid. */
     uid: string | undefined;

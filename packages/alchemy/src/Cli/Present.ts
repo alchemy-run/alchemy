@@ -7,8 +7,8 @@ import { currentConsoleSettings } from "./GlobalLog.ts";
 
 /**
  * Print one line of plain renderer output: what the TUI would draw, for a
- * terminal without it. Renderers present events, they don't log them —
- * the events are already log records — so this writes to the console only,
+ * terminal without it. Renderers present events, they don't log them --
+ * the events are already log records -- so this writes to the console only,
  * prints nothing under `--log-format json`, where the records are the
  * output, and honors the console's `--log-level` floor like log lines do.
  */

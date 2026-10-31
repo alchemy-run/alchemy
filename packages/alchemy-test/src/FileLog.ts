@@ -1,7 +1,7 @@
 import { closeSync, constants, openSync, writeSync } from "node:fs";
 /**
  * Persistent run log: every test's pass/failure followed by its captured
- * output, appended to `.alchemy/log/test.log` as the run progresses —
+ * output, appended to `.alchemy/log/test.log` as the run progresses --
  * color-free so agents and tooling can read it directly.
  */
 import * as Effect from "effect/Effect";
@@ -92,7 +92,7 @@ export interface FileLog {
 const LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Delete sibling run logs whose mtime (from stat — file names are never
+ * Delete sibling run logs whose mtime (from stat -- file names are never
  * trusted) is older than a week, so the per-run log directory can't grow
  * unboundedly. Best-effort: failures are ignored.
  */

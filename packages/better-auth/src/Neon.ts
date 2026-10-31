@@ -14,7 +14,7 @@ export interface NeonOptions extends SqlLayerOptions {}
 
 // The Neon serverless Pool is pg-compatible (Better Auth's Kysely path
 // duck-types it as a Postgres pool via its `connect` method) but speaks
-// WebSocket instead of TCP — no `pg`, no Hyperdrive, no nodejs socket
+// WebSocket instead of TCP -- no `pg`, no Hyperdrive, no nodejs socket
 // APIs. Loaded dynamically so the driver stays an optional peer.
 const loadNeonPool = Effect.promise(() => import("@neondatabase/serverless")).pipe(
   Effect.map((mod) =>
@@ -49,7 +49,7 @@ const openPool = (
 /**
  * Neon database layer for Better Auth over Neon's serverless driver.
  *
- * This is the optimal Workers/Lambda → Neon pairing: the driver speaks
+ * This is the optimal Workers/Lambda -> Neon pairing: the driver speaks
  * WebSocket instead of TCP, so it needs no Hyperdrive, no `pg` install,
  * and no socket compatibility flags. One pool per execution, closed when
  * the event settles.

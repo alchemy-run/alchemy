@@ -26,13 +26,13 @@ export type OrganizationExclusionProps = {
    * `organizations/{organization}/exclusions/{exclusion}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens,
-   * periods; first character must be alphanumeric. Immutable — changing
+   * periods; first character must be alphanumeric. Immutable -- changing
    * it replaces the exclusion.
    */
   exclusionId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the exclusion.
    */
   organization?: string;
@@ -43,7 +43,7 @@ export type OrganizationExclusionProps = {
   filter: string;
   /**
    * Human-readable description. Logging exclusions have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -90,7 +90,7 @@ export type OrganizationExclusion = Resource<
  * organization's `_Default` bucket (they do not apply to `_Required`).
  * An organization can have up to 10. Logging exclusions have no labels
  * field, so Alchemy stamps ownership into the description for `list` /
- * nuke. Name and organization are identity — changing either replaces
+ * nuke. Name and organization are identity -- changing either replaces
  * the exclusion.
  *
  * ### Creating an Organization Exclusion

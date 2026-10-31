@@ -75,7 +75,7 @@ export interface DBClusterProps {
    */
   scalingConfiguration?: rds.ScalingConfiguration;
   /**
-   * Availability zones for cluster placement. Immutable — forces replacement.
+   * Availability zones for cluster placement. Immutable -- forces replacement.
    */
   availabilityZones?: string[];
   /**
@@ -184,7 +184,7 @@ export interface DBClusterProps {
    */
   publiclyAccessible?: boolean;
   /**
-   * Engine lifecycle support setting. Immutable — forces replacement.
+   * Engine lifecycle support setting. Immutable -- forces replacement.
    */
   engineLifecycleSupport?: string;
   /**
@@ -196,11 +196,11 @@ export interface DBClusterProps {
    */
   deletionProtection?: boolean;
   /**
-   * Whether the storage is encrypted. Immutable — forces replacement.
+   * Whether the storage is encrypted. Immutable -- forces replacement.
    */
   storageEncrypted?: boolean;
   /**
-   * Optional KMS key used for storage encryption. Immutable — forces replace.
+   * Optional KMS key used for storage encryption. Immutable -- forces replace.
    */
   kmsKeyId?: string;
   /**
@@ -632,7 +632,7 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh cluster.
+          // Immutable props -- any change forces a fresh cluster.
           if (
             olds !== undefined &&
             (olds.engine !== news.engine ||
@@ -667,7 +667,7 @@ export const DBClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const credentials = yield* resolveMasterCredentials(news);
-          // Duration props → the exact wire units the RDS API expects.
+          // Duration props -> the exact wire units the RDS API expects.
           const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
           const backtrackWindowSeconds = toWireSeconds(news.backtrackWindow);
           const monitoringIntervalSeconds = toWireSeconds(news.monitoringInterval);
@@ -675,12 +675,12 @@ export const DBClusterProvider = () =>
             news.performanceInsightsRetentionPeriod,
           );
 
-          // Observe — fetch live cluster state. We never trust `output`
+          // Observe -- fetch live cluster state. We never trust `output`
           // blindly: the cluster may have been deleted out-of-band, or this
           // may be a first-time reconcile after adoption.
           let observed = yield* readCluster(identifier);
 
-          // Ensure — create the cluster if it's missing. Tolerate
+          // Ensure -- create the cluster if it's missing. Tolerate
           // `DBClusterAlreadyExistsFault` as a race with a peer reconciler
           // (e.g. retry after state-persistence failure).
           if (!observed?.DBClusterArn) {
@@ -743,7 +743,7 @@ export const DBClusterProvider = () =>
             // doesn't hit `InvalidDBClusterStateFault`.
             observed = yield* waitForCluster(identifier);
 
-            // syncCoreSettings — single `modifyDBCluster` carrying scalar
+            // syncCoreSettings -- single `modifyDBCluster` carrying scalar
             // in-place fields, only emitting a field when the desired value
             // differs from the observed cloud state.
             const core: rds.ModifyDBClusterMessage = {
@@ -802,7 +802,7 @@ export const DBClusterProvider = () =>
             if (news.allowMajorVersionUpgrade) {
               core.AllowMajorVersionUpgrade = true;
             }
-            // syncMasterPassword — rotation or explicit password update.
+            // syncMasterPassword -- rotation or explicit password update.
             if (news.manageMasterUserPassword && news.rotateMasterUserPassword) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
@@ -815,7 +815,7 @@ export const DBClusterProvider = () =>
               observed = yield* waitForCluster(identifier);
             }
 
-            // syncCloudwatchLogsExports — delta-shaped; separate call.
+            // syncCloudwatchLogsExports -- delta-shaped; separate call.
             const logDelta = logExportDelta(
               observed.EnabledCloudwatchLogsExports,
               news.enableCloudwatchLogsExports,
@@ -832,7 +832,7 @@ export const DBClusterProvider = () =>
 
           const dbClusterArn = observed.DBClusterArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired so the
+          // Sync tags -- diff observed cloud tags against desired so the
           // reconciler converges regardless of what was on the resource
           // before (initial create, adoption, or drift).
           const observedTags = toTagRecord(observed.TagList);

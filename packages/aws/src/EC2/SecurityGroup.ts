@@ -204,7 +204,7 @@ export interface SecurityGroup extends Resource<
   Providers
 > {}
 /**
- * An EC2 security group — a stateful virtual firewall that controls inbound
+ * An EC2 security group -- a stateful virtual firewall that controls inbound
  * (`ingress`) and outbound (`egress`) traffic for resources in a VPC. Rules can
  * allow traffic from CIDR ranges, IPv6 ranges, managed prefix lists, or other
  * security groups. Because it is stateful, return traffic for an allowed
@@ -221,7 +221,7 @@ export interface SecurityGroup extends Resource<
  *
  * ### Creating a Security Group
  * Every security group belongs to a VPC. `groupName` and `description` are
- * optional — alchemy generates a deterministic name and a default description
+ * optional -- alchemy generates a deterministic name and a default description
  * when they are omitted. Both the VPC and the name are immutable, so changing
  * either replaces the group.
  *
@@ -252,7 +252,7 @@ export interface SecurityGroup extends Resource<
  * ### Ingress Rules
  * Inbound rules are declared inline via `ingress`. Each rule specifies an
  * `ipProtocol` (`tcp`, `udp`, `icmp`, or `-1` for all), an optional port range
- * (`fromPort`/`toPort`), and a source — most commonly an IPv4 `cidrIpv4`.
+ * (`fromPort`/`toPort`), and a source -- most commonly an IPv4 `cidrIpv4`.
  *
  * **Example:** Allow HTTP and HTTPS from anywhere
  * ```typescript
@@ -286,7 +286,7 @@ export interface SecurityGroup extends Resource<
  * ### Egress Rules
  * Outbound traffic is governed by `egress`. If you omit it entirely, the group
  * enforces the default "allow all outbound" rule. Supplying `egress` replaces
- * that default with exactly the rules you list — so you must re-add an
+ * that default with exactly the rules you list -- so you must re-add an
  * allow-all rule if you still want unrestricted outbound.
  *
  * **Example:** Restrict outbound to HTTPS only
@@ -306,7 +306,7 @@ export interface SecurityGroup extends Resource<
  * });
  * ```
  *
- * This locks egress down to port 443 only — useful for instances that should
+ * This locks egress down to port 443 only -- useful for instances that should
  * only call out to HTTPS APIs. Any other outbound traffic (DNS, NTP, etc.) would
  * need explicit rules added here.
  *
@@ -731,7 +731,7 @@ export const SecurityGroupProvider = () =>
                     (sg): sg is ec2.SecurityGroup & { GroupId: string } =>
                       sg.GroupId != null &&
                       // Every VPC's `default` group is AWS-managed and can
-                      // never be deleted (CannotDelete) — don't enumerate it.
+                      // never be deleted (CannotDelete) -- don't enumerate it.
                       sg.GroupName !== "default" &&
                       // EMR's shared default-VPC groups (see helper).
                       !emrManaged.has(sg.GroupId),
@@ -799,7 +799,7 @@ export const SecurityGroupProvider = () =>
           const groupName = output?.groupName ?? (yield* createGroupName(id, news.groupName));
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the SG via cached id, else fall through to create.
+          // Observe -- find the SG via cached id, else fall through to create.
           let sg: ec2.SecurityGroup | undefined;
           if (output?.groupId) {
             const lookup = yield* ec2
@@ -816,7 +816,7 @@ export const SecurityGroupProvider = () =>
             sg = yield* findOwnedGroup(id, groupName, news.vpcId);
           }
 
-          // Ensure — create the SG when missing.
+          // Ensure -- create the SG when missing.
           if (sg === undefined) {
             yield* session.note(`Creating Security Group: ${groupName}`);
             const result = yield* ec2
@@ -849,7 +849,7 @@ export const SecurityGroupProvider = () =>
 
           const groupId = sg.GroupId! as SecurityGroupId;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (sg.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -929,7 +929,7 @@ export const SecurityGroupProvider = () =>
 
           yield* session.note(`Deleting Security Group: ${groupId}`);
 
-          // DependencyViolation means ENIs still reference the group — ALB,
+          // DependencyViolation means ENIs still reference the group -- ALB,
           // ECS task, or VPC-attached Lambda ENIs release minutes after the
           // owning resource is deleted. Lambda Hyperplane ENIs are reaped
           // explicitly between attempts (they otherwise linger up to ~20

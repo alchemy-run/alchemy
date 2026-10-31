@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:GetDeployment` — reads a deployment's
+ * Runtime binding for `codedeploy:GetDeployment` -- reads a deployment's
  * status, revision, and rollout overview. CodeDeploy authorizes the call
  * against the deployment group the deployment belongs to.
  * ### Observing Deployments

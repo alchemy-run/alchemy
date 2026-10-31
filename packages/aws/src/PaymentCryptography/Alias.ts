@@ -41,7 +41,7 @@ export interface Alias extends Resource<
 
 /**
  * A friendly name for an AWS Payment Cryptography {@link Key}. Aliases give
- * keys a stable, human-readable identifier that survives key rotation — the
+ * keys a stable, human-readable identifier that survives key rotation -- the
  * alias can be repointed to a new key without touching consumers.
  * ### Creating Aliases
  * **Example:** Alias attached to a key
@@ -113,15 +113,15 @@ export const AliasProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // fall through: undefined → default update (keyArn repoint)
+          // fall through: undefined -> default update (keyArn repoint)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const aliasName = output?.aliasName ?? (yield* createAliasName(id, news));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let alias = yield* observeAlias(aliasName);
 
-          // 2. Ensure — create when missing; a concurrent create surfaces as
+          // 2. Ensure -- create when missing; a concurrent create surfaces as
           //    ConflictException, which resolves by re-observing.
           if (alias === undefined) {
             alias = yield* paymentcryptography
@@ -136,7 +136,7 @@ export const AliasProvider = () =>
               );
           }
 
-          // 3. Sync — repoint the alias when the observed target differs
+          // 3. Sync -- repoint the alias when the observed target differs
           //    from the desired one (including detaching).
           if (alias.KeyArn !== news.keyArn) {
             alias = yield* paymentcryptography

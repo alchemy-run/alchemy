@@ -6,7 +6,7 @@ import type { Detector } from "./Detector.ts";
 /**
  * Runtime binding for `guardduty:ListFindings`.
  *
- * Lists finding ids for the detector, with optional finding criteria and sort order — the entry point for a findings-triage automation.
+ * Lists finding ids for the detector, with optional finding criteria and sort order -- the entry point for a findings-triage automation.
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.ListFindingsHttp)`.

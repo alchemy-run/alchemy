@@ -30,12 +30,12 @@ export type DatasetProps = {
   /**
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/locations/{location}/datasets/{dataset}`). If
-   * omitted, Vertex AI assigns an id. Immutable — changing it replaces
+   * omitted, Vertex AI assigns an id. Immutable -- changing it replaces
    * the dataset.
    */
   datasetId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the dataset. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -56,7 +56,7 @@ export type DatasetProps = {
   labels?: Record<string, string>;
   /**
    * GCS URI of the dataset metadata schema YAML (OpenAPI 3.0.2 Schema
-   * Object). Immutable — changing it replaces the dataset.
+   * Object). Immutable -- changing it replaces the dataset.
    * @default "gs://google-cloud-aiplatform/schema/dataset/metadata/tabular_1.0.0.yaml"
    */
   metadataSchemaUri?: string;
@@ -66,7 +66,7 @@ export type DatasetProps = {
    */
   metadata?: unknown;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * dataset.
    */
   encryptionSpec?: EncryptionSpec;
@@ -76,7 +76,7 @@ export type DatasetProps = {
   modelReference?: string;
   /**
    * Saved queries created with the dataset (max one on create). Required
-   * for DatasetVersion — Vertex rejects versioning an empty dataset with
+   * for DatasetVersion -- Vertex rejects versioning an empty dataset with
    * no SavedQuery (`Unsupported dataset version creation with empty set
    * of saved queries`).
    */
@@ -85,7 +85,7 @@ export type DatasetProps = {
     displayName?: string;
     /**
      * Problem type (`IMAGE_CLASSIFICATION_SINGLE_LABEL`,
-     * `TEXT_CLASSIFICATION_SINGLE_LABEL`, …).
+     * `TEXT_CLASSIFICATION_SINGLE_LABEL`, ...).
      */
     problemType?: string;
     /** Additional saved-query metadata. */
@@ -103,7 +103,7 @@ export type Dataset = Resource<
     datasetId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** User-facing display name. */
     displayName: string | undefined;
@@ -133,7 +133,7 @@ export type Dataset = Resource<
 >;
 
 /**
- * A Vertex AI Dataset — a collection of DataItems and Annotations.
+ * A Vertex AI Dataset -- a collection of DataItems and Annotations.
  *
  * Location, dataset id, metadata schema, and CMEK are immutable. Display
  * name, description, and labels update in place. Alchemy ownership labels

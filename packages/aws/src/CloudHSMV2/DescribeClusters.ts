@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `cloudhsm:DescribeClusters`).
  *
  * Lists the account's CloudHSM clusters (optionally filtered by cluster id,
- * VPC or state) with each cluster's HSMs embedded — the building block of
+ * VPC or state) with each cluster's HSMs embedded -- the building block of
  * cluster-health monitoring and automatic-HSM-replacement automation.
  * Provide the implementation with
  * `Effect.provide(AWS.CloudHSMV2.DescribeClustersHttp)`.

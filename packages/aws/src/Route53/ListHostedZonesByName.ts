@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `route53:ListHostedZonesByName`; list actions do not support
  * resource-level permissions, so it is granted on `*`).
  *
- * Looks hosted zones up by DNS name in lexicographic order — the direct way
+ * Looks hosted zones up by DNS name in lexicographic order -- the direct way
  * to resolve "which zone owns `example.com`?" at runtime. Provide the
  * implementation with
  * `Effect.provide(AWS.Route53.ListHostedZonesByNameHttp)`.

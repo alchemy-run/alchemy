@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:ListTopicsDetectionJobs` — list the account's
+ * Runtime binding for `comprehend:ListTopicsDetectionJobs` -- list the account's
  * asynchronous topic modeling jobs, with optional status/name/time filters.
  *
  * The binding takes no arguments and grants the action on `*` (job APIs

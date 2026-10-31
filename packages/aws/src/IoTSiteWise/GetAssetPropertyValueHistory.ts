@@ -13,7 +13,7 @@ export interface GetAssetPropertyValueHistoryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotsitewise:GetAssetPropertyValueHistory` — read the
+ * Runtime binding for `iotsitewise:GetAssetPropertyValueHistory` -- read the
  * historical timestamp-quality-values of one property of the bound asset
  * over a time range from a deployed Lambda or Task.
  *

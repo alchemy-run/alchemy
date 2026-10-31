@@ -30,7 +30,7 @@ const isTransientConnectError = (cause: unknown): boolean => {
  * A verified-TLS `pg` session on a Fly Managed Postgres URI for the scope
  * of `use`. A fresh cluster's hostname takes a moment to resolve, so
  * connection failures are retried; one that persists is almost always a
- * missing route — MPG hostnames only exist on the org's private network.
+ * missing route -- MPG hostnames only exist on the org's private network.
  */
 const withFlyPgExecutor = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
@@ -48,7 +48,7 @@ const withFlyPgExecutor = <A, E, R>(
         isTransientConnectError(error.cause)
           ? new MigrationError({
               message:
-                `${error.message} — Fly Managed Postgres is only reachable ` +
+                `${error.message} \u2014 Fly Managed Postgres is only reachable ` +
                 "on the org's private network. Run the deploy behind a " +
                 "WireGuard peer or `fly mpg proxy`, or from a machine on " +
                 "6PN. See https://fly.io/docs/mpg/create-and-connect/",

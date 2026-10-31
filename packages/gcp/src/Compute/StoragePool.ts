@@ -39,14 +39,14 @@ export type StoragePoolProps = {
    */
   storagePoolName?: string;
   /**
-   * Zone the pool lives in (e.g. `us-central1-a`). Immutable — changing it
+   * Zone the pool lives in (e.g. `us-central1-a`). Immutable -- changing it
    * replaces the pool.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
    * Storage pool type (`hyperdisk-balanced`, `hyperdisk-throughput`,
-   * `hyperdisk-extreme`, …). Immutable — changing it replaces the pool.
+   * `hyperdisk-extreme`, ...). Immutable -- changing it replaces the pool.
    * @default "hyperdisk-balanced"
    */
   storagePoolType?: string;
@@ -73,11 +73,11 @@ export type StoragePoolProps = {
    */
   poolProvisionedThroughput?: number | string;
   /**
-   * Capacity provisioning type. Immutable — changing it replaces the pool.
+   * Capacity provisioning type. Immutable -- changing it replaces the pool.
    */
   capacityProvisioningType?: StoragePoolCapacityProvisioningType;
   /**
-   * Performance provisioning type. Immutable — changing it replaces the
+   * Performance provisioning type. Immutable -- changing it replaces the
    * pool.
    */
   performanceProvisioningType?: StoragePoolPerformanceProvisioningType;
@@ -111,7 +111,7 @@ export type StoragePool = Resource<
     capacityProvisioningType: string | undefined;
     /** Performance provisioning type. */
     performanceProvisioningType: string | undefined;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Compute Engine self-link. */
     selfLink: string | undefined;

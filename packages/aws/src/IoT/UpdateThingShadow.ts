@@ -12,7 +12,7 @@ export interface UpdateThingShadowRequest extends Omit<
  * Runtime binding for the IoT data-plane `UpdateThingShadow` operation (IAM
  * action `iot:UpdateThingShadow`).
  *
- * Bind it to a {@link Thing} to write the thing's device shadow — the thing
+ * Bind it to a {@link Thing} to write the thing's device shadow -- the thing
  * name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.IoT.UpdateThingShadowHttp)`.
  * ### Device Shadows

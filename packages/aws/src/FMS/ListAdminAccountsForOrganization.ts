@@ -11,12 +11,12 @@ export interface ListAdminAccountsForOrganizationRequest
 /**
  * Runtime binding for `fms:ListAdminAccountsForOrganization`.
  *
- * Returns the Firewall Manager administrator accounts in the organization — only usable by the organization's management account. Provide the
+ * Returns the Firewall Manager administrator accounts in the organization -- only usable by the organization's management account. Provide the
  * implementation with `Effect.provide(AWS.FMS.ListAdminAccountsForOrganizationHttp)`.
  * ### Administrator Management
  * **Example:** List the Organization's Administrators
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listAdminAccountsForOrganization = yield* AWS.FMS.ListAdminAccountsForOrganization();
  *
  * // runtime

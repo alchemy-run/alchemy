@@ -38,14 +38,14 @@ import {
 export type FoldersLocationsGlobalPolicyOrchestratorProps = {
   /**
    * Folder (`folders/{folder}` or the numeric id). When omitted, the
-   * stack project's parent folder is used. Immutable — changing it
+   * stack project's parent folder is used. Immutable -- changing it
    * replaces the orchestrator.
    */
   folderId?: string;
   /**
    * Orchestrator id (the `{policyOrchestrator}` segment of
    * `folders/{folder}/locations/global/policyOrchestrators/{policyOrchestrator}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the orchestrator.
    */
   policyOrchestratorId?: string;

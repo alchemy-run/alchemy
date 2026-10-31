@@ -14,7 +14,7 @@ export interface CreateAssetRequest extends Omit<datazone.CreateAssetInput, "dom
  * ### Publishing Assets
  * **Example:** Register an Asset
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const createAsset = yield* AWS.DataZone.CreateAsset(domain);
  *
  * // runtime

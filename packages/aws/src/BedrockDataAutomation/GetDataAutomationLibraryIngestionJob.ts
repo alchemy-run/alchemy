@@ -15,7 +15,7 @@ export interface GetDataAutomationLibraryIngestionJobRequest extends Omit<
 /**
  * Runtime binding for the `GetDataAutomationLibraryIngestionJob` operation
  * (IAM action `bedrock:GetDataAutomationLibraryIngestionJob` on the library
- * ARN) — poll the status of a library ingestion job from a deployed
+ * ARN) -- poll the status of a library ingestion job from a deployed
  * Function.
  *
  * Provide the implementation with
@@ -23,11 +23,11 @@ export interface GetDataAutomationLibraryIngestionJobRequest extends Omit<
  * ### Library Ingestion
  * **Example:** Poll An Ingestion Job
  * ```typescript
- * // deploy time — bind the library
+ * // deploy time -- bind the library
  * const getJob =
  *   yield* AWS.BedrockDataAutomation.GetDataAutomationLibraryIngestionJob(library);
  *
- * // runtime — check the job started by the ingestion binding
+ * // runtime -- check the job started by the ingestion binding
  * const { job } = yield* getJob({ jobArn });
  * if (job?.jobStatus === "COMPLETED") {
  *   yield* Effect.log(`ingestion results at ${job.outputConfiguration.s3Uri}`);

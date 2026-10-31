@@ -19,7 +19,7 @@ export const toTagRecord = (tags: forecast.Tag[] | undefined): Record<string, st
 
 /**
  * Read the observed tags of a Forecast resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readForecastTags = Effect.fn(function* (arn: string) {
   const response = yield* forecast
@@ -45,7 +45,7 @@ export const syncForecastTags = Effect.fn(function* (
     });
   }
   if (removed.length > 0) {
-    // TagKeys decodes as SensitiveString — wrap in Redacted for the encoder
+    // TagKeys decodes as SensitiveString -- wrap in Redacted for the encoder
     // (which unwraps back to the plain string on the wire).
     yield* forecast.untagResource({
       ResourceArn: arn,
@@ -56,7 +56,7 @@ export const syncForecastTags = Effect.fn(function* (
 
 /**
  * Coerce a generated physical name into Forecast's identifier constraint
- * (`^[a-zA-Z][a-zA-Z0-9_]*` — underscores only, must start with a letter).
+ * (`^[a-zA-Z][a-zA-Z0-9_]*` -- underscores only, must start with a letter).
  * `createPhysicalName` emits DNS-style hyphens, which Forecast rejects.
  */
 export const toForecastName = (name: string) => {

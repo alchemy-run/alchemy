@@ -15,7 +15,7 @@ export interface ListDataSourceSyncJobsRequest extends Omit<
  * Runtime binding for the `ListDataSourceSyncJobs` operation (IAM action
  * `kendra:ListDataSourceSyncJobs`), scoped to one {@link DataSource}.
  *
- * Lists the data source's sync-job history — status, error details, and
+ * Lists the data source's sync-job history -- status, error details, and
  * per-run document add/modify/delete/fail metrics.
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.ListDataSourceSyncJobsHttp)`.

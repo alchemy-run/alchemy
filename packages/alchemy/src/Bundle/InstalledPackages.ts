@@ -29,7 +29,7 @@ export type NpmInstallRunner = (
 
 export interface ResolveInstallTargetsOptions {
   readonly cwd: string;
-  /** Normalized package-root → requested version map (from {@link normalizeInstallTargets}). */
+  /** Normalized package-root -> requested version map (from {@link normalizeInstallTargets}). */
   readonly requested: Readonly<Record<string, string>>;
 }
 
@@ -60,9 +60,9 @@ export interface HashPackageInstallIdentityOptions {
 }
 
 export interface InstallResolvedPackagesOptions {
-  /** Package-root → concrete npm version map (from {@link resolveInstallTargets}). */
+  /** Package-root -> concrete npm version map (from {@link resolveInstallTargets}). */
   readonly resolved: Readonly<Record<string, string>>;
-  /** Locked parent-package → child-package versions used to pin transitives. */
+  /** Locked parent-package -> child-package versions used to pin transitives. */
   readonly overrides?: PackageOverrides;
   readonly architecture: "x86_64" | "arm64";
   readonly runNpmInstall?: NpmInstallRunner;
@@ -179,7 +179,7 @@ const npmCommandArgs = (
 
 /**
  * Normalizes and validates a `build.install` declaration to a
- * package-root → requested-version map. Array entries default to `"*"`.
+ * package-root -> requested-version map. Array entries default to `"*"`.
  */
 export function normalizeInstallTargets(
   install: PackageInstall | undefined,
@@ -614,7 +614,7 @@ const addLockedGraphOverrides = <Node>(
     return edges;
   };
 
-  // name → set of install specs observed anywhere in the subtree (memoized).
+  // name -> set of install specs observed anywhere in the subtree (memoized).
   const specsMemo = new Map<unknown, ReadonlyMap<string, ReadonlySet<string>>>();
   const specsOf = (start: Node): ReadonlyMap<string, ReadonlySet<string>> => {
     const startId = nodeId(start);

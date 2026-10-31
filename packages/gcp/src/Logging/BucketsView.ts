@@ -25,7 +25,7 @@ export type BucketsViewProps = {
   /**
    * Parent log bucket. Full name
    * `projects/{project}/locations/{location}/buckets/{bucket}` or the
-   * bucket id (combined with `location`). Immutable — changing it
+   * bucket id (combined with `location`). Immutable -- changing it
    * replaces the view.
    */
   bucket: string;
@@ -33,12 +33,12 @@ export type BucketsViewProps = {
    * View id (the `{view}` segment of
    * `.../buckets/{bucket}/views/{view}`). If omitted, a unique name is
    * generated from the stack, stage, and logical id. Limited to 100
-   * characters: letters, digits, underscores, hyphens. Immutable —
+   * characters: letters, digits, underscores, hyphens. Immutable --
    * changing it replaces the view.
    */
   viewId?: string;
   /**
-   * Bucket location used when `bucket` is a bare id. Immutable — changing
+   * Bucket location used when `bucket` is a bare id. Immutable -- changing
    * it replaces the view.
    * @default "global"
    */
@@ -51,7 +51,7 @@ export type BucketsViewProps = {
   filter?: string;
   /**
    * Human-readable description. Log views have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -91,7 +91,7 @@ export type BucketsView = Resource<
  *
  * A bucket may contain at most 30 views. Log views have no labels field,
  * so Alchemy stamps ownership into the description for `list` / nuke.
- * `viewId` and the parent bucket are identity — changing either replaces
+ * `viewId` and the parent bucket are identity -- changing either replaces
  * the view. Filter and description update in place.
  *
  * ### Creating a View

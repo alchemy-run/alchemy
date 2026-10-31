@@ -16,7 +16,7 @@ type TypeId = typeof TypeId;
 export type RuleProps = {
   /**
    * The identifier of the Web Analytics ruleset the rule belongs to.
-   * Each zone-based (orange-clouded) `Site` owns one implicit ruleset —
+   * Each zone-based (orange-clouded) `Site` owns one implicit ruleset --
    * pass its `rulesetId` attribute. Changing this property triggers a
    * replacement.
    */
@@ -90,7 +90,7 @@ export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>
  *
  * Rules include or exclude traffic from Web Analytics measurement by
  * hostname and path patterns. They live under the implicit ruleset of a
- * zone-based (orange-clouded) `Site` — pass the site's `rulesetId`
+ * zone-based (orange-clouded) `Site` -- pass the site's `rulesetId`
  * attribute. Host, paths, `inclusive`, and `isPaused` are all mutable in
  * place; changing `rulesetId` triggers a replacement.
  *
@@ -148,7 +148,7 @@ export const RuleProvider = () =>
       // Rules live under a Site's implicit ruleset and there is no
       // account-wide rule list. Enumerate every site (paginated), collect
       // their ruleset ids, then fan out the per-ruleset rule list and
-      // flatten — the same listRules read path each rule's `read` uses.
+      // flatten -- the same listRules read path each rule's `read` uses.
       const sites = yield* rum.listSiteInfos.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
@@ -168,7 +168,7 @@ export const RuleProvider = () =>
               (rules ?? []).map((rule) => toAttributes(rule, rulesetId, accountId)),
             ),
             // A freshly minted scoped token can briefly 403 across the
-            // edge — skip rulesets we momentarily can't read.
+            // edge -- skip rulesets we momentarily can't read.
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
@@ -182,7 +182,7 @@ export const RuleProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // A rule cannot be moved between rulesets — moving it means a new
+      // A rule cannot be moved between rulesets -- moving it means a new
       // rule under the new ruleset.
       if (output !== undefined && news.rulesetId !== output.rulesetId) {
         return { action: "replace" } as const;
@@ -197,7 +197,7 @@ export const RuleProvider = () =>
         output?.rulesetId ?? (typeof olds?.rulesetId === "string" ? olds.rulesetId : undefined);
       if (rulesetId === undefined) return undefined;
 
-      // There is no getRule — read through the ruleset's rule list. A
+      // There is no getRule -- read through the ruleset's rule list. A
       // deleted ruleset (the parent site is gone) means the rule is gone.
       const rules = yield* listRules(acct, rulesetId);
       if (rules === undefined) return undefined;
@@ -209,7 +209,7 @@ export const RuleProvider = () =>
       }
 
       // Adoption path: rules carry no ownership markers, so a rule matching
-      // the same host+paths cannot be proven ours — brand it `Unowned` so
+      // the same host+paths cannot be proven ours -- brand it `Unowned` so
       // the engine refuses to take over unless `adopt` is set.
       if (olds !== undefined && isResolved(olds)) {
         const match = rules
@@ -230,7 +230,7 @@ export const RuleProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const rulesetId = news.rulesetId as string;
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule (or ruleset) falls through to create.
       const rules =
         output?.id !== undefined && output.rulesetId === rulesetId
@@ -238,7 +238,7 @@ export const RuleProvider = () =>
           : undefined;
       let observed = rules?.find((rule) => rule.id === output?.id);
 
-      // 2. Ensure — create when missing. Rules have no uniqueness
+      // 2. Ensure -- create when missing. Rules have no uniqueness
       //    constraint, so there is no AlreadyExists race to tolerate. The
       //    API rejects bodies with absent `inclusive`/`is_paused`
       //    (`web_analytics.configuration.form.*.invalid`), so always send
@@ -271,7 +271,7 @@ export const RuleProvider = () =>
         return toAttributes(observed, rulesetId, accountId);
       }
 
-      // 3. Sync — diff observed cloud state against desired. The update
+      // 3. Sync -- diff observed cloud state against desired. The update
       //    API is a PUT; send the full desired body, but skip the call
       //    entirely on a no-op. Unspecified props keep their observed
       //    values.
@@ -311,8 +311,8 @@ export const RuleProvider = () =>
           ruleId: output.id,
         })
         .pipe(
-          // `RuleNotFound` (code 10003) — the rule is already gone;
-          // `RulesetNotFound` (404) — the parent site/ruleset is gone,
+          // `RuleNotFound` (code 10003) -- the rule is already gone;
+          // `RulesetNotFound` (404) -- the parent site/ruleset is gone,
           // taking the rule with it. Both make delete a success.
           Effect.catchTag(["RuleNotFound", "RulesetNotFound"], () => Effect.void),
         );

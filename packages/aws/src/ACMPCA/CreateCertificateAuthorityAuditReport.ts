@@ -13,7 +13,7 @@ export interface CreateCertificateAuthorityAuditReportRequest extends Omit<
  *
  * Bind a {@link CertificateAuthority} inside a function runtime to generate
  * an audit report of every private-key use (issue/revoke) into an S3
- * bucket — e.g. from a scheduled compliance function. AWS allows at most
+ * bucket -- e.g. from a scheduled compliance function. AWS allows at most
  * one report per CA every 30 minutes. The S3 bucket policy must grant
  * Amazon Web Services Private CA write access. Provide
  * `ACMPCA.CreateCertificateAuthorityAuditReportHttp` on the Function effect

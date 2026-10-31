@@ -6,15 +6,15 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Shared scaffolding for AWS DAX HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
 
 /**
  * Build the impl Effect for an account-level operation (cluster monitoring,
- * event history). The deploy-time half grants `actions` on `*` — these
+ * event history). The deploy-time half grants `actions` on `*` -- these
  * read-only monitoring actions span every cluster/parameter-group in the
  * account and the names they filter on are runtime data.
  */

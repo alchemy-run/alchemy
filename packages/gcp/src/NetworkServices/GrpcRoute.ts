@@ -91,7 +91,7 @@ export type GrpcRouteFaultInjectionPolicy = {
 export type GrpcRouteRetryPolicy = {
   /**
    * Conditions that trigger a retry (`connect-failure`, `unavailable`,
-   * `cancelled`, …).
+   * `cancelled`, ...).
    */
   retryConditions?: string[];
   /** Allowed retry count. Defaults to 1. */
@@ -134,11 +134,11 @@ export type GrpcRouteProps = {
    * `projects/{project}/locations/{location}/grpcRoutes/{grpcRoute}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the route.
+   * Immutable -- changing it replaces the route.
    */
   grpcRouteId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the route. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -184,7 +184,7 @@ export type GrpcRoute = Resource<
     grpcRouteId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Server-defined resource URL. */
     selfLink: string | undefined;
@@ -210,7 +210,7 @@ export type GrpcRoute = Resource<
 >;
 
 /**
- * A Network Services GrpcRoute — how a Mesh or Gateway routes gRPC
+ * A Network Services GrpcRoute -- how a Mesh or Gateway routes gRPC
  * traffic for a set of hostnames.
  *
  * Changing `grpcRouteId` or `location` replaces the route. Hostnames,

@@ -36,7 +36,7 @@ export type SourcesMigratingVmProps = {
   /**
    * Parent source. Full name
    * `projects/{project}/locations/{location}/sources/{source}` or the
-   * source id (combined with `location`). Immutable — changing it
+   * source id (combined with `location`). Immutable -- changing it
    * replaces the migrating VM.
    */
   source: string;
@@ -47,12 +47,12 @@ export type SourcesMigratingVmProps = {
   location?: string;
   /**
    * Migrating VM id. If omitted, a unique RFC1035 name is generated.
-   * Immutable — changing it replaces the migrating VM.
+   * Immutable -- changing it replaces the migrating VM.
    */
   migratingVmId?: string;
   /**
-   * Unique VM id in the source (vSphere moRef `vm-…`, AWS instance id,
-   * Azure VM id). Immutable — changing it replaces the migrating VM.
+   * Unique VM id in the source (vSphere moRef `vm-...`, AWS instance id,
+   * Azure VM id). Immutable -- changing it replaces the migrating VM.
    */
   sourceVmId: string;
   /**

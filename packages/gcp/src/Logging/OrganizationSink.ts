@@ -27,13 +27,13 @@ export type OrganizationSinkProps = {
    * `organizations/{organization}/sinks/{sink}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Limited to
    * 100 characters: letters, digits, underscores, hyphens, periods;
-   * first character must be alphanumeric. Immutable — changing it
+   * first character must be alphanumeric. Immutable -- changing it
    * replaces the sink.
    */
   sinkId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the sink.
    */
   organization?: string;
@@ -53,7 +53,7 @@ export type OrganizationSinkProps = {
   filter?: string;
   /**
    * Human-readable description (max 8000 characters). Logging sinks have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -146,7 +146,7 @@ export type OrganizationSink = Resource<
  *
  * Logging sinks have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. Name and organization are identity
- * — changing `sinkId` or `organization` replaces the sink. Filter,
+ * -- changing `sinkId` or `organization` replaces the sink. Filter,
  * destination, description, disabled flag, exclusions, and BigQuery
  * options update in place.
  *

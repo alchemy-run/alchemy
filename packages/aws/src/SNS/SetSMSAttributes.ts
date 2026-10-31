@@ -7,7 +7,7 @@ export interface SetSMSAttributesRequest extends sns.SetSMSAttributesInput {}
 /**
  * Runtime binding for `sns:SetSMSAttributes`.
  *
- * An account-scoped operation — updates the account-level SMS settings,
+ * An account-scoped operation -- updates the account-level SMS settings,
  * e.g. switching the default message type between `Promotional` and
  * `Transactional`.
  * Provide the `SetSMSAttributesHttp` layer on the Function to implement the binding.

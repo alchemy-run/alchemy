@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:ListUsers` — list the users in a face collection.
+ * Runtime binding for `rekognition:ListUsers` -- list the users in a face collection.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:ListUsers` on `*` (Rekognition data-plane resources such

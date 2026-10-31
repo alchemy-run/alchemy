@@ -53,7 +53,7 @@ export type ScheduleEventSourceService = <Req = never>(
 
 /**
  * Event source that invokes the hosting compute on a Cloud Scheduler
- * schedule — the "cron handler" DX.
+ * schedule -- the "cron handler" DX.
  *
  * The HTTP-host implementation is `GCP.Run.ScheduleEventSource`
  * (`GCP.Function` / `GCP.Run.Service`, `GCP.CloudFunctions.Function`): it

@@ -30,7 +30,7 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An Amazon SimpleDB domain — the container for SimpleDB items and
+ * An Amazon SimpleDB domain -- the container for SimpleDB items and
  * attributes, analogous to a table.
  *
  * SimpleDB is a legacy service (closed to accounts that never used it and
@@ -59,7 +59,7 @@ export interface Domain extends Resource<
 export const Domain = Resource<Domain>("AWS.SimpleDB.Domain");
 
 /**
- * CreateDomain is eventually consistent — DomainMetadata directly after a
+ * CreateDomain is eventually consistent -- DomainMetadata directly after a
  * create can briefly report NoSuchDomain. Explicitly typed so the
  * conditional `Retry.Return` type does not leak into declaration emit.
  */
@@ -108,7 +108,7 @@ export const DomainProvider = () =>
           if (metadata === undefined) {
             return undefined;
           }
-          // SimpleDB has no tagging API, so ownership cannot be verified —
+          // SimpleDB has no tagging API, so ownership cannot be verified --
           // an existing domain with the derived name is treated as ours.
           return {
             domainName: name,
@@ -129,17 +129,17 @@ export const DomainProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.domainName ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const metadata = yield* observeDomain(name);
 
-          // 2. ENSURE — CreateDomain is idempotent (creating an existing
+          // 2. ENSURE -- CreateDomain is idempotent (creating an existing
           //    domain succeeds); wait until the domain is visible.
           if (metadata === undefined) {
             yield* sdb.createDomain({ DomainName: name });
             yield* retryWhileNoSuchDomain(sdb.domainMetadata({ DomainName: name }));
           }
 
-          // 3. SYNC — a domain has no mutable configuration and no tags.
+          // 3. SYNC -- a domain has no mutable configuration and no tags.
 
           yield* session.note(name);
           return {
@@ -149,7 +149,7 @@ export const DomainProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteDomain is idempotent — deleting a missing domain succeeds.
+          // DeleteDomain is idempotent -- deleting a missing domain succeeds.
           yield* sdb.deleteDomain({ DomainName: output.domainName });
         }),
       });

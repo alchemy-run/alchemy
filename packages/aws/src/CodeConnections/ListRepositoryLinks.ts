@@ -11,7 +11,7 @@ export interface ListRepositoryLinksRequest extends codeconnections.ListReposito
  * Runtime binding for `codeconnections:ListRepositoryLinks`.
  *
  * An account-level operation (no repository-link argument) that enumerates
- * the account's repository links — the Git-sync attachments between a
+ * the account's repository links -- the Git-sync attachments between a
  * connection and a specific provider repository. Useful for sync dashboards
  * that discover which repositories are wired up before drilling into their
  * sync status. Provide the implementation with
@@ -19,7 +19,7 @@ export interface ListRepositoryLinksRequest extends codeconnections.ListReposito
  * ### Monitoring Git Sync
  * **Example:** List the Account's Repository Links
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listRepositoryLinks =
  *   yield* AWS.CodeConnections.ListRepositoryLinks();
  *

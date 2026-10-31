@@ -22,8 +22,8 @@ export interface PreviewWorkerBuild {
   /**
    * Absolute directory containing the built server modules (the entry
    * environment's `build.outDir`). Every file under it (recursively) is
-   * loaded into workerd as a module, so relative imports between chunks —
-   * including nested child-environment output like waku's `server/ssr` —
+   * loaded into workerd as a module, so relative imports between chunks --
+   * including nested child-environment output like waku's `server/ssr` --
    * resolve exactly as they would on the deployed worker.
    */
   readonly directory: string;
@@ -43,13 +43,13 @@ export interface PreviewServerHandle {
  * Boot workerd (via `cloudflare-runtime`'s `Runtime.start`) over the built
  * worker output on disk. Unlike the dev server there is no module runner and
  * no module fallback: the build is self-contained, so every module is read
- * from the output directory upfront (entry first — workerd treats the first
+ * from the output directory upfront (entry first -- workerd treats the first
  * module as the main module) and handed to workerd directly. Assets are
  * served by the runtime's disk-backed assets plugin from the client build
  * directory.
  *
  * When the plugin options carry no `context`, a runtime context is built
- * into the preview's own scope and torn down by `close()` — unlike the dev
+ * into the preview's own scope and torn down by `close()` -- unlike the dev
  * server's process-lifetime cached context. This matters for build-time SSG
  * (waku boots a preview server mid-`buildApp`): a lingering context's open
  * handles would keep the build process alive after the build completes.
@@ -91,7 +91,7 @@ export const startPreviewServer = async <B extends BindingHooks = BindingHooks>(
  * Workaround for a `cloudflare-runtime` teardown gap: building the runtime
  * context spawns a detached, uninterruptible fiber (`DockerLive`) that binds
  * a Docker proxy server (`server.listen(0)`) and probes the local Docker
- * daemon with no finalizer — so a build process that booted a preview server
+ * daemon with no finalizer -- so a build process that booted a preview server
  * for SSG can never exit on its own, even after the runtime scope closes.
  *
  * Until the runtime tears that fiber down (or starts it lazily), snapshot

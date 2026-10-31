@@ -27,7 +27,7 @@ declare module "@distilled.cloud/cloudflare/Credentials" {
 
 /**
  * Memoize a credentials-resolution effect until shortly before the resolved
- * credentials expire — see {@link CredentialsCache.cacheUntilExpiry} for the
+ * credentials expire -- see {@link CredentialsCache.cacheUntilExpiry} for the
  * caching rules. Non-OAuth credentials (API token / global key) never expire
  * and cache forever.
  */

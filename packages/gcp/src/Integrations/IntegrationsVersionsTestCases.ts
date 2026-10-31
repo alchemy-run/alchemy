@@ -27,16 +27,16 @@ export type IntegrationsVersionsTestCasesProps = {
   /**
    * Parent integration version resource name
    * `projects/{project}/locations/{location}/integrations/{integration}/versions/{version}`.
-   * Immutable — changing it replaces the test case.
+   * Immutable -- changing it replaces the test case.
    */
   version: string;
   /**
    * Test case id (the `{testCase}` segment). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the test case.
+   * generated. Immutable -- changing it replaces the test case.
    */
   testCaseId?: string;
   /**
-   * Location used when `version` is a bare id. Immutable — changing it
+   * Location used when `version` is a bare id. Immutable -- changing it
    * replaces the test case.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -48,7 +48,7 @@ export type IntegrationsVersionsTestCasesProps = {
   displayName?: string;
   /**
    * Human-readable description. Test cases have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -91,7 +91,7 @@ export type IntegrationsVersionsTestCases = Resource<
 /**
  * A functional test case attached to an Application Integration version.
  *
- * Test cases have no labels field — Alchemy stamps ownership into the
+ * Test cases have no labels field -- Alchemy stamps ownership into the
  * description. Parent version and test case id are immutable. Display
  * name, description, and trigger id update in place.
  *

@@ -17,7 +17,7 @@ export type FilterAction = "NONE" | "SUPPRESS";
 export interface FilterProps {
   /**
    * Name of the filter. If omitted, a unique name is generated. Updatable in
-   * place — the filter's identity is its ARN.
+   * place -- the filter's identity is its ARN.
    */
   name?: string;
 
@@ -75,7 +75,7 @@ export interface Filter extends Resource<
 > {}
 
 /**
- * An Amazon Inspector findings filter — matches findings against criteria
+ * An Amazon Inspector findings filter -- matches findings against criteria
  * and either keeps them visible (`NONE`, a saved view) or suppresses them
  * (`SUPPRESS`, a suppression rule). Everything is updatable in place; the
  * filter's identity is its ARN.
@@ -155,11 +155,11 @@ export const FilterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative. The ARN (if we have
+          // 1. OBSERVE -- cloud state is authoritative. The ARN (if we have
           // one) survives renames; fall back to a name lookup otherwise.
           let live = output?.arn ? yield* findByArn(output.arn) : yield* findByName(name);
 
-          // 2. ENSURE — create when missing. A BadRequestException here is
+          // 2. ENSURE -- create when missing. A BadRequestException here is
           // a duplicate-name race: re-observe and converge on the winner.
           if (!live) {
             const { arn } = yield* inspector2
@@ -182,7 +182,7 @@ export const FilterProvider = () =>
             }
           }
 
-          // 3. SYNC settings — observed ↔ desired.
+          // 3. SYNC settings -- observed <-> desired.
           const drift =
             live.name !== name ||
             live.action !== news.action ||
@@ -200,7 +200,7 @@ export const FilterProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges foreign tags too.
           const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
           if (upsert.length > 0) {
@@ -222,7 +222,7 @@ export const FilterProvider = () =>
           return buildAttrs(final ?? live);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the filter may already be gone.
+          // Idempotent -- the filter may already be gone.
           yield* inspector2
             .deleteFilter({ arn: output.arn })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));

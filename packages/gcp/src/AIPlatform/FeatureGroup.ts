@@ -52,11 +52,11 @@ export type FeatureGroupBigQuery = {
 export type FeatureGroupProps = {
   /**
    * Feature group id. Valid characters `[a-z0-9_]`, must start with a
-   * letter, max 128. Immutable — changing it replaces the group.
+   * letter, max 128. Immutable -- changing it replaces the group.
    */
   featureGroupId?: string;
   /**
-   * Region. Immutable — changing it replaces the group.
+   * Region. Immutable -- changing it replaces the group.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;

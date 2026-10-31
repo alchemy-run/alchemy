@@ -12,8 +12,8 @@ export type GetJobRunInput = Omit<emr.GetJobRunRequest, "applicationId">;
 /**
  * Runtime binding for `emr-serverless:GetJobRun`.
  *
- * Reads a job run's full detail on the bound {@link Application} — state,
- * driver, resource utilization, timeout — so a function can poll a submitted
+ * Reads a job run's full detail on the bound {@link Application} -- state,
+ * driver, resource utilization, timeout -- so a function can poll a submitted
  * job to completion or inspect why it failed. Provide the implementation
  * with `Effect.provide(AWS.EMRServerless.GetJobRunHttp)`.
  * ### Running Jobs

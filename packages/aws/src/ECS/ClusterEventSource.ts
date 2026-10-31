@@ -9,7 +9,7 @@ import {
 /**
  * The `detail` payload Amazon ECS delivers to EventBridge. Task state-change
  * events carry the task's shape (`lastStatus`, `stoppedReason`, `containers`,
- * …); container-instance state-change events carry the instance's shape;
+ * ...); container-instance state-change events carry the instance's shape;
  * deployment and service-action events carry `eventName`/`reason`. Fields not
  * shared by every event kind are optional (the schema grows over time).
  */
@@ -24,7 +24,7 @@ export interface ClusterEventDetail {
   stoppedReason?: string;
   /** Task events: ARN of the task. */
   taskArn?: string;
-  /** Task events: what started the task (e.g. `ecs-svc/…` for services). */
+  /** Task events: what started the task (e.g. `ecs-svc/...` for services). */
   startedBy?: string;
   /** Deployment / service-action events: the event name (e.g. `SERVICE_DEPLOYMENT_COMPLETED`). */
   eventName?: string;
@@ -79,7 +79,7 @@ export interface ClusterEventSourceProps extends EventRouteProps {
  * those events so it can react when a task stops, a deployment completes or
  * rolls back, or an instance drops out.
  *
- * ECS publishes to EventBridge automatically — no additional resource is
+ * ECS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

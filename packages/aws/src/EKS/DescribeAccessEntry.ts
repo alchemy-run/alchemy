@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeAccessEntry`.
  *
- * Reads one access entry — the Kubernetes username, groups, and type mapped to an IAM principal.
+ * Reads one access entry -- the Kubernetes username, groups, and type mapped to an IAM principal.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeAccessEntry` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeAccessEntryHttp)`.

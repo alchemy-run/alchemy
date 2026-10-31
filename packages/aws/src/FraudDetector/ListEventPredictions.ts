@@ -14,7 +14,7 @@ export interface ListEventPredictionsRequest extends Omit<
 > {}
 
 /**
- * List the past predictions made by a bound Amazon Fraud Detector detector —
+ * List the past predictions made by a bound Amazon Fraud Detector detector --
  * the effectful search call made from a deployed Lambda or Task, e.g. to find
  * the `predictionTimestamp` needed by `GetEventPredictionMetadata`.
  *

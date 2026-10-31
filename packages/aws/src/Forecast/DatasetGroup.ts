@@ -19,12 +19,12 @@ export interface DatasetGroupProps {
   datasetGroupName?: string;
   /**
    * The forecasting domain: `RETAIL`, `CUSTOM`, `INVENTORY_PLANNING`,
-   * `EC2_CAPACITY`, `WORK_FORCE`, `WEB_TRAFFIC`, or `METRICS`. Immutable —
+   * `EC2_CAPACITY`, `WORK_FORCE`, `WEB_TRAFFIC`, or `METRICS`. Immutable --
    * changing it replaces the group.
    */
   domain: string;
   /**
-   * ARNs of the datasets to attach to the group. This is an in-place update —
+   * ARNs of the datasets to attach to the group. This is an in-place update --
    * changing the set re-associates the datasets without replacing the group.
    */
   datasetArns?: string[];
@@ -52,7 +52,7 @@ export interface DatasetGroup extends Resource<
 > {}
 
 /**
- * An Amazon Forecast dataset group — a domain-scoped container that groups the
+ * An Amazon Forecast dataset group -- a domain-scoped container that groups the
  * datasets used to train predictors. Creating the group is cheap; the
  * expensive training work lives in predictors and forecasts provisioned
  * separately.
@@ -134,13 +134,13 @@ export const DatasetGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredArns = news.datasetArns ?? [];
 
-          // 1. Observe — cloud state is authoritative; output is an ARN cache.
+          // 1. Observe -- cloud state is authoritative; output is an ARN cache.
           let group =
             output?.datasetGroupArn !== undefined
               ? yield* describe(output.datasetGroupArn)
               : undefined;
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (group === undefined) {
             const created = yield* forecast.createDatasetGroup({
               DatasetGroupName: name,
@@ -153,14 +153,14 @@ export const DatasetGroupProvider = () =>
             });
             group = yield* describe(created.DatasetGroupArn!);
           } else {
-            // 3. Sync attached datasets — in-place update on drift.
+            // 3. Sync attached datasets -- in-place update on drift.
             if (!sameArns(group.DatasetArns ?? [], desiredArns)) {
               yield* forecast.updateDatasetGroup({
                 DatasetGroupArn: group.DatasetGroupArn!,
                 DatasetArns: desiredArns,
               });
             }
-            // 3b. Sync tags — diff against OBSERVED cloud tags.
+            // 3b. Sync tags -- diff against OBSERVED cloud tags.
             yield* syncForecastTags(group.DatasetGroupArn!, desiredTags);
           }
 

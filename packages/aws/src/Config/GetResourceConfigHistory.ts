@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetResourceConfigHistory` — read the list of
+ * Runtime binding for `config:GetResourceConfigHistory` -- read the list of
  * configuration items (change history) AWS Config recorded for a resource,
  * newest first.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Resource Configurations
  * **Example:** Read a Resource's Configuration History
  * ```typescript
- * // init — grants config:GetResourceConfigHistory
+ * // init -- grants config:GetResourceConfigHistory
  * const getResourceConfigHistory = yield* AWS.Config.GetResourceConfigHistory();
  *
  * // runtime

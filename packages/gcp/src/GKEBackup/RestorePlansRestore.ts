@@ -64,7 +64,7 @@ export type RestorePlansRestoreProps = {
   /**
    * Parent RestorePlan. Full name
    * `projects/{project}/locations/{location}/restorePlans/{restorePlan}`
-   * or the plan id (combined with `location`). Immutable — changing it
+   * or the plan id (combined with `location`). Immutable -- changing it
    * replaces the restore.
    */
   restorePlan: string;
@@ -75,14 +75,14 @@ export type RestorePlansRestoreProps = {
   location?: string;
   /**
    * Restore id (the `{restore}` segment). If omitted, a unique RFC1035
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the restore.
    */
   restoreId?: string;
   /**
    * Source Backup. Full name
    * `projects/{project}/locations/{location}/backupPlans/{backupPlan}/backups/{backup}`
-   * or a backup id under the RestorePlan's BackupPlan. Immutable —
+   * or a backup id under the RestorePlan's BackupPlan. Immutable --
    * changing it replaces the restore.
    */
   backup: string;
@@ -156,7 +156,7 @@ export type RestorePlansRestore = Resource<
 >;
 
 /**
- * A Backup for GKE restore — a request to restore a Backup into the
+ * A Backup for GKE restore -- a request to restore a Backup into the
  * target cluster of a RestorePlan.
  *
  * Changing `restoreId`, `restorePlan`, `location`, `backup`, `filter`,

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListRecoveryPointsByResource` operation (IAM
  * action `backup:ListRecoveryPointsByResource`).
  *
- * Lists the recovery points for a specific protected resource by its ARN —
+ * Lists the recovery points for a specific protected resource by its ARN --
  * find the newest recovery point to restore from. Provide the implementation
  * with `Effect.provide(AWS.Backup.ListRecoveryPointsByResourceHttp)`.
  * ### Recovery Points

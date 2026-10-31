@@ -38,12 +38,12 @@ export type ReportConfigProps = {
   /**
    * Report config id (the `{reportConfig}` segment of
    * `projects/{project}/locations/{location}/reportConfigs/{reportConfig}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the config.
    */
   reportConfigId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -61,7 +61,7 @@ export type ReportConfigProps = {
   displayName?: string;
   /**
    * Free-text description. Report configs have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -98,7 +98,7 @@ export type ReportConfig = Resource<
  * A Migration Center report configuration that binds asset groups to
  * preference sets for TCO reports.
  *
- * Report configs have no labels field — Alchemy stamps ownership into the
+ * Report configs have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. The API has no patch
  * method; changing assignments, display name, or description replaces the
  * config. Nested reports are force-deleted with the config.

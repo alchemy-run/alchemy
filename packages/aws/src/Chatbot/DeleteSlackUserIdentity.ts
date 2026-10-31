@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:DeleteSlackUserIdentity`.
  *
- * Unlinks a Slack user identity from its AWS user identity — the write half
+ * Unlinks a Slack user identity from its AWS user identity -- the write half
  * of identity offboarding automation (e.g. revoke a departing employee's
  * chat identity from a Lambda triggered by your HR system). Provide the
  * implementation with

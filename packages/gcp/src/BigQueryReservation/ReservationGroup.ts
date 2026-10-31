@@ -27,12 +27,12 @@ export type ReservationGroupProps = {
    * logical id. Must contain only lowercase letters, digits, or dashes;
    * start with a letter; not end with a dash; max 64 characters.
    * Groups have no labels field, so Alchemy stamps ownership into this
-   * id (`alch---…`) for `list` / nuke. Immutable — changing it replaces
+   * id (`alch---...`) for `list` / nuke. Immutable -- changing it replaces
    * the group.
    */
   reservationGroupId?: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Immutable --
    * changing it replaces the group. Multi-regions `US` and `EU` stay
    * uppercase; regional ids are lowercased.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -50,7 +50,7 @@ export type ReservationGroup = Resource<
     reservationGroupId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `US`, …). */
+    /** Location id (`us-central1`, `US`, ...). */
     location: string;
   },
   never,
@@ -58,10 +58,10 @@ export type ReservationGroup = Resource<
 >;
 
 /**
- * A BigQuery reservation group — a named container for reservations.
+ * A BigQuery reservation group -- a named container for reservations.
  *
  * Groups have no labels or description, so Alchemy stamps ownership into
- * the group id (`alch---…`) so `list` / `pnpm nuke:gcp` can find them.
+ * the group id (`alch---...`) so `list` / `pnpm nuke:gcp` can find them.
  * There is no update API; `reservationGroupId` and `location` are
  * identity and changing them replaces the group.
  *

@@ -24,7 +24,7 @@ export type PolicyAction = "allow" | "log" | "add_reporting_directives";
 
 export interface PolicyProps {
   /**
-   * Zone the policy belongs to. Stable — changing the zone triggers a
+   * Zone the policy belongs to. Stable -- changing the zone triggers a
    * replacement.
    */
   zoneId: string;
@@ -79,7 +79,7 @@ export interface PolicyAttributes {
 export type Policy = Resource<TypeId, PolicyProps, PolicyAttributes, never, Providers>;
 
 /**
- * A Page Shield policy — a Content Security Policy rule
+ * A Page Shield policy -- a Content Security Policy rule
  * (`/zones/{zone_id}/page_shield/policies`) that is applied when its
  * expression matches a request.
  *
@@ -91,7 +91,7 @@ export type Policy = Resource<TypeId, PolicyProps, PolicyAttributes, never, Prov
  * non-entitled zones, creation fails with the typed `PolicyQuotaExceeded`
  * error ("exceeded the maximum number of rules in the phase
  * http_response_page_shield: 1 out of 0"). Page Shield itself should be
- * enabled on the zone first — see `Cloudflare.PageShield.Settings`.
+ * enabled on the zone first -- see `Cloudflare.PageShield.Settings`.
  * ### Creating a Policy
  * **Example:** Log-only CSP policy
  * ```typescript
@@ -154,7 +154,7 @@ export const PolicyProvider = () =>
         const observed = yield* getPolicy(zoneId, output.policyId);
         return observed ? toAttributes(zoneId, observed) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // description (policies have no name and carry no tags, so the
       // description is the best identity we have). A match is branded
       // `Unowned` so the engine gates takeover behind `--adopt`.
@@ -169,7 +169,7 @@ export const PolicyProvider = () =>
       const zoneId = news.zoneId as string;
       const description = yield* createDescription(id, news.description);
 
-      // 1. Observe — the policyId cached on `output` is a hint, not a
+      // 1. Observe -- the policyId cached on `output` is a hint, not a
       //    guarantee: a PolicyNotFound falls through to "missing".
       const observed = output?.policyId ? yield* getPolicy(zoneId, output.policyId) : undefined;
 
@@ -181,7 +181,7 @@ export const PolicyProvider = () =>
         value: news.value,
       };
 
-      // 2. Ensure — greenfield (or out-of-band delete): create with the
+      // 2. Ensure -- greenfield (or out-of-band delete): create with the
       //    full desired body. Descriptions are not unique on Cloudflare's
       //    side, so there is no AlreadyExists race to tolerate.
       if (!observed) {
@@ -189,7 +189,7 @@ export const PolicyProvider = () =>
         return toAttributes(zoneId, created);
       }
 
-      // 3. Sync — diff observed cloud state against desired; the update
+      // 3. Sync -- diff observed cloud state against desired; the update
       //    API is a PUT, so send the full body, but skip the call
       //    entirely on a no-op.
       const dirty =
@@ -214,7 +214,7 @@ export const PolicyProvider = () =>
       // (`/zones/{zone_id}/page_shield/policies`). Fan out across every
       // zone in the account, exhaustively paginate each, and hydrate into
       // the same Attributes shape `read` produces. Zones without Page
-      // Shield entitlement reject with the typed `Forbidden` tag — skip
+      // Shield entitlement reject with the typed `Forbidden` tag -- skip
       // them rather than failing the whole enumeration.
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);

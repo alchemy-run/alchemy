@@ -5,19 +5,19 @@ import type { IPSet } from "./IPSet.ts";
 
 export interface UpdateIPSetRequest {
   /**
-   * The complete new set of IP addresses and CIDR ranges — WAF replaces
+   * The complete new set of IP addresses and CIDR ranges -- WAF replaces
    * the entire list.
    */
   addresses: string[];
   /**
-   * New description of the IP set. Omitted — the existing description is
+   * New description of the IP set. Omitted -- the existing description is
    * kept.
    */
   description?: string;
 }
 
 /**
- * Runtime binding for `wafv2:UpdateIPSet` — replace the bound
+ * Runtime binding for `wafv2:UpdateIPSet` -- replace the bound
  * {@link IPSet}'s address list at runtime (the classic dynamic block list:
  * a Lambda appends offending IPs as it detects them). The binding reads the
  * IP set for a fresh `LockToken`, applies the update, and retries
@@ -28,7 +28,7 @@ export interface UpdateIPSetRequest {
  * ### Managing IP Sets at Runtime
  * **Example:** Add an Offending IP to the Block List
  * ```typescript
- * // init — grants wafv2:GetIPSet + wafv2:UpdateIPSet on the IP set
+ * // init -- grants wafv2:GetIPSet + wafv2:UpdateIPSet on the IP set
  * const getIPSet = yield* AWS.WAFv2.GetIPSet(blockList);
  * const updateIPSet = yield* AWS.WAFv2.UpdateIPSet(blockList);
  *

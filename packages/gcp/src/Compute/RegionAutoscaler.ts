@@ -72,7 +72,7 @@ export type RegionAutoscalerProps = {
    */
   autoscalerName?: string;
   /**
-   * Region of the managed instance group (e.g. `us-central1`). Immutable —
+   * Region of the managed instance group (e.g. `us-central1`). Immutable --
    * changing it replaces the autoscaler. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -86,7 +86,7 @@ export type RegionAutoscalerProps = {
   /**
    * Optional description. Compute autoscalers have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * and user labels are stored in a `[alchemy …]` prefix for `list` / nuke.
+   * and user labels are stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -143,7 +143,7 @@ export type RegionAutoscaler = Resource<
  * target, description, and labels update in place via
  * `regionAutoscalers.patch`. Compute Engine has no labels on this
  * resource, so Alchemy stamps ownership into the description (`[alchemy
- * alchemy-stack=… alchemy-stage=… alchemy-id=…]`) so `list` /
+ * alchemy-stack=... alchemy-stage=... alchemy-id=...]`) so `list` /
  * `pnpm nuke:gcp` can find them.
  *
  * ### Creating a Region Autoscaler

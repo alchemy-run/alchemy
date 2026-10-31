@@ -25,7 +25,7 @@ export interface GetDevicePositionHistoryRequest extends Omit<
  * const getHistory = yield* Location.GetDevicePositionHistory(tracker);
  *
  * const history = yield* getHistory({ DeviceId: "vehicle-1" });
- * // history.DevicePositions → chronological position samples
+ * // history.DevicePositions -> chronological position samples
  * ```
  *
  * @binding

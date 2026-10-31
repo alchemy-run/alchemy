@@ -14,7 +14,7 @@ export interface GetListingRequest extends Omit<datazone.GetListingInput, "domai
  * ### Searching the Catalog
  * **Example:** Read a Listing
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getListing = yield* AWS.DataZone.GetListing(domain);
  *
  * // runtime

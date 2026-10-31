@@ -7,7 +7,7 @@ import type { Flow } from "./Flow.ts";
  * Runtime binding for `mediaconnect:GrantFlowEntitlements`.
  *
  * Grants entitlements on the bound {@link Flow} so other AWS accounts can
- * subscribe to its content — e.g. a self-service affiliate portal that
+ * subscribe to its content -- e.g. a self-service affiliate portal that
  * provisions access for a new subscriber account on demand. Granting more
  * entitlements than the flow allows fails with the typed
  * `GrantFlowEntitlements420Exception` tag. The flow ARN is injected from
@@ -16,7 +16,7 @@ import type { Flow } from "./Flow.ts";
  * ### Managing Entitlements
  * **Example:** Grant a Subscriber Access to the Flow
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const grantEntitlements = yield* AWS.MediaConnect.GrantFlowEntitlements(flow);
  *
  * // runtime

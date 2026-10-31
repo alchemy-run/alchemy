@@ -9,7 +9,7 @@ export interface GetPipelineExecutionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:GetPipelineExecution` — returns the
+ * Runtime binding for `codepipeline:GetPipelineExecution` -- returns the
  * status, source revisions, and trigger of one execution.
  * ### Observing Pipelines
  * **Example:** Get an Execution

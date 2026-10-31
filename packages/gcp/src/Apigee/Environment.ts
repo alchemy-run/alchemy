@@ -43,7 +43,7 @@ export type EnvironmentNodeConfig = apigee.GoogleCloudApigeeV1NodeConfig;
 export type EnvironmentProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the
+   * current GCP project id. Immutable -- changing it replaces the
    * environment.
    */
   organization?: string;
@@ -51,7 +51,7 @@ export type EnvironmentProps = {
    * Environment id (the `{env}` segment of
    * `organizations/{org}/environments/{env}`). Must match
    * `^[.\\p{Alnum}-_]{1,255}$`. If omitted, a unique name is generated.
-   * Immutable — changing it replaces the environment.
+   * Immutable -- changing it replaces the environment.
    */
   environmentId?: string;
   /**
@@ -60,19 +60,19 @@ export type EnvironmentProps = {
   displayName?: string;
   /**
    * Human-readable description. Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
-   * Environment type. Immutable — changing it replaces the environment.
+   * Environment type. Immutable -- changing it replaces the environment.
    */
   type?: EnvironmentType;
   /**
-   * API proxy type. Immutable — changing it replaces the environment.
+   * API proxy type. Immutable -- changing it replaces the environment.
    */
   apiProxyType?: EnvironmentApiProxyType;
   /**
-   * Deployment type. Immutable — changing it replaces the environment.
+   * Deployment type. Immutable -- changing it replaces the environment.
    */
   deploymentType?: EnvironmentDeploymentType;
   /**
@@ -125,7 +125,7 @@ export type Environment = Resource<
     nodeConfig: EnvironmentNodeConfig | undefined;
     /** Whether flow hooks are attached. */
     hasAttachedFlowHooks: boolean | undefined;
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** Creation time in milliseconds since epoch. */
     createdAt: string | undefined;
@@ -141,7 +141,7 @@ export type Environment = Resource<
  *
  * Apigee environments have no labels field, so Alchemy stamps ownership
  * into the description (and properties) for `list` / nuke. Name, type,
- * API proxy type, and deployment type are identity — changing them
+ * API proxy type, and deployment type are identity -- changing them
  * replaces the environment. Display name, description, forward proxy,
  * IP resolution, properties, and node config update in place.
  *

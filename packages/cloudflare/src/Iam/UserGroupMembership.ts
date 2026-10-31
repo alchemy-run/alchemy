@@ -14,14 +14,14 @@ type TypeId = typeof TypeId;
 
 export interface UserGroupMembershipProps {
   /**
-   * ID of the user group to add the member to — e.g.
-   * `userGroup.userGroupId`. Immutable — changing it triggers a
+   * ID of the user group to add the member to -- e.g.
+   * `userGroup.userGroupId`. Immutable -- changing it triggers a
    * replacement.
    */
   userGroup: string;
   /**
    * Account member ID to add to the user group (the membership id from
-   * the account's member roster, not the user id). Immutable — changing
+   * the account's member roster, not the user id). Immutable -- changing
    * it triggers a replacement.
    */
   memberId: string;
@@ -53,8 +53,8 @@ export type UserGroupMembership = Resource<
  *
  * This is an existence-only resource: it has no mutable aspects beyond its
  * identity (user group + member), so changing either property triggers a
- * replacement. Cloudflare's member-add API is idempotent — adding a member
- * who is already in the group succeeds — so reconcile is a simple
+ * replacement. Cloudflare's member-add API is idempotent -- adding a member
+ * who is already in the group succeeds -- so reconcile is a simple
  * observe-then-ensure flow.
  *
  * Account-scoped IAM (user groups and their members) is an Enterprise
@@ -111,12 +111,12 @@ export const UserGroupMembershipProvider = () =>
               ),
             ),
             // Group removed out-of-band between enumeration and member
-            // listing — skip it.
+            // listing -- skip it.
             Effect.catchTags({
               UserGroupNotFound: () => Effect.succeed([] as UserGroupMembershipAttributes[]),
               // A group whose policy Cloudflare can't validate rejects the
               // member listing with a 400 ("Policy validation failed"). It's
-              // not ours to enumerate — contribute nothing rather than failing
+              // not ours to enumerate -- contribute nothing rather than failing
               // the whole account-wide listing.
               PolicyValidationFailed: () => Effect.succeed([] as UserGroupMembershipAttributes[]),
             }),
@@ -128,7 +128,7 @@ export const UserGroupMembershipProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
-      // Identity change — both props are the resource's identity, so any
+      // Identity change -- both props are the resource's identity, so any
       // change is a replacement. Compare only once both sides are concrete.
       if (typeof olds?.userGroup === "string" && olds.userGroup !== news.userGroup) {
         return { action: "replace" } as const;
@@ -142,11 +142,11 @@ export const UserGroupMembershipProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      // Cold read falls back to the previous props — the identity is fully
+      // Cold read falls back to the previous props -- the identity is fully
       // user-specified, so the (group, member) pair is the lookup key. The
       // props may still hold an unresolved `Output` (e.g. a reference to a
       // sibling group's id when state was persisted before reconcile), so
-      // only use them as a lookup key once they're concrete strings —
+      // only use them as a lookup key once they're concrete strings --
       // otherwise there is nothing to read.
       const oldGroup = typeof olds?.userGroup === "string" ? olds.userGroup : undefined;
       const oldMember = typeof olds?.memberId === "string" ? olds.memberId : undefined;
@@ -169,10 +169,10 @@ export const UserGroupMembershipProvider = () =>
       // consistent: its `/members` sub-resource API briefly answers GET and
       // POST with `UserGroupNotFound` (404) until the new group propagates
       // across Cloudflare's edge. Ride out that window with a bounded retry
-      // — `UserGroupNotFound` here means "the group isn't visible yet", not
+      // -- `UserGroupNotFound` here means "the group isn't visible yet", not
       // "the group is gone" (we are mid-create of its membership).
       const ensure = Effect.gen(function* () {
-        // Observe — membership is existence-only; if it's already there we
+        // Observe -- membership is existence-only; if it's already there we
         // are done. A missing *member* (`UserGroupMemberNotFound`) is the
         // expected greenfield state; a missing *group* (`UserGroupNotFound`)
         // bubbles to the retry below.
@@ -184,7 +184,7 @@ export const UserGroupMembershipProvider = () =>
           return toAttributes(observed, userGroupId, accountId);
         }
 
-        // Ensure — add the member. The batch POST is idempotent for members
+        // Ensure -- add the member. The batch POST is idempotent for members
         // already in the group, so a concurrent add is not an error.
         const created = yield* iam.createUserGroupMember({
           accountId,
@@ -218,8 +218,8 @@ export const UserGroupMembershipProvider = () =>
           memberId: output.memberId,
         })
         .pipe(
-          // Already gone — the member (404 in group, or no longer a valid
-          // account member at all → InvalidMember) or the whole user group
+          // Already gone -- the member (404 in group, or no longer a valid
+          // account member at all -> InvalidMember) or the whole user group
           // (404) has been removed out-of-band.
           Effect.catchTag(
             ["UserGroupMemberNotFound", "UserGroupNotFound", "InvalidMember"],
@@ -236,9 +236,9 @@ type ObservedMember = {
 };
 
 /**
- * Read a membership, mapping "gone" — the member not being in the group
+ * Read a membership, mapping "gone" -- the member not being in the group
  * (`UserGroupMemberNotFound`) or the group itself missing
- * (`UserGroupNotFound`) — to `undefined`.
+ * (`UserGroupNotFound`) -- to `undefined`.
  */
 const getMembership = (accountId: string, userGroupId: string, memberId: string) =>
   iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(

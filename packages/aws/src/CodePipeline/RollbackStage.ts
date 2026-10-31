@@ -6,7 +6,7 @@ import type { Pipeline } from "./Pipeline.ts";
 export interface RollbackStageRequest extends Omit<SVC.RollbackStageInput, "pipelineName"> {}
 
 /**
- * Runtime binding for `codepipeline:RollbackStage` — rolls a stage back to
+ * Runtime binding for `codepipeline:RollbackStage` -- rolls a stage back to
  * the state of a previous successful execution (V2 pipelines).
  * ### Operating Stages
  * **Example:** Roll a Stage Back

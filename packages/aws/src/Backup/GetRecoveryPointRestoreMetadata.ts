@@ -17,7 +17,7 @@ export interface GetRecoveryPointRestoreMetadataRequest extends Omit<
  * action `backup:GetRecoveryPointRestoreMetadata`).
  *
  * Returns the restore metadata for a recovery point in the bound
- * {@link BackupVault} — the key/value set passed to `StartRestoreJob` as its
+ * {@link BackupVault} -- the key/value set passed to `StartRestoreJob` as its
  * `Metadata`. Provide the implementation with
  * `Effect.provide(AWS.Backup.GetRecoveryPointRestoreMetadataHttp)`.
  * ### Restoring Recovery Points

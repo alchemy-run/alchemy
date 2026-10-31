@@ -10,7 +10,7 @@ import { StateStoreError, type PersistedState, type StateService } from "./State
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
 /**
- * A state store over an object storage bucket (S3, Cloud Storage, …).
+ * A state store over an object storage bucket (S3, Cloud Storage, ...).
  *
  * The store is laid out exactly like the local state store's file tree,
  * with the bucket (plus an optional prefix) in place of `.alchemy/state`:
@@ -472,7 +472,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
             Effect.map((keys) =>
               keys
                 .map((key) => key.slice(stagePrefix(request).length))
-                // Filter bookkeeping before decoding — `decodeFqn` replaces
+                // Filter bookkeeping before decoding -- `decodeFqn` replaces
                 // `__` with `/`, which would turn `__stack_output__` into
                 // `/stack_output/` and slip past the filter.
                 .filter(

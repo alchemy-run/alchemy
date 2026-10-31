@@ -124,7 +124,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     // `builder.buildApp` (e.g. a plain client-only SPA), `builder.buildApp()`
     // runs post-order `buildApp` hooks *before* the default environment builds,
     // so a hook fires while the output is still empty (issue #792). Instead,
-    // `viteBuild` reads `output` *after* `builder.buildApp()` resolves — by
+    // `viteBuild` reads `output` *after* `builder.buildApp()` resolves -- by
     // which point every environment that actually built has run `writeBundle`.
     async writeBundle(_, bundle) {
       const root = path.resolve(this.environment.config.root);
@@ -182,7 +182,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
                 // `dist/ssr/__vite_rsc_assets_manifest.js`), and each
                 // environment's chunks import their own copy via a relative
                 // specifier. Keying by the bare filename collapses them into a
-                // single entry, dropping every copy but the last — so the
+                // single entry, dropping every copy but the last -- so the
                 // entry worker's `import "../__vite_rsc_assets_manifest.js"`
                 // resolves to a module that isn't in the bundle and the
                 // deployed Worker fails at startup.
@@ -220,7 +220,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     // `path.relative` (and user-configured outDirs) yield backslashes on
     // Windows; worker module names are import specifiers, so a name like
     // `dist\ssr/index.js` deploys fine but can never be resolved by the
-    // entry's `import "ssr/index.js"` — the worker 1101s at request time.
+    // entry's `import "ssr/index.js"` -- the worker 1101s at request time.
     return `${relativeOutDir.replaceAll("\\", "/")}/${name}`;
   };
 

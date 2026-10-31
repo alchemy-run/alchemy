@@ -9,7 +9,7 @@ export interface DeleteObjectTaggingRequest extends Omit<S3.DeleteObjectTaggingR
  * Runtime binding for `s3:DeleteObjectTagging`.
  *
  * Bind this operation to a bucket to get a callable that removes an object's
- * entire tag set — the bucket name is injected automatically and
+ * entire tag set -- the bucket name is injected automatically and
  * `s3:DeleteObjectTagging`/`s3:DeleteObjectVersionTagging` are granted on the
  * bucket's objects. Provide the implementation with
  * `Effect.provide(AWS.S3.DeleteObjectTaggingHttp)`.

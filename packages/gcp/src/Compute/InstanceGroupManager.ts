@@ -16,7 +16,7 @@ import { waitZoneOperation } from "./operations.ts";
 export type InstanceGroupManagerNamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
   name: string;
-  /** TCP port number (`1`–`65535`). */
+  /** TCP port number (`1`-`65535`). */
   port: number;
 };
 
@@ -28,7 +28,7 @@ export type InstanceGroupManagerAutoHealingPolicy = {
   healthCheck: string;
   /**
    * Seconds to ignore failed health checks after a VM is created
-   * (`0`–`3600`).
+   * (`0`-`3600`).
    * @default 0
    */
   initialDelaySec?: number;
@@ -38,13 +38,13 @@ export type InstanceGroupManagerUpdatePolicy = compute.InstanceGroupManagerUpdat
 
 export type InstanceGroupManagerProps = {
   /**
-   * Name of the managed instance group. Must be 1–63 characters and comply
+   * Name of the managed instance group. Must be 1-63 characters and comply
    * with RFC1035. If omitted, a unique name is generated from the stack,
    * stage, and logical id. Changing this replaces the group.
    */
   managerName?: string;
   /**
-   * Zone of the group (e.g. `"us-central1-a"`). Immutable — changing it
+   * Zone of the group (e.g. `"us-central1-a"`). Immutable -- changing it
    * replaces the group.
    * @default "us-central1-a"
    */
@@ -61,7 +61,7 @@ export type InstanceGroupManagerProps = {
   targetSize?: number;
   /**
    * Prefix for VM names (RFC1035, max 58 characters). Defaults to the
-   * manager name. Immutable — changing it replaces the group.
+   * manager name. Immutable -- changing it replaces the group.
    */
   baseInstanceName?: string;
   /**

@@ -65,7 +65,7 @@ export interface NetworkAclAssociation extends Resource<
 /**
  * Associates a subnet with a `NetworkAcl`, replacing whichever ACL the subnet
  * currently uses (every subnet is always associated with exactly one network
- * ACL — the VPC's default until you point it at a custom one).
+ * ACL -- the VPC's default until you point it at a custom one).
  *
  * Changing `subnetId` replaces the association, while changing only
  * `networkAclId` re-points the same subnet at a different ACL in place. On
@@ -189,7 +189,7 @@ export const NetworkAclAssociationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — find the subnet's current association. EC2 guarantees
+          // Observe -- find the subnet's current association. EC2 guarantees
           // every subnet always has exactly one NACL association, so the
           // lookup always returns something for a live subnet.
           const currentAssoc = yield* findAssociation(news.subnetId as string);
@@ -199,7 +199,7 @@ export const NetworkAclAssociationProvider = () =>
             });
           }
 
-          // Sync — if the subnet already points at the desired NACL, the
+          // Sync -- if the subnet already points at the desired NACL, the
           // association is already correct and we just report it. Otherwise
           // ReplaceNetworkAclAssociation atomically swaps it.
           if (currentAssoc.networkAclId === (news.networkAclId as string)) {

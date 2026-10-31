@@ -6,10 +6,10 @@
  * ```
  * 001e# service=git-upload-pack\n
  * 0000
- * <oid> HEAD\0<capabilities>\n         ← first ref carries caps after a NUL
+ * <oid> HEAD\0<capabilities>\n         <- first ref carries caps after a NUL
  * <oid> refs/heads/main\n
  * <oid> refs/tags/v1\n
- * <peeled> refs/tags/v1^{}\n           ← annotated tags peeled
+ * <peeled> refs/tags/v1^{}\n           <- annotated tags peeled
  * 0000
  * ```
  *
@@ -38,7 +38,7 @@ export const uploadPackCapabilities = (defaultBranch: string): string =>
 
 /**
  * The v0 receive-pack capability set (DESIGN §2.3): per-ref report-status
- * (v1 and v2 — v2 is implemented identically, with no `option` lines, which
+ * (v1 and v2 -- v2 is implemented identically, with no `option` lines, which
  * is valid), ref deletion, atomic pushes, and OFS_DELTA in pushed packs.
  */
 export const receivePackCapabilities = (): string =>

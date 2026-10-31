@@ -17,7 +17,7 @@ export type LiveInputOutputProps = {
    * from. Usually a reference to a `LiveInput`'s `liveInputId`
    * attribute.
    *
-   * Immutable — an output belongs to exactly one live input, so changing
+   * Immutable -- an output belongs to exactly one live input, so changing
    * it triggers a replacement.
    */
   liveInputId: string;
@@ -25,14 +25,14 @@ export type LiveInputOutputProps = {
    * The URL the output restreams to, e.g.
    * `rtmps://a.rtmps.youtube.com/live2`.
    *
-   * Immutable — Cloudflare's update endpoint only toggles `enabled`, so
+   * Immutable -- Cloudflare's update endpoint only toggles `enabled`, so
    * changing the URL triggers a replacement.
    */
   url: string;
   /**
    * The streamKey used to authenticate against the output's target.
    *
-   * Immutable — Cloudflare's update endpoint only toggles `enabled`, so
+   * Immutable -- Cloudflare's update endpoint only toggles `enabled`, so
    * changing the streamKey triggers a replacement.
    */
   streamKey: string;
@@ -83,7 +83,7 @@ export type LiveInputOutput = Resource<
 >;
 
 /**
- * A Cloudflare Stream live input output — restreams (simulcasts) live
+ * A Cloudflare Stream live input output -- restreams (simulcasts) live
  * video received by a `LiveInput` to another RTMP(S) destination
  * such as YouTube Live or Twitch.
  *
@@ -148,7 +148,7 @@ export const LiveInputOutputProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      // The destination is immutable — only `enabled` can be updated.
+      // The destination is immutable -- only `enabled` can be updated.
       const oldUrl = output?.url ?? olds?.url;
       if (oldUrl !== undefined && oldUrl !== news.url) {
         return { action: "replace" } as const;
@@ -157,13 +157,13 @@ export const LiveInputOutputProvider = () =>
       if (oldStreamKey !== undefined && oldStreamKey !== news.streamKey) {
         return { action: "replace" } as const;
       }
-      // `enabled` is mutable via PUT — default engine update logic.
+      // `enabled` is mutable via PUT -- default engine update logic.
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output }) {
       // Outputs have no deterministic name or tags, so a cold read (state
-      // lost before the uid was persisted) cannot recover the resource —
+      // lost before the uid was persisted) cannot recover the resource --
       // rely on the cached uid.
       if (output?.outputId === undefined) return undefined;
       const observed = yield* findOutput(output.accountId, output.liveInputId, output.outputId);
@@ -175,7 +175,7 @@ export const LiveInputOutputProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const liveInputId = news.liveInputId as string;
 
-      // Observe — the uid cached on `output` is a hint, not a guarantee:
+      // Observe -- the uid cached on `output` is a hint, not a guarantee:
       // a missing output (or live input) falls through to "missing" and
       // we recreate.
       const observed = output?.outputId
@@ -183,7 +183,7 @@ export const LiveInputOutputProvider = () =>
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. uids are auto-assigned so there is no
         // AlreadyExists race to tolerate.
         const created = yield* stream.createLiveInputOutput({
@@ -196,7 +196,7 @@ export const LiveInputOutputProvider = () =>
         return toAttributes(created, accountId, liveInputId);
       }
 
-      // Sync — `enabled` is the only mutable aspect; diff observed cloud
+      // Sync -- `enabled` is the only mutable aspect; diff observed cloud
       // state against desired and skip the PUT on a no-op.
       const observedAccount = output?.accountId ?? accountId;
       const desiredEnabled = news.enabled ?? true;
@@ -248,7 +248,7 @@ export const LiveInputOutputProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — an output (or its parent live input) already deleted
+      // Idempotent -- an output (or its parent live input) already deleted
       // out-of-band surfaces as `OutputNotFound` (Cloudflare error code
       // 10003).
       yield* stream
@@ -269,9 +269,9 @@ type ObservedOutput = {
 };
 
 /**
- * Find an output by uid under a live input, mapping "gone" — either the
+ * Find an output by uid under a live input, mapping "gone" -- either the
  * output missing from the list or the parent live input deleted
- * (`LiveInputNotFound`, Cloudflare error code 10003) — to `undefined`.
+ * (`LiveInputNotFound`, Cloudflare error code 10003) -- to `undefined`.
  * There is no get-by-uid endpoint, so observation goes through the list.
  */
 const findOutput = (accountId: string, liveInputId: string, outputId: string) =>

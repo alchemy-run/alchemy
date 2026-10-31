@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `StartServiceSoftwareUpdate` operation (IAM action
  * `es:StartServiceSoftwareUpdate`).
  *
- * Schedules a service software update for a domain — immediately, at a timestamp, or in the domain's off-peak window — e.g. rolling out a pending security patch fleet-wide. Provide the implementation with
+ * Schedules a service software update for a domain -- immediately, at a timestamp, or in the domain's off-peak window -- e.g. rolling out a pending security patch fleet-wide. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.StartServiceSoftwareUpdateHttp)`.
  * ### Service Software Updates
  * **Example:** Start a Service Software Update
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const startServiceSoftwareUpdate = yield* OpenSearch.StartServiceSoftwareUpdate();
  *
  * const result = yield* startServiceSoftwareUpdate({ DomainName: name });
- * // result.ServiceSoftwareOptions?.UpdateStatus → "PENDING_UPDATE"
+ * // result.ServiceSoftwareOptions?.UpdateStatus -> "PENDING_UPDATE"
  * ```
  *
  * @binding

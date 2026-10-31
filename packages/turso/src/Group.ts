@@ -170,7 +170,7 @@ export const GroupProvider = () =>
           if (!group) return undefined;
           const attrs = toAttrs(org, group, group.delete_protection ?? false);
           // Turso has no tags: a group found under an explicit, user-chosen
-          // name without prior state may belong to someone else — unless it
+          // name without prior state may belong to someone else -- unless it
           // is the generation a delete-first replacement is about to free.
           const ours =
             output !== undefined ||

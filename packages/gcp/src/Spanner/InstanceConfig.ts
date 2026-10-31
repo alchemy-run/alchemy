@@ -40,9 +40,9 @@ export type InstanceConfigProps = {
   /**
    * Instance config id (the `{config}` segment of
    * `projects/{project}/instanceConfigs/{config}`). User-managed ids must
-   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2–64
+   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2-64
    * characters). If omitted, a unique `custom-` name is generated.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   instanceConfigId?: string;
   /**
@@ -51,7 +51,7 @@ export type InstanceConfigProps = {
   displayName?: string;
   /**
    * Google-managed base config id (`regional-us-central1`) or full name.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    * @default `regional-{region}` for the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   baseConfig?: string;
@@ -59,7 +59,7 @@ export type InstanceConfigProps = {
    * Replica placement. Must include every replica from `baseConfig` plus
    * at least one of its optional replicas. When omitted, Alchemy copies
    * the base replicas and appends the first optional replica.
-   * Immutable — changing them replaces the config.
+   * Immutable -- changing them replaces the config.
    */
   replicas?: ReplicaInfo[];
   /**

@@ -34,7 +34,7 @@ export interface MountSpec {
 }
 
 // Pass `volume.volumeId` through as-is. At bind time it is an Output,
-// never a materialized string — `typeof === "string"` would store `""`
+// never a materialized string -- `typeof === "string"` would store `""`
 // and every downstream guard would skip the mount. `Input<Binding>`
 // resolves the Output before reconcile.
 const volumeIdOf = (volume: Volume) => volume.volumeId ?? "";

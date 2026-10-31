@@ -62,7 +62,7 @@ export interface LocationStrategy {
 
 export interface Props {
   /**
-   * Zone the load balancer lives in. Stable — changing the zone triggers
+   * Zone the load balancer lives in. Stable -- changing the zone triggers
    * replacement.
    */
   zoneId: string;
@@ -93,7 +93,7 @@ export interface Props {
   proxied?: boolean;
   /**
    * TTL (seconds) of the DNS entry for the IP address returned by this
-   * load balancer. Only applies to unproxied load balancers — the API
+   * load balancer. Only applies to unproxied load balancers -- the API
    * rejects it when `proxied: true`.
    * @default 30
    */
@@ -136,17 +136,17 @@ export interface Props {
     poolWeights?: Record<string, number>;
   };
   /**
-   * Region code → ordered pool IDs for that region. Regions not defined
+   * Region code -> ordered pool IDs for that region. Regions not defined
    * fall back to `defaultPools`.
    */
   regionPools?: Record<string, ReadonlyArray<string>>;
   /**
-   * Country code → ordered pool IDs for that country. Countries not
+   * Country code -> ordered pool IDs for that country. Countries not
    * defined fall back to the corresponding region pool mapping.
    */
   countryPools?: Record<string, ReadonlyArray<string>>;
   /**
-   * Enterprise only — Cloudflare PoP identifier → ordered pool IDs for
+   * Enterprise only -- Cloudflare PoP identifier -> ordered pool IDs for
    * that PoP.
    */
   popPools?: Record<string, ReadonlyArray<string>>;
@@ -178,7 +178,7 @@ export interface Attributes {
 export type LoadBalancer = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare Load Balancer — a zone-level DNS hostname that distributes
+ * A Cloudflare Load Balancer -- a zone-level DNS hostname that distributes
  * traffic across {@link Pool}s with health-based failover,
  * geo/latency steering, and session affinity.
  *
@@ -265,7 +265,7 @@ export const LoadBalancerProvider = () =>
         const observed = yield* getLoadBalancer(output.zoneId, output.loadBalancerId);
         return observed ? toAttributes(observed, output.zoneId) : undefined;
       }
-      // Cold read — a load balancer's hostname is unique within its zone.
+      // Cold read -- a load balancer's hostname is unique within its zone.
       // Load balancers carry no ownership marker, so report the match as
       // Unowned and let the engine gate takeover behind --adopt.
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
@@ -285,13 +285,13 @@ export const LoadBalancerProvider = () =>
       const zoneId = news.zoneId as string;
       const body = buildBody(news);
 
-      // 1. Observe — output.loadBalancerId is a cache hint; a 404 falls
+      // 1. Observe -- output.loadBalancerId is a cache hint; a 404 falls
       //    through to "missing" and we recreate.
       const observed = output?.loadBalancerId
         ? yield* getLoadBalancer(output.zoneId ?? zoneId, output.loadBalancerId)
         : undefined;
 
-      // 2. Ensure — missing: create with the full desired body.
+      // 2. Ensure -- missing: create with the full desired body.
       if (!observed?.id) {
         const created = yield* loadBalancers.createLoadBalancer({
           zoneId,
@@ -300,7 +300,7 @@ export const LoadBalancerProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 3. Sync — the update endpoint is a PUT requiring the full body;
+      // 3. Sync -- the update endpoint is a PUT requiring the full body;
       //    diff observed against desired and skip the call on a no-op.
       if (!loadBalancerDirty(observed, body)) {
         return toAttributes(observed, zoneId);

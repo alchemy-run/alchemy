@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:GetResourceShares`.
  *
  * Retrieves details about the resource shares that you own (`resourceOwner: "SELF"`) or that are shared with you (`resourceOwner: "OTHER-ACCOUNTS"`).
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetResourceSharesHttp)`.
  * ### Discovering Shares & Shared Resources
  * **Example:** List the Resource Shares You Own
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getResourceShares = yield* AWS.RAM.GetResourceShares();
  *
  * // runtime

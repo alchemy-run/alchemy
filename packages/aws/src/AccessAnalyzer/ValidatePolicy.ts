@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Validating Policies
  * **Example:** Validate an Identity Policy
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const validatePolicy = yield* AWS.AccessAnalyzer.ValidatePolicy();
  *
  * // runtime

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:GetServiceQuota` — read the applied
+ * Runtime binding for `servicequotas:GetServiceQuota` -- read the applied
  * value of any Service Quotas quota (account-level or resource-level) from
  * inside a Function.
  *
  * Service Quotas is a read-mostly control-plane service with no resource to
  * manage for reads: the binding takes no arguments and grants the function
  * `servicequotas:GetServiceQuota` (the action has no resource-level IAM).
- * Pass the raw distilled request — no marshalling.
+ * Pass the raw distilled request -- no marshalling.
  *
  * ### Reading Quotas
  * **Example:** Read the Lambda concurrent-executions quota

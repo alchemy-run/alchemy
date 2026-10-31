@@ -13,7 +13,7 @@ export interface DeleteMessageRequest extends Omit<
 > {}
 
 /**
- * Moderate the bound room by deleting a message — the effectful call made
+ * Moderate the bound room by deleting a message -- the effectful call made
  * from a deployed Lambda or Task. It broadcasts a `DELETEMESSAGE` event to
  * every connected client, directing them to remove the message (`id` is the
  * ID from the WebSocket `SendMessage` response); an optional `reason` is

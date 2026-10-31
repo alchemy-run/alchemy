@@ -96,12 +96,12 @@ export type ConnectivityTestProps = {
    * Test id (the `{test}` segment of
    * `projects/{project}/locations/global/connectivityTests/{test}`). If
    * omitted, a unique RFC1035 name is generated. Must be 1-40 characters,
-   * start with a letter, and end with a letter or number. Immutable —
+   * start with a letter, and end with a letter or number. Immutable --
    * changing it replaces the test.
    */
   testId?: string;
   /**
-   * Location. Must be `global`. Immutable — changing it replaces the
+   * Location. Must be `global`. Immutable -- changing it replaces the
    * test.
    * @default "global"
    */

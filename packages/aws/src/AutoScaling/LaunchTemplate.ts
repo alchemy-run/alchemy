@@ -485,14 +485,14 @@ export const LaunchTemplateProvider = () =>
             output,
           });
 
-          // Observe — fetch live cloud state. We try both lookup paths
+          // Observe -- fetch live cloud state. We try both lookup paths
           // (id from output, name from desired) so the reconciler
           // converges whether `output` is fresh, stale, or missing.
           let existing =
             (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ||
             (yield* describeByName(launchTemplateName));
 
-          // Ensure — create the launch template if missing. We must
+          // Ensure -- create the launch template if missing. We must
           // verify alchemy ownership via tags here (since this resource
           // does not implement `read` adoption gating).
           if (!existing) {
@@ -537,7 +537,7 @@ export const LaunchTemplateProvider = () =>
             });
           }
 
-          // Sync version — each reconcile creates a new version pinned as
+          // Sync version -- each reconcile creates a new version pinned as
           // the default. ASGs that reference `$Default` automatically
           // pick up the new version.
           yield* createVersion({
@@ -546,7 +546,7 @@ export const LaunchTemplateProvider = () =>
             runtime,
           });
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           yield* syncTemplateTags({
             launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
             oldTags: toTagRecord(existing.Tags),
@@ -583,7 +583,7 @@ const isLaunchTemplateNotFound = (error: unknown) => {
     tag === "InvalidLaunchTemplateId.Malformed" ||
     tag === "InvalidLaunchTemplateId.NotFound" ||
     // Live `describeLaunchTemplates` surfaces the dot-form codes, which the
-    // ec2 SDK leaves untyped — a missing template on the read-before-create
+    // ec2 SDK leaves untyped -- a missing template on the read-before-create
     // probe otherwise fails the whole plan.
     tag === "InvalidLaunchTemplateName.NotFoundException" ||
     tag === "InvalidLaunchTemplateId.NotFoundException"

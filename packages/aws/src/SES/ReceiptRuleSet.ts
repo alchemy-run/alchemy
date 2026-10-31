@@ -29,7 +29,7 @@ export interface ReceiptRuleSet extends Resource<
 > {}
 
 /**
- * An Amazon SES receipt rule set — the ordered container for the receipt rules
+ * An Amazon SES receipt rule set -- the ordered container for the receipt rules
  * that decide what happens to inbound email (deliver to S3, invoke a Lambda,
  * publish to SNS, bounce, etc.).
  *
@@ -125,10 +125,10 @@ export const ReceiptRuleSetProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = output?.ruleSetName ?? (yield* createName(id, news));
 
-          // OBSERVE — cloud state is authoritative.
+          // OBSERVE -- cloud state is authoritative.
           const observed = yield* describe(name);
 
-          // ENSURE — create if missing; AlreadyExists is a race, not a failure.
+          // ENSURE -- create if missing; AlreadyExists is a race, not a failure.
           if (observed === undefined) {
             yield* ses
               .createReceiptRuleSet({ RuleSetName: name })

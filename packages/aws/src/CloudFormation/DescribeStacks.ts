@@ -8,14 +8,14 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:DescribeStacks`).
  *
  * Bind this operation to a {@link Stack} to read its live status, parameters,
- * and template outputs from inside a function runtime — the classic
+ * and template outputs from inside a function runtime -- the classic
  * service-discovery pattern of resolving endpoints/ARNs from a stack's
  * outputs. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.DescribeStacksHttp)`.
  * ### Reading Stacks
  * **Example:** Read a Stack's Outputs
  * ```typescript
- * // init — bind the operation to the stack
+ * // init -- bind the operation to the stack
  * const describeStacks = yield* AWS.CloudFormation.DescribeStacks(stack);
  *
  * // runtime

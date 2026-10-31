@@ -17,7 +17,7 @@ import { sha256Object } from "../Util/sha256.ts";
  * The structural slice of a framework-integration module
  * (`@alchemy.run/frontend-frameworks/nuxt`, `@alchemy.run/frontend-frameworks/astro`, ...) this resource
  * drives. Typed structurally so alchemy carries no dependency on
- * `@distilled.cloud/framework-core` — the *project's* install is always the
+ * `@distilled.cloud/framework-core` -- the *project's* install is always the
  * one loaded. Requirement channels are erased (the module is loaded
  * dynamically, so its effects are typed post-hoc): `build` is
  * requirement-free and `dev` runs in the caller's ambient Scope.
@@ -67,7 +67,7 @@ const definedEnv = (
  * Options for the local dev server that runs a framework site under
  * `alchemy dev`.
  *
- * Use `{ mode: "external" }` to skip starting a dev server entirely —
+ * Use `{ mode: "external" }` to skip starting a dev server entirely --
  * useful when an external dev server (e.g. one you run yourself in
  * another terminal) is serving the site instead.
  */
@@ -112,7 +112,7 @@ export interface ServerProps {
   /**
    * Module specifier of the framework-integration package that implements
    * the build and dev server (e.g. `"@alchemy.run/frontend-frameworks/nuxt"`). Must be
-   * installed in your project — it is loaded dynamically at deploy time and
+   * installed in your project -- it is loaded dynamically at deploy time and
    * drives your project's own framework toolchain.
    */
   framework: string;
@@ -130,7 +130,7 @@ export interface ServerProps {
   target: string;
   /**
    * Framework-integration options forwarded to the module's `make()`
-   * (e.g. `{ nuxt: { ... } }` config overrides). Must be JSON-serializable —
+   * (e.g. `{ nuxt: { ... } }` config overrides). Must be JSON-serializable --
    * the value participates in the memo hash and is persisted in state.
    */
   options?: Record<string, unknown>;
@@ -146,7 +146,7 @@ export interface ServerProps {
    * any child it spawns) so server code reads the same values in both
    * modes. Changing a value restarts the dev server.
    *
-   * Entries whose value is `undefined` are dropped — this lets website
+   * Entries whose value is `undefined` are dropped -- this lets website
    * composites forward optional values (e.g. an `Output` service URL that
    * resolves to `undefined`) without filtering first.
    */
@@ -419,7 +419,7 @@ export const ServerProviderLive = () =>
 
 /**
  * Try to bind `port` on `host`; resolves `true` when the port is free.
- * The listener is closed immediately — the port is only observed
+ * The listener is closed immediately -- the port is only observed
  * available, not reserved, so the caller should bind promptly and the
  * framework still handles the (tiny) race window itself.
  */
@@ -462,7 +462,7 @@ const resolveDevPort = Effect.fn(function* (options: {
 });
 
 /**
- * A framework dev server may advertise its *bind* address — nuxt echoes the
+ * A framework dev server may advertise its *bind* address -- nuxt echoes the
  * host it was told to listen on, so a Router-attached site (which binds
  * `0.0.0.0` to be reachable from the emulator container) reports
  * `http://0.0.0.0:{port}/`. The unspecified address is not a connectable
@@ -475,7 +475,7 @@ const normalizeAdvertisedUrl = (url: string) =>
 
 /**
  * The `alchemy dev` variant: runs the framework's own dev server (native
- * HMR through the framework's kit — nuxt, astro, ...) inside the dev
+ * HMR through the framework's kit -- nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
  * framework/target/root/options config changes.
  */
@@ -489,7 +489,7 @@ export const ServerProviderLocal = () =>
       return {
         start: Effect.fn(function* ({ news: props }) {
           // External mode: an external dev server (run out-of-band by the
-          // user) serves the site — don't import the framework or spawn
+          // user) serves the site -- don't import the framework or spawn
           // anything, just surface the external URL as the attribute.
           if (props.dev?.mode === "external") {
             return {
@@ -504,7 +504,7 @@ export const ServerProviderLocal = () =>
           const root = path.resolve(initialCwd, props.root ?? ".");
           // Dev/live env parity: the composite sets these on the Lambda on
           // deploy; in dev the framework server runs inside the sidecar
-          // (or as its child — `next dev`), so the sidecar's process env
+          // (or as its child -- `next dev`), so the sidecar's process env
           // is what SSR code reads. `env` is part of the restart surface,
           // so a changed value restarts the dev server with the new
           // environment. Values are not unset on stop: sibling dev servers

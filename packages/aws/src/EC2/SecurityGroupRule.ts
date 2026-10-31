@@ -265,7 +265,7 @@ export interface SecurityGroupRule extends Resource<
  * ```
  *
  * Use `cidrIpv6` for dual-stack workloads; `::/0` is the IPv6 equivalent of
- * `0.0.0.0/0`. IPv4 and IPv6 are separate rules — you'd pair this with a
+ * `0.0.0.0/0`. IPv4 and IPv6 are separate rules -- you'd pair this with a
  * `cidrIpv4` rule to cover both.
  *
  * **Example:** Allow from a managed prefix list
@@ -300,7 +300,7 @@ export interface SecurityGroupRule extends Resource<
  * });
  * ```
  *
- * With `ipProtocol: "-1"`, ports are ignored and every protocol is permitted —
+ * With `ipProtocol: "-1"`, ports are ignored and every protocol is permitted --
  * appropriate only for fully trusted sources such as your own VPC CIDR.
  *
  * **Example:** Allow ICMP echo (ping)
@@ -537,7 +537,7 @@ export const SecurityGroupRuleProvider = () =>
               : undefined,
           };
 
-          // Observe — find the rule via cached id, else fall through to
+          // Observe -- find the rule via cached id, else fall through to
           // create. SG rule identity is the SecurityGroupRuleId.
           let observed: ec2.SecurityGroupRule | undefined;
           if (output?.securityGroupRuleId) {
@@ -553,7 +553,7 @@ export const SecurityGroupRuleProvider = () =>
             observed = lookup.SecurityGroupRules?.[0];
           }
 
-          // Ensure — Authorize{Ingress,Egress} when missing.
+          // Ensure -- Authorize{Ingress,Egress} when missing.
           if (observed === undefined) {
             yield* session.note("Creating Security Group Rule...");
             const tagSpec = [
@@ -605,7 +605,7 @@ export const SecurityGroupRuleProvider = () =>
             });
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (observed.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -643,7 +643,7 @@ export const SecurityGroupRuleProvider = () =>
         delete: Effect.fn(function* ({ olds, output, session }) {
           const ruleId = output.securityGroupRuleId;
           const groupId = (output.groupId ?? olds?.group?.groupId ?? olds?.groupId) as string;
-          // Prefer the observed attribute (`isEgress`) — `olds` may be the
+          // Prefer the observed attribute (`isEgress`) -- `olds` may be the
           // listed Attributes (e.g. during nuke) rather than the Props shape,
           // in which case `olds.type` is undefined.
           const isEgress = output.isEgress ?? olds?.type !== "ingress";
@@ -651,7 +651,7 @@ export const SecurityGroupRuleProvider = () =>
           yield* session.note(`Deleting Security Group Rule: ${ruleId}`);
 
           // The whole security group may already be gone, taking its rules
-          // with it (InvalidGroup.NotFound) — the rule is deleted either way.
+          // with it (InvalidGroup.NotFound) -- the rule is deleted either way.
           if (isEgress) {
             yield* ec2
               .revokeSecurityGroupEgress({

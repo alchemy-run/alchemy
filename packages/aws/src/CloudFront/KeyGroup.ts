@@ -181,7 +181,7 @@ export const KeyGroupProvider = () =>
           const name = yield* createName(id, news);
           const items = news.items as string[];
 
-          // Observe — locate the key group by id (cached on `output`) or
+          // Observe -- locate the key group by id (cached on `output`) or
           // by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.keyGroupId
             ? yield* getById(output.keyGroupId).pipe(
@@ -192,7 +192,7 @@ export const KeyGroupProvider = () =>
             observed = yield* getByName(name);
           }
 
-          // Ensure — create the key group if it's missing. Tolerate
+          // Ensure -- create the key group if it's missing. Tolerate
           // `KeyGroupAlreadyExists` (race with a peer reconciler).
           if (!observed) {
             const created = yield* cloudfront
@@ -231,7 +231,7 @@ export const KeyGroupProvider = () =>
             return toAttrs(created.KeyGroup.Id, created.KeyGroup.KeyGroupConfig, created.ETag);
           }
 
-          // Sync — patch the observed config to the desired state. The
+          // Sync -- patch the observed config to the desired state. The
           // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateKeyGroup({
             Id: observed.id,

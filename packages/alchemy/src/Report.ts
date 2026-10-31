@@ -34,7 +34,7 @@ export interface PlanningStatusSession {
     options?: {
       /**
        * Animate the status glyph. Pass `false` for phases whose work runs
-       * synchronously on the main thread (e.g. module import) — a spinner
+       * synchronously on the main thread (e.g. module import) -- a spinner
        * cannot animate while the event loop is blocked, so it freezes
        * mid-frame and reads as hung; a static row doesn't promise motion.
        */

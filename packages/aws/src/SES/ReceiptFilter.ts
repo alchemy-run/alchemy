@@ -33,7 +33,7 @@ export interface ReceiptFilterProps {
    */
   filterName?: string;
   /**
-   * The IP filtering rule — an allow or block decision for a CIDR range.
+   * The IP filtering rule -- an allow or block decision for a CIDR range.
    * Changing it replaces the filter (SES has no update operation for filters).
    */
   ipFilter: ReceiptIpFilter;
@@ -51,7 +51,7 @@ export interface ReceiptFilter extends Resource<
 > {}
 
 /**
- * An Amazon SES receipt IP address filter — an account-level allow/block rule
+ * An Amazon SES receipt IP address filter -- an account-level allow/block rule
  * for the source IP of inbound mail. Block filters take precedence over allow
  * filters.
  *
@@ -134,10 +134,10 @@ export const ReceiptFilterProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = output?.filterName ?? (yield* createName(id, news));
 
-          // OBSERVE — filters have no update API, so reconcile is create-only.
+          // OBSERVE -- filters have no update API, so reconcile is create-only.
           const observed = yield* findFilter(name);
 
-          // ENSURE — create if missing; AlreadyExists is a race, not a failure.
+          // ENSURE -- create if missing; AlreadyExists is a race, not a failure.
           if (observed === undefined) {
             yield* ses
               .createReceiptFilter({

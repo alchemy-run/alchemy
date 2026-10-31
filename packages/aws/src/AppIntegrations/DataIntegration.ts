@@ -200,7 +200,7 @@ export const DataIntegrationProvider = () =>
       return DataIntegration.Provider.of({
         stables: ["dataIntegrationId", "dataIntegrationArn", "kmsKey", "sourceURI"],
 
-        // The list API only returns Arn/Name/SourceURI summaries — hydrate
+        // The list API only returns Arn/Name/SourceURI summaries -- hydrate
         // each into the full attributes shape, tolerating per-item NotFound
         // races.
         list: () =>
@@ -258,7 +258,7 @@ export const DataIntegrationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — prefer the cached ID; fall back to enumerating by
+          // 1. Observe -- prefer the cached ID; fall back to enumerating by
           //    name so a lost-state re-run converges.
           let identifier: string | undefined = output?.dataIntegrationId;
           let live = identifier === undefined ? undefined : yield* observe(identifier);
@@ -267,7 +267,7 @@ export const DataIntegrationProvider = () =>
             live = identifier === undefined ? undefined : yield* observe(identifier);
           }
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (live === undefined) {
             const created = yield* appintegrations.createDataIntegration({
               Name: name,
@@ -299,7 +299,7 @@ export const DataIntegrationProvider = () =>
           }
           const attrs = yield* toAttrs(live);
 
-          // 3. Sync mutable aspects — only the name and description can be
+          // 3. Sync mutable aspects -- only the name and description can be
           //    updated in place. The API cannot clear a description (min
           //    length 1), so only push a defined value that differs.
           const update: Omit<appintegrations.UpdateDataIntegrationRequest, "Identifier"> = {};
@@ -316,7 +316,7 @@ export const DataIntegrationProvider = () =>
             });
           }
 
-          // 4. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 4. Sync tags -- diff against OBSERVED cloud tags so adoption
           //    converges.
           const observedTags = definedTags(live.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

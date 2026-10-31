@@ -6,7 +6,7 @@ import { makeReadWriteKVClient } from "./ReadWriteNamespaceBinding.ts";
 import { makeReadWriteKVHttpClient } from "./ReadWriteNamespaceHttp.ts";
 
 /**
- * Local implementation of the {@link ReadWriteNamespace} binding — reads and
+ * Local implementation of the {@link ReadWriteNamespace} binding -- reads and
  * writes KV values over the Cloudflare HTTP API using the **current
  * credentials** instead of a native Worker binding
  * (`ReadWriteNamespaceBinding`) or a scoped API token

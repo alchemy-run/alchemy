@@ -12,8 +12,8 @@ import * as GCPBindings from "../GCPBindings.ts";
 /**
  * Object content transfer over the Cloud Storage JSON API media endpoints
  * (`alt=media` download, `uploadType=multipart` upload). The generated
- * storage SDK only covers the metadata surface — `objects.get` returns
- * metadata and `objects.insert` without the `/upload` path is rejected —
+ * storage SDK only covers the metadata surface -- `objects.get` returns
+ * metadata and `objects.insert` without the `/upload` path is rejected --
  * so content bindings speak these two endpoints directly.
  *
  * NOT exported from `index.ts`.

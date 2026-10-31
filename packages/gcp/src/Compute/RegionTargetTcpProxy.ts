@@ -27,16 +27,16 @@ export type RegionTargetTcpProxyProps = {
    */
   targetTcpProxyName?: string;
   /**
-   * Region the proxy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the proxy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute RegionTargetTcpProxy
-   * has no labels field). The regional API cannot update this field —
+   * has no labels field). The regional API cannot update this field --
    * changing it replaces the resource.
    */
   description?: string;

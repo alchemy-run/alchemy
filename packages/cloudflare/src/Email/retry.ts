@@ -8,7 +8,7 @@ import * as Schedule from "effect/Schedule";
  * Cloudflare validates a `{ type: "worker", value: [scriptName] }` action
  * while handling the create/update request and rejects it with
  * `WorkerScriptNotFound` ("Workers Script Info not found") until the script
- * propagates — typically within a few hundred milliseconds. The rejected call
+ * propagates -- typically within a few hundred milliseconds. The rejected call
  * creates nothing, so a retry cannot produce a duplicate rule.
  *
  * Mirrors `Cloudflare/Fetcher`'s treatment of a freshly-deployed script:

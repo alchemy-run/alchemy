@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `ListBrokers` operation (IAM action
- * `mq:ListBrokers` on `*` — the operation is not resource-scoped).
+ * `mq:ListBrokers` on `*` -- the operation is not resource-scoped).
  *
  * Lists all Amazon MQ brokers in the account/region. Provide the
  * implementation with `Effect.provide(AWS.MQ.ListBrokersHttp)`.
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const listBrokers = yield* MQ.ListBrokers();
  *
  * const page = yield* listBrokers();
- * // page.BrokerSummaries → [{ BrokerName: "orders", BrokerState: "RUNNING", … }]
+ * // page.BrokerSummaries -> [{ BrokerName: "orders", BrokerState: "RUNNING", ... }]
  * ```
  *
  * @binding

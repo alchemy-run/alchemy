@@ -6,7 +6,7 @@ import type { User } from "./User.ts";
 /**
  * Runtime binding for `transfer:ImportSshPublicKey`.
  *
- * Registers an additional SSH public key on the bound {@link User} — the
+ * Registers an additional SSH public key on the bound {@link User} -- the
  * key-rotation half of a self-service credential portal. The `ServerId` and
  * `UserName` are injected from the binding; only the public key body is
  * passed at runtime. Returns the new `SshPublicKeyId` for later
@@ -16,12 +16,12 @@ import type { User } from "./User.ts";
  * ### Managing SSH Keys at Runtime
  * **Example:** Rotate a User's Key
  * ```typescript
- * // init — bind the operation to the user
+ * // init -- bind the operation to the user
  * const importSshPublicKey = yield* AWS.Transfer.ImportSshPublicKey(user);
  *
  * // runtime
  * const { SshPublicKeyId } = yield* importSshPublicKey({
- *   SshPublicKeyBody: "ssh-ed25519 AAAA…",
+ *   SshPublicKeyBody: "ssh-ed25519 AAAA...",
  * });
  * ```
  *

@@ -8,7 +8,7 @@ export interface CheckIfPhoneNumberIsOptedOutRequest
 /**
  * Runtime binding for `sns:CheckIfPhoneNumberIsOptedOut`.
  *
- * An account-scoped operation — reports whether SMS delivery to a phone
+ * An account-scoped operation -- reports whether SMS delivery to a phone
  * number is blocked because its owner opted out.
  * Provide the `CheckIfPhoneNumberIsOptedOutHttp` layer on the Function to implement the binding.
  * ### SMS Opt-Out Management

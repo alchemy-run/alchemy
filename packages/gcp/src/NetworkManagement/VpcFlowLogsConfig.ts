@@ -50,12 +50,12 @@ export type VpcFlowLogsConfigProps = {
   /**
    * Config id (the `{vpc_flow_logs_config}` segment of
    * `projects/{project}/locations/global/vpcFlowLogsConfigs/{vpc_flow_logs_config}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the config.
    */
   vpcFlowLogsConfigId?: string;
   /**
-   * Location. Must be `global`. Immutable — changing it replaces the
+   * Location. Must be `global`. Immutable -- changing it replaces the
    * config.
    * @default "global"
    */

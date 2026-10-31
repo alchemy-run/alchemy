@@ -71,7 +71,7 @@ export interface TrackerEventSourceProps extends EventRouteProps {
  * to the account's default EventBridge bus (source `aws.geo`); this
  * subscribes the host Function to those events.
  *
- * Location publishes to EventBridge automatically — no additional resource
+ * Location publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

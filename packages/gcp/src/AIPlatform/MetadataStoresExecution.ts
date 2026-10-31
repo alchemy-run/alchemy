@@ -33,7 +33,7 @@ export type MetadataStoresExecutionProps = {
   /**
    * Parent MetadataStore resource name
    * `projects/{project}/locations/{location}/metadataStores/{metadatastore}`.
-   * Immutable — changing it replaces the execution.
+   * Immutable -- changing it replaces the execution.
    */
   metadataStore: string;
   /**

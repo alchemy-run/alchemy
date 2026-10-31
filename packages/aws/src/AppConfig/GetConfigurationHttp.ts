@@ -59,7 +59,7 @@ export const GetConfigurationHttp = Layer.effect(
       configurationProfile: ConfigurationProfile,
       options?: GetConfigurationOptions,
     ) {
-      // Outputs yield DEFERRED effects — resolve again per invocation below.
+      // Outputs yield DEFERRED effects -- resolve again per invocation below.
       const ApplicationId = yield* application.applicationId;
       const EnvironmentId = yield* environment.environmentId;
       const ConfigurationProfileId = yield* configurationProfile.configurationProfileId;
@@ -119,12 +119,12 @@ export const GetConfigurationHttp = Layer.effect(
         const nextToken = response.NextPollConfigurationToken ?? state.token;
 
         // Decoding the (already-buffered) config body only fails on a
-        // corrupt payload — a defect, not part of the operation's typed union.
+        // corrupt payload -- a defect, not part of the operation's typed union.
         const fetched = response.Configuration
           ? yield* response.Configuration.pipe(Stream.decodeText, Stream.mkString, Effect.orDie)
           : "";
 
-        // An empty body means "unchanged" — keep the last-seen content.
+        // An empty body means "unchanged" -- keep the last-seen content.
         const content = fetched.length > 0 ? fetched : state.lastContent;
         const contentType = response.ContentType ?? state.lastContentType;
         const versionLabel = response.VersionLabel ?? state.lastVersionLabel;

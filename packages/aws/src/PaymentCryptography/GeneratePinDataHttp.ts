@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyPairHttpBinding } from "./BindingHttp.ts";
 import { GeneratePinData } from "./GeneratePinData.ts";
 
 /**
- * HTTP implementation of {@link GeneratePinData} — grants the host Function
+ * HTTP implementation of {@link GeneratePinData} -- grants the host Function
  * `payment-cryptography:GeneratePinData` on both the generation key (PVK)
  * and the encryption key (PEK) and calls the Payment Cryptography Data API
  * at runtime.

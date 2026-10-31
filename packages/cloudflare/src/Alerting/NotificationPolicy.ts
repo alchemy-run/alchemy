@@ -41,7 +41,7 @@ export type AlertType = alerting.CreatePolicyRequest["alertType"];
 
 /**
  * Optional filters restricting which events trigger the policy. Which keys
- * are valid (or required — Cloudflare returns `FiltersRequired`) depends on
+ * are valid (or required -- Cloudflare returns `FiltersRequired`) depends on
  * the alert type.
  */
 export type NotificationPolicyFilters = alerting.CreatePolicyRequest["filters"];
@@ -52,18 +52,18 @@ export type NotificationPolicyFilters = alerting.CreatePolicyRequest["filters"];
  * are email addresses; webhook/pagerduty ids reference destination UUIDs.
  */
 export interface NotificationPolicyMechanisms {
-  /** Email destinations — `id` is the recipient email address. */
+  /** Email destinations -- `id` is the recipient email address. */
   email?: ReadonlyArray<{ id: string }>;
-  /** Webhook destinations — `id` references a {@link NotificationWebhook}. */
+  /** Webhook destinations -- `id` references a {@link NotificationWebhook}. */
   webhooks?: ReadonlyArray<{ id: string }>;
-  /** PagerDuty destinations — `id` references a connected PagerDuty service. */
+  /** PagerDuty destinations -- `id` references a connected PagerDuty service. */
   pagerduty?: ReadonlyArray<{ id: string }>;
 }
 
 export interface NotificationPolicyProps {
   /**
    * Name of the policy. If omitted, a unique name is generated.
-   * Mutable — renames are applied in place.
+   * Mutable -- renames are applied in place.
    * @default ${app}-${id}-${stage}-${suffix}
    */
   name?: string;
@@ -130,8 +130,8 @@ export type NotificationPolicy = Resource<
  * A Cloudflare Notifications policy.
  *
  * A notification policy connects an alert type (the event Cloudflare
- * watches for) to one or more destinations — email addresses, webhook
- * destinations, or PagerDuty services — optionally narrowed by filters.
+ * watches for) to one or more destinations -- email addresses, webhook
+ * destinations, or PagerDuty services -- optionally narrowed by filters.
  * ### Creating a policy
  * **Example:** Email notifications for Universal SSL events
  * ```typescript
@@ -250,7 +250,7 @@ export const NotificationPolicyProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The valid filter/mechanism shape depends on the alert type — a
+      // The valid filter/mechanism shape depends on the alert type -- a
       // policy alerting on a different event is a different policy.
       // `alertType` is a plain string prop, statically knowable here.
       const o = olds as NotificationPolicyProps;
@@ -272,7 +272,7 @@ export const NotificationPolicyProvider = () =>
         return undefined;
       }
 
-      // Cold read: no persisted id (state-persistence failure) — find the
+      // Cold read: no persisted id (state-persistence failure) -- find the
       // deterministic physical name in the account's policy list.
       const name = yield* createPolicyName(id, olds?.name);
       const match = yield* findPolicyByName(acct, name);
@@ -285,7 +285,7 @@ export const NotificationPolicyProvider = () =>
       const name = yield* createPolicyName(id, news.name);
       const desired = buildPolicyBody(name, news, bindings);
 
-      // 1. Observe — by cached id first, then by deterministic name.
+      // 1. Observe -- by cached id first, then by deterministic name.
       let observed: ObservedPolicy | undefined;
       if (output?.policyId) {
         observed = yield* observePolicy(accountId, output.policyId);
@@ -294,7 +294,7 @@ export const NotificationPolicyProvider = () =>
         observed = yield* findPolicyByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. `createPolicy` only returns the
+      // 2. Ensure -- create when missing. `createPolicy` only returns the
       //    new id; re-read for the full attribute set.
       if (!observed) {
         const created = yield* alerting.createPolicy({
@@ -310,7 +310,7 @@ export const NotificationPolicyProvider = () =>
         return toPolicyAttributes(fresh ?? { id: created.id }, accountId);
       }
 
-      // 3. Sync — PUT the full desired body when any mutable aspect
+      // 3. Sync -- PUT the full desired body when any mutable aspect
       //    drifts from the observed cloud state.
       if (!policyEqualsObserved(desired, observed)) {
         yield* alerting.updatePolicy({

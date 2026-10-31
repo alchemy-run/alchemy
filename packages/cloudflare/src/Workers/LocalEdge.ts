@@ -33,19 +33,19 @@ export interface LocalEdgeDomain {
 }
 
 /**
- * Local emulation of Cloudflare's zone routing — the control-plane rules
+ * Local emulation of Cloudflare's zone routing -- the control-plane rules
  * that send `api.example.com/users/*` to one Worker and
  * `api.example.com/orders/*` to another with no gateway Worker in the
  * request path.
  *
  * Every route registered by a local `Worker` (`routes` prop) or
  * `Workers.Route` resource is matched by one router workerd, which forwards
- * the request over a service binding to the matched script — the target
+ * the request over a service binding to the matched script -- the target
  * sees the original `request.url`, like on Cloudflare. Hostnames map to
  * local listeners by port:
  *
  * - Each literal hostname named by a route pattern gets its own listener
- *   on a free port, logged as `[edge] <host> → <url>`.
+ *   on a free port, logged as `[edge] <host> -> <url>`.
  * - A Worker whose custom `domain` is a routed hostname serves it on its
  *   own dev URL too: its proxy points at the router, with the Worker as the
  *   fallback for unmatched paths (routes take precedence over custom
@@ -77,16 +77,16 @@ export class LocalEdge extends Context.Service<
 >()("alchemy/cloudflare/LocalEdge") {}
 
 interface RouterConfig {
-  /** Listener port → the hostname it serves. */
+  /** Listener port -> the hostname it serves. */
   readonly ports: Record<string, string>;
   readonly routes: ReadonlyArray<{ pattern: string; binding: string | null }>;
-  /** Hostname → the binding of its custom-domain Worker. */
+  /** Hostname -> the binding of its custom-domain Worker. */
   readonly domains: Record<string, string>;
 }
 
 /**
  * How long a routed request waits for its target Worker to register with
- * the dev registry — the same budget a Worker's own dev proxy parks
+ * the dev registry -- the same budget a Worker's own dev proxy parks
  * requests for while it starts.
  */
 const TARGET_WAIT_MS = 120_000;
@@ -162,7 +162,7 @@ export const LocalEdgeLive = Layer.effect(
         const scope = yield* Scope.fork(rootScope);
         const instance = yield* workerProxy.serve().pipe(Scope.provide(scope));
         listeners.set(host, { instance, scope });
-        yield* Effect.log(`[edge] ${host} → ${instance.url.origin}`);
+        yield* Effect.log(`[edge] ${host} \u2192 ${instance.url.origin}`);
       }
     });
 

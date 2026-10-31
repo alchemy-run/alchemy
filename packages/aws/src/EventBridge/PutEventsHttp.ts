@@ -68,7 +68,7 @@ export const PutEventsHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        // Pass the ARN as an unresolved Output — binding data is resolved
+        // Pass the ARN as an unresolved Output -- binding data is resolved
         // by the engine before the host reconciles. Eagerly yielding here
         // (during plan) produces a deferred object that serializes into an
         // invalid IAM policy (MalformedPolicyDocumentException).

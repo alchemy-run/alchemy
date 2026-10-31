@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:RemoveAutoScalingPolicy` — detaches the automatic scaling policy from an instance group of the bound cluster.
+ * Runtime binding for `elasticmapreduce:RemoveAutoScalingPolicy` -- detaches the automatic scaling policy from an instance group of the bound cluster.
  * ### Scaling the Cluster
  * **Example:** Remove a Group's Auto Scaling
  * ```typescript

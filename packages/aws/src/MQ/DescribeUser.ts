@@ -7,7 +7,7 @@ import type { Broker } from "./Broker.ts";
  * Runtime binding for the `DescribeUser` operation (IAM action
  * `mq:DescribeUser`), scoped to one {@link Broker}.
  *
- * Reads a broker user's attributes — console access, groups, and any
+ * Reads a broker user's attributes -- console access, groups, and any
  * pending change staged for the next reboot. Provide the implementation
  * with `Effect.provide(AWS.MQ.DescribeUserHttp)`.
  * ### Managing Users
@@ -16,7 +16,7 @@ import type { Broker } from "./Broker.ts";
  * const describeUser = yield* MQ.DescribeUser(broker);
  *
  * const user = yield* describeUser({ Username: "tenant-42" });
- * // user.Groups, user.Pending?.PendingChange → "CREATE" | "UPDATE" | "DELETE"
+ * // user.Groups, user.Pending?.PendingChange -> "CREATE" | "UPDATE" | "DELETE"
  * ```
  *
  * @binding

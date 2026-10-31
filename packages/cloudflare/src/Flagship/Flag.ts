@@ -40,7 +40,7 @@ export type FlagConditionOperator =
  * nested group of clauses combined with AND/OR.
  */
 /**
- * Value a flat condition compares against — a scalar, a JSON object, or a
+ * Value a flat condition compares against -- a scalar, a JSON object, or a
  * list (for `in` / `not_in`).
  */
 export type FlagConditionValue = string | number | boolean | { [key: string]: unknown } | unknown[];
@@ -96,7 +96,7 @@ export type FlagRule = {
    */
   conditions: FlagCondition[];
   /**
-   * Evaluation order — lower runs first.
+   * Evaluation order -- lower runs first.
    */
   priority: number;
   /**
@@ -121,7 +121,7 @@ export type FlagProps = {
    */
   appId: string;
   /**
-   * Unique flag key within the app — used in all evaluation and SDK calls.
+   * Unique flag key within the app -- used in all evaluation and SDK calls.
    * Changing the key triggers a replacement. If omitted, a unique key is
    * generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
@@ -317,7 +317,7 @@ export const FlagProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The app is a path parameter — a flag cannot move between apps in
+      // The app is a path parameter -- a flag cannot move between apps in
       // place. By diff time both sides are resolved strings.
       const oldAppId = output?.appId ?? olds?.appId;
       if (
@@ -358,12 +358,12 @@ export const FlagProviderLive = () =>
         description: news.description,
       };
 
-      // Observe — flag identity is (appId, key); a missing flag falls
+      // Observe -- flag identity is (appId, key); a missing flag falls
       // through and we recreate.
       const observed = yield* getFlag(output?.accountId ?? accountId, appId, key);
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). A concurrent create
+        // Ensure -- greenfield (or out-of-band delete). A concurrent create
         // of the same key surfaces as FlagshipFlagAlreadyExists; treat it
         // as a race and converge via the update path below.
         const created = yield* flagship
@@ -380,7 +380,7 @@ export const FlagProviderLive = () =>
         }
       }
 
-      // Sync — diff observed cloud state against desired; the update API is
+      // Sync -- diff observed cloud state against desired; the update API is
       // a PUT that takes the full body, so send everything, but skip the
       // call entirely on a no-op.
       const live = observed ?? (yield* getFlag(accountId, appId, key));
@@ -451,7 +451,7 @@ export const FlagProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — writes the flag's definition into the local
+ * Local (dev) provider -- writes the flag's definition into the local
  * Flagship simulator's store under its (`dev:`) app, where a dev Worker's
  * `flagship` binding evaluates it. Definitions are plain files under
  * `.alchemy/local/flagship`, read fresh on every evaluation, so an update
@@ -479,7 +479,7 @@ export const FlagProviderLocal = () =>
       // enablement and description update in place).
     }),
     read: Effect.fn(function* ({ output }) {
-      // Virtual identity — the persisted state row is the source of truth
+      // Virtual identity -- the persisted state row is the source of truth
       // (the written definition converges on every reconcile).
       return output ?? undefined;
     }),
@@ -500,7 +500,7 @@ export const FlagProviderLocal = () =>
         variations: news.variations,
         rules: news.rules ?? [],
       };
-      // An atomic overwrite — idempotent, so re-running after a crash
+      // An atomic overwrite -- idempotent, so re-running after a crash
       // converges.
       yield* LocalFlagship.writeFlag(yield* localFlagshipStore(appId), key, definition);
       return {
@@ -534,7 +534,7 @@ export class LocalFlagError extends Data.TaggedError("LocalFlagError")<{
 }> {}
 
 /**
- * The local Flagship simulator's store for an app — the same storage
+ * The local Flagship simulator's store for an app -- the same storage
  * directory the local workerd runtime serves.
  */
 export const localFlagshipStore = (appId: string) =>

@@ -20,7 +20,7 @@ export interface StartDominantLanguageDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartDominantLanguageDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartDominantLanguageDetectionJob` -- start an asynchronous
  * dominant-language detection job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -35,7 +35,7 @@ export interface StartDominantLanguageDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous DominantLanguage Detection Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startDominantLanguageDetectionJob = yield* AWS.Comprehend.StartDominantLanguageDetectionJob(dataAccessRole);
  *
  * // runtime

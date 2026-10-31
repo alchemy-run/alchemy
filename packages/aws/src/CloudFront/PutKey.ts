@@ -16,7 +16,7 @@ export interface PutKeyRequest extends Omit<kvs.PutKeyRequest, "KvsARN"> {}
  * ### Writing KeyValueStore Data
  * **Example:** Put a Key
  * ```typescript
- * // init — bind the operations to the store
+ * // init -- bind the operations to the store
  * const describeStore = yield* CloudFront.DescribeKeyValueStore(store);
  * const putKey = yield* CloudFront.PutKey(store);
  *

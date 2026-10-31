@@ -18,7 +18,7 @@ export interface ListTablesRequest extends bcm.ListTablesRequest {}
  * ### Browsing the Table Dictionary
  * **Example:** List the Available Tables
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listTables = yield* AWS.BCMDataExports.ListTables();
  *
  * // runtime

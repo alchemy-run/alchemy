@@ -12,7 +12,7 @@ export interface GetChangeLogsRequest extends Omit<
 /**
  * Runtime binding for `auditmanager:GetChangeLogs`.
  *
- * Lists the changelog — who did what, when — for the bound
+ * Lists the changelog -- who did what, when -- for the bound
  * assessment, optionally narrowed to a control set or control. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.GetChangeLogsHttp)`.
  * ### Audit Trail

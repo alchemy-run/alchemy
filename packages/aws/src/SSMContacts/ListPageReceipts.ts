@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-contacts:ListPageReceipts`.
  *
- * List the delivery/read receipts of a page — one receipt per contact
+ * List the delivery/read receipts of a page -- one receipt per contact
  * channel the page was sent over.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListPageReceiptsHttp)`.

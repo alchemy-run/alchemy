@@ -11,13 +11,13 @@ export interface StartCommitmentPurchaseAnalysisRequest
 /**
  * Runtime binding for `ce:StartCommitmentPurchaseAnalysis`.
  *
- * Start an analysis of a planned Savings Plans commitment purchase —
+ * Start an analysis of a planned Savings Plans commitment purchase --
  * projects the cost impact before you buy. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.StartCommitmentPurchaseAnalysisHttp)`.
  * ### Commitment Purchase Analysis
  * **Example:** Analyze a Planned Commitment
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const startCommitmentPurchaseAnalysis = yield* AWS.CostExplorer.StartCommitmentPurchaseAnalysis();
  *
  * // runtime

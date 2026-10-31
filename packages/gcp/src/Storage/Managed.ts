@@ -13,13 +13,13 @@ import { listAlchemyBuckets, toFolderName, withTrailingSlash } from "./internal.
 export type ManagedProps = {
   /**
    * Name of the uniform-access bucket that contains this managed folder.
-   * Immutable — changing it replaces the folder.
+   * Immutable -- changing it replaces the folder.
    */
   bucketName: string;
   /**
    * Managed folder path. A trailing slash is added if omitted. If
    * omitted entirely, a unique name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the folder.
+   * and logical id. Immutable -- changing it replaces the folder.
    */
   managedFolderName?: string;
 };

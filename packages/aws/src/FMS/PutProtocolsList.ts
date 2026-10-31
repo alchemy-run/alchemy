@@ -15,7 +15,7 @@ export interface PutProtocolsListRequest extends fms.PutProtocolsListRequest {}
  * ### Protocols Lists
  * **Example:** Create a Protocols List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const putProtocolsList = yield* AWS.FMS.PutProtocolsList();
  *
  * // runtime

@@ -6,7 +6,7 @@ import type { Job } from "./Job.ts";
 export interface DescribeJobRunRequest extends Omit<SVC.DescribeJobRunRequest, "Name"> {}
 
 /**
- * Runtime binding for `databrew:DescribeJobRun` — reads the state,
+ * Runtime binding for `databrew:DescribeJobRun` -- reads the state,
  * timings, and outputs of one run of the bound DataBrew job.
  * ### Observing Job Runs
  * **Example:** Poll a Run's State

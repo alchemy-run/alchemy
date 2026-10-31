@@ -21,13 +21,13 @@ import {
 export type MonetizationSubscriptionProps = {
   /**
    * Play package name of the parent app (for example `com.example.app`).
-   * Immutable — changing it replaces the subscription.
+   * Immutable -- changing it replaces the subscription.
    */
   packageName: string;
   /**
    * Unique product id within the app. Lower-case letters, numbers,
    * underscores, and dots; 1-40 characters. If omitted, a unique id is
-   * generated. Immutable — changing it replaces the subscription.
+   * generated. Immutable -- changing it replaces the subscription.
    */
   productId?: string;
   /**
@@ -93,7 +93,7 @@ export type MonetizationSubscription = Resource<
  * Subscriptions have no labels field, so ownership rests on the
  * deterministic product id: `read` reports a subscription it finds without
  * prior state as unowned (adopt it with `--adopt`). `packageName` and
- * `productId` are identity — changing either replaces the subscription.
+ * `productId` are identity -- changing either replaces the subscription.
  * Listings, base plans, tax settings, and payment-country restrictions
  * update in place. A subscription can only be deleted while every base
  * plan is still a draft.

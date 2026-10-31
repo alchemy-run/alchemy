@@ -33,18 +33,18 @@ export type RegionHealthSourceProps = {
    */
   sourceName?: string;
   /**
-   * Region the source lives in. Immutable — changing it replaces the
+   * Region the source lives in. Immutable -- changing it replaces the
    * source. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
    * Optional description. Health sources have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * ownership is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
-   * Source type. The only allowed value is `BACKEND_SERVICE`. Immutable —
+   * Source type. The only allowed value is `BACKEND_SERVICE`. Immutable --
    * changing it replaces the source.
    * @default "BACKEND_SERVICE"
    */

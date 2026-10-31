@@ -11,7 +11,7 @@ export interface GetShardIteratorRequest extends Omit<
 /**
  * Runtime binding for `kinesis:GetShardIterator`.
  *
- * Bind this operation to a `Stream` to obtain a shard iterator — the starting
+ * Bind this operation to a `Stream` to obtain a shard iterator -- the starting
  * position for reading records with `AWS.Kinesis.GetRecords`. The stream name
  * is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.GetShardIteratorHttp)`.

@@ -219,7 +219,7 @@ export const waitForDeleted = (identifier: string, session: ScopedPlanStatusSess
     const connector = yield* lambdacore
       .getNetworkConnector({ Identifier: identifier })
       .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-    // A missing connector is the success signal — it has been deleted.
+    // A missing connector is the success signal -- it has been deleted.
     if (!connector) return;
     if (connector.State === "DELETE_FAILED") {
       return yield* new ConnectorFailed({

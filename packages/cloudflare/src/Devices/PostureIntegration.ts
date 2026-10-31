@@ -32,15 +32,15 @@ export type DevicePostureIntegrationType =
  * Connection settings for the third-party posture provider. Which fields
  * are required depends on the integration `type`:
  *
- * - `workspace_one` — `apiUrl`, `authUrl`, `clientId`, `clientSecret`
- * - `crowdstrike_s2s` — `apiUrl`, `clientId`, `clientSecret`, `customerId`
- * - `uptycs` — `apiUrl`, `clientKey`, `clientSecret`, `customerId`
- * - `intune` — `clientId`, `clientSecret`, `customerId`
- * - `kolide` — `clientId`, `clientSecret`
- * - `tanium_s2s` — `apiUrl`, `clientSecret`, optional `accessClientId` /
+ * - `workspace_one` -- `apiUrl`, `authUrl`, `clientId`, `clientSecret`
+ * - `crowdstrike_s2s` -- `apiUrl`, `clientId`, `clientSecret`, `customerId`
+ * - `uptycs` -- `apiUrl`, `clientKey`, `clientSecret`, `customerId`
+ * - `intune` -- `clientId`, `clientSecret`, `customerId`
+ * - `kolide` -- `clientId`, `clientSecret`
+ * - `tanium_s2s` -- `apiUrl`, `clientSecret`, optional `accessClientId` /
  *   `accessClientSecret`
- * - `sentinelone_s2s` — `apiUrl`, `clientSecret`
- * - `custom_s2s` — `apiUrl`, `clientSecret`, `accessClientId`,
+ * - `sentinelone_s2s` -- `apiUrl`, `clientSecret`
+ * - `custom_s2s` -- `apiUrl`, `clientSecret`, `accessClientId`,
  *   `accessClientSecret`
  *
  * Secrets are write-only: Cloudflare never returns them on reads, so they
@@ -57,7 +57,7 @@ export interface DevicePostureIntegrationConfig {
   clientKey?: string;
   /** The customer/tenant identifier (crowdstrike, uptycs, intune). */
   customerId?: string;
-  /** The OAuth client secret. Write-only — never returned on reads. */
+  /** The OAuth client secret. Write-only -- never returned on reads. */
   clientSecret?: Redacted.Redacted<string>;
   /** Access service-token client ID guarding the custom endpoint. */
   accessClientId?: string;
@@ -73,7 +73,7 @@ export interface DevicePostureIntegrationProps {
    */
   name?: string;
   /**
-   * The third-party provider type. Immutable — changing it triggers a
+   * The third-party provider type. Immutable -- changing it triggers a
    * replacement.
    */
   type: DevicePostureIntegrationType;
@@ -119,7 +119,7 @@ export type DevicePostureIntegration = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **device posture integration** — a service-to-
+ * A Cloudflare Zero Trust **device posture integration** -- a service-to-
  * service connection to a third-party endpoint security provider
  * (CrowdStrike, Intune, Kolide, Workspace ONE, ...) whose signals power
  * `*_s2s` device posture rules.
@@ -182,7 +182,7 @@ export const DevicePostureIntegrationProvider = () =>
   Provider.succeed(DevicePostureIntegration, {
     stables: ["integrationId", "accountId", "type"],
 
-    // Account collection — enumerate every posture integration in the
+    // Account collection -- enumerate every posture integration in the
     // ambient account, exhaustively paginating the distilled list op.
     // Zero Trust is plan-gated; a `Forbidden` rejection means the account
     // lacks the entitlement, so treat it as "nothing to list".
@@ -201,7 +201,7 @@ export const DevicePostureIntegrationProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The provider type is immutable on Cloudflare's side — the config
+      // The provider type is immutable on Cloudflare's side -- the config
       // shapes are disjoint, so model a type change as replacement.
       const oldType = output?.type ?? olds?.type;
       if (oldType !== undefined && oldType !== news.type) {
@@ -232,7 +232,7 @@ export const DevicePostureIntegrationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createIntegrationName(id, news.name);
 
-      // 1. Observe — `output.integrationId` is a cached hint; fall back to
+      // 1. Observe -- `output.integrationId` is a cached hint; fall back to
       //    a name scan so a crashed prior run converges.
       let observed = output?.integrationId
         ? yield* observeIntegration(accountId, output.integrationId)
@@ -241,7 +241,7 @@ export const DevicePostureIntegrationProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* zeroTrust.createDevicePostureIntegration({
           accountId,
@@ -253,7 +253,7 @@ export const DevicePostureIntegrationProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — secrets are masked on reads so they cannot be diffed
+      // 3. Sync -- secrets are masked on reads so they cannot be diffed
       //    against observed state; PATCH when any observable field drifts
       //    OR when the desired config carries secrets that may have
       //    rotated. Cloudflare re-validates credentials on PATCH, so only
@@ -325,7 +325,7 @@ type EncodedConfig = Parameters<typeof zeroTrust.createDevicePostureIntegration>
  * shape. The distilled request type is a union of per-provider structs;
  * the API discriminates by the sibling `type` field, so a single
  * present-fields projection is sufficient. The localized cast bridges the
- * flat shape to the union — it never touches error handling.
+ * flat shape to the union -- it never touches error handling.
  */
 const encodeConfig = (config: DevicePostureIntegrationConfig): EncodedConfig => {
   const out: Record<string, string> = {};

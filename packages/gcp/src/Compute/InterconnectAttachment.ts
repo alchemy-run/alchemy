@@ -45,34 +45,34 @@ export type InterconnectAttachmentL2Forwarding = compute.InterconnectAttachmentL
 export type InterconnectAttachmentProps = {
   /**
    * Attachment name (RFC1035, 1-63 characters). If omitted, a unique name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the attachment.
    */
   interconnectAttachmentName?: string;
   /**
-   * Region the attachment lives in. Immutable — changing it replaces the
+   * Region the attachment lives in. Immutable -- changing it replaces the
    * attachment. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Cloud Router URL or name in the same region. Required. Immutable —
+   * Cloud Router URL or name in the same region. Required. Immutable --
    * changing it replaces the attachment.
    */
   router: string;
   /**
    * Attachment type (`DEDICATED`, `PARTNER`, `PARTNER_PROVIDER`,
-   * `L2_DEDICATED`). Immutable — changing it replaces the attachment.
+   * `L2_DEDICATED`). Immutable -- changing it replaces the attachment.
    * @default "PARTNER"
    */
   type?: InterconnectAttachmentType;
   /**
    * Underlying Interconnect URL or name. Required for `DEDICATED` and
-   * `L2_DEDICATED`. Immutable — changing it replaces the attachment.
+   * `L2_DEDICATED`. Immutable -- changing it replaces the attachment.
    */
   interconnect?: string;
   /**
-   * Desired availability domain for `PARTNER` attachments. Immutable —
+   * Desired availability domain for `PARTNER` attachments. Immutable --
    * changing it replaces the attachment.
    */
   edgeAvailabilityDomain?: InterconnectAttachmentEdgeAvailabilityDomain;
@@ -102,18 +102,18 @@ export type InterconnectAttachmentProps = {
    */
   stackType?: InterconnectAttachmentStackType;
   /**
-   * VLAN encryption. Immutable — changing it replaces the attachment.
+   * VLAN encryption. Immutable -- changing it replaces the attachment.
    * @default "NONE"
    */
   encryption?: InterconnectAttachmentEncryption;
   /**
-   * IEEE 802.1Q VLAN tag (2-4093). Create-time only. Immutable —
+   * IEEE 802.1Q VLAN tag (2-4093). Create-time only. Immutable --
    * changing it replaces the attachment.
    */
   vlanTag8021q?: number;
   /**
    * Reserved internal addresses for IPsec-encrypted attachments.
-   * Immutable — changing them replaces the attachment.
+   * Immutable -- changing them replaces the attachment.
    */
   ipsecInternalAddresses?: string[];
   /**

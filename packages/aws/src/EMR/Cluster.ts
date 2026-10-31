@@ -30,7 +30,7 @@ export class EMRClusterUnexpectedResponse extends Data.TaggedError("EMRClusterUn
 }> {}
 
 /**
- * EC2 instance topology for an EMR {@link Cluster} — a master (primary)
+ * EC2 instance topology for an EMR {@link Cluster} -- a master (primary)
  * instance group plus an optional core instance group, using the uniform
  * instance-groups configuration.
  */
@@ -178,13 +178,13 @@ export interface ClusterProps {
    */
   stepConcurrencyLevel?: number;
   /**
-   * Auto-termination policy — the cluster terminates itself after being idle
+   * Auto-termination policy -- the cluster terminates itself after being idle
    * for the configured duration (60 seconds to 7 days). Updateable in place;
    * removing the prop detaches the policy.
    */
   autoTerminationPolicy?: {
     /**
-     * Idle time after which the cluster auto-terminates — e.g. `"1 hour"` or
+     * Idle time after which the cluster auto-terminates -- e.g. `"1 hour"` or
      * `Duration.hours(1)`. Sent to AWS as whole seconds.
      */
     idleTimeout: Duration.Input;
@@ -339,7 +339,7 @@ export const ClusterProvider = () =>
           : createPhysicalName({ id, maxLength: 80 });
 
       // Describe a cluster by id; a terminal or missing cluster reads as
-      // undefined — a terminated EMR cluster cannot be revived or updated.
+      // undefined -- a terminated EMR cluster cannot be revived or updated.
       const readCluster = Effect.fn(function* (clusterId: string) {
         const response = yield* emr
           .describeCluster({ ClusterId: clusterId })
@@ -351,7 +351,7 @@ export const ClusterProvider = () =>
       });
 
       // Cluster names are not unique in EMR; the deterministic physical name
-      // is. Find the live (non-terminal) cluster carrying our name — used
+      // is. Find the live (non-terminal) cluster carrying our name -- used
       // when state was lost and we only know the derived name.
       const findClusterByName = Effect.fn(function* (name: string) {
         const summary = yield* emr.listClusters.items({ ClusterStates: [...ACTIVE_STATES] }).pipe(
@@ -468,7 +468,7 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
           // The core group can resize in place, but crossing the 0 boundary
-          // adds/removes the whole group — replacement.
+          // adds/removes the whole group -- replacement.
           const newCore = ni.coreInstanceCount ?? 1;
           const oldCore = oi.coreInstanceCount ?? 1;
           if ((newCore === 0) !== (oldCore === 0)) {
@@ -491,13 +491,13 @@ export const ClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           //    cache. A terminated cluster reads as missing.
           let observed = output?.clusterId
             ? yield* readCluster(output.clusterId)
             : yield* findClusterByName(name);
 
-          // 2. Ensure — launch the job flow if missing. Create errors
+          // 2. Ensure -- launch the job flow if missing. Create errors
           //    (invalid roles, subnet, release) propagate directly.
           let clusterId = observed?.Id;
           if (clusterId === undefined) {
@@ -542,7 +542,7 @@ export const ClusterProvider = () =>
               })
               .pipe(
                 // A freshly created EC2 instance profile is not yet visible to
-                // EMR (IAM eventual consistency) — RunJobFlow rejects it with
+                // EMR (IAM eventual consistency) -- RunJobFlow rejects it with
                 // "Invalid InstanceProfile" for several seconds. Retry bounded.
                 Effect.retry({
                   while: (e) => e._tag === "EmrInstanceProfileNotReady",
@@ -562,7 +562,7 @@ export const ClusterProvider = () =>
           // for WAITING/RUNNING so modify calls don't race bootstrap.
           observed = yield* waitForReady(clusterId);
 
-          // 3. Sync — per mutable aspect, diff OBSERVED state against the
+          // 3. Sync -- per mutable aspect, diff OBSERVED state against the
           //    desired props and apply only the delta.
           const desiredVisible = props.visibleToAllUsers ?? true;
           if ((observed.VisibleToAllUsers ?? true) !== desiredVisible) {
@@ -648,7 +648,7 @@ export const ClusterProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(observed.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

@@ -51,20 +51,20 @@ export type ScoringConfig = {
 export type SecurityProfileProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the profile.
+   * Immutable -- changing it replaces the profile.
    */
   organization?: string;
   /**
    * Profile id (the `{profile}` segment of
    * `organizations/{org}/securityProfiles/{profile}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * 1–63 characters matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
-   * Immutable — changing it replaces the profile.
+   * 1-63 characters matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   * Immutable -- changing it replaces the profile.
    */
   securityProfileId?: string;
   /**
    * Human-readable description. Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes. Profiles have no
+   * `[alchemy ...]` prefix and stripped from attributes. Profiles have no
    * labels field.
    */
   description?: string;
@@ -125,7 +125,7 @@ export type SecurityProfile = Resource<
  * An Advanced API Security profile (v1).
  *
  * Profiles have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Name and organization are identity —
+ * description for `list` / nuke. Name and organization are identity --
  * changing them replaces the profile. Description and profile config
  * update in place (each update creates a new revision).
  *

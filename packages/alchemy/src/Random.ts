@@ -34,14 +34,14 @@ export const RandomProvider = () =>
   Provider.succeed(Random, {
     reconcile: ({ news = {}, output }) =>
       Effect.sync(() => {
-        // Observe — there is no remote state. The cached `output.text` is
+        // Observe -- there is no remote state. The cached `output.text` is
         // the authoritative current value; once minted it is preserved
         // across reconciles to keep the secret stable.
         if (output?.text) {
           return output;
         }
 
-        // Ensure — no observed value: mint a fresh random secret and
+        // Ensure -- no observed value: mint a fresh random secret and
         // return it. The next reconcile will see this in `output` and
         // short-circuit above.
         const byteLength = news.bytes ?? 32;

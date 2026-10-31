@@ -175,7 +175,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   test.todo = (name, eff, opts) => addTest(name, eff, opts, "todo");
 
   // One lock per scratch stack. When an attempt times out, the runner fires
-  // an interrupt and ABANDONS the attempt's fiber after a short grace — but
+  // an interrupt and ABANDONS the attempt's fiber after a short grace -- but
   // the fiber keeps running its teardown (`scratch.destroy()` below) in the
   // background, e.g. a CloudFront disable-wait. Without this lock the retry
   // starts concurrently on the SAME scratch state: the stale teardown then
@@ -201,8 +201,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   ) => {
     if (sharedScope === undefined) return Effect.die("Test runtime is closed");
     // Durable, file-namespaced scratch state (`.alchemy/state`). A run that
-    // dies mid-delete — e.g. the runner abandons teardown 10s after a test
-    // timeout while a CloudFront disable-wait is still in flight — leaves
+    // dies mid-delete -- e.g. the runner abandons teardown 10s after a test
+    // timeout while a CloudFront disable-wait is still in flight -- leaves
     // its `deleting` rows on disk, so the NEXT run's leading
     // `stack.destroy()` (or the ensuring teardown below) resumes and drains
     // them instead of planning "no changes" and silently orphaning the
@@ -212,7 +212,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     // that fails (assertion, API error like a 409/Unauthorized) or is
     // interrupted (timeout) BEFORE its trailing `stack.destroy()` would
     // otherwise leak every cloud resource it deployed.
-    // `scratch.destroy()` is idempotent — a no-op when the body already
+    // `scratch.destroy()` is idempotent -- a no-op when the body already
     // destroyed, and it reclaims the orphans otherwise. `Effect.ensuring`
     // runs the finalizer on success, failure, AND interruption.
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
@@ -228,7 +228,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     opts: TestOptions | undefined,
     mode: "run" | "skip" | "todo",
   ) => {
-    // Captured at registration (module evaluation during collection) — the
+    // Captured at registration (module evaluation during collection) -- the
     // collection context is gone by the time the body runs.
     const file = currentFile();
     registerTest({

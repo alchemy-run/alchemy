@@ -1,12 +1,12 @@
 /**
- * `@alchemy.run/frontend-frameworks/vite/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/vite/node` -- the Node container deploy
  * target for the plain Vite integration.
  *
  * A plain Vite build is assets-only (client bundle + `index.html`). The
  * finishing pass writes a Node HTTP program (`serve-node.mjs`) into
  * `clientDirectory` that serves those files, answers `GET /health`, and
  * applies SPA / 404-page fallback. Platform composites deploy that file
- * as-is (`isExternal`) — they do not generate a second static server.
+ * as-is (`isExternal`) -- they do not generate a second static server.
  *
  * The wholesale `build` hook runs the project's `vite build` in a
  * disposable child process whose working directory IS the project root
@@ -97,7 +97,7 @@ export const makeNodeTarget = (config: ViteTargetConfig = {}): ViteTarget => ({
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeNodeTarget;
 

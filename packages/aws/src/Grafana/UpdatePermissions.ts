@@ -25,7 +25,7 @@ import type { Workspace } from "./Workspace.ts";
  *     },
  *   ],
  * });
- * // errors → [] when every instruction applied
+ * // errors -> [] when every instruction applied
  * ```
  *
  * @binding

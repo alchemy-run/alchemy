@@ -5,12 +5,12 @@ import type * as Effect from "effect/Effect";
 export interface PutJobSuccessResultRequest extends SVC.PutJobSuccessResultInput {}
 
 /**
- * Runtime binding for `codepipeline:PutJobSuccessResult` — reports success
+ * Runtime binding for `codepipeline:PutJobSuccessResult` -- reports success
  * for a job handed to the workload by a pipeline `Invoke` (Lambda) or
  * custom action. Without this call the action times out.
  *
  * CodePipeline job operations do not support resource-level permissions, so
- * the grant is on `*`. The binding takes no resource — the job id arrives
+ * the grant is on `*`. The binding takes no resource -- the job id arrives
  * with the invocation event.
  * ### Job Workers
  * **Example:** Complete an Invoke-Action Job

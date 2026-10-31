@@ -1,4 +1,4 @@
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./Blueprint.ts";
 export * from "./CopyBlueprintStage.ts";
 export * from "./CopyBlueprintStageHttp.ts";

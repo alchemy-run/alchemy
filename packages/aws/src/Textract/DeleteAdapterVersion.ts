@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Adapter } from "./Adapter.ts";
 
 /**
- * Runtime binding for `textract:DeleteAdapterVersion` — delete a version
+ * Runtime binding for `textract:DeleteAdapterVersion` -- delete a version
  * of the bound adapter (e.g. retire superseded versions from a retraining
  * pipeline).
  *

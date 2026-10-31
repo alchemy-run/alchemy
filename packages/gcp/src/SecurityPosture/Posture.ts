@@ -45,13 +45,13 @@ export type PostureProps = {
    * `organizations/{organization}/locations/global/postures/{posture}`).
    * If omitted, a unique id is generated from the stack, stage, and
    * logical id. Letters, digits, hyphens, and underscores; max 63
-   * characters. Immutable — changing it replaces the posture.
+   * characters. Immutable -- changing it replaces the posture.
    */
   postureId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the posture.
+   * Manager ancestor. Immutable -- changing it replaces the posture.
    */
   organization?: string;
   /**
@@ -70,7 +70,7 @@ export type PostureProps = {
    */
   description?: string;
   /**
-   * User annotations. Postures have no labels field — Alchemy ownership
+   * User annotations. Postures have no labels field -- Alchemy ownership
    * (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored here
    * so `list` / `pnpm nuke:gcp` can find owned postures. Annotations are
    * set at create time.
@@ -131,7 +131,7 @@ export type Posture = Resource<
  * Analytics detectors into policy sets that can be deployed to a
  * project, folder, or organization. Postures live under
  * `organizations/{organization}/locations/global`. They have no labels
- * field — Alchemy stamps ownership into `annotations`. `postureId` and
+ * field -- Alchemy stamps ownership into `annotations`. `postureId` and
  * `organization` are identity. Description, policy sets, and state
  * update in place. State cannot be patched in the same request as other
  * fields.

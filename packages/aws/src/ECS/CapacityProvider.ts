@@ -219,12 +219,12 @@ export const CapacityProviderProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const autoScalingGroupArn = news.autoScalingGroupArn as string;
 
-          // Observe — fetch live cloud state. We fetch fresh on every
+          // Observe -- fetch live cloud state. We fetch fresh on every
           // reconcile so adoption, drift, and partial-prior-runs all
           // converge.
           let existing = yield* describe(name);
 
-          // Ensure — create the capacity provider if missing.
+          // Ensure -- create the capacity provider if missing.
           if (!existing?.name || !existing.capacityProviderArn) {
             yield* ecs
               .createCapacityProvider({
@@ -240,7 +240,7 @@ export const CapacityProviderProvider = () =>
               .pipe(
                 // ECS may surface concurrent creation either as
                 // `LimitExceededException` or a generic `ClientException`
-                // with name conflict semantics — re-describe and continue.
+                // with name conflict semantics -- re-describe and continue.
                 Effect.catchTag("LimitExceededException", () => Effect.void),
               );
             existing = yield* describe(name);
@@ -249,7 +249,7 @@ export const CapacityProviderProvider = () =>
           const capacityProviderArn = (existing?.capacityProviderArn ??
             `arn:aws:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
 
-          // Sync managed scaling — observed ↔ desired. ECS
+          // Sync managed scaling -- observed <-> desired. ECS
           // updateCapacityProvider only mutates managed* fields; ASG ARN is
           // immutable (replacement-triggering, handled in diff).
           yield* ecs.updateCapacityProvider({
@@ -261,7 +261,7 @@ export const CapacityProviderProvider = () =>
             },
           });
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = fromEcsTags(existing?.tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -355,7 +355,7 @@ export const CapacityProviderProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* ecs.deleteCapacityProvider({ capacityProvider: output.name }).pipe(
-            // Already gone — treat as success.
+            // Already gone -- treat as success.
             Effect.catchTags({
               InvalidParameterException: () => Effect.void,
               ClientException: () => Effect.void,

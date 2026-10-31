@@ -173,7 +173,7 @@ export const AwsLogSourceProvider = () =>
           if (sourceName === undefined) return undefined;
           const sourceVersion = output?.sourceVersion ?? olds?.sourceVersion;
           // An account that never onboarded Security Lake rejects
-          // listLogSources — that means "no log source", not a failure.
+          // listLogSources -- that means "no log source", not a failure.
           const observed = yield* observeSource(sourceName, sourceVersion).pipe(
             Effect.catchTag(
               ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
@@ -185,7 +185,7 @@ export const AwsLogSourceProvider = () =>
             ),
           );
           if (observed.regions.size === 0) return undefined;
-          // Log sources carry no tags, so ownership can't be distinguished —
+          // Log sources carry no tags, so ownership can't be distinguished --
           // read reports observed state directly.
           return {
             sourceName,
@@ -238,7 +238,7 @@ export const AwsLogSourceProvider = () =>
             }));
           }),
 
-        // The source identity (name + pinned version) is create-only — a
+        // The source identity (name + pinned version) is create-only -- a
         // change tears down collection for the old source and enables the new.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -251,10 +251,10 @@ export const AwsLogSourceProvider = () =>
           const desiredRegions = news.regions;
           const previousAccounts = output?.accounts;
 
-          // 1. OBSERVE — which Regions already collect this source.
+          // 1. OBSERVE -- which Regions already collect this source.
           const observed = yield* observeSource(news.sourceName, news.sourceVersion);
 
-          // 2. ENSURE — enable collection in Regions where it is missing.
+          // 2. ENSURE -- enable collection in Regions where it is missing.
           const missingRegions = desiredRegions.filter((region) => !observed.regions.has(region));
           if (missingRegions.length > 0) {
             const response = yield* securitylake.createAwsLogSource({
@@ -269,7 +269,7 @@ export const AwsLogSourceProvider = () =>
             );
           }
 
-          // 3. SYNC accounts — enable for newly added accounts everywhere,
+          // 3. SYNC accounts -- enable for newly added accounts everywhere,
           // disable for accounts no longer desired.
           const addedAccounts = (news.accounts ?? []).filter(
             (account) => !(previousAccounts ?? []).includes(account),
@@ -314,7 +314,7 @@ export const AwsLogSourceProvider = () =>
             );
           }
 
-          // 3b. SYNC Region removals — only Regions this resource previously
+          // 3b. SYNC Region removals -- only Regions this resource previously
           // managed (recorded in output) are disabled.
           const staleRegions = (output?.regions ?? []).filter(
             (managed) => !desiredRegions.includes(managed) && observed.regions.has(managed),

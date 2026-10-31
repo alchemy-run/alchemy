@@ -18,7 +18,7 @@ export interface AuthorizerProps {
    */
   apiId: string;
   /**
-   * The authorizer type: `JWT` (HTTP APIs — validate a JWT issued by an
+   * The authorizer type: `JWT` (HTTP APIs -- validate a JWT issued by an
    * OIDC/OAuth2 provider) or `REQUEST` (Lambda authorizer, both
    * protocols).
    */
@@ -31,9 +31,9 @@ export interface AuthorizerProps {
   /**
    * The identity source(s):
    *
-   * - JWT — where to find the token, e.g. `["$request.header.Authorization"]`.
-   * - REQUEST (HTTP APIs) — the caching identity sources.
-   * - REQUEST (WebSocket APIs) — e.g. `["route.request.header.Auth"]`.
+   * - JWT -- where to find the token, e.g. `["$request.header.Authorization"]`.
+   * - REQUEST (HTTP APIs) -- the caching identity sources.
+   * - REQUEST (WebSocket APIs) -- e.g. `["route.request.header.Auth"]`.
    */
   identitySource?: string[];
   /**
@@ -81,7 +81,7 @@ export interface AuthorizerType extends Resource<
   {
     /** The API this authorizer belongs to. */
     apiId: string;
-    /** The authorizer identifier — referenced by `Route.authorizerId`. */
+    /** The authorizer identifier -- referenced by `Route.authorizerId`. */
     authorizerId: string;
     /** The authorizer name. */
     name: string;
@@ -100,11 +100,11 @@ export interface AuthorizerType extends Resource<
 > {}
 
 /**
- * An API Gateway v2 Authorizer — controls access to HTTP/WebSocket API
+ * An API Gateway v2 Authorizer -- controls access to HTTP/WebSocket API
  * routes via JWT validation or a Lambda (`REQUEST`) authorizer.
  * ### JWT authorizers
  * The common HTTP API authorizer: API Gateway validates the caller's JWT
- * against the issuer's JWKS and matches the audience — no Lambda invoked.
+ * against the issuer's JWKS and matches the audience -- no Lambda invoked.
  *
  * **Example:** JWT authorizer for a Cognito user pool
  * ```typescript
@@ -276,7 +276,7 @@ export const AuthorizerProvider = () =>
             return snapshotFromAuthorizer(apiId, observed);
           }
 
-          // 3. SYNC — update on drift.
+          // 3. SYNC -- update on drift.
           const snapshot = snapshotFromAuthorizer(apiId, observed);
           const desiredTtlSeconds = toWireSeconds(news.authorizerResultTtl);
           const drift =

@@ -58,7 +58,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 export interface MachineGuest {
   /**
-   * CPU kind (`shared`, `performance`, `shared-cpu-1x`, …).
+   * CPU kind (`shared`, `performance`, `shared-cpu-1x`, ...).
    *
    * @default "shared"
    */
@@ -106,7 +106,7 @@ export interface MachineRestart {
 export interface MachinePort {
   /** Published proxy port. */
   port?: number;
-  /** Fly handlers (`http`, `tls`, `pg_tls`, …). */
+  /** Fly handlers (`http`, `tls`, `pg_tls`, ...). */
   handlers?: string[];
   /** Redirect HTTP to HTTPS on this port. */
   forceHttps?: boolean;
@@ -256,7 +256,7 @@ export interface MachinePropsBase {
    */
   name?: string;
   /**
-   * Region to start the Machine in (`iad`, `ewr`, `ord`, …). Changing it
+   * Region to start the Machine in (`iad`, `ewr`, `ord`, ...). Changing it
    * replaces the Machine.
    *
    * @default "iad"
@@ -361,7 +361,7 @@ export type Machine = Resource<
     name: string;
     /** Region the Machines are running in. */
     region: string;
-    /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
+    /** Observed state of replica 0 (`created`, `started`, `stopped`, ...). */
     state: string;
     /** Fly instance / version id of replica 0, if the API returned one. */
     instanceId: string | undefined;
@@ -1147,7 +1147,7 @@ export const MachineProvider = () =>
       if (appChanged || nameChanged || regionChanged) {
         return {
           action: "replace" as const,
-          // Name is unique per App — same name in a new region cannot coexist.
+          // Name is unique per App -- same name in a new region cannot coexist.
           deleteFirst: nameChanged === false && appChanged === false,
         };
       }

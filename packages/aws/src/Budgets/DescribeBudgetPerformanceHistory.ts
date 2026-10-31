@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Budget } from "./Budget.ts";
 
 /**
- * Request for {@link DescribeBudgetPerformanceHistory} — the bound budget's
+ * Request for {@link DescribeBudgetPerformanceHistory} -- the bound budget's
  * `AccountId` and `BudgetName` are injected automatically.
  */
 export interface DescribeBudgetPerformanceHistoryRequest extends Omit<
@@ -17,13 +17,13 @@ export interface DescribeBudgetPerformanceHistoryRequest extends Omit<
  * `DescribeBudgetPerformanceHistory`.
  *
  * Bind this operation to a {@link Budget} to read its budgeted-vs-actual
- * amounts for past periods — e.g. to render a spend trend or detect
+ * amounts for past periods -- e.g. to render a spend trend or detect
  * consistently blown budgets. Provide the implementation with
  * `Effect.provide(AWS.Budgets.DescribeBudgetPerformanceHistoryHttp)`.
  * ### Reading Budget Spend
  * **Example:** Read Budgeted vs Actual Amounts
  * ```typescript
- * // init — bind the operation to the budget
+ * // init -- bind the operation to the budget
  * const history = yield* AWS.Budgets.DescribeBudgetPerformanceHistory(budget);
  *
  * // runtime

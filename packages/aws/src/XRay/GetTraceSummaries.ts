@@ -24,12 +24,12 @@ export interface GetTraceSummariesRequest extends xray.GetTraceSummariesRequest 
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true, tracing: "Active" },
  *   Effect.gen(function* () {
- *     // init — bind the operation (grants xray:GetTraceSummaries)
+ *     // init -- bind the operation (grants xray:GetTraceSummaries)
  *     const getTraceSummaries = yield* XRay.GetTraceSummaries();
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — find traces for a service in the last 5 minutes
+ *         // runtime -- find traces for a service in the last 5 minutes
  *         const now = yield* Effect.sync(() => Date.now());
  *         const result = yield* getTraceSummaries({
  *           StartTime: new Date(now - 5 * 60 * 1000),

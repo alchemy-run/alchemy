@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:RetryBuildBatch` — restarts a finished
+ * Runtime binding for `codebuild:RetryBuildBatch` -- restarts a finished
  * batch build of the bound project, retrying either all builds or only the
  * failed ones (`retryType`).
  * ### Batch Builds

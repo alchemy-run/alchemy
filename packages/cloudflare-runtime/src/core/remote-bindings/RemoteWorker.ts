@@ -29,7 +29,7 @@ export class RemoteWorker extends Context.Service<
 
 // Explicit annotation: the inferred type references `Credentials` from
 // `@distilled.cloud/cloudflare`, which the dts bundler cannot name on its
-// own — without this it degrades `make`/`layer` (and everything composed
+// own -- without this it degrades `make`/`layer` (and everything composed
 // from them, e.g. `RuntimeServices.layerRuntime`) to `any, any`.
 export const make: (
   accountId: Effect.Effect<string>,
@@ -95,7 +95,7 @@ export const make: (
     // preview dedupes deployments by script content and IGNORES changed
     // bindings metadata: re-uploading byte-identical files under the same
     // script name returns a preview token routed to the FIRST deployment
-    // of those bytes — whose env carries a stale binding set (its resources
+    // of those bytes -- whose env carries a stale binding set (its resources
     // may no longer exist), so every proxied call 400s with our own
     // BindingNotFound. A deterministic config hash keeps caching intact for
     // an unchanged session while forcing a distinct deployment whenever the

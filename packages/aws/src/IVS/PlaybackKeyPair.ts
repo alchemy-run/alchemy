@@ -129,7 +129,7 @@ export const PlaybackKeyPairProvider = () =>
       });
 
       /**
-       * ListPlaybackKeyPairs has no name filter — enumerate and match
+       * ListPlaybackKeyPairs has no name filter -- enumerate and match
        * exactly (key pair names are unique per account/region).
        */
       const findByName = Effect.fn(function* (name: string) {
@@ -156,7 +156,7 @@ export const PlaybackKeyPairProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          // There is no UpdatePlaybackKeyPair — both the key material and
+          // There is no UpdatePlaybackKeyPair -- both the key material and
           // the name are immutable. Key pair names are unique, so replacing
           // the material under the SAME name must delete the old key pair
           // first (create-before-delete would find the old one by name and
@@ -180,7 +180,7 @@ export const PlaybackKeyPairProvider = () =>
             ? yield* getByArn(output.playbackKeyPairArn)
             : yield* findByName(name);
 
-          // 2. Ensure — import if missing. A ConflictException means the
+          // 2. Ensure -- import if missing. A ConflictException means the
           // name already exists (a race with a peer reconciler or a
           // state-persistence failure): adopt it by name.
           if (observed === undefined) {
@@ -203,7 +203,7 @@ export const PlaybackKeyPairProvider = () =>
             });
           }
 
-          // 3. Sync tags — the only mutable aspect.
+          // 3. Sync tags -- the only mutable aspect.
           yield* syncIvsTags(arn, desiredTags);
 
           // 4. Return fresh attributes.

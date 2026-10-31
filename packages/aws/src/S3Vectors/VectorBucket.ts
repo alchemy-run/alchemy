@@ -12,7 +12,7 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
- * Server-side encryption configuration for a vector bucket. Immutable —
+ * Server-side encryption configuration for a vector bucket. Immutable --
  * changing it replaces the bucket.
  */
 export interface VectorBucketEncryption {
@@ -38,14 +38,14 @@ export interface VectorBucketProps {
    */
   vectorBucketName?: string;
   /**
-   * Server-side encryption configuration. Immutable — changing it replaces
+   * Server-side encryption configuration. Immutable -- changing it replaces
    * the bucket.
    */
   encryption?: VectorBucketEncryption;
   /**
    * Resource policy statements for the vector bucket, granting or denying
    * cross-account/principal access to it and the indexes inside it
-   * (`arn:…:bucket/<name>/index/*`). Rendered as a standard
+   * (`arn:...:bucket/<name>/index/*`). Rendered as a standard
    * `2012-10-17` policy document via `PutVectorBucketPolicy`; omitting the
    * prop removes any existing policy.
    */
@@ -74,7 +74,7 @@ export interface VectorBucket extends Resource<
 > {}
 
 /**
- * An Amazon S3 Vectors bucket — durable storage for vector embeddings,
+ * An Amazon S3 Vectors bucket -- durable storage for vector embeddings,
  * queryable by similarity. Create one or more {@link Index}es inside it to
  * store and query vectors.
  *
@@ -197,7 +197,7 @@ export const VectorBucketProvider = () =>
           const oldName = yield* createName(id, olds ?? {});
           const newName = yield* createName(id, news ?? {});
           if (oldName !== newName) return { action: "replace" } as const;
-          // Encryption is fixed at create time — any change replaces.
+          // Encryption is fixed at create time -- any change replaces.
           if (encryptionKey(olds?.encryption) !== encryptionKey(news?.encryption)) {
             return { action: "replace" } as const;
           }
@@ -208,10 +208,10 @@ export const VectorBucketProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observe(name);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    ConflictException, which we treat as a race and re-observe.
           if (live === undefined) {
             yield* s3vectors
@@ -226,7 +226,7 @@ export const VectorBucketProvider = () =>
 
           const vectorBucketArn = live?.vectorBucketArn ?? output?.vectorBucketArn;
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption and
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so adoption and
           //    drift converge (create-time tags only apply on first create).
           if (vectorBucketArn !== undefined) {
             const currentTags = yield* observedTags(vectorBucketArn);
@@ -245,7 +245,7 @@ export const VectorBucketProvider = () =>
             }
           }
 
-          // 4. SYNC POLICY — diff desired against the OBSERVED bucket policy
+          // 4. SYNC POLICY -- diff desired against the OBSERVED bucket policy
           //    so adoption and drift converge (delete when the prop is gone).
           const desiredPolicy =
             news.policy !== undefined && news.policy.length > 0

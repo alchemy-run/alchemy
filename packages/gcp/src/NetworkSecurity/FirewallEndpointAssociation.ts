@@ -38,11 +38,11 @@ export type FirewallEndpointAssociationProps = {
    * Association id (the `{firewallEndpointAssociation}` segment of
    * `projects/{project}/locations/{location}/firewallEndpointAssociations/{firewallEndpointAssociation}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the association.
+   * logical id. Immutable -- changing it replaces the association.
    */
   firewallEndpointAssociationId?: string;
   /**
-   * Zone of the association (`us-central1-a`, …). Immutable — changing
+   * Zone of the association (`us-central1-a`, ...). Immutable -- changing
    * it replaces the association. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -51,12 +51,12 @@ export type FirewallEndpointAssociationProps = {
   /**
    * FirewallEndpoint resource name
    * (`projects/{project}/locations/{location}/firewallEndpoints/{firewallEndpoint}`).
-   * Immutable — changing it replaces the association.
+   * Immutable -- changing it replaces the association.
    */
   firewallEndpoint: string;
   /**
    * VPC network resource name
-   * (`projects/{project}/global/networks/{network}`). Immutable —
+   * (`projects/{project}/global/networks/{network}`). Immutable --
    * changing it replaces the association.
    */
   network: string;
@@ -98,7 +98,7 @@ export type FirewallEndpointAssociation = Resource<
     disabled: boolean;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether reconciling is in progress. */
     reconciling: boolean;

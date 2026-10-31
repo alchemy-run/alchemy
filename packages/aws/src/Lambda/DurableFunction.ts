@@ -34,7 +34,7 @@ const TypeId = "AWS.Lambda.DurableFunction" as const;
  * resources.
  *
  * Deliberately narrow: cloud clients (`Credentials`/`Region`-requiring
- * effects) are NOT provided to the body directly — resolve typed binding
+ * effects) are NOT provided to the body directly -- resolve typed binding
  * clients in the init phase and call them inside `Durable.step`, which is
  * exactly the determinism law the replay model requires.
  */
@@ -72,7 +72,7 @@ export type DurableFunctionInitServices =
  *
  * A DurableFunction accepts every {@link FunctionProps | Function prop}
  * except `functionUrl` (every invocation of a durable function arrives as the
- * durable-execution envelope — there is no HTTP surface), plus the
+ * durable-execution envelope -- there is no HTTP surface), plus the
  * `DurableConfig` tuning knobs below.
  */
 /** The DurableConfig tuning knobs a DurableFunction adds to Function props. */
@@ -85,7 +85,7 @@ export interface DurableFunctionTuning {
   executionTimeout?: Duration.Input;
   /**
    * How long completed execution history is retained (e.g. `"7 days"`;
-   * 1–90 days). Rounded to whole days on the wire.
+   * 1-90 days). Rounded to whole days on the wire.
    * @default "14 days" (AWS default)
    */
   retentionPeriod?: Duration.Input;
@@ -93,12 +93,12 @@ export interface DurableFunctionTuning {
 
 /**
  * Props of a {@link DurableFunction}: any Function props that carry a
- * `main` — the orchestrator body is an Effect that has to be bundled into
- * an entrypoint — minus `functionUrl` (every invocation arrives as the
+ * `main` -- the orchestrator body is an Effect that has to be bundled into
+ * an entrypoint -- minus `functionUrl` (every invocation arrives as the
  * durable envelope, so there is no HTTP surface), plus the DurableConfig
  * knobs.
  *
- * Selected by SHAPE (`Extract<…, { main: string }>`), not by packaging, so
+ * Selected by SHAPE (`Extract<..., { main: string }>`), not by packaging, so
  * any future main-bearing variant is durable-capable automatically; a
  * prebuilt `image` function is excluded because it has no `main` for the
  * `impl` Effect to live in.
@@ -306,7 +306,7 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
   return {
     ...rest,
     // Every invocation of a DurableConfig'd function arrives as the durable
-    // envelope — a Function URL could never be served.
+    // envelope -- a Function URL could never be served.
     functionUrl: false,
     build: {
       ...build,
@@ -333,7 +333,7 @@ const resolveDurableHandle = (id: string) => (instance: unknown) => {
     ? Effect.succeed(handle as DurableFunction<any, any>)
     : Effect.die(
         new Error(
-          `AWS.Lambda.DurableFunction<${id}> has no durable handle — provide ` +
+          `AWS.Lambda.DurableFunction<${id}> has no durable handle \u2014 provide ` +
             `its implementation (\`${id}.make(props, impl)\` or an inline ` +
             `form) before yielding it.`,
         ),
@@ -356,7 +356,7 @@ const composeDurableImpl = (
     // provides `Function.Self` during its own init).
     const host = yield* Function;
 
-    // Resolve the distilled operations once at init — they close over the
+    // Resolve the distilled operations once at init -- they close over the
     // ambient Credentials/Region/HttpClient so the handle's runtime
     // callables need no cloud services of their own.
     const invoke = yield* Lambda.invoke;
@@ -368,8 +368,8 @@ const composeDurableImpl = (
     const sendCallbackHeartbeat = yield* Lambda.sendDurableExecutionCallbackHeartbeat;
 
     // Capture the function-name Output WITHOUT resolving it. This is a
-    // self-reference — `host` is the very Function this wrapper's init is
-    // building — and `functionName`'s Output source only registers during
+    // self-reference -- `host` is the very Function this wrapper's init is
+    // building -- and `functionName`'s Output source only registers during
     // that function's own reconcile. Yielding it here (init/plan time) would
     // block forever (the reconcile that produces it waits on this init to
     // finish). Resolve it lazily inside the runtime callables instead, the
@@ -429,7 +429,7 @@ const composeDurableImpl = (
         Effect.gen(function* () {
           // `FunctionName` is the host's own unresolved Output (captured raw at
           // init to avoid the plan-time self-reference deadlock). Resolve both
-          // stages — Output → Accessor → string — lazily at runtime.
+          // stages -- Output -> Accessor -> string -- lazily at runtime.
           const functionName = yield* yield* FunctionName;
           const response = yield* invoke({
             FunctionName: functionName,
@@ -500,11 +500,11 @@ const composeDurableImpl = (
   });
 
 /**
- * An AWS Lambda Durable Function — a code-first, replay-based orchestrator
+ * An AWS Lambda Durable Function -- a code-first, replay-based orchestrator
  * that IS a durable Lambda Function. `AWS.Lambda.DurableFunction` is a
  * wrapper of {@link Function}: it owns the underlying Lambda function,
  * configures its `DurableConfig` at `CreateFunction` (durability is a
- * create-time property — a DurableFunction is always durable), registers the
+ * create-time property -- a DurableFunction is always durable), registers the
  * durable-execution listener on the owned entrypoint, self-binds the
  * checkpoint-protocol IAM (`lambda:CheckpointDurableExecution`,
  * `lambda:GetDurableExecutionState`) onto the execution role, and vendors the
@@ -517,7 +517,7 @@ const composeDurableImpl = (
  * `Durable.step`s replay from the checkpoint log without re-executing.
  *
  * Every invocation of a durable function arrives as the durable-execution
- * envelope, so a DurableFunction has no HTTP surface (`functionUrl` is disabled) —
+ * envelope, so a DurableFunction has no HTTP surface (`functionUrl` is disabled) --
  * it does one thing: run durable orchestrations. Reusing a logical id
  * between a plain `Function` and a `DurableFunction` replaces the physical
  * function (DurableConfig cannot be flipped in place).
@@ -551,7 +551,7 @@ const composeDurableImpl = (
  *
  * **Example:** Tag + default export (entrypoint form)
  * ```typescript
- * // order-flow.ts — `main` points at this module
+ * // order-flow.ts -- `main` points at this module
  * export class OrderFlow extends AWS.Lambda.DurableFunction<OrderFlow>()(
  *   "OrderFlow",
  * ) {}
@@ -630,7 +630,7 @@ export const DurableFunction: DurableFunctionClass = taggedFunction(DurableFunct
   ...args: [] | [id: string] | [id: string, props: unknown, impl: Effect.Effect<any, any, any>]
 ) => {
   if (args.length === 0) {
-    // `DurableFunction<Self>()` — the binder for the class/tag forms.
+    // `DurableFunction<Self>()` -- the binder for the class/tag forms.
     return DurableFunction;
   }
   const [id, props, impl] = args;

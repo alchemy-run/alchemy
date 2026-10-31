@@ -177,7 +177,7 @@ const createName = (id: string, name: string | undefined) =>
   name === undefined ? createPhysicalName({ id }) : Effect.succeed(name);
 
 // Distilled emits the Management API's cursor-paginated list operations as
-// plain ops, so callers walk `pagination` themselves — the same shape the Neon
+// plain ops, so callers walk `pagination` themselves -- the same shape the Neon
 // provider uses (see `src/Neon/Project.ts` findProjectByName).
 const listProjects = () =>
   Effect.gen(function* () {

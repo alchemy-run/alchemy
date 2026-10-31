@@ -34,7 +34,7 @@ export type OctaneProps = FrameworkSiteProps<{
  * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/octane` with the
- * `@alchemy.run/frontend-frameworks/octane/aws` deploy target — the project's
+ * `@alchemy.run/frontend-frameworks/octane/aws` deploy target -- the project's
  * own `vite build` (with `@octanejs/vite-plugin`) produces the
  * default native Node server bundle, and the target's finishing pass
  * automatically wraps its fetch handler as a streaming Lambda handler.

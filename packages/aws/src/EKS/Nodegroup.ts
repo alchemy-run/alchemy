@@ -48,7 +48,7 @@ export interface NodegroupProps {
    */
   instanceTypes?: string[];
   /**
-   * Scaling configuration (min/max/desired node counts). Mutable — updated in
+   * Scaling configuration (min/max/desired node counts). Mutable -- updated in
    * place via `updateNodegroupConfig`.
    */
   scalingConfig?: eks.NodegroupScalingConfig;
@@ -67,16 +67,16 @@ export interface NodegroupProps {
    */
   diskSize?: number;
   /**
-   * Kubernetes labels applied to the nodes. Mutable — reconciled in place.
+   * Kubernetes labels applied to the nodes. Mutable -- reconciled in place.
    */
   labels?: Record<string, string>;
   /**
-   * Kubernetes taints applied to the nodes. Mutable — reconciled in place.
+   * Kubernetes taints applied to the nodes. Mutable -- reconciled in place.
    */
   taints?: eks.Taint[];
   /**
    * Node group update configuration (`maxUnavailable` /
-   * `maxUnavailablePercentage`). Mutable — updated in place.
+   * `maxUnavailablePercentage`). Mutable -- updated in place.
    */
   updateConfig?: eks.NodegroupUpdateConfig;
   /**
@@ -84,12 +84,12 @@ export interface NodegroupProps {
    */
   remoteAccess?: eks.RemoteAccessConfig;
   /**
-   * Kubernetes version for the node group. Mutable — upgraded in place via
+   * Kubernetes version for the node group. Mutable -- upgraded in place via
    * `updateNodegroupVersion`.
    */
   version?: string;
   /**
-   * AMI release version for the node group. Mutable — upgraded in place.
+   * AMI release version for the node group. Mutable -- upgraded in place.
    */
   releaseVersion?: string;
   /**
@@ -142,11 +142,11 @@ export interface Nodegroup extends Resource<
 > {}
 
 /**
- * An Amazon EKS managed node group — an EC2 Auto Scaling group of worker nodes
+ * An Amazon EKS managed node group -- an EC2 Auto Scaling group of worker nodes
  * managed by EKS for a cluster.
  *
  * Managed node groups provide the compute capacity a non-Auto-Mode EKS cluster
- * needs to run pods. Creation is asynchronous (`CREATING` → `ACTIVE`, ~2–5 min)
+ * needs to run pods. Creation is asynchronous (`CREATING` -> `ACTIVE`, ~2-5 min)
  * and the provider waits for the group to become `ACTIVE` before returning.
  * Scaling, labels, taints, update config, and version are mutable in place;
  * subnets, instance types, AMI type, disk size, node role, capacity type, and
@@ -203,7 +203,7 @@ const normalizeLabels = (labels: Record<string, string | undefined> | undefined)
     ),
   );
 
-// Wait budget: ~10 min at 5s spacing — node groups reach ACTIVE in 2–5 min.
+// Wait budget: ~10 min at 5s spacing -- node groups reach ACTIVE in 2-5 min.
 const waitSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]);
 
 const taintKey = (taint: eks.Taint) => `${taint.key ?? ""}::${taint.effect ?? ""}`;
@@ -485,10 +485,10 @@ export const NodegroupProvider = () =>
             ...news.tags,
           };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let state = yield* readNodegroup({ clusterName, nodegroupName });
 
-          // Ensure — create if missing; tolerate a create race, then wait for
+          // Ensure -- create if missing; tolerate a create race, then wait for
           // the node group to reach ACTIVE before syncing.
           if (!state) {
             yield* eks
@@ -560,7 +560,7 @@ export const NodegroupProvider = () =>
             }
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({

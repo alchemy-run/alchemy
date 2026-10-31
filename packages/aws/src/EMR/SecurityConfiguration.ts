@@ -14,8 +14,8 @@ export interface SecurityConfigurationProps {
    */
   securityConfigurationName?: string;
   /**
-   * The security configuration document — encryption, authentication
-   * (Kerberos), authorization, and instance-metadata settings — as a plain
+   * The security configuration document -- encryption, authentication
+   * (Kerberos), authorization, and instance-metadata settings -- as a plain
    * object or a pre-serialized JSON string. The document is immutable in
    * EMR; content changes are converged by deleting and recreating the
    * configuration under the same name (clusters capture the document at
@@ -38,7 +38,7 @@ export interface SecurityConfiguration extends Resource<
 > {}
 
 /**
- * An Amazon EMR security configuration — a reusable JSON document of
+ * An Amazon EMR security configuration -- a reusable JSON document of
  * encryption, authentication, and instance-metadata settings referenced by
  * name when launching a {@link Cluster}.
  *
@@ -167,13 +167,13 @@ export const SecurityConfigurationProvider = () =>
           const name = output?.securityConfigurationName ?? (yield* toName(id, props));
           const desired = toDocument(props.securityConfiguration);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           const observed = yield* readConfiguration(name);
 
           // 2/3. Ensure + sync: the document is immutable, so a content
           //      change is converged by deleting the old document and
           //      recreating it under the same name. A concurrent create of
-          //      identical content surfaces as AlreadyExists — that's a
+          //      identical content surfaces as AlreadyExists -- that's a
           //      race, not a failure.
           if (
             observed?.SecurityConfiguration !== undefined &&

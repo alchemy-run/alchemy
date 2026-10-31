@@ -46,11 +46,11 @@ export type AutoscalingLimits = {
 };
 
 export type AutoscalingTargets = {
-  /** Target high-priority CPU percent (`10`–`90`). */
+  /** Target high-priority CPU percent (`10`-`90`). */
   highPriorityCpuUtilizationPercent?: number;
-  /** Target total CPU percent (`10`–`90`). */
+  /** Target total CPU percent (`10`-`90`). */
   totalCpuUtilizationPercent?: number;
-  /** Target storage percent (`10`–`99`). */
+  /** Target storage percent (`10`-`99`). */
   storageUtilizationPercent?: number;
 };
 
@@ -75,19 +75,19 @@ export type InstanceProps = {
    * Instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters). Immutable — changing
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-64 characters). Immutable -- changing
    * it replaces the instance.
    */
   instanceId?: string;
   /**
    * Instance configuration id (`regional-us-central1`) or full name
-   * (`projects/{project}/instanceConfigs/{config}`). Immutable —
+   * (`projects/{project}/instanceConfigs/{config}`). Immutable --
    * changing it replaces the instance.
    * @default `regional-{region}` for the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   config?: string;
   /**
-   * User-facing display name. Must be unique per project and 4–30
+   * User-facing display name. Must be unique per project and 4-30
    * characters. Defaults to a truncated instance id.
    */
   displayName?: string;
@@ -112,7 +112,7 @@ export type InstanceProps = {
    */
   autoscalingConfig?: AutoscalingConfig;
   /**
-   * Instance type. Immutable — changing it replaces the instance.
+   * Instance type. Immutable -- changing it replaces the instance.
    * @default "PROVISIONED"
    */
   instanceType?: InstanceType;
@@ -176,7 +176,7 @@ export type Instance = Resource<
  * Changing `instanceId`, `config`, or `instanceType` replaces the
  * instance. Display name, labels, compute capacity, edition, backup
  * schedule, and autoscaling update in place. Create, update, and delete
- * are long-running operations — a 100 processing-unit regional instance
+ * are long-running operations -- a 100 processing-unit regional instance
  * typically takes one to two minutes.
  *
  * ### Creating an Instance

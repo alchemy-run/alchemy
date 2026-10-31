@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:CreateSolutionVersion` — Trains a new model (solution version) for an existing solution — the
+ * Runtime binding for `personalize:CreateSolutionVersion` -- Trains a new model (solution version) for an existing solution -- the
  * retraining step of the MLOps loop, typically run on a schedule after
  * fresh data is imported.
  * Provide the implementation with

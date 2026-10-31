@@ -15,7 +15,7 @@ import { fetchCeTags, pinCe, syncCeTags, toResourceTags } from "./common.ts";
  */
 export interface AnomalySubscriber {
   /**
-   * The destination — an email address (for `EMAIL`) or an SNS topic ARN
+   * The destination -- an email address (for `EMAIL`) or an SNS topic ARN
    * (for `SNS`).
    */
   address: string;
@@ -48,7 +48,7 @@ export interface AnomalySubscriptionProps {
    */
   frequency: "DAILY" | "IMMEDIATE" | "WEEKLY" | (string & {});
   /**
-   * An expression gating notifications on anomaly impact — e.g. only alert
+   * An expression gating notifications on anomaly impact -- e.g. only alert
    * when the total absolute impact exceeds $100:
    * `{ Dimensions: { Key: "ANOMALY_TOTAL_IMPACT_ABSOLUTE", MatchOptions: ["GREATER_THAN_OR_EQUAL"], Values: ["100"] } }`
    * (raw Cost Explorer `Expression` shape).
@@ -82,7 +82,7 @@ export interface AnomalySubscription extends Resource<
  * subscribers to one or more {@link AnomalyMonitor}s with a notification
  * frequency and an impact threshold.
  *
- * Cost Explorer is a global service — all calls are pinned to `us-east-1`
+ * Cost Explorer is a global service -- all calls are pinned to `us-east-1`
  * regardless of the stack region. Every property is mutable in place.
  *
  * ### Creating Anomaly Subscriptions
@@ -200,14 +200,14 @@ export const AnomalySubscriptionProvider = () =>
           };
           const desiredSubscribers = toSubscribers(news.subscribers);
 
-          // OBSERVE — cloud state is authoritative.
+          // OBSERVE -- cloud state is authoritative.
           const live = output?.subscriptionArn
             ? yield* getByArn(output.subscriptionArn)
             : yield* findByName(name);
 
           let subscriptionArn: string;
           if (live?.SubscriptionArn === undefined) {
-            // ENSURE — create if missing. Subscription names are unique per
+            // ENSURE -- create if missing. Subscription names are unique per
             // account; tolerate the AlreadyExists race by adopting the
             // same-name subscription and converging it (every property is
             // mutable via UpdateAnomalySubscription).
@@ -245,7 +245,7 @@ export const AnomalySubscriptionProvider = () =>
             );
             subscriptionArn = created.SubscriptionArn;
           } else {
-            // SYNC — diff observed against desired; every field is mutable.
+            // SYNC -- diff observed against desired; every field is mutable.
             subscriptionArn = live.SubscriptionArn;
             const observed = live;
             const needsUpdate =
@@ -273,7 +273,7 @@ export const AnomalySubscriptionProvider = () =>
             }
           }
 
-          // SYNC TAGS — diff against observed cloud tags.
+          // SYNC TAGS -- diff against observed cloud tags.
           yield* syncCeTags(subscriptionArn, desiredTags);
 
           yield* session.note(subscriptionArn);

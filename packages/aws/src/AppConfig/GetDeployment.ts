@@ -11,7 +11,7 @@ export interface GetDeploymentRequest extends Omit<
 
 /**
  * Read an AppConfig deployment's status from a Lambda (or other AWS runtime)
- * — poll a rollout started with {@link StartDeployment} until it reaches a
+ * -- poll a rollout started with {@link StartDeployment} until it reaches a
  * terminal state (`COMPLETE`, `ROLLED_BACK`, `REVERTED`).
  *
  * Provide `AppConfig.GetDeploymentHttp` on the hosting function's Effect to

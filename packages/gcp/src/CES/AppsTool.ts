@@ -28,7 +28,7 @@ export type AppsToolProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * tool.
    */
   app: string;
@@ -38,7 +38,7 @@ export type AppsToolProps = {
    */
   location?: string;
   /**
-   * Tool id. If omitted, a unique name is generated. Immutable —
+   * Tool id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the tool.
    */
   toolId?: string;

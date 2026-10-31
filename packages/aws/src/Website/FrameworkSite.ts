@@ -102,12 +102,12 @@ export interface WebFunctionServerProps {
    */
   server?: "web-function";
   /**
-   * Requests one Web Function environment serves at once (1–128).
+   * Requests one Web Function environment serves at once (1-128).
    * @default 64
    */
   maxConcurrencyPerEnvironment?: number;
   /**
-   * Maximum Web Function environments per Region (2–10,000).
+   * Maximum Web Function environments per Region (2-10,000).
    */
   maxEnvironments?: number;
   /**
@@ -147,7 +147,7 @@ export interface FunctionServerProps {
 /**
  * Props of every framework website composite (SvelteKit, Nuxt, Waku,
  * Octane, Astro, ...): the shared props, the framework's own (`Framework`,
- * kept FLAT — the composite is the framework, so its keys need no
+ * kept FLAT -- the composite is the framework, so its keys need no
  * namespace), and the props of the chosen `server`.
  */
 export type FrameworkSiteProps<Framework = {}> = FrameworkSiteBaseProps &
@@ -270,7 +270,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
   // composites); values flow into the resources below, which resolve
   // them at reconcile time. The plan-time reads in this function
   // (domain-shape branching, dev wiring, the build's rootDir/memo)
-  // need concrete values — passing an `Output` for those specific
+  // need concrete values -- passing an `Output` for those specific
   // fields is unsupported, same as on the Cloudflare side.
   const props = propsIn as FrameworkSiteProps;
   yield* checkWebsiteRegions(`AWS.Website.${config.name} "${id}"`, props);
@@ -282,7 +282,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
 
   // A Router-attached dev server is an ORIGIN for the emulated CloudFront
   // edge, which runs in a container and reaches the host through its
-  // gateway address — it cannot open a connection to the host's loopback.
+  // gateway address -- it cannot open a connection to the host's loopback.
   // Frameworks bind loopback by default (Vite picks `[::1]`), so the edge
   // would get a refused connection and answer 502. Bind all interfaces
   // unless the caller asked for a specific host. Standalone dev sites, and
@@ -306,7 +306,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
 
   if (isLocal) {
     // Router-attached sites register with the Router in dev exactly as they
-    // do live — same resource types and ids — with the framework's dev
+    // do live -- same resource types and ids -- with the framework's dev
     // server standing in for the S3 + Lambda origins.
     const kvNamespace = routerDomain
       ? yield* registerDevRouterRoute(routerDomain, build.url)
@@ -391,7 +391,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     handler: "handler",
     isExternal: true,
     // The AWS deploy target's finishing pass writes the server directory
-    // as a complete Node deployment unit (entry + chunks) — ship it
+    // as a complete Node deployment unit (entry + chunks) -- ship it
     // as-is.
     bundle: false,
     runtime: (props.server === "function" ? props.runtime : undefined) ?? "nodejs24.x",

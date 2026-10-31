@@ -47,12 +47,12 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  * The writable bot-management settings. Which fields the Cloudflare API
  * accepts depends on the zone's plan:
  *
- * - **Free** — `fightMode` (Bot Fight Mode)
- * - **Pro** — `sbfmDefinitelyAutomated`, `sbfmVerifiedBots`,
+ * - **Free** -- `fightMode` (Bot Fight Mode)
+ * - **Pro** -- `sbfmDefinitelyAutomated`, `sbfmVerifiedBots`,
  *   `sbfmStaticResourceProtection`, `optimizeWordpress`
- * - **Business / Enterprise (without the Bot Management add-on)** — Pro
+ * - **Business / Enterprise (without the Bot Management add-on)** -- Pro
  *   fields plus `sbfmLikelyAutomated`
- * - **Enterprise with Bot Management add-on** — `autoUpdateModel`,
+ * - **Enterprise with Bot Management add-on** -- `autoUpdateModel`,
  *   `bmCookieEnabled`, `suppressSessionScore`
  *
  * `aiSearch`, `aiUser`, `aiTraining`, `botPreferenceSyncEnabled`,
@@ -60,7 +60,7 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  * `cfRobotsVariant`, `enableJs`, and `isRobotsTxtManaged` are shared
  * across plans (though some accounts reject writes to a subset of them).
  *
- * Only fields you explicitly set are ever sent to Cloudflare — sending a
+ * Only fields you explicitly set are ever sent to Cloudflare -- sending a
  * field outside the zone's plan shape fails validation server-side.
  */
 export interface Settings {
@@ -94,7 +94,7 @@ export interface Settings {
    */
   crawlerProtection?: "enabled" | "disabled";
   /**
-   * Block content bots — automated traffic with low bot scores, excluding
+   * Block content bots -- automated traffic with low bot scores, excluding
    * safe verified bot categories.
    */
   contentBotsProtection?: "block" | "disabled";
@@ -165,7 +165,7 @@ export interface Settings {
 
 export interface Props extends Settings {
   /**
-   * Zone whose bot-management configuration is managed. Stable — changing
+   * Zone whose bot-management configuration is managed. Stable -- changing
    * the zone triggers a replacement (which simply re-adopts the new
    * zone's singleton and restores the old zone's snapshot).
    */
@@ -193,7 +193,7 @@ export interface Attributes extends Settings {
 export type BotManagement = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * The bot-management configuration of a Cloudflare zone — a zone-scoped
+ * The bot-management configuration of a Cloudflare zone -- a zone-scoped
  * **singleton**: every zone always has exactly one bot-management config,
  * so there is no create or delete on the Cloudflare side. Reconciling this
  * resource adopts the singleton and PUTs only the fields you explicitly
@@ -308,7 +308,7 @@ export const BotManagementProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its bot-management config (every
       // live zone always has exactly one).
       const allZones = yield* listAllZones(accountId);
@@ -316,7 +316,7 @@ export const BotManagementProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           // `observe` maps a dead zone (`InvalidRoute`) to undefined; a
-          // plan-gated zone forbids the read — skip both.
+          // plan-gated zone forbids the read -- skip both.
           observe(zoneId).pipe(
             Effect.map((observed) =>
               observed === undefined
@@ -341,7 +341,7 @@ export const BotManagementProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // The config is a singleton — it exists iff the zone exists.
+      // The config is a singleton -- it exists iff the zone exists.
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* observe(zoneId);
@@ -353,14 +353,14 @@ export const BotManagementProvider = () =>
       // Inputs are resolved to concrete strings by Plan.
       const zoneId = (output?.zoneId ?? news.zoneId) as string;
 
-      // 1. Observe — the singleton always exists for a live zone.
+      // 1. Observe -- the singleton always exists for a live zone.
       let observed = yield* botManagement.getBotManagement({ zoneId });
 
-      // 2. Snapshot — capture pre-management values once; `output` acts
+      // 2. Snapshot -- capture pre-management values once; `output` acts
       //    as the cache that keeps the very first observation sticky.
       const initialSettings = output?.initialSettings ?? pickSettings(observed);
 
-      // 3. Sync — diff observed against the fields the user set and PUT
+      // 3. Sync -- diff observed against the fields the user set and PUT
       //    only when something actually differs. Unset fields are never
       //    sent (plan-shape validation + don't clobber dashboard config).
       const desired = pickSettings(news);
@@ -376,13 +376,13 @@ export const BotManagementProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
-      // Singleton — nothing to delete on the Cloudflare side. Restore the
+      // Singleton -- nothing to delete on the Cloudflare side. Restore the
       // fields this resource managed (i.e. the props that were set) to
       // their pre-management snapshot values. Fields whose snapshot value
       // is absent (the plan never exposed them, or Cloudflare returned
       // null) cannot be restored and are left as-is.
       const observed = yield* observe(output.zoneId);
-      if (!observed) return; // zone is gone — nothing to restore
+      if (!observed) return; // zone is gone -- nothing to restore
       const managed = pickSettings(olds ?? {});
       const current = pickSettings(observed);
       const restore: Settings = {};
@@ -456,7 +456,7 @@ const pickSettings = (source: ObservedBotManagement | Settings): Settings => {
 
 /**
  * True when every field set in `desired` matches `observed`. Unset
- * desired fields are ignored — they are dashboard/plan-managed.
+ * desired fields are ignored -- they are dashboard/plan-managed.
  */
 const settingsEqual = (desired: Settings, observed: Settings): boolean =>
   SETTINGS_KEYS.every((key) => desired[key] === undefined || desired[key] === observed[key]);

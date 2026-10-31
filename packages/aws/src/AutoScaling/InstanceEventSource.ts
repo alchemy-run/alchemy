@@ -90,7 +90,7 @@ const allInstanceEvents: InstanceEventType[] = [
 /**
  * Deliver EC2 Auto Scaling instance launch/terminate events to the host
  * Function via EventBridge. Unlike {@link consumeLifecycleActions} this does
- * not pause the instance transition — it observes completed scaling
+ * not pause the instance transition -- it observes completed scaling
  * activities, e.g. to deregister an instance from an external system after
  * termination or alert on launch failures.
  *
@@ -139,7 +139,7 @@ export const consumeInstanceEvents = <StreamReq = never, Req = never>(
 ) =>
   // The pattern uses only literal `source` + `detail-type` so it round-trips
   // through both the deploy-time rule and the runtime matcher (Output values
-  // cannot appear in the pattern — they don't resolve inside the deployed
+  // cannot appear in the pattern -- they don't resolve inside the deployed
   // bundle).
   consumeBusEvents(
     `${props.id ?? group.LogicalId}-InstanceEvents`,

@@ -19,9 +19,9 @@ export interface EmailIdentityProps {
    * The email address or domain to verify with SES, e.g. `hello@example.com`
    * or `example.com`. Changing this replaces the identity.
    *
-   * - **Email address** — SES sends a verification email to the address; the
+   * - **Email address** -- SES sends a verification email to the address; the
    *   identity stays `PENDING` until the link is clicked.
-   * - **Domain** — SES generates Easy DKIM tokens (see the `dkimTokens`
+   * - **Domain** -- SES generates Easy DKIM tokens (see the `dkimTokens`
    *   attribute) that must be published as CNAME records; the identity stays
    *   `PENDING` until the DNS records propagate.
    */
@@ -52,7 +52,7 @@ export interface EmailIdentityProps {
    * A custom MAIL FROM domain (a verified subdomain of the identity) SES uses
    * in the message envelope. Publish the required MX and SPF records for the
    * subdomain to complete setup. Leave undefined to keep SES's current
-   * setting — there is no removal path once one is configured.
+   * setting -- there is no removal path once one is configured.
    */
   mailFromDomain?: string;
   /**
@@ -104,7 +104,7 @@ export interface EmailIdentity extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 email identity — a verified email address or domain that
+ * An Amazon SES v2 email identity -- a verified email address or domain that
  * you send email from.
  *
  * Creating the identity starts verification: email-address identities receive
@@ -320,11 +320,11 @@ export const EmailIdentityProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only a
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only a
           //    cache of the identity name.
           let observed = yield* getIdentity(name);
 
-          // 2. ENSURE — create if missing; AlreadyExists is a race, not a
+          // 2. ENSURE -- create if missing; AlreadyExists is a race, not a
           //    failure. Creation kicks off verification (email or DKIM DNS).
           if (observed === undefined) {
             yield* sesv2
@@ -341,7 +341,7 @@ export const EmailIdentityProvider = () =>
             observed = yield* sesv2.getEmailIdentity({ EmailIdentity: name });
           }
 
-          // 3. SYNC configuration-set association — compare observed against
+          // 3. SYNC configuration-set association -- compare observed against
           //    desired; passing undefined removes the association.
           if (observed.ConfigurationSetName !== news.configurationSetName) {
             yield* sesv2.putEmailIdentityConfigurationSetAttributes({
@@ -351,7 +351,7 @@ export const EmailIdentityProvider = () =>
           }
 
           // 3b. SYNC Easy DKIM signing key length (domain identities). Only
-          //     applied when explicitly requested and observably different —
+          //     applied when explicitly requested and observably different --
           //     rotating the key regenerates the DKIM tokens.
           if (
             news.dkimSigningKeyLength !== undefined &&
@@ -367,7 +367,7 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 3c. SYNC Easy DKIM signing enablement — only applied when
+          // 3c. SYNC Easy DKIM signing enablement -- only applied when
           //     explicitly requested and observably different.
           if (
             news.dkimSigningEnabled !== undefined &&
@@ -379,7 +379,7 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 3d. SYNC feedback forwarding — only applied when explicitly
+          // 3d. SYNC feedback forwarding -- only applied when explicitly
           //     requested and observably different (SES defaults it to on).
           if (
             news.feedbackForwardingEnabled !== undefined &&
@@ -391,7 +391,7 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 3e. SYNC custom MAIL FROM domain — only applied when explicitly
+          // 3e. SYNC custom MAIL FROM domain -- only applied when explicitly
           //     requested and observably different.
           if (
             news.mailFromDomain !== undefined &&
@@ -407,7 +407,7 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 3f. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3f. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -424,7 +424,7 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 4. RETURN — re-read so DKIM tokens/status reflect any sync above.
+          // 4. RETURN -- re-read so DKIM tokens/status reflect any sync above.
           const final = yield* sesv2.getEmailIdentity({ EmailIdentity: name });
           yield* session.note(identityArn);
           return {

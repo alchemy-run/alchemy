@@ -72,7 +72,7 @@ export type PolicyBasedRouteInterconnectAttachment = {
 };
 
 export type PolicyBasedRouteWarning = {
-  /** Server warning code (`RESOURCE_NOT_ACTIVE`, …). */
+  /** Server warning code (`RESOURCE_NOT_ACTIVE`, ...). */
   code: string | undefined;
   /** Human-readable warning. */
   warningMessage: string | undefined;
@@ -84,24 +84,24 @@ export type PolicyBasedRouteProps = {
    * `projects/{project}/locations/global/policyBasedRoutes/{policyBasedRoute}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * route.
    */
   policyBasedRouteId?: string;
   /**
    * VPC network this route applies to. Accepts a name (`default`), a
    * resource path (`projects/{project}/global/networks/{network}`), or a
-   * Compute self-link. Immutable — changing it replaces the route.
+   * Compute self-link. Immutable -- changing it replaces the route.
    */
   network: string;
   /**
-   * L4 match filter. Immutable — changing it replaces the route.
+   * L4 match filter. Immutable -- changing it replaces the route.
    */
   filter: PolicyBasedRouteFilter;
   /**
    * IP address of a global-access-enabled internal L4 load balancer used
    * as the next hop. Exactly one of `nextHopIlbIp` or
-   * `nextHopOtherRoutes` must be set. Immutable — changing it replaces
+   * `nextHopOtherRoutes` must be set. Immutable -- changing it replaces
    * the route.
    */
   nextHopIlbIp?: string;
@@ -109,34 +109,34 @@ export type PolicyBasedRouteProps = {
    * Other routes consulted for the next hop. `DEFAULT_ROUTING` skips
    * remaining policy-based routes and uses the VPC routing tables.
    * Exactly one of `nextHopIlbIp` or `nextHopOtherRoutes` must be set.
-   * Immutable — changing it replaces the route.
+   * Immutable -- changing it replaces the route.
    */
   nextHopOtherRoutes?: PolicyBasedRouteNextHopOtherRoutes;
   /**
    * VM instances this route applies to, selected by network tags. Omit
    * together with `interconnectAttachment` to install on every endpoint
-   * in the VPC. Immutable — changing it replaces the route.
+   * in the VPC. Immutable -- changing it replaces the route.
    */
   virtualMachine?: PolicyBasedRouteVirtualMachine;
   /**
    * Interconnect attachments this route applies to. Mutually exclusive
-   * with `virtualMachine`. Immutable — changing it replaces the route.
+   * with `virtualMachine`. Immutable -- changing it replaces the route.
    */
   interconnectAttachment?: PolicyBasedRouteInterconnectAttachment;
   /**
    * Priority used to break ties among matching policy-based routes.
-   * Lower wins. Range `1`–`65535`.
+   * Lower wins. Range `1`-`65535`.
    * @default 1000
    */
   priority?: number;
   /**
-   * Human-readable description. Immutable — changing it replaces the
+   * Human-readable description. Immutable -- changing it replaces the
    * route (the API has no update method).
    */
   description?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * Immutable — changing them replaces the route (the API has no update
+   * Immutable -- changing them replaces the route (the API has no update
    * method).
    */
   labels?: Record<string, string>;
@@ -155,7 +155,7 @@ export type PolicyBasedRoute = Resource<
     policyBasedRouteId: string;
     /** Project id. */
     project: string;
-    /** Location id. Policy-based routes are global — always `"global"`. */
+    /** Location id. Policy-based routes are global -- always `"global"`. */
     location: string;
     /** Fully-qualified VPC network path. */
     network: string;
@@ -194,7 +194,7 @@ export type PolicyBasedRoute = Resource<
  * A VPC policy-based route.
  *
  * Policy-based routes match L4 traffic by source, destination, and
- * protocol — not just destination IP — and always take precedence over
+ * protocol -- not just destination IP -- and always take precedence over
  * other route types. They live at `locations/global`. The API has create,
  * get, list, and delete only, so every user-facing field is immutable and
  * changing it replaces the resource.

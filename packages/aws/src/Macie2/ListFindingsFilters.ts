@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListFindingsFilters`.
  *
  * Retrieves a subset of information about all the findings filters for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListFindingsFiltersHttp)`.
  * ### Custom Data Identifiers & Lists
  * **Example:** List Findings Filters
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listFindingsFilters = yield* AWS.Macie2.ListFindingsFilters();
  *
  * // runtime

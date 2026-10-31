@@ -54,25 +54,25 @@ export type BindingProps = {
    * Binding id (the `{binding}` segment of
    * `projects/{project}/locations/{location}/bindings/{binding}`). If
    * omitted, a unique RFC1035 name is generated. Must be 4-63 characters
-   * matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable — changing
+   * matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable -- changing
    * it replaces the binding.
    */
   bindingId?: string;
   /**
-   * Location of the binding (`us-central1`, `global`, …). Multi-region
-   * `us` and `eu` are not supported. Immutable — changing it replaces
+   * Location of the binding (`us-central1`, `global`, ...). Multi-region
+   * `us` and `eu` are not supported. Immutable -- changing it replaces
    * the binding.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * URN of the source agent (`urn:agent:{publisher}:{namespace}:{name}`).
-   * Immutable — changing it replaces the binding.
+   * Immutable -- changing it replaces the binding.
    */
   sourceIdentifier: string;
   /**
    * URN of the target agent, MCP server, or endpoint
-   * (`urn:agent:…`, `urn:mcp:…`, or `urn:endpoint:…`). Immutable —
+   * (`urn:agent:...`, `urn:mcp:...`, or `urn:endpoint:...`). Immutable --
    * changing it replaces the binding.
    */
   targetIdentifier: string;
@@ -82,7 +82,7 @@ export type BindingProps = {
   displayName?: string;
   /**
    * Human-readable description (max 2048 characters). Bindings have no
-   * labels field, so Alchemy stamps ownership into a `[alchemy …]`
+   * labels field, so Alchemy stamps ownership into a `[alchemy ...]`
    * prefix and strips it from attributes.
    */
   description?: string;

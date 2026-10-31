@@ -46,12 +46,12 @@ import {
 export type SignedCustomersDeviceProps = {
   /**
    * Parent SAS customer, as `customers/{customer}` or the customer id.
-   * Immutable — changing it replaces the device.
+   * Immutable -- changing it replaces the device.
    */
   parent: string;
   /**
    * Server-assigned device resource name
-   * (`customers/{customer}/devices/{device}`). Immutable — changing it
+   * (`customers/{customer}/devices/{device}`). Immutable -- changing it
    * replaces the device.
    */
   name?: string;
@@ -67,7 +67,7 @@ export type SignedCustomersDeviceProps = {
   installerId: string;
   /**
    * Display name. SAS Portal devices have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix after create and
+   * stamps ownership into a `[alchemy ...]` prefix after create and
    * strips it from attributes.
    */
   displayName?: string;

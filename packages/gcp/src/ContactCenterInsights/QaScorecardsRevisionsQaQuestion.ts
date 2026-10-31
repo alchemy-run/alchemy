@@ -63,12 +63,12 @@ export type QaScorecardsRevisionsQaQuestionProps = {
   /**
    * Parent QaScorecardRevision resource name
    * (`projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}/revisions/{revision}`).
-   * Immutable — changing it replaces the question.
+   * Immutable -- changing it replaces the question.
    */
   parent: string;
   /**
    * Question id (the `{qa_question}` segment). If omitted, a unique id is
-   * generated. Must match `^[a-z0-9-]{4,64}$`. Immutable — changing it
+   * generated. Must match `^[a-z0-9-]{4,64}$`. Immutable -- changing it
    * replaces the question.
    */
   qaQuestionId?: string;
@@ -86,7 +86,7 @@ export type QaScorecardsRevisionsQaQuestionProps = {
   questionType?: QaQuestionType;
   /**
    * Instructions describing how to determine the answer. Questions have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   answerInstructions?: string;
@@ -158,7 +158,7 @@ export type QaScorecardsRevisionsQaQuestion = Resource<
  * A question on a Contact Center AI Insights QA scorecard revision.
  *
  * Parent revision and question id are immutable. Questions have no
- * labels field — Alchemy stamps ownership into `answerInstructions`.
+ * labels field -- Alchemy stamps ownership into `answerInstructions`.
  * Question body, abbreviation, instructions, order, choices, and tags
  * update in place while the parent revision is `EDITABLE`.
  *

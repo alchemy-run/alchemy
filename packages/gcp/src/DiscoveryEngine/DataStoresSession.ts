@@ -23,12 +23,12 @@ export type DataStoresSessionProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the session.
+   * Immutable -- changing it replaces the session.
    */
   dataStore: string;
   /**
    * Session id (1-63 characters, lowercase alphanumeric). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the session.
+   * unique id is generated. Immutable -- changing it replaces the session.
    */
   sessionId?: string;
   /**
@@ -49,8 +49,8 @@ export type DataStoresSessionProps = {
    */
   isPinned?: boolean;
   /**
-   * User labels (string values). Alchemy adds `alchemy-stack=…`,
-   * `alchemy-stage=…`, and `alchemy-id=…` entries to mark ownership.
+   * User labels (string values). Alchemy adds `alchemy-stack=...`,
+   * `alchemy-stage=...`, and `alchemy-id=...` entries to mark ownership.
    */
   labels?: string[];
 };

@@ -6,7 +6,7 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:GetMembers`.
  *
- * Reads the membership details of specific accounts in the behavior graph —
+ * Reads the membership details of specific accounts in the behavior graph --
  * status, volume usage, and per-package ingest states. Unknown accounts come
  * back in `UnprocessedAccounts`. The graph ARN is injected from the bound
  * {@link Graph}.

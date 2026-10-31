@@ -12,7 +12,7 @@ import type { SearchInstance } from "./SearchInstance.ts";
  * `SearchInstance`.
  *
  * `QuerySearch` is a single identifier that is simultaneously the binding's Context
- * tag, its type, and the callable — `yield* Cloudflare.AI.QuerySearch(instance)`.
+ * tag, its type, and the callable -- `yield* Cloudflare.AI.QuerySearch(instance)`.
  *
  * Provide {@link QuerySearchBinding} in the Worker's runtime layer.
  *
@@ -64,7 +64,7 @@ export class SearchError extends Data.TaggedError("AiSearchError")<{
  * Effect-native client for a Cloudflare.AI. Search Worker binding.
  *
  * Wraps the standalone `SearchInstance` runtime binding (the binding the
- * `ai_search` type resolves to — the deprecated `AutoRAG` shape is gone) so
+ * `ai_search` type resolves to -- the deprecated `AutoRAG` shape is gone) so
  * each operation returns an Effect tagged with {@link SearchError}. Obtain
  * one from `Cloudflare.AI.QuerySearch(instance)` (or a namespace client's
  * `.get(instanceName)`) during the Worker's init phase.
@@ -90,7 +90,7 @@ export interface QuerySearchClient {
     params: runtime.AiSearchChatCompletionsRequest,
   ): Effect.Effect<runtime.AiSearchChatCompletionsResponse, SearchError, RuntimeContext>;
   /**
-   * Metadata about this instance (id, models, source, status, …).
+   * Metadata about this instance (id, models, source, status, ...).
    */
   info(): Effect.Effect<runtime.AiSearchInstanceInfo, SearchError, RuntimeContext>;
   /**

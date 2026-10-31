@@ -88,8 +88,8 @@ export type BranchProps = {
   /**
    * Initialization source.
    *
-   * - `parent-data` (default) — copy schema and data from the parent.
-   * - `schema-only` — copy only the schema.
+   * - `parent-data` (default) -- copy schema and data from the parent.
+   * - `schema-only` -- copy only the schema.
    */
   initSource?: "schema-only" | "parent-data";
   /**
@@ -157,7 +157,7 @@ export type Branch = Resource<
     pooledConnectionUri: string;
     /**
      * Parsed connection components ready to feed into a Postgres origin
-     * — e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
+     * -- e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
      * direct (non-pooled) endpoint, which is the recommended target
      * when fronting Neon with another pooler like Hyperdrive.
      */
@@ -183,7 +183,7 @@ export type Branch = Resource<
 /**
  * A branch of a Neon project.
  *
- * Branches are first-class, copy-on-write copies of a parent branch — they
+ * Branches are first-class, copy-on-write copies of a parent branch -- they
  * share storage with the parent until the new branch starts diverging.
  * ### Branching from a project's default branch
  * **Example:** Basic branch
@@ -253,7 +253,7 @@ export const BranchProvider = () =>
       // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
       // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
       // An Output-valued `project` doesn't survive a `creating`-state
-      // round-trip (it deserializes as `undefined`) — when the old project is
+      // round-trip (it deserializes as `undefined`) -- when the old project is
       // unknown, fall through to the create/update recovery path rather than
       // force a replacement.
       const oldProjectId =
@@ -351,7 +351,7 @@ export const BranchProvider = () =>
       const projectId = maybeResolveProjectId(olds.project as BranchSource);
       if (projectId === undefined) {
         // The project reference survived as an object but its Output-valued
-        // `projectId` did not — there is nothing to look the branch up in.
+        // `projectId` did not -- there is nothing to look the branch up in.
         return undefined;
       }
       const name = yield* createBranchName(id, olds.name);
@@ -584,7 +584,7 @@ const listAllProjects = Effect.gen(function* () {
     projects.push(...page.projects);
     const nextCursor = page.pagination?.cursor;
     // Neon returns a `pagination.cursor` on every response (the `created_at`
-    // of the last row), not a "has next page" flag — stop once a page comes
+    // of the last row), not a "has next page" flag -- stop once a page comes
     // back empty or the cursor stops advancing to avoid an infinite loop.
     if (page.projects.length === 0 || nextCursor === undefined || nextCursor === cursor) {
       break;
@@ -651,7 +651,7 @@ const hydrateBranch = (
     };
     return attributes;
   }).pipe(
-    // A branch/database/endpoint can disappear mid-enumeration — skip it.
+    // A branch/database/endpoint can disappear mid-enumeration -- skip it.
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 

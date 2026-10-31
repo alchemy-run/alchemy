@@ -6,7 +6,7 @@ export interface CheckDomainTransferabilityRequest
   extends route53domains.CheckDomainTransferabilityRequest {}
 
 /**
- * Runtime binding for `route53domains:CheckDomainTransferability` — check
+ * Runtime binding for `route53domains:CheckDomainTransferability` -- check
  * whether a domain can be transferred to Amazon Route 53 from another
  * registrar.
  *

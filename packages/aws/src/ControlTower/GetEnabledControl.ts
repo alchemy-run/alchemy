@@ -14,7 +14,7 @@ import type { EnabledControl } from "./EnabledControl.ts";
  * ### Inspecting an Enabled Control
  * **Example:** Read the Enabled Control's Drift Status
  * ```typescript
- * // init — bind the operation to the enabled control
+ * // init -- bind the operation to the enabled control
  * const getEnabledControl = yield* AWS.ControlTower.GetEnabledControl(guardrail);
  *
  * // runtime

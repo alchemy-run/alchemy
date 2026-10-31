@@ -1,12 +1,12 @@
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 /**
- * GitHub REST v3 compatibility facade (`/api/v3/**`) — DESIGN.md "Tier 1".
+ * GitHub REST v3 compatibility facade (`/api/v3/**`) -- DESIGN.md "Tier 1".
  *
  * Lets GitHub-flavored tooling talk to the service unmodified. The target
  * consumers are `gh api` (via `GH_HOST=<host>` + `GH_ENTERPRISE_TOKEN`,
  * which sends REST to `https://<host>/api/v3/...`) and Octokit-style SDKs
  * pointed at a GitHub Enterprise `baseUrl`. Only the REST plane is
- * mimicked — the `gh pr`/`gh issue` porcelain commands speak GraphQL and
+ * mimicked -- the `gh pr`/`gh issue` porcelain commands speak GraphQL and
  * are out of scope (use `gh api` paths instead).
  *
  * This module is a pure TRANSLATION layer: every route parses GitHub's
@@ -14,7 +14,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
  * uses (auth enforcement stays in the DO), and re-shapes responses into
  * GitHub's JSON. GitHub-isms handled here:
  *
- * - `Authorization: token <t>` (gh's scheme) — parsed by `Auth.ts`
+ * - `Authorization: token <t>` (gh's scheme) -- parsed by `Auth.ts`
  *   alongside Bearer/Basic.
  * - A merged PR is `state: "closed"` with `merged: true` (our tri-state
  *   `merged` collapses into GitHub's boolean).
@@ -22,13 +22,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
  *   "Requires authentication", 404 "Not Found", 405 for unsupported merge
  *   methods, 409 for conflicts).
  * - List pagination is RFC-5988 `Link: <...>; rel="next"` headers. The
- *   next URL carries an opaque `cursor` (not a page number) — `gh api
+ *   next URL carries an opaque `cursor` (not a page number) -- `gh api
  *   --paginate` and Octokit follow the URL verbatim, so keyset cursors
  *   work transparently.
  *
  * Deliberately absent (documented, not accidental): issues, reviews,
  * comments, checks, search, GraphQL, rename detection in file lists, and
- * additions/deletions line counts (reported as 0 — the server does not
+ * additions/deletions line counts (reported as 0 -- the server does not
  * compute content diffs; fetch blobs and diff client-side).
  */
 import * as Effect from "effect/Effect";
@@ -53,9 +53,9 @@ import type {
   SignatureData,
 } from "./RepoObject.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Dependencies injected by the Worker
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** Outcome of the Worker's shared owner/repo + credential prelude. */
 export type CompatPrelude =
@@ -118,7 +118,7 @@ export interface CompatRepoStub {
 export interface GitHubCompatOptions {
   /**
    * The Worker's `rawRestPrelude`: resolves `owner/repo`, parses
-   * credentials (anonymous allowed — public repos), and 404s/500s early.
+   * credentials (anonymous allowed -- public repos), and 404s/500s early.
    */
   readonly prelude: (
     owner: string,
@@ -128,9 +128,9 @@ export interface GitHubCompatOptions {
   readonly stub: (repoId: string) => CompatRepoStub;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Small helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const OID_RE = /^[0-9a-f]{40}$/;
 
@@ -173,7 +173,7 @@ const ghNotFound = ghError(404, "Not Found");
 
 /**
  * Maps the DO's typed error union onto GitHub's status conventions. Every
- * facade route ends with this — unknown tags become 500s via `Effect.die`
+ * facade route ends with this -- unknown tags become 500s via `Effect.die`
  * (defects, not silent 200s).
  */
 const ghCatch = <A, R>(
@@ -217,9 +217,9 @@ const ghCatch = <A, R>(
     ),
   );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shape mappers (our data → GitHub JSON)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Shape mappers (our data -> GitHub JSON)
+// -----------------------------------------------------------------------------
 
 const ghUser = (login: string) => ({
   login,
@@ -333,9 +333,9 @@ const ghPull = (pull: PullData & Partial<PullDetailData>, meta: RepoMetaData, or
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // The routes
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Builds the `/api/v3` route layer. Mounted by the GitWorker next to the
@@ -384,7 +384,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
       return result as HttpServerResponse.HttpServerResponse;
     });
 
-  /** `Link: <…>; rel="next"` for cursor pages, GitHub-style. */
+  /** `Link: <...>; rel="next"` for cursor pages, GitHub-style. */
   const linkHeaders = (
     base: string,
     query: URLSearchParams,
@@ -410,7 +410,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           .pipe(Effect.map((page) => page.items[0]?.oid ?? revision));
 
   return {
-    /** `GET /api/v3/user` — the credential probe; override the `user` handler in your `github` group to answer from your users. */
+    /** `GET /api/v3/user` -- the credential probe; override the `user` handler in your `github` group to answer from your users. */
     user: () => ghJson(ghUser("git")),
     /** `GET /api/v3/repos/:owner/:repo` */
     repo: () =>
@@ -592,7 +592,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           const raw = yield* request.json.pipe(Effect.orElseSucceed(() => ({})));
           const body = raw as { commit_message?: string; sha?: string; merge_method?: string };
           if (body.merge_method !== undefined && body.merge_method !== "merge") {
-            // squash/rebase rewrite history server-side — not supported.
+            // squash/rebase rewrite history server-side -- not supported.
             return yield* ghError(405, `Merge method '${body.merge_method}' is not supported`);
           }
           const result = yield* repo.mergePull({

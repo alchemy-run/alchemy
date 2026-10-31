@@ -21,30 +21,30 @@ export interface UaRuleProps {
   /**
    * Zone the rule applies to.
    *
-   * Stable — moving a rule between zones triggers a replacement.
+   * Stable -- moving a rule between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * The exact User-Agent string to match. The whole UA header must equal
-   * this value — no wildcards or substring matching.
+   * this value -- no wildcards or substring matching.
    *
-   * Mutable — updated in place via PUT. Note that Cloudflare rejects a
+   * Mutable -- updated in place via PUT. Note that Cloudflare rejects a
    * second rule for the same User-Agent string in a zone, so the value
    * acts as the rule's identity for adoption.
    */
   userAgent: string;
   /**
-   * The action to apply to a matched request. Mutable — updated in place.
+   * The action to apply to a matched request. Mutable -- updated in place.
    */
   mode: UaRuleMode;
   /**
    * An informative summary of the rule. Sanitized server-side (HTML tags
-   * are removed). Mutable — updated in place.
+   * are removed). Mutable -- updated in place.
    */
   description?: string;
   /**
    * When true, the rule is disabled without being deleted.
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    *
    * @default false
    */
@@ -69,7 +69,7 @@ export interface UaRuleAttributes {
 export type UaRule = Resource<UaRuleTypeId, UaRuleProps, UaRuleAttributes, never, Providers>;
 
 /**
- * A Cloudflare User Agent Blocking rule — block or challenge every request
+ * A Cloudflare User Agent Blocking rule -- block or challenge every request
  * to a zone whose `User-Agent` header exactly matches a given string.
  *
  * Everything about a UA rule is mutable in place: `userAgent`, `mode`,
@@ -137,7 +137,7 @@ export const UaRuleProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // UA rules live inside a zone (`/zones/{zone_id}/firewall/ua_rules`)
-      // with no account-wide list — enumerate every zone and exhaustively
+      // with no account-wide list -- enumerate every zone and exhaustively
       // paginate each one's rules.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -163,7 +163,7 @@ export const UaRuleProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as UaRuleProps;
       const n = news as UaRuleProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.zoneId === undefined) return undefined;
       // zoneId is Input<string>; compare only once both are concrete.
       if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
@@ -199,20 +199,20 @@ export const UaRuleProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the User-Agent scan
       //    and then to create.
       let observed = output?.uaRuleId ? yield* getUaRule(zoneId, output.uaRuleId) : undefined;
 
       // 2. Fall back to scanning the zone for a User-Agent match.
-      //    Ownership has already been verified upstream — `read` reports
+      //    Ownership has already been verified upstream -- `read` reports
       //    existing rules as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByUserAgent(zoneId, news.userAgent);
       }
 
-      // 3. Ensure — create when missing. A concurrent create surfaces as
+      // 3. Ensure -- create when missing. A concurrent create surfaces as
       //    `DuplicateUaRule` (Cloudflare code 10009): converge by
       //    re-scanning for the rule that won the race.
       if (!observed) {
@@ -235,7 +235,7 @@ export const UaRuleProvider = () =>
           );
       }
 
-      // 4. Sync — diff observed cloud state against desired; skip the PUT
+      // 4. Sync -- diff observed cloud state against desired; skip the PUT
       //    entirely on a no-op. Undefined optional props are treated as
       //    "no constraint" so adoption doesn't clobber foreign settings.
       const dirty =
@@ -259,7 +259,7 @@ export const UaRuleProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare's DELETE is naturally idempotent (an already-gone rule
-      // answers HTTP 200 echoing the id) — the typed catch covers the rare
+      // answers HTTP 200 echoing the id) -- the typed catch covers the rare
       // not-found envelope race.
       yield* firewall
         .deleteUaRule({ zoneId: output.zoneId, uaRuleId: output.uaRuleId })
@@ -285,7 +285,7 @@ const getUaRule = (zoneId: string, uaRuleId: string) =>
 
 /**
  * Find a rule by exact User-Agent string within the zone. The UA string is
- * a rule's identity — Cloudflare rejects duplicates — so at most one rule
+ * a rule's identity -- Cloudflare rejects duplicates -- so at most one rule
  * can match.
  */
 const findByUserAgent = (zoneId: string, userAgent: string) =>
@@ -299,7 +299,7 @@ const findByUserAgent = (zoneId: string, userAgent: string) =>
   );
 
 const toAttributes = (rule: ObservedUaRule, zoneId: string): UaRuleAttributes => ({
-  // Distilled types every field as optional/nullable — Cloudflare always
+  // Distilled types every field as optional/nullable -- Cloudflare always
   // echoes them for a persisted rule.
   uaRuleId: rule.id ?? "",
   zoneId,

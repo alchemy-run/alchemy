@@ -41,19 +41,19 @@ export interface WorkflowProps {
    */
   description?: string;
   /**
-   * The workflow engine. Immutable — changing it replaces the workflow.
+   * The workflow engine. Immutable -- changing it replaces the workflow.
    * @default "WDL"
    */
   engine?: "WDL" | "NEXTFLOW" | "CWL";
   /**
    * The definition of the workflow, as a zip archive of the workflow source
    * files. Provided as raw bytes. Mutually exclusive with `definitionUri`.
-   * Immutable — changing it replaces the workflow.
+   * Immutable -- changing it replaces the workflow.
    */
   definitionZip?: Uint8Array;
   /**
    * The S3 URI of a zip archive containing the workflow definition. Mutually
-   * exclusive with `definitionZip`. Immutable — changing it replaces the
+   * exclusive with `definitionZip`. Immutable -- changing it replaces the
    * workflow.
    */
   definitionUri?: string;
@@ -113,12 +113,12 @@ export interface Workflow extends Resource<
 > {}
 
 /**
- * An Amazon HealthOmics private workflow — a bioinformatics workflow (WDL,
+ * An Amazon HealthOmics private workflow -- a bioinformatics workflow (WDL,
  * Nextflow, or CWL) that is executed as one or more runs.
  *
  * A workflow name is auto-generated from the app, stage, and logical ID
  * unless you provide one. The workflow definition (`engine`, `definitionZip`,
- * `definitionUri`, `main`, `parameterTemplate`, `accelerators`) is immutable —
+ * `definitionUri`, `main`, `parameterTemplate`, `accelerators`) is immutable --
  * changing any of it replaces the workflow. `name`, `description`,
  * `storageCapacity`, and `storageType` are updated in place.
  * ### Creating a Workflow

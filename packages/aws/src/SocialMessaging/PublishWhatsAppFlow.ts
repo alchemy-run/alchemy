@@ -26,7 +26,7 @@ export interface PublishWhatsAppFlowRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Publish a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const publishFlow = yield* AWS.SocialMessaging.PublishWhatsAppFlow(account);
  *
  * // runtime

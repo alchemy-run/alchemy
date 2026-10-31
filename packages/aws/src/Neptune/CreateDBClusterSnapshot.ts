@@ -7,7 +7,7 @@ import type { DBCluster } from "./DBCluster.ts";
  * Runtime binding for the `CreateDBClusterSnapshot` operation (IAM actions
  * `rds:CreateDBClusterSnapshot` + `rds:AddTagsToResource`).
  *
- * Takes a manual snapshot of the bound {@link DBCluster} — e.g. a
+ * Takes a manual snapshot of the bound {@link DBCluster} -- e.g. a
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * cluster identifier is injected from the binding. Provide the
  * implementation with
@@ -15,7 +15,7 @@ import type { DBCluster } from "./DBCluster.ts";
  * ### Managing Snapshots
  * **Example:** Take a Manual Snapshot
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const createDBClusterSnapshot =
  *   yield* AWS.Neptune.CreateDBClusterSnapshot(cluster);
  *

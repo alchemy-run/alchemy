@@ -18,10 +18,10 @@ export interface CompleteMultipartUploadRequest extends Omit<
  * ### Multipart Uploads
  * **Example:** Complete a Multipart Upload
  * ```typescript
- * // init — bind the operation to the bucket
+ * // init -- bind the operation to the bucket
  * const completeUpload = yield* AWS.S3.CompleteMultipartUpload(bucket);
  *
- * // runtime — parts collected from each AWS.S3.UploadPart call
+ * // runtime -- parts collected from each AWS.S3.UploadPart call
  * yield* completeUpload({
  *   Key: "backups/archive.tar",
  *   UploadId,

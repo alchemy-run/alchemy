@@ -21,13 +21,13 @@ export type TagKeyProps = {
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-256 characters, begin and end with an
    * alphanumeric, and otherwise contain only letters, digits, dashes,
-   * underscores, and dots. Immutable — changing it replaces the key.
+   * underscores, and dots. Immutable -- changing it replaces the key.
    */
   shortName?: string;
   /**
    * Parent organization or project (`organizations/{org}` or
    * `projects/{project}`). Defaults to the stack's GCP project. Immutable
-   * — changing it replaces the key.
+   * -- changing it replaces the key.
    */
   parent?: string;
   /**
@@ -35,18 +35,18 @@ export type TagKeyProps = {
    */
   description?: string;
   /**
-   * Policy engine this key is intended for. Immutable — changing it
+   * Policy engine this key is intended for. Immutable -- changing it
    * replaces the key.
    */
   purpose?: TagKeyPurpose | (string & {});
   /**
    * Purpose-specific metadata (for example `network` for `GCE_FIREWALL`).
-   * Immutable — changing it replaces the key.
+   * Immutable -- changing it replaces the key.
    */
   purposeData?: Record<string, string>;
   /**
    * Regular expression constraint for freeform TagValue short names.
-   * Immutable — changing it replaces the key.
+   * Immutable -- changing it replaces the key.
    */
   allowedValuesRegex?: string;
 };
@@ -83,7 +83,7 @@ export type TagKey = Resource<
 >;
 
 /**
- * A Resource Manager TagKey — a namespace for TagValues used to annotate
+ * A Resource Manager TagKey -- a namespace for TagValues used to annotate
  * Google Cloud resources.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
@@ -91,7 +91,7 @@ export type TagKey = Resource<
  * TagKeys have no labels.
  *
  * `shortName`, `parent`, `purpose`, `purposeData`, and `allowedValuesRegex`
- * are immutable — changing them replaces the key. `description` is the only
+ * are immutable -- changing them replaces the key. `description` is the only
  * updatable field.
  *
  * ### Creating a TagKey

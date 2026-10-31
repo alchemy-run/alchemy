@@ -21,7 +21,7 @@ import {
 /**
  * A single long-term memory extraction strategy (semantic, summary, user
  * preference, episodic, or custom). Passed through to the AgentCore API
- * unchanged — see the AWS SDK `MemoryStrategyInput` shape.
+ * unchanged -- see the AWS SDK `MemoryStrategyInput` shape.
  */
 export type MemoryStrategy = control.MemoryStrategyInput;
 
@@ -89,7 +89,7 @@ export interface Memory extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock AgentCore Memory — managed short- and long-term memory
+ * An Amazon Bedrock AgentCore Memory -- managed short- and long-term memory
  * for AI agents.
  *
  * Short-term memory stores raw session events (turn-by-turn conversation);
@@ -253,7 +253,7 @@ export const MemoryProvider = () =>
             return { action: "replace" } as const;
           }
           // Strategy lists are create-only: in-place strategy mutation uses a
-          // different (Modify) input shape and partial updates — replace.
+          // different (Modify) input shape and partial updates -- replace.
           if (
             JSON.stringify(oldProps.memoryStrategies ?? []) !==
             JSON.stringify(news?.memoryStrategies ?? [])
@@ -271,13 +271,13 @@ export const MemoryProvider = () =>
           const desiredTags = { ...props.tags, ...internalTags };
           const eventExpiryDuration = toWireDays(props.eventExpiryDuration) ?? 90;
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let memory = output?.memoryId ? yield* getMemoryOrUndefined(output.memoryId) : undefined;
           if (memory === undefined) {
             memory = yield* findByName(name);
           }
 
-          // 2. ENSURE — create if missing; tolerate the name-exists race.
+          // 2. ENSURE -- create if missing; tolerate the name-exists race.
           if (memory === undefined) {
             const created = yield* control
               .createMemory({
@@ -309,7 +309,7 @@ export const MemoryProvider = () =>
             });
           }
 
-          // 3. SYNC — converge mutable settings from OBSERVED state.
+          // 3. SYNC -- converge mutable settings from OBSERVED state.
           const drifted =
             (unredact(memory.description) ?? undefined) !==
               (props.description ?? unredact(memory.description)) ||

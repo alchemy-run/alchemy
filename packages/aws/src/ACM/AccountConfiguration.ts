@@ -94,7 +94,7 @@ const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
  * request: replaying a token with different parameters is a typed
  * `ConflictException`, and replaying it with the same parameters returns the
  * cached original result WITHOUT re-applying it. So the token must vary with
- * the desired value AND the attempt — the seed is truncated first so the
+ * the desired value AND the attempt -- the seed is truncated first so the
  * discriminating suffix always survives.
  */
 const idempotencyToken = (seed: string, desiredDays: number, attempt: number) =>

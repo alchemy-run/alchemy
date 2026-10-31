@@ -26,7 +26,7 @@ export type DbInstanceStatus = influxdb.Status;
 
 export interface DbInstanceProps {
   /**
-   * Name that uniquely identifies the DB instance. Must be 3–40 characters,
+   * Name that uniquely identifies the DB instance. Must be 3-40 characters,
    * start with a letter, and contain only lowercase letters, numbers, and
    * hyphens.
    * @default ${app}-${stage}-${id}
@@ -159,7 +159,7 @@ export interface DbInstance extends Resource<
 > {}
 
 /**
- * An Amazon Timestream for InfluxDB DB instance — a managed, single-tenant
+ * An Amazon Timestream for InfluxDB DB instance -- a managed, single-tenant
  * InfluxDB engine for time-series workloads.
  *
  * `DbInstance` owns the instance's lifecycle and its mutable configuration
@@ -168,7 +168,7 @@ export interface DbInstance extends Resource<
  * credentials, organization, and bucket are fixed at creation.
  *
  * :::caution
- * Provisioning a DB instance takes ~15–20 minutes and incurs EC2-backed cost.
+ * Provisioning a DB instance takes ~15-20 minutes and incurs EC2-backed cost.
  * :::
  * ### Creating DB Instances
  * **Example:** Basic InfluxDB Instance
@@ -243,7 +243,7 @@ const findInstanceByName = Effect.fn(function* (name: string) {
 });
 
 /**
- * A DB instance still transitioning toward the awaited status — retried by
+ * A DB instance still transitioning toward the awaited status -- retried by
  * {@link waitForStatus}'s bounded schedule.
  */
 class DbInstanceNotReady extends Data.TaggedError("DbInstanceNotReady")<{
@@ -260,7 +260,7 @@ export class DbInstanceProvisioningFailed extends Data.TaggedError("DbInstancePr
   readonly status: string;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -269,9 +269,9 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     // ParseError: a CREATING instance can transiently decode incompletely
-    // while fields are still being populated — treat it as not-ready.
+    // while fields are still being populated -- treat it as not-ready.
     while: (e) => e._tag === "DbInstanceNotReady" || e._tag === "ParseError",
-    // Provisioning is slow (~15–20 min); poll every 20s up to ~30 min.
+    // Provisioning is slow (~15-20 min); poll every 20s up to ~30 min.
     schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(90)]),
   });
 
@@ -328,7 +328,7 @@ export const DbInstanceProvider = () =>
           if (!isResolved(news)) return;
           const oldName = yield* createInstanceName(id, olds);
           const newName = yield* createInstanceName(id, news);
-          // Name and the networking/credential aspects are immutable — changing
+          // Name and the networking/credential aspects are immutable -- changing
           // any of them requires a replacement.
           const arraysDiffer = (a?: string[], b?: string[]) =>
             JSON.stringify([...(a ?? [])].sort()) !== JSON.stringify([...(b ?? [])].sort());
@@ -355,14 +355,14 @@ export const DbInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted rather than
           // duplicated.
           let state = output?.id
             ? yield* readInstanceById(output.id)
             : yield* findInstanceByName(name);
 
-          // Ensure — create if missing, then wait for AVAILABLE.
+          // Ensure -- create if missing, then wait for AVAILABLE.
           if (state === undefined) {
             const created = yield* influxdb.createDbInstance({
               name,
@@ -419,7 +419,7 @@ export const DbInstanceProvider = () =>
             yield* session.note(`Updated DB instance ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* influxdb.untagResource({

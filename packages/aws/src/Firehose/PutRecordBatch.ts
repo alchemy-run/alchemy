@@ -14,7 +14,7 @@ export interface PutRecordBatchRequest extends Omit<
  *
  * Grants `firehose:PutRecordBatch` on the bound delivery stream. Each request
  * supports up to 500 records and 4 MiB total (limits are AWS-enforced, not
- * client-enforced). Even a 200 response can carry per-record failures —
+ * client-enforced). Even a 200 response can carry per-record failures --
  * check `FailedPutCount` and retry the failed entries from
  * `RequestResponses`.
  * ### Putting Records

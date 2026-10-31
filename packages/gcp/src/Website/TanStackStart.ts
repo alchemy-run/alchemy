@@ -16,7 +16,7 @@ export interface TanStackStartProps extends FrameworkSiteProps {}
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/tanstack-start` with the
- * `@alchemy.run/frontend-frameworks/tanstack-start/node` deploy target —
+ * `@alchemy.run/frontend-frameworks/tanstack-start/node` deploy target --
  * both must be installed in your project, alongside
  * `@tanstack/react-start` (or `@tanstack/solid-start`) and `vite`.
  *

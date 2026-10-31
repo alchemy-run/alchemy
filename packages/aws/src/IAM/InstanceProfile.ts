@@ -191,10 +191,10 @@ export const InstanceProfileProvider = () =>
             ...news.tags,
           };
 
-          // Observe — fetch the live instance profile (or absence).
+          // Observe -- fetch the live instance profile (or absence).
           let profile = yield* readInstanceProfile(name);
 
-          // Ensure — create the profile when it is missing. Tolerate races
+          // Ensure -- create the profile when it is missing. Tolerate races
           // and surface a clear error when an unrelated foreign profile
           // already owns the name.
           if (!profile?.Arn) {
@@ -229,7 +229,7 @@ export const InstanceProfileProvider = () =>
             }
           }
 
-          // Sync role attachment — diff the observed role on the profile
+          // Sync role attachment -- diff the observed role on the profile
           // against the desired role and only swap when they differ.
           const observedRoleName = profile.Roles?.[0]?.RoleName;
           const desiredRoleName = news.roleName as string | undefined;
@@ -239,7 +239,7 @@ export const InstanceProfileProvider = () =>
             nextRoleName: desiredRoleName,
           });
 
-          // Sync tags — use the cloud's actual tags as the baseline so
+          // Sync tags -- use the cloud's actual tags as the baseline so
           // adoption / out-of-band tag changes converge correctly.
           const observedTags = toTagRecord(profile.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);

@@ -32,7 +32,7 @@ export type AppsDeploymentProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * deployment.
    */
   app: string;
@@ -42,7 +42,7 @@ export type AppsDeploymentProps = {
    */
   location?: string;
   /**
-   * Deployment id. If omitted, a unique name is generated. Immutable —
+   * Deployment id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the deployment.
    */
   deploymentId?: string;
@@ -100,10 +100,10 @@ export type AppsDeployment = Resource<
 >;
 
 /**
- * A Customer Engagement Suite deployment — an immutable, queryable
+ * A Customer Engagement Suite deployment -- an immutable, queryable
  * channel binding of an app version.
  *
- * Deployments have no labels or description field — Alchemy stamps
+ * Deployments have no labels or description field -- Alchemy stamps
  * ownership into `displayName` so `list` / nuke can find them. Parent
  * app, location, and deployment id are immutable.
  *

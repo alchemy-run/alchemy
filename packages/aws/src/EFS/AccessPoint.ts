@@ -81,12 +81,12 @@ export interface AccessPoint extends Resource<
 > {}
 
 /**
- * An Amazon EFS access point — an application-specific entry point into a
+ * An Amazon EFS access point -- an application-specific entry point into a
  * file system that enforces a POSIX identity and a root directory.
  *
  * Access points are how Lambda (and other serverless compute) mounts EFS:
  * pass `accessPoint.accessPointArn` to a Lambda Function's
- * `fileSystemConfigs`. The POSIX user and root directory are immutable —
+ * `fileSystemConfigs`. The POSIX user and root directory are immutable --
  * changing them replaces the access point.
  * ### Creating Access Points
  * **Example:** Access point with a POSIX identity and auto-created root
@@ -259,7 +259,7 @@ export const AccessPointProvider = () =>
         }),
 
         // posixUser, rootDirectory, and the file system are all immutable on
-        // an access point — any change replaces it. Only tags update in
+        // an access point -- any change replaces it. Only tags update in
         // place.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news) || olds === undefined) return undefined;
@@ -270,14 +270,14 @@ export const AccessPointProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // undefined → default update path (tag sync)
+          // undefined -> default update path (tag sync)
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const token = yield* createToken(id);
           const internalTags = yield* createInternalTags(id);
 
-          // 1. OBSERVE — output.accessPointId is only a cache; the client
+          // 1. OBSERVE -- output.accessPointId is only a cache; the client
           //    token is the deterministic identity within the file system.
           let ap = output?.accessPointId
             ? yield* findById(output.accessPointId)
@@ -286,7 +286,7 @@ export const AccessPointProvider = () =>
             ap = undefined;
           }
 
-          // 2. ENSURE — create if missing. CreateAccessPoint is idempotent
+          // 2. ENSURE -- create if missing. CreateAccessPoint is idempotent
           //    on the client token; a concurrent identical create surfaces
           //    the typed AccessPointAlreadyExists which we resolve by
           //    describing the winner.
@@ -319,7 +319,7 @@ export const AccessPointProvider = () =>
               .pipe(Effect.map((r) => r.AccessPoints![0])),
           );
 
-          // 3. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3. SYNC tags -- diff against OBSERVED cloud tags so adoption
           //    converges.
           const observedTags = efsTagsToRecord(ap.Tags);
           const { upsert, removed } = diffTags(observedTags, {

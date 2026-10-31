@@ -55,7 +55,7 @@ export class Globals extends Plugin.Service<Globals>()("cloudflare-runtime/plugi
  * Fire one cron expression against the entry socket's scheduled route.
  *
  * Driven by `Schedule.cron`: each iteration sleeps until the expression's
- * next match, then triggers the route — no polling, no manual clock math.
+ * next match, then triggers the route -- no polling, no manual clock math.
  * Trigger failures are logged and the loop continues. The loop runs on the
  * worker's start `Scope`, so it dies with the worker.
  */
@@ -101,7 +101,7 @@ export const GlobalsLive = Layer.effect(
     );
 
     // Inbound email replies (`message.reply(...)` from the user worker's
-    // `email()` handler) are persisted under `{storage}/email` — the same
+    // `email()` handler) are persisted under `{storage}/email` -- the same
     // directory the send-email simulator writes to. The entry middleware
     // gets a disk service binding plus the node-side absolute path so its
     // logged file paths point at real files. Miniflare persists replies via

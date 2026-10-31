@@ -38,7 +38,7 @@ export interface ContactChannelProps {
   deliveryAddress: contacts.ContactChannelAddress;
 
   /**
-   * When `true`, the channel is created without sending an activation code —
+   * When `true`, the channel is created without sending an activation code --
    * the contact's device does not receive a message. Activate later with
    * `sendActivationCode` + `activateContactChannel`.
    *
@@ -68,7 +68,7 @@ export interface ContactChannel extends Resource<
 > {}
 
 /**
- * An Incident Manager contact channel — the method (SMS, voice, or email)
+ * An Incident Manager contact channel -- the method (SMS, voice, or email)
  * that Incident Manager uses to engage a contact during an incident.
  *
  * ### Creating Contact Channels
@@ -136,7 +136,7 @@ export const ContactChannelProvider = () =>
       return ContactChannelResource.Provider.of({
         stables: ["contactChannelArn", "contactArn", "type"],
 
-        // Sub-resource keyed by its parent contact — enumeration across all
+        // Sub-resource keyed by its parent contact -- enumeration across all
         // contacts is not meaningful here.
         list: () => Effect.succeed([]),
 
@@ -146,7 +146,7 @@ export const ContactChannelProvider = () =>
             if (channel === undefined) return undefined;
             return buildAttrs(channel);
           }
-          // No cached identifier — recover by searching the parent contact
+          // No cached identifier -- recover by searching the parent contact
           // from prior props. Channels are not taggable, so a match found
           // this way cannot prove ownership.
           if (olds?.contactId === undefined) return undefined;
@@ -168,7 +168,7 @@ export const ContactChannelProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.name ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — by cached ARN first, then by (contact, name, type).
+          // 1. OBSERVE -- by cached ARN first, then by (contact, name, type).
           let channel = output ? yield* getChannel(output.contactChannelArn) : undefined;
           if (channel === undefined) {
             const found = yield* findChannel(news.contactId, name, news.type);
@@ -177,7 +177,7 @@ export const ContactChannelProvider = () =>
             }
           }
 
-          // 2. ENSURE — create if missing; tolerate the already-exists race
+          // 2. ENSURE -- create if missing; tolerate the already-exists race
           //    by re-searching.
           if (channel === undefined) {
             yield* session.note(`creating contact channel ${name}`);
@@ -200,7 +200,7 @@ export const ContactChannelProvider = () =>
             channel = (yield* getChannel(arn))!;
           }
 
-          // 3. SYNC name + delivery address — observed vs desired.
+          // 3. SYNC name + delivery address -- observed vs desired.
           const nameDelta = channel.Name !== name;
           const addressDelta =
             (channel.DeliveryAddress.SimpleAddress ?? "") !==

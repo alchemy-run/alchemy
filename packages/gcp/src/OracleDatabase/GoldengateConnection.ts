@@ -61,7 +61,7 @@ export type GoldengateConnectionProps = {
   /**
    * Connection properties. `connectionType` and `displayName` are
    * required on create. Type-specific nested objects (Oracle, Kafka,
-   * PostgreSQL, …) are passed through to the API.
+   * PostgreSQL, ...) are passed through to the API.
    */
   properties?: oracle.GoldengateConnectionProperties;
   /** Connection type. Convenience alias for `properties.connectionType`. */

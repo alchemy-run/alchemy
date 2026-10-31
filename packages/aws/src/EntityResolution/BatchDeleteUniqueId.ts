@@ -12,7 +12,7 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
  * ### Real-Time Matching
  * **Example:** Delete Records from the Match Store
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const batchDeleteUniqueId = yield* AWS.EntityResolution.BatchDeleteUniqueId(workflow);
  *
  * // runtime

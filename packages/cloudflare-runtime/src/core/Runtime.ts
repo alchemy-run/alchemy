@@ -60,7 +60,7 @@ export const RuntimeLive = Layer.effect(
 
     /**
      * Resolve each (streaming) tail consumer name to a `ServiceDesignator`
-     * through the dev registry proxy — the same path service bindings to other
+     * through the dev registry proxy -- the same path service bindings to other
      * local workers take (`Service.local`). The registry proxy's
      * `ExternalService` entrypoint forwards `tail()` batches and
      * `tailStream()` sessions to the consumer's process via the workerd debug
@@ -137,9 +137,9 @@ export const RuntimeLive = Layer.effect(
           // Each start cleans up ONLY its own image tag when its scope
           // closes. Do NOT prune other same-name tags as "stale" here: a
           // dev session starts the worker more than once (precreate stub
-          // → reconcile), and a cleanup that guesses which sibling tags
+          // -> reconcile), and a cleanup that guesses which sibling tags
           // are dead can untag the tag a live workerd is about to
-          // `docker create` from — every container start then fails and
+          // `docker create` from -- every container start then fails and
           // the session serves 500s until redeploy.
           yield* Effect.addFinalizer(() =>
             docker

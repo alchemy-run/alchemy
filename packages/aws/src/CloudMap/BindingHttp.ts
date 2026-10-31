@@ -6,8 +6,8 @@ import type { Service } from "./Service.ts";
 /**
  * Shared scaffolding for AWS Cloud Map HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation, the IAM action list, and
  * the injected identifier is boilerplate.
  */
@@ -62,7 +62,7 @@ export const makeCloudMapServiceHttpBinding = <I extends { ServiceId: string }, 
  * Build the impl Effect for a discovery data-plane operation
  * (`DiscoverInstances` / `DiscoverInstancesRevision`). The runtime callable
  * injects the bound {@link Service}'s namespace and service names; the
- * deploy-time half grants `actions` on `*` — the discovery data-plane
+ * deploy-time half grants `actions` on `*` -- the discovery data-plane
  * actions do not support resource-level IAM permissions.
  */
 export const makeCloudMapDiscoveryHttpBinding = <
@@ -110,7 +110,7 @@ export const makeCloudMapDiscoveryHttpBinding = <
 
 /**
  * Build the impl Effect for an account-level operation (`GetOperation`).
- * The deploy-time half grants `actions` on `*` — these actions do not
+ * The deploy-time half grants `actions` on `*` -- these actions do not
  * support resource-level IAM permissions.
  */
 export const makeCloudMapAccountHttpBinding = <I, A, E, R>(options: {

@@ -31,11 +31,11 @@ import {
 
 export type BackupWindow = {
   /**
-   * Hour of day (`0`–`23`) when the window starts.
+   * Hour of day (`0`-`23`) when the window starts.
    */
   startHourOfDay?: number;
   /**
-   * Hour of day (`1`–`24`) when the window ends. Must be greater than
+   * Hour of day (`1`-`24`) when the window ends. Must be greater than
    * `startHourOfDay`. The end hour is exclusive.
    */
   endHourOfDay?: number;
@@ -58,12 +58,12 @@ export type StandardSchedule = {
    */
   recurrenceType?: backupdr.StandardScheduleRecurrenceTypeEnum | (string & {});
   /**
-   * Days of month (`1`–`31`). `MONTHLY` and `YEARLY` only.
+   * Days of month (`1`-`31`). `MONTHLY` and `YEARLY` only.
    */
   daysOfMonth?: number[];
   /**
    * Hourly frequency. Required for `HOURLY`. Workload-specific min/max
-   * apply (Compute Instance: 4–23).
+   * apply (Compute Instance: 4-23).
    */
   hourlyFrequency?: number;
   /**
@@ -128,11 +128,11 @@ export type BackupPlanProps = {
    * Backup plan id (the `{backupPlan}` segment of
    * `projects/{project}/locations/{location}/backupPlans/{backupPlan}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the plan.
+   * and logical id. Immutable -- changing it replaces the plan.
    */
   backupPlanId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the plan. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -141,7 +141,7 @@ export type BackupPlanProps = {
   /**
    * Backup vault that stores backups created by this plan. Full name
    * `projects/{project}/locations/{location}/backupVaults/{backupvault}`
-   * or a vault id combined with `location`. Immutable — changing it
+   * or a vault id combined with `location`. Immutable -- changing it
    * replaces the plan.
    */
   backupVault: string;
@@ -149,7 +149,7 @@ export type BackupPlanProps = {
    * Resource type the plan applies to, e.g. `compute.googleapis.com/Instance`,
    * `compute.googleapis.com/Disk`, `sqladmin.googleapis.com/Instance`,
    * `alloydb.googleapis.com/Cluster`, `file.googleapis.com/Instance`.
-   * Immutable — changing it replaces the plan.
+   * Immutable -- changing it replaces the plan.
    */
   resourceType: string;
   /**
@@ -222,7 +222,7 @@ export type BackupPlan = Resource<
     state: string | undefined;
     /** Revision resource name. */
     revisionName: string | undefined;
-    /** User-friendly revision id (`v0`, `v1`, …). */
+    /** User-friendly revision id (`v0`, `v1`, ...). */
     revisionId: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -234,7 +234,7 @@ export type BackupPlan = Resource<
 >;
 
 /**
- * A Backup and DR backup plan — schedule and retention for a workload
+ * A Backup and DR backup plan -- schedule and retention for a workload
  * type, stored in a Backup Vault.
  *
  * Changing `backupPlanId`, `location`, `backupVault`, `resourceType`, or

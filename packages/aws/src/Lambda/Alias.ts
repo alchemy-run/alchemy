@@ -336,7 +336,7 @@ export const AliasProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // The alias-scoped async config does not die with the alias — clear
+          // The alias-scoped async config does not die with the alias -- clear
           // it first so a later alias of the same name starts clean.
           yield* syncEventInvokeConfig({
             functionName: output.functionName,

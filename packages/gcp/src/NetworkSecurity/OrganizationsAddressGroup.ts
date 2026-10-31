@@ -40,28 +40,28 @@ export type OrganizationsAddressGroupProps = {
    * Address group id (the `{addressGroup}` segment of
    * `organizations/{organization}/locations/{location}/addressGroups/{addressGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   addressGroupId?: string;
   /**
    * Organization id or `organizations/{organization}`. If omitted, Alchemy
    * uses `GOOGLE_ORGANIZATION_ID` or the project's Resource Manager
-   * parent. Immutable — changing it replaces the group.
+   * parent. Immutable -- changing it replaces the group.
    */
   organization?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the group.
    * @default "global"
    */
   location?: string;
   /**
-   * Address type. Immutable — changing it replaces the group.
+   * Address type. Immutable -- changing it replaces the group.
    * @default "IPV4"
    */
   type?: OrganizationsAddressGroupType;
   /**
-   * Maximum number of items. Immutable — changing it replaces the group.
+   * Maximum number of items. Immutable -- changing it replaces the group.
    * @default 100
    */
   capacity?: number;
@@ -70,7 +70,7 @@ export type OrganizationsAddressGroupProps = {
    */
   items?: string[];
   /**
-   * Supported purposes (`DEFAULT`, `CLOUD_ARMOR`). Immutable — changing
+   * Supported purposes (`DEFAULT`, `CLOUD_ARMOR`). Immutable -- changing
    * them replaces the group.
    */
   purpose?: OrganizationsAddressGroupPurpose[];
@@ -94,7 +94,7 @@ export type OrganizationsAddressGroup = Resource<
     addressGroupId: string;
     /** Organization id. */
     organization: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Address type (`IPV4` or `IPV6`). */
     type: string;

@@ -80,7 +80,7 @@ export type HealthCheckProps = {
    */
   healthCheckName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute HealthCheck has no
    * labels field).
    */
@@ -91,7 +91,7 @@ export type HealthCheckProps = {
    */
   checkIntervalSec?: number;
   /**
-   * Probe timeout in seconds. Must be ≤ `checkIntervalSec`.
+   * Probe timeout in seconds. Must be <= `checkIntervalSec`.
    * @default 5
    */
   timeoutSec?: number;
@@ -190,7 +190,7 @@ export type HealthCheck = Resource<
  * Health checks probe backends for load balancing and managed-instance-group
  * autohealing. This resource maps to the global `healthChecks` collection
  * (`regionHealthChecks` is a separate resource). Compute HealthCheck has no
- * labels field — Alchemy ownership is stored in the description so nuke can
+ * labels field -- Alchemy ownership is stored in the description so nuke can
  * find leaked checks.
  *
  * ### Creating a Health Check

@@ -20,7 +20,7 @@ export type ConversationMessage = {
 
 export type CollectionsDataStoresConversationProps = {
   /**
-   * Parent data store resource name. Immutable — changing it replaces
+   * Parent data store resource name. Immutable -- changing it replaces
    * the conversation.
    */
   dataStore: string;

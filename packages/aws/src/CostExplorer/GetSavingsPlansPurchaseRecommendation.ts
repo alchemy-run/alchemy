@@ -17,7 +17,7 @@ export interface GetSavingsPlansPurchaseRecommendationRequest
  * ### Savings Plans
  * **Example:** Get Savings Plans Recommendations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getSavingsPlansPurchaseRecommendation = yield* AWS.CostExplorer.GetSavingsPlansPurchaseRecommendation();
  *
  * // runtime

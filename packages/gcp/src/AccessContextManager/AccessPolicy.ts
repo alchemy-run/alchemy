@@ -31,14 +31,14 @@ export type AccessPolicyProps = {
   /**
    * Organization parent (`organizations/{organization}` or the numeric
    * organization id). If omitted, Alchemy uses `GOOGLE_ORGANIZATION_ID`
-   * or the project's Resource Manager parent. Immutable — changing it
+   * or the project's Resource Manager parent. Immutable -- changing it
    * replaces the policy.
    */
   parent?: string;
   /**
    * Human-readable title. Access policies have no labels or description,
    * so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix and stripped from
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   title?: string;
@@ -46,7 +46,7 @@ export type AccessPolicyProps = {
    * Policy scopes. Format: `folders/{folder_number}` or
    * `projects/{project_number}`. At most one scope. Empty or omitted
    * creates the organization-wide default policy (one per organization).
-   * Immutable — changing scopes replaces the policy.
+   * Immutable -- changing scopes replaces the policy.
    */
   scopes?: string[];
 };
@@ -82,7 +82,7 @@ export type AccessPolicy = Resource<
  *
  * Access policies have no labels. Alchemy stamps ownership into `title`
  * so `list` / `pnpm nuke:gcp` can find them. `parent` and `scopes` are
- * immutable — changing them replaces the policy. `title` updates in
+ * immutable -- changing them replaces the policy. `title` updates in
  * place. The policy id is assigned by the API.
  *
  * ### Creating an Access Policy

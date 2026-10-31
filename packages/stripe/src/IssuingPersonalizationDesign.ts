@@ -92,8 +92,8 @@ export interface IssuingPersonalizationDesignPreferences {
 
 export interface IssuingPersonalizationDesignProps {
   /**
-   * Id of the physical bundle (`ics_…`) this design ships with. Required.
-   * Mutable — changing it updates the design in place.
+   * Id of the physical bundle (`ics_...`) this design ships with. Required.
+   * Mutable -- changing it updates the design in place.
    */
   physicalBundle: string;
   /**
@@ -104,11 +104,11 @@ export interface IssuingPersonalizationDesignProps {
   /**
    * Lookup key used to retrieve this design from a static string. Unique
    * per account, max 200 characters. If omitted, a unique key is
-   * generated. Mutable — a change transfers the key onto this design.
+   * generated. Mutable -- a change transfers the key onto this design.
    */
   lookupKey?: string;
   /**
-   * File id (`file_…`) of the card logo. Must have purpose
+   * File id (`file_...`) of the card logo. Must have purpose
    * `issuing_logo` (PNG, 1000×200, black on white). Mutable.
    */
   cardLogo?: string;
@@ -132,13 +132,13 @@ export type IssuingPersonalizationDesign = Resource<
   "Stripe.IssuingPersonalizationDesign",
   IssuingPersonalizationDesignProps,
   {
-    /** Stripe personalization design id (`ipcd_…`). */
+    /** Stripe personalization design id (`ipcd_...`). */
     id: string;
     /** Friendly display name. */
     name: string;
     /** Lookup key used to retrieve this design dynamically. */
     lookupKey: string | undefined;
-    /** Physical bundle id (`ics_…`). */
+    /** Physical bundle id (`ics_...`). */
     physicalBundle: string;
     /** Card logo file id, if set. */
     cardLogo: string | undefined;
@@ -169,7 +169,7 @@ export type IssuingPersonalizationDesign = Resource<
 >;
 
 /**
- * A Stripe Issuing Personalization Design — a physical bundle, optional
+ * A Stripe Issuing Personalization Design -- a physical bundle, optional
  * card logo, and optional carrier text that represent a card product
  * line. Name, lookup key, logo, carrier text, physical bundle,
  * preferences, and metadata update in place.
@@ -227,7 +227,7 @@ export type IssuingPersonalizationDesign = Resource<
  * ### Destroying a Personalization Design
  * **Example:** Destroy is a no-op
  * ```typescript
- * // stack.destroy() leaves the Stripe object in place — there is no
+ * // stack.destroy() leaves the Stripe object in place -- there is no
  * // delete/archive API. Residue stays tagged with alchemy_stack.
  * const design = yield* Stripe.IssuingPersonalizationDesign("metal-card", {
  *   physicalBundle: "ics_Fiiwz3T83opOUd",

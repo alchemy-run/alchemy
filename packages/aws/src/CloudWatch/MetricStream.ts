@@ -59,7 +59,7 @@ export interface MetricStream extends Resource<
 > {}
 
 /**
- * A CloudWatch metric stream — continuously exports CloudWatch metrics to
+ * A CloudWatch metric stream -- continuously exports CloudWatch metrics to
  * a Kinesis Data Firehose delivery stream (and on to S3, Datadog, etc.).
  * ### Creating Metric Streams
  * **Example:** Firehose Delivery Stream
@@ -84,7 +84,7 @@ export interface MetricStream extends Resource<
  * ### Reading Metric Streams at Runtime
  * **Example:** Read the Stream's State from a Function
  * ```typescript
- * // init — bind the stream to the function (see GetMetricStream)
+ * // init -- bind the stream to the function (see GetMetricStream)
  * const getMetricStream = yield* AWS.CloudWatch.GetMetricStream(stream);
  *
  * // runtime
@@ -204,13 +204,13 @@ export const MetricStreamProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // Observe — pin the physical name from `output` if present;
+          // Observe -- pin the physical name from `output` if present;
           // otherwise derive from desired props. Read existing so we have
           // a baseline for tag-diffing on adoption.
           const name = output?.metricStreamName ?? (yield* createMetricStreamName(id, news));
           const existing = yield* readMetricStream(name);
 
-          // Ensure — `putMetricStream` is an upsert; we send the full
+          // Ensure -- `putMetricStream` is an upsert; we send the full
           // desired config every reconcile.
           yield* retryConcurrent(
             cloudwatch.putMetricStream({
@@ -219,14 +219,14 @@ export const MetricStreamProvider = () =>
             }),
           );
 
-          // Sync running state — `enabled` drives start/stop independently
+          // Sync running state -- `enabled` drives start/stop independently
           // of the put call.
           yield* syncMetricStreamState({
             name,
             enabled: news.enabled,
           });
 
-          // Sync tags — diff against `olds.tags` when we have prior state,
+          // Sync tags -- diff against `olds.tags` when we have prior state,
           // otherwise fall back to what we observed (adoption path).
           const tags = yield* updateResourceTags({
             id,

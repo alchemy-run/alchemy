@@ -28,7 +28,7 @@ export interface FlowProps {
    */
   kmsArn?: string;
   /**
-   * How the flow is triggered — on demand, on a schedule, or by an event.
+   * How the flow is triggered -- on demand, on a schedule, or by an event.
    * @default { triggerType: "OnDemand" }
    */
   triggerConfig?: appflow.TriggerConfig;
@@ -78,7 +78,7 @@ export interface Flow extends Resource<
  * `appflow.amazonaws.com` service principal (`s3:GetObject` + `s3:ListBucket`
  * on the source; `s3:PutObject` and the multipart/ACL actions on the
  * destination), and the source prefix must contain at least one object when
- * the flow is created — AppFlow validates connectivity by listing the source
+ * the flow is created -- AppFlow validates connectivity by listing the source
  * at `CreateFlow` time and rejects an empty prefix with
  * `ConnectorServerException`.
  * ### Creating a Flow
@@ -162,7 +162,7 @@ export const FlowProvider = () =>
             .describeFlow({ flowName: name })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // 2. Ensure — create if missing. Tolerate an AlreadyExists race by
+          // 2. Ensure -- create if missing. Tolerate an AlreadyExists race by
           // falling back to describe.
           if (live === undefined) {
             yield* appflow
@@ -180,7 +180,7 @@ export const FlowProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             live = yield* appflow.describeFlow({ flowName: name });
           } else {
-            // 3. Sync — updateFlow converges the mutable configuration
+            // 3. Sync -- updateFlow converges the mutable configuration
             // (trigger, source/destination, tasks). It does not accept tags.
             yield* appflow.updateFlow({
               flowName: name,

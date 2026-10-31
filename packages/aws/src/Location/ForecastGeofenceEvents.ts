@@ -28,7 +28,7 @@ export interface ForecastGeofenceEventsRequest extends Omit<
  *   DeviceState: { Position: [-122.3493, 47.6205], Speed: 20 },
  *   TimeHorizonMinutes: 30,
  * });
- * // events.ForecastedEvents → [{ GeofenceId, EventType, NearestDistance }, …]
+ * // events.ForecastedEvents -> [{ GeofenceId, EventType, NearestDistance }, ...]
  * ```
  *
  * @binding

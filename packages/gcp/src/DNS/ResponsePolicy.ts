@@ -27,7 +27,7 @@ export type ResponsePolicyProps = {
    * omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters, begin with a letter, end
    * with a letter or digit, and contain only lowercase letters, digits,
-   * or dashes. Immutable — changing it replaces the response policy.
+   * or dashes. Immutable -- changing it replaces the response policy.
    */
   responsePolicyName?: string;
   /**
@@ -82,7 +82,7 @@ export type ResponsePolicy = Resource<
  * A Cloud DNS response policy applied to one or more VPC networks.
  *
  * Response policies override DNS answers for selected names (via
- * response policy rules) for VMs in bound networks. Name is identity —
+ * response policy rules) for VMs in bound networks. Name is identity --
  * changing it replaces the policy. Description, labels, and the
  * network / GKE cluster lists update in place.
  *

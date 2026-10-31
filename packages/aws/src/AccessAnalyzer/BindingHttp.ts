@@ -6,8 +6,8 @@ import type { Analyzer } from "./Analyzer.ts";
 /**
  * Shared scaffolding for AccessAnalyzer HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for analyzer-scoped operations) the injected `analyzerArn` is boilerplate.
  */
@@ -54,7 +54,7 @@ export const makeAnalyzerScopedHttpBinding = <I extends { analyzerArn: string },
   });
 
 /**
- * Build the impl Effect for an account-level operation (no target analyzer —
+ * Build the impl Effect for an account-level operation (no target analyzer --
  * the policy-check, policy-validation, and policy-generation APIs). The
  * deploy-time half grants `actions` on `*` because these IAM actions do not
  * support resource-level scoping.

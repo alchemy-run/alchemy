@@ -61,22 +61,22 @@ export interface KeyModesOfUse {
 export interface KeyAttributes {
   /**
    * The key algorithm to be used, e.g. `TDES_2KEY`, `AES_128`, `AES_256`,
-   * `RSA_2048`, `ECC_NIST_P256`. Immutable — changing it replaces the key.
+   * `RSA_2048`, `ECC_NIST_P256`. Immutable -- changing it replaces the key.
    */
   keyAlgorithm: string;
   /**
    * The type of key, e.g. `SYMMETRIC_KEY`, `ASYMMETRIC_KEY_PAIR`,
-   * `PRIVATE_KEY`, `PUBLIC_KEY`. Immutable — changing it replaces the key.
+   * `PRIVATE_KEY`, `PUBLIC_KEY`. Immutable -- changing it replaces the key.
    */
   keyClass: string;
   /**
    * The TR-31 cryptographic usage of the key, e.g.
    * `TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY`, `TR31_M7_HMAC_KEY`,
-   * `TR31_P0_PIN_ENCRYPTION_KEY`. Immutable — changing it replaces the key.
+   * `TR31_P0_PIN_ENCRYPTION_KEY`. Immutable -- changing it replaces the key.
    */
   keyUsage: string;
   /**
-   * The cryptographic operations the key may perform. Immutable — changing
+   * The cryptographic operations the key may perform. Immutable -- changing
    * any mode replaces the key.
    */
   keyModesOfUse: KeyModesOfUse;
@@ -90,7 +90,7 @@ export interface KeyProps {
   keyAttributes: KeyAttributes;
   /**
    * Whether the key can be exported out of the service (e.g. via TR-31/TR-34
-   * key blocks). Immutable — changing it replaces the key.
+   * key blocks). Immutable -- changing it replaces the key.
    * @default false
    */
   exportable?: boolean;
@@ -102,19 +102,19 @@ export interface KeyProps {
   enabled?: boolean;
   /**
    * The algorithm used to compute the key check value, `CMAC` or
-   * `ANSI_X9_24`. Immutable — changing it replaces the key.
+   * `ANSI_X9_24`. Immutable -- changing it replaces the key.
    * @default ANSI_X9_24 for TDES keys, CMAC otherwise
    */
   keyCheckValueAlgorithm?: string;
   /**
    * For ECC key pairs used in ECDH key agreement, the usage bound to the
-   * derived symmetric key. Immutable — changing it replaces the key.
+   * derived symmetric key. Immutable -- changing it replaces the key.
    */
   deriveKeyUsage?: string;
   /**
    * The waiting period before a deleted key is permanently removed, e.g.
    * `"7 days"` or `Duration.days(7)` (`3` - `180` days; sent to the API as
-   * whole days — a bare number is milliseconds). During the window the key
+   * whole days -- a bare number is milliseconds). During the window the key
    * is `DELETE_PENDING` and can be restored.
    * @default "3 days"
    */
@@ -155,7 +155,7 @@ export interface Key extends Resource<
 > {}
 
 /**
- * An AWS Payment Cryptography key — a managed cryptographic key with TR-31
+ * An AWS Payment Cryptography key -- a managed cryptographic key with TR-31
  * attributes (algorithm, class, usage, modes of use) used for data
  * encryption, MAC generation/verification, and other payment-domain
  * cryptographic operations.
@@ -207,7 +207,7 @@ export interface Key extends Resource<
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // runtime — PlainText is hex-encoded
+ *     // runtime -- PlainText is hex-encoded
  *     const result = yield* encrypt({
  *       PlainText: "31323334353637383930313233343536",
  *       EncryptionAttributes: { Symmetric: { Mode: "CBC" } },
@@ -299,7 +299,7 @@ export const KeyProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk)
                 // Keys already inside their deletion window are as deleted
-                // as the API allows — a second DeleteKey is a no-op, so they
+                // as the API allows -- a second DeleteKey is a no-op, so they
                 // are not orphans (mirrors KMS PendingDeletion filtering).
                 .filter((k) => k.KeyState !== "DELETE_PENDING" && k.KeyState !== "DELETE_COMPLETE")
                 .map((k): Key["Attributes"] => ({
@@ -332,27 +332,27 @@ export const KeyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // fall through: undefined → default update (enabled / tags sync)
+          // fall through: undefined -> default update (enabled / tags sync)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredEnabled = news.enabled ?? true;
           const internalTags = yield* createInternalTags(id);
 
-          // 1. Observe — output.keyArn is only an identity cache; the cloud
+          // 1. Observe -- output.keyArn is only an identity cache; the cloud
           //    is authoritative. Fall back to a tag scan for adoption after
           //    state-persistence failures.
           const cachedArn = output?.keyArn ?? (yield* findKeyByTags(id));
           let key = cachedArn === undefined ? undefined : yield* observeKey(cachedArn);
 
           // A key inside its deletion window is restored rather than
-          // recreated — the material (and dependent ciphertext) survives.
+          // recreated -- the material (and dependent ciphertext) survives.
           if (key !== undefined && key.KeyState === "DELETE_PENDING") {
             key = yield* paymentcryptography
               .restoreKey({ KeyIdentifier: key.KeyArn })
               .pipe(Effect.map((r) => r.Key));
           }
 
-          // 2. Ensure — create when missing.
+          // 2. Ensure -- create when missing.
           if (key === undefined) {
             key = yield* paymentcryptography
               .createKey({
@@ -380,7 +380,7 @@ export const KeyProvider = () =>
                   .pipe(Effect.map((r) => r.Key));
           }
 
-          // 3b. Sync tags — diff against observed cloud tags so adoption
+          // 3b. Sync tags -- diff against observed cloud tags so adoption
           //     (foreign tags) converges.
           const observedTags = yield* fetchKeyTags(key.KeyArn);
           const desiredTags: Record<string, string> = {
@@ -414,7 +414,7 @@ export const KeyProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // A key already scheduled for deletion rejects a second
-                // DeleteKey with a conflict — that is the desired end state,
+                // DeleteKey with a conflict -- that is the desired end state,
                 // so treat it as success. Any other conflict is re-raised.
                 ConflictException: (error) =>
                   paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(

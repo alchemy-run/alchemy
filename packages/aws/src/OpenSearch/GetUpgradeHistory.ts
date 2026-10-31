@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const getUpgradeHistory = yield* OpenSearch.GetUpgradeHistory();
  *
  * const result = yield* getUpgradeHistory({ DomainName: name });
- * // result.UpgradeHistories → past upgrades
+ * // result.UpgradeHistories -> past upgrades
  * ```
  *
  * @binding

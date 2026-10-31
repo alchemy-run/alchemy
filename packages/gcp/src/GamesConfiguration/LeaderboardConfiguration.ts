@@ -24,12 +24,12 @@ import {
 
 export type LeaderboardConfigurationProps = {
   /**
-   * Play Games application id from the Google Play Console. Immutable —
+   * Play Games application id from the Google Play Console. Immutable --
    * changing it replaces the leaderboard.
    */
   applicationId: string;
   /**
-   * Server-assigned leaderboard id. Immutable — changing it replaces the
+   * Server-assigned leaderboard id. Immutable -- changing it replaces the
    * leaderboard.
    */
   leaderboardId?: string;
@@ -103,7 +103,7 @@ export type LeaderboardConfiguration = Resource<
  * A Play Games Services leaderboard configuration.
  *
  * Leaderboard configurations have no labels field and a server-assigned
- * id, so only a recorded leaderboard can be read back. `applicationId` and `leaderboardId` are identity — changing either
+ * id, so only a recorded leaderboard can be read back. `applicationId` and `leaderboardId` are identity -- changing either
  * replaces the configuration. Score order, bounds, name, and format
  * update in place.
  *

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface GetMetricWidgetImageRequest extends cloudwatch.GetMetricWidgetImageInput {}
 
 /**
- * Runtime binding for `cloudwatch:GetMetricWidgetImage` — render a metric
+ * Runtime binding for `cloudwatch:GetMetricWidgetImage` -- render a metric
  * graph as a PNG (useful for embedding charts in alerts or reports).
  *
  * Provide `CloudWatch.GetMetricWidgetImageHttp` on the hosting Lambda
@@ -13,7 +13,7 @@ export interface GetMetricWidgetImageRequest extends cloudwatch.GetMetricWidgetI
  * ### Rendering Metric Graphs
  * **Example:** Render a Metric Graph as PNG
  * ```typescript
- * // init — grants cloudwatch:GetMetricWidgetImage
+ * // init -- grants cloudwatch:GetMetricWidgetImage
  * const getMetricWidgetImage = yield* AWS.CloudWatch.GetMetricWidgetImage();
  *
  * // runtime

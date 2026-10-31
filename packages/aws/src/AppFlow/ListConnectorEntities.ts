@@ -13,7 +13,7 @@ export interface ListConnectorEntitiesRequest extends Omit<
  *
  * Bind this operation to a {@link ConnectorProfile} in the function's init
  * phase to get a callable that discovers the entities the connected
- * application exposes (e.g. Salesforce objects, database tables) — useful for
+ * application exposes (e.g. Salesforce objects, database tables) -- useful for
  * dynamic schema discovery at runtime. The connector profile name is injected
  * automatically and `appflow:ListConnectorEntities` is granted on the
  * profile. Provide the implementation with
@@ -21,11 +21,11 @@ export interface ListConnectorEntitiesRequest extends Omit<
  * ### Discovering Connector Entities
  * **Example:** List the Entities Behind a Connector Profile
  * ```typescript
- * // init — bind the operation to the connector profile
+ * // init -- bind the operation to the connector profile
  * const listConnectorEntities =
  *   yield* AWS.AppFlow.ListConnectorEntities(profile);
  *
- * // runtime — enumerate the connector's entities
+ * // runtime -- enumerate the connector's entities
  * const result = yield* listConnectorEntities();
  * // result.connectorEntityMap groups entities by category
  * ```

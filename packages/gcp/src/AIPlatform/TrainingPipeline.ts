@@ -35,12 +35,12 @@ export type TrainingPipelineProps = {
    * Training pipeline id (the `{training_pipeline}` segment of
    * `projects/{project}/locations/{location}/trainingPipelines/{training_pipeline}`).
    * Vertex assigns this on create. Pass the value from a previous deploy
-   * to target the same pipeline. Immutable — changing it replaces the
+   * to target the same pipeline. Immutable -- changing it replaces the
    * pipeline.
    */
   trainingPipelineId?: string;
   /**
-   * Vertex AI location (`us-central1`, `us-east1`, …). Immutable —
+   * Vertex AI location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the pipeline. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -53,13 +53,13 @@ export type TrainingPipelineProps = {
   displayName?: string;
   /**
    * Cloud Storage URI of the training-task YAML
-   * (`gs://google-cloud-aiplatform/schema/trainingjob/definition/…`).
-   * Immutable — changing it replaces the pipeline.
+   * (`gs://google-cloud-aiplatform/schema/trainingjob/definition/...`).
+   * Immutable -- changing it replaces the pipeline.
    */
   trainingTaskDefinition: string;
   /**
    * Training-task inputs as specified by `trainingTaskDefinition`.
-   * Immutable — changing it replaces the pipeline.
+   * Immutable -- changing it replaces the pipeline.
    */
   trainingTaskInputs?: unknown;
   /**
@@ -99,7 +99,7 @@ export type TrainingPipeline = Resource<
     name: string;
     /** Training pipeline id (last path segment). */
     trainingPipelineId: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Project id. */
     project: string;
@@ -123,7 +123,7 @@ export type TrainingPipeline = Resource<
     encryptionSpec: TrainingPipelineEncryptionSpec | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Pipeline state (`PIPELINE_STATE_RUNNING`, …). */
+    /** Pipeline state (`PIPELINE_STATE_RUNNING`, ...). */
     state: string | undefined;
     /** Error when the pipeline failed or was cancelled. */
     error: aiplatform.GoogleRpcStatus | undefined;
@@ -145,7 +145,7 @@ export type TrainingPipeline = Resource<
  * uploads a Model.
  *
  * Creating a TrainingPipeline starts it immediately. Vertex assigns the
- * resource id; there is no update RPC — changing `location` or
+ * resource id; there is no update RPC -- changing `location` or
  * `trainingTaskDefinition` replaces the pipeline. Labels brand the
  * resource for `list` / nuke.
  *

@@ -71,7 +71,7 @@ export const hasAlchemyLabels = Effect.fn(function* (id: string, labels: Tags | 
 
 /**
  * Diff observed cloud labels against desired labels. Always pass
- * **observed** labels as `oldLabels` — never `olds.labels` or
- * `output.labels` — so adoption converges.
+ * **observed** labels as `oldLabels` -- never `olds.labels` or
+ * `output.labels` -- so adoption converges.
  */
 export const diffLabels = diffTags;

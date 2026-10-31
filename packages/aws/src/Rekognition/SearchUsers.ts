@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:SearchUsers` — search a face collection for users matching a face ID or user ID.
+ * Runtime binding for `rekognition:SearchUsers` -- search a face collection for users matching a face ID or user ID.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:SearchUsers` on `*` (Rekognition data-plane resources such

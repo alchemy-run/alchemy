@@ -9,7 +9,7 @@ export interface ListAnalysisReportsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:ListAnalysisReports` — list the
+ * Runtime binding for `network-firewall:ListAnalysisReports` -- list the
  * traffic analysis reports generated for the bound {@link Firewall}; the
  * firewall ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface ListAnalysisReportsRequest extends Omit<
  * ### Analysis Reports
  * **Example:** List Analysis Reports
  * ```typescript
- * // init — grants network-firewall:ListAnalysisReports on the firewall
+ * // init -- grants network-firewall:ListAnalysisReports on the firewall
  * const listAnalysisReports =
  *   yield* AWS.NetworkFirewall.ListAnalysisReports(firewall);
  *

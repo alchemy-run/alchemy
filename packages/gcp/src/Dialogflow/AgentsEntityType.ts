@@ -37,13 +37,13 @@ export type EntityTypeEntity = {
 export type AgentsEntityTypeProps = {
   /**
    * Parent agent resource name
-   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable —
+   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable --
    * changing it replaces the entity type.
    */
   agent: string;
   /**
    * Entity type id (the `{entity_type}` segment). Server-assigned on
-   * create. Immutable — changing it replaces the entity type.
+   * create. Immutable -- changing it replaces the entity type.
    */
   entityTypeId?: string;
   /**
@@ -186,7 +186,7 @@ const excludedOf = (
     .filter((phrase) => (phrase.value ?? "").length > 0)
     .map((phrase) => ({ value: phrase.value ?? "" }));
 
-// Drops the `[alchemy …]` excluded phrase earlier versions stamped.
+// Drops the `[alchemy ...]` excluded phrase earlier versions stamped.
 const userExcludedOf = (
   list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[] | undefined,
 ) => excludedOf(list).filter((phrase) => !hasOwnershipMarker(phrase.value));

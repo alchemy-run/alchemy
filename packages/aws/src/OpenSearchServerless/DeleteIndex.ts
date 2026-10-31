@@ -7,7 +7,7 @@ import type { Collection } from "./Collection.ts";
  * Runtime binding for the `DeleteIndex` operation scoped to one collection
  * (IAM actions `aoss:DeleteIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
- * Deletes an index from the bound {@link Collection} — the teardown half of
+ * Deletes an index from the bound {@link Collection} -- the teardown half of
  * the runtime multi-tenant pattern built with {@link CreateIndex}. Deleting
  * an already-deleted index surfaces the typed `ResourceNotFoundException`.
  * The calling principal must also be granted `aoss:DeleteIndex` on the index

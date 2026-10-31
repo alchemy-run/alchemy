@@ -18,7 +18,7 @@ import { getConnector, waitForDeleted } from "./NetworkConnectorLifecycle.ts";
 /** Inline policy on the egress operator role. */
 export const EGRESS_POLICY = "AlchemyWebFunctionEgress";
 
-/** `arn:…:network-connector:<id>:<version>` → `arn:…:network-connector:<id>`. */
+/** `arn:...:network-connector:<id>:<version>` -> `arn:...:network-connector:<id>`. */
 const unversioned = (connectorArn: string) => connectorArn.slice(0, connectorArn.lastIndexOf(":"));
 
 /** Whether two version-qualified ARNs name the same connector. */

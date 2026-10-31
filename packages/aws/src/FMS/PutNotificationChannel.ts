@@ -10,12 +10,12 @@ export interface PutNotificationChannelRequest extends fms.PutNotificationChanne
 /**
  * Runtime binding for `fms:PutNotificationChannel`.
  *
- * Designates the SNS topic and IAM role that Firewall Manager uses to record SNS logs — the channel through which Firewall Manager notifications flow. Provide the
+ * Designates the SNS topic and IAM role that Firewall Manager uses to record SNS logs -- the channel through which Firewall Manager notifications flow. Provide the
  * implementation with `Effect.provide(AWS.FMS.PutNotificationChannelHttp)`.
  * ### Notification Channel
  * **Example:** Set the Notification Channel
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const putNotificationChannel = yield* AWS.FMS.PutNotificationChannel();
  *
  * // runtime

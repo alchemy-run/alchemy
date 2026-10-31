@@ -47,12 +47,12 @@ export interface AutoScalingConfiguration {
   /** The desired value of the chosen metric. */
   metricTarget?: number;
   /**
-   * The cooldown after a scale-in event before another scaling event —
+   * The cooldown after a scale-in event before another scaling event --
    * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
    */
   scaleInCooldown?: Duration.Input;
   /**
-   * The cooldown after a scale-out event before another scaling event —
+   * The cooldown after a scale-out event before another scaling event --
    * e.g. `"5 minutes"`. Sent to AWS as whole seconds.
    */
   scaleOutCooldown?: Duration.Input;
@@ -82,7 +82,7 @@ export interface KxClusterProps {
    */
   clusterName?: string;
   /**
-   * The type of cluster — `HDB`, `RDB`, `GATEWAY`, `GP` or `TICKERPLANT`.
+   * The type of cluster -- `HDB`, `RDB`, `GATEWAY`, `GP` or `TICKERPLANT`.
    * Changing it replaces the cluster.
    */
   clusterType: KxClusterType;
@@ -97,7 +97,7 @@ export interface KxClusterProps {
    */
   vpcConfiguration: VpcConfiguration;
   /**
-   * Availability-zone placement mode — `SINGLE` or `MULTI`. Changing it
+   * Availability-zone placement mode -- `SINGLE` or `MULTI`. Changing it
    * replaces the cluster.
    */
   azMode: KxAzMode;
@@ -201,7 +201,7 @@ export interface KxCluster extends Resource<
 > {}
 
 /**
- * A kdb cluster inside an Amazon FinSpace Managed kdb environment — the
+ * A kdb cluster inside an Amazon FinSpace Managed kdb environment -- the
  * compute that mounts kdb databases and serves q queries.
  *
  * :::caution
@@ -263,7 +263,7 @@ const toAttributes = (
 });
 
 /**
- * A cluster still transitioning toward the awaited status — retried by the
+ * A cluster still transitioning toward the awaited status -- retried by the
  * bounded schedule in {@link waitForClusterStatus}.
  */
 class KxClusterNotReady extends Data.TaggedError("KxClusterNotReady")<{
@@ -281,7 +281,7 @@ export class KxClusterProvisioningFailed extends Data.TaggedError("KxClusterProv
   readonly statusReason: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -325,7 +325,7 @@ const waitForClusterStatus = (
           statusReason: response?.statusReason,
         });
       }
-      // response === undefined right after create is eventual consistency —
+      // response === undefined right after create is eventual consistency --
       // keep polling on the bounded schedule.
       return yield* new KxClusterNotReady({ clusterName, status });
     }),
@@ -340,7 +340,7 @@ export const KxClusterProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["environmentId", "clusterName"],
-        // Clusters are keyed by their parent kdb environment — there is no
+        // Clusters are keyed by their parent kdb environment -- there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -350,7 +350,7 @@ export const KxClusterProvider = () =>
           const cluster = yield* readCluster(environmentId, clusterName);
           if (!cluster) return undefined;
           // Clusters have no tag-read surface (no ARN in Get/List responses)
-          // — ownership cannot be verified, so a name match is owned.
+          // -- ownership cannot be verified, so a name match is owned.
           return toAttributes(cluster, environmentId, clusterName);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -394,10 +394,10 @@ export const KxClusterProvider = () =>
           // One idempotency token per reconcile.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let cluster = yield* readCluster(environmentId, clusterName);
 
-          // Ensure — create if missing (tolerating a Conflict race), then
+          // Ensure -- create if missing (tolerating a Conflict race), then
           // wait for RUNNING.
           if (cluster === undefined) {
             yield* finspace
@@ -436,7 +436,7 @@ export const KxClusterProvider = () =>
             }
           }
 
-          // Sync code configuration — only when the caller manages code and
+          // Sync code configuration -- only when the caller manages code and
           // the observed deployment drifted.
           if (
             news.code !== undefined &&
@@ -456,7 +456,7 @@ export const KxClusterProvider = () =>
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
           }
 
-          // Sync mounted databases — only when the caller manages them and
+          // Sync mounted databases -- only when the caller manages them and
           // the observed set drifted.
           if (news.databases !== undefined && !sameJson(news.databases, cluster.databases)) {
             yield* finspace.updateKxClusterDatabases({

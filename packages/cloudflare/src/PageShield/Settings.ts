@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export interface SettingsProps {
   /**
-   * Zone whose Page Shield configuration is managed. Stable — changing
+   * Zone whose Page Shield configuration is managed. Stable -- changing
    * the zone triggers a replacement (the old zone's configuration is
    * restored to the values it had before Alchemy managed it).
    */
@@ -21,7 +21,7 @@ export interface SettingsProps {
   /**
    * Whether Page Shield (client-side script monitoring) is enabled on
    * the zone. The resource exists to turn the feature on, so this
-   * defaults to `true`. Mutable — updated in place.
+   * defaults to `true`. Mutable -- updated in place.
    * @default true
    */
   enabled?: boolean;
@@ -31,7 +31,7 @@ export interface SettingsProps {
    * the zone's `/cdn-cgi/script_monitor/report` path. Mutable.
    *
    * Setting this to `false` requires the dedicated-domain-reporting
-   * entitlement — on non-entitled zones the write fails with the typed
+   * entitlement -- on non-entitled zones the write fails with the typed
    * `NotEntitled` error.
    * @default true
    */
@@ -41,7 +41,7 @@ export interface SettingsProps {
    * analyzed (not just the host). Mutable.
    *
    * Setting this to `true` requires the connection-monitor entitlement
-   * (Business/Enterprise) — on non-entitled zones the write fails with
+   * (Business/Enterprise) -- on non-entitled zones the write fails with
    * the typed `NotEntitled` error.
    * @default false
    */
@@ -84,7 +84,7 @@ export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never
  *
  * Page Shield monitors the JavaScript and connections loaded by your
  * visitors' browsers to detect supply-chain attacks (e.g. Magecart). The
- * configuration is a zone **singleton** — it always exists (default
+ * configuration is a zone **singleton** -- it always exists (default
  * disabled), so this resource never creates or deletes anything physical.
  * Reconcile PUTs the configuration when the observed flags differ from the
  * desired ones; destroy restores the flags the zone had before Alchemy
@@ -96,7 +96,7 @@ export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never
  * or `useCloudflareReportingEndpoint: false` on a non-entitled zone fails
  * with the typed `NotEntitled` error.
  *
- * Only one `Settings` resource per zone makes sense — two
+ * Only one `Settings` resource per zone makes sense -- two
  * instances managing the same zone would fight over the singleton.
  * ### Managing Page Shield
  * **Example:** Enable Page Shield on a zone
@@ -162,7 +162,7 @@ export const SettingsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its configuration (every zone has
       // one, defaulting to disabled).
       const allZones = yield* listAllZones(accountId);
@@ -184,7 +184,7 @@ export const SettingsProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
-      // zoneId is the singleton's identity — moving the resource to a
+      // zoneId is the singleton's identity -- moving the resource to a
       // different zone replaces it (restoring the old zone on delete).
       if (output !== undefined && output.zoneId !== news.zoneId) {
         return { action: "replace" } as const;
@@ -197,7 +197,7 @@ export const SettingsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* pageShield.getPageShield({ zoneId });
       // The configuration is a singleton that always exists with a
-      // Cloudflare default — there is nothing to "own", so a cold read
+      // Cloudflare default -- there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed flags at adoption
       // time become the `initial*` values restored on destroy.
       const initial: DesiredSettings =
@@ -215,10 +215,10 @@ export const SettingsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the configuration always exists; read its live state.
+      // 1. Observe -- the configuration always exists; read its live state.
       const observed = yield* pageShield.getPageShield({ zoneId });
 
-      // 2. Capture — the pre-management flags, restored on destroy.
+      // 2. Capture -- the pre-management flags, restored on destroy.
       //    `output` (including an adoption read) already carries them;
       //    otherwise this is our first touch and the observed flags are
       //    the zone's original.
@@ -231,7 +231,7 @@ export const SettingsProvider = () =>
             }
           : observed;
 
-      // 3. Sync — PUT the full desired body only when something differs.
+      // 3. Sync -- PUT the full desired body only when something differs.
       const desired = desiredSettings(news);
       if (sameSettings(observed, desired)) {
         return toAttributes(zoneId, observed, initial);

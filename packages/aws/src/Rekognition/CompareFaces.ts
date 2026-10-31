@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:CompareFaces` — compare the largest face in a source image against faces in a target image and return match confidence.
+ * Runtime binding for `rekognition:CompareFaces` -- compare the largest face in a source image against faces in a target image and return match confidence.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:CompareFaces` on `*` (Rekognition data-plane resources such

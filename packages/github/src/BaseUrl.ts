@@ -9,10 +9,10 @@ import * as Effect from "effect/Effect";
  * the GitHub SDK expects, following the same conventions as the `gh` CLI and the
  * Terraform GitHub provider:
  *
- * - `github.com` / `api.github.com` → `undefined` (the github.com default)
+ * - `github.com` / `api.github.com` -> `undefined` (the github.com default)
  * - GitHub Enterprise Cloud with data residency (`acme.ghe.com` or
- *   `api.acme.ghe.com`) → `https://api.acme.ghe.com`
- * - GitHub Enterprise Server (`github.example.com`) → `https://github.example.com/api/v3`;
+ *   `api.acme.ghe.com`) -> `https://api.acme.ghe.com`
+ * - GitHub Enterprise Server (`github.example.com`) -> `https://github.example.com/api/v3`;
  *   an explicit path (e.g. an already-complete `/api/v3` URL) is honored as-is.
  *
  * Accepts a bare hostname or a full URL.
@@ -42,7 +42,7 @@ export const normalizeGitHubBaseUrl = (
 
 /**
  * The hostname `gh auth token --hostname` expects for a normalized API base
- * URL — the plain host for GitHub Enterprise Server, and the `api.`-less
+ * URL -- the plain host for GitHub Enterprise Server, and the `api.`-less
  * host for GitHub Enterprise Cloud with data residency.
  */
 export const githubHostname = (baseUrl: string): string => {
@@ -97,7 +97,7 @@ export const withBaseUrl =
 
 /**
  * The REST API base URL a resource's `baseUrl` prop actually resolves to: the
- * normalized prop when set, otherwise the provider's host — which already
+ * normalized prop when set, otherwise the provider's host -- which already
  * reflects `GitHub.providers({ baseUrl })` or the auth provider's resolved
  * host.
  */
@@ -111,17 +111,17 @@ export const effectiveGitHubBaseUrl = (
       });
 
 /**
- * Whether a resource's EFFECTIVE GitHub host changed between deploys — used
+ * Whether a resource's EFFECTIVE GitHub host changed between deploys -- used
  * by resource `diff` implementations to decide replacement (a resource with
  * the same name on a different GitHub instance is a different physical
  * resource).
  *
- * Each side is resolved through the full fallback chain (explicit prop →
- * `providers({ baseUrl })` → auth provider host) and normalized before
- * comparing, so neither a cosmetic rewrite (`github.example.com` →
+ * Each side is resolved through the full fallback chain (explicit prop ->
+ * `providers({ baseUrl })` -> auth provider host) and normalized before
+ * comparing, so neither a cosmetic rewrite (`github.example.com` ->
  * `https://github.example.com/api/v3`) nor making the ambient default
- * explicit (prop `undefined` → prop equal to the provider's host) triggers
- * a replacement — and dropping back to github.com from an enterprise-wide
+ * explicit (prop `undefined` -> prop equal to the provider's host) triggers
+ * a replacement -- and dropping back to github.com from an enterprise-wide
  * provider host is correctly detected as a change.
  */
 export const gitHubBaseUrlChanged = (

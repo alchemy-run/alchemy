@@ -42,9 +42,9 @@ export interface DomainProps {
   /**
    * The fully-qualified domain name of a domain that is **already
    * onboarded** to Email Security (via MX/BCC/journal or an API
-   * integration). Domains cannot be created via the API — onboarding
+   * integration). Domains cannot be created via the API -- onboarding
    * happens in the Email Security dashboard. The domain name is the
-   * resource's identity — changing it triggers a replacement (re-adopting
+   * resource's identity -- changing it triggers a replacement (re-adopting
    * a different domain).
    */
   domain: string;
@@ -135,7 +135,7 @@ export type Domain = Resource<
 /**
  * A Cloudflare Email Security (Area 1) domain's settings.
  *
- * Domains cannot be created via the API — they appear when the domain is
+ * Domains cannot be created via the API -- they appear when the domain is
  * onboarded to Email Security (MX/BCC/journal or an API integration) in
  * the dashboard. This resource **adopts and configures** an existing
  * domain: `read` finds it by name and reports it as unowned, so taking it
@@ -192,7 +192,7 @@ export const DomainProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The domain name is the resource's identity — changing it means
+      // The domain name is the resource's identity -- changing it means
       // re-adopting a different onboarded domain.
       const oldDomain = output?.domain ?? olds?.domain;
       if (oldDomain !== undefined && oldDomain !== news.domain) {
@@ -212,7 +212,7 @@ export const DomainProvider = () =>
       }
 
       // Cold lookup: the domain pre-exists (onboarded in the dashboard) and
-      // carries no ownership markers — report it `Unowned` so taking it
+      // carries no ownership markers -- report it `Unowned` so taking it
       // under management is gated behind the adopt policy.
       const domain = output?.domain ?? olds?.domain;
       if (domain !== undefined) {
@@ -225,7 +225,7 @@ export const DomainProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the domain must already be onboarded; the API cannot
+      // 1. Observe -- the domain must already be onboarded; the API cannot
       //    create one.
       let observed = output?.domainId ? yield* getDomain(accountId, output.domainId) : undefined;
       if (!observed) {
@@ -236,12 +236,12 @@ export const DomainProvider = () =>
           message:
             `Domain "${news.domain}" is not onboarded to Email Security on ` +
             `account ${accountId}. Cloudflare.Email.Domain only ` +
-            `manages settings on an existing domain — onboard the domain ` +
+            `manages settings on an existing domain \u2014 onboard the domain ` +
             `in the Email Security dashboard first.`,
         });
       }
 
-      // 2. Sync — diff observed settings against the declared props and
+      // 2. Sync -- diff observed settings against the declared props and
       //    patch only on a delta. Omitted props are left untouched.
       const delta = settingsDelta(observed, news);
       if (delta === undefined) {
@@ -256,7 +256,7 @@ export const DomainProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // DESTRUCTIVE: this offboards the domain from Email Security — its
+      // DESTRUCTIVE: this offboards the domain from Email Security -- its
       // mail flow is no longer scanned. Already-gone is success.
       yield* emailSecurity
         .deleteSettingDomain({
@@ -270,7 +270,7 @@ export const DomainProvider = () =>
     // paginated account-level list API and hydrate each into the exact
     // `read` Attributes shape. Accounts without the Email Security add-on
     // (`EmailSecurityNotEntitled`) or lacking access (`Forbidden`) have
-    // nothing to enumerate — return [].
+    // nothing to enumerate -- return [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* emailSecurity.listSettingDomains.pages({ accountId }).pipe(

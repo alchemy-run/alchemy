@@ -20,7 +20,7 @@ export interface DeviceDefaultProfileProps {
    * through WARP; `"exclude"` routes everything except listed entries.
    *
    * The Cloudflare backend stores the include and exclude lists
-   * independently — only the list matching the active mode is enforced
+   * independently -- only the list matching the active mode is enforced
    * at runtime. We always push both lists when supplied so toggling
    * `mode` is non-destructive.
    *
@@ -68,7 +68,7 @@ export interface DeviceDefaultProfileProps {
   allowUpdates?: boolean;
   /**
    * When `true`, fallback domains without an explicit `dnsServer` are
-   * NOT resolved via the system resolver — WARP refuses to resolve them.
+   * NOT resolved via the system resolver -- WARP refuses to resolve them.
    */
   disableAutoFallback?: boolean;
   /**
@@ -82,8 +82,8 @@ export interface DeviceDefaultProfileProps {
   switchLocked?: boolean;
   /**
    * Selects WARP's tunneling behavior:
-   * - `"warp"` — full WireGuard tunnel
-   * - `"proxy"` — local SOCKS proxy on the chosen `port`
+   * - `"warp"` -- full WireGuard tunnel
+   * - `"proxy"` -- local SOCKS proxy on the chosen `port`
    */
   serviceModeV2?: DeviceDefaultProfile.ServiceModeV2;
   /**
@@ -210,7 +210,7 @@ export type DeviceDefaultProfile = Resource<
  * or deleted. Reconciling this resource patches the existing profile in
  * place and synchronizes the four sibling list endpoints (include,
  * exclude, fallback domains). The `delete` lifecycle is a deliberate
- * no-op — destroying the Alchemy resource only removes our local state,
+ * no-op -- destroying the Alchemy resource only removes our local state,
  * the cloud profile remains intact.
  *
  * Custom (non-default) profiles are a separate resource.
@@ -272,10 +272,10 @@ export const DeviceDefaultProfileProvider = () =>
     stables: ["accountId"],
     reconcile: Effect.fn(function* ({ news = {} }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // 1. Observe — the default profile always exists.
+      // 1. Observe -- the default profile always exists.
       let obs = yield* observe();
 
-      // 2. Sync — four independent idempotent diffs.
+      // 2. Sync -- four independent idempotent diffs.
 
       // (a) General profile patch.
       const desiredMode = news.mode ?? inferMode(obs.profile);
@@ -310,7 +310,7 @@ export const DeviceDefaultProfileProvider = () =>
       setIf("switchLocked", news.switchLocked, denull(obs.profile.switchLocked));
       // lanAllowMinutes / lanAllowSubnetSize are accepted by PATCH but
       // not surfaced on GET, so we cannot diff them. Push them every
-      // time the user sets them — the API is idempotent.
+      // time the user sets them -- the API is idempotent.
       if (news.lanAllowMinutes !== undefined) {
         patchBody.lanAllowMinutes = news.lanAllowMinutes;
         needsPatch = true;
@@ -479,7 +479,7 @@ const buildAttrs = (
     excludeOfficeIps: denull(profile.excludeOfficeIps),
     switchLocked: denull(profile.switchLocked),
     serviceModeV2,
-    // lanAllow* are PATCH-only — GET does not echo them back.
+    // lanAllow* are PATCH-only -- GET does not echo them back.
     lanAllowMinutes: undefined,
     lanAllowSubnetSize: undefined,
     registerInterfaceIpWithDns: denull(profile.registerInterfaceIpWithDns),

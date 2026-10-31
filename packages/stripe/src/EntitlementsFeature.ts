@@ -33,7 +33,7 @@ export interface EntitlementsFeatureProps {
   /**
    * Unique system identifier for this feature (max 80 characters). If
    * omitted, a unique key is generated from the stack, stage, and logical
-   * id. Create-only — changing it replaces the feature.
+   * id. Create-only -- changing it replaces the feature.
    */
   lookupKey?: string;
   /**
@@ -60,7 +60,7 @@ export type EntitlementsFeature = Resource<
   "Stripe.EntitlementsFeature",
   EntitlementsFeatureProps,
   {
-    /** Stripe feature id (`feat_…`). */
+    /** Stripe feature id (`feat_...`). */
     id: string;
     /** Unique system identifier for this feature. */
     lookupKey: string;
@@ -78,7 +78,7 @@ export type EntitlementsFeature = Resource<
 >;
 
 /**
- * A Stripe Entitlements Feature — a monetizable ability you attach to
+ * A Stripe Entitlements Feature -- a monetizable ability you attach to
  * Products. When a customer purchases a product with this feature, Stripe
  * creates an entitlement for them. `lookup_key` is unique among active
  * features and immutable (changing it replaces the feature). Name and
@@ -86,7 +86,7 @@ export type EntitlementsFeature = Resource<
  *
  * Stripe does not hard-delete features; destroying this resource
  * deactivates it (`active: false`). Archived features cannot be edited
- * or unarchived. An archived lookup key can be reused — a later create
+ * or unarchived. An archived lookup key can be reused -- a later create
  * with the same key provisions a new feature.
  *
  * @see https://docs.stripe.com/api/entitlements/feature

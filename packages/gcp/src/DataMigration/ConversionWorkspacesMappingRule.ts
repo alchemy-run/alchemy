@@ -45,7 +45,7 @@ export type ConversionWorkspacesMappingRuleProps = {
   /**
    * Parent conversion workspace. Full name
    * `projects/{project}/locations/{location}/conversionWorkspaces/{conversionWorkspace}`
-   * or the workspace id (combined with `location`). Immutable — changing
+   * or the workspace id (combined with `location`). Immutable -- changing
    * it replaces the rule.
    */
   conversionWorkspace: string;
@@ -56,12 +56,12 @@ export type ConversionWorkspacesMappingRuleProps = {
   location?: string;
   /**
    * Mapping rule id (the `{mappingRule}` segment). If omitted, a unique
-   * RFC1035 name is generated. Immutable — changing it replaces the rule.
+   * RFC1035 name is generated. Immutable -- changing it replaces the rule.
    */
   mappingRuleId?: string;
   /**
    * Rule scope (`DATABASE_ENTITY_TYPE_SCHEMA`,
-   * `DATABASE_ENTITY_TYPE_TABLE`, …). The API has no patch method —
+   * `DATABASE_ENTITY_TYPE_TABLE`, ...). The API has no patch method --
    * changing the rule body replaces the rule.
    */
   ruleScope: MappingRuleRuleScope;
@@ -76,8 +76,8 @@ export type ConversionWorkspacesMappingRuleProps = {
   ruleOrder?: string;
   /**
    * User-friendly display name. Mapping rules have no labels field, so
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
-   * attributes. The API has no patch method — changing display name
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
+   * attributes. The API has no patch method -- changing display name
    * replaces the rule.
    */
   displayName?: string;
@@ -168,9 +168,9 @@ export type ConversionWorkspacesMappingRule = Resource<
 /**
  * A mapping rule attached to a Database Migration Service conversion
  * workspace. Rules transform source schema entities into the destination
- * schema (rename, move, type change, …).
+ * schema (rename, move, type change, ...).
  *
- * Mapping rules have no labels field and no patch method — Alchemy stamps
+ * Mapping rules have no labels field and no patch method -- Alchemy stamps
  * ownership into the display name, and any change to the rule body
  * replaces the rule.
  *

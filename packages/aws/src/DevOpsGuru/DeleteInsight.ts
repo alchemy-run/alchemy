@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:DeleteInsight`.
  *
- * Deletes a closed insight — housekeeping automation for insights that have been triaged and resolved. Only closed insights can be deleted.
+ * Deletes a closed insight -- housekeeping automation for insights that have been triaged and resolved. Only closed insights can be deleted.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.DeleteInsightHttp)`.
  * ### Inspecting Insights
  * **Example:** Delete a Closed Insight
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteInsight = yield* AWS.DevOpsGuru.DeleteInsight();
  *
  * // runtime

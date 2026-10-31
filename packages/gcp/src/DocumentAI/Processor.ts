@@ -37,31 +37,31 @@ export type ProcessorProps = {
   /**
    * Processor id (the `{processor}` segment of
    * `projects/{project}/locations/{location}/processors/{processor}`).
-   * Assigned by the API on create. Immutable — changing it replaces the
+   * Assigned by the API on create. Immutable -- changing it replaces the
    * processor. Supply it to adopt an existing processor.
    */
   processorId?: string;
   /**
    * Multi-region location (`us` or `eu`). Some processor types are also
-   * available in regional locations. Immutable — changing it replaces the
+   * available in regional locations. Immutable -- changing it replaces the
    * processor.
    * @default "us"
    */
   location?: string;
   /**
    * Processor type such as `OCR_PROCESSOR` or `FORM_PARSER_PROCESSOR`.
-   * Immutable — changing it replaces the processor.
+   * Immutable -- changing it replaces the processor.
    * @default "OCR_PROCESSOR"
    */
   type?: string;
   /**
    * User-facing display name. Processors have no labels field, so Alchemy
    * stamps ownership into this field for list / nuke. There is no update
-   * API for display name — changing it replaces the processor.
+   * API for display name -- changing it replaces the processor.
    */
   displayName?: string;
   /**
-   * Cloud KMS key used for CMEK. Immutable — changing it replaces the
+   * Cloud KMS key used for CMEK. Immutable -- changing it replaces the
    * processor.
    */
   kmsKeyName?: string;
@@ -71,7 +71,7 @@ export type ProcessorProps = {
    */
   defaultProcessorVersion?: string;
   /**
-   * Schema version resource name used by the processor. Immutable —
+   * Schema version resource name used by the processor. Immutable --
    * changing it replaces the processor.
    */
   activeSchemaVersion?: string;
@@ -99,7 +99,7 @@ export type Processor = Resource<
     type: string | undefined;
     /** User display name with the Alchemy ownership prefix stripped. */
     displayName: string | undefined;
-    /** Processor state (`ENABLED`, `DISABLED`, …). */
+    /** Processor state (`ENABLED`, `DISABLED`, ...). */
     state: string | undefined;
     /** Default processor version resource name. */
     defaultProcessorVersion: string | undefined;

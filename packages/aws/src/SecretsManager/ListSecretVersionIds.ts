@@ -13,16 +13,16 @@ export interface ListSecretVersionIdsRequest extends Omit<
  *
  * Bind this operation to a `Secret` to get a callable that lists the
  * secret's version IDs and their staging labels (`AWSCURRENT`,
- * `AWSPENDING`, `AWSPREVIOUS`) — useful for rotation functions and audit
+ * `AWSPENDING`, `AWSPREVIOUS`) -- useful for rotation functions and audit
  * tooling. Provide the implementation with
  * `Effect.provide(AWS.SecretsManager.ListSecretVersionIdsHttp)`.
  * ### Inspecting Secrets
  * **Example:** List a Secret's Versions
  * ```typescript
- * // init — bind the operation to the secret
+ * // init -- bind the operation to the secret
  * const listVersions = yield* AWS.SecretsManager.ListSecretVersionIds(secret);
  *
- * // runtime — every version with its staging labels
+ * // runtime -- every version with its staging labels
  * const result = yield* listVersions({ IncludeDeprecated: true });
  * const current = (result.Versions ?? []).find((version) =>
  *   version.VersionStages?.includes("AWSCURRENT"),

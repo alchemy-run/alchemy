@@ -8,7 +8,7 @@ import {
 
 /**
  * The `detail` payload AWS Backup delivers to EventBridge when a backup,
- * restore, or copy job — or a recovery point / vault — changes state. Job
+ * restore, or copy job -- or a recovery point / vault -- changes state. Job
  * events carry the job id and `state`; recovery-point events carry the
  * recovery point ARN and `status`. Fields not shared by every event kind are
  * optional (the schema grows over time).
@@ -81,7 +81,7 @@ export interface BackupEventSourceProps extends EventRouteProps {
  * (source `aws.backup`); this subscribes the host Function to those events
  * so it can alert on failed jobs or chain post-backup automation.
  *
- * AWS Backup publishes to EventBridge automatically — no additional resource
+ * AWS Backup publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

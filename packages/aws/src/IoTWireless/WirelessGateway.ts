@@ -31,7 +31,7 @@ export interface WirelessGatewayProps {
   description?: string;
   /**
    * LoRaWAN gateway configuration. `GatewayEui` (the gateway's unique
-   * 64-bit radio identifier) and `RfRegion` are the gateway's identity —
+   * 64-bit radio identifier) and `RfRegion` are the gateway's identity --
    * changing either replaces the gateway. `JoinEuiFilters`, `NetIdFilters`,
    * and `MaxEirp` update in place.
    */
@@ -61,12 +61,12 @@ export interface WirelessGateway extends Resource<
 > {}
 
 /**
- * An AWS IoT Core for LoRaWAN wireless gateway — the cloud registration of
+ * An AWS IoT Core for LoRaWAN wireless gateway -- the cloud registration of
  * a physical LoRaWAN gateway (packet forwarder), keyed by its unique
  * 64-bit `GatewayEui`.
  *
  * The gateway's radio identity (`GatewayEui`, `RfRegion`, sub-bands,
- * beaconing) is immutable — changing it replaces the gateway. The name,
+ * beaconing) is immutable -- changing it replaces the gateway. The name,
  * description, EUI/NetID filters, `MaxEirp`, and tags update in place.
  * ### Creating Gateways
  * **Example:** US915 Gateway
@@ -197,10 +197,10 @@ export const WirelessGatewayProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let gateway = yield* observe(output, news);
 
-          // 2. ENSURE — create if missing; a Conflict means the EUI is
+          // 2. ENSURE -- create if missing; a Conflict means the EUI is
           //    already registered, so re-observe by it.
           if (gateway === undefined) {
             yield* session.note(`creating wireless gateway ${name}`);
@@ -224,7 +224,7 @@ export const WirelessGatewayProvider = () =>
           }
           const attrs = yield* toAttrs(gateway, name);
 
-          // 3. SYNC — apply the mutable-aspect delta from OBSERVED state.
+          // 3. SYNC -- apply the mutable-aspect delta from OBSERVED state.
           const nameDelta = gateway.Name !== name;
           const descriptionDelta =
             news.description !== undefined && gateway.Description !== news.description;
@@ -253,7 +253,7 @@ export const WirelessGatewayProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           yield* syncIotWirelessTags(attrs.wirelessGatewayArn, desiredTags);
 
           // 4. RETURN fresh attributes.

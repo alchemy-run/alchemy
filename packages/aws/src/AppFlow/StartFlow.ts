@@ -9,7 +9,7 @@ export interface StartFlowRequest extends Omit<appflow.StartFlowRequest, "flowNa
  * Runtime binding for `appflow:StartFlow`.
  *
  * Bind this operation to a {@link Flow} in the function's init phase to get a
- * callable that activates the flow — for on-demand flows this triggers a
+ * callable that activates the flow -- for on-demand flows this triggers a
  * single run and returns its `executionId`; for schedule and event-triggered
  * flows it activates the flow. The flow name is injected automatically and
  * `appflow:StartFlow` is granted on the flow. Provide the implementation with
@@ -21,12 +21,12 @@ export interface StartFlowRequest extends Omit<appflow.StartFlowRequest, "flowNa
  *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const flow = yield* AWS.AppFlow.Flow("CopyFlow", { ... });
- *     // init — bind the operation to the flow
+ *     // init -- bind the operation to the flow
  *     const startFlow = yield* AWS.AppFlow.StartFlow(flow);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — trigger a run
+ *         // runtime -- trigger a run
  *         const run = yield* startFlow();
  *         return HttpServerResponse.json({ executionId: run.executionId });
  *       }).pipe(Effect.orDie),

@@ -42,7 +42,7 @@ export interface StageProps {
   stageName: string;
   /**
    * The `deploymentId` this stage points at. Pass `deployment.deploymentId`
-   * — Alchemy will automatically wait for the deployment to be created
+   * -- Alchemy will automatically wait for the deployment to be created
    * before creating the stage.
    */
   deploymentId: Input<string>;
@@ -312,7 +312,7 @@ const toWireMethodSettings = (
  * `methodSettingScalarPatch`).
  *
  * To drop a whole `(resourcePath, httpMethod)` key, we walk the fields
- * present on `prev[key]` and emit `remove`s for each — but again only
+ * present on `prev[key]` and emit `remove`s for each -- but again only
  * if that field was actually set upstream.
  */
 const buildMethodSettingPatches = (
@@ -616,14 +616,14 @@ export const StageProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — fetch live stage state. `output` is at most a cache
+          // Observe -- fetch live stage state. `output` is at most a cache
           // for the natural-key tuple (restApiId, stageName); the actual
           // mutable settings come from the cloud read on every reconcile.
           let observed = yield* ag
             .getStage({ restApiId, stageName })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
-          // Ensure — create the stage if missing. `createStage` only sets
+          // Ensure -- create the stage if missing. `createStage` only sets
           // a subset of the configurable surface; the rest is applied via
           // updateStage in the sync step below.
           if (!observed?.stageName) {
@@ -649,7 +649,7 @@ export const StageProvider = () =>
             });
           }
 
-          // Sync stage settings — diff observed cloud state against desired
+          // Sync stage settings -- diff observed cloud state against desired
           // and emit only the delta as PATCH operations. `buildStagePatches`
           // already handles every mutable aspect (deploymentId, description,
           // cache, variables, methodSettings, accessLog, canary, tracing,
@@ -666,7 +666,7 @@ export const StageProvider = () =>
             );
           }
 
-          // Sync tags — observed ↔ desired.
+          // Sync tags -- observed <-> desired.
           if (!deepEqual(observedSnapshot.tags, desiredTags)) {
             const arn = stageArn(region, restApiId, stageName);
             yield* syncTags({

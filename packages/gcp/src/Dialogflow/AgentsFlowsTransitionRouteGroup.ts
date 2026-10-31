@@ -47,11 +47,11 @@ export type AgentsFlowsTransitionRouteGroupProps = {
   /**
    * Parent flow resource name
    * `projects/{project}/locations/{location}/agents/{agent}/flows/{flow}`.
-   * Immutable — changing it replaces the route group.
+   * Immutable -- changing it replaces the route group.
    */
   flow: string;
   /**
-   * Transition route group id. Server-assigned on create. Immutable —
+   * Transition route group id. Server-assigned on create. Immutable --
    * changing it replaces the route group.
    */
   transitionRouteGroupId?: string;

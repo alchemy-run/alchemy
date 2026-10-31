@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:DescribeConfigRuleEvaluationStatus` — read
+ * Runtime binding for `config:DescribeConfigRuleEvaluationStatus` -- read
  * the evaluation status (last invocation, last failure, first-evaluation
  * flag) of your Config rules.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Rule Evaluation Status
  * **Example:** Read Rule Evaluation Status
  * ```typescript
- * // init — grants config:DescribeConfigRuleEvaluationStatus
+ * // init -- grants config:DescribeConfigRuleEvaluationStatus
  * const describeConfigRuleEvaluationStatus = yield* AWS.Config.DescribeConfigRuleEvaluationStatus();
  *
  * // runtime

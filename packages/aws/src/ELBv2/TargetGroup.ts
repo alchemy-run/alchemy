@@ -53,9 +53,9 @@ export interface TargetGroupProps {
   healthCheckProtocol?: string;
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
-  /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  /** The approximate interval between health checks -- e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
   healthCheckInterval?: Duration.Input;
-  /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  /** The amount of time to wait for a health-check response -- e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
   healthCheckTimeout?: Duration.Input;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
@@ -119,7 +119,7 @@ export interface TargetGroup extends Resource<
  *
  * **Example:** Lambda target group
  * ```typescript
- * // No vpc/port/protocol — the target is a Lambda function.
+ * // No vpc/port/protocol -- the target is a Lambda function.
  * const tg = yield* TargetGroup("fn", {
  *   targetType: "lambda",
  * });
@@ -333,7 +333,7 @@ export const TargetGroupProvider = () =>
             ...news.tags,
           };
 
-          // Observe — look up by deterministic name.
+          // Observe -- look up by deterministic name.
           let described = yield* elbv2
             .describeTargetGroups({
               Names: [name],
@@ -341,9 +341,9 @@ export const TargetGroupProvider = () =>
             .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
           let targetGroup = described?.TargetGroups?.[0];
 
-          // Ensure — create if missing. Stable axes (vpcId, port, protocol,
+          // Ensure -- create if missing. Stable axes (vpcId, port, protocol,
           // targetType) are handled by diff so we don't deal with mismatch.
-          // Lambda target groups have no port/protocol/VPC — the API rejects
+          // Lambda target groups have no port/protocol/VPC -- the API rejects
           // those members, so omit them entirely.
           const isLambdaTarget = news.targetType === "lambda";
           if (!targetGroup?.TargetGroupArn) {
@@ -377,7 +377,7 @@ export const TargetGroupProvider = () =>
 
           const targetGroupArn = targetGroup.TargetGroupArn as TargetGroupArn;
 
-          // Sync health check — diff observed against desired; only call
+          // Sync health check -- diff observed against desired; only call
           // modifyTargetGroup when a health-check field actually changed.
           const observedHc = {
             HealthCheckPath: targetGroup.HealthCheckPath,
@@ -411,7 +411,7 @@ export const TargetGroupProvider = () =>
             });
           }
 
-          // Sync attributes — diff the observed values of the declared keys
+          // Sync attributes -- diff the observed values of the declared keys
           // against desired and apply only the delta.
           let attributes = yield* readAttributes(targetGroupArn, news.attributes);
           const attributeChanges = attributeDelta(news.attributes, attributes);
@@ -426,7 +426,7 @@ export const TargetGroupProvider = () =>
             };
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const tagDescriptions = yield* elbv2.describeTags({
             ResourceArns: [targetGroupArn],
           });
@@ -468,7 +468,7 @@ export const TargetGroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // deleteTargetGroup is idempotent on a missing target group (returns
           // success). It only fails with ResourceInUseException while a
-          // listener/rule still references it — retry briefly for the
+          // listener/rule still references it -- retry briefly for the
           // eventual-consistency window after the dependents are removed.
           yield* elbv2
             .deleteTargetGroup({

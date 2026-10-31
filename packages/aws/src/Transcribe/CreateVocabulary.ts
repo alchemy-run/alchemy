@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:CreateVocabulary` — create a custom vocabulary that improves transcription accuracy for domain-specific terms (e.g. per-tenant vocabularies created at runtime).
+ * Runtime binding for `transcribe:CreateVocabulary` -- create a custom vocabulary that improves transcription accuracy for domain-specific terms (e.g. per-tenant vocabularies created at runtime).
  *
  * Vocabulary processing is asynchronous: the vocabulary is created in the `PENDING` state and must reach `READY` (poll with {@link GetVocabulary}) before a transcription job can reference it.
  *

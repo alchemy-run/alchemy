@@ -70,8 +70,8 @@ export interface BasePluginOptions {
   skipEnvironments?: Array<string>;
   /**
    * Extra rules for imports emitted as separate Worker modules, checked
-   * before the built-in rules (`.wasm` → CompiledWasm, `.bin` → Data,
-   * `.txt`/`.html`/`.sql` → Text). `test` receives the resolved file path.
+   * before the built-in rules (`.wasm` -> CompiledWasm, `.bin` -> Data,
+   * `.txt`/`.html`/`.sql` -> Text). `test` receives the resolved file path.
    *
    * @default []
    * @example
@@ -95,7 +95,7 @@ export interface AdditionalModuleRule {
 
 /**
  * Whether the named Vite environment must be left untouched by the Cloudflare
- * plugins — the browser `client` environment, plus anything the user listed in
+ * plugins -- the browser `client` environment, plus anything the user listed in
  * {@link BasePluginOptions.skipEnvironments}.
  */
 export const isSkippedEnvironment = (options: BasePluginOptions, name: string): boolean =>

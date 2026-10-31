@@ -46,7 +46,7 @@ export interface StreamKey extends Resource<
 > {}
 
 /**
- * An Amazon IVS stream key — the secret credential broadcast software
+ * An Amazon IVS stream key -- the secret credential broadcast software
  * uses to authenticate against a channel's ingest endpoint.
  *
  * IVS allows at most one stream key per channel, and `CreateChannel`
@@ -153,7 +153,7 @@ export const StreamKeyProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // A stream key is bound to its channel at create time — moving
+          // A stream key is bound to its channel at create time -- moving
           // it to another channel requires a replacement.
           if (olds.channelArn !== news.channelArn) {
             return { action: "replace" } as const;
@@ -164,18 +164,18 @@ export const StreamKeyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — prefer the cached ARN; fall back to the channel's
+          // 1. Observe -- prefer the cached ARN; fall back to the channel's
           // (at most one) existing key.
           let observed = output?.streamKeyArn
             ? yield* getByArn(output.streamKeyArn)
             : yield* findByChannel(news.channelArn);
           // A cached ARN can belong to a previous channel after a failed
-          // replacement — only trust keys on the desired channel.
+          // replacement -- only trust keys on the desired channel.
           if (observed !== undefined && observed.channelArn !== news.channelArn) {
             observed = undefined;
           }
 
-          // 2. Ensure — create if missing. The per-channel quota is 1 and
+          // 2. Ensure -- create if missing. The per-channel quota is 1 and
           // CreateChannel auto-provisions a key, so a quota rejection means
           // the channel already has its key: adopt it (tags are converged
           // below).
@@ -197,7 +197,7 @@ export const StreamKeyProvider = () =>
             });
           }
 
-          // 3. Sync tags — the only mutable aspect. Diff against OBSERVED
+          // 3. Sync tags -- the only mutable aspect. Diff against OBSERVED
           // cloud tags so adopting the auto-created key converges.
           yield* syncIvsTags(arn, desiredTags);
 
@@ -220,7 +220,7 @@ export const StreamKeyProvider = () =>
           );
         }),
 
-        // Stream keys are sub-resources keyed by their parent channel —
+        // Stream keys are sub-resources keyed by their parent channel --
         // there is no account-level enumeration to reconcile against.
         list: () => Effect.succeed([]),
       };

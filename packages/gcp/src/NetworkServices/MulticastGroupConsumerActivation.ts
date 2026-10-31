@@ -45,12 +45,12 @@ export type MulticastGroupConsumerActivationProps = {
    * Activation id (the `{multicastGroupConsumerActivation}` segment of
    * `projects/{project}/locations/{location}/multicastGroupConsumerActivations/{multicastGroupConsumerActivation}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must be at most 48 characters. Immutable — changing it
+   * logical id. Must be at most 48 characters. Immutable -- changing it
    * replaces the activation.
    */
   multicastGroupConsumerActivationId?: string;
   /**
-   * Zone of the activation (`us-central1-a`, …). Immutable — changing
+   * Zone of the activation (`us-central1-a`, ...). Immutable -- changing
    * it replaces the activation. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -59,13 +59,13 @@ export type MulticastGroupConsumerActivationProps = {
   /**
    * Multicast consumer association in the same zone
    * (`projects/{project}/locations/{location}/multicastConsumerAssociations/{association}`).
-   * Immutable — changing it replaces the activation.
+   * Immutable -- changing it replaces the activation.
    */
   multicastConsumerAssociation: string;
   /**
    * Multicast group range activation in the same zone
    * (`projects/{project}/locations/{location}/multicastGroupRangeActivations/{activation}`).
-   * Immutable — changing it replaces the activation.
+   * Immutable -- changing it replaces the activation.
    */
   multicastGroupRangeActivation: string;
   /**
@@ -97,7 +97,7 @@ export type MulticastGroupConsumerActivation = Resource<
     multicastGroupConsumerActivationId: string;
     /** Project id. */
     project: string;
-    /** Zone id (`us-central1-a`, …). */
+    /** Zone id (`us-central1-a`, ...). */
     location: string;
     /** Attached multicast consumer association. */
     multicastConsumerAssociation: string | undefined;

@@ -58,8 +58,8 @@ type NextResolve = Parameters<ResolveHookSync>[2];
 
 /**
  * Node's module compile cache (`module.enableCompileCache`) keeps V8 code
- * cache for compiled modules — transformed TypeScript included, since it is
- * keyed by the compiled source — but Node only persists it once after the
+ * cache for compiled modules -- transformed TypeScript included, since it is
+ * keyed by the compiled source -- but Node only persists it once after the
  * entry module evaluated and again on a clean exit. Alchemy processes load
  * most of their graph lazily after that point (commands, the user's stack,
  * provider layers) and usually stop on a signal, so without an explicit
@@ -104,7 +104,7 @@ const isForeignSpecifier = (specifier: string) =>
 
 /**
  * tsx-compatible resolution. Oxc's resolver handles project code the way
- * TypeScript does (tsconfig `paths`, `.js` → `.ts` substitution,
+ * TypeScript does (tsconfig `paths`, `.js` -> `.ts` substitution,
  * extensionless and directory imports); a file it finds is final, as in
  * nub, rather than handed back to Node to resolve a second time. Packages
  * and everything Oxc cannot place stay with Node, which also reports the
@@ -170,7 +170,7 @@ const withJsonAttribute = (url: string, context: LoadHookContext) => {
 };
 
 /**
- * `import text from "./x.txt" with { type: "text" }` — the TC39 Import Text
+ * `import text from "./x.txt" with { type: "text" }` -- the TC39 Import Text
  * proposal (stage 3), which Bun and Deno already implement. The module's
  * default export is the file decoded as UTF-8 exactly as `TextDecoder`
  * does it (BOM stripped, invalid sequences replaced). Node keys its module

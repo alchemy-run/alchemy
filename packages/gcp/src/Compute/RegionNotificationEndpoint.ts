@@ -32,7 +32,7 @@ export type RegionNotificationEndpointGrpcSettings = {
    */
   authority?: string;
   /**
-   * How often to resend a full update of unhealthy backends (600–3600s).
+   * How often to resend a full update of unhealthy backends (600-3600s).
    * Regional endpoints only.
    */
   resendInterval?: compute.Duration;
@@ -46,7 +46,7 @@ export type RegionNotificationEndpointProps = {
    */
   notificationEndpointName?: string;
   /**
-   * Region the endpoint lives in (e.g. `us-central1`). Immutable —
+   * Region the endpoint lives in (e.g. `us-central1`). Immutable --
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -55,12 +55,12 @@ export type RegionNotificationEndpointProps = {
   /**
    * Optional description. Compute NotificationEndpoint has no labels
    * field and no update API, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and any description change replaces the
+   * `[alchemy ...]` prefix and any description change replaces the
    * endpoint.
    */
   description?: string;
   /**
-   * gRPC notification settings. Immutable — changing any field replaces
+   * gRPC notification settings. Immutable -- changing any field replaces
    * the endpoint.
    */
   grpcSettings: RegionNotificationEndpointGrpcSettings;
@@ -107,7 +107,7 @@ export type RegionNotificationEndpoint = Resource<
  * Notification endpoints receive gRPC callbacks when a health-check
  * service detects backend status changes. This resource maps to the
  * `regionNotificationEndpoints` collection. There is no update API and
- * no labels field — Alchemy stamps ownership into the description so
+ * no labels field -- Alchemy stamps ownership into the description so
  * nuke can find leaked endpoints. Changing any user-facing field
  * replaces the resource.
  *

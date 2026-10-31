@@ -97,7 +97,8 @@ const validateGroupName = (props: Pick<GroupProps, "groupName">) =>
   props.groupName === "Default"
     ? Effect.fail(
         new XRayReservedGroupName({
-          message: '"Default" is reserved for the built-in X-Ray group — choose another groupName.',
+          message:
+            '"Default" is reserved for the built-in X-Ray group \u2014 choose another groupName.',
         }),
       )
     : Effect.void;
@@ -171,10 +172,10 @@ export const GroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeGroup(groupName);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed GroupAlreadyExists tag, which we treat as a race
           //    and re-observe.
           if (live === undefined) {
@@ -191,7 +192,7 @@ export const GroupProvider = () =>
               );
           }
 
-          // 3. SYNC — diff the OBSERVED filter expression and insights
+          // 3. SYNC -- diff the OBSERVED filter expression and insights
           //    configuration against the desired state; update only on drift.
           const observedInsights = live?.InsightsConfiguration ?? {};
           const inSync =
@@ -211,7 +212,7 @@ export const GroupProvider = () =>
 
           const groupArn = live?.GroupARN ?? output?.groupArn;
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           if (groupArn !== undefined) {
             const currentTags = yield* observedTags(groupArn);
@@ -232,7 +233,7 @@ export const GroupProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* xray.deleteGroup({ GroupName: output.groupName }).pipe(
-            // Typed synthetic tag for a missing group — idempotent delete.
+            // Typed synthetic tag for a missing group -- idempotent delete.
             Effect.catchTag("GroupNotFound", () => Effect.void),
           );
         }),

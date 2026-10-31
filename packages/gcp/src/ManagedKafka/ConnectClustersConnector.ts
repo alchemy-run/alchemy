@@ -41,7 +41,7 @@ export type ConnectClustersConnectorProps = {
   /**
    * Parent Connect cluster. Full name
    * `projects/{project}/locations/{location}/connectClusters/{id}` or
-   * the Connect cluster id (combined with `location`). Immutable —
+   * the Connect cluster id (combined with `location`). Immutable --
    * changing it replaces the connector.
    */
   connectCluster: string;
@@ -52,11 +52,11 @@ export type ConnectClustersConnectorProps = {
   location?: string;
   /**
    * Connector id. If omitted, a unique RFC1035 name is generated.
-   * Immutable — changing it replaces the connector.
+   * Immutable -- changing it replaces the connector.
    */
   connectorId?: string;
   /**
-   * Connector config (`connector.class`, `tasks.max`, converters, …).
+   * Connector config (`connector.class`, `tasks.max`, converters, ...).
    */
   configs?: Record<string, string>;
   /**

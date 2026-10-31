@@ -7,18 +7,18 @@ import type { Instance } from "./Instance.ts";
 /**
  * Shared scaffolding for the IAM Identity Center runtime bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate:
  *
- * - {@link makeIdentityStoreHttpBinding} — Identity Store data-plane
+ * - {@link makeIdentityStoreHttpBinding} -- Identity Store data-plane
  *   operations (`identitystore:*` actions: user CRUD, group lookups,
  *   membership management). The runtime callable injects the bound
  *   {@link Instance}'s `IdentityStoreId`; the deploy-time half grants
  *   `actions` on the identity store ARN plus the region-less
  *   `user/*`/`group/*`/`membership/*` sub-resource ARNs the actions require.
- * - {@link makeIdentityCenterInstanceHttpBinding} — `sso:*` admin reads
+ * - {@link makeIdentityCenterInstanceHttpBinding} -- `sso:*` admin reads
  *   scoped to the bound {@link Instance} (account-assignment audit,
  *   permission set reads). The runtime callable injects the instance's
  *   `InstanceArn`; the deploy-time half grants `actions` on the instance ARN

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { ConfigRule } from "./ConfigRule.ts";
 
-/** Request for {@link GetComplianceDetailsByConfigRule} — the rule name is injected from the bound rule. */
+/** Request for {@link GetComplianceDetailsByConfigRule} -- the rule name is injected from the bound rule. */
 export interface GetComplianceDetailsByConfigRuleRequest extends Omit<
   config.GetComplianceDetailsByConfigRuleRequest,
   "ConfigRuleName"
 > {}
 
 /**
- * Runtime binding for `config:GetComplianceDetailsByConfigRule` — read the
+ * Runtime binding for `config:GetComplianceDetailsByConfigRule` -- read the
  * per-resource evaluation results (who was evaluated, when, and the
  * verdict) of the bound {@link ConfigRule}; the rule name is injected
  * automatically.
@@ -20,7 +20,7 @@ export interface GetComplianceDetailsByConfigRuleRequest extends Omit<
  * ### Reading Compliance
  * **Example:** Read a Rule's Evaluation Results
  * ```typescript
- * // init — grants config:GetComplianceDetailsByConfigRule
+ * // init -- grants config:GetComplianceDetailsByConfigRule
  * const getComplianceDetails =
  *   yield* AWS.Config.GetComplianceDetailsByConfigRule(rule);
  *

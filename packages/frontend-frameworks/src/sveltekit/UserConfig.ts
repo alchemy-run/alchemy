@@ -3,13 +3,13 @@
  *
  * A normal SvelteKit v3 project carries all of its configuration in the Vite
  * config file: `svelte.config.js` is gone (kit's own `plugin_root` throws if
- * one exists on disk), and kit options — adapter, aliases, preprocess,
- * prerender entries — are passed directly to the `sveltekit(...)` plugin call
+ * one exists on disk), and kit options -- adapter, aliases, preprocess,
+ * prerender entries -- are passed directly to the `sveltekit(...)` plugin call
  * inside `vite.config.ts`.
  *
  * This package must honor that file natively (the user's Vite plugins, kit
  * options, and Vite settings all apply) while still injecting the deploy
- * target's adapter — WITHOUT constructing a second `sveltekit()` plugin
+ * target's adapter -- WITHOUT constructing a second `sveltekit()` plugin
  * instance next to the user's.
  *
  * Mechanism: `sveltekit(config)` validates the config eagerly and exposes it
@@ -17,7 +17,7 @@
  * *processes* it (deriving the `kit` config every later hook closes over)
  * inside that plugin's `config: { order: "pre" }` hook. Vite runs config
  * hooks in hook-`order` groups, and within a group in `enforce`-sorted plugin
- * order — so an `enforce: "pre"` inline plugin whose config hook is also
+ * order -- so an `enforce: "pre"` inline plugin whose config hook is also
  * `order: "pre"` runs BEFORE kit's setup hook (inline plugins append after
  * file plugins, and the file's only other `pre`-enforced kit plugin,
  * `vite-plugin-sveltekit-resolve-svelte-config`, merely asserts no
@@ -30,16 +30,16 @@
  * 1. flattens the config's plugin option (awaiting the promises `sveltekit()`
  *    returns) and finds `vite-plugin-sveltekit-setup`;
  * 2. fails with a descriptive error when it is absent (a `vite.config.ts`
- *    without `sveltekit()` is not a SvelteKit project — we cannot add the
+ *    without `sveltekit()` is not a SvelteKit project -- we cannot add the
  *    plugin from a config hook, Vite ignores plugins injected there);
  * 3. merges the integration-level kit options (`SvelteKitOptions.kit`) over
- *    the user's — integration options win, mirroring Vite's inline-over-file
+ *    the user's -- integration options win, mirroring Vite's inline-over-file
  *    precedence;
  * 4. replaces the adapter with the deploy target's, warning when the user
  *    had declared their own: the adapter is the deploy-packaging seam (its
  *    output is what the target's finishing pass re-bundles and what alchemy
  *    uploads), so a foreign adapter's output would simply never be deployed.
- *    The user's file itself is untouched — running plain `vite build`
+ *    The user's file itself is untouched -- running plain `vite build`
  *    outside this integration still uses their adapter.
  */
 import type { Adapter } from "@sveltejs/kit";
@@ -65,14 +65,14 @@ export const DEFAULT_VITE_CONFIG_FILES: ReadonlyArray<string> = [
   "vite.config.cts",
 ];
 
-/** The shape of kit's setup-plugin `api` (structural — kit doesn't export it). */
+/** The shape of kit's setup-plugin `api` (structural -- kit doesn't export it). */
 interface SetupPluginApi {
   readonly options?: Record<string, unknown>;
 }
 
 /**
  * Flatten Vite's `PluginOption` tree (nested arrays, promises, falsy holes)
- * into a plain plugin list — the same normalization Vite itself performs
+ * into a plain plugin list -- the same normalization Vite itself performs
  * before running config hooks.
  */
 export const flattenPluginOption = async (
@@ -92,8 +92,8 @@ export const flattenPluginOption = async (
 /**
  * The top-level svelte options `sveltekit(config)` consumes at construction
  * time (before any Vite hook runs). They cannot be applied by mutating
- * `api.options` afterwards — `vite-plugin-svelte` was already instantiated
- * with them — so the injector warns instead of silently dropping them.
+ * `api.options` afterwards -- `vite-plugin-svelte` was already instantiated
+ * with them -- so the injector warns instead of silently dropping them.
  */
 const CONSTRUCTION_TIME_KEYS = ["extensions", "compilerOptions", "vitePlugin", "preprocess"];
 
@@ -123,7 +123,7 @@ export const mergeKitOptions = (
 };
 
 export interface SvelteKitConfigPluginOptions {
-  /** The deploy target's adapter — always wins over a user-declared adapter. */
+  /** The deploy target's adapter -- always wins over a user-declared adapter. */
   readonly adapter: Adapter;
   /**
    * Integration-level kit options (`SvelteKitOptions.kit`) merged over the
@@ -169,7 +169,7 @@ export const makeSvelteKitConfigPlugin = (
         if (!isPlainObject(kit)) {
           throw new Error(
             `The "${SVELTEKIT_SETUP_PLUGIN_NAME}" plugin does not expose its config as ` +
-              "`api.options` or `api.options.kit` — the installed @sveltejs/kit version " +
+              "`api.options` or `api.options.kit` \u2014 the installed @sveltejs/kit version " +
               "is incompatible with this integration's adapter injection.",
           );
         }
@@ -191,7 +191,7 @@ export const makeSvelteKitConfigPlugin = (
           if (constructionTime.length > 0) {
             warn(
               `The kit option(s) ${constructionTime.map((key) => `"${key}"`).join(", ")} ` +
-                "cannot be injected when the project has its own Vite config file — " +
+                "cannot be injected when the project has its own Vite config file \u2014 " +
                 "pass them to the `sveltekit(...)` call in the config file instead.",
             );
           }

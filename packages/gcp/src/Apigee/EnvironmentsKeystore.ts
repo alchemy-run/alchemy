@@ -24,18 +24,18 @@ const MAX_NAME_LENGTH = 255;
 export type EnvironmentsKeystoreProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the keystore.
+   * current GCP project id. Immutable -- changing it replaces the keystore.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the keystore.
    */
   environment: string;
   /**
    * Keystore id (last path segment). If omitted, a unique name is generated
    * from the stack, stage, and logical id. Must match
-   * `[\w[:space:].-]{1,255}`. Immutable — changing it replaces the keystore.
+   * `[\w[:space:].-]{1,255}`. Immutable -- changing it replaces the keystore.
    */
   keystoreId?: string;
 };
@@ -64,7 +64,7 @@ export type EnvironmentsKeystore = Resource<
  *
  * Keystores have no labels or description, so `list` enumerates every
  * keystore in Apigee environments mapped to this GCP project for
- * `pnpm nuke:gcp`. Name is identity — changing `keystoreId`,
+ * `pnpm nuke:gcp`. Name is identity -- changing `keystoreId`,
  * `organization`, or `environment` replaces the keystore. Aliases are
  * managed by `EnvironmentsKeystoresAlias`.
  *

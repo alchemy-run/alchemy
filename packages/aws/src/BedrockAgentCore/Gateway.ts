@@ -98,7 +98,7 @@ export interface Gateway extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock AgentCore Gateway — a managed MCP endpoint that turns
+ * An Amazon Bedrock AgentCore Gateway -- a managed MCP endpoint that turns
  * APIs and Lambda functions into agent-callable tools.
  *
  * A gateway fronts one or more targets (OpenAPI specs, Smithy models, Lambda
@@ -248,7 +248,7 @@ export const GatewayProvider = () =>
             gateway = yield* findByName(name);
           }
 
-          // 2. ENSURE — a freshly created IAM role is not instantly assumable
+          // 2. ENSURE -- a freshly created IAM role is not instantly assumable
           // by the AgentCore service principal, so ride out the transient
           // ValidationException; tolerate the name-exists conflict race.
           if (gateway === undefined) {
@@ -287,7 +287,7 @@ export const GatewayProvider = () =>
             });
           }
 
-          // 3. SYNC — converge mutable settings from OBSERVED state.
+          // 3. SYNC -- converge mutable settings from OBSERVED state.
           const drifted =
             (unredact(gateway.description) ?? undefined) !==
               (props.description ?? unredact(gateway.description)) ||
@@ -329,7 +329,7 @@ export const GatewayProvider = () =>
         }),
 
         // A gateway with live targets rejects deletion with a
-        // ConflictException until they are gone — the engine deletes targets
+        // ConflictException until they are gone -- the engine deletes targets
         // first, but their teardown is eventually consistent.
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteGateway({ gatewayIdentifier: output.gatewayId }).pipe(

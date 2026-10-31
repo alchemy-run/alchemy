@@ -2,7 +2,7 @@ import * as Namespace from "alchemy/Namespace";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**
- * The Next.js Node framework module (it is its own deploy target — not
+ * The Next.js Node framework module (it is its own deploy target -- not
  * OpenNext). Container-optimal path is `next build` + a long-running Node
  * process.
  */
@@ -17,7 +17,7 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * Deploy a Next.js application to Railway as a long-running Node process:
  * `next build`, then a serve entry that `import("next")` +
  * `next({ dev: false }).prepare()` + `getRequestHandler()` on `PORT`
- * (default 3000). **Not** OpenNext — those wrappers are Lambda/workerd.
+ * (default 3000). **Not** OpenNext -- those wrappers are Lambda/workerd.
  *
  * The image `npm install`s `next`, `react`, and `react-dom`, and bakes
  * `.next` plus `public/` into `/app`.

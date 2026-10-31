@@ -6,7 +6,7 @@ import type { Api } from "./Api.ts";
 /**
  * Request options for {@link ExportApi}. `ApiId` is resolved from the
  * bound {@link Api}; `Specification` defaults to `OAS30` (the only
- * supported value — exports are OpenAPI 3.0, HTTP APIs only).
+ * supported value -- exports are OpenAPI 3.0, HTTP APIs only).
  */
 export interface ExportApiRequest extends Partial<Omit<agw2.ExportApiRequest, "ApiId">> {}
 
@@ -15,7 +15,7 @@ export interface ExportApiRequest extends Partial<Omit<agw2.ExportApiRequest, "A
  * (`apigateway:GET` on `/apis/{apiId}/exports/{specification}`).
  *
  * Bind an {@link Api} inside a function runtime to serve or snapshot the
- * live API definition — e.g. publishing your own `/openapi.json` route or
+ * live API definition -- e.g. publishing your own `/openapi.json` route or
  * diffing deployed routes against the source of truth. The response
  * `body` is a byte `Stream` of the JSON (or YAML) document. Provide
  * `ApiGatewayV2.ExportApiHttp` on the Function effect to implement the

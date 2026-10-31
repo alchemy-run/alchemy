@@ -1,21 +1,21 @@
 /**
- * `Git.BlobStore` — the swappable bulk-byte store (RFC "Git Building
+ * `Git.BlobStore` -- the swappable bulk-byte store (RFC "Git Building
  * Blocks" §3.1).
  *
  * Immutable, content-addressed bulk bytes: compacted packs, clone
  * bundles, oversize loose objects, and spilled push bodies. The contract
- * is everything the pack plane needs and nothing more — ranged reads,
+ * is everything the pack plane needs and nothing more -- ranged reads,
  * whole-object writes with a known length, multipart writes of unknown
  * length, delete, and prefix listing (GC only, never on a serving path).
  *
  * Implementations shipped:
  *
- * - `Git.BlobStoreR2` — Cloudflare R2 over the existing
+ * - `Git.BlobStoreR2` -- Cloudflare R2 over the existing
  *   `ReadWriteBucket` capability (the default).
- * - `Git.BlobStoreS3` — AWS S3 over the S3 object bindings.
+ * - `Git.BlobStoreS3` -- AWS S3 over the S3 object bindings.
  *
  * Multipart rules are the R2/S3 intersection: uniform part sizes
- * (≥ 5 MiB) except the last part.
+ * (>= 5 MiB) except the last part.
  *
  * ### Providing the store
  * **Example:** R2 (the default)
@@ -67,10 +67,10 @@ export interface UploadedPart {
 }
 
 /**
- * An in-flight multipart write. Parts must be uniform in size (≥ 5 MiB)
- * except the last — the R2/S3 intersection. Parts may be uploaded from
+ * An in-flight multipart write. Parts must be uniform in size (>= 5 MiB)
+ * except the last -- the R2/S3 intersection. Parts may be uploaded from
  * ANY isolate that knows the key and `uploadId` (`BlobStoreShape.uploadPart`
- * — the push pipeline's hasher isolates do, DESIGN §22.10); the creator
+ * -- the push pipeline's hasher isolates do, DESIGN §22.10); the creator
  * completes with the collected parts, in any order.
  */
 export interface BlobMultipart {
@@ -93,7 +93,7 @@ export interface BlobMeta {
   readonly size: number;
 }
 
-/** The service shape — see the module doc for semantics. */
+/** The service shape -- see the module doc for semantics. */
 export interface BlobStoreShape {
   /** Ranged read; omit `range` for the whole object. `null` = missing. */
   readonly get: (
@@ -112,7 +112,7 @@ export interface BlobStoreShape {
   readonly multipart: (key: string) => Effect.Effect<BlobMultipart, BlobStoreError, RuntimeContext>;
   /**
    * Uploads one part of a multipart write created elsewhere (by key and
-   * `uploadId`) — the resume path the push pipeline's hasher isolates use.
+   * `uploadId`) -- the resume path the push pipeline's hasher isolates use.
    */
   readonly uploadPart: (
     key: string,
@@ -123,7 +123,7 @@ export interface BlobStoreShape {
   readonly delete: (
     keys: string | ReadonlyArray<string>,
   ) => Effect.Effect<void, BlobStoreError, RuntimeContext>;
-  /** Prefix listing — GC/purge only, never on a serving path. */
+  /** Prefix listing -- GC/purge only, never on a serving path. */
   readonly list: (prefix: string) => Stream.Stream<BlobMeta, BlobStoreError, RuntimeContext>;
 }
 

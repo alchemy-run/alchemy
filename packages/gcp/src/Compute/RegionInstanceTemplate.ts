@@ -43,7 +43,7 @@ export type RegionInstanceTemplateProps = {
    */
   templateName?: string;
   /**
-   * Region the template lives in. Immutable — changing it replaces the
+   * Region the template lives in. Immutable -- changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -54,7 +54,7 @@ export type RegionInstanceTemplateProps = {
   description?: string;
   /**
    * Machine type name (not a URL), e.g. `e2-micro`. Regional instance
-   * templates are immutable — changing this replaces the template.
+   * templates are immutable -- changing this replaces the template.
    * @default "e2-micro"
    */
   machineType?: string;

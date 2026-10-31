@@ -73,7 +73,7 @@ export interface S3DestinationProps {
    */
   errorOutputPrefix?: string;
   /**
-   * Buffering interval before flushing to S3 — e.g. `"1 minute"` or
+   * Buffering interval before flushing to S3 -- e.g. `"1 minute"` or
    * `Duration.seconds(60)`. Sent to AWS as whole seconds; valid values range
    * from 0 (zero buffering) to 900 seconds.
    * @default "300 seconds"
@@ -135,7 +135,7 @@ export interface DeliveryStreamProps {
   destination: S3DestinationProps;
   /**
    * Server-side encryption (SSE) for records at rest inside the delivery
-   * stream. Only supported for `DirectPut` streams — streams with a Kinesis
+   * stream. Only supported for `DirectPut` streams -- streams with a Kinesis
    * source inherit encryption from the source stream. Adding, changing or
    * removing encryption updates the stream in place via
    * `StartDeliveryStreamEncryption` / `StopDeliveryStreamEncryption`.
@@ -214,7 +214,7 @@ export interface DeliveryStream extends Resource<
      */
     compressionFormat: CompressionFormat | undefined;
     /**
-     * Server-side encryption status reported by the stream — `ENABLED` when
+     * Server-side encryption status reported by the stream -- `ENABLED` when
      * SSE is active, `DISABLED` when it is not.
      */
     encryptionStatus: DeliveryStreamEncryptionStatus | undefined;
@@ -242,8 +242,8 @@ export interface DeliveryStream extends Resource<
  *
  * `DeliveryStream` owns the stream's lifecycle and mutable destination
  * configuration (buffering hints, compression, prefixes, tags). The stream is
- * `DirectPut` by default — producers write with `PutRecord` /
- * `PutRecordBatch` — or it can drain an existing Kinesis Data Stream via the
+ * `DirectPut` by default -- producers write with `PutRecord` /
+ * `PutRecordBatch` -- or it can drain an existing Kinesis Data Stream via the
  * `source` prop. Unless you supply role ARNs, an IAM role is auto-created
  * granting Firehose write access to the destination bucket (and read access
  * to the source stream when one is configured).
@@ -330,7 +330,7 @@ export interface DeliveryStream extends Resource<
 export const DeliveryStream = Resource<DeliveryStream>("AWS.Firehose.DeliveryStream");
 
 /**
- * The delivery stream entered `CREATING_FAILED` — AWS never recovers this
+ * The delivery stream entered `CREATING_FAILED` -- AWS never recovers this
  * state; the stream must be deleted and recreated.
  */
 export class DeliveryStreamCreateFailed extends Data.TaggedError("DeliveryStreamCreateFailed")<{
@@ -382,13 +382,13 @@ const createDeliveryStreamName = (id: string, props: { deliveryStreamName?: stri
 
 /**
  * Data-FIRST `Effect.retry(self, options)` wrapped with an explicit return
- * annotation — inlining `Effect.retry` with an options object in provider
+ * annotation -- inlining `Effect.retry` with an options object in provider
  * lifecycle code leaves `Retry.Return`'s conditional type unresolved in the
  * provider's inferred layer type, which TypeScript's declaration emit widens
- * to an `unknown` R — poisoning `AWS.providers()` for every downstream
+ * to an `unknown` R -- poisoning `AWS.providers()` for every downstream
  * consumer (see `retryThroughDeletionWindow` in SecretsManager/Secret.ts).
  *
- * Retries `InvalidArgumentException`s that mention the IAM role — a freshly
+ * Retries `InvalidArgumentException`s that mention the IAM role -- a freshly
  * created role takes a few seconds to become assumable by the Firehose
  * service principal, and `CreateDeliveryStream` surfaces that propagation
  * window as a role-related `InvalidArgumentException`.
@@ -417,7 +417,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
   });
 
 /**
- * Retries `ConcurrentModificationException` from `UpdateDestination` — the
+ * Retries `ConcurrentModificationException` from `UpdateDestination` -- the
  * read-modify-write cycle re-reads the fresh `VersionId` on every attempt.
  * Explicitly annotated for the same declaration-emit reason as
  * {@link retryThroughRolePropagation}.
@@ -494,7 +494,7 @@ const readDeliveryStream = Effect.fn(function* ({
     return undefined;
   }
   // The stream can vanish between the describe above and the tag read (e.g.
-  // a concurrent destroy) — a typed `ResourceNotFoundException` here just
+  // a concurrent destroy) -- a typed `ResourceNotFoundException` here just
   // means it's gone.
   const tagsResponse = yield* firehose
     .listTagsForDeliveryStream({ DeliveryStreamName: deliveryStreamName })
@@ -536,7 +536,7 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
     }),
   );
 
-// SSE transitions (ENABLING → ENABLED, DISABLING → DISABLED) settle in
+// SSE transitions (ENABLING -> ENABLED, DISABLING -> DISABLED) settle in
 // seconds for the AWS-owned CMK; 2s × 45 bounds the wait at 90s. Returns the
 // terminal encryption configuration (or `undefined` when the stream has
 // never been encrypted).
@@ -713,7 +713,7 @@ export const DeliveryStreamProvider = () =>
             return { action: "replace" } as const;
           }
           // The source (DirectPut vs KinesisStreamAsSource, and which stream)
-          // is immutable — any change replaces the delivery stream.
+          // is immutable -- any change replaces the delivery stream.
           const oldSource = olds?.source;
           const newSource = news?.source;
           if (
@@ -734,7 +734,7 @@ export const DeliveryStreamProvider = () =>
           }
           if (news.encryption && news.source) {
             return yield* new DeliveryStreamValidationError({
-              message: `DeliveryStream "${id}" cannot enable server-side encryption on a KinesisStreamAsSource stream — encryption is inherited from the source Kinesis stream`,
+              message: `DeliveryStream "${id}" cannot enable server-side encryption on a KinesisStreamAsSource stream \u2014 encryption is inherited from the source Kinesis stream`,
             });
           }
           if (news.encryption?.keyType === "CUSTOMER_MANAGED_CMK" && !news.encryption.keyArn) {
@@ -772,12 +772,12 @@ export const DeliveryStreamProvider = () =>
             });
           }
 
-          // Observe — cloud state is authoritative; `output` is only a cache
+          // Observe -- cloud state is authoritative; `output` is only a cache
           // for the physical name.
           let observed = yield* describeDeliveryStream(deliveryStreamName);
 
           // A stream stuck in CREATING_FAILED / DELETING_FAILED can never
-          // recover — converge by deleting it and recreating below.
+          // recover -- converge by deleting it and recreating below.
           if (
             observed &&
             (observed.DeliveryStreamStatus === "CREATING_FAILED" ||
@@ -804,7 +804,7 @@ export const DeliveryStreamProvider = () =>
           };
           const desiredCompression = news.destination.compressionFormat ?? defaultCompressionFormat;
 
-          // Ensure — create the stream if it's missing. Tolerate the
+          // Ensure -- create the stream if it's missing. Tolerate the
           // already-exists race (`ResourceInUseException`) and retry through
           // the fresh role's IAM propagation window.
           if (observed === undefined) {
@@ -841,10 +841,10 @@ export const DeliveryStreamProvider = () =>
           }
 
           // Both a fresh create and a crashed prior run land here in
-          // `CREATING` — wait for `ACTIVE` before syncing (bounded).
+          // `CREATING` -- wait for `ACTIVE` before syncing (bounded).
           const active = yield* waitForDeliveryStreamActive(deliveryStreamName);
 
-          // Sync destination settings — diff observed against desired and
+          // Sync destination settings -- diff observed against desired and
           // apply only the delta via UpdateDestination (read-modify-write on
           // VersionId, retried through ConcurrentModificationException).
           const syncDestination = Effect.gen(function* () {
@@ -881,7 +881,7 @@ export const DeliveryStreamProvider = () =>
           });
           yield* retryConcurrentModification(syncDestination);
 
-          // Sync server-side encryption — settle any in-flight transition
+          // Sync server-side encryption -- settle any in-flight transition
           // (a crashed prior run may have left ENABLING/DISABLING), diff the
           // observed terminal state against the desired config, and apply
           // Start/Stop only on a delta. Both operations are async; the
@@ -934,7 +934,7 @@ export const DeliveryStreamProvider = () =>
             yield* session.note(`Disabled SSE on ${deliveryStreamName}`);
           }
 
-          // Sync tags — diff against OBSERVED cloud tags (adoption may bring
+          // Sync tags -- diff against OBSERVED cloud tags (adoption may bring
           // a stream with foreign tags), never olds/output.
           const observedTagsResponse = yield* firehose
             .listTagsForDeliveryStream({
@@ -972,7 +972,7 @@ export const DeliveryStreamProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // A stream in CREATING can't be deleted — retry through the window
+          // A stream in CREATING can't be deleted -- retry through the window
           // (bounded). Already-gone is success.
           yield* retryWhileInUse(
             firehose
@@ -984,7 +984,7 @@ export const DeliveryStreamProvider = () =>
           );
           yield* waitForDeliveryStreamDeleted(output.deliveryStreamName);
 
-          // Remove the synthesized IAM role (idempotent — it may already be
+          // Remove the synthesized IAM role (idempotent -- it may already be
           // gone from a previous partial delete).
           if (output.roleName) {
             yield* deleteRoleIfExists(output.roleName);

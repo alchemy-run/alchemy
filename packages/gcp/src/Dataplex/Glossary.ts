@@ -32,12 +32,12 @@ export type GlossaryProps = {
    * `projects/{project}/locations/{location}/glossaries/{glossary}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * glossary.
    */
   glossaryId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the glossary. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -93,7 +93,7 @@ export type Glossary = Resource<
 >;
 
 /**
- * A Dataplex Glossary — a collection of GlossaryCategories and
+ * A Dataplex Glossary -- a collection of GlossaryCategories and
  * GlossaryTerms.
  *
  * Changing `glossaryId` or `location` replaces the glossary. Description,

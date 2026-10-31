@@ -23,12 +23,12 @@ const LIST_CONCURRENCY = 10;
 
 export interface ProductFeatureProps {
   /**
-   * Id of the Stripe Product to attach the feature to (`prod_…`).
+   * Id of the Stripe Product to attach the feature to (`prod_...`).
    * Changing it replaces the attachment.
    */
   product: string;
   /**
-   * Id of the Entitlements Feature to attach (`feat_…`). Changing it
+   * Id of the Entitlements Feature to attach (`feat_...`). Changing it
    * replaces the attachment.
    */
   entitlementFeature: string;
@@ -38,11 +38,11 @@ export type ProductFeature = Resource<
   "Stripe.ProductFeature",
   ProductFeatureProps,
   {
-    /** Stripe product-feature id (`prodft_…`). */
+    /** Stripe product-feature id (`prodft_...`). */
     id: string;
-    /** Id of the product this feature is attached to (`prod_…`). */
+    /** Id of the product this feature is attached to (`prod_...`). */
     product: string;
-    /** Id of the attached entitlements feature (`feat_…`). */
+    /** Id of the attached entitlements feature (`feat_...`). */
     entitlementFeature: string;
     /** Whether the attachment exists in live mode. */
     livemode: boolean;
@@ -52,7 +52,7 @@ export type ProductFeature = Resource<
 >;
 
 /**
- * A Stripe Product Feature — the attachment of an Entitlements Feature
+ * A Stripe Product Feature -- the attachment of an Entitlements Feature
  * to a Product. When a customer purchases a product that has a feature
  * attached, Stripe creates an entitlement to that feature. Existence-only:
  * there is nothing to update in place; changing `product` or

@@ -9,7 +9,7 @@ export interface GenerateAs2805KekValidationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GenerateAs2805KekValidation` —
+ * Runtime binding for `payment-cryptography:GenerateAs2805KekValidation` --
  * generates AS2805 Key Encryption Key (KEK) validation data (random key
  * send/receive components) under a KEK {@link Key}, used during AS2805 node
  * key establishment in Australian payment networks. Provide

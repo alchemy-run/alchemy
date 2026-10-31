@@ -37,14 +37,14 @@ export type AccessLevelCustom = acm.CustomLevel;
 export type AccessPoliciesAccessLevelProps = {
   /**
    * Parent access policy (`accessPolicies/{policy}` or the policy id).
-   * Immutable — changing it replaces the access level.
+   * Immutable -- changing it replaces the access level.
    */
   policy: string;
   /**
    * Access level id (the `{access_level}` segment). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Must begin
    * with a letter, then alphanumeric or `_`, max 50 characters.
-   * Immutable — changing it replaces the access level.
+   * Immutable -- changing it replaces the access level.
    */
   accessLevelId?: string;
   /**
@@ -53,7 +53,7 @@ export type AccessPoliciesAccessLevelProps = {
   title?: string;
   /**
    * Description of the access level. Access levels have no labels, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -100,7 +100,7 @@ export type AccessPoliciesAccessLevel = Resource<
  *
  * Access levels have no labels. Alchemy stamps ownership into
  * `description` so `list` / `pnpm nuke:gcp` can find them. `policy` and
- * `accessLevelId` are immutable — changing them replaces the level.
+ * `accessLevelId` are immutable -- changing them replaces the level.
  * Title, description, `basic`, and `custom` update in place.
  *
  * ### Creating an Access Level

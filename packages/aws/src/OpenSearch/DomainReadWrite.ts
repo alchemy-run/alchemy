@@ -9,13 +9,13 @@ import type { ReadDomainClient } from "./DomainRead.ts";
 import type { WriteDomainClient } from "./DomainWrite.ts";
 
 /**
- * Runtime client with full access to a domain's REST data plane — everything
+ * Runtime client with full access to a domain's REST data plane -- everything
  * on {@link ReadDomainClient} and {@link WriteDomainClient} plus a raw
  * any-method escape hatch.
  */
 export interface ReadWriteDomainClient extends ReadDomainClient, WriteDomainClient {
   /**
-   * Raw escape hatch — a SigV4-signed request with any method against any
+   * Raw escape hatch -- a SigV4-signed request with any method against any
    * data-plane path (e.g. `PUT /my-index` to create an index with explicit
    * mappings, or `POST /_reindex`).
    */
@@ -40,7 +40,7 @@ export interface ReadWriteDomainClient extends ReadDomainClient, WriteDomainClie
  * and its paths).
  *
  * Every request is a SigV4-signed HTTP call (service `es`) against the
- * domain's endpoint, made with the host Function's own credentials — the
+ * domain's endpoint, made with the host Function's own credentials -- the
  * domain's access policy must allow the function's role. Prefer the
  * least-privilege `DomainRead` / `DomainWrite` bindings when one direction
  * suffices. Provide the implementation with
@@ -48,7 +48,7 @@ export interface ReadWriteDomainClient extends ReadDomainClient, WriteDomainClie
  * ### Reading and Writing a Domain
  * **Example:** Index Then Search
  * ```typescript
- * // init — grants es:ESHttp* on the domain
+ * // init -- grants es:ESHttp* on the domain
  * const client = yield* AWS.OpenSearch.DomainReadWrite(domain);
  *
  * // runtime

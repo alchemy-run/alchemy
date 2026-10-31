@@ -7,7 +7,7 @@ export interface CreateSMSSandboxPhoneNumberRequest extends sns.CreateSMSSandbox
 /**
  * Runtime binding for `sns:CreateSMSSandboxPhoneNumber`.
  *
- * An account-scoped operation — registers a destination phone number in
+ * An account-scoped operation -- registers a destination phone number in
  * the SMS sandbox, which sends it a one-time verification code.
  * Provide the `CreateSMSSandboxPhoneNumberHttp` layer on the Function to implement the binding.
  * ### SMS Sandbox

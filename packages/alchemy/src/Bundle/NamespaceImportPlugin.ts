@@ -52,9 +52,9 @@ const SUPPORTED_FILE_RE = /\.(?:m?[jt]sx?|cjs|cts)$/;
  * `import * as AWS from "@alchemy.run/aws"` parses every AWS service.
  *
  * A namespace is only rewritten when every reference to its name is a
- * static member access (`ns.X`, or `ns.X` in a type). Anything else —
+ * static member access (`ns.X`, or `ns.X` in a type). Anything else --
  * passing the namespace around, computed access, a shadowing binding,
- * JSX — leaves the import untouched.
+ * JSX -- leaves the import untouched.
  */
 export const namespaceImportPlugin = (
   options: NamespaceImportPluginOptions = {},

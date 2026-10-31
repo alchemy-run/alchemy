@@ -19,10 +19,10 @@ export interface RecordListProps {
   /**
    * Records to publish.
    *
-   * - `CNAME` — the record set at the name is overwritten (`UPSERT`).
-   * - `A` / `AAAA` — the name's record set of that type holds exactly the
+   * - `CNAME` -- the record set at the name is overwritten (`UPSERT`).
+   * - `A` / `AAAA` -- the name's record set of that type holds exactly the
    *   listed values.
-   * - `TXT` — the listed values are merged into the name's TXT record set,
+   * - `TXT` -- the listed values are merged into the name's TXT record set,
    *   alongside values published by anyone else.
    */
   records: DnsRecord[];
@@ -55,7 +55,7 @@ export interface RecordList extends Resource<
 
 /**
  * An explicit list of Route 53 records whose values are typically computed
- * from another resource's outputs — ACM certificate validation CNAMEs, a
+ * from another resource's outputs -- ACM certificate validation CNAMEs, a
  * platform's ownership-verification TXT, a Fly App's addresses.
  *
  * This is the resource an `AWS.Route53.Adapter()` declares for
@@ -193,7 +193,7 @@ const submitChanges = (hostedZoneId: string, changes: route53.Change[]) =>
   });
 
 /**
- * Apply one zone's changes as a single batch and wait for it once — each
+ * Apply one zone's changes as a single batch and wait for it once -- each
  * Route 53 change takes up to a minute to reach `INSYNC`. A rejected batch
  * (e.g. a DELETE racing another writer) falls back to one change at a
  * time, where a rejected DELETE is benign and anything else fails.
@@ -263,7 +263,7 @@ const groupBy = (entries: RecordListEntry[]) => {
 export const RecordListProvider = () =>
   Provider.succeed(RecordList, {
     // No `diff`: every change (records, a pinned zone moving) converges in
-    // place — reconcile removes values the list no longer publishes.
+    // place -- reconcile removes values the list no longer publishes.
     read: Effect.fn(function* ({ output }) {
       if (output === undefined) return undefined;
       const present = yield* Effect.forEach(output.records, (entry) =>

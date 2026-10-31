@@ -163,7 +163,7 @@ const readConsumer = Effect.fn(function* ({
 });
 
 // Kinesis tells us "in use" via ResourceInUseException, but the consumer
-// registry is eventually consistent — describeStreamConsumer can briefly
+// registry is eventually consistent -- describeStreamConsumer can briefly
 // return ResourceNotFoundException for a consumer the registry just
 // confirmed exists. Poll up to ~10s before giving up.
 class ConsumerRegistryNotConsistent extends Data.TaggedError("ConsumerRegistryNotConsistent")<{
@@ -240,7 +240,7 @@ export const StreamConsumerProvider = () =>
       // describeStreamConsumer rejects with InvalidArgumentException unless
       // either consumerARN, or both streamARN + consumerName, are provided.
       // If the engine probed for adoption before our upstream Stream was
-      // created we'll have neither — treat that as "doesn't exist".
+      // created we'll have neither -- treat that as "doesn't exist".
       if (typeof streamArn !== "string" && !output?.consumerArn) {
         return undefined;
       }
@@ -273,7 +273,7 @@ export const StreamConsumerProvider = () =>
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
 
-      // Observe — fetch live cloud state. `output` is treated as a cache
+      // Observe -- fetch live cloud state. `output` is treated as a cache
       // for the consumer ARN; the consumer's actual existence and tags are
       // fetched fresh so the reconciler converges regardless of drift,
       // adoption, or a partially-completed prior run.
@@ -283,7 +283,7 @@ export const StreamConsumerProvider = () =>
         consumerArn: output?.consumerArn,
       });
 
-      // Ensure — register the consumer if it's missing. Tolerate
+      // Ensure -- register the consumer if it's missing. Tolerate
       // `ResourceInUseException` as a race with a peer reconciler: a
       // brief registry-consistency wait, then re-read and continue the
       // sync path.
@@ -326,7 +326,7 @@ export const StreamConsumerProvider = () =>
         }
       }
 
-      // Sync tags — diff observed cloud tags against desired. Adoption
+      // Sync tags -- diff observed cloud tags against desired. Adoption
       // may bring us a consumer that already has its own tag set; diffing
       // against `state.tags` (fetched fresh) lets the reconciler converge
       // ownership without fighting whatever was there before.
@@ -374,7 +374,7 @@ export const StreamConsumerProvider = () =>
       yield* waitForConsumerDeleted(output.consumerArn);
     }),
     // Consumers are stream-scoped: listStreamConsumers requires a StreamARN.
-    // Fan out — enumerate every stream in the account/region, then list the
+    // Fan out -- enumerate every stream in the account/region, then list the
     // consumers registered on each stream, then hydrate tags per consumer.
     list: Effect.fn(function* () {
       const streamArns = yield* kinesis.listStreams.pages({}).pipe(

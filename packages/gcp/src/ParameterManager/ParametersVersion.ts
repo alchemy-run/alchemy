@@ -33,13 +33,13 @@ export type ParametersVersionProps = {
   /**
    * Parent parameter. Full name
    * `projects/{project}/locations/{location}/parameters/{parameter}`
-   * or the parameter id (combined with `location`). Immutable —
+   * or the parameter id (combined with `location`). Immutable --
    * changing it replaces the version.
    */
   parameter: string;
   /**
    * Parameter Manager location used when `parameter` is a bare id.
-   * Immutable — changing it replaces the version. `GLOBAL` is accepted
+   * Immutable -- changing it replaces the version. `GLOBAL` is accepted
    * and normalized to `global`.
    * @default "global"
    */
@@ -49,19 +49,19 @@ export type ParametersVersionProps = {
    * `.../parameters/{parameter}/versions/{version}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Must be 1-63 characters, start with a letter, and match
-   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the
+   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable -- changing it replaces the
    * version.
    */
   parameterVersionId?: string;
   /**
    * UTF-8 payload. Alchemy base64-encodes this for the API. Ignored
-   * when `payload.data` is set. Immutable — changing it replaces the
+   * when `payload.data` is set. Immutable -- changing it replaces the
    * version.
    */
   data?: string;
   /**
    * Payload as stored by the API. `data` is standard base64. Takes
-   * precedence over `data`. Immutable — changing it replaces the
+   * precedence over `data`. Immutable -- changing it replaces the
    * version.
    */
   payload?: {
@@ -89,7 +89,7 @@ export type ParametersVersion = Resource<
     parameterId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `global`, …). */
+    /** Location id (`us-central1`, `global`, ...). */
     location: string;
     /** Standard-base64 payload, when the FULL view returned it. */
     payloadData: string | undefined;
@@ -107,7 +107,7 @@ export type ParametersVersion = Resource<
 >;
 
 /**
- * A Parameter Manager parameter version — an immutable payload attached
+ * A Parameter Manager parameter version -- an immutable payload attached
  * to a {@link Parameter}. Versions have no labels field; `list` / nuke
  * find versions whose parent parameter carries Alchemy labels.
  *

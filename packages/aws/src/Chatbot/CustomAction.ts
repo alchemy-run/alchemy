@@ -104,7 +104,7 @@ export interface CustomAction extends Resource<
 > {}
 
 /**
- * An AWS Chatbot (Amazon Q Developer in chat applications) custom action —
+ * An AWS Chatbot (Amazon Q Developer in chat applications) custom action --
  * a reusable CLI command that chat users invoke by alias or as a button on
  * notifications.
  *
@@ -226,10 +226,10 @@ export const CustomActionProvider = () =>
           const desiredDefinition = { CommandText: news.commandText };
           const desiredAttachments = news.attachments?.map(toWireAttachment);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeAction(arn);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe.
           if (live === undefined) {
@@ -249,7 +249,7 @@ export const CustomActionProvider = () =>
               );
           }
 
-          // 3. SYNC — diff the OBSERVED definition, alias, and attachments
+          // 3. SYNC -- diff the OBSERVED definition, alias, and attachments
           //    against the desired state; update only on drift.
           const inSync =
             live !== undefined &&
@@ -267,7 +267,7 @@ export const CustomActionProvider = () =>
               .pipe(inChatbotRegion);
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -297,7 +297,7 @@ export const CustomActionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* chatbot.deleteCustomAction({ CustomActionArn: output.customActionArn }).pipe(
             inChatbotRegion,
-            // Idempotent delete — a missing action is not an error.
+            // Idempotent delete -- a missing action is not an error.
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

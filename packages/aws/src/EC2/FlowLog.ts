@@ -34,7 +34,7 @@ export interface FlowLogProps {
 
   /**
    * The ID of the VPC, subnet, or network interface to capture flow logs for.
-   * Immutable — changing it replaces the flow log.
+   * Immutable -- changing it replaces the flow log.
    */
   resourceId: string;
 
@@ -131,7 +131,7 @@ export interface FlowLog extends Resource<
  * A flow log is immutable: every property except `tags` is fixed at creation,
  * so changing the monitored resource, destination, or traffic type replaces the
  * flow log. For CloudWatch Logs delivery you must supply a `logGroupName` and a
- * `deliverLogsPermissionArn` — an IAM role that EC2's `vpc-flow-logs` service
+ * `deliverLogsPermissionArn` -- an IAM role that EC2's `vpc-flow-logs` service
  * principal can assume to write to the group.
  *
  * ### Creating a Flow Log
@@ -262,7 +262,7 @@ export const FlowLogProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          // Flow logs are immutable except for tags — any structural change
+          // Flow logs are immutable except for tags -- any structural change
           // replaces the resource.
           if (
             news.resourceType !== olds.resourceType ||
@@ -284,18 +284,18 @@ export const FlowLogProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the flow log via the cached id, else create.
+          // Observe -- find the flow log via the cached id, else create.
           let fl: ec2.FlowLog | undefined;
           if (output?.flowLogId) {
             fl = yield* describeFlowLog(output.flowLogId);
           }
 
-          // Ensure — create if missing. createFlowLogs reports per-resource
+          // Ensure -- create if missing. createFlowLogs reports per-resource
           // failures in the Unsuccessful array rather than throwing.
           if (fl === undefined) {
             yield* session.note("Creating flow log...");
             // A freshly-created delivery role may not yet be assumable by the
-            // flow-logs service (IAM eventual consistency) — createFlowLogs
+            // flow-logs service (IAM eventual consistency) -- createFlowLogs
             // reports that in Unsuccessful. Retry that (but not a genuine
             // "already exists") on a bounded schedule.
             const result = yield* ec2
@@ -338,7 +338,7 @@ export const FlowLogProvider = () =>
             yield* session.note(`Flow log created: ${flowLogId}`);
             fl = yield* describeFlowLog(flowLogId);
             if (!fl) {
-              // Freshly-created flow log not yet visible — synthesize attrs.
+              // Freshly-created flow log not yet visible -- synthesize attrs.
               return yield* toAttrs({
                 FlowLogId: flowLogId,
                 ResourceId: news.resourceId,
@@ -350,7 +350,7 @@ export const FlowLogProvider = () =>
 
           const flowLogId = fl.FlowLogId!;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({
@@ -386,7 +386,7 @@ export const FlowLogProvider = () =>
         delete: Effect.fn(function* ({ output, session }) {
           const flowLogId = output.flowLogId;
           yield* session.note(`Deleting flow log: ${flowLogId}`);
-          // deleteFlowLogs is idempotent — a missing flow log is reported in
+          // deleteFlowLogs is idempotent -- a missing flow log is reported in
           // Unsuccessful, which we ignore.
           yield* ec2.deleteFlowLogs({ FlowLogIds: [flowLogId] });
         }),

@@ -31,12 +31,12 @@ const isReservedPriority = (priority: number | undefined) =>
 export type RegionNetworkFirewallPolicyProps = {
   /**
    * Policy name (RFC1035, 1-63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the policy.
    */
   firewallPolicyName?: string;
   /**
-   * Region the policy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the policy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -45,18 +45,18 @@ export type RegionNetworkFirewallPolicyProps = {
   /**
    * Optional description. Network firewall policies have no labels field,
    * so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
-   * Policy type. Set only at create time — changing it replaces the
+   * Policy type. Set only at create time -- changing it replaces the
    * policy.
    * @default "VPC_POLICY"
    */
   policyType?: FirewallPolicyType;
   /**
    * Network firewall rules. GCP always keeps default `goto_next` rules
-   * in the reserved priority range `2147483548`–`2147483647`; Alchemy
+   * in the reserved priority range `2147483548`-`2147483647`; Alchemy
    * never add/patch/remove those. When this field is set, user rules
    * are synced with `addRule` / `patchRule` / `removeRule` (not
    * `patch`). When omitted on later updates, observed rules are left
@@ -107,7 +107,7 @@ export type RegionNetworkFirewallPolicy = Resource<
  *
  * Policies live under `projects/{project}/regions/{region}/firewallPolicies`
  * and are identified by a user-provided RFC1035 name. Name, region, and
- * `policyType` are immutable — changing any of them replaces the policy.
+ * `policyType` are immutable -- changing any of them replaces the policy.
  * Description updates in place via `regionNetworkFirewallPolicies.patch`.
  * Rules are synced with `addRule` / `patchRule` / `removeRule`.
  *
@@ -493,7 +493,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
 
       // Name is immutable on GCP. Resolve the desired name the same way
-      // create does — do not fall back to previousName when news omits
+      // create does -- do not fall back to previousName when news omits
       // firewallPolicyName, or a generated-name change looks like a no-op.
       const previousName = output?.firewallPolicyName ?? olds?.firewallPolicyName;
       const nextName = yield* toName(id, news.firewallPolicyName);

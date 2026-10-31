@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export type Props = {
   /**
-   * Zone the security.txt file belongs to. Stable — changing the zone
+   * Zone the security.txt file belongs to. Stable -- changing the zone
    * triggers a replacement (the old zone's security.txt is deleted and a
    * new one is created on the new zone).
    */
@@ -26,15 +26,15 @@ export type Props = {
    */
   enabled?: boolean;
   /**
-   * Contact channels for security researchers — `mailto:` addresses,
-   * `tel:` numbers, or HTTPS URLs (RFC 9116 `Contact` field). Required —
+   * Contact channels for security researchers -- `mailto:` addresses,
+   * `tel:` numbers, or HTTPS URLs (RFC 9116 `Contact` field). Required --
    * Cloudflare rejects a security.txt without it. Mutable.
    */
   contact: string[];
   /**
    * RFC 3339 timestamp after which the file's content should be
    * considered stale (RFC 9116 `Expires` field), e.g.
-   * `2027-01-01T00:00:00Z`. Required — Cloudflare rejects a security.txt
+   * `2027-01-01T00:00:00Z`. Required -- Cloudflare rejects a security.txt
    * without it. Mutable.
    */
   expires: string;
@@ -106,8 +106,8 @@ export type SecurityTxt = Resource<TypeId, Props, Attributes, never, Providers>;
  * replace of every field, and destroying it removes the file from the
  * zone entirely.
  *
- * Cloudflare requires the RFC 9116 mandatory fields — `contact` and
- * `expires` — on every write.
+ * Cloudflare requires the RFC 9116 mandatory fields -- `contact` and
+ * `expires` -- on every write.
  * ### Publishing a security.txt
  * **Example:** Minimal security.txt
  * ```typescript
@@ -167,7 +167,7 @@ export const SecurityTxtProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // There is no account-wide API for this per-zone singleton, and the
-      // file is only present on zones that have explicitly configured it —
+      // file is only present on zones that have explicitly configured it --
       // enumerate every zone, read its security.txt, and emit one entry per
       // configured zone (an empty-string sentinel means unconfigured, which
       // `read` treats as absent, so skip it).
@@ -202,12 +202,12 @@ export const SecurityTxtProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* securityTxt.getSecurityTxt({ zoneId });
-      // An unconfigured zone returns an empty-string sentinel — absent.
+      // An unconfigured zone returns an empty-string sentinel -- absent.
       if (typeof observed === "string") return undefined;
       const attrs = toAttributes(zoneId, observed);
       // The file is a zone singleton with no ownership markers. On a cold
       // read (no prior output) an existing file was configured outside
-      // Alchemy — brand it `Unowned` so the engine refuses to take over
+      // Alchemy -- brand it `Unowned` so the engine refuses to take over
       // unless `--adopt` is set.
       if (output === undefined) return Unowned(attrs);
       return attrs;
@@ -218,11 +218,11 @@ export const SecurityTxtProvider = () =>
       const zoneId = news.zoneId as string;
       const desired = desiredAttributes(zoneId, news);
 
-      // 1. Observe — read the live file (an empty-string sentinel means
+      // 1. Observe -- read the live file (an empty-string sentinel means
       //    the zone has no security.txt yet).
       const observed = yield* securityTxt.getSecurityTxt({ zoneId });
 
-      // 2. Sync — PUT is a full replace (a true upsert), so create and
+      // 2. Sync -- PUT is a full replace (a true upsert), so create and
       //    update are the same call. Skip the API entirely when the
       //    observed file already matches the desired one.
       if (
@@ -244,7 +244,7 @@ export const SecurityTxtProvider = () =>
         preferredLanguages: desired.preferredLanguages,
       });
 
-      // 3. Return — re-read so attributes reflect what Cloudflare stored.
+      // 3. Return -- re-read so attributes reflect what Cloudflare stored.
       const final = yield* securityTxt.getSecurityTxt({ zoneId });
       return typeof final === "string" ? desired : toAttributes(zoneId, final);
     }),

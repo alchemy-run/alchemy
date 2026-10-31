@@ -135,7 +135,7 @@ export interface Firewall extends Resource<
 > {}
 
 /**
- * A Hetzner Cloud firewall — a named set of inbound/outbound rules that
+ * A Hetzner Cloud firewall -- a named set of inbound/outbound rules that
  * can be applied to one or more Servers.
  *
  * Name, rules, labels, and `applyTo` are all mutable. Changing the name
@@ -563,10 +563,10 @@ export const FirewallProvider = () =>
       const rules = desiredRules(news.rules);
       const serverIds = desiredServerIds(news.applyTo);
 
-      // Observe — cached id is a hint; cloud state is authoritative.
+      // Observe -- cached id is a hint; cloud state is authoritative.
       let current = yield* observe({ id, name, output });
 
-      // Ensure — create if missing. A Conflict is a name-race; look up
+      // Ensure -- create if missing. A Conflict is a name-race; look up
       // the existing firewall and fall through to sync.
       if (current === undefined) {
         yield* ensureFirewall({ name, labels, rules, serverIds });

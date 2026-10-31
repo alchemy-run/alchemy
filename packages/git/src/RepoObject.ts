@@ -1,19 +1,19 @@
 /**
  * The per-repo Durable Object (DESIGN.md §2, §3.4, §3.6, §8).
  *
- * One DO per repo, addressed by `getByName(repoId)` (a ULID — never
+ * One DO per repo, addressed by `getByName(repoId)` (a ULID -- never
  * `owner/name`, so renames never move data). The DO owns refs, the object
  * index and loose bytes, tokens, the commit graph, push staging, and the
  * alarm jobs (import / fork / delete-purge / staging-GC). It runs the git
- * v0 wire protocol in its `fetch` handler — advertisement, upload-pack,
- * receive-pack — because every byte those need lives in this DO's SQLite.
+ * v0 wire protocol in its `fetch` handler -- advertisement, upload-pack,
+ * receive-pack -- because every byte those need lives in this DO's SQLite.
  *
  * NOTE: the protocol *choreography* (advertisement builder, request
  * parsers, pack writer/parser) is implemented in this file against the
  * pure codec primitives in `src/Protocol/` (`Pkt`, `Sideband`, `ObjectCodec`,
  * `Delta`, `Zlib`, `Store`). DESIGN.md places these in
  * `src/git/{Advertise,UploadPack,ReceivePack,PackParser,PackWriter}.ts`;
- * they live here (exported) until the git-layer split lands — moving them
+ * they live here (exported) until the git-layer split lands -- moving them
  * is a mechanical extraction.
  *
  * ### Wire endpoints
@@ -136,29 +136,29 @@ import {
 import type { StreamingFeeder } from "./Store/StreamingSource.ts";
 import { BACKPRESSURE_BYTES, RETAIN_BYTES } from "./Store/StreamingSource.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Constants
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Pushes up to this size are ingested straight from memory; larger ones are
  * parked in R2 and parsed from there (DESIGN.md §3.6). A **buffering
- * threshold, not a limit** — a push larger than this is no longer rejected.
+ * threshold, not a limit** -- a push larger than this is no longer rejected.
  *
  * The spill threshold of the streaming receive (`receiveWireBody`): bodies
  * up to this size are buffered and parsed from memory (the fast path, at
  * 50 MiB the bound v1 validated for a 128 MB isolate); larger bodies are
- * never materialized — they stream into an R2 multipart upload as they
+ * never materialized -- they stream into an R2 multipart upload as they
  * arrive and are parsed back through bounded windows.
  *
  * Measured on the 38 MiB alchemy-repo push: ~20 s in memory, ~37 s through
- * R2. The R2 path costs about 2x, and is unbounded — the full 67 MiB
+ * R2. The R2 path costs about 2x, and is unbounded -- the full 67 MiB
  * alchemy history (44k objects) pushed in 92 s.
  */
 export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 // 4 MiB (was 50, then 24): with promoted wire packs (DESIGN §22.5) the
-// spilled path is the FAST one — it never writes blob bytes to SQLite, so
-// staging and the staged→live flip cost milliseconds instead of seconds
+// spilled path is the FAST one -- it never writes blob bytes to SQLite, so
+// staging and the staged->live flip cost milliseconds instead of seconds
 // (a 5.7 MiB in-memory push spent 6 s in finalize on production; a 40 MiB
 // spilled one 0.7 s). Only genuinely small pushes stay in memory.
 // 24 MiB, down from the 50 MiB v1 validated with ONE active repo: instances
@@ -168,7 +168,7 @@ export const MAX_PACK_BYTES = 4 * 1024 * 1024;
 // motivated it; the R2 path costs ~2x on the bytes above the threshold.
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
-/** Bytes per hasher part — the spill part size, so a part is one R2 part (DESIGN §22.7). */
+/** Bytes per hasher part -- the spill part size, so a part is one R2 part (DESIGN §22.7). */
 export const HASH_PART_BYTES = 4 * 1024 * 1024;
 /** Hasher calls in flight per push (DESIGN §22.8). */
 export const HASH_CONCURRENCY = 8;
@@ -178,7 +178,7 @@ export const HASH_CONCURRENCY = 8;
 
 export const STAGE_BATCH_OBJECTS = 2048;
 // 2048 (was 256): measured on production, staging cost tracked the number
-// of transaction COMMITs (~100 ms each), not rows — 61 commits for a
+// of transaction COMMITs (~100 ms each), not rows -- 61 commits for a
 // 15.6k-object push. Objects average a few KiB, so 2048 stays well under
 // STAGE_BATCH_BYTES; the byte cap still bounds memory for large objects.
 
@@ -217,12 +217,12 @@ export const GIT_AGENT = "git-service/1";
 export const PUSH_WAIT_TIMEOUT = "30 seconds";
 
 /**
- * Memory the Repo DO lends to concurrent push ingests, in MiB — one
+ * Memory the Repo DO lends to concurrent push ingests, in MiB -- one
  * permit per MiB (DESIGN.md §2.1).
  *
  * The semaphore exists for MEMORY, not correctness: a DO is
  * single-threaded, but its input gate is only closed across *storage*
- * awaits, and receive-pack awaits the network and blob storage — so two
+ * awaits, and receive-pack awaits the network and blob storage -- so two
  * pushes genuinely interleave. Correctness across that interleave is
  * already handled by data scoping (`staged_push = pushId`, and every
  * read filtering `staged_push IS NULL`) plus a synchronous
@@ -261,10 +261,10 @@ export const isolatePushGate: Effect.Effect<Semaphore.Semaphore> = Effect.suspen
  */
 export const pushPermitsFor = (contentLength: number | undefined): number => {
   const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024));
-  // What a push can hold at once, in MiB — never its body. An unknown
+  // What a push can hold at once, in MiB -- never its body. An unknown
   // length is treated as spilled. Memory safety beats concurrency: on a
   // 64 MiB budget that admits one large push per isolate alongside small ones.
-  // Streaming (DESIGN §22.6–7): the feeder retains RETAIN_BYTES behind the
+  // Streaming (DESIGN §22.6-7): the feeder retains RETAIN_BYTES behind the
   // pump and buffers BACKPRESSURE_BYTES ahead of it, plus one staging batch.
   const spilled = mib(RETAIN_BYTES + BACKPRESSURE_BYTES + STAGE_BATCH_BYTES);
   // In memory the caches cannot outgrow what the (small) body can inflate
@@ -284,7 +284,7 @@ export const STAGING_TTL_MS = 24 * 60 * 60 * 1000;
 export const WWW_AUTHENTICATE = 'Basic realm="git-service"' as const;
 
 /**
- * Worker↔DO headers for the clone-bundle splice (DESIGN.md §11): the DO
+ * Worker<->DO headers for the clone-bundle splice (DESIGN.md §11): the DO
  * answers an eligible clone with these *instead of* the pack, and the
  * Worker streams the named R2 object to the client. Only
  * {@link BUNDLE_HASH_HEADER} is kept on the client-visible response, as
@@ -295,14 +295,14 @@ export const BUNDLE_HASH_HEADER = "x-git-bundle" as const;
 export const BUNDLE_COUNT_HEADER = "x-git-bundle-count" as const;
 export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Errors
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A push pack failed to ingest (malformed, oversize, checksum mismatch,
  * missing thin base, delta error). Reported in-band as `unpack <reason>` +
- * per-ref `ng` — never as an HTTP error.
+ * per-ref `ng` -- never as an HTTP error.
  */
 export class PackIngestError extends Schema.TaggedError<PackIngestError>()("PackIngestError", {
   reason: Schema.String,
@@ -318,9 +318,9 @@ export class WireProtocolError extends Schema.TaggedError<WireProtocolError>()(
   { reason: Schema.String },
 ) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RPC data shapes (plain serializable data — no Schema classes over RPC)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// RPC data shapes (plain serializable data -- no Schema classes over RPC)
+// -----------------------------------------------------------------------------
 
 /** Repo metadata as stored in the `config` table. */
 export interface RepoMetaData {
@@ -379,7 +379,7 @@ export interface CommitPushResult {
   readonly results: ReadonlyArray<PushRefResult>;
 }
 
-/** Server-side push timing — see the REST `PushStats` schema. */
+/** Server-side push timing -- see the REST `PushStats` schema. */
 export interface PushStatsData {
   readonly objects: number;
   readonly bytes: number;
@@ -388,11 +388,11 @@ export interface PushStatsData {
   readonly connectivityMs: number;
   readonly finalizeMs: number;
   readonly totalMs: number;
-  /** Ingest split by phase (ms) — see the REST `PushStats.phases` caveat. */
+  /** Ingest split by phase (ms) -- see the REST `PushStats.phases` caveat. */
   readonly phases?: Record<string, number> | undefined;
 }
 
-/** Where a repo's objects live — see the REST `ObjectStats` schema. */
+/** Where a repo's objects live -- see the REST `ObjectStats` schema. */
 export interface ObjectStatsData {
   /** Blobs still in SQLite rows, awaiting compaction into an R2 pack. */
   readonly loose: number;
@@ -470,7 +470,7 @@ export interface ReadObjectInput {
   readonly expect?: ObjectTypeName | undefined;
 }
 
-/** A fully-read object (content inflated, ≤ 64 MiB by the ingest cap). */
+/** A fully-read object (content inflated, <= 64 MiB by the ingest cap). */
 export interface ObjectData {
   readonly oid: string;
   readonly type: ObjectTypeName;
@@ -592,7 +592,7 @@ export interface PullDetailData extends PullData {
 export interface CreatePullInput {
   readonly title: string;
   readonly body?: string | undefined;
-  /** Short or full branch name; normalized to `refs/heads/…` here. */
+  /** Short or full branch name; normalized to `refs/heads/...` here. */
   readonly base: string;
   readonly head: string;
 }
@@ -712,7 +712,7 @@ export interface GitRepoShape {
   ) => Effect.Effect<CommitLogPage, RepoAuthError | RefNotFound, RuntimeContext>;
   /**
    * The changed-file list of a commit vs its FIRST parent (empty tree for
-   * a root commit) — see the REST `diff` endpoint.
+   * a root commit) -- see the REST `diff` endpoint.
    */
   readonly readCommitDiff: (input: {
     readonly oid: string;
@@ -723,7 +723,7 @@ export interface GitRepoShape {
   >;
   /**
    * Three-dot comparison of two revisions: merge base, ahead/behind
-   * counts, head-side commits, and the mergeBase..head file diff — see
+   * counts, head-side commits, and the mergeBase..head file diff -- see
    * the REST `compare` endpoint.
    */
   readonly compareCommits: (
@@ -759,7 +759,7 @@ export interface GitRepoShape {
   /**
    * Merges an open PR: fast-forward when possible, else a two-parent merge
    * commit iff the three-way tree merge is trivial (no path changed on both
-   * sides vs the merge base). Conflicts are a typed 409 — the server never
+   * sides vs the merge base). Conflicts are a typed 409 -- the server never
    * writes conflict markers.
    */
   readonly mergePull: (
@@ -777,7 +777,7 @@ export interface GitRepoShape {
     RuntimeContext
   >;
   /**
-   * Streams a row snapshot for a fork (DESIGN.md §2.3 Fork). Internal —
+   * Streams a row snapshot for a fork (DESIGN.md §2.3 Fork). Internal --
    * called only by a sibling Repo DO's fork alarm job; never routed from
    * the Worker.
    */
@@ -837,9 +837,9 @@ export interface GitRepoShape {
   ) => Effect.Effect<void, never, RuntimeContext>;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Protocol choreography — pure helpers (exported for tests / future split)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Protocol choreography -- pure helpers (exported for tests / future split)
+// -----------------------------------------------------------------------------
 
 /** Upload-pack capability list (DESIGN.md §4). */
 export const uploadCapabilities = (defaultBranch: string): string =>
@@ -1105,7 +1105,7 @@ export const packHeader = (count: number): Uint8Array => {
 
 /**
  * The §3.5 no-delta pack emitter: header + per-entry
- * `varint(type,size) + stored zdata` (verbatim — zero compression CPU) +
+ * `varint(type,size) + stored zdata` (verbatim -- zero compression CPU) +
  * incremental SHA-1 trailer. Constant memory; the manifest is already
  * materialized so the count is known upfront.
  */
@@ -1126,7 +1126,7 @@ export const packStream = (
   });
 
 /**
- * The entry stream alone — no header, no trailer. Because entries are
+ * The entry stream alone -- no header, no trailer. Because entries are
  * stored non-delta (`varint(type,size) + zdata`), entry streams from
  * different sources concatenate into one valid pack under a rewritten
  * header and a fresh trailer. That is what lets a clone be served as
@@ -1147,9 +1147,9 @@ export const packEntryStream = (
         ),
       );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pack ingest (DESIGN.md §3.6) — buffered v1, RandomAccess seam is the buffer
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Pack ingest (DESIGN.md §3.6) -- buffered v1, RandomAccess seam is the buffer
+// -----------------------------------------------------------------------------
 
 /** A commit staged by an ingest, with what the commit graph needs. */
 export interface StagedCommitInfo {
@@ -1165,13 +1165,13 @@ export interface IngestResult {
   readonly objectCount: number;
   /** SQL staging time, when measured by the streaming ingest path. */
   readonly stageMs?: number | undefined;
-  /** Per-phase CPU split of ingest (ms) — see `PackParser` `phases`. */
+  /** Per-phase CPU split of ingest (ms) -- see `PackParser` `phases`. */
   readonly phases?: Record<string, number> | undefined;
   /** Objects staged as references into a promoted wire pack (DESIGN §22.5). */
   readonly promoted?: number | undefined;
   /** The completed spilled object's key, when the body spilled (DESIGN §22.10). */
   readonly parkedKey?: string | undefined;
-  /** The resolved pack's key — delta-resolved blobs, promoted (DESIGN §22.13). */
+  /** The resolved pack's key -- delta-resolved blobs, promoted (DESIGN §22.13). */
   readonly resolvedKey?: string | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
@@ -1319,11 +1319,11 @@ export interface IngestOptions {
  * the trailer SHA-1, and stage everything under `pushId`.
  *
  * The v1.x streaming upgrade seam: this function's only view of the pack
- * is `pack: Uint8Array` random access — swapping in an R2-backed
+ * is `pack: Uint8Array` random access -- swapping in an R2-backed
  * `RandomAccess` touches this implementation, not the protocol drivers.
  */
 /**
- * Ingests a pack from a {@link RandomAccess} source — the path that has **no
+ * Ingests a pack from a {@link RandomAccess} source -- the path that has **no
  * size cap** (DESIGN.md §3.6). Memory is bounded by the source's read
  * window and the delta LRU rather than by the pack, so the source can be an
  * R2 object of any size (see `Store/PackSource.ts`).
@@ -1331,7 +1331,7 @@ export interface IngestOptions {
  * Delegates the wire-format work to the pure `PackParser` (which the pack
  * fixtures in `test/pack.test.ts` cover directly) and does the repo-side
  * work in its sink: stage the object, and record commit-graph edges.
- * Blobs are staged without inflating — only commits, trees and tags need
+ * Blobs are staged without inflating -- only commits, trees and tags need
  * their content parsed, and those are small.
  */
 export const ingestPackFrom = (
@@ -1397,7 +1397,7 @@ export const ingestPackFrom = (
 
     // Stage in batches: one transaction per batch instead of one (plus an
     // existence probe) per object. That per-object cost is what made a
-    // 13.7k-object push take ~20 s inside a single-threaded DO — the work
+    // 13.7k-object push take ~20 s inside a single-threaded DO -- the work
     // is inherently serial, so the only lever is fewer operations
     // (DESIGN.md §16.6).
     // Buffered entries keep their pack coordinates so the promote/inline
@@ -1445,7 +1445,7 @@ export const ingestPackFrom = (
             ? { packId: target.packId, offset: target.base + entry.dataOffset }
             : undefined);
         if (pack !== undefined) promoted += 1;
-        // A promoted row needs no bytes; an inline row needs its zdata —
+        // A promoted row needs no bytes; an inline row needs its zdata --
         // the hasher path did not ship it, so read the span back.
         const zdata =
           entry.zdata ??
@@ -1509,7 +1509,7 @@ export const ingestPackFrom = (
           }
           batch.push(entry);
           // Counted as inline until the flush decides; promoted rows carry
-          // no BLOB, so this over-counts — safe for a memory cap.
+          // no BLOB, so this over-counts -- safe for a memory cap.
           batchBytes += entry.zdata?.byteLength ?? entry.span ?? 0;
           if (batch.length >= STAGE_BATCH_OBJECTS || batchBytes >= STAGE_BATCH_BYTES) {
             yield* flush();
@@ -1532,7 +1532,7 @@ export const ingestPackFrom = (
     const pumpThroughHasher = (hasher: HasherShape) =>
       Effect.gen(function* () {
         const spill = options.spill;
-        // Spill parts (uniform, ≥ 5 MiB for R2) and hash chunks: a hasher
+        // Spill parts (uniform, >= 5 MiB for R2) and hash chunks: a hasher
         // may want smaller chunks than a part (a Lambda's 6 MB payload);
         // chunks then divide parts and the pump uploads the parts itself.
         const partBytes =
@@ -1554,7 +1554,7 @@ export const ingestPackFrom = (
           return yield* PackIngestError.make({ reason: "bad pack magic" });
         }
         const count = new DataView(header.buffer, header.byteOffset).getUint32(8);
-        // Trailer SHA-1 over [0, total − 20): hash with a 20-byte lag, so
+        // Trailer SHA-1 over [0, total - 20): hash with a 20-byte lag, so
         // the last 20 bytes seen are the trailer itself.
         const trailerSha = makeSha1();
         let lag = new Uint8Array(0);
@@ -1578,10 +1578,10 @@ export const ingestPackFrom = (
         const known = new Map<number, Known>(); // by header offset
         const knownByOid = new Map<string, Known>();
         const unresolved: Array<UnresolvedDelta> = [];
-        // Raw-chunk dispatch (DESIGN §22.9–10): NO scanning here. Every
+        // Raw-chunk dispatch (DESIGN §22.9-10): NO scanning here. Every
         // chunk goes to a hasher as it arrives (bounded concurrency), which
         // resyncs to the first entry boundary inside the chunk and scans and
-        // hashes from there — and, when the body spills, writes the chunk
+        // hashes from there -- and, when the body spills, writes the chunk
         // as its part of the multipart upload. Results are consumed in
         // chunk order, concurrently with the receive; the one entry
         // straddling each chunk edge is stitched from the neighbouring
@@ -1634,7 +1634,7 @@ export const ingestPackFrom = (
             for (const e of result.entries) {
               // A hasher may omit non-blob content to bound its response
               // (a Lambda): inflate it here from the fresh zdata or the
-              // retained span — trees, commits and tags are small.
+              // retained span -- trees, commits and tags are small.
               const content =
                 e.content ??
                 (e.type === ObjectType.blob
@@ -1672,7 +1672,7 @@ export const ingestPackFrom = (
             return result.count;
           });
 
-        // ── phase 1 (producer): read parts as they arrive, dispatch each ──
+        // -- phase 1 (producer): read parts as they arrive, dispatch each --
         // Wall-clock phase split (Date.now advances across awaits; the
         // platform's cpuTime is the CPU attribution): `PushStats.phases`.
         const pumpStarted = Date.now();
@@ -1832,11 +1832,11 @@ export const ingestPackFrom = (
           ),
         );
 
-        // ── phase 2 (consumer): settle results in chunk order ──────────
+        // -- phase 2 (consumer): settle results in chunk order ----------
         // `prevEnd` is the last settled boundary. A chunk's resync result
-        // covers [firstOffset, …); whatever lies in [prevEnd, firstOffset)
-        // — usually one straddling entry, but any number when chunks are
-        // tiny — is scanned sequentially as one region from the retained
+        // covers [firstOffset, ...); whatever lies in [prevEnd, firstOffset)
+        // -- usually one straddling entry, but any number when chunks are
+        // tiny -- is scanned sequentially as one region from the retained
         // payloads. Entries the region scan reaches at or past
         // `firstOffset` are duplicates of the chunk's own result and are
         // dropped; a region that does not end exactly at `firstOffset`
@@ -1845,7 +1845,7 @@ export const ingestPackFrom = (
         const keepBelow = (result: ScanResult, limit: number): ScanResult => {
           const entries = result.entries.filter((e) => e.offset < limit);
           const unresolved = result.unresolved.filter((u) => u.offset < limit);
-          // The settled boundary is the END of the last kept entry — which
+          // The settled boundary is the END of the last kept entry -- which
           // may lie past `limit` when that entry straddles a chunk edge.
           let end = result.count === 0 ? result.consumedTo : -1;
           for (const e of entries) end = Math.max(end, e.dataOffset + e.span);
@@ -1866,7 +1866,7 @@ export const ingestPackFrom = (
         // fiber (a child's children die with it), so the producer runs here
         // and the consumer settles results as they land.
         // The entry straddling a part edge is hashed as soon as its part
-        // settles — sized from its own header, from the retained bytes —
+        // settles -- sized from its own header, from the retained bytes --
         // so a large object crossing several parts (a 10 MB blob spans
         // three) is verified alongside the parts, not after the last one.
         interface Speculative {
@@ -1993,7 +1993,7 @@ export const ingestPackFrom = (
                 `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
               );
               if (!ends) {
-                trace(`  → sequential fallback`);
+                trace(`  \u2192 sequential fallback`);
                 const again = yield* sequential();
                 staged += yield* stageResult(again.bytes, again.base, again.r);
                 prevEnd = again.r.consumedTo;
@@ -2089,7 +2089,7 @@ export const ingestPackFrom = (
         // The resolved pack (DESIGN §22.13): every delta-resolved blob's
         // fresh zlib, `typeSize header + zdata` per entry, one object; rows
         // point at their zdata like promoted wire-pack rows do. Written in
-        // two parts so the in-chunk resolutions — most of them — upload
+        // two parts so the in-chunk resolutions -- most of them -- upload
         // while the cross-chunk rounds run.
         const writeResolvedPack = (suffix: string) =>
           Effect.gen(function* () {
@@ -2331,7 +2331,7 @@ export const ingestPackFrom = (
         }
         return { count };
       }).pipe(
-        // A failed ingest must not leave a dangling multipart upload —
+        // A failed ingest must not leave a dangling multipart upload --
         // R2 bills incomplete uploads until aborted or lifecycle-expired.
         Effect.onError(() =>
           Effect.suspend(() =>
@@ -2437,7 +2437,7 @@ export const ingestPack = (
     }
     const count = view.getUint32(8);
 
-    // Trailer verification first — cheap, and everything after assumes an
+    // Trailer verification first -- cheap, and everything after assumes an
     // intact buffer.
     const trailer = bytesToHex(pack.subarray(pack.length - 20));
     const sha = makeSha1();
@@ -2526,7 +2526,7 @@ export const ingestPack = (
       yield* recordObject(oid, type, content);
     });
 
-    // ── Pass 1: scan entries, stage non-deltas verbatim ─────────────────────
+    // -- Pass 1: scan entries, stage non-deltas verbatim ---------------------
     let offset = 12;
     const zlibToIngest = (error: Zlib.ZlibError): PackIngestError =>
       PackIngestError.make({ reason: error.reason });
@@ -2626,7 +2626,7 @@ export const ingestPack = (
       });
     }
 
-    // ── Pass 2: resolve deltas (bases may chain; thin bases from store) ─────
+    // -- Pass 2: resolve deltas (bases may chain; thin bases from store) -----
     const contentOf = (
       entry: RawEntry,
       depth: number,
@@ -2651,7 +2651,7 @@ export const ingestPack = (
           if (entry.oid !== undefined) cache.set(entry.oid, inflated.content);
           return { content: inflated.content, type: entry.type! };
         }
-        // delta — resolve the base first
+        // delta -- resolve the base first
         const resolveBase = Effect.gen(function* () {
           if (entry.kind === "ofs") {
             const baseEntry = byOffset.get(entry.baseOffset!);
@@ -2714,9 +2714,9 @@ export const ingestPack = (
     } satisfies IngestResult;
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Small shared helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const asOid = (s: string): ApiOid => s as ApiOid;
 
@@ -2781,7 +2781,7 @@ export const gunzipIfNeeded = (
     return Effect.succeed(body);
   }
   if (!looksGzip) {
-    // Content-Encoding claimed gzip but the magic disagrees — trust bytes.
+    // Content-Encoding claimed gzip but the magic disagrees -- trust bytes.
     return Effect.succeed(body);
   }
   return Effect.tryPromise({
@@ -2800,9 +2800,9 @@ export const gunzipIfNeeded = (
 
 const noCache = { "cache-control": "no-cache" } as const;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // The Durable Object
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The per-repo Durable Object class (modular form). The runtime
@@ -2849,7 +2849,7 @@ export interface RepoStoreShape {
 }
 
 /**
- * `Git.RepoStore` — the repository block as a service: every route reaches
+ * `Git.RepoStore` -- the repository block as a service: every route reaches
  * a repository through it. `ReposDurableObject` provides it over the
  * {@link GitRepo} Durable Object namespace. It is the seam for decorating
  * repositories (hook `commitPush`, `updateRef`, `mergePull` to observe ref
@@ -2863,13 +2863,13 @@ export class RepoStore extends Context.Service<RepoStore, RepoStoreShape>()(
 
 /**
  * The Repo DO implementation Layer. Requires the {@link BlobStore}
- * service (provide `Git.BlobStoreR2(yourBucket)` — or any other
- * implementation — in the same layer graph) and the {@link Registry}
+ * service (provide `Git.BlobStoreR2(yourBucket)` -- or any other
+ * implementation -- in the same layer graph) and the {@link Registry}
  * namespace.
  */
 export const GitRepoLive = GitRepo.make(
   Effect.gen(function* () {
-    // ── Outer init: resolve bindings + namespaces (runs at plan time too) ──
+    // -- Outer init: resolve bindings + namespaces (runs at plan time too) --
     const state = yield* Cloudflare.DurableObjectState;
     // The building-blocks seam: bulk bytes live behind whatever BlobStore
     // the user's layer graph provides (R2 by default, S3, ...).
@@ -2880,11 +2880,11 @@ export const GitRepoLive = GitRepo.make(
     const selfNamespace = yield* Cloudflare.DurableObjectScope;
 
     return Effect.gen(function* () {
-      // ── Inner init: per-instance construction (runtime only) ────────────
+      // -- Inner init: per-instance construction (runtime only) ------------
       const sql = makeSqlClient(state);
       yield* initRepoSchema(sql).pipe(Effect.orDie);
 
-      // ── config helpers ───────────────────────────────────────────────────
+      // -- config helpers ---------------------------------------------------
       const getConfig = (key: string) =>
         sql
           .first<{ value: string }>(`SELECT value FROM config WHERE key = ?`, key)
@@ -2900,7 +2900,7 @@ export const GitRepoLive = GitRepo.make(
 
       /**
        * Repo metadata from the `config` table. The `objects` breakdown is
-       * a GROUP BY over the whole `objects` table — on a large repo that
+       * a GROUP BY over the whole `objects` table -- on a large repo that
        * scan walks pages dense with inline zdata and was measured at
        * ~1.5 s per call (DESIGN §22). It is therefore opt-in: only the
        * REST repo-detail responses pay for it; the wire path, auth, and
@@ -2923,7 +2923,7 @@ export const GitRepoLive = GitRepo.make(
                 bytes: number;
               }>(
                 // Row-resident blobs are "loose" (awaiting compaction);
-                // row-resident commits/trees/tags are "resident" — they stay
+                // row-resident commits/trees/tags are "resident" -- they stay
                 // in SQLite for the life of the repo (Compact.ts BLOB_TYPE).
                 `SELECT CASE WHEN location = 'row' AND type <> 3 THEN 'resident'
                              WHEN location = 'row' THEN 'loose'
@@ -2979,7 +2979,7 @@ export const GitRepoLive = GitRepo.make(
       /** The object store, keyed by the current repoId. */
       const storeFor = (repoId: string): ObjectStore => makeObjectStore({ sql, blobs, repoId });
 
-      // ── refs ─────────────────────────────────────────────────────────────
+      // -- refs -------------------------------------------------------------
       /** Peels a (possibly annotated-tag) oid to its final non-tag target. */
       const peelOid = (repoId: string, oid: Oid): Effect.Effect<Oid | undefined, StoreError> =>
         Effect.gen(function* () {
@@ -3087,7 +3087,7 @@ export const GitRepoLive = GitRepo.make(
 
       /**
        * The single transactional ref-CAS path (DESIGN.md §3.4). All ref
-       * mutations — push commands, REST writes, import finalize — run here.
+       * mutations -- push commands, REST writes, import finalize -- run here.
        */
       interface RefResult {
         readonly ref: string;
@@ -3111,7 +3111,7 @@ export const GitRepoLive = GitRepo.make(
         }>;
         /**
          * Extra statements run inside the transaction body, only when at
-         * least one command succeeded (right after the graph inserts) —
+         * least one command succeeded (right after the graph inserts) --
          * e.g. the PR merge stamps its pulls row atomically with the ref
          * flip and the staged-object promotion. MUST be fully synchronous.
          */
@@ -3257,7 +3257,7 @@ export const GitRepoLive = GitRepo.make(
           })
           .pipe(
             // Any committed ref movement changes what an anonymous reader
-            // can see — republish the head snapshot (DESIGN.md §21).
+            // can see -- republish the head snapshot (DESIGN.md §21).
             Effect.tap((results) =>
               results.some((result) => result.ok) ? writeHeadSnapshot : Effect.void,
             ),
@@ -3314,9 +3314,9 @@ export const GitRepoLive = GitRepo.make(
           }));
         });
 
-      // ── pull requests ────────────────────────────────────────────────────
+      // -- pull requests ----------------------------------------------------
 
-      /** `main` or `refs/heads/main` → `refs/heads/main`; branches only. */
+      /** `main` or `refs/heads/main` -> `refs/heads/main`; branches only. */
       const normalizeBranchRef = Effect.fn(function* (name: string) {
         const full = name.startsWith("refs/") ? name : `refs/heads/${name}`;
         if (
@@ -3363,16 +3363,16 @@ export const GitRepoLive = GitRepo.make(
         readonly aheadBy: number;
         /** Commits reachable from base but not head. */
         readonly behindBy: number;
-        /** The walk hit its pop bound — counts/base are unreliable. */
+        /** The walk hit its pop bound -- counts/base are unreliable. */
         readonly saturated: boolean;
       }
 
       /**
        * The same gen-ordered merge-base paint walk `compareCommits` runs,
        * reduced to what the PR surface needs: the best common ancestor plus
-       * ahead/behind counts. `mergeBase === head` ⇔ head is reachable from
-       * base (up-to-date); `mergeBase === base` ⇔ base is reachable from
-       * head (fast-forwardable) — the gen ordering guarantees a node's
+       * ahead/behind counts. `mergeBase === head` <=> head is reachable from
+       * base (up-to-date); `mergeBase === base` <=> base is reachable from
+       * head (fast-forwardable) -- the gen ordering guarantees a node's
        * flags are complete when it pops. A tip missing from the commit
        * graph reports `saturated` (uncomputable), never an error.
        */
@@ -3462,7 +3462,7 @@ export const GitRepoLive = GitRepo.make(
         return row.tree;
       });
 
-      // ── alarm scheduling ─────────────────────────────────────────────────
+      // -- alarm scheduling -------------------------------------------------
       const armAlarmAt = (time: number) =>
         Effect.gen(function* () {
           const existing = yield* state.storage.getAlarm();
@@ -3480,7 +3480,7 @@ export const GitRepoLive = GitRepo.make(
           Date.now(),
         );
 
-      // ── bootstrap (create / fork / import) ───────────────────────────────
+      // -- bootstrap (create / fork / import) -------------------------------
       const seedConfig = Effect.fn(function* (input: InitRepoInput, status: RepoStatus) {
         const createdAt = Date.now();
         yield* setConfig("repo_id", input.repoId);
@@ -3513,7 +3513,7 @@ export const GitRepoLive = GitRepo.make(
         return { meta } satisfies InitRepoResult;
       });
 
-      // ── wire protocol drivers ────────────────────────────────────────────
+      // -- wire protocol drivers --------------------------------------------
 
       /** Parses `/:owner/:repo[.git]/<endpoint>` out of the request URL. */
       const parseWirePath = (
@@ -3546,7 +3546,7 @@ export const GitRepoLive = GitRepo.make(
         headers: { "retry-after": "10" },
       });
 
-      /** GET info/refs — the v0 advertisement. */
+      /** GET info/refs -- the v0 advertisement. */
       const handleInfoRefs = (
         request: HttpServerRequest.HttpServerRequest,
         service: string | undefined,
@@ -3570,7 +3570,7 @@ export const GitRepoLive = GitRepo.make(
           });
         });
 
-      /** POST git-upload-pack — negotiation + pack (DESIGN.md §2.3). */
+      /** POST git-upload-pack -- negotiation + pack (DESIGN.md §2.3). */
       const handleUploadPack = (request: HttpServerRequest.HttpServerRequest, meta: RepoMetaData) =>
         Effect.gen(function* () {
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
@@ -3608,7 +3608,7 @@ export const GitRepoLive = GitRepo.make(
 
           // Negotiation round without done and nothing in common: answer
           // NAK and wait for the next round (or done). EXCEPT when the
-          // request carries `deepen` — the shallow/unshallow section must
+          // request carries `deepen` -- the shallow/unshallow section must
           // precede the NAK ("fatal: expected shallow/unshallow, got NAK"
           // otherwise), so depth-carrying rounds fall through to the
           // closure computation below.
@@ -3621,7 +3621,7 @@ export const GitRepoLive = GitRepo.make(
 
           // Bundle fast path (DESIGN.md §12.2): a full clone whose wants are
           // all covered by the current bundle is served as bytes straight
-          // from R2 — no closure walk, no per-object reads. `bundleCovers`
+          // from R2 -- no closure walk, no per-object reads. `bundleCovers`
           // refuses anything with haves/depth/shallow state.
           const bundle = yield* readBundle;
           if (
@@ -3637,8 +3637,8 @@ export const GitRepoLive = GitRepo.make(
             // The DO does NOT stream the pack: it hands the Worker a
             // *marker* naming the R2 object, and the Worker streams those
             // bytes to the client itself (DESIGN.md §11, serving plane).
-            // Auth and planning still happen here — where tokens and refs
-            // live — but no pack byte transits this object, which is the
+            // Auth and planning still happen here -- where tokens and refs
+            // live -- but no pack byte transits this object, which is the
             // whole point of splitting the planes.
             const found = yield* blobs
               .head(bundle.key)
@@ -3689,7 +3689,7 @@ export const GitRepoLive = GitRepo.make(
           // brought shallowness into the exchange (`deepen` or `shallow`
           // lines). If this repo's own boundary truncated the walk for a
           // client that did neither, an unsolicited section would derail
-          // its parser — refuse cleanly instead.
+          // its parser -- refuse cleanly instead.
           const clientShallowAware = req.depth !== undefined || req.clientShallow.length > 0;
           if (closure.shallow.length > 0 && !clientShallowAware) {
             return errResponse(
@@ -3709,7 +3709,7 @@ export const GitRepoLive = GitRepo.make(
 
           // Depth-carrying negotiation round with nothing in common and no
           // done yet: the response is the shallow section ALONE (lines +
-          // flush) — no NAK, no pack. The stateless client buffers this
+          // flush) -- no NAK, no pack. The stateless client buffers this
           // response, sends `done`, and expects the NEXT response to begin
           // with the shallow section again; a trailing NAK here would sit
           // in its buffer and derail that parse ("expected shallow list").
@@ -3741,7 +3741,7 @@ export const GitRepoLive = GitRepo.make(
 
           // The pack goes out through the native pump (Sideband.ts
           // `pumpPackBody`, DESIGN §22.3): the emitter's batched chunks are
-          // large, so the Effect→ReadableStream bridge is a handful of
+          // large, so the Effect->ReadableStream bridge is a handful of
           // pulls, and framing/flush happen at platform speed.
           const source = yield* packStream(closure.entries, objects).pipe(
             Stream.toReadableStreamEffect(),
@@ -3758,7 +3758,7 @@ export const GitRepoLive = GitRepo.make(
           });
         });
 
-      // ── alarm jobs ───────────────────────────────────────────────────────
+      // -- alarm jobs -------------------------------------------------------
       /** Nulls a committed push's `staged_push` column and drops its row. */
       const flipPush = (pushId: string) =>
         Effect.gen(function* () {
@@ -3808,7 +3808,7 @@ export const GitRepoLive = GitRepo.make(
           blobs,
         });
         // Restore the geometric invariant over the repo's packs, so pack
-        // count — and with it read fan-out — stays O(log bytes).
+        // count -- and with it read fan-out -- stays O(log bytes).
         const merge = yield* runGeometricMergeJob({
           repoId: meta.repoId,
           sql,
@@ -3867,14 +3867,14 @@ export const GitRepoLive = GitRepo.make(
       /**
        * Republishes the repo's head snapshot (DESIGN.md §21): a tiny
        * JSON object in the BlobStore from which the Worker serves
-       * anonymous public reads — the upload-pack advertisement and
-       * bundle-covered clones — without waking this DO. Called after
+       * anonymous public reads -- the upload-pack advertisement and
+       * bundle-covered clones -- without waking this DO. Called after
        * every commit that changes what an anonymous reader can see.
        *
        * Best-effort by design: it runs AFTER the SQLite commit (which
        * stays authoritative), so a failed write only leaves a stale
-       * snapshot that the next mutation — or the post-push bundle
-       * alarm, seconds later — repairs.
+       * snapshot that the next mutation -- or the post-push bundle
+       * alarm, seconds later -- repairs.
        */
       const writeHeadSnapshot: Effect.Effect<void, never, RuntimeContext> = Effect.gen(
         function* () {
@@ -3929,7 +3929,7 @@ export const GitRepoLive = GitRepo.make(
         });
         if (info !== undefined) {
           yield* setConfig("bundle", JSON.stringify(info));
-          // The snapshot now names a bundle covering the current refs —
+          // The snapshot now names a bundle covering the current refs --
           // full anonymous clones go DO-less from here (DESIGN.md §21).
           yield* writeHeadSnapshot;
         }
@@ -4002,7 +4002,7 @@ export const GitRepoLive = GitRepo.make(
                 }),
               ),
             );
-            // Connectivity: hard edges only — shallow imports may lack
+            // Connectivity: hard edges only -- shallow imports may lack
             // parent commits (they become walk boundaries).
             const missing = yield* objects.missingObjects([...ingest.referenced], pushId);
             if (missing.length > 0) {
@@ -4013,7 +4013,7 @@ export const GitRepoLive = GitRepo.make(
             graph = yield* computeGraphRows(ingest.commits);
             // A depth-limited import leaves parents un-ingested: record the
             // boundary commits so upload-pack serves this repo as shallow
-            // (walk bound + `shallow` lines — see handleUploadPack).
+            // (walk bound + `shallow` lines -- see handleUploadPack).
             const parentOids = Array.from(
               new Set(ingest.commits.flatMap((commit) => commit.parents)),
             );
@@ -4124,7 +4124,7 @@ export const GitRepoLive = GitRepo.make(
         return true;
       });
 
-      // ── the shape ────────────────────────────────────────────────────────
+      // -- the shape --------------------------------------------------------
       const shape: GitRepoShape = {
         initRepo: (input) => bootstrap(input, "ready").pipe(Effect.tap(() => writeHeadSnapshot)),
 
@@ -4151,7 +4151,7 @@ export const GitRepoLive = GitRepo.make(
         startPurge: Effect.fn(function* () {
           const meta = yield* requireMeta;
           yield* setConfig("status", "deleting");
-          // Kill the DO-less fast path NOW — the prefix drain gets the
+          // Kill the DO-less fast path NOW -- the prefix drain gets the
           // rest, but anonymous reads must stop serving immediately.
           yield* blobs.delete(headKey(meta.repoId)).pipe(Effect.ignore);
           yield* refreshSummary;
@@ -4506,7 +4506,7 @@ export const GitRepoLive = GitRepo.make(
               frontier.push({ oid, time: row.commit_time });
             }
           });
-          // The start may be a tag — peel to a commit.
+          // The start may be a tag -- peel to a commit.
           const startMeta = yield* objects.getMeta(start);
           if (startMeta === undefined) {
             return yield* RefNotFound.make({ ref: input.ref ?? "HEAD" });
@@ -4762,7 +4762,7 @@ export const GitRepoLive = GitRepo.make(
 
           const startOid = yield* resolveRevision(meta.defaultBranch, input.ref);
 
-          // Resolve start → commit → root tree (peel tags on the way).
+          // Resolve start -> commit -> root tree (peel tags on the way).
           const resolveRootTree = Effect.gen(function* () {
             let current = startOid;
             for (let hops = 0; hops < 16; hops++) {
@@ -4827,7 +4827,7 @@ export const GitRepoLive = GitRepo.make(
             }
             treeOid = entry.oid;
           }
-          // unreachable — the loop returns or fails
+          // unreachable -- the loop returns or fails
           return yield* ObjectNotFound.make({ oid: input.path });
         }),
 
@@ -4855,7 +4855,7 @@ export const GitRepoLive = GitRepo.make(
             return yield* PullExists.make({ number: duplicate.number });
           }
           const now = Date.now();
-          // Allocate the number and insert the row in ONE transaction —
+          // Allocate the number and insert the row in ONE transaction --
           // the DO's input/output gates make the counter race-free.
           const number = yield* sql.transactionSync((raw) => {
             const seq = raw
@@ -4938,7 +4938,7 @@ export const GitRepoLive = GitRepo.make(
             mergeable: null,
             mergeableReason: null,
           } as const;
-          // A merged PR's record is `mergeCommit` — live fields stay null.
+          // A merged PR's record is `mergeCommit` -- live fields stay null.
           if (pull.state === "merged") {
             return { ...pull, ...empty } satisfies PullDetailData;
           }
@@ -5007,7 +5007,7 @@ export const GitRepoLive = GitRepo.make(
           const baseChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(baseTip));
           const headChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(headTip));
           if (baseChanges.truncated || headChanges.truncated) {
-            // Can't see every change — conservatively not mergeable.
+            // Can't see every change -- conservatively not mergeable.
             return {
               ...live,
               mergeable: false,
@@ -5059,7 +5059,7 @@ export const GitRepoLive = GitRepo.make(
               state,
             });
           }
-          // Both branches must exist — the ref CAS below must NEVER
+          // Both branches must exist -- the ref CAS below must NEVER
           // (re)create a deleted base branch.
           const baseRow = yield* sql.first<RefRow>(
             `SELECT name, oid FROM refs WHERE name = ?`,
@@ -5095,9 +5095,9 @@ export const GitRepoLive = GitRepo.make(
           }
           const now = Date.now();
 
-          // ── fast-forward: base is an ancestor of head ──────────────────
+          // -- fast-forward: base is an ancestor of head ------------------
           if (cmp.mergeBase === baseTip) {
-            // No new objects, no graph rows (all present from the push) —
+            // No new objects, no graph rows (all present from the push) --
             // one transaction re-checks the CAS, flips the ref, and stamps
             // the pulls row atomically.
             const pull = yield* sql.transactionSync<PullData, RefConflict>((raw, rollback) => {
@@ -5141,10 +5141,10 @@ export const GitRepoLive = GitRepo.make(
             } satisfies MergePullResult;
           }
 
-          // ── trivial three-way merge commit ─────────────────────────────
+          // -- trivial three-way merge commit -----------------------------
           if (cmp.mergeBase === undefined) {
             // Unrelated histories (or a saturated walk): conservative
-            // conflict — the server never guesses.
+            // conflict -- the server never guesses.
             return yield* MergeConflict.make({
               number: input.number,
               paths: [],
@@ -5156,7 +5156,7 @@ export const GitRepoLive = GitRepo.make(
           const baseChanges = yield* diffTrees(objects, mbTree, baseTree);
           const headChanges = yield* diffTrees(objects, mbTree, yield* treeOfCommit(headTip));
           if (baseChanges.truncated || headChanges.truncated) {
-            // A truncated diff hides changes — conflict detection would be
+            // A truncated diff hides changes -- conflict detection would be
             // unsound, so refuse conservatively.
             return yield* MergeConflict.make({
               number: input.number,
@@ -5171,7 +5171,7 @@ export const GitRepoLive = GitRepo.make(
             });
           }
 
-          // Build the merged tree: head's mergeBase→head changes applied
+          // Build the merged tree: head's mergeBase->head changes applied
           // onto the CURRENT base tree (disjoint by the check above).
           const applied = yield* applyTreeChanges(objects, baseTree, headChanges.files);
           const shortHead = row.head_ref.startsWith("refs/heads/")
@@ -5197,7 +5197,7 @@ export const GitRepoLive = GitRepo.make(
 
           // Stage under a synthetic push id WITH a pushes staging row first,
           // so the staging-GC alarm reaps the objects if we crash (or the
-          // CAS below loses) — the exact crash-safety story of a push.
+          // CAS below loses) -- the exact crash-safety story of a push.
           const pushId = `pr-${input.number}-${yield* ulid()}`;
           yield* sql.run(
             `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
@@ -5223,7 +5223,7 @@ export const GitRepoLive = GitRepo.make(
           });
           yield* objects.insertStagedBatch(pushId, staged);
           // Crash safety: arm the staging-GC alarm (like the push path) so
-          // a lost CAS below — or a crash before finalize — cannot leak the
+          // a lost CAS below -- or a crash before finalize -- cannot leak the
           // staged objects; a committed push's row is ignored by the GC.
           yield* upsertJob("gc", null);
           yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
@@ -5339,7 +5339,7 @@ export const GitRepoLive = GitRepo.make(
                 switch (job.kind) {
                   case "purge": {
                     const wiped = yield* runPurgeAlarm;
-                    return wiped; // storage is gone — stop the whole alarm
+                    return wiped; // storage is gone -- stop the whole alarm
                   }
                   case "import":
                     yield* runImportAlarm(job);
@@ -5371,7 +5371,7 @@ export const GitRepoLive = GitRepo.make(
             Effect.catchCause((cause) =>
               Effect.gen(function* () {
                 yield* Effect.logError("repo alarm failed", cause);
-                // Best-effort retry — never let the alarm defect.
+                // Best-effort retry -- never let the alarm defect.
                 yield* armAlarmAt(Date.now() + 30_000).pipe(Effect.ignore);
               }),
             ),

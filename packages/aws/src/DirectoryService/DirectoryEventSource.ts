@@ -7,7 +7,7 @@ import { EventTopic } from "./EventTopic.ts";
 
 /**
  * A directory status notification delivered to the handler. Directory
- * Service publishes a message whenever the directory changes stage — e.g.
+ * Service publishes a message whenever the directory changes stage -- e.g.
  * from `Active` to `Impaired` or `Inoperable`, and back to `Active`.
  */
 export interface DirectoryStatusEvent {

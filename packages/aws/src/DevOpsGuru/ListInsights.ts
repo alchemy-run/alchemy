@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Inspecting Insights
  * **Example:** List Ongoing Insights
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInsights = yield* AWS.DevOpsGuru.ListInsights();
  *
  * // runtime

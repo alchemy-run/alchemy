@@ -14,7 +14,7 @@ export type CmbConfigProps = {
   /**
    * The Cloudflare account whose Customer Metadata Boundary (CMB) log
    * configuration is managed. The config is an account-level singleton, so
-   * the account is the resource's identity — changing it triggers a
+   * the account is the resource's identity -- changing it triggers a
    * replacement.
    * @default the account from the active Cloudflare profile
    */
@@ -23,7 +23,7 @@ export type CmbConfigProps = {
    * Name of the region log data is restricted to (e.g. `"eu"`).
    *
    * Changing the CMB region affects where ALL logs for the account are
-   * stored and processed — treat this as a destructive, account-wide
+   * stored and processed -- treat this as a destructive, account-wide
    * setting.
    */
   regions?: string;
@@ -55,7 +55,7 @@ export type CmbConfig = Resource<TypeId, CmbConfigProps, CmbConfigAttributes, ne
  * the account itself.
  *
  * CMB is part of Cloudflare's Data Localization Suite and requires an
- * Enterprise plan — on unentitled accounts every operation fails with the
+ * Enterprise plan -- on unentitled accounts every operation fails with the
  * typed `LogsControlNotAuthorized` error.
  *
  * :::warning
@@ -113,15 +113,15 @@ export const CmbConfigProvider = () =>
       const accountId =
         output?.accountId ?? (typeof olds?.accountId === "string" ? olds.accountId : envAccountId);
       const observed = yield* getCmbConfig(accountId);
-      // Unconfigured account — the singleton does not currently exist.
+      // Unconfigured account -- the singleton does not currently exist.
       if (observed === undefined) return undefined;
-      // The config is an account singleton — there is no foreign instance
+      // The config is an account singleton -- there is no foreign instance
       // to protect, so a cold read adopts freely.
       return toAttributes(accountId, observed);
     }),
 
     // Account singleton: there is no account-wide collection API, only the
-    // single `/logs/control/cmb/config` GET. Mirror `read` exactly — return a
+    // single `/logs/control/cmb/config` GET. Mirror `read` exactly -- return a
     // one-element array when the config is set, `[]` when the account is
     // unconfigured.
     list: Effect.fn(function* () {
@@ -135,10 +135,10 @@ export const CmbConfigProvider = () =>
       // Inputs were resolved to concrete values by Plan.
       const accountId = (news.accountId as string | undefined) ?? envAccountId;
 
-      // Observe — read the live config (undefined = unconfigured).
+      // Observe -- read the live config (undefined = unconfigured).
       const observed = yield* getCmbConfig(accountId);
 
-      // Sync — POST is a full upsert; skip the call when the observed
+      // Sync -- POST is a full upsert; skip the call when the observed
       // config already matches the desired one.
       const desiredAllowOutOfRegionAccess = news.allowOutOfRegionAccess;
       const inSync =
@@ -159,7 +159,7 @@ export const CmbConfigProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Observe — already unconfigured (or gone with the account) means
+      // Observe -- already unconfigured (or gone with the account) means
       // there is nothing to delete; re-delete after a crashed run is a
       // no-op.
       const observed = yield* getCmbConfig(output.accountId).pipe(
@@ -183,7 +183,7 @@ const getCmbConfig = (accountId: string) =>
       config.regions === undefined || config.regions === null ? undefined : config,
     ),
     // Accounts without the Compliance/CMB entitlement get
-    // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
+    // `LogsControlNotAuthorized` -- treat as unconfigured (nothing to manage).
     Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () => Effect.undefined),
   );
 

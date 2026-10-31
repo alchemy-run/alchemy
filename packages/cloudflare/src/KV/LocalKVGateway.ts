@@ -1,21 +1,21 @@
 /**
  * Node-side path into the local workerd KV simulator, built on the
- * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
+ * runtime's platform proxy (`PlatformProxy.open` -- our `getPlatformProxy`).
  *
  * For a `dev:` namespace there is no cloud namespace to speak REST to.
  * Instead, each operation opens a scoped platform proxy hosting the native
- * KV binding and runs against `proxy.env.KV` — the same
+ * KV binding and runs against `proxy.env.KV` -- the same
  * `runtime.KVNamespace` surface the Worker-binding client builders
  * (`makeReadKVClient` / `makeWriteKVClient`) already consume, so the
  * `*Local` layers reuse those builders verbatim:
  *
- *   Node ── proxy.env.KV.get(...) ──▶ kv service ──▶ KVNamespaceObject
+ *   Node -- proxy.env.KV.get(...) --> kv service --> KVNamespaceObject
  *
- * One proxy boot per operation — slow but correct; the `*Local` layers run
+ * One proxy boot per operation -- slow but correct; the `*Local` layers run
  * in deploy-time Actions, not on a request path. Data lands in the same
  * `{storage}/kv` directory every local worker binding reads.
  *
- * NOT exported from `index.ts` — capability-internal scaffolding.
+ * NOT exported from `index.ts` -- capability-internal scaffolding.
  */
 import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
@@ -39,8 +39,8 @@ const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, NamespaceError> =
 
 /**
  * Binding-client helpers backed by a per-operation platform proxy instead
- * of a Worker's `env`. `raw` cannot be satisfied — a native namespace only
- * lives as long as its proxy's scope — so it dies with guidance.
+ * of a Worker's `env`. `raw` cannot be satisfied -- a native namespace only
+ * lives as long as its proxy's scope -- so it dies with guidance.
  */
 export const makeProxyKVNamespaceHelpers = (
   namespaceId: string,
@@ -75,7 +75,7 @@ export const makeProxyKVNamespaceHelpers = (
       // The gateway layer's platform requirements are satisfied by the
       // ambient stack-eval context; `Context<never>` can't prove that
       // statically, so erase the leftover R (and the proxy's own infra
-      // error channel) with a cast — mirroring D1's gateway.
+      // error channel) with a cast -- mirroring D1's gateway.
       Effect.provideContext(ambient),
     ) as Effect.Effect<T, NamespaceError>;
 

@@ -253,7 +253,7 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     // A queue created earlier in the same plan is eventually consistent:
     // listConsumers can transiently 404 (`QueueNotFound`, code 11000) before
     // the fresh queue is visible to the consumers API. Treat that as "no
-    // consumer yet" — the caller falls through to createConsumer, which
+    // consumer yet" -- the caller falls through to createConsumer, which
     // retries QueueNotFound until the queue propagates.
     Effect.catchTag("QueueNotFound", () => Effect.undefined),
   );
@@ -275,7 +275,7 @@ export const ConsumerProviderLive = () =>
             (page.result ?? []).map((q) => q.queueId).filter((id): id is string => id != null),
           ),
         ),
-        // Account not entitled for Queues — nothing to enumerate.
+        // Account not entitled for Queues -- nothing to enumerate.
         Effect.catchTag("InvalidRoute", () => Effect.succeed<string[]>([])),
       );
       const rows = yield* Effect.forEach(
@@ -309,7 +309,7 @@ export const ConsumerProviderLive = () =>
                 }),
               ),
             ),
-            // Queue deleted mid-list or partial entitlement — skip it.
+            // Queue deleted mid-list or partial entitlement -- skip it.
             Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
               Effect.succeed<Consumer["Attributes"][]>([]),
             ),
@@ -329,7 +329,7 @@ export const ConsumerProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // Queue change requires replacement — consumerId is bound
+      // Queue change requires replacement -- consumerId is bound
       // to a queue and the API has no "move consumer" verb.
       if (output?.queueId && news.queueId !== output.queueId) {
         return { action: "replace", deleteFirst: true } as const;
@@ -337,7 +337,7 @@ export const ConsumerProviderLive = () =>
       // Settings / DLQ / script drift is an update. We DON'T
       // escalate scriptName changes to `replace` because the
       // engine resolves cross-resource Output<string> refs (a
-      // sibling Worker's `workerName`) lazily — when the upstream
+      // sibling Worker's `workerName`) lazily -- when the upstream
       // Worker is created in the same plan, `news` is partially
       // unresolved at diff time and `isResolved(news)` short-
       // circuits up top. Falling through to "update" lets the
@@ -362,7 +362,7 @@ export const ConsumerProviderLive = () =>
 
       // Delete a consumer and wait for Cloudflare's worker subsystem to
       // drop its claim on the old script so createConsumer below doesn't
-      // race the queue↔script propagation lag.
+      // race the queue<->script propagation lag.
       const detachConsumer = Effect.fn(function* (consumerId: string) {
         yield* queues
           .deleteConsumer({ accountId: acct, queueId, consumerId })
@@ -378,7 +378,7 @@ export const ConsumerProviderLive = () =>
         );
       });
 
-      // Observe — prefer the cached consumerId, then fall back to
+      // Observe -- prefer the cached consumerId, then fall back to
       // listConsumers (paginated) to recover from out-of-band
       // deletes or partial state-persistence failures. Track
       // whether the observation came from the cached id or the
@@ -422,12 +422,12 @@ export const ConsumerProviderLive = () =>
       // different script. Probe the script it points at: when it no
       // longer exists, or is a *prior generation of the same logical
       // Worker* (same `alchemy:stack/stage/id` ownership tags as the
-      // configured script — replacements mint a new physical name, and
+      // configured script -- replacements mint a new physical name, and
       // a crashed apply can strand the old generation's consumer with
       // its state entry lost), the wiring is ours to rebuild. Any other
-      // script — another team's, or a *different* Worker in this stack
+      // script -- another team's, or a *different* Worker in this stack
       // (a real misconfiguration: two consumers declared for one queue)
-      // — is refused loudly rather than silently stolen.
+      // -- is refused loudly rather than silently stolen.
       if (
         observed &&
         !owned &&
@@ -463,7 +463,7 @@ export const ConsumerProviderLive = () =>
               `consumer for script "${observed.scriptName}", but this ` +
               `resource is configured for "${news.scriptName}" and ` +
               `local state for the consumer was missing. Each queue ` +
-              `can have only one worker consumer — delete the ` +
+              `can have only one worker consumer \u2014 delete the ` +
               `existing one, update scriptName to match, or restore ` +
               `the consumer's state entry before redeploying.`,
           );
@@ -472,7 +472,7 @@ export const ConsumerProviderLive = () =>
         observed = undefined;
       }
 
-      // Ensure — create if missing. ConsumerAlreadyExists is the
+      // Ensure -- create if missing. ConsumerAlreadyExists is the
       // race signal: another reconcile or peer beat us to it.
       // Re-run the lookup; the paginated stream tolerates the
       // single-page eventual-consistency window the previous
@@ -527,7 +527,7 @@ export const ConsumerProviderLive = () =>
                       `worker consumer for script "${match.scriptName}", ` +
                       `but this resource is configured for ` +
                       `"${news.scriptName}". Each queue can have only ` +
-                      `one worker consumer — delete the existing one ` +
+                      `one worker consumer \u2014 delete the existing one ` +
                       `or update scriptName to match before redeploying.`,
                   );
                 }
@@ -540,7 +540,7 @@ export const ConsumerProviderLive = () =>
         consumerId = observed.consumerId;
       }
 
-      // Sync — Cloudflare replaces all mutable fields on
+      // Sync -- Cloudflare replaces all mutable fields on
       // updateConsumer, so always issue this so adoption converges
       // and settings drift gets corrected on every reconcile.
       // updateConsumer hits the same "queue handler missing" race
@@ -600,7 +600,7 @@ export const ConsumerProviderLive = () =>
       // Block until Cloudflare's worker subsystem stops claiming
       // the script as a queue consumer. Without this the
       // sibling Worker.delete races on `QueueConsumerConflict`
-      // (code 10064) — `deleteConsumer` returns success on the
+      // (code 10064) -- `deleteConsumer` returns success on the
       // queue subsystem before the script-side view propagates.
       yield* queues
         .getConsumer({
@@ -670,7 +670,7 @@ const toObserved = (c: {
     ? { consumerId: c.consumerId, scriptName: c.scriptName ?? undefined }
     : undefined;
 
-// ~60s budget — Worker reconcile uploads typically land in 2–10s,
+// ~60s budget -- Worker reconcile uploads typically land in 2-10s,
 // but a fresh container/asset deploy can stretch that.
 const queueHandlerReadinessSchedule = Schedule.max([
   Schedule.spaced("2 seconds"),
@@ -704,7 +704,7 @@ export const ConsumerProviderLocal = () =>
         diff: Effect.fn(function* ({ news, output }) {
           if (!output) return { action: "update" };
           // A real (non-`dev:`) consumerId on a local-mode row is legacy
-          // damage from pre-stamping dev runs — replace so the new
+          // damage from pre-stamping dev runs -- replace so the new
           // generation mints a true local identity (delete best-effort
           // detaches the stray live consumer).
           if (isLiveId(output.consumerId)) {
@@ -769,7 +769,7 @@ export const ConsumerProviderLocal = () =>
           }
           const consumer: Consumer["Attributes"] = {
             // Never carry a real (non-`dev:`) consumer id forward onto a
-            // local row — it belongs to a live consumer this row no longer
+            // local row -- it belongs to a live consumer this row no longer
             // manages (legacy pre-stamping damage).
             consumerId:
               output?.consumerId && !isLiveId(output.consumerId)
@@ -801,7 +801,7 @@ export const ConsumerProviderLocal = () =>
           MutableHashMap.remove(localRuntimeState.queueConsumers, output.consumerId);
           yield* restartScripts([output.scriptName]);
           // Legacy local-mode rows written before providerMode stamping can
-          // carry a real consumer's id — detach the live consumer too so
+          // carry a real consumer's id -- detach the live consumer too so
           // migrating the row to a true local identity doesn't strand it on
           // the queue (a stranded worker consumer blocks every future
           // createConsumer with ConsumerAlreadyExists).

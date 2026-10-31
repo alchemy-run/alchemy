@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `synthetics:DescribeCanariesLastRun` — read the most
+ * Runtime binding for `synthetics:DescribeCanariesLastRun` -- read the most
  * recent run of every canary in the account (optionally filtered by
  * `Names`), e.g. to render a fleet-wide status page.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Canary Status
  * **Example:** Fleet-Wide Last-Run Summary
  * ```typescript
- * // init — grants synthetics:DescribeCanariesLastRun
+ * // init -- grants synthetics:DescribeCanariesLastRun
  * const describeCanariesLastRun =
  *   yield* AWS.Synthetics.DescribeCanariesLastRun();
  *

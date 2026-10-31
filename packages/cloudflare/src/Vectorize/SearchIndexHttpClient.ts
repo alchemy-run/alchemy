@@ -6,7 +6,7 @@ import type { Credentials } from "../Credentials.ts";
 import type { SearchIndexClient } from "./SearchIndex.ts";
 
 // Shared HTTP scaffolding for the Vectorize `SearchIndex` binding. NOT
-// re-exported from `index.ts` — only the contract and the impl layers are
+// re-exported from `index.ts` -- only the contract and the impl layers are
 // public. A future token-scoped `SearchIndexHttp` layer reuses this builder
 // with an auth minted from an `AccountApiToken`; `SearchIndexLocal` builds the
 // auth from the ambient current-credentials context.
@@ -27,7 +27,7 @@ export interface SearchIndexAuth {
 /**
  * Build a {@link SearchIndexClient} over the Vectorize HTTP API.
  *
- * `indexName` is an Effect so the resolution stays deferred to each call —
+ * `indexName` is an Effect so the resolution stays deferred to each call --
  * inside an Action it resolves through the apply-time RuntimeContext. The
  * credentials are provided ONLY around the distilled op (via `auth.authorize`),
  * never around the name accessor, matching the D1 / KV Local variants. `orDie`
@@ -35,8 +35,8 @@ export interface SearchIndexAuth {
  * as defects.
  *
  * Two methods have no Cloudflare HTTP equivalent and `Effect.die`:
- * - `raw` — there is no HTTP-backed `runtime.Vectorize` object to hand back.
- * - `queryById` — the HTTP query endpoint only accepts a raw vector, not an id.
+ * - `raw` -- there is no HTTP-backed `runtime.Vectorize` object to hand back.
+ * - `queryById` -- the HTTP query endpoint only accepts a raw vector, not an id.
  */
 export const makeHttpSearchIndexClient = (
   auth: SearchIndexAuth,
@@ -51,7 +51,7 @@ export const makeHttpSearchIndexClient = (
   return {
     raw: Effect.die(
       new Error(
-        "SearchIndex over HTTP: `raw` is not available — use a native Worker binding (SearchIndexBinding) for direct access.",
+        "SearchIndex over HTTP: `raw` is not available \u2014 use a native Worker binding (SearchIndexBinding) for direct access.",
       ),
     ),
     describe: () =>
@@ -75,7 +75,7 @@ export const makeHttpSearchIndexClient = (
     queryById: () =>
       Effect.die(
         new Error(
-          "SearchIndex over HTTP: `queryById` is not supported — the HTTP query endpoint only accepts a raw query vector. Fetch the vector with `getByIds` and pass its values to `query`.",
+          "SearchIndex over HTTP: `queryById` is not supported \u2014 the HTTP query endpoint only accepts a raw query vector. Fetch the vector with `getByIds` and pass its values to `query`.",
         ),
       ),
     insert: (vectors) =>
@@ -113,22 +113,22 @@ export const makeHttpSearchIndexClient = (
   } satisfies SearchIndexClient;
 };
 
-// ── shape adapters (runtime types <-> distilled HTTP types) ─────────────────
+// -- shape adapters (runtime types <-> distilled HTTP types) -----------------
 
 /**
- * Serialize vectors to an ndjson Blob — the raw `application/x-ndjson` request
+ * Serialize vectors to an ndjson Blob -- the raw `application/x-ndjson` request
  * body of the Vectorize v2 insert/upsert endpoints.
  */
 const toNdjsonBlob = (vectors: runtime.VectorizeVector[]): Blob => new Blob([toNdjson(vectors)]);
 
-/** Serialize vectors to ndjson — one JSON vector per line. */
+/** Serialize vectors to ndjson -- one JSON vector per line. */
 const toNdjson = (vectors: runtime.VectorizeVector[]): string =>
   vectors
     .map((v) =>
       JSON.stringify({
         id: v.id,
         // A `VectorFloatArray` (Float32Array) would `JSON.stringify` to an
-        // object, not an array — normalize to a plain number array.
+        // object, not an array -- normalize to a plain number array.
         values: Array.from(v.values),
         ...(v.namespace !== undefined ? { namespace: v.namespace } : {}),
         ...(v.metadata !== undefined ? { metadata: v.metadata } : {}),

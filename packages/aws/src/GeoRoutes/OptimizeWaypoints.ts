@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-routes:OptimizeWaypoints` — calculate the optimal
+ * Runtime binding for `geo-routes:OptimizeWaypoints` -- calculate the optimal
  * order to visit a set of waypoints, minimizing travel time or distance
  * (the traveling-salesman step of delivery/route planning).
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const optimizeWaypoints = yield* AWS.GeoRoutes.OptimizeWaypoints();
  *
- * // runtime — positions are [longitude, latitude]
+ * // runtime -- positions are [longitude, latitude]
  * const result = yield* optimizeWaypoints({
  *   Origin: [-122.339, 47.61],
  *   Destination: [-122.201, 47.61],

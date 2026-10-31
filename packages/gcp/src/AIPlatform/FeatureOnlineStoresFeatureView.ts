@@ -180,7 +180,7 @@ export type FeatureOnlineStoresFeatureView = Resource<
 >;
 
 /**
- * A Feature View — the serving projection of a Feature Online Store.
+ * A Feature View -- the serving projection of a Feature Online Store.
  *
  * Parent store, view id, and location are identity. Labels, sources, sync
  * schedule, and optimized replica counts update in place.

@@ -14,7 +14,7 @@ import type { Providers } from "../Providers.ts";
 
 export interface JobTemplateSparkSubmitJobDriver {
   /**
-   * The entry point of the Spark application — an S3 URI to a jar or Python
+   * The entry point of the Spark application -- an S3 URI to a jar or Python
    * script (e.g. `s3://my-bucket/scripts/etl.py`).
    */
   entryPoint: string;
@@ -150,7 +150,7 @@ export interface JobTemplateProps {
    */
   jobTemplateName?: string;
   /**
-   * The StartJobRun values the template stores. Job templates are immutable —
+   * The StartJobRun values the template stores. Job templates are immutable --
    * any change replaces the template.
    */
   jobTemplateData: JobTemplateDataProps;
@@ -161,7 +161,7 @@ export interface JobTemplateProps {
   kmsKeyArn?: string;
   /**
    * Tags to apply to the job template. Merged with the internal Alchemy
-   * tags. Tags are set at creation only — the EMR containers `TagResource`
+   * tags. Tags are set at creation only -- the EMR containers `TagResource`
    * API rejects job template ARNs (typed `InvalidResourceArn`), so changing
    * tags replaces the template.
    */
@@ -191,7 +191,7 @@ export class JobTemplateConsistencyError extends Data.TaggedError("JobTemplateCo
 }> {}
 
 /**
- * An Amazon EMR on EKS job template — a stored set of `StartJobRun` values
+ * An Amazon EMR on EKS job template -- a stored set of `StartJobRun` values
  * (execution role, release label, job driver, configuration) that can be
  * referenced by ID when starting job runs, optionally with `${placeholder}`
  * parameters filled in per run.
@@ -199,7 +199,7 @@ export class JobTemplateConsistencyError extends Data.TaggedError("JobTemplateCo
  * Job templates are account-level and fully immutable: any change (including
  * tags, which the tagging API does not support post-create for templates)
  * replaces the template. They pair with the
- * {@link StartJobRun | AWS.EMRContainers.StartJobRun} binding — a Lambda can
+ * {@link StartJobRun | AWS.EMRContainers.StartJobRun} binding -- a Lambda can
  * start a templated Spark job with just the template ID and parameter values.
  *
  * ### Creating Job Templates
@@ -350,7 +350,7 @@ export const JobTemplateProvider = () =>
             upsert.length > 0 ||
             removed.length > 0
           ) {
-            // job templates are fully immutable — even tags: the tagging API
+            // job templates are fully immutable -- even tags: the tagging API
             // rejects job template ARNs (typed InvalidResourceArn), so tags
             // are set at creation only and any change replaces
             return { action: "replace" } as const;
@@ -362,10 +362,10 @@ export const JobTemplateProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache
           let jt = yield* observe(output?.jobTemplateId, name);
 
-          // 2. ENSURE — create if missing (synchronous, available immediately)
+          // 2. ENSURE -- create if missing (synchronous, available immediately)
           if (jt === undefined) {
             const created = yield* emrc.createJobTemplate({
               // deterministic per instance: a retried create after a crashed
@@ -399,7 +399,7 @@ export const JobTemplateProvider = () =>
           }
 
           // No tag sync: EMR containers' TagResource rejects job template
-          // ARNs (typed InvalidResourceArn) — tags exist at creation only,
+          // ARNs (typed InvalidResourceArn) -- tags exist at creation only,
           // and diff() replaces the template on any tag change.
 
           yield* session.note(jt.id!);
@@ -407,7 +407,7 @@ export const JobTemplateProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // deleteJobTemplate's typed union has no not-found tag — the API
+          // deleteJobTemplate's typed union has no not-found tag -- the API
           // reports missing/already-deleted ids as validation errors, which
           // makes the swallow below the idempotency guarantee.
           yield* emrc

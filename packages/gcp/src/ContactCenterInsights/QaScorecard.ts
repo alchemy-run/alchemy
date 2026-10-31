@@ -28,11 +28,11 @@ export type QaScorecardProps = {
    * Scorecard id (the `{qa_scorecard}` segment of
    * `projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
    * If omitted, a unique id is generated. Must match `^[a-z0-9-]{4,64}$`.
-   * Immutable — changing it replaces the scorecard.
+   * Immutable -- changing it replaces the scorecard.
    */
   qaScorecardId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * scorecard. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -43,7 +43,7 @@ export type QaScorecardProps = {
   displayName?: string;
   /**
    * Human-readable description. Scorecards have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -85,10 +85,10 @@ export type QaScorecard = Resource<
 >;
 
 /**
- * A Contact Center AI Insights QA scorecard — a collection of questions
+ * A Contact Center AI Insights QA scorecard -- a collection of questions
  * scored during analysis.
  *
- * Scorecards have no labels field — Alchemy stamps ownership into the
+ * Scorecards have no labels field -- Alchemy stamps ownership into the
  * description. Location and id are immutable. Display name and
  * description update in place. Delete uses `force` so child revisions
  * and questions are removed.

@@ -1,6 +1,6 @@
 /**
  * Process bootstrap for `AWS.ECS.Task` / `AWS.ECS.Service` containers. The
- * generated entry imports this module and the user's `main`, nothing else —
+ * generated entry imports this module and the user's `main`, nothing else --
  * see `alchemy/Runtime/Bootstrap` for why.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -44,7 +44,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(Credentials.fromChain()),
         Layer.provideMerge(Region.fromEnv()),
         // AWS_ENDPOINT_URL is the LocalStack-standard override injected by
-        // local emulators (floci) into task containers — without it, runtime
+        // local emulators (floci) into task containers -- without it, runtime
         // bindings in `alchemy dev` would call REAL AWS with dummy
         // credentials. Resolves undefined when unset, so live deploys are
         // unaffected.

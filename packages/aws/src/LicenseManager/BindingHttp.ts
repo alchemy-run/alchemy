@@ -5,8 +5,8 @@ import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
 /**
  * Shared HTTP scaffolding for the AWS License Manager runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for the
  * configuration-scoped builder) the injected ARN is boilerplate.
  *
@@ -19,7 +19,7 @@ import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
 /**
  * Build the impl Effect for an account-level License Manager operation (the
  * license checkout data plane, license/grant reads, resource inventory, and
- * license-specification operations — none of which are resource-scoped in
+ * license-specification operations -- none of which are resource-scoped in
  * IAM).
  */
 export const makeLicenseManagerHttpBinding = <I extends object, A, E, R>(options: {
@@ -83,7 +83,7 @@ export const makeLicenseConfigurationHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (configuration: LicenseConfiguration) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const ConfigurationArn = yield* configuration.licenseConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.LicenseManager.${options.capability}(${configuration})`({

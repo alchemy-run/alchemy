@@ -9,7 +9,7 @@ export interface PutObjectLegalHoldRequest extends Omit<S3.PutObjectLegalHoldReq
  * Runtime binding for `s3:PutObjectLegalHold`.
  *
  * Bind this operation to a bucket to get a callable that applies or removes
- * a legal hold on an object — the bucket name is injected automatically and
+ * a legal hold on an object -- the bucket name is injected automatically and
  * `s3:PutObjectLegalHold` is granted on the bucket's objects. Requires a
  * bucket created with `objectLockEnabled: true`. Provide the implementation
  * with `Effect.provide(AWS.S3.PutObjectLegalHoldHttp)`.
@@ -22,7 +22,7 @@ export interface PutObjectLegalHoldRequest extends Omit<S3.PutObjectLegalHoldReq
  *   Key: "records/1.json",
  *   LegalHold: { Status: "ON" },
  * });
- * // … later, release it so the object can be deleted
+ * // ... later, release it so the object can be deleted
  * yield* putObjectLegalHold({
  *   Key: "records/1.json",
  *   LegalHold: { Status: "OFF" },

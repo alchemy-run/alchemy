@@ -16,11 +16,11 @@ import type { InvestigationGroup } from "./InvestigationGroup.ts";
  * ### Reading the Resource Policy
  * **Example:** Audit Who Can Start Investigations
  * ```typescript
- * // init — grants aiops:GetInvestigationGroupPolicy on the group
+ * // init -- grants aiops:GetInvestigationGroupPolicy on the group
  * const getInvestigationGroupPolicy =
  *   yield* AWS.AIOps.GetInvestigationGroupPolicy(group);
  *
- * // runtime — no policy attached surfaces as a typed error
+ * // runtime -- no policy attached surfaces as a typed error
  * const attached = yield* getInvestigationGroupPolicy().pipe(
  *   Effect.map((r) => r.policy),
  *   Effect.catchTag("ResourceNotFoundException", () =>

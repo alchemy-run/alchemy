@@ -8,17 +8,17 @@ import type { Instance } from "./Instance.ts";
  * {@link Instance} (IAM action `ec2:DescribeInstances`; `Describe*` actions
  * do not support resource-level permissions, so the grant is on `*`).
  *
- * Returns the bound instance's live description — state, addresses, block
- * device mappings — e.g. a Lambda that reports whether a dev box is running.
+ * Returns the bound instance's live description -- state, addresses, block
+ * device mappings -- e.g. a Lambda that reports whether a dev box is running.
  * Provide the implementation with
  * `Effect.provide(AWS.EC2.DescribeInstanceHttp)`.
  * ### Observing Instances
  * **Example:** Read the bound instance's live state
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const describeInstance = yield* AWS.EC2.DescribeInstance(instance);
  *
- * // runtime — read the live description
+ * // runtime -- read the live description
  * const live = yield* describeInstance();
  * console.log(live?.State?.Name, live?.PrivateIpAddress);
  * ```

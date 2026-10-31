@@ -11,15 +11,15 @@ import * as Result from "effect/Result";
  * their subnets/security groups for several minutes, and Lambda's own reaper
  * may not delete the detached ENI for up to ~20 minutes. Until the ENI is
  * gone, `DeleteSubnet`/`DeleteSecurityGroup` fail with `DependencyViolation`
- * — historically forcing users to run `destroy` twice, minutes apart.
+ * -- historically forcing users to run `destroy` twice, minutes apart.
  *
  * `retryWhileLingeringEnis` wraps a subnet/security-group delete call (or an
  * internet-gateway detach, which `DependencyViolation`s while any ENI in the
  * VPC still holds a mapped public address): on every `DependencyViolation`
  * it observes the ENIs still occupying the resource, explicitly deletes any
  * *detached* (status `available`) Lambda ENI instead of waiting for Lambda's
- * reaper, and — while the blockers are exclusively Lambda ENIs that are
- * provably on their way out — keeps waiting on an extended budget that
+ * reaper, and -- while the blockers are exclusively Lambda ENIs that are
+ * provably on their way out -- keeps waiting on an extended budget that
  * covers AWS's worst-case release window. Any other lingering dependency
  * keeps today's shorter budget.
  */
@@ -29,11 +29,11 @@ import * as Result from "effect/Result";
  * for us to delete once detached. Only Lambda Hyperplane ENIs qualify today:
  * every other managed type (NAT gateways, VPC endpoints, ELB, EFS mount
  * targets, ECS task ENIs) is deleted by the API call that deletes its owner
- * — and their owners are proper alchemy resources ordered ahead of the
+ * -- and their owners are proper alchemy resources ordered ahead of the
  * subnet/SG by the deletion graph.
  *
  * Matching note (observed live): while attached, a Hyperplane ENI reports
- * `InterfaceType: "lambda"` — but the moment Lambda detaches it, the type
+ * `InterfaceType: "lambda"` -- but the moment Lambda detaches it, the type
  * flips to plain `"interface"` and only the description (`AWS Lambda VPC
  * ENI-{functionName}`) still identifies it. Match both, like Terraform does.
  */
@@ -79,7 +79,7 @@ const reapLingeringEnis = Effect.fn(function* (
         Effect.as("deleted" as const),
         // Already gone counts as progress; anything else (raced back to
         // in-use, throttle, missing IAM permission) must not fail the
-        // destroy — reaping is purely an accelerator, so degrade to the
+        // destroy -- reaping is purely an accelerator, so degrade to the
         // outer retry's plain waiting.
         Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () =>
           Effect.succeed("deleted" as const),
@@ -109,8 +109,8 @@ const reapLingeringEnis = Effect.fn(function* (
  * - Base budget (~12 min) matches the historical subnet schedule: fast
  *   exponential start, capped at 30-second steps.
  * - While the observed blockers include reapable ENIs (attached or just
- *   reaped), the budget extends to ~25 min — Lambda's documented worst-case
- *   ENI release window — because those blockers are guaranteed to clear.
+ *   reaped), the budget extends to ~25 min -- Lambda's documented worst-case
+ *   ENI release window -- because those blockers are guaranteed to clear.
  */
 export const retryWhileLingeringEnis = <A, E extends { _tag: string }, R>(
   deleteCall: Effect.Effect<A, E, R>,
@@ -139,7 +139,7 @@ export const retryWhileLingeringEnis = <A, E extends { _tag: string }, R>(
 
       const { pendingReapable, reaped } = yield* reapLingeringEnis(options.scope, options.session);
       if (reaped > 0) {
-        // An ENI just left — the next attempt has a real chance; skip the
+        // An ENI just left -- the next attempt has a real chance; skip the
         // backoff sleep and try immediately.
         continue;
       }

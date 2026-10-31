@@ -25,12 +25,12 @@ export type VolumesSnapshotProps = {
   /**
    * Parent boot volume. Full name
    * `projects/{project}/locations/{location}/volumes/{volume}` or the
-   * volume id (combined with `location`). Immutable — changing it
+   * volume id (combined with `location`). Immutable -- changing it
    * replaces the snapshot. Only boot volumes accept snapshots.
    */
   volume: string;
   /**
-   * Region used when `volume` is a bare id. Immutable — changing it
+   * Region used when `volume` is a bare id. Immutable -- changing it
    * replaces the snapshot. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -39,12 +39,12 @@ export type VolumesSnapshotProps = {
   /**
    * Snapshot id (the `{snapshot}` segment of
    * `{volume}/snapshots/{snapshot}`). If omitted, the API assigns an id.
-   * Immutable — changing it replaces the snapshot.
+   * Immutable -- changing it replaces the snapshot.
    */
   snapshotId?: string;
   /**
    * Human-readable description. Volume snapshots have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -78,11 +78,11 @@ export type VolumesSnapshot = Resource<
 >;
 
 /**
- * A Bare Metal Solution boot-volume snapshot — a point-in-time copy of a
+ * A Bare Metal Solution boot-volume snapshot -- a point-in-time copy of a
  * BMS boot volume.
  *
  * Snapshots have no labels field, so Alchemy stamps ownership into a
- * `[alchemy …]` description prefix for `list` / nuke. The API does not
+ * `[alchemy ...]` description prefix for `list` / nuke. The API does not
  * expose an update method; description is set at create time. Changing
  * `snapshotId`, `volume`, or `location` replaces the snapshot.
  *

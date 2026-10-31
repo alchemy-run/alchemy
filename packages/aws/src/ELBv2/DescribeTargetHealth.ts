@@ -17,7 +17,7 @@ export interface DescribeTargetHealthRequest extends Omit<
  * `elasticloadbalancing:DescribeTargetHealth`; ELBv2 `Describe*` actions do
  * not support resource-level permissions, so the grant is on `*`).
  *
- * Reads the live health state of the bound target group's targets — e.g. a
+ * Reads the live health state of the bound target group's targets -- e.g. a
  * readiness gate that waits for a freshly registered target to turn
  * `healthy` before shifting traffic, or an ops endpoint surfacing fleet
  * health. Provide the implementation with
@@ -25,10 +25,10 @@ export interface DescribeTargetHealthRequest extends Omit<
  * ### Target Health
  * **Example:** Check the health of every target
  * ```typescript
- * // init — bind the operation to the target group
+ * // init -- bind the operation to the target group
  * const describeTargetHealth = yield* AWS.ELBv2.DescribeTargetHealth(targetGroup);
  *
- * // runtime — read health states
+ * // runtime -- read health states
  * const health = yield* describeTargetHealth({});
  * const states = health.TargetHealthDescriptions?.map(
  *   (d) => d.TargetHealth?.State,

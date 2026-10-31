@@ -30,12 +30,12 @@ export type OrganizationsLocationsConnectionProps = {
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the connection.
+   * Manager ancestor. Immutable -- changing it replaces the connection.
    */
   organization?: string;
   /**
-   * Location of the Cloud SQL instance (`us-central1`, …). Must match the
-   * region of `cloudSql.connectionName`. Immutable — changing it replaces
+   * Location of the Cloud SQL instance (`us-central1`, ...). Must match the
+   * region of `cloudSql.connectionName`. Immutable -- changing it replaces
    * the connection.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -47,7 +47,7 @@ export type OrganizationsLocationsConnectionProps = {
   state?: ConnectionState;
   /**
    * Cloud SQL properties. `connectionName` and `databaseEngine` are
-   * identity — changing either replaces the connection.
+   * identity -- changing either replaces the connection.
    */
   cloudSql: CloudSqlProperties;
 };
@@ -84,7 +84,7 @@ export type OrganizationsLocationsConnection = Resource<
  * external data source (Cloud SQL).
  *
  * Connections have no labels or description field, so `list` returns an
- * empty set — nuke cannot discover them from the cloud. Organization,
+ * empty set -- nuke cannot discover them from the cloud. Organization,
  * location, Cloud SQL `connectionName`, and `databaseEngine` are identity.
  * State, credentials, and `maxConnections` update in place. The connection
  * id is assigned by the API.

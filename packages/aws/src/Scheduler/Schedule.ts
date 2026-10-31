@@ -237,12 +237,12 @@ export const ScheduleProvider = () =>
             ActionAfterCompletion: news.actionAfterCompletion,
           };
 
-          // Observe — fetch live schedule.
+          // Observe -- fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // Ensure — create if missing. EventBridge Scheduler does not support
+          // Ensure -- create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
           // can't be branded/verified via tags. A `ConflictException` means a
           // schedule with this deterministic name already exists; fall through
@@ -272,7 +272,7 @@ export const ScheduleProvider = () =>
           const scheduleArn = observed.Arn;
 
           // Sync schedule configuration. Scheduler doesn't support a partial
-          // update — `updateSchedule` is a full PUT — so we always send the
+          // update -- `updateSchedule` is a full PUT -- so we always send the
           // full desired config. Fields like `state` are reflected in
           // `observed.State`; sending a no-op update is cheap.
           yield* scheduler

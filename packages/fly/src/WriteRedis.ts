@@ -6,7 +6,7 @@ import type { Redis } from "./Redis.ts";
 /**
  * Bind a {@link Redis} database with write access (`set`, `del`).
  *
- * `WriteRedis` is the Context tag, the type, and the callable —
+ * `WriteRedis` is the Context tag, the type, and the callable --
  * `yield* Fly.WriteRedis(Cache)`. Provide {@link WriteRedisHttp}.
  *
  *

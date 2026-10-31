@@ -10,7 +10,7 @@ import type { Service } from "./Service.ts";
 export interface GetInstanceRequest extends Omit<SD.GetInstanceRequest, "ServiceId"> {}
 
 /**
- * Runtime binding for `servicediscovery:GetInstance` — reads a single
+ * Runtime binding for `servicediscovery:GetInstance` -- reads a single
  * registered instance of the bound {@link Service} by its instance ID,
  * returning its full attribute map. Provide the implementation with
  * `Effect.provide(AWS.CloudMap.GetInstanceHttp)`.

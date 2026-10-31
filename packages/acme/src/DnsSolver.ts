@@ -4,13 +4,13 @@
  *
  * A solver has two forms:
  *
- * - a **descriptor** — plain, serializable data in a resource's props
+ * - a **descriptor** -- plain, serializable data in a resource's props
  *   (`{ type: "Cloudflare.DNS", zoneId }`) that survives state and the RPC
  *   boundary. Each DNS solver has a constructor
  *   (`Cloudflare.ACME.ZoneSolver(zone)`) and a layer registering the
  *   matching implementation, so the ACME provider never imports a DNS SDK
  *   itself.
- * - a **runtime solver** — the {@link DnsSolver} interface a running
+ * - a **runtime solver** -- the {@link DnsSolver} interface a running
  *   Worker or Service hands to `IssueCertificate.issue`, built from a
  *   runtime DNS write client (`Cloudflare.ACME.zoneSolver(dns)`).
  */

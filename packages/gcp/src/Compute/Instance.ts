@@ -45,13 +45,13 @@ export type InstanceProps = {
    */
   instanceName?: string;
   /**
-   * Zone to create the instance in (e.g. `us-central1-a`). Immutable —
+   * Zone to create the instance in (e.g. `us-central1-a`). Immutable --
    * changing it replaces the instance.
    * @default "us-central1-a"
    */
   zone?: string;
   /**
-   * Machine type short name (`e2-micro`) or partial/full URL. Immutable —
+   * Machine type short name (`e2-micro`) or partial/full URL. Immutable --
    * changing it replaces the instance.
    * @default "e2-micro"
    */
@@ -73,7 +73,7 @@ export type InstanceProps = {
    */
   metadata?: Record<string, string>;
   /**
-   * Source image for the boot disk. Immutable — changing it replaces the
+   * Source image for the boot disk. Immutable -- changing it replaces the
    * instance.
    * @default "projects/debian-cloud/global/images/family/debian-12"
    */
@@ -84,7 +84,7 @@ export type InstanceProps = {
    */
   diskSizeGb?: number;
   /**
-   * Boot disk type short name (`pd-balanced`) or URL. Immutable —
+   * Boot disk type short name (`pd-balanced`) or URL. Immutable --
    * changing it replaces the instance.
    * @default "pd-standard"
    */
@@ -116,12 +116,12 @@ export type InstanceProps = {
    */
   attachedDisks?: InstanceAttachedDisk[];
   /**
-   * Create a preemptible VM. Immutable — changing it replaces the instance.
+   * Create a preemptible VM. Immutable -- changing it replaces the instance.
    * @default false
    */
   preemptible?: boolean;
   /**
-   * VM provisioning model. Use `SPOT` for Spot VMs. Immutable — changing it
+   * VM provisioning model. Use `SPOT` for Spot VMs. Immutable -- changing it
    * replaces the instance.
    * @default "STANDARD"
    */
@@ -186,7 +186,7 @@ export type Instance = Resource<
     zone: string;
     /** Machine type short name (e.g. `e2-micro`). */
     machineType: string;
-    /** Current instance status (`RUNNING`, `TERMINATED`, …). */
+    /** Current instance status (`RUNNING`, `TERMINATED`, ...). */
     status: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;

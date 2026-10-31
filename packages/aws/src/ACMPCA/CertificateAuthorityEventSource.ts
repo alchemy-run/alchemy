@@ -9,7 +9,7 @@ import {
 /**
  * The `detail` payload AWS Private CA delivers to EventBridge. Success
  * events (certificate issued, certificate revoked, CRL generated, audit
- * report created) carry no detail — the CA ARN and the certificate/report
+ * report created) carry no detail -- the CA ARN and the certificate/report
  * ARN ride in the event's top-level `resources` array. Failure events
  * (e.g. a CRL that could not be written to S3) describe the failure here.
  */
@@ -60,7 +60,7 @@ export interface CertificateAuthorityEventSourceProps extends EventRouteProps {
  * to those events so it can distribute freshly issued certificates, alert
  * on revocations, or track CRL/audit failures.
  *
- * AWS Private CA publishes to EventBridge automatically — no additional
+ * AWS Private CA publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

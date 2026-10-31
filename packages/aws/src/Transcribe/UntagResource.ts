@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:UntagResource` — remove tags from a Transcribe resource by ARN.
+ * Runtime binding for `transcribe:UntagResource` -- remove tags from a Transcribe resource by ARN.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:UntagResource` on `*`.

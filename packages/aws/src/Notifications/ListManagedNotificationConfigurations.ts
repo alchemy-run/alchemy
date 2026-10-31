@@ -18,7 +18,7 @@ export interface ListManagedNotificationConfigurationsRequest
  * ### Reading AWS-Managed Notifications
  * **Example:** List Managed Notification Configurations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listManagedNotificationConfigurations =
  *   yield* AWS.Notifications.ListManagedNotificationConfigurations();
  *

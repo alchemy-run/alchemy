@@ -93,7 +93,7 @@ export interface WorkflowRunEventSourceProps extends EventRouteProps {
  * events so it can alert on failed runs or chain follow-up work when a run
  * succeeds.
  *
- * MWAA Serverless publishes to EventBridge automatically — no additional
+ * MWAA Serverless publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

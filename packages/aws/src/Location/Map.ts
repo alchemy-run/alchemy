@@ -19,12 +19,12 @@ export class MapUnexpectedResponse extends Data.TaggedError("MapUnexpectedRespon
 
 /**
  * Rendering configuration for a map. `style` selects the base map style and is
- * immutable — changing it replaces the map.
+ * immutable -- changing it replaces the map.
  */
 export interface MapConfiguration {
   /**
    * The map style. Selecting a style determines the map's data provider
-   * (Esri, HERE, or Grab). Immutable — changing the style replaces the map.
+   * (Esri, HERE, or Grab). Immutable -- changing the style replaces the map.
    *
    * Common values: `VectorEsriNavigation`, `VectorEsriStreets`,
    * `VectorHereExplore`, `RasterHereExploreSatellite`,
@@ -40,7 +40,7 @@ export interface MapConfiguration {
 
 export interface MapProps {
   /**
-   * Name of the map resource. Immutable — changing it replaces the map.
+   * Name of the map resource. Immutable -- changing it replaces the map.
    * @default ${app}-${stage}-${id}
    */
   mapName?: string;
@@ -163,7 +163,7 @@ export const MapProvider = () =>
           if (!isResolved(news)) return;
           const oldName = yield* createMapName(id, olds);
           const newName = yield* createMapName(id, news);
-          // Name and base style are immutable — either change forces a replace.
+          // Name and base style are immutable -- either change forces a replace.
           if (oldName !== newName || olds.configuration?.style !== news.configuration?.style) {
             return { action: "replace" } as const;
           }
@@ -173,10 +173,10 @@ export const MapProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative; output is only a name cache.
+          // Observe -- cloud state is authoritative; output is only a name cache.
           let state = yield* readMap(mapName);
 
-          // Ensure — create if missing; tolerate a concurrent create.
+          // Ensure -- create if missing; tolerate a concurrent create.
           if (state === undefined) {
             yield* location
               .createMap({
@@ -211,7 +211,7 @@ export const MapProvider = () =>
             });
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* location.untagResource({

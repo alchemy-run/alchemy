@@ -116,7 +116,7 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Amazon Redshift Serverless namespace — the storage-and-database half of
+ * An Amazon Redshift Serverless namespace -- the storage-and-database half of
  * a serverless data warehouse.
  *
  * A namespace holds databases, schemas, tables, admin credentials, and IAM
@@ -270,10 +270,10 @@ export const NamespaceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readNamespace(name);
 
-          // 2. Ensure — create if missing; tolerate a concurrent create.
+          // 2. Ensure -- create if missing; tolerate a concurrent create.
           if (observed === undefined) {
             const created = yield* redshiftserverless
               .createNamespace({
@@ -310,7 +310,7 @@ export const NamespaceProvider = () =>
             });
           }
 
-          // 3. Sync — apply mutable aspects the user specified when they drift
+          // 3. Sync -- apply mutable aspects the user specified when they drift
           // from OBSERVED state.
           const update: Omit<redshiftserverless.UpdateNamespaceRequest, "namespaceName"> = {};
           if (
@@ -340,7 +340,7 @@ export const NamespaceProvider = () =>
             if (updated !== undefined) observed = updated;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(observed.namespaceArn!, desiredTags);
 
           // 4. Return fresh attributes.
@@ -351,7 +351,7 @@ export const NamespaceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* redshiftserverless.deleteNamespace({ namespaceName: output.namespaceName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            // A workgroup may still be detaching — retry briefly.
+            // A workgroup may still be detaching -- retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
               schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),

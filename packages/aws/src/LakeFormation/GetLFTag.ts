@@ -15,7 +15,7 @@ export interface GetLFTagRequest extends lf.GetLFTagRequest {}
  * ### Reading LF-Tags
  * **Example:** Read a Tag Definition
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getLFTag = yield* AWS.LakeFormation.GetLFTag();
  *
  * // runtime

@@ -8,8 +8,8 @@ import type { Revision } from "./Revision.ts";
 /**
  * Shared scaffolding for AWS Data Exchange HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation, the IAM action list, and
  * the granted ARNs is boilerplate: the runtime callable injects `DataSetId`
  * (and `RevisionId` for revision-scoped operations) from the bound resource.
@@ -20,7 +20,7 @@ export const dataSetArns = (dataSet: DataSet): OutputType<string>[] => [dataSet.
 
 /**
  * ARN matching every asset in the bound data set
- * (`arn:…:data-sets/{id}/revisions/star/assets/star`) — asset-level actions
+ * (`arn:...:data-sets/{id}/revisions/star/assets/star`) -- asset-level actions
  * like `dataexchange:SendApiAsset` authorize against the asset resource.
  */
 export const dataSetAssetArns = (dataSet: DataSet): OutputType<string>[] => [
@@ -29,7 +29,7 @@ export const dataSetAssetArns = (dataSet: DataSet): OutputType<string>[] => [
 
 /**
  * The bound data set's ARN plus a wildcard over every sub-resource
- * (`arn:…:data-sets/{id}` and `arn:…:data-sets/{id}/star`) — IAM wildcards
+ * (`arn:...:data-sets/{id}` and `arn:...:data-sets/{id}/star`) -- IAM wildcards
  * match across `/`, so one pattern covers revisions and assets alike. Used
  * by the revision/asset data-plane bindings that receive `RevisionId` and
  * `AssetId` at runtime (e.g. a Lambda that publishes a fresh revision on a
@@ -45,7 +45,7 @@ export const revisionArns = (revision: Revision): OutputType<string>[] => [revis
 
 /**
  * ARN matching every asset in the bound revision
- * (`arn:…:data-sets/{ds}/revisions/{rev}/assets/star`) — asset-level
+ * (`arn:...:data-sets/{ds}/revisions/{rev}/assets/star`) -- asset-level
  * actions like `dataexchange:GetAsset` authorize against the asset resource.
  */
 export const revisionAssetArns = (revision: Revision): OutputType<string>[] => [
@@ -150,7 +150,7 @@ export const makeRevisionHttpBinding = <
 /**
  * Build the impl Effect for an account-level Data Exchange operation (jobs,
  * data grants, enumerations). The deploy-time half grants `actions` on `*`
- * — jobs and data grants are account-scoped resources whose ids only exist
+ * -- jobs and data grants are account-scoped resources whose ids only exist
  * at runtime, so there is no resource ARN to scope down to.
  */
 export const makeDataExchangeAccountHttpBinding = <I, A, E, R>(options: {

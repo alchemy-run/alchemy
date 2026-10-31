@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteBackup` operation (IAM action
  * `cloudhsm:DeleteBackup`).
  *
- * Marks a CloudHSM backup for deletion — it enters `PENDING_DELETION` and
+ * Marks a CloudHSM backup for deletion -- it enters `PENDING_DELETION` and
  * can still be recovered with `RestoreBackup` for 7 days. Pair with
  * `DescribeBackups` to build a backup-pruning job. Provide the
  * implementation with `Effect.provide(AWS.CloudHSMV2.DeleteBackupHttp)`.

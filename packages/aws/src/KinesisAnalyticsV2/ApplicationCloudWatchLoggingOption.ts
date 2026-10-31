@@ -46,7 +46,7 @@ export interface ApplicationCloudWatchLoggingOption extends Resource<
  * Apache Flink application so application messages (errors, job lifecycle
  * events) are delivered to CloudWatch.
  *
- * The option is identified by the log stream it delivers to — changing
+ * The option is identified by the log stream it delivers to -- changing
  * either the application or the log stream replaces the option. The
  * application's service execution role must be allowed to call
  * `logs:PutLogEvents` / `logs:DescribeLogStreams` (the role auto-created by
@@ -77,7 +77,7 @@ export const ApplicationCloudWatchLoggingOption = Resource<ApplicationCloudWatch
 
 /**
  * The logging option could not be observed on the application after it was
- * added — the add call succeeded but the option never appeared.
+ * added -- the add call succeeded but the option never appeared.
  */
 export class LoggingOptionNotFound extends Data.TaggedError("LoggingOptionNotFound")<{
   readonly applicationName: string;
@@ -119,7 +119,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
       return ApplicationCloudWatchLoggingOption.Provider.of({
         stables: ["applicationName", "logStreamArn", "cloudWatchLoggingOptionId"],
 
-        // Sub-resource keyed by its parent application — there is no
+        // Sub-resource keyed by its parent application -- there is no
         // account-level enumeration of logging options, so `list` is empty
         // and refresh flows through `read` on known instances.
         list: () => Effect.succeed([]),
@@ -140,7 +140,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // The option's identity is (application, log stream) — the only
+          // The option's identity is (application, log stream) -- the only
           // way to change either is to delete and re-add.
           if (
             olds?.applicationName !== news?.applicationName ||
@@ -150,7 +150,7 @@ export const ApplicationCloudWatchLoggingOptionProvider = () =>
           }
         }),
 
-        // Existence-only sub-resource: observe → if missing, add. The add
+        // Existence-only sub-resource: observe -> if missing, add. The add
         // uses the freshly observed application version id as its
         // compare-and-set token and is retried through concurrent
         // modifications with a re-read.

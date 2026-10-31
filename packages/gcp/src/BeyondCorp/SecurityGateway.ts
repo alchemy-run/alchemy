@@ -81,12 +81,12 @@ export type SecurityGatewayProps = {
    * SecurityGateway id (the `{securityGateway}` segment of
    * `projects/{project}/locations/{location}/securityGateways/{securityGateway}`).
    * If omitted, a unique RFC1035 name is generated. Must be 4-63
-   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable --
    * changing it replaces the gateway.
    */
   securityGatewayId?: string;
   /**
-   * Location. Security gateways live in `global`. Immutable — changing
+   * Location. Security gateways live in `global`. Immutable -- changing
    * it replaces the gateway.
    * @default "global"
    */
@@ -133,7 +133,7 @@ export type SecurityGateway = Resource<
     serviceDiscovery: SecurityGatewayServiceDiscovery | undefined;
     /** Shared proxy-protocol configuration. */
     proxyProtocolConfig: SecurityGatewayProxyProtocolConfig | undefined;
-    /** Server-reported state (`RUNNING`, `CREATING`, …). */
+    /** Server-reported state (`RUNNING`, `CREATING`, ...). */
     state: string | undefined;
     /** Service account used for consumer-project operations. */
     delegatingServiceAccount: string | undefined;

@@ -7,7 +7,7 @@ import { DurableObjectState } from "./DurableObjectState.ts";
 import type { SqlStorageValue } from "./DurableObjectStorage.ts";
 
 // ---------------------------------------------------------------------------
-// Scheduled Events — SQLite-backed cron/timer for Durable Objects
+// Scheduled Events -- SQLite-backed cron/timer for Durable Objects
 // ---------------------------------------------------------------------------
 
 const ensureTable = Effect.gen(function* () {

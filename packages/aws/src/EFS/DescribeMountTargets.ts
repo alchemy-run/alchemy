@@ -16,7 +16,7 @@ export interface DescribeMountTargetsRequest extends Omit<
  * Runtime binding for the `DescribeMountTargets` operation (IAM action
  * `elasticfilesystem:DescribeMountTargets` on the file system ARN).
  *
- * Lists the bound {@link FileSystem}'s mount targets — the per-AZ NFS
+ * Lists the bound {@link FileSystem}'s mount targets -- the per-AZ NFS
  * endpoints with their IP addresses and lifecycle states. Useful for health
  * checks and for compute that needs to discover a mount target's IP at
  * runtime. Provide the implementation with

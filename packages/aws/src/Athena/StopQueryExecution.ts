@@ -12,7 +12,7 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * ### Cancelling Queries
  * **Example:** Cancel a Runaway Query
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const stopQueryExecution = yield* AWS.Athena.StopQueryExecution(workGroup);
  *
  * // runtime

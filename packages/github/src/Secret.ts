@@ -41,7 +41,7 @@ export interface SecretProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -65,11 +65,11 @@ export interface Secret extends Resource<
  *
  * `Secret` manages the lifecycle of an encrypted secret in GitHub Actions.
  * Secrets are encrypted using the repository's (or environment's) public
- * key via `libsodium` before being stored. The resource is idempotent —
+ * key via `libsodium` before being stored. The resource is idempotent --
  * calling it with the same name will update the secret value in place.
  *
  * Authentication is resolved via the GitHub `Credentials` service supplied
- * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
+ * by `GitHub.providers()` (which uses the Alchemy AuthProvider -- env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
  * ### Repository Secrets
@@ -103,8 +103,8 @@ export interface Secret extends Resource<
  * ```
  *
  * ### Wiring with Other Resources
- * A common pattern is wiring the output of another resource — like an
- * IAM role ARN or a database URL — directly into a GitHub secret so
+ * A common pattern is wiring the output of another resource -- like an
+ * IAM role ARN or a database URL -- directly into a GitHub secret so
  * that CI workflows can use it.
  *
  * **Example:** Store an IAM Role ARN for CI
@@ -158,10 +158,10 @@ async function encryptValue(plaintext: string, publicKey: string): Promise<strin
 export const SecretProvider = () =>
   Provider.succeed(Secret, {
     // A secret's entire identity is (host, owner, repository, environment,
-    // name) — GitHub has no rename/move API for secrets, so changing any of
+    // name) -- GitHub has no rename/move API for secrets, so changing any of
     // them replaces the resource: the engine upserts the new secret first,
     // then `delete` removes the old one from its old location. Replacement
-    // is safe here — a secret is declarative config that is fully
+    // is safe here -- a secret is declarative config that is fully
     // re-creatable from props.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -178,7 +178,7 @@ export const SecretProvider = () =>
     }),
 
     // Non-listable: a GitHub Actions secret is keyed entirely by its parent
-    // (owner, repository[, environment], name) which arrive as props — there is
+    // (owner, repository[, environment], name) which arrive as props -- there is
     // no ambient owner/repo scope to enumerate from, `list()` takes no input,
     // and the `Attributes` shape carries no identifying keys (only `updatedAt`).
     // GitHub only exposes list-secrets *within* a specific repo/environment, so
@@ -186,11 +186,11 @@ export const SecretProvider = () =>
     list: () => Effect.succeed([]),
 
     reconcile: Effect.fn(function* ({ news, olds }) {
-      // Observe — there's no API to read a secret's value back, so we can
+      // Observe -- there's no API to read a secret's value back, so we can
       // only observe its location (repo vs. environment, environment name).
       // A location change normally arrives as a replacement (see `diff`);
       // this guard is the safety net for the plan-time path where `news`
-      // contained unresolved outputs and diff could not compare — delete the
+      // contained unresolved outputs and diff could not compare -- delete the
       // orphaned secret from its old location before upserting the new one.
       if (
         olds !== undefined &&
@@ -199,7 +199,7 @@ export const SecretProvider = () =>
         yield* deleteSecret(olds);
       }
 
-      // Ensure & Sync — `createOrUpdate*Secret` is upsert-style: it
+      // Ensure & Sync -- `createOrUpdate*Secret` is upsert-style: it
       // creates the secret if absent and overwrites it if present. The
       // value is encrypted client-side with the repo/environment public
       // key, so we re-encrypt and re-upload on every reconcile (Redacted

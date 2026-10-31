@@ -4,10 +4,10 @@ import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
  * Codec between plain JavaScript values and Firestore REST `Value`s.
  * NOT exported from `index.ts`.
  *
- * Encoding: `null`/`undefined` → `nullValue`, booleans → `booleanValue`,
- * integral numbers and bigints → `integerValue`, other numbers →
- * `doubleValue`, strings → `stringValue`, `Date` → `timestampValue`,
- * `Uint8Array` → `bytesValue`, arrays → `arrayValue`, plain objects →
+ * Encoding: `null`/`undefined` -> `nullValue`, booleans -> `booleanValue`,
+ * integral numbers and bigints -> `integerValue`, other numbers ->
+ * `doubleValue`, strings -> `stringValue`, `Date` -> `timestampValue`,
+ * `Uint8Array` -> `bytesValue`, arrays -> `arrayValue`, plain objects ->
  * `mapValue`. Decoding reverses this; `integerValue`s outside the safe
  * integer range decode to `bigint`, `geoPointValue` to
  * `{ latitude, longitude }`, and `referenceValue` to its resource name.

@@ -6,8 +6,8 @@ import type { BackupVault } from "./BackupVault.ts";
 /**
  * Shared scaffolding for AWS Backup HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for vault-scoped operations) the injected `BackupVaultName` is
  * boilerplate. The three `Start*Job` bindings inject an IAM role and a
@@ -17,7 +17,7 @@ import type { BackupVault } from "./BackupVault.ts";
 /**
  * Build the impl Effect for an account-level operation (job monitoring,
  * protected-resource discovery, restore orchestration). The deploy-time half
- * grants `actions` on `*` — backup job / restore job / copy job IAM actions
+ * grants `actions` on `*` -- backup job / restore job / copy job IAM actions
  * do not support resource-level scoping.
  */
 export const makeBackupAccountHttpBinding = <I, A, E, R>(options: {
@@ -55,7 +55,7 @@ export const makeBackupAccountHttpBinding = <I, A, E, R>(options: {
  * injects the bound {@link BackupVault}'s name as `BackupVaultName` and the
  * deploy-time half grants `actions` on the vault ARN (or `*` for
  * recovery-point actions, which authorize on the recovery point's underlying
- * resource ARN — an EBS/RDS snapshot ARN — and cannot be scoped to the
+ * resource ARN -- an EBS/RDS snapshot ARN -- and cannot be scoped to the
  * vault).
  */
 export const makeBackupVaultHttpBinding = <
@@ -68,7 +68,7 @@ export const makeBackupVaultHttpBinding = <
   tag: string;
   /** The distilled operation; `BackupVaultName` is injected from the vault. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the vault ARN (or `*` — see `wildcardIam`). */
+  /** IAM actions granted on the vault ARN (or `*` -- see `wildcardIam`). */
   actions: readonly string[];
   /**
    * Grant on `*` instead of the vault ARN. Recovery-point actions authorize

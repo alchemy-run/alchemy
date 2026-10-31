@@ -41,7 +41,7 @@ export interface DeviceManagedNetworkProps {
    */
   name?: string;
   /**
-   * TLS detection endpoint for the network. Mutable — updated in place.
+   * TLS detection endpoint for the network. Mutable -- updated in place.
    */
   config: DeviceManagedNetworkConfig;
 }
@@ -53,7 +53,7 @@ export type DeviceManagedNetworkAttributes = {
   accountId: string;
   /** Observed network name. */
   name: string;
-  /** The type of managed network — always `tls`. */
+  /** The type of managed network -- always `tls`. */
   type: "tls";
   /** Observed TLS detection configuration. */
   config: DeviceManagedNetworkConfig;
@@ -68,7 +68,7 @@ export type DeviceManagedNetwork = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **device managed network** — a TLS endpoint the
+ * A Cloudflare Zero Trust **device managed network** -- a TLS endpoint the
  * WARP client probes to detect whether the device is on a known network.
  * Device profiles can then `match` on `network` to apply different WARP
  * settings on trusted networks.
@@ -142,7 +142,7 @@ export const DeviceManagedNetworkProvider = () =>
       }
 
       // Cold lookup: names are unique per account, so an exact match
-      // identifies the network — but it carries no ownership markers, so
+      // identifies the network -- but it carries no ownership markers, so
       // brand it `Unowned` and let the engine gate takeover behind the
       // adopt policy.
       const name = yield* createNetworkName(id, olds?.name);
@@ -155,7 +155,7 @@ export const DeviceManagedNetworkProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createNetworkName(id, news.name);
 
-      // 1. Observe — the network id cached on `output` is a hint, not a
+      // 1. Observe -- the network id cached on `output` is a hint, not a
       //    guarantee. Names are unique per account, so also scan by name
       //    to converge on a network created by a crashed prior run.
       let observed = output?.networkId
@@ -165,7 +165,7 @@ export const DeviceManagedNetworkProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* zeroTrust.createDeviceNetwork({
           accountId,
@@ -176,7 +176,7 @@ export const DeviceManagedNetworkProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — PUT name/config when the observed state differs; skip
+      // 3. Sync -- PUT name/config when the observed state differs; skip
       //    the call entirely on a no-op.
       const dirty = (observed.name ?? "") !== name || !sameConfig(observed.config, news.config);
       if (!dirty) {

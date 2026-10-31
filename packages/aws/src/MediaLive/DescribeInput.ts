@@ -6,16 +6,16 @@ import type { Input } from "./Input.ts";
 /**
  * Runtime binding for `medialive:DescribeInput`.
  *
- * Reads the bound {@link Input}'s live state — attachment state
+ * Reads the bound {@link Input}'s live state -- attachment state
  * (`DETACHED`/`ATTACHED`), resolved push ingest URLs, sources, and
- * security groups — e.g. so a stream-key service can hand a contributor
+ * security groups -- e.g. so a stream-key service can hand a contributor
  * the RTMP endpoint to push to. The input id is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.MediaLive.DescribeInputHttp)`.
  * ### Observing Inputs
  * **Example:** Read the Input's Ingest Endpoints
  * ```typescript
- * // init — bind the operation to the input
+ * // init -- bind the operation to the input
  * const describeInput = yield* AWS.MediaLive.DescribeInput(input);
  *
  * // runtime

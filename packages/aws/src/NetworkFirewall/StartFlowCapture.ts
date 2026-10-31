@@ -6,7 +6,7 @@ import type { Firewall } from "./Firewall.ts";
 export interface StartFlowCaptureRequest extends Omit<NFW.StartFlowCaptureRequest, "FirewallArn"> {}
 
 /**
- * Runtime binding for `network-firewall:StartFlowCapture` — begin a
+ * Runtime binding for `network-firewall:StartFlowCapture` -- begin a
  * time-boxed capture of the flows the bound {@link Firewall} is tracking,
  * according to the `FlowFilters` you define; the firewall ARN is injected
  * automatically.
@@ -16,7 +16,7 @@ export interface StartFlowCaptureRequest extends Omit<NFW.StartFlowCaptureReques
  * ### Flow Operations
  * **Example:** Capture Flows to a Host
  * ```typescript
- * // init — grants network-firewall:StartFlowCapture on the firewall
+ * // init -- grants network-firewall:StartFlowCapture on the firewall
  * const startFlowCapture = yield* AWS.NetworkFirewall.StartFlowCapture(firewall);
  *
  * // runtime

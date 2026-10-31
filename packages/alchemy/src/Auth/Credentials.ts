@@ -16,7 +16,7 @@ export const credentialsFilePath = (profile: string, provider: string) =>
 
 /**
  * Service exposing per-profile credential file helpers. All methods have
- * `R = never` — the {@link FileSystem.FileSystem} requirement is captured
+ * `R = never` -- the {@link FileSystem.FileSystem} requirement is captured
  * by {@link CredentialsStoreLive} when the layer is built.
  *
  * Reads and writes go through the provider's declared credential schema, so
@@ -44,7 +44,7 @@ export interface CredentialsStoreService {
   readonly deleteProfile: (profile: string) => Effect.Effect<void, AuthError>;
   /**
    * The same store rooted at `dirFor(profile)` instead of
-   * `~/.alchemy/credentials/{profile}` — for caches kept beside a profile
+   * `~/.alchemy/credentials/{profile}` -- for caches kept beside a profile
    * rather than with its credentials.
    */
   readonly scoped: (dirFor: (profile: string) => string) => CredentialsStoreService;

@@ -29,7 +29,7 @@ export type RegionBackendServiceBackend = {
   group: string;
   /** Optional backend description. */
   description?: string;
-  /** Balancing mode (`UTILIZATION`, `RATE`, `CONNECTION`, …). */
+  /** Balancing mode (`UTILIZATION`, `RATE`, `CONNECTION`, ...). */
   balancingMode?: string;
   /** Capacity scaler in `[0.0, 1.0]`. */
   capacityScaler?: number;
@@ -60,12 +60,12 @@ export type RegionBackendServiceProps = {
   /**
    * Name of the backend service. If omitted, a unique RFC1035 name is
    * generated from the stack, stage, and logical id. Must be 1-63
-   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable —
+   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable --
    * changing it replaces the resource.
    */
   name?: string;
   /**
-   * Region the backend service lives in (e.g. `us-central1`). Immutable —
+   * Region the backend service lives in (e.g. `us-central1`). Immutable --
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -73,7 +73,7 @@ export type RegionBackendServiceProps = {
   region?: string;
   /**
    * User-facing description. Alchemy ownership is stamped into the stored
-   * description (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`);
+   * description (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`);
    * regional backend services have no labels API.
    */
   description?: string;
@@ -84,7 +84,7 @@ export type RegionBackendServiceProps = {
    */
   protocol?: string;
   /**
-   * Load balancer type. Immutable — changing it replaces the resource.
+   * Load balancer type. Immutable -- changing it replaces the resource.
    * @default "INTERNAL_MANAGED"
    */
   loadBalancingScheme?: string;
@@ -105,7 +105,7 @@ export type RegionBackendServiceProps = {
    */
   enableCDN?: boolean;
   /**
-   * Session affinity (`NONE`, `CLIENT_IP`, `GENERATED_COOKIE`, …).
+   * Session affinity (`NONE`, `CLIENT_IP`, `GENERATED_COOKIE`, ...).
    * @default "NONE"
    */
   sessionAffinity?: string;
@@ -147,12 +147,12 @@ export type RegionBackendServiceProps = {
   logConfig?: RegionBackendServiceLogConfigProps;
   /**
    * Intra-locality load-balancing algorithm (`ROUND_ROBIN`, `MAGLEV`,
-   * `RING_HASH`, …). Applicable to `INTERNAL_MANAGED` HTTP(S) services.
+   * `RING_HASH`, ...). Applicable to `INTERNAL_MANAGED` HTTP(S) services.
    */
   localityLbPolicy?: string;
   /**
    * VPC network URL or name. Only valid for passthrough Network Load
-   * Balancers (`INTERNAL` / some `EXTERNAL` HA setups). Immutable —
+   * Balancers (`INTERNAL` / some `EXTERNAL` HA setups). Immutable --
    * changing it replaces the resource.
    */
   network?: string;
@@ -226,12 +226,12 @@ export type RegionBackendService = Resource<
 
 /**
  * A regional Compute Engine backend service. Backend services define how
- * Google Cloud load balancers distribute traffic — protocol, timeout,
+ * Google Cloud load balancers distribute traffic -- protocol, timeout,
  * session affinity, health checks, and the backends themselves.
  *
  * Compute Engine backend services have no labels field, so Alchemy stamps
- * ownership into the description (`[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find them. Changing
+ * ownership into the description (`[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find them. Changing
  * `name`, `region`, `loadBalancingScheme`, or `network` replaces the
  * resource.
  *

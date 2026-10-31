@@ -93,7 +93,7 @@ export type SearchInstanceProps = {
    * account-provided `default` namespace. Pass a `SearchNamespace`'s
    * `name` output to group instances under a custom namespace (which also
    * orders this instance after that namespace on deploy and before it on
-   * destroy). The namespace is immutable — changing it triggers a
+   * destroy). The namespace is immutable -- changing it triggers a
    * replacement.
    * @default "default"
    */
@@ -106,7 +106,7 @@ export type SearchInstanceProps = {
   type?: SearchInstanceSourceType;
   /**
    * Data source: the R2 bucket name (for `type: "r2"`) or the crawl seed
-   * URL (for `type: "web-crawler"`). Changing it triggers a replacement —
+   * URL (for `type: "web-crawler"`). Changing it triggers a replacement --
    * the index must be rebuilt from scratch.
    */
   source: string;
@@ -126,7 +126,7 @@ export type SearchInstanceProps = {
   aiGatewayId?: string;
   /**
    * Embedding model used to vectorize content. Cannot be changed after
-   * creation — updating this property triggers a replacement.
+   * creation -- updating this property triggers a replacement.
    * @default service default
    */
   embeddingModel?: EmbeddingModel;
@@ -154,7 +154,7 @@ export type SearchInstanceProps = {
    */
   chunkSize?: number;
   /**
-   * Overlap between consecutive chunks, as a percentage (0–30). Only
+   * Overlap between consecutive chunks, as a percentage (0-30). Only
    * affects future indexing runs.
    */
   chunkOverlap?: number;
@@ -223,7 +223,7 @@ export type SearchInstanceProps = {
   /**
    * Kick off an initial indexing job right after the instance is first
    * created, instead of waiting for the first scheduled sync. The job is
-   * triggered best-effort and not awaited — the deploy does not block on
+   * triggered best-effort and not awaited -- the deploy does not block on
    * indexing, which can take much longer than a provisioning step should.
    * Has no effect on updates or when no `source` is configured.
    * @default false
@@ -299,7 +299,7 @@ export type SearchInstance = Resource<
 >;
 
 /**
- * A Cloudflare.AI. Search (formerly AutoRAG) instance — a fully managed
+ * A Cloudflare.AI. Search (formerly AutoRAG) instance -- a fully managed
  * retrieval-augmented generation pipeline over your own data.
  *
  * An instance continuously indexes a data source (an R2 bucket or a web
@@ -308,7 +308,7 @@ export type SearchInstance = Resource<
  * indexing run happens asynchronously.
  *
  * The instance `instanceId`, `namespace`, `type`, `source`, and
- * `embeddingModel` are fixed at creation — changing any of them triggers a
+ * `embeddingModel` are fixed at creation -- changing any of them triggers a
  * replacement. Everything else (models, chunking, caching, reranking,
  * public endpoint, sync interval) is mutable in place.
  *
@@ -346,11 +346,11 @@ export type SearchInstance = Resource<
  * ### R2 source options
  * For an `r2` source, `sourceParams` filters which objects are indexed (all
  * fields optional):
- * - `prefix` — only index keys under this prefix.
- * - `includeItems` / `excludeItems` — micromatch glob patterns (`*` within a
+ * - `prefix` -- only index keys under this prefix.
+ * - `includeItems` / `excludeItems` -- micromatch glob patterns (`*` within a
  *   path segment, `**` across segments; max 10 each). Only objects matching an
  *   `includeItems` pattern are indexed; `excludeItems` takes precedence.
- * - `r2Jurisdiction` — R2 data-residency jurisdiction of the source bucket.
+ * - `r2Jurisdiction` -- R2 data-residency jurisdiction of the source bucket.
  * **Example:** Index only part of a bucket
  * ```typescript
  * const instance = yield* Cloudflare.AI.SearchInstance("docs-search", {
@@ -369,26 +369,26 @@ export type SearchInstance = Resource<
  * parsed, and stored. All fields are optional.
  *
  * `parseType` selects how pages are discovered:
- * - `"sitemap"` (Cloudflare default) — read `<seed>/sitemap.xml` (discovered
+ * - `"sitemap"` (Cloudflare default) -- read `<seed>/sitemap.xml` (discovered
  *   via `robots.txt`) and index the URLs it lists.
- * - `"discover"` — start at `source` and follow links.
+ * - `"discover"` -- start at `source` and follow links.
  *
- * `crawlOptions` is no longer accepted by the API — Cloudflare removed it;
+ * `crawlOptions` is no longer accepted by the API -- Cloudflare removed it;
  * discovery behavior is controlled solely by `parseType`.
  *
  * `parseOptions` controls how each page is parsed:
- * - `useBrowserRendering` — render JS in a headless browser before parsing.
- * - `includeImages` — index image content.
- * - `specificSitemaps` — explicit sitemap URLs to read (for `"sitemap"`).
- * - `contentSelector` — `{ path, selector }[]` CSS selectors scoping which
+ * - `useBrowserRendering` -- render JS in a headless browser before parsing.
+ * - `includeImages` -- index image content.
+ * - `specificSitemaps` -- explicit sitemap URLs to read (for `"sitemap"`).
+ * - `contentSelector` -- `{ path, selector }[]` CSS selectors scoping which
  *   part of a page is indexed per URL path.
- * - `includeHeaders` — extra request headers sent while crawling.
+ * - `includeHeaders` -- extra request headers sent while crawling.
  *
- * `storeOptions` overrides where crawled content is stored — Cloudflare
+ * `storeOptions` overrides where crawled content is stored -- Cloudflare
  * provisions managed storage by default:
- * - `storageId` — R2 bucket name to store crawl output in.
- * - `storageType` — `"r2"`.
- * - `r2Jurisdiction` — R2 data-residency jurisdiction for the store bucket.
+ * - `storageId` -- R2 bucket name to store crawl output in.
+ * - `storageType` -- `"r2"`.
+ * - `r2Jurisdiction` -- R2 data-residency jurisdiction for the store bucket.
  * **Example:** Basic web-crawler instance
  * ```typescript
  * const instance = yield* Cloudflare.AI.SearchInstance("site-search", {
@@ -445,7 +445,7 @@ export type SearchInstance = Resource<
  * ### Grouping under a namespace
  * SearchInstances live in a namespace (the account-provided `default` when
  * unspecified). Pass a {@link SearchNamespace}'s `name` to group related
- * instances — the engine then orders this instance after the namespace on
+ * instances -- the engine then orders this instance after the namespace on
  * deploy. The namespace is immutable; changing it replaces the instance.
  * **Example:** Place the instance in a custom namespace
  * ```typescript
@@ -544,7 +544,7 @@ export const SearchInstanceProvider = () =>
         return { action: "replace" } as const;
       }
       // The namespace is immutable on the Cloudflare side (it is the API
-      // path) — moving an instance between namespaces is a replacement. The
+      // path) -- moving an instance between namespaces is a replacement. The
       // new instance lives at a different path, so create-before-delete is
       // always safe here regardless of whether the id is pinned.
       const newNamespace = resolveNamespace(news.namespace);
@@ -552,7 +552,7 @@ export const SearchInstanceProvider = () =>
       if (newNamespace !== oldNamespace) {
         return { action: "replace" } as const;
       }
-      // The instance id is its identity — renaming is a replacement.
+      // The instance id is its identity -- renaming is a replacement.
       const oldId = output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
@@ -562,7 +562,7 @@ export const SearchInstanceProvider = () =>
         return { action: "replace" } as const;
       }
       // When the user pinned an explicit `instanceId`, the replacement's
-      // create would collide with the still-existing old instance — the
+      // create would collide with the still-existing old instance -- the
       // old one must be deleted first. Generated ids get a fresh suffix
       // from the new SearchInstance ID, so create-before-delete is safe there.
       const replace = {
@@ -635,12 +635,12 @@ export const SearchInstanceProvider = () =>
       const namespace = resolveNamespace(news.namespace);
       const instanceId = output?.instanceId ?? (yield* createInstanceId(id, news.instanceId));
 
-      // Observe — `output.instanceId` is a cache, not a guarantee: a NotFound
+      // Observe -- `output.instanceId` is a cache, not a guarantee: a NotFound
       // falls through to "missing" and we recreate.
       let observed = yield* getInstance(acct, namespace, instanceId);
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. If Cloudflare rejects the request because
         // the instance already exists (a race), fall through to the
         // sync path against the observed instance.
@@ -677,7 +677,7 @@ export const SearchInstanceProvider = () =>
         if (ensured.created) {
           // Optionally kick off the initial index instead of waiting for
           // the first scheduled sync. Best-effort and NOT awaited for
-          // completion — the deploy must not block on indexing (the
+          // completion -- the deploy must not block on indexing (the
           // scheduled sync is the backstop if this transiently fails).
           if ((news.indexOnCreate ?? false) && news.source !== undefined) {
             yield* aisearch
@@ -702,7 +702,7 @@ export const SearchInstanceProvider = () =>
         observed = ensured.instance;
       }
 
-      // Sync — diff observed cloud state against the desired mutable
+      // Sync -- diff observed cloud state against the desired mutable
       // config; skip the PUT entirely on a no-op. Only fields the user
       // actually set participate in the diff; for the rest the observed
       // value is preserved in the full PUT body.
@@ -712,7 +712,7 @@ export const SearchInstanceProvider = () =>
         ([key, value]) =>
           // Cloudflare's read projection always returns `tokenId: null`
           // (the association is write-only), so it can never be diffed
-          // against desired — excluding it avoids perpetual false drift.
+          // against desired -- excluding it avoids perpetual false drift.
           // It still rides along in the create body and in any update PUT
           // triggered by other fields.
           key !== "tokenId" &&
@@ -774,7 +774,7 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(effect: Effect.
       while: (e) => e._tag === "InvalidTokenCredentials" || e._tag === "MissingSitemap",
       // A full-body update PUT re-sends `source`, which makes Cloudflare
       // re-validate the (write-only, auto-provisioned) R2 service token and
-      // re-fetch a web-crawler seed — opening a fresh propagation window each
+      // re-fetch a web-crawler seed -- opening a fresh propagation window each
       // time. The window stretches under full-suite parallel load (token
       // propagation across the edge contends with every other test's calls),
       // so the budget is generous (~2 min). Crucially the per-attempt delay is
@@ -798,7 +798,7 @@ const resolveNamespace = (namespace: string | undefined): string => namespace ??
 
 /**
  * Read an instance by id within its namespace, mapping "gone" to
- * `undefined` — either the instance is missing (`AiSearchInstanceNotFound`,
+ * `undefined` -- either the instance is missing (`AiSearchInstanceNotFound`,
  * code 7002) or its whole namespace is (`NamespaceNotFound`, code 7063).
  */
 const getInstance = (accountId: string, namespace: string, id: string) =>
@@ -856,7 +856,7 @@ const toMutableBody = (news: SearchInstanceProps) => ({
 });
 
 /**
- * The update API is a PUT — fields the user did not set are preserved by
+ * The update API is a PUT -- fields the user did not set are preserved by
  * sending the observed values back. Observed `null`s are omitted (the
  * field was never configured).
  */
@@ -896,7 +896,7 @@ const defined = <T extends Record<string, unknown>>(value: T): Partial<T> =>
  * The instance fields `read` projects, common to the create / read /
  * update / list-item response shapes (all optional but `id`). Decoupling
  * from the exact distilled response unions lets the namespace-scoped list
- * items — which carry a reduced field set — flow through unchanged.
+ * items -- which carry a reduced field set -- flow through unchanged.
  */
 type SearchInstanceLike = {
   id: string;

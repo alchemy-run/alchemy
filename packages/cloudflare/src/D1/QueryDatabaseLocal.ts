@@ -14,7 +14,7 @@ import {
 } from "./QueryDatabaseHttpClient.ts";
 
 /**
- * Local implementation of the {@link QueryDatabase} binding — queries D1 over
+ * Local implementation of the {@link QueryDatabase} binding -- queries D1 over
  * the Cloudflare HTTP API using the **current credentials** instead of a native
  * Worker binding (`QueryDatabaseBinding`) or a scoped API token.
  *
@@ -51,7 +51,7 @@ export const QueryDatabaseLocal = Layer.effect(
     // branch evaluates it; native local clients need no cloud credentials.
     // Credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the HTTP query ops run
-    // with the current credentials — no `host.bind`, no minted token.
+    // with the current credentials -- no `host.bind`, no minted token.
     const environment = yield* CloudflareEnvironment;
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // The FULL ambient context, for the dev-mode gateway: booting an
@@ -62,7 +62,7 @@ export const QueryDatabaseLocal = Layer.effect(
 
     // Under `alchemy dev` the database may be a local simulator row (a
     // `dev:` id). Queries then tunnel through an ephemeral workerd gateway
-    // into the simulator's DO SQLite (one gateway boot per query — slow but
+    // into the simulator's DO SQLite (one gateway boot per query -- slow but
     // correct; Actions are deploy-time one-shots). Real ids keep the cloud
     // HTTP query API.
     const localTransport =
@@ -84,7 +84,7 @@ export const QueryDatabaseLocal = Layer.effect(
         }>;
 
     return Effect.fn(function* (database: Database) {
-      // Deferred accessor — resolves the databaseId against the tracker at
+      // Deferred accessor -- resolves the databaseId against the tracker at
       // apply time. No `host.bind`: the local variant registers no binding.
       const databaseId = yield* database.databaseId;
       return makeQueryDatabaseClientFrom(

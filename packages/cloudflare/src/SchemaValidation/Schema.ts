@@ -18,7 +18,7 @@ export interface SchemaProps {
   /**
    * Zone the schema is uploaded to.
    *
-   * Immutable — moving a schema between zones triggers a replacement.
+   * Immutable -- moving a schema between zones triggers a replacement.
    */
   zoneId: string;
   /**
@@ -27,7 +27,7 @@ export interface SchemaProps {
    * should be unique within the zone. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
    *
-   * Immutable — there is no rename API, so changing the name triggers a
+   * Immutable -- there is no rename API, so changing the name triggers a
    * replacement.
    * @default ${app}-${stage}-${id}
    */
@@ -35,7 +35,7 @@ export interface SchemaProps {
   /**
    * The kind of the schema. Only OpenAPI v3 is supported.
    *
-   * Immutable — changing the kind triggers a replacement.
+   * Immutable -- changing the kind triggers a replacement.
    * @default "openapi_v3"
    */
   kind?: "openapi_v3";
@@ -43,7 +43,7 @@ export interface SchemaProps {
    * The raw OpenAPI v3 schema, as a JSON or YAML string. Cloudflare
    * validates the document on upload and rejects invalid specs.
    *
-   * Immutable — the uploaded source cannot be modified, so changing it
+   * Immutable -- the uploaded source cannot be modified, so changing it
    * triggers a replacement (a new schema is uploaded, then the old one is
    * deleted).
    */
@@ -53,7 +53,7 @@ export interface SchemaProps {
    *
    * Enabling a disabled schema is an in-place update, but Cloudflare does
    * not allow disabling an enabled schema ("delete schema instead"), so
-   * changing `true` → `false` triggers a replacement.
+   * changing `true` -> `false` triggers a replacement.
    * @default true
    */
   validationEnabled?: boolean;
@@ -89,7 +89,7 @@ export type SchemaValidationSchema = Resource<
  * (`/zones/{zone_id}/schema_validation/schemas`).
  *
  * Uploading a schema registers the endpoints it describes as API Shield
- * operations (a server-side side effect — deleting the schema does not
+ * operations (a server-side side effect -- deleting the schema does not
  * delete those operations). The schema body is immutable: changing `source`
  * uploads a new schema and deletes the old one (replacement). Only the
  * `validationEnabled` flag is mutable in place.
@@ -126,8 +126,8 @@ export type SchemaValidationSchema = Resource<
  * ### Toggling validation
  * **Example:** Enable a previously-disabled schema in place
  * ```typescript
- * // Enabling (false → true) patches the schema in place. Disabling an
- * // enabled schema is rejected by Cloudflare, so `true` → `false` (like a
+ * // Enabling (false -> true) patches the schema in place. Disabling an
+ * // enabled schema is rejected by Cloudflare, so `true` -> `false` (like a
  * // `source` change) replaces the schema instead.
  * yield* Cloudflare.SchemaValidation.SchemaValidationSchema("DraftSchema", {
  *   zoneId: zone.zoneId,
@@ -156,7 +156,7 @@ export const SchemaProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // zoneId is a path param — moving zones is a replacement.
+      // zoneId is a path param -- moving zones is a replacement.
       if (
         output?.zoneId !== undefined &&
         typeof news.zoneId === "string" &&
@@ -183,9 +183,9 @@ export const SchemaProvider = () =>
         return { action: "replace" } as const;
       }
       // Cloudflare rejects disabling an enabled schema in place
-      // ("Disabling a schema is not allowed, delete schema instead.") —
+      // ("Disabling a schema is not allowed, delete schema instead.") --
       // converge by replacing: upload a new, disabled copy and delete the
-      // old one. Enabling (false → true) is a plain in-place update.
+      // old one. Enabling (false -> true) is a plain in-place update.
       const oldEnabled = output?.validationEnabled ?? olds?.validationEnabled ?? true;
       if (oldEnabled && news.validationEnabled === false) {
         return { action: "replace" } as const;
@@ -202,7 +202,7 @@ export const SchemaProvider = () =>
         return observed ? toAttributes(zoneId, observed) : undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // name. Names are not unique server-side and carry no ownership
       // marker, so brand the match `Unowned` and let the engine gate
       // takeover behind adoption.
@@ -219,11 +219,11 @@ export const SchemaProvider = () =>
       const name = yield* createSchemaName(id, news.name);
       const desiredEnabled = news.validationEnabled ?? true;
 
-      // 1. Observe — the cached schemaId is a hint, not a guarantee: a
+      // 1. Observe -- the cached schemaId is a hint, not a guarantee: a
       //    SchemaNotFound falls through to "missing" and we re-upload.
       const observed = output?.schemaId ? yield* getSchema(zoneId, output.schemaId) : undefined;
 
-      // 2. Ensure — upload when missing. Names are not unique server-side,
+      // 2. Ensure -- upload when missing. Names are not unique server-side,
       //    so there is no AlreadyExists race to tolerate.
       if (observed === undefined) {
         const created = yield* schemaValidation.createSchema({
@@ -236,7 +236,7 @@ export const SchemaProvider = () =>
         return toAttributes(zoneId, created);
       }
 
-      // 3. Sync — `validationEnabled` is the only mutable aspect; the
+      // 3. Sync -- `validationEnabled` is the only mutable aspect; the
       //    source/name/kind are immutable and disabling is rejected by the
       //    API, so diff replaces on those changes. Skip the API call
       //    entirely on a no-op.
@@ -248,13 +248,13 @@ export const SchemaProvider = () =>
         schemaId: observed.schemaId,
         validationEnabled: desiredEnabled,
       });
-      // The PATCH response omits the stored source (returns "") — keep the
+      // The PATCH response omits the stored source (returns "") -- keep the
       // observed copy so the attributes stay faithful.
       return toAttributes(zoneId, { ...patched, source: observed.source });
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — a schema already deleted out-of-band is success.
+      // Idempotent -- a schema already deleted out-of-band is success.
       yield* schemaValidation
         .deleteSchema({ zoneId: output.zoneId, schemaId: output.schemaId })
         .pipe(Effect.catchTag("SchemaNotFound", () => Effect.void));
@@ -264,7 +264,7 @@ export const SchemaProvider = () =>
     // enumerate every zone in the account and list its schemas, paginating
     // each exhaustively. `omitSource: false` hydrates the full `read`
     // Attributes shape. Zones whose route is invalid (deleted/partial) reject
-    // with the typed `InvalidRoute` — skip them rather than failing the whole
+    // with the typed `InvalidRoute` -- skip them rather than failing the whole
     // enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -304,7 +304,7 @@ const getSchema = (zoneId: string, schemaId: string) =>
     .pipe(Effect.catchTag("SchemaNotFound", () => Effect.undefined));
 
 /**
- * Find a schema by exact name (meta-data only — sources omitted). If several
+ * Find a schema by exact name (meta-data only -- sources omitted). If several
  * schemas carry the same name, pick the oldest for determinism.
  */
 const findByName = (zoneId: string, name: string) =>

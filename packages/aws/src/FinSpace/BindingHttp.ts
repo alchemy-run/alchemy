@@ -6,8 +6,8 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
 /**
  * Shared scaffolding for Amazon FinSpace Managed kdb HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeFinSpaceKxHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeFinSpaceKxHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -18,7 +18,7 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * Every Managed kdb data-plane operation is addressed by `environmentId`,
  * and kdb sub-resources (databases, clusters, dataviews, users, changesets)
  * live under the environment's ARN
- * (`arn:…:kxEnvironment/{envId}/kxDatabase/{db}`, …). The deploy-time half
+ * (`arn:...:kxEnvironment/{envId}/kxDatabase/{db}`, ...). The deploy-time half
  * therefore grants `actions` on the bound environment's ARN plus its `/*`
  * sub-resource wildcard; the runtime callable injects the environment's id
  * into every request.
@@ -36,7 +36,7 @@ export const makeFinSpaceKxHttpBinding = <I extends { environmentId: string }, A
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KxEnvironment>(environment: K) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${environment})`({

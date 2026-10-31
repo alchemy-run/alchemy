@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateWhatIfAnalysis` — start a what-if
+ * Runtime binding for `forecast:CreateWhatIfAnalysis` -- start a what-if
  * analysis on a baseline forecast, the container under which scenario
  * forecasts (price changes, promotions) are created and later compared via
  * {@link QueryWhatIfForecast}.

@@ -33,11 +33,11 @@ export type BackupChannelProps = {
    * Backup channel id (the `{backupChannel}` segment of
    * `projects/{project}/locations/{location}/backupChannels/{backupChannel}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the channel.
+   * and logical id. Immutable -- changing it replaces the channel.
    */
   backupChannelId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the channel. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -46,7 +46,7 @@ export type BackupChannelProps = {
   /**
    * Project that is allowed to store backups created via this channel.
    * Full name `projects/{project}` or a project id. Must differ from
-   * the source project. Immutable — changing it replaces the channel.
+   * the source project. Immutable -- changing it replaces the channel.
    */
   destinationProject: string;
   /**

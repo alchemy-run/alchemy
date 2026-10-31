@@ -15,7 +15,7 @@ export type SubdomainProps = {
    * `https://<script>.<subdomain>.workers.dev`). Must contain only
    * lowercase ASCII letters, digits, and hyphens.
    *
-   * Mutable — renamed in place via PUT. **Renaming changes the URL of
+   * Mutable -- renamed in place via PUT. **Renaming changes the URL of
    * every deployed Worker on the account that uses a `workers.dev`
    * subdomain**, so treat changes with extreme care.
    */
@@ -44,7 +44,7 @@ export type Subdomain = Resource<TypeId, SubdomainProps, SubdomainAttributes, ne
  * `workers.dev` enabled is served at
  * `https://<script>.<subdomain>.workers.dev`.
  *
- * Each account has at most one subdomain — "creating" this resource claims
+ * Each account has at most one subdomain -- "creating" this resource claims
  * (or renames to) the requested name. Subdomain names are globally unique
  * across all Cloudflare accounts; claiming a taken name fails with the
  * typed `SubdomainAlreadyExists` error.
@@ -100,7 +100,7 @@ export const SubdomainProvider = () =>
       const acct = output?.accountId ?? accountId;
       const observed = yield* getSubdomain(acct);
       if (observed === undefined) return undefined;
-      // The subdomain is an account singleton — there is nothing to
+      // The subdomain is an account singleton -- there is nothing to
       // "own", so a cold read adopts freely (never `Unowned`). The
       // observed name at adoption time becomes the `initialSubdomain`
       // restored on destroy.
@@ -113,7 +113,7 @@ export const SubdomainProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Account singleton — at most one workers.dev subdomain per account.
+      // Account singleton -- at most one workers.dev subdomain per account.
       // Mirror `read` with no prior output: the observed name is also the
       // `initialSubdomain`. Return a one-element array when registered, `[]`
       // when the account has never claimed a subdomain.
@@ -131,17 +131,17 @@ export const SubdomainProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — read the account's live subdomain (undefined when
+      // 1. Observe -- read the account's live subdomain (undefined when
       //    the account has never registered one).
       const observed = yield* getSubdomain(accountId);
 
-      // 2. Capture — the pre-management name, restored on destroy.
+      // 2. Capture -- the pre-management name, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed name is
       //    the account's original (undefined = none existed).
       const initialSubdomain = output !== undefined ? output.initialSubdomain : observed;
 
-      // 3. Sync — claim/rename only when the observed name differs.
+      // 3. Sync -- claim/rename only when the observed name differs.
       if (observed === news.subdomain) {
         return { accountId, subdomain: observed, initialSubdomain };
       }
@@ -154,13 +154,13 @@ export const SubdomainProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialSubdomain } = output;
-      // Observe — already gone (or never existed) means nothing to do.
+      // Observe -- already gone (or never existed) means nothing to do.
       const observed = yield* getSubdomain(accountId);
       // Restore the pre-management name; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
       if (observed === initialSubdomain) return;
       if (initialSubdomain === undefined) {
-        // The account had no subdomain before we claimed one — remove it.
+        // The account had no subdomain before we claimed one -- remove it.
         yield* workers
           .deleteSubdomain({ accountId })
           .pipe(Effect.catchTag("SubdomainNotFound", () => Effect.void));

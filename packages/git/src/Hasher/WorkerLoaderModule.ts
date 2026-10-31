@@ -1,8 +1,8 @@
 /**
  * The dynamic hasher (DESIGN §22.12): a module Worker loaded by
  * `HasherWorkerLoader` through a `WorkerLoader` binding, one isolate per
- * slot. It answers the hash route's own protocol — coordinates in the
- * query, the part in the body, the scan as one framed response — and
+ * slot. It answers the hash route's own protocol -- coordinates in the
+ * query, the part in the body, the scan as one framed response -- and
  * nothing else; it has no bindings and no network.
  */
 import * as Effect from "effect/Effect";

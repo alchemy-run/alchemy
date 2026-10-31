@@ -1,17 +1,17 @@
 import * as NodePath from "node:path";
 /**
- * `@alchemy.run/frontend-frameworks/waku/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/waku/node` -- the Node container deploy
  * target for the Waku integration.
  *
  * Waku's Node story is a plain-Node waku build with waku's own `node`
  * adapter selected via `unstable_adapter`. The finishing pass writes a
  * Node HTTP program that serves `clientDirectory` first (extensionless
- * HTML: `/about` → `about/index.html`), then falls through to
+ * HTML: `/about` -> `about/index.html`), then falls through to
  * `INTERNAL_runFetch` on `PORT` (default 3000), and answers `GET /health`.
  *
- * - **`adapter`** — the project's `waku/adapters/node`.
- * - **`vitePlugins`** — none (plain Node; no workerd plugin).
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`adapter`** -- the project's `waku/adapters/node`.
+ * - **`vitePlugins`** -- none (plain Node; no workerd plugin).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

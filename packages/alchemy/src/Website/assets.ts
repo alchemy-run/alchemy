@@ -12,7 +12,7 @@
  * Do not force that API onto this module until those knobs are needed here.
  *
  * Keep {@link contentTypeOf} in sync with the MIME table inlined by
- * `makeNodeServeEntrySource` (`frontend-frameworks` NodeServe) — that
+ * `makeNodeServeEntrySource` (`frontend-frameworks` NodeServe) -- that
  * generated origin cannot import this file.
  */
 

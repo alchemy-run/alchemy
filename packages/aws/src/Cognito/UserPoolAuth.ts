@@ -126,7 +126,7 @@ export interface UserPoolAuthClient {
  * Bind this to a `UserPoolClient` inside a function runtime to get a typed
  * client for sign-up, sign-in, and token flows. These operations are
  * unauthenticated (Cognito does not evaluate IAM for them), so the binding
- * grants no IAM policy — it injects the app client ID into every call.
+ * grants no IAM policy -- it injects the app client ID into every call.
  * ### Authenticating Users
  * **Example:** Username/Password Sign-In
  * ```typescript

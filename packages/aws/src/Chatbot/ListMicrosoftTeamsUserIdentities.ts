@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `chatbot:ListMicrosoftTeamsUserIdentities`.
  *
  * Lists the Microsoft Teams user identities linked to AWS user identities,
- * optionally filtered to one channel configuration — the read half of
+ * optionally filtered to one channel configuration -- the read half of
  * identity offboarding automation. Provide the implementation with
  * `Effect.provide(AWS.Chatbot.ListMicrosoftTeamsUserIdentitiesHttp)`.
  * ### Microsoft Teams Identity Management

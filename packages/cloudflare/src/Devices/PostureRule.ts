@@ -23,7 +23,7 @@ export type DevicePostureRuleType = zeroTrust.CreateDevicePostureRequest["type"]
 
 /**
  * The per-type check definition for a posture rule. The accepted shape
- * depends on {@link DevicePostureRuleProps.type} — e.g. `os_version` takes
+ * depends on {@link DevicePostureRuleProps.type} -- e.g. `os_version` takes
  * `{ operatingSystem, operator, version }`, `firewall` takes
  * `{ enabled, operatingSystem }`, `disk_encryption` takes
  * `{ checkDisks?, requireAll? }`.
@@ -44,7 +44,7 @@ export interface DevicePostureRuleProps {
   name?: string;
   /**
    * The type of posture check (e.g. `os_version`, `firewall`,
-   * `disk_encryption`, `crowdstrike_s2s`). Immutable — changing the type
+   * `disk_encryption`, `crowdstrike_s2s`). Immutable -- changing the type
    * triggers a replacement.
    */
   type: DevicePostureRuleType;
@@ -105,7 +105,7 @@ export type DevicePostureRule = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **device posture rule** — a periodic check the
+ * A Cloudflare Zero Trust **device posture rule** -- a periodic check the
  * WARP client runs on enrolled devices (OS version, firewall status, disk
  * encryption, file presence, or a third-party security provider's
  * verdict). Posture results can then gate Access policies and Gateway
@@ -183,7 +183,7 @@ export const DevicePostureRuleProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // `type` is immutable on Cloudflare's side — replace on change.
+      // `type` is immutable on Cloudflare's side -- replace on change.
       const oldType = output?.type ?? olds?.type;
       if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
@@ -213,13 +213,13 @@ export const DevicePostureRuleProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createRuleName(id, news.name);
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to create.
       const observed = output?.postureRuleId
         ? yield* observeRule(accountId, output.postureRuleId)
         : undefined;
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race.
       if (!observed) {
         const created = yield* zeroTrust.createDevicePosture({
@@ -235,7 +235,7 @@ export const DevicePostureRuleProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — the update API is a PUT that requires the full body;
+      // 3. Sync -- the update API is a PUT that requires the full body;
       //    send everything, but skip the call entirely on a no-op.
       const dirty =
         (observed.name ?? "") !== name ||

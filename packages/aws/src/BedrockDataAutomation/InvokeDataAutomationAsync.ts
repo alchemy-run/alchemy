@@ -16,7 +16,7 @@ export interface InvokeDataAutomationAsyncRequest extends Omit<
 /**
  * Runtime binding for the `InvokeDataAutomationAsync` operation (IAM action
  * `bedrock:InvokeDataAutomationAsync` on the project ARN + the account's
- * data automation profiles) — start an asynchronous Bedrock Data Automation
+ * data automation profiles) -- start an asynchronous Bedrock Data Automation
  * job against the bound project from a deployed Function.
  *
  * The binding is constructed with the target {@link DataAutomationProject};
@@ -25,16 +25,16 @@ export interface InvokeDataAutomationAsyncRequest extends Omit<
  * locations and the cross-region data automation profile ARN (e.g.
  * `arn:aws:bedrock:us-west-2:{account}:data-automation-profile/us.data-automation-v1`).
  * The calling role also needs `s3:GetObject` on the input and `s3:PutObject`
- * on the output location — Bedrock Data Automation accesses S3 with the
+ * on the output location -- Bedrock Data Automation accesses S3 with the
  * caller's permissions. Provide the implementation with
  * `Effect.provide(AWS.BedrockDataAutomation.InvokeDataAutomationAsyncHttp)`.
  * ### Invoking Data Automation
  * **Example:** Start An Async Job For An Uploaded Document
  * ```typescript
- * // deploy time — bind the project
+ * // deploy time -- bind the project
  * const invokeAsync = yield* AWS.BedrockDataAutomation.InvokeDataAutomationAsync(project);
  *
- * // runtime — process a document already in S3
+ * // runtime -- process a document already in S3
  * const { invocationArn } = yield* invokeAsync({
  *   inputConfiguration: { s3Uri: `s3://${bucket}/uploads/invoice.pdf` },
  *   outputConfiguration: { s3Uri: `s3://${bucket}/results/` },

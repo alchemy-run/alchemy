@@ -15,7 +15,7 @@ import type * as Redacted from "effect/Redacted";
 import type { App } from "./App.ts";
 
 /**
- * Manage an App's TLS certificates at runtime — the companion to the
+ * Manage an App's TLS certificates at runtime -- the companion to the
  * deploy-time {@link Certificate} resource, for services that mint or
  * rotate certificates on their own (a relay adding a tenant's wildcard,
  * a renewal loop).

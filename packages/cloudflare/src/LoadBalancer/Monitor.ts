@@ -26,7 +26,7 @@ export interface MonitorProps {
   type?: MonitorType;
   /**
    * Object description. Monitors have no name field, so the description
-   * doubles as the monitor's identity for state recovery — if omitted, a
+   * doubles as the monitor's identity for state recovery -- if omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
@@ -129,7 +129,7 @@ export interface MonitorAttributes {
 export type Monitor = Resource<TypeId, MonitorProps, MonitorAttributes, never, Providers>;
 
 /**
- * A Cloudflare Load Balancing monitor — an active health check (HTTP,
+ * A Cloudflare Load Balancing monitor -- an active health check (HTTP,
  * HTTPS, TCP, ICMP, or SMTP probe) that Load Balancing pools reference to
  * decide which origins are healthy.
  *
@@ -186,7 +186,7 @@ export const MonitorProvider = () =>
 
     // Account-scoped collection: monitors are enumerated by the account-wide
     // listMonitors endpoint, whose result items already carry the full monitor
-    // shape — map each directly into the exact `read` Attributes shape.
+    // shape -- map each directly into the exact `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* loadBalancers.listMonitors.pages({ accountId }).pipe(
@@ -215,7 +215,7 @@ export const MonitorProvider = () =>
         const observed = yield* getMonitor(acct, output.monitorId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // description (our physical name). Descriptions are not unique on
       // Cloudflare's side and carry no ownership marker, so report the
       // match as Unowned and let the engine gate takeover behind --adopt.
@@ -233,12 +233,12 @@ export const MonitorProvider = () =>
       const description = yield* createDescription(id, news.description);
       const body = buildBody(news, description);
 
-      // 1. Observe — output.monitorId is a hint, not a guarantee.
+      // 1. Observe -- output.monitorId is a hint, not a guarantee.
       const observed = output?.monitorId
         ? yield* getMonitor(output.accountId ?? accountId, output.monitorId)
         : undefined;
 
-      // 2. Ensure — missing (greenfield or out-of-band delete): create.
+      // 2. Ensure -- missing (greenfield or out-of-band delete): create.
       if (!observed?.id) {
         const created = yield* loadBalancers.createMonitor({
           accountId,
@@ -247,7 +247,7 @@ export const MonitorProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — the update endpoint is a PUT requiring the full body;
+      // 3. Sync -- the update endpoint is a PUT requiring the full body;
       //    diff observed against desired and skip the call on a no-op.
       if (!monitorDirty(observed, body)) {
         return toAttributes(observed, accountId);
@@ -261,7 +261,7 @@ export const MonitorProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // A monitor still referenced by a pool cannot be deleted — the engine
+      // A monitor still referenced by a pool cannot be deleted -- the engine
       // deletes the pool first, but eventual consistency may lag, so retry
       // the typed MonitorInUse tag with bounded backoff.
       yield* loadBalancers

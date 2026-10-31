@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Visibility
  * **Example:** Read Organization-Wide Insight Counts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeOrganizationHealth = yield* AWS.DevOpsGuru.DescribeOrganizationHealth();
  *
  * // runtime

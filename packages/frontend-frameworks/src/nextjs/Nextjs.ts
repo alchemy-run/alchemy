@@ -76,11 +76,11 @@ export interface NextjsFrameworkOptions {
     | {
         /**
          * - `"preview"` (default): build the OpenNext worker and serve it
-         *   under `cloudflare-runtime` (workerd) — production parity, no HMR.
+         *   under `cloudflare-runtime` (workerd) -- production parity, no HMR.
          * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node, with
          *   the worker's bindings proxied from `cloudflare-runtime` and
          *   planted on OpenNext's `getCloudflareContext()` contract
-         *   ({@link DevServer.start}). App code runs in Node, not workerd —
+         *   ({@link DevServer.start}). App code runs in Node, not workerd --
          *   CF-specific runtime behavior and ISR/caching semantics still
          *   need `"preview"`.
          * @default "preview"
@@ -94,7 +94,7 @@ export interface NextjsFrameworkOptions {
    * The host's runtime stack (a `Context.Context<RuntimeServices>`, e.g.
    * alchemy's `DevContext.runtimeContext`). When provided, dev servers host
    * the binding proxy in it instead of building the credential-free internal
-   * layer — this is what makes `Alchemy.remote()` bindings resolve in dev.
+   * layer -- this is what makes `Alchemy.remote()` bindings resolve in dev.
    * Typed `unknown` to keep the option JSON-tolerant at the boundary; it is
    * narrowed internally.
    */
@@ -246,7 +246,7 @@ const proxyToPort = (
 
 /**
  * The Next.js implementation of framework-core's `Framework` service,
- * built on the `@opennextjs/cloudflare` build pipeline — wrangler-free:
+ * built on the `@opennextjs/cloudflare` build pipeline -- wrangler-free:
  *
  * - `build` runs the pipeline in a disposable child process (`runner.mjs`
  *   vendors the two thin config wrappers so no wrangler code is ever
@@ -257,10 +257,10 @@ const proxyToPort = (
  *   `@alchemy.run/cloudflare-runtime/core` (workerd) with the OpenNext worker
  *   shape: `ASSETS` + run-worker-first, a `WORKER_SELF_REFERENCE` self
  *   service binding, and the same-script SQLite-backed revalidation-queue
- *   Durable Object. No HMR — file watching/rebuild is a later phase.
+ *   Durable Object. No HMR -- file watching/rebuild is a later phase.
  * - `dev` with `options.dev.mode: "hmr"` runs the real `next dev` (Turbopack
  *   HMR) in Node with the worker's bindings proxied from
- *   `cloudflare-runtime` ({@link DevServer.start}) — see the mode's fidelity
+ *   `cloudflare-runtime` ({@link DevServer.start}) -- see the mode's fidelity
  *   notes on {@link NextjsFrameworkOptions}.
  */
 export const make = (
@@ -310,7 +310,7 @@ export const make = (
         // 1.5. Edge-runtime routes/pages are not supported by
         // @opennextjs/cloudflare (it shims `next/dist/compiled/edge-runtime`
         // to an empty module, so they 500 at runtime). Fail the build with
-        // the exact route list instead of shipping a mystery 500 — the same
+        // the exact route list instead of shipping a mystery 500 -- the same
         // code runs fine on Workers under the node runtime.
         const manifestPath = path.join(
           buildPaths.appBuildOutputPath,
@@ -329,7 +329,7 @@ export const make = (
           if (edgeRoutes.length > 0) {
             return yield* fail(
               `Edge-runtime routes/pages are not supported by @opennextjs/cloudflare: ${edgeRoutes.join(", ")}. ` +
-                `Remove \`export const runtime = "edge"\` from these modules — the node runtime runs on Workers.`,
+                `Remove \`export const runtime = "edge"\` from these modules \u2014 the node runtime runs on Workers.`,
             )(undefined);
           }
         }

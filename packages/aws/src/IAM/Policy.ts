@@ -46,7 +46,7 @@ export interface PolicyStatement {
 
 /**
  * A single statement in a Service Control Policy (SCP) or Resource Control
- * Policy (RCP) — the restricted IAM dialect accepted by AWS Organizations.
+ * Policy (RCP) -- the restricted IAM dialect accepted by AWS Organizations.
  *
  * SCP statements never carry a `Principal`/`NotPrincipal` (they apply to the
  * accounts the policy is attached to), and Allow statements are further
@@ -66,7 +66,7 @@ export interface ServiceControlPolicyStatement {
 }
 
 /**
- * A Service Control Policy document — the SCP-legal subset of
+ * A Service Control Policy document -- the SCP-legal subset of
  * {@link PolicyDocument} used by AWS Organizations policies
  * (`SERVICE_CONTROL_POLICY` / `RESOURCE_CONTROL_POLICY`).
  */
@@ -80,15 +80,15 @@ export interface ServiceControlPolicyDocument {
  *
  * Accepts either the raw JSON string a cloud API returned (IAM returns
  * URL-encoded documents; both encoded and plain strings are handled) or an
- * in-memory document object, and produces a deterministic string — object keys
- * sorted recursively, arrays kept in order, no whitespace — so two equivalent
+ * in-memory document object, and produces a deterministic string -- object keys
+ * sorted recursively, arrays kept in order, no whitespace -- so two equivalent
  * documents compare equal regardless of key ordering or encoding.
  *
  * Single-element arrays are collapsed to their element: the IAM policy
  * grammar treats `["x"]` and `"x"` as equivalent in every list-valued
  * position (`Action`, `Resource`, principal values, condition values, even
  * `Statement` itself), and several AWS services (e.g. Secrets Manager)
- * store the scalar form — without collapsing, a typed document that uses
+ * store the scalar form -- without collapsing, a typed document that uses
  * arrays would spuriously diff against the stored policy on every deploy.
  *
  * Unparseable strings are returned unchanged so a diff still fires (and shows
@@ -308,7 +308,7 @@ export const PolicyProvider = () =>
                   };
                 }).pipe(
                   // A peer test may delete a policy between `listPolicies` and
-                  // hydrating its tags/version — skip the vanished entry rather
+                  // hydrating its tags/version -- skip the vanished entry rather
                   // than failing the whole enumeration.
                   Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
@@ -373,11 +373,11 @@ export const PolicyProvider = () =>
             ...news.tags,
           };
 
-          // Observe — fetch the policy metadata, current default-version
+          // Observe -- fetch the policy metadata, current default-version
           // document, and tags. Each piece feeds an independent sync step.
           let observed = yield* readPolicy(policyArn);
 
-          // Ensure — create the managed policy when it is missing. We
+          // Ensure -- create the managed policy when it is missing. We
           // pass the desired document as the initial version so first
           // create lands fully configured. On race, adopt by reading
           // existing.
@@ -414,7 +414,7 @@ export const PolicyProvider = () =>
             observed = created.Policy;
           }
 
-          // Sync default-version document — IAM managed policies are
+          // Sync default-version document -- IAM managed policies are
           // immutable per version, so any document change requires
           // creating a new default version (and pruning the oldest non-
           // default if we're at the 5-version cap).

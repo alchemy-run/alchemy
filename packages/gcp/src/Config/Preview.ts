@@ -33,11 +33,11 @@ export type PreviewProps = {
    * Preview id (the `{preview}` segment of
    * `projects/{project}/locations/{location}/previews/{preview}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the preview.
+   * and logical id. Immutable -- changing it replaces the preview.
    */
   previewId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the preview. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -46,7 +46,7 @@ export type PreviewProps = {
   location?: string;
   /**
    * Terraform blueprint to preview. Required unless `deployment` is set.
-   * There is no update API — changing the blueprint replaces the preview.
+   * There is no update API -- changing the blueprint replaces the preview.
    */
   terraformBlueprint?: config.TerraformBlueprint;
   /**
@@ -152,12 +152,12 @@ export type Preview = Resource<
 >;
 
 /**
- * An Infrastructure Manager preview — the Terraform plan Infra Manager
+ * An Infrastructure Manager preview -- the Terraform plan Infra Manager
  * would apply to reach the desired blueprint (or to delete a
  * deployment).
  *
  * Previews have no patch API. Changing identity (`previewId`,
- * `location`) or any input (blueprint, service account, labels, …)
+ * `location`) or any input (blueprint, service account, labels, ...)
  * replaces the preview. Create and delete are long-running operations
  * and typically invoke Cloud Build.
  *

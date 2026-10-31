@@ -44,7 +44,7 @@ export interface TelemetryRuleProps {
    */
   ruleName?: string;
   /**
-   * The type of telemetry the rule enables — `"Logs"`, `"Metrics"`, or
+   * The type of telemetry the rule enables -- `"Logs"`, `"Metrics"`, or
    * `"Traces"`.
    */
   telemetryType: obs.TelemetryType;
@@ -112,7 +112,7 @@ export interface TelemetryRule extends Resource<
 > {}
 
 /**
- * A CloudWatch **telemetry rule** (Observability Admin) — automatically
+ * A CloudWatch **telemetry rule** (Observability Admin) -- automatically
  * enables telemetry (such as VPC flow logs) for AWS resources in your
  * account that match the rule's criteria.
  *
@@ -457,10 +457,10 @@ export const TelemetryRuleProvider = () =>
           const desiredTags = { ...props.tags, ...internalTags };
           const desiredRule = toWireRule(props);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readRule(name);
 
-          // 2. Ensure — create if missing; a ConflictException means a peer
+          // 2. Ensure -- create if missing; a ConflictException means a peer
           //    created the same-named rule concurrently, so re-observe.
           if (observed === undefined) {
             yield* obs
@@ -487,7 +487,7 @@ export const TelemetryRuleProvider = () =>
               }),
             );
           } else if (ruleNeedsUpdate(desiredRule, observed.TelemetryRule)) {
-            // 3. Sync — UpdateTelemetryRule replaces the whole rule config;
+            // 3. Sync -- UpdateTelemetryRule replaces the whole rule config;
             //    apply only on an actual delta against OBSERVED state.
             yield* obs.updateTelemetryRule({
               RuleIdentifier: name,
@@ -496,7 +496,7 @@ export const TelemetryRuleProvider = () =>
             observed = (yield* readRule(name)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const ruleArn = observed.RuleArn!;
           const observedTags = yield* readTags(ruleArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);

@@ -8,7 +8,7 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:DescribeStackResourceDrifts`).
  *
  * Bind this operation to a {@link Stack} to read per-resource drift results
- * after a {@link DetectStackDrift} run — which resources were `MODIFIED` or
+ * after a {@link DetectStackDrift} run -- which resources were `MODIFIED` or
  * `DELETED` out-of-band and the actual-vs-expected property differences.
  * Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.DescribeStackResourceDriftsHttp)`.

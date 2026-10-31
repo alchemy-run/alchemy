@@ -53,7 +53,7 @@ export interface CloudAgentProps {
   /**
    * Agent name. Unique per environment for this user. If omitted, a
    * unique name is generated from the stack, stage and logical ID.
-   * Changing it replaces the agent — Railway has no rename API.
+   * Changing it replaces the agent -- Railway has no rename API.
    */
   name?: string;
   /**
@@ -76,7 +76,7 @@ export type CloudAgent = Resource<
     environmentId: string;
     /** Parent Railway project id. */
     projectId: string;
-    /** Observed lifecycle status (`STARTING`, `RUNNING`, `SLEEPING`, …). */
+    /** Observed lifecycle status (`STARTING`, `RUNNING`, `SLEEPING`, ...). */
     status: CloudAgentStatus;
     /**
      * Public hostname serving port 8080. Stable across sleep and wake;
@@ -116,7 +116,7 @@ export type CloudAgent = Resource<
  *
  * :::caution[Changing `environment` or `name` replaces the agent]
  * Railway has no cloud-agent update API. A new VM is created, then
- * the old one is deleted — the disk is not copied.
+ * the old one is deleted -- the disk is not copied.
  * :::
  *
  * ### A stable name
@@ -132,7 +132,7 @@ export type CloudAgent = Resource<
  * ```
  *
  * ### Variables
- * `variables` are create-only. Pair them with a new agent — Railway
+ * `variables` are create-only. Pair them with a new agent -- Railway
  * does not update variables on an existing VM. Values may reference
  * other services via `Railway.ref`.
  *
@@ -148,7 +148,7 @@ export type CloudAgent = Resource<
  *
  * ### Sleep and wake
  * Sleep stops compute billing and keeps the disk. Wake re-runs the
- * entrypoint with files in place. These are not reconciler steps —
+ * entrypoint with files in place. These are not reconciler steps --
  * call {@link sleepCloudAgent} / {@link wakeCloudAgent}.
  *
  * **Example:** Sleep then wake
@@ -279,7 +279,7 @@ export const sleepCloudAgent = Effect.fn(function* (
 
 /**
  * Wake a sleeping cloud agent. Crashed or failed agents cannot be
- * woken — create a new one instead.
+ * woken -- create a new one instead.
  */
 export const wakeCloudAgent = Effect.fn(function* (
   agent: { readonly cloudAgentId: string } | string,

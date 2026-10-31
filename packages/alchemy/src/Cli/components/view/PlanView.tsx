@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
- * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
- * output, the approval prompt, and the live apply/dev/destroy progress —
+ * THE plan renderer. Every surface that shows a plan tree -- `alchemy plan`
+ * output, the approval prompt, and the live apply/dev/destroy progress --
  * renders through this one state-driven component, so a plan always looks
  * the same wherever it appears.
  *
@@ -77,7 +77,7 @@ const rowDetail = (status: ApplyStatus, message: string | undefined) =>
     message
   );
 
-// ── Component ─────────────────────────────────────────────────────────────
+// -- Component -------------------------------------------------------------
 
 export interface PlanProps {
   /** Reactive tree containing rows, statuses, label, and presentation state. */
@@ -138,7 +138,7 @@ export function Plan(props: PlanProps): JSX.Element {
     collapsed,
   });
 
-  // ── Summary and operation bar ─────────────────────────────────────────
+  // -- Summary and operation bar -----------------------------------------
   const operationProgress =
     mode === "apply" ? (
       <>
@@ -308,7 +308,7 @@ function PlanContent(props: {
   );
 }
 
-// ── Rows ──────────────────────────────────────────────────────────────────
+// -- Rows ------------------------------------------------------------------
 
 function PlanRowView(props: {
   row: PlanRow;
@@ -488,7 +488,7 @@ function PlanRowView(props: {
   );
 }
 
-// ── Headers ───────────────────────────────────────────────────────────────
+// -- Headers ---------------------------------------------------------------
 
 function ReviewSummary(props: { label: string; summary: PlanSummaryCounts }): JSX.Element {
   const { counts, taskCounts, bindingChanges } = props.summary;
@@ -627,7 +627,7 @@ function ApplySummary(props: {
   );
 }
 
-// ── Status helpers ────────────────────────────────────────────────────────
+// -- Status helpers --------------------------------------------------------
 
 const resourceDisplayStatus = (row: ResourceRow, status: ApplyStatus): ApplyStatus | "no change" =>
   row.action === "noop" && (status === "created" || status === "updated") ? "no change" : status;
@@ -733,4 +733,4 @@ function DetailLine({
   );
 }
 
-// ── Static convenience ────────────────────────────────────────────────────
+// -- Static convenience ----------------------------------------------------

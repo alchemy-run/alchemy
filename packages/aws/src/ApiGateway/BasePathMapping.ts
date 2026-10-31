@@ -100,7 +100,7 @@ export const BasePathMappingProvider = () =>
           const domainNameId = output?.domainNameId ?? news.domainNameId;
           const basePath = output?.basePath ?? normalizeBasePath(news.basePath);
 
-          // Observe — basePathmappings are keyed by (domainName, basePath).
+          // Observe -- basePathmappings are keyed by (domainName, basePath).
           // We never trust `output.restApiId`/`output.stage` for diffing; we
           // re-read the live mapping every time.
           let observed = yield* ag
@@ -111,7 +111,7 @@ export const BasePathMappingProvider = () =>
             })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
-          // Ensure — create the mapping if it isn't there.
+          // Ensure -- create the mapping if it isn't there.
           if (!observed?.restApiId) {
             yield* ag.createBasePathMapping({
               domainName: news.domainName,
@@ -128,7 +128,7 @@ export const BasePathMappingProvider = () =>
             });
           }
 
-          // Sync mutable fields — diff observed cloud state against desired.
+          // Sync mutable fields -- diff observed cloud state against desired.
           const desiredRestApiId = news.restApiId as string;
           const patches: ag.PatchOperation[] = [];
           if (desiredRestApiId !== observed.restApiId) {

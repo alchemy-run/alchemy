@@ -37,33 +37,33 @@ export type GlobalNetworkEndpointSpec = {
 
 export type GlobalNetworkEndpointGroupProps = {
   /**
-   * NEG name (RFC1035, 1–63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable —
+   * NEG name (RFC1035, 1-63 characters). If omitted, a unique name is
+   * generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the group.
    */
   networkEndpointGroupName?: string;
   /**
    * Optional description. Global internet NEGs have no labels field and
    * no update API, so Alchemy ownership (`alchemy-stack` /
-   * `alchemy-stage` / `alchemy-id`) is stored in a `[alchemy …]` prefix
-   * for `list` / nuke. Immutable — changing the user-facing description
+   * `alchemy-stage` / `alchemy-id`) is stored in a `[alchemy ...]` prefix
+   * for `list` / nuke. Immutable -- changing the user-facing description
    * replaces the group.
    */
   description?: string;
   /**
    * Endpoint type. Global NEGs are internet NEGs:
-   * `INTERNET_FQDN_PORT` or `INTERNET_IP_PORT`. Immutable — changing
+   * `INTERNET_FQDN_PORT` or `INTERNET_IP_PORT`. Immutable -- changing
    * it replaces the group.
    * @default "INTERNET_FQDN_PORT"
    */
   networkEndpointType?: GlobalNetworkEndpointType;
   /**
-   * Default port used when an endpoint omits `port`. Immutable —
+   * Default port used when an endpoint omits `port`. Immutable --
    * changing it replaces the group.
    */
   defaultPort?: number;
   /**
-   * User annotations. Immutable — changing them replaces the group.
+   * User annotations. Immutable -- changing them replaces the group.
    */
   annotations?: Record<string, string>;
   /**
@@ -112,7 +112,7 @@ export type GlobalNetworkEndpointGroup = Resource<
  * backends for global external Application Load Balancers. They live in
  * the `global/networkEndpointGroups` collection (zonal VM NEGs and
  * regional serverless/PSC NEGs are separate resources). The collection
- * has no labels field and no update API — Alchemy stamps ownership into
+ * has no labels field and no update API -- Alchemy stamps ownership into
  * the description so `list` / nuke can find leaked groups. Name, type,
  * default port, annotations, and description are immutable (changing any
  * of them replaces the group). Endpoints attach and detach in place.

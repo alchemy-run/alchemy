@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface CancelQueryRequest extends TSQ.CancelQueryRequest {}
 
 /**
- * Runtime binding for `timestream-query:CancelQuery` — cancel a running query
+ * Runtime binding for `timestream-query:CancelQuery` -- cancel a running query
  * by the `QueryId` a previous `Query` call reported.
  *
  * `timestream:CancelQuery` does not support resource-level permissions, so
@@ -17,10 +17,10 @@ export interface CancelQueryRequest extends TSQ.CancelQueryRequest {}
  * ### Querying Data
  * **Example:** Cancel a running query
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const cancelQuery = yield* Timestream.CancelQuery();
  *
- * // runtime — cancel by the QueryId from a prior Query response
+ * // runtime -- cancel by the QueryId from a prior Query response
  * const result = yield* cancelQuery({ QueryId: queryId });
  * // result.CancellationMessage reports whether the query was still running
  * ```

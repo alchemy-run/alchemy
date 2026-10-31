@@ -37,11 +37,11 @@ export type AspectTypeProps = {
    * `projects/{project}/locations/{location}/aspectTypes/{aspectType}`).
    * If omitted, a unique name is generated. Must be 1-63 characters,
    * start with a letter, and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
-   * Immutable — changing it replaces the AspectType.
+   * Immutable -- changing it replaces the AspectType.
    */
   aspectTypeId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * AspectType. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -115,7 +115,7 @@ export type AspectType = Resource<
 >;
 
 /**
- * A Dataplex AspectType — a template for Aspects on catalog Entries.
+ * A Dataplex AspectType -- a template for Aspects on catalog Entries.
  *
  * Location, aspect type id, data classification, and authorization are
  * immutable. Description, display name, labels, and the metadata template

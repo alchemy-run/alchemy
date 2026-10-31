@@ -85,19 +85,19 @@ export interface ServerProps {
    */
   name?: string;
   /**
-   * Server type name (`cpx12`, `cx23`, …) or numeric id. Cannot be
-   * changed after creation — changing it replaces the Server.
+   * Server type name (`cpx12`, `cx23`, ...) or numeric id. Cannot be
+   * changed after creation -- changing it replaces the Server.
    */
   serverType: string;
   /**
-   * Image name (`ubuntu-24.04`, …) or numeric id the Server is created
-   * from. Cannot be changed after creation — changing it replaces the
+   * Image name (`ubuntu-24.04`, ...) or numeric id the Server is created
+   * from. Cannot be changed after creation -- changing it replaces the
    * Server.
    */
   image: string;
   /**
-   * Location name (`nbg1`, `fsn1`, `hel1`, …) or numeric id. Cannot be
-   * changed after creation — changing it replaces the Server.
+   * Location name (`nbg1`, `fsn1`, `hel1`, ...) or numeric id. Cannot be
+   * changed after creation -- changing it replaces the Server.
    *
    * @default "nbg1"
    */
@@ -105,7 +105,7 @@ export interface ServerProps {
   /**
    * SSH keys injected at create time. Accepts `Hetzner.SshKey` resources
    * or `{ id }` stubs. Hetzner cannot change injected keys after
-   * create — this list is applied only when the Server is provisioned.
+   * create -- this list is applied only when the Server is provisioned.
    */
   sshKeys?: Array<Ref<ServerSshKey>>;
   /**
@@ -130,14 +130,14 @@ export interface ServerProps {
    */
   placementGroup?: Ref<ServerPlacementGroup>;
   /**
-   * Cloud-init user data run on the Server's **first boot** — the place to
+   * Cloud-init user data run on the Server's **first boot** -- the place to
    * install packages, write config files, or add users.
    *
-   * Accepts a shell script (`#!/bin/bash …`), a `#cloud-config` document,
+   * Accepts a shell script (`#!/bin/bash ...`), a `#cloud-config` document,
    * or a bare shell snippet (a `#!/bin/bash` shebang is added for you).
    * Alchemy combines it with its own bootstrap script (which preinstalls
    * Node 26 for `Hetzner.Service`) into a multipart cloud-init document, so
-   * both run — the bootstrap first. A document that already starts with a
+   * both run -- the bootstrap first. A document that already starts with a
    * `Content-Type:` / `MIME-Version:` header is passed through untouched,
    * taking over the whole payload including the bootstrap.
    *
@@ -194,7 +194,7 @@ export type Server = Resource<
     name: string;
     /** Server status. */
     status: ServerStatus;
-    /** Server type name (`cx22`, …). */
+    /** Server type name (`cx22`, ...). */
     serverType: string;
     /** Numeric Server type id. */
     serverTypeId: number;
@@ -202,13 +202,13 @@ export type Server = Resource<
     image: string | undefined;
     /** Numeric Image id, or `undefined` if no image is attached. */
     imageId: number | undefined;
-    /** Location name (`nbg1`, `fsn1`, …). */
+    /** Location name (`nbg1`, `fsn1`, ...). */
     location: string;
     /** Numeric location ID. */
     locationId: number;
     /** Public IPv4 address, or `undefined` if IPv4 is disabled. */
     ipv4: string | undefined;
-    /** Public IPv6 network (`…/64`), or `undefined` if IPv6 is disabled. */
+    /** Public IPv6 network (`.../64`), or `undefined` if IPv6 is disabled. */
     ipv6: string | undefined;
     /** Attached Volume IDs. */
     volumeIds: number[];
@@ -247,7 +247,7 @@ export type Server = Resource<
 >;
 
 /**
- * A Hetzner Cloud Server — a virtual machine in a Location, created from
+ * A Hetzner Cloud Server -- a virtual machine in a Location, created from
  * a Server type and an Image. `serverType`, `image`, and `location` are
  * immutable (changing any of them replaces the Server). Name, labels,
  * delete protection, and (when set) Networks / Firewalls / Volumes /
@@ -280,7 +280,7 @@ export type Server = Resource<
  * **Example:** SSH key and Placement Group
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
- *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
+ *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
  * });
  * const group = yield* Hetzner.PlacementGroup("web");
  * const server = yield* Hetzner.Server("web", {
@@ -319,7 +319,7 @@ export type Server = Resource<
  *
  * `userData` is merged with Alchemy's own bootstrap script into a
  * multipart cloud-init document, so both run. It is applied on first boot
- * only — changing it replaces the Server.
+ * only -- changing it replaces the Server.
  *
  * @resource
  * @product Server
@@ -413,7 +413,7 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-/** Companion deploy keys are not stack resources — delete must be idempotent. */
+/** Companion deploy keys are not stack resources -- delete must be idempotent. */
 const deleteDeployKey = (id: number | undefined) =>
   id === undefined
     ? Effect.void
@@ -481,15 +481,15 @@ const classifyUserData = (doc: string): UserDataPart => {
   for (const [prefix, contentType] of CLOUD_INIT_FORMATS) {
     if (first.startsWith(prefix)) return { contentType, body: doc };
   }
-  // A bare snippet (`apt-get install -y nginx`) is the common case —
+  // A bare snippet (`apt-get install -y nginx`) is the common case --
   // cloud-init needs a shebang before it will execute one.
   return { contentType: "text/x-shellscript", body: `#!/bin/bash\n${doc}` };
 };
 
 /**
  * Wrap the parts in a multipart cloud-init document. Parts are named
- * `part-001`, `part-002`, … the way cloud-init names anonymous parts
- * itself — scripts run in that (lexical) order, so the bootstrap goes
+ * `part-001`, `part-002`, ... the way cloud-init names anonymous parts
+ * itself -- scripts run in that (lexical) order, so the bootstrap goes
  * first.
  */
 const mimeMultipart = (parts: ReadonlyArray<UserDataPart>) =>
@@ -517,7 +517,7 @@ export const composeUserData = (userData: string | undefined): string => {
   if (userData === undefined) return ALCHEMY_BOOTSTRAP;
   const doc = userData.replace(/^\uFEFF/, "").replace(/^[\s\n]+/, "");
   if (doc === "") return ALCHEMY_BOOTSTRAP;
-  // An explicit MIME document is passed through verbatim — the caller owns
+  // An explicit MIME document is passed through verbatim -- the caller owns
   // the whole payload, bootstrap included.
   if (/^(content-type|mime-version):/i.test(doc)) return userData;
   return mimeMultipart([
@@ -869,7 +869,7 @@ export const ServerProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
-        // Cloud-init runs once, on first boot — a changed init script can
+        // Cloud-init runs once, on first boot -- a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
           return { action: "replace" } as const;
@@ -924,7 +924,7 @@ export const ServerProvider = () =>
       const userData = yield* buildUserData({ name, userData: news.userData });
 
       // Observe by id then desired name only. Do not fall back to
-      // ownership labels — a create-first replacement still has the old
+      // ownership labels -- a create-first replacement still has the old
       // generation live under the same logical id.
       let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
@@ -942,7 +942,7 @@ export const ServerProvider = () =>
         ...(deployKey.deploySshKeyId !== undefined ? [deployKey.deploySshKeyId] : []),
       ];
 
-      // Ensure — create only when missing. A Conflict is a race with a
+      // Ensure -- create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
         const created = yield* Hetzner.servers

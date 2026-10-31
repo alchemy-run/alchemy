@@ -10,7 +10,7 @@ import type { Service } from "./Service.ts";
 export interface ListInstancesRequest extends Omit<SD.ListInstancesRequest, "ServiceId"> {}
 
 /**
- * Runtime binding for `servicediscovery:ListInstances` — lists summary
+ * Runtime binding for `servicediscovery:ListInstances` -- lists summary
  * information (id + attributes) for every instance registered with the
  * bound {@link Service}. Unlike `DiscoverInstances` this is the
  * control-plane view: strongly consistent with registration, one page at a

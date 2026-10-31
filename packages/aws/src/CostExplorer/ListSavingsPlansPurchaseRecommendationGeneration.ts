@@ -17,7 +17,7 @@ export interface ListSavingsPlansPurchaseRecommendationGenerationRequest
  * ### Savings Plans
  * **Example:** List Recent Generations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listSavingsPlansPurchaseRecommendationGeneration = yield* AWS.CostExplorer.ListSavingsPlansPurchaseRecommendationGeneration();
  *
  * // runtime

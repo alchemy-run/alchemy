@@ -171,7 +171,7 @@ export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
 
 /**
  * Raised when an `AppMonitor` is configured with both or neither of
- * `domain` / `domainList` — the API requires exactly one.
+ * `domain` / `domainList` -- the API requires exactly one.
  */
 export class RumAppMonitorInvalidDomains extends Data.TaggedError("RumAppMonitorInvalidDomains")<{
   message: string;
@@ -317,15 +317,15 @@ export const AppMonitorProvider = () =>
           const desiredCwLogEnabled = news.cwLogEnabled ?? false;
           const desiredCustomEvents = news.customEvents ?? "DISABLED";
 
-          // 1. OBSERVE — cloud state is authoritative; output is only a
+          // 1. OBSERVE -- cloud state is authoritative; output is only a
           //    cache of the derived physical name.
           let live = yield* observeMonitor(name);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
-          //    re-observe. CreateAppMonitor is eventually consistent — an
+          //    re-observe. CreateAppMonitor is eventually consistent -- an
           //    immediate GetAppMonitor can still miss it, and persisting an
-          //    undefined appMonitorId poisons every downstream binding env —
+          //    undefined appMonitorId poisons every downstream binding env --
           //    so poll (bounded) until the monitor is observable.
           if (live === undefined) {
             yield* rum
@@ -351,7 +351,7 @@ export const AppMonitorProvider = () =>
             );
           }
 
-          // 3. SYNC — diff the OBSERVED domain(s), configuration, log
+          // 3. SYNC -- diff the OBSERVED domain(s), configuration, log
           //    setting, and custom-events status against the desired state;
           //    update only on drift.
           const inSync =
@@ -373,7 +373,7 @@ export const AppMonitorProvider = () =>
             live = yield* observeMonitor(name);
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = Object.fromEntries(
             Object.entries(live?.Tags ?? {}).filter(
@@ -400,14 +400,14 @@ export const AppMonitorProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rum.deleteAppMonitor({ Name: output.appMonitorName }).pipe(
-            // idempotent — the monitor may already be gone
+            // idempotent -- the monitor may already be gone
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
           // When cwLogEnabled is (or was ever) on, RUM vends telemetry into
           // a log group named
           //   /aws/vendedlogs/RUMService_{appMonitorName}{first 8 hex chars of Id}
-          // and deleteAppMonitor does NOT remove it — without this reap every
+          // and deleteAppMonitor does NOT remove it -- without this reap every
           // deleted log-enabled monitor leaks an orphaned log group. Match
           // the observed groups against the monitor's Id so a sibling
           // monitor whose name extends ours is never reaped by accident.

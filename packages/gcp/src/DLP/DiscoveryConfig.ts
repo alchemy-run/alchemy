@@ -37,19 +37,19 @@ export type DiscoveryConfigProps = {
    * Config id (the `{discoveryConfig}` segment of
    * `projects/{project}/locations/{location}/discoveryConfigs/{id}`). If
    * omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 100 characters. Immutable — changing it replaces the
+   * is at most 100 characters. Immutable -- changing it replaces the
    * config.
    */
   configId?: string;
   /**
-   * Processing location (`us`, `us-central1`, …). Immutable — changing it
+   * Processing location (`us`, `us-central1`, ...). Immutable -- changing it
    * replaces the config.
    * @default "us"
    */
   location?: string;
   /**
    * Display name (max 100 characters). Discovery configs have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   displayName?: string;
@@ -116,7 +116,7 @@ export type DiscoveryConfig = Resource<
  *
  * Discovery configs have no labels field, so Alchemy stamps ownership
  * into the display name for `list` / nuke. Location and id are identity
- * — changing them replaces the config. Display name, status, targets,
+ * -- changing them replaces the config. Display name, status, targets,
  * and templates update in place.
  *
  * ### Creating a Discovery Config

@@ -7,7 +7,7 @@ import type { Directory } from "./Directory.ts";
  * Runtime binding for the `CreateComputer` operation (IAM action
  * `ds:CreateComputer`), scoped to one {@link Directory}.
  *
- * Creates a computer account in the bound directory — the programmatic half
+ * Creates a computer account in the bound directory -- the programmatic half
  * of joining a machine to the domain (e.g. from an instance-provisioning
  * workflow). `Password` is the one-time machine password and is sensitive;
  * pass a `Redacted` value. The directory id is injected from the binding.
@@ -16,7 +16,7 @@ import type { Directory } from "./Directory.ts";
  * ### Managing Computers
  * **Example:** Create a Computer Account
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const createComputer = yield* AWS.DirectoryService.CreateComputer(directory);
  *
  * // runtime

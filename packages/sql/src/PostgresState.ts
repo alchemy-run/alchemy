@@ -20,8 +20,8 @@ import type * as SqlError from "effect/sql/SqlError";
 import { resolveConnectionOptions } from "./PostgresTls.ts";
 
 // `@effect/sql-pg` is loaded lazily rather than imported statically (as
-// `SQL/Postgres.ts` does) so that `postgresState({ client })` — which takes
-// any `@effect/sql` client — works without the optional peer installed at
+// `SQL/Postgres.ts` does) so that `postgresState({ client })` -- which takes
+// any `@effect/sql` client -- works without the optional peer installed at
 // all. Only `postgresState({ url })`, which builds a pool, needs it.
 const importPgClient = () =>
   import("@effect/sql-pg/PgClient").catch((cause) => {
@@ -33,7 +33,7 @@ const importPgClient = () =>
 
 export interface PostgresStateOptions<E = never, R = never> {
   /**
-   * An existing `@effect/sql` client. The caller owns its lifecycle — the
+   * An existing `@effect/sql` client. The caller owns its lifecycle -- the
    * store only issues queries against it. Exactly one of `client` and `url`
    * must be provided.
    *
@@ -47,7 +47,7 @@ export interface PostgresStateOptions<E = never, R = never> {
   client?: SqlClient.SqlClient;
   /**
    * Postgres connection URL, as a `Redacted` value or an Effect yielding one
-   * — `Config.Redacted("STATE_DATABASE_URL")` is itself an Effect, so it can
+   * -- `Config.Redacted("STATE_DATABASE_URL")` is itself an Effect, so it can
    * be passed directly. The store creates its own `@effect/sql-pg` pool from
    * the URL and closes that pool when the state layer is released.
    */
@@ -82,7 +82,7 @@ const DEFAULT_LEASE_CHECK_TTL_MS = 5_000;
 /**
  * Amortizes a lease check over a short TTL: a passing check is trusted for
  * `ttlMs`, so a burst of operations inside the window does one round-trip,
- * not one per operation. A failing check is never cached — it propagates
+ * not one per operation. A failing check is never cached -- it propagates
  * immediately and leaves the last-good timestamp untouched, so the very
  * next operation re-checks.
  */
@@ -112,16 +112,16 @@ interface Lease {
 /**
  * State store backed by any Postgres database.
  *
- * Stack state lives in two tables — `alchemy_resource_state` and
- * `alchemy_stack_output` — created on first use with
+ * Stack state lives in two tables -- `alchemy_resource_state` and
+ * `alchemy_stack_output` -- created on first use with
  * `create table if not exists`.
  *
  * Concurrent deploys are serialized with a session-scoped Postgres advisory
  * lock per `(stack, stage)`: the lock is taken on a reserved connection
  * (`SqlClient.reserve`) when the first operation for the pair runs, and
  * contention fails immediately instead of queueing. Every subsequent
- * operation first re-verifies — from a *different* connection, by inspecting
- * `pg_locks` — that the backend which took the lock still holds it, so a
+ * operation first re-verifies -- from a *different* connection, by inspecting
+ * `pg_locks` -- that the backend which took the lock still holds it, so a
  * dropped lock connection fails loudly instead of letting operations run
  * unlocked. That check reports the backend it ran on as well, so a
  * single-connection client, which would have the lock holder vouch for
@@ -185,7 +185,7 @@ export const postgresState = <E = never, R = never>(options: PostgresStateOption
 /**
  * Construct a Postgres-backed {@link StateService}.
  *
- * Construction itself never touches the database — pool creation (when a
+ * Construction itself never touches the database -- pool creation (when a
  * `url` was given), schema migration, and advisory-lock acquisition are all
  * deferred to the first state operation. Finalizers for the advisory locks
  * and any store-owned pool are registered on `scope`.
@@ -198,7 +198,7 @@ export const makePostgresState = <E = never, R = never>(
     const prefix = options.lockKeyPrefix ?? "alchemy";
     const ttlMs = options.leaseCheckTtlMs ?? DEFAULT_LEASE_CHECK_TTL_MS;
     // Captured once, so a `url` Effect that needs services (a custom
-    // ConfigProvider, say) can still be resolved later — from inside the
+    // ConfigProvider, say) can still be resolved later -- from inside the
     // service methods, whose own requirements are fixed at `never`.
     const context = yield* Effect.context<R>();
 
@@ -221,7 +221,7 @@ export const makePostgresState = <E = never, R = never>(
      * Idempotent schema migration. Concurrent `create table if not exists`
      * statements can still collide inside Postgres on the shared catalog
      * rows (duplicate pg_type/pg_class key errors), so the migration runs
-     * in a transaction — one connection, pinned by `withTransaction` — that
+     * in a transaction -- one connection, pinned by `withTransaction` -- that
      * first takes a transaction-scoped advisory lock on a fixed migration
      * key. The lock releases automatically at commit or rollback.
      */
@@ -515,7 +515,7 @@ export const makePostgresState = <E = never, R = never>(
           ),
         ),
       // Filters by status directly in SQL rather than listing FQNs and
-      // re-fetching each one — same semantics as LocalState, without the
+      // re-fetching each one -- same semantics as LocalState, without the
       // N+1 round-trips.
       getReplacedResources: (request) =>
         guarded(

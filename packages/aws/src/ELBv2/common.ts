@@ -11,7 +11,7 @@ import type { TargetGroupArn } from "./TargetGroup.ts";
 export interface ForwardTarget {
   /**
    * The target group to forward to. Accepts a `TargetGroup` resource reference
-   * — the engine resolves it to the ARN automatically (the `Input` machinery
+   * -- the engine resolves it to the ARN automatically (the `Input` machinery
    * applies deeply to nested props).
    */
   targetGroupArn: TargetGroupArn;
@@ -38,7 +38,7 @@ export interface ForwardAction {
     /** Whether target-group stickiness is enabled. */
     enabled: boolean;
     /**
-     * The time a client remains pinned to a target group — e.g. `"1 hour"`
+     * The time a client remains pinned to a target group -- e.g. `"1 hour"`
      * or `Duration.hours(1)`. Sent to AWS as whole seconds.
      * @default "1 hour"
      */
@@ -113,7 +113,7 @@ export interface AuthenticateOidcAction {
    * @default "AWSELBAuthSessionCookie"
    */
   sessionCookieName?: string;
-  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  /** The maximum duration of the authentication session -- e.g. `"7 days"`. Sent to AWS as whole seconds. */
   sessionTimeout?: Duration.Input;
   /**
    * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).
@@ -147,7 +147,7 @@ export interface AuthenticateCognitoAction {
    * @default "AWSELBAuthSessionCookie"
    */
   sessionCookieName?: string;
-  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  /** The maximum duration of the authentication session -- e.g. `"7 days"`. Sent to AWS as whole seconds. */
   sessionTimeout?: Duration.Input;
   /**
    * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).

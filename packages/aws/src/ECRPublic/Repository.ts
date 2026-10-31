@@ -258,10 +258,10 @@ export const PublicRepositoryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let repository = yield* observe(repositoryName);
 
-          // Ensure — create if missing. Tolerate the AlreadyExists race.
+          // Ensure -- create if missing. Tolerate the AlreadyExists race.
           if (!repository?.repositoryArn || !repository.repositoryUri) {
             const created = yield* pin(
               ecrpublic.createRepository({

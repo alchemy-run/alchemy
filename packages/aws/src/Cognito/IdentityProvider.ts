@@ -173,7 +173,7 @@ export const IdentityProviderProvider = () =>
         stables: ["providerName", "userPoolId", "providerType"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -211,7 +211,7 @@ export const IdentityProviderProvider = () =>
           // 1. OBSERVE
           let observed = yield* describeProvider(userPoolId, providerName);
 
-          // 2. ENSURE — tolerate the create race.
+          // 2. ENSURE -- tolerate the create race.
           if (observed === undefined) {
             observed = yield* cip
               .createIdentityProvider({
@@ -231,7 +231,7 @@ export const IdentityProviderProvider = () =>
                 ),
               );
           } else {
-            // 3. SYNC — details, mapping, and identifiers are mutable.
+            // 3. SYNC -- details, mapping, and identifiers are mutable.
             // Cognito augments ProviderDetails with derived keys (e.g.
             // attributes_url), so compare desired keys only.
             const observedDetails = definedRecord(observed.ProviderDetails);

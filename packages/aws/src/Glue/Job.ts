@@ -134,7 +134,7 @@ export interface Job extends Resource<
 > {}
 
 /**
- * An AWS Glue job — a Spark (`glueetl`), Python shell (`pythonshell`), or
+ * An AWS Glue job -- a Spark (`glueetl`), Python shell (`pythonshell`), or
  * streaming ETL job definition (script in S3 + IAM role + arguments). The
  * definition lifecycle is instant and free; job *runs* are billed and are
  * started via `startJobRun`.
@@ -313,7 +313,7 @@ export const JobProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Glue writes each run's logs to streams prefixed by the run id in
           // SHARED, service-managed groups (`/aws-glue/python-jobs/output`,
-          // `/aws-glue/jobs/logs-v2`, …). deleteJob leaves them behind and
+          // `/aws-glue/jobs/logs-v2`, ...). deleteJob leaves them behind and
           // drops the run history, so enumerate our runs and reap their
           // streams first (never the shared groups themselves).
           const job = yield* observe(output.jobName);
@@ -335,7 +335,7 @@ export const JobProvider = () =>
             );
           }
 
-          // DeleteJob is idempotent — the API returns success (not an error)
+          // DeleteJob is idempotent -- the API returns success (not an error)
           // when the job definition is already gone.
           yield* glue.deleteJob({ JobName: output.jobName });
         }),

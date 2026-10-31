@@ -7,18 +7,18 @@ import { SingleShotGen } from "effect/Utils";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 /**
- * A Cloudflare **Worker-only binding** — the plain data value produced by
+ * A Cloudflare **Worker-only binding** -- the plain data value produced by
  * calling a {@link Service} (e.g. `Cloudflare.Images.Images(name)`).
  *
  * These bindings (`Browser`, `Images`, `VersionMetadata`, `RateLimit`,
- * `Artifacts.Namespace`, …) have **no backing cloud resource**; they are only
+ * `Artifacts.Namespace`, ...) have **no backing cloud resource**; they are only
  * configuration on a Worker's script metadata. A binding value is therefore
  * both:
  *
- * - **declarable on a Worker's `env`** — `InferEnv` maps the per-binding type to
+ * - **declarable on a Worker's `env`** -- `InferEnv` maps the per-binding type to
  *   its native runtime type, and {@link bindWorkerAsyncBindings} emits its wire
  *   spec via {@link toWorkerBinding}, and
- * - **`yield*`-able inside an Effect-native Worker** — its iterator attaches the
+ * - **`yield*`-able inside an Effect-native Worker** -- its iterator attaches the
  *   binding to the surrounding Worker and resolves to the runtime client.
  */
 export interface Binding<Kind extends string = string, Client = unknown, Service = unknown> {
@@ -27,7 +27,7 @@ export interface Binding<Kind extends string = string, Client = unknown, Service
   readonly name: string;
   /**
    * Alchemy-internal: opt this binding out of local emulation in
-   * `alchemy dev` — the `Alchemy.remote()` decoration captured by
+   * `alchemy dev` -- the `Alchemy.remote()` decoration captured by
    * {@link pipe} on capabilities with a local simulator (Browser, Images,
    * Stream). Registered on the host Worker via the binding-data `devRemote`
    * channel, never on the wire binding itself.
@@ -40,14 +40,14 @@ export interface Binding<Kind extends string = string, Client = unknown, Service
   toWorkerBinding(): WorkerBinding;
   /**
    * Lift the binding into an Effect ({@link BindingEffect}) so registration
-   * aspects can decorate it — most notably `Alchemy.remote()`, which opts
+   * aspects can decorate it -- most notably `Alchemy.remote()`, which opts
    * the binding out of local emulation in `alchemy dev`:
    *
    * ```ts
-   * // Effect-native Worker — resolves to the runtime client:
+   * // Effect-native Worker -- resolves to the runtime client:
    * const browser = yield* Cloudflare.Browser("BROWSER").pipe(Alchemy.remote());
    *
-   * // async Worker env — declares the decorated binding:
+   * // async Worker env -- declares the decorated binding:
    * env: { IMAGES: Cloudflare.Images.Images("IMAGES").pipe(Alchemy.remote()) }
    * ```
    */
@@ -64,7 +64,7 @@ export interface Binding<Kind extends string = string, Client = unknown, Service
  *
  * Context-adaptive resolution: inside an Effect-native Worker (where the
  * binding's implementation layer is provided) it registers the binding on the
- * host and resolves to the runtime `Client` — same one-`yield*` shape as the
+ * host and resolves to the runtime `Client` -- same one-`yield*` shape as the
  * bare binding value. Anywhere else (an async Worker's `env`, resolved by the
  * engine) it resolves to the decorated binding *value*; the
  * `"~alchemy/Binding"` brand lets `InferEnv` map it to the native runtime
@@ -79,18 +79,18 @@ export interface BindingEffect<B extends Binding<any, any, any>> extends Effect.
   readonly "~alchemy/Binding": B;
 }
 
-/** Any {@link BindingEffect} — the arm admitted by a Worker's `env`. */
+/** Any {@link BindingEffect} -- the arm admitted by a Worker's `env`. */
 export type AnyBindingEffect = BindingEffect<Binding<any, any, any>>;
 
 /**
- * The fused tag + callable + type for a Worker-only binding — the same
+ * The fused tag + callable + type for a Worker-only binding -- the same
  * single-identifier shape as core {@link CoreBinding.Service}, specialized so
  * the callable produces a {@link Binding} value instead of binding a resource.
  *
  * `interface X extends Binding.Service<X, Id, Client>` declares the type;
- * `const X = Binding.Service<X>({ … })` produces the value that is at once the
- * Context tag (usable in `Layer.effect(X, …)` / `Effect.provide`), the callable
- * (`X(props)` → a {@link Binding}), and carries the type.
+ * `const X = Binding.Service<X>({ ... })` produces the value that is at once the
+ * Context tag (usable in `Layer.effect(X, ...)` / `Effect.provide`), the callable
+ * (`X(props)` -> a {@link Binding}), and carries the type.
  *
  * ```ts
  * import * as Binding from "../Workers/Binding.ts";
@@ -120,7 +120,7 @@ type AnyService = { readonly key: string } & ((...args: any[]) => any);
  * `Self` (the per-binding interface) supplies the tag `id` (`Self["key"]`); the
  * binding's `Payload` (extra fields beyond `name`, e.g. RateLimit's
  * `namespaceId`/`simple`) is inferred from `parse`. Omit `parse` for name-only
- * bindings — `name` is read from the first arg's `.name` property.
+ * bindings -- `name` is read from the first arg's `.name` property.
  */
 export const Service = <
   Self extends AnyService,
@@ -132,7 +132,7 @@ export const Service = <
   readonly defaultName: string;
   /**
    * Derive `name` + payload from the constructor args. Omit for name-only
-   * bindings — `name` is then the first (string) arg, the binding's logical id.
+   * bindings -- `name` is then the first (string) arg, the binding's logical id.
    */
   readonly parse?: (...args: any[]) => { name?: string } & Payload;
   /** Build the wire binding spec from the resolved binding value. */
@@ -149,7 +149,7 @@ export const Service = <
     self[Symbol.iterator] = () => new SingleShotGen(bind(self));
     // The lifted form (`BindingEffect`): capture the ambient
     // `ProviderModePolicy` (`Alchemy.remote()` decoration), then resolve
-    // context-adaptively — to the runtime client when the binding's layer is
+    // context-adaptively -- to the runtime client when the binding's layer is
     // in context (inside an Effect-native Worker), to the decorated binding
     // value otherwise (an async Worker's `env`, resolved by the engine).
     const lifted = Effect.gen(function* () {

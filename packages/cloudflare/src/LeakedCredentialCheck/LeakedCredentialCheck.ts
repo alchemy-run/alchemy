@@ -12,13 +12,13 @@ type TypeId = typeof TypeId;
 
 export interface Props {
   /**
-   * Zone whose Leaked Credential Checks setting is managed. Stable —
+   * Zone whose Leaked Credential Checks setting is managed. Stable --
    * changing the zone triggers a replacement (the old zone's setting is
    * restored to the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Whether Leaked Credential Checks are enabled on the zone. Mutable —
+   * Whether Leaked Credential Checks are enabled on the zone. Mutable --
    * set in place via the API's POST upsert.
    * @default true
    */
@@ -48,7 +48,7 @@ export type LeakedCredentialCheck = Resource<TypeId, Props, Attributes, never, P
  * credentials previously seen in known breach compilations, populating the
  * `cf.waf.credential_check.*` ruleset fields that WAF rules can act on
  * (e.g. force a password reset on a leaked-credential login). The check is
- * a zone **singleton** — it always exists (default `enabled: false`), so
+ * a zone **singleton** -- it always exists (default `enabled: false`), so
  * this resource never creates or deletes anything physical. Reconcile sets
  * the flag when the observed value differs from the desired one; destroy
  * restores the value the setting had before Alchemy first managed it
@@ -58,7 +58,7 @@ export type LeakedCredentialCheck = Resource<TypeId, Props, Attributes, never, P
  * locations (see {@link LeakedCredentialDetection}) are plan-gated
  * separately.
  *
- * Only one `LeakedCredentialCheck` resource per zone makes sense — two
+ * Only one `LeakedCredentialCheck` resource per zone makes sense -- two
  * instances managing the same zone would fight over the singleton.
  * ### Managing the check
  * **Example:** Enable Leaked Credential Checks on a zone
@@ -103,7 +103,7 @@ export const LeakedCredentialCheckProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -144,7 +144,7 @@ export const LeakedCredentialCheckProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* lcc.getLeakedCredentialCheck({ zoneId });
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts
+      // default -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialEnabled` restored on destroy.
       const enabled = observed.enabled ?? false;
@@ -156,17 +156,17 @@ export const LeakedCredentialCheckProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* lcc.getLeakedCredentialCheck({ zoneId });
       const observedEnabled = observed.enabled ?? false;
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
-      // 3. Sync — POST (the API's set/upsert) only when it differs.
+      // 3. Sync -- POST (the API's set/upsert) only when it differs.
       const desired = desiredEnabled(news);
       if (observedEnabled === desired) {
         return { zoneId, enabled: observedEnabled, initialEnabled };

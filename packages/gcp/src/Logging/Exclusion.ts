@@ -19,7 +19,7 @@ export type ExclusionProps = {
    * `projects/{project}/exclusions/{exclusion}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Limited to
    * 100 characters: letters, digits, underscores, hyphens, periods; first
-   * character must be alphanumeric. Immutable — changing it replaces the
+   * character must be alphanumeric. Immutable -- changing it replaces the
    * exclusion.
    */
   exclusionId?: string;
@@ -30,7 +30,7 @@ export type ExclusionProps = {
   filter: string;
   /**
    * Human-readable description. Logging exclusions have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -72,7 +72,7 @@ export type Exclusion = Resource<
  * Exclusions drop matching log entries before they are stored in the
  * `_Default` bucket (they do not apply to `_Required`). A project can have
  * up to 10. Logging exclusions have no labels field, so Alchemy stamps
- * ownership into the description for `list` / nuke. Name is identity —
+ * ownership into the description for `list` / nuke. Name is identity --
  * changing `exclusionId` replaces the exclusion.
  *
  * ### Creating an Exclusion

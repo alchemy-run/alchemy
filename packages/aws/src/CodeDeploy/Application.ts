@@ -17,7 +17,7 @@ export interface ApplicationProps {
    */
   applicationName?: string;
   /**
-   * The compute platform the application deploys to. Immutable — changing it
+   * The compute platform the application deploys to. Immutable -- changing it
    * replaces the application.
    * @default "Server"
    */
@@ -46,7 +46,7 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An AWS CodeDeploy application — a logical container that groups the
+ * An AWS CodeDeploy application -- a logical container that groups the
  * deployment groups and revisions for a single deployable unit on a given
  * compute platform (EC2/on-prem `Server`, `Lambda`, or `ECS`).
  *
@@ -128,7 +128,7 @@ export const ApplicationProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // Compute platform is immutable — replace on change.
+          // Compute platform is immutable -- replace on change.
           if ((news?.computePlatform ?? "Server") !== (olds?.computePlatform ?? "Server")) {
             return { action: "replace" } as const;
           }
@@ -161,10 +161,10 @@ export const ApplicationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let application = yield* getApplication(name);
 
-          // 2. Ensure — create if missing. Tolerate an already-exists race.
+          // 2. Ensure -- create if missing. Tolerate an already-exists race.
           if (application?.applicationId === undefined) {
             yield* codedeploy
               .createApplication({
@@ -179,7 +179,7 @@ export const ApplicationProvider = () =>
             application = yield* getApplication(name);
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(arn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -193,7 +193,7 @@ export const ApplicationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteApplication is idempotent — deleting a non-existent
+          // DeleteApplication is idempotent -- deleting a non-existent
           // application succeeds (no not-found variant in its error union).
           yield* codedeploy.deleteApplication({
             applicationName: output.applicationName,

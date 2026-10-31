@@ -29,17 +29,17 @@ export type MetadataStoreProps = {
    * MetadataStore id (the `{metadatastore}` segment of
    * `projects/{project}/locations/{location}/metadataStores/{metadatastore}`).
    * If omitted, a unique name is generated. Must be 4-128 characters of
-   * `a-z` and `-`. Immutable — changing it replaces the store.
+   * `a-z` and `-`. Immutable -- changing it replaces the store.
    */
   metadataStoreId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the store.
+   * Vertex AI location. Immutable -- changing it replaces the store.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Human-readable description. Metadata stores have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -84,7 +84,7 @@ export type MetadataStore = Resource<
  * A Vertex ML Metadata store for artifacts, contexts, and executions.
  *
  * Metadata stores have no labels field, so Alchemy stamps ownership into
- * the description for `list` / nuke. There is no update API — changing
+ * the description for `list` / nuke. There is no update API -- changing
  * identity, location, encryption, or Dataplex config replaces the store.
  *
  * ### Creating a MetadataStore

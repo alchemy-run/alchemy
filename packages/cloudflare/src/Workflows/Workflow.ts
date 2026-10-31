@@ -227,7 +227,7 @@ export const waitForEvent = <T = unknown>(
  *
  * `WorkerEnvironment` is provided to the body at runtime by the workflow
  * export wrapper (see `make(env)` below), so users can access env bindings
- * from inside workflow steps via `yield* WorkerEnvironment` — the type must
+ * from inside workflow steps via `yield* WorkerEnvironment` -- the type must
  * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
  * body even though it succeeds at runtime.
  *
@@ -407,8 +407,8 @@ export interface WorkflowLike<Params = unknown> {
  * A Workflow bound on an external/async Worker's `env`, exposed on
  * `worker.env.<name>` at declaration time, not on persisted Worker references
  * or Effect-native Workers. Carries the binding's identity as `Output`s
- * of the current deploy pass, so a sibling resource in the same stack — a
- * Queue subscription to the Workflow's lifecycle events, for instance — can
+ * of the current deploy pass, so a sibling resource in the same stack -- a
+ * Queue subscription to the Workflow's lifecycle events, for instance -- can
  * consume the Workflow's physical name on its very first deployment without
  * reading persisted state or re-deriving the name.
  *
@@ -419,7 +419,7 @@ export interface WorkflowLike<Params = unknown> {
  */
 export interface WorkflowBinding<Params = unknown> {
   kind: TypeId;
-  /** Logical name of the Workflow, as passed to `Workflow(name, …)`. */
+  /** Logical name of the Workflow, as passed to `Workflow(name, ...)`. */
   name: string;
   /** Name of the exported `WorkflowEntrypoint` class. */
   className: string;
@@ -592,7 +592,7 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  *
  * A Workflow follows the same two-phase pattern as Workers and Durable
  * Objects. The outer `Effect.gen` resolves shared dependencies. The inner
- * `Effect.fn` is the workflow body — a function from a typed `input`
+ * `Effect.fn` is the workflow body -- a function from a typed `input`
  * payload to an Effect that runs steps using `task`, `sleep`, and
  * `sleepUntil`. `task` takes the step name and Effect, plus an optional
  * config object for retries, timeout, and a rollback handler.
@@ -657,7 +657,7 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  * ```
  *
  * ### Scheduling instances
- * Each matching cron expression creates a new instance automatically —
+ * Each matching cron expression creates a new instance automatically --
  * no Worker Cron Trigger or `scheduled` handler required.
  * **Example:** Native cron schedules
  * ```typescript
@@ -958,7 +958,7 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  * script. The host Worker declares and exports the `WorkflowEntrypoint`
  * class. The consumer Worker declares a `Workflow` with `scriptName` set
  * to the host Worker's script name. Cross-script references are bindings
- * only — Alchemy does not drive `putWorkflow` for the foreign class, so
+ * only -- Alchemy does not drive `putWorkflow` for the foreign class, so
  * deploy the host first.
  *
  * **Example:** Consumer Worker binds to the host script
@@ -1209,7 +1209,7 @@ export const ProviderLive = () =>
     // `workflowId` is stable across live updates: `putWorkflow` is a
     // PUT-as-upsert keyed by the account-global `workflowName`, so re-putting
     // the same name (className/scriptName changes) preserves the workflow's
-    // id. The dev→deploy id change that used to force `workflowId` out of
+    // id. The dev->deploy id change that used to force `workflowId` out of
     // this list is now an engine-orchestrated mode-switch REPLACEMENT (the
     // persisted `providerMode` stamp differs), so the live provider never
     // sees a `dev:` id.
@@ -1229,7 +1229,7 @@ export const ProviderLive = () =>
                 workflowId: wf.id,
                 workflowName: wf.name,
                 // `className`/`scriptName` can be null/absent in the list
-                // payload on some accounts — fall back so listing succeeds.
+                // payload on some accounts -- fall back so listing succeeds.
                 className: wf.className ?? "",
                 scriptName: wf.scriptName ?? "",
                 accountId,
@@ -1386,7 +1386,7 @@ export const ProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the workflow is purely virtual: a `dev:` id keyed
+ * Local (dev) provider -- the workflow is purely virtual: a `dev:` id keyed
  * into the local workerd workflow engine. The host worker's `workflow`
  * binding is lowered onto the local runtime's Workflow Engine DO by
  * `LocalWorkerProvider` (`Workflows.local(...)`), so no runtime layer is
@@ -1414,7 +1414,7 @@ export const ProviderLocal = () =>
       // scriptName changes update in place).
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ news, output, bindings }) {
@@ -1444,7 +1444,7 @@ export const ProviderLocal = () =>
     }),
     delete: Effect.fn(function* () {
       // The simulator's on-disk instance state lives under the local worker's
-      // storage; dropping the state row is enough — orphaned data is
+      // storage; dropping the state row is enough -- orphaned data is
       // reclaimed with `.alchemy`.
     }),
   });

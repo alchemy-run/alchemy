@@ -49,7 +49,7 @@ import * as Scope from "effect/Scope";
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.
  */
 export interface MakeOptions<ROut = any> {
-  /** Provider layer for the stack — e.g. `AWS.providers()`, `Cloudflare.providers()`. */
+  /** Provider layer for the stack -- e.g. `AWS.providers()`, `Cloudflare.providers()`. */
   providers: Layer.Layer<ROut, never, StackServices>;
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
@@ -59,7 +59,7 @@ export interface MakeOptions<ROut = any> {
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
    * people running the same suite against one account don't collide.
-   * Does **not** read `$ALCHEMY_STAGE` — that is the CLI deploy/dev stage.
+   * Does **not** read `$ALCHEMY_STAGE` -- that is the CLI deploy/dev stage.
    */
   stage?: string;
   /**
@@ -74,7 +74,7 @@ export interface MakeOptions<ROut = any> {
    * instead of being deployed to the cloud. When omitted, falls back to the
    * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
    *
-   * {@link ALCHEMY_TEST_DEV} (`ALCHEMY_TEST_DEV=1`) overrides this — use it
+   * {@link ALCHEMY_TEST_DEV} (`ALCHEMY_TEST_DEV=1`) overrides this -- use it
    * to force an entire existing live suite through local providers without
    * editing each `Test.make({ dev: true })`.
    */
@@ -86,17 +86,17 @@ export interface MakeOptions<ROut = any> {
    * Cloudflare's `localRuntimeServices()`) are EMPTY in the test process and
    * RPC-backed providers run their lifecycle in a spawned sidecar process.
    *
-   * Defaults to the resolved `dev` flag — dev tests run the real `alchemy
+   * Defaults to the resolved `dev` flag -- dev tests run the real `alchemy
    * dev` topology unless they opt out. In-process dev (`sidecar: false`)
    * masks missing main-process lifecycle dependencies (the class of bug
    * behind #1007, where D1's local migrations only failed under `alchemy
-   * dev`); it remains available because it IS still a real production path —
+   * dev`); it remains available because it IS still a real production path --
    * a plain `alchemy deploy` deleting a `providerMode: "local"` state row
-   * runs the local provider in-process — and because in-process runs are
+   * runs the local provider in-process -- and because in-process runs are
    * easier to debug.
    *
    * Fully lazy: only the proxy facade is installed up front. The spawner
-   * HTTP server starts — and a sidecar child process is forked — on the
+   * HTTP server starts -- and a sidecar child process is forked -- on the
    * first provider session request (a deploy/destroy building an RPC-backed
    * local provider); a dev file that never does starts no processes at all.
    * Once started, the sidecar lives for the whole test file (its own scope,
@@ -112,7 +112,7 @@ export interface MakeOptions<ROut = any> {
   sidecar?: boolean | SidecarOptions;
 }
 
-/** Options for the dev sidecar process — see {@link MakeOptions.sidecar}. */
+/** Options for the dev sidecar process -- see {@link MakeOptions.sidecar}. */
 export interface SidecarOptions {
   /** Prefixes of environment variables withheld from the sidecar. */
   readonly omitEnv?: ReadonlyArray<string>;
@@ -184,13 +184,13 @@ export const resolveStage = (options: { stage?: string }): string =>
  * `provide` installs a lazy {@link RpcProviderProxy} facade into an effect.
  * Installing the facade is free: the spawner HTTP server only starts (and,
  * downstream of it, a sidecar child process is only forked) when a provider
- * actually requests a session — i.e. when a deploy/destroy builds an
+ * actually requests a session -- i.e. when a deploy/destroy builds an
  * RPC-backed local provider. A dev file that never does starts nothing.
  *
  * The spawner (and the sidecar children it forks) is a PROCESS-WIDE
  * SINGLETON shared by every test file, refcounted per handle: all files run
  * in one bun process, and a per-file sidecar means a per-file bun child that
- * imports the entire alchemy + distilled module graph — dozens of concurrent
+ * imports the entire alchemy + distilled module graph -- dozens of concurrent
  * files at hundreds of MB each OOMs the machine. Stack isolation is
  * preserved because each RPC session carries its own stack environment (see
  * `SESSION_ENV_PARAM` in Local/RpcServerEnvironment.ts) and the child builds
@@ -381,7 +381,7 @@ if (testDev) {
   // Bun/Node would otherwise reject the upgrade. Scoped to ALCHEMY_TEST_DEV
   // only.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  // Set here — before the RPC spawner or any vite child forks — so the whole
+  // Set here -- before the RPC spawner or any vite child forks -- so the whole
   // dev process tree inherits it.
   for (const services of testServices) {
     for (const [key, value] of Object.entries(services.env ?? {})) process.env[key] ??= value;
@@ -456,8 +456,8 @@ const resourceRecorder = Logger.make<unknown, void>((options) => {
 });
 
 /**
- * Start capturing what the resource `fqn` logs — its processes' output (a dev
- * Worker's console, a Vite dev server) and alchemy's lines about it — whether
+ * Start capturing what the resource `fqn` logs -- its processes' output (a dev
+ * Worker's console, a Vite dev server) and alchemy's lines about it -- whether
  * its provider runs in the dev sidecar or in-process. Start it before the
  * deploy; the returned effect reads every line since, without ANSI styling.
  * The capture ends with the enclosing scope.
@@ -551,7 +551,7 @@ export const toEffect = <A, ROut = any>(
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
-    // satisfied — which surfaces as `Service not found: AuthProviders`.
+    // satisfied -- which surfaces as `Service not found: AuthProviders`.
     Effect.provide(options.state ?? State.localState()),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
@@ -614,7 +614,7 @@ export const withProviders = <A, E, R, ROut>(
  * `scope`, when supplied, is forwarded down so the dev sidecar (and other
  * scoped resources) lives until the caller closes it instead of dying as
  * soon as `deploy` resolves. The test harness uses this to keep workerd
- * alive across `beforeAll` → tests → `afterAll`.
+ * alive across `beforeAll` -> tests -> `afterAll`.
  */
 export interface DeployCallOptions extends Plan.MakePlanOptions {
   stage?: string;
@@ -710,7 +710,7 @@ export const destroy = <ROut>(
  * without polluting other tests in the same file.
  *
  * When the adapter can name the test file (the alchemy-test runner), the
- * store is DURABLE — rows live under `.alchemy/state/{file}-{test}/{stage}`
+ * store is DURABLE -- rows live under `.alchemy/state/{file}-{test}/{stage}`
  * on disk. Durability is what makes an interrupted destroy recoverable: the
  * engine persists a `deleting` row before every `provider.delete` and only
  * drops it on success, so a run killed mid-delete (e.g. the runner's
@@ -757,8 +757,8 @@ const sanitizeStackName = (name: string) =>
  * namespace: `test/AWS/Website/Router.test.ts` -> `AWS/Website/Router`.
  * Test names repeat across files (e.g. "create and delete bucket with
  * default props"), so the durable per-test store MUST be namespaced by file
- * or two concurrently-running same-named tests would read, write and — far
- * worse — destroy each other's rows.
+ * or two concurrently-running same-named tests would read, write and -- far
+ * worse -- destroy each other's rows.
  */
 const scratchNamespace = (file: string) =>
   file.replace(/^test[/\\]/, "").replace(/\.test\.ts$/, "");
@@ -772,7 +772,7 @@ const scratchNamespace = (file: string) =>
  * leave resumable rows for the next run (see {@link ScratchStack}).
  *
  * Without `file` (bun/vitest adapters, which cannot name their file at
- * registration time): falls back to a private in-memory store — isolated,
+ * registration time): falls back to a private in-memory store -- isolated,
  * but discarded with the process.
  */
 export const scratchStack = <ROut>(

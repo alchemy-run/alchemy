@@ -79,7 +79,7 @@ export interface SequenceStore extends Resource<
 > {}
 
 /**
- * An Amazon HealthOmics sequence store — a container for genomics read sets
+ * An Amazon HealthOmics sequence store -- a container for genomics read sets
  * (FASTQ, BAM, CRAM).
  *
  * A sequence store name is auto-generated from the app, stage, and logical ID

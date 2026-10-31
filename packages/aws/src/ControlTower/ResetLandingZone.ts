@@ -7,7 +7,7 @@ import type { LandingZone } from "./LandingZone.ts";
  * Runtime binding for `controltower:ResetLandingZone`.
  *
  * Bind this operation to a {@link LandingZone} to re-deploy the landing
- * zone to its last-known configuration from inside a function runtime —
+ * zone to its last-known configuration from inside a function runtime --
  * remediating landing zone drift. The call starts an asynchronous operation
  * (landing zone operations routinely take an hour); poll it with
  * {@link GetLandingZoneOperation}. Provide the implementation with
@@ -15,7 +15,7 @@ import type { LandingZone } from "./LandingZone.ts";
  * ### Remediating Drift
  * **Example:** Reset a Drifted Landing Zone
  * ```typescript
- * // init — bind the operation to the landing zone
+ * // init -- bind the operation to the landing zone
  * const resetLandingZone = yield* AWS.ControlTower.ResetLandingZone(landingZone);
  *
  * // runtime

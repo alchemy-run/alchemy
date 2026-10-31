@@ -12,7 +12,7 @@ export interface PutActionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `personalize:PutActions`, scoped to one {@link Dataset} —
+ * Runtime binding for `personalize:PutActions`, scoped to one {@link Dataset} --
  * Adds or updates actions incrementally in the bound Actions
  * {@link Dataset} for the NEXT_BEST_ACTION recipe.
  * Provide the implementation with

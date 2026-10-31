@@ -29,13 +29,13 @@ export interface VariantProps {
    */
   accountId?: string;
   /**
-   * Variant name — the URL segment used to request the variant (e.g.
+   * Variant name -- the URL segment used to request the variant (e.g.
    * `https://imagedelivery.net/<hash>/<image>/<name>`). Alphanumeric only;
    * Cloudflare rejects hyphens and underscores.
    *
    * Defaults to the logical ID verbatim (variant names are user-facing URL
    * segments, so no uniqueness suffix is appended). Changing the name
-   * triggers a replacement — the API cannot rename a variant.
+   * triggers a replacement -- the API cannot rename a variant.
    *
    * @default the logical ID
    */
@@ -85,17 +85,17 @@ export interface VariantAttributes {
 export type Variant = Resource<TypeId, VariantProps, VariantAttributes, never, Providers>;
 
 /**
- * A Cloudflare Images variant — a named resizing preset (e.g. `thumbnail`,
+ * A Cloudflare Images variant -- a named resizing preset (e.g. `thumbnail`,
  * `hero`) applied when serving images from Cloudflare Images.
  *
  * A variant is identified by its name within an account (up to 100 variants
  * per account). The name is the URL segment used to request the variant, so
- * it is immutable — changing it triggers a replacement. All resizing options
+ * it is immutable -- changing it triggers a replacement. All resizing options
  * (`fit`, `width`, `height`, `metadata`, `neverRequireSignedURLs`) are
  * mutable in place.
  *
  * Note: every Images-enabled account has a built-in `public` variant. Do not
- * manage `public` with this resource — Cloudflare silently ignores deletes
+ * manage `public` with this resource -- Cloudflare silently ignores deletes
  * of the built-in variant, so destroy would not actually remove it.
  * ### Creating a Variant
  * **Example:** Thumbnail variant
@@ -158,18 +158,18 @@ export const VariantProvider = () =>
       // the exact `read` Attributes shape.
       //
       // NOTE: distilled mis-types this response as a single variant, but the
-      // real body is a keyed `variants` map — so the strict decode currently
+      // real body is a keyed `variants` map -- so the strict decode currently
       // fails. The fix is a distilled response-schema patch (see neededPatch
       // in the agent report); once applied, the successful-decode path below
       // works unchanged.
       const names = yield* images.listV1Variants({ accountId }).pipe(
         Effect.map(variantNamesFrom),
-        // The built-in `public` variant is not managed by this resource —
+        // The built-in `public` variant is not managed by this resource --
         // Cloudflare silently ignores deletes of it (the DELETE returns 200
         // but the variant persists), so exclude it from enumeration.
         Effect.map((all) => all.filter((name) => name !== "public")),
         // Accounts without the Cloudflare Images entitlement reject the route
-        // (code 5403) — there is nothing to enumerate.
+        // (code 5403) -- there is nothing to enumerate.
         Effect.catchTag("ImagesAccessNotEnabled", () => Effect.succeed<string[]>([])),
       );
 
@@ -186,15 +186,15 @@ export const VariantProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      // News may still contain unresolved plan-time expressions — defer to
+      // News may still contain unresolved plan-time expressions -- defer to
       // the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
-      // The variant name is its API path identifier — it cannot be renamed.
+      // The variant name is its API path identifier -- it cannot be renamed.
       const oldName = output?.variantName ?? olds?.name ?? id;
       if ((news.name ?? id) !== oldName) {
         return { action: "replace" } as const;
       }
-      // Moving accounts replaces. accountId is an Input — compare only once
+      // Moving accounts replaces. accountId is an Input -- compare only once
       // both sides are concrete strings.
       if (
         typeof olds?.accountId === "string" &&
@@ -222,7 +222,7 @@ export const VariantProvider = () =>
       if (!observed) return undefined;
       const attrs = toAttributes(observed, acct);
       // Variants carry no ownership markers. With no prior output we cannot
-      // prove we created a same-named variant — report it `Unowned` so the
+      // prove we created a same-named variant -- report it `Unowned` so the
       // engine gates takeover behind the adopt policy.
       return output?.variantName ? attrs : Unowned(attrs);
     }),
@@ -233,11 +233,11 @@ export const VariantProvider = () =>
       const acct = (news.accountId as string | undefined) ?? accountId;
       const name = news.name ?? id;
 
-      // 1. Observe — cloud state is authoritative. The cached output is only
+      // 1. Observe -- cloud state is authoritative. The cached output is only
       //    a hint; a missing variant falls through to create.
       let observed = yield* getVariant(acct, name);
 
-      // 2. Ensure — create when missing. A concurrent create surfaces as
+      // 2. Ensure -- create when missing. A concurrent create surfaces as
       //    `VariantAlreadyExists` (Cloudflare code 5409): converge by
       //    re-reading the variant that won the race.
       if (!observed) {
@@ -255,7 +255,7 @@ export const VariantProvider = () =>
       }
       if (!observed) {
         // Create succeeded but neither the response body nor a re-read
-        // surfaced the variant — eventual-consistency blip; fail typed so
+        // surfaced the variant -- eventual-consistency blip; fail typed so
         // the engine can retry the reconcile.
         return yield* images.VariantNotFound.make({
           code: 5401,
@@ -263,7 +263,7 @@ export const VariantProvider = () =>
         });
       }
 
-      // 3. Sync — diff observed options against desired; PATCH requires the
+      // 3. Sync -- diff observed options against desired; PATCH requires the
       //    full options struct, so send everything, but skip the API call
       //    entirely on a no-op.
       const desired = desiredOptions(news);
@@ -302,7 +302,7 @@ export const VariantProvider = () =>
       // success, so the engine's replacement GC (which deletes the OLD
       // generation as the new one is created) leaves a genuinely clean slate
       // rather than an orphan that lingers past the caller's verification.
-      // Bounded — if it never clears we stop polling and proceed.
+      // Bounded -- if it never clears we stop polling and proceed.
       yield* getVariant(output.accountId, output.variantName).pipe(
         Effect.repeat({
           schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(12)]),
@@ -315,7 +315,7 @@ export const VariantProvider = () =>
 type ObservedVariant = NonNullable<images.GetV1VariantResponse["variant"]>;
 
 /**
- * Read a variant by name, mapping "gone" (`VariantNotFound` — Cloudflare
+ * Read a variant by name, mapping "gone" (`VariantNotFound` -- Cloudflare
  * error code 5401, or the envelope-less plain-text 404 the GET endpoint
  * returns) to `undefined`.
  */
@@ -326,7 +326,7 @@ const getVariant = (accountId: string, variantId: string) =>
   );
 
 /**
- * Extract variant names — the keys of the `variants` map — from a list-variants
+ * Extract variant names -- the keys of the `variants` map -- from a list-variants
  * payload. The endpoint returns `result.variants` as a keyed object map of
  * variantId -> variant (not an array), so accept either the unwrapped `result`
  * (`{ variants: {...} }`) or the full raw body (`{ result: { variants: {...} } }`).

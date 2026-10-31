@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Looking Up Users
  * **Example:** Enumerate Users
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listUsers = yield* AWS.IdentityCenter.ListUsers(instance);
  *
  * // runtime

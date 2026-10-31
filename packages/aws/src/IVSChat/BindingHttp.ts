@@ -5,8 +5,8 @@ import type { Room } from "./Room.ts";
 /**
  * Shared scaffolding for Amazon IVS Chat HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeIvsChatRoomHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeIvsChatRoomHttpBinding({ ... }))` over the builder
  * below. Everything except the operation, the IAM action list, and an
  * optional request-shape mapper is boilerplate.
  */
@@ -18,7 +18,7 @@ import type { Room } from "./Room.ts";
  * of every request.
  *
  * `prepare` (optional) maps a friendlier public request shape onto the wire
- * request — e.g. `CreateChatToken` converts a `Duration.Input` into the wire
+ * request -- e.g. `CreateChatToken` converts a `Duration.Input` into the wire
  * `sessionDurationInMinutes`. It defaults to identity.
  */
 export const makeIvsChatRoomHttpBinding = <
@@ -42,7 +42,7 @@ export const makeIvsChatRoomHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (room: Room) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const RoomArn = yield* room.roomArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${room})`({

@@ -31,11 +31,11 @@ export type EncryptionConfig = {
   /**
    * Cloud KMS key
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
-   * Immutable — changing it replaces the database.
+   * Immutable -- changing it replaces the database.
    */
   kmsKeyName?: string;
   /**
-   * KMS keys covering every region of the instance config. Immutable —
+   * KMS keys covering every region of the instance config. Immutable --
    * changing them replaces the database.
    */
   kmsKeyNames?: string[];
@@ -44,7 +44,7 @@ export type EncryptionConfig = {
 export type DatabaseProps = {
   /**
    * Parent instance id or full name
-   * (`projects/{project}/instances/{instance}`). Immutable — changing it
+   * (`projects/{project}/instances/{instance}`). Immutable -- changing it
    * replaces the database.
    */
   instance: string;
@@ -52,17 +52,17 @@ export type DatabaseProps = {
    * Database id (the `{database}` segment of
    * `projects/{project}/instances/{instance}/databases/{database}`). If
    * omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must match `^[a-z][-a-z0-9]*[a-z0-9]$` (2–30
-   * characters). Immutable — changing it replaces the database.
+   * logical id. Must match `^[a-z][-a-z0-9]*[a-z0-9]$` (2-30
+   * characters). Immutable -- changing it replaces the database.
    */
   databaseId?: string;
   /**
-   * SQL dialect. Immutable — changing it replaces the database.
+   * SQL dialect. Immutable -- changing it replaces the database.
    * @default "GOOGLE_STANDARD_SQL"
    */
   databaseDialect?: DatabaseDialect;
   /**
-   * Extra DDL statements run atomically with create. Immutable —
+   * Extra DDL statements run atomically with create. Immutable --
    * changing them replaces the database, so evolve a schema with
    * `migrations` instead.
    */
@@ -84,7 +84,7 @@ export type DatabaseProps = {
    */
   migrations?: MigrationsInput;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * database.
    */
   encryptionConfig?: EncryptionConfig;
@@ -544,7 +544,7 @@ export const DatabaseProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      // Sync migrations — the shared pipeline skips already-applied ones.
+      // Sync migrations -- the shared pipeline skips already-applied ones.
       const migrationsInput = migrationsInputOf(news);
       const migrations = migrationsInput
         ? yield* runDatabaseMigrations({

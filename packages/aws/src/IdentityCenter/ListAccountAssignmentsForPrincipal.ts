@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `ListAccountAssignmentsForPrincipal` operation (IAM action
  * `sso:ListAccountAssignmentsForPrincipal`), scoped to one {@link Instance}.
  *
- * Lists every account assignment a user or group holds across the organization — "what can this principal access?" for access portals. Only valid on organization instances, called from the management account. The instance's
+ * Lists every account assignment a user or group holds across the organization -- "what can this principal access?" for access portals. Only valid on organization instances, called from the management account. The instance's
  * `InstanceArn` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.ListAccountAssignmentsForPrincipalHttp)`.
  * ### Auditing Access
  * **Example:** List a Principal's Assignments
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listAccountAssignmentsForPrincipal = yield* AWS.IdentityCenter.ListAccountAssignmentsForPrincipal(instance);
  *
  * // runtime

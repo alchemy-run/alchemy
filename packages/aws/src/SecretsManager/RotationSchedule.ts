@@ -98,7 +98,7 @@ export interface RotationSchedule extends Resource<
  * delete).
  *
  * Usually created for you by {@link onSecretRotation}, which also wires the
- * invoke permission and the runtime handler — reach for the resource
+ * invoke permission and the runtime handler -- reach for the resource
  * directly only when the rotation function is managed outside the current
  * stack.
  * ### Scheduling Rotation
@@ -129,13 +129,13 @@ export const RotationSchedule = Resource<RotationSchedule>("AWS.SecretsManager.R
 
 /**
  * Bounded retry while Secrets Manager can't yet invoke the rotation Lambda
- * (`InvalidRequestException` — the `lambda:InvokeFunction` permission for
+ * (`InvalidRequestException` -- the `lambda:InvokeFunction` permission for
  * principal `secretsmanager.amazonaws.com` propagates asynchronously right
  * after it is created).
  *
  * Explicitly-typed helper: inlining `Effect.retry` here leaves
  * `Retry.Return`'s conditional type unresolved in the provider's inferred
- * layer type, which declaration emit widens to an `unknown` R — poisoning
+ * layer type, which declaration emit widens to an `unknown` R -- poisoning
  * `AWS.providers()` for every consumer (same shape as in `Secret.ts`).
  */
 const retryWhileInvokePermissionPropagates = <A, E extends { _tag: string }, R>(
@@ -190,7 +190,7 @@ export const RotationScheduleProvider = () =>
           // `RotateImmediately: false` Secrets Manager only validates the
           // config by invoking the rotation function's `testSecret` step.
           // Right after the invoke permission is created Secrets Manager may
-          // not see it yet — retry through that propagation window.
+          // not see it yet -- retry through that propagation window.
           const rotated = yield* retryWhileInvokePermissionPropagates(
             secretsmanager.rotateSecret({
               SecretId: secretId,
@@ -224,7 +224,7 @@ export const RotationScheduleProvider = () =>
             );
         }),
         // A rotation schedule is configuration on a secret, not a separately
-        // enumerable object — `listSecrets` surfaces the rotation state
+        // enumerable object -- `listSecrets` surfaces the rotation state
         // (`RotationEnabled`, `RotationLambdaARN`) inline, so hydrate the
         // exact `read` Attributes shape for every secret that has rotation
         // enabled.

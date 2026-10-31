@@ -13,7 +13,7 @@ export class Internet extends Context.Service<Internet, Config.Service>()(
  *
  * This deliberately does NOT match Node's read-once-at-startup semantics:
  * this layer is built once per long-lived sidecar process, but the file the
- * env var points at may not exist yet when the sidecar starts — `alchemy
+ * env var points at may not exist yet when the sidecar starts -- `alchemy
  * dev` points it at the local emulator's self-signed CA
  * (`~/.floci/ca.pem`), which is minted while the FIRST apply is already
  * deploying workers in parallel. Reading at every workerd config build

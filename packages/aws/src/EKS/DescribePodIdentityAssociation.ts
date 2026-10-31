@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribePodIdentityAssociation`.
  *
- * Reads one EKS Pod Identity association — the IAM role wired to a Kubernetes service account.
+ * Reads one EKS Pod Identity association -- the IAM role wired to a Kubernetes service account.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribePodIdentityAssociation` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribePodIdentityAssociationHttp)`.

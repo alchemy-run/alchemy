@@ -121,7 +121,7 @@ export interface BackupPlan extends Resource<
 > {}
 
 /**
- * An AWS Backup plan — a policy expression that defines *when* and *how* you
+ * An AWS Backup plan -- a policy expression that defines *when* and *how* you
  * want to back up your resources, composed of one or more scheduled rules
  * that each target a backup vault.
  *
@@ -213,7 +213,7 @@ export const BackupPlanProvider = () =>
                     p.BackupPlanArn !== undefined &&
                     // Service-managed plans (e.g. EFS automatic backups'
                     // `aws/efs/automatic-backup-plan`) reject DeleteBackupPlan
-                    // with AccessDenied (verified live) — keep them out of
+                    // with AccessDenied (verified live) -- keep them out of
                     // enumeration for account-wide teardown (nuke).
                     !(p.BackupPlanName ?? "").startsWith("aws/"),
                 )
@@ -253,7 +253,7 @@ export const BackupPlanProvider = () =>
             Rules: (news.rules ?? []).map(toRuleInput),
           };
 
-          // OBSERVE — resolve the plan by its stable id when we have one.
+          // OBSERVE -- resolve the plan by its stable id when we have one.
           const live = output?.backupPlanId
             ? yield* backup
                 .getBackupPlan({ BackupPlanId: output.backupPlanId })
@@ -265,7 +265,7 @@ export const BackupPlanProvider = () =>
           let versionId: string;
 
           if (!live?.BackupPlanArn) {
-            // ENSURE — create.
+            // ENSURE -- create.
             const created = yield* backup.createBackupPlan({
               BackupPlan: backupPlanInput,
               BackupPlanTags: { ...internalTags, ...news.tags },
@@ -274,7 +274,7 @@ export const BackupPlanProvider = () =>
             backupPlanArn = created.BackupPlanArn!;
             versionId = created.VersionId ?? "";
           } else {
-            // SYNC — a plan is a true upsert via updateBackupPlan; converge
+            // SYNC -- a plan is a true upsert via updateBackupPlan; converge
             // rule/name changes unconditionally (the API is idempotent).
             backupPlanId = output!.backupPlanId!;
             const updated = yield* backup.updateBackupPlan({
@@ -285,7 +285,7 @@ export const BackupPlanProvider = () =>
             versionId = updated.VersionId ?? live.VersionId ?? "";
           }
 
-          // SYNC tags — diff against observed cloud tags.
+          // SYNC tags -- diff against observed cloud tags.
           const currentTags = yield* backup.listTags({ ResourceArn: backupPlanArn }).pipe(
             Effect.map((r) => r.Tags ?? {}),
             Effect.orElseSucceed(() => ({}) as Record<string, string | undefined>),
@@ -317,7 +317,7 @@ export const BackupPlanProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // A plan cannot be deleted while it still has resource selections
-          // attached — delete those first (idempotent: a vanished selection
+          // attached -- delete those first (idempotent: a vanished selection
           // is already gone).
           const selections = yield* backup.listBackupSelections
             .pages({ BackupPlanId: output.backupPlanId })

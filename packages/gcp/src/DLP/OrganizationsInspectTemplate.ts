@@ -34,13 +34,13 @@ export type OrganizationsInspectTemplateProps = {
    * `organizations/{organization}/inspectTemplates/{inspectTemplate}`).
    * If omitted, a unique id is generated from the stack, stage, and
    * logical id. Letters, digits, hyphens, and underscores; max 100
-   * characters. Immutable — changing it replaces the template.
+   * characters. Immutable -- changing it replaces the template.
    */
   templateId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the template.
+   * Manager ancestor. Immutable -- changing it replaces the template.
    */
   organization?: string;
   /**
@@ -50,7 +50,7 @@ export type OrganizationsInspectTemplateProps = {
   /**
    * Human-readable description (max 256 characters). Inspect templates
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -98,7 +98,7 @@ export type OrganizationsInspectTemplate = Resource<
 /**
  * An organization-scoped Sensitive Data Protection inspect template.
  *
- * Templates have no labels field — Alchemy stamps ownership into the
+ * Templates have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Template id and organization
  * are identity. Display name, description, and inspect config update in
  * place.

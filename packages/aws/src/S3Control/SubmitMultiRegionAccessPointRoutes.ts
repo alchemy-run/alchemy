@@ -8,14 +8,14 @@ import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
  *
  * Shifts traffic between the bound {@link MultiRegionAccessPoint}'s regions
  * by dialing each region's `TrafficDialPercentage` (0 = passive, 100 =
- * active) — the act half of an automated failover controller, e.g. a
+ * active) -- the act half of an automated failover controller, e.g. a
  * health-check Lambda that dials a degraded region to 0. Requests are
  * routed to the `us-west-2` MRAP control plane. Provide the implementation
  * with `Effect.provide(AWS.S3Control.SubmitMultiRegionAccessPointRoutesHttp)`.
  * ### Controlling Multi-Region Failover
  * **Example:** Fail Traffic Away from a Region
  * ```typescript
- * // init — bind the operation to the Multi-Region Access Point
+ * // init -- bind the operation to the Multi-Region Access Point
  * const submitRoutes =
  *   yield* AWS.S3Control.SubmitMultiRegionAccessPointRoutes(mrap);
  *

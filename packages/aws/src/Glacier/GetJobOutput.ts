@@ -16,7 +16,7 @@ export interface GetJobOutputRequest extends Omit<
  * Runtime binding for the `GetJobOutput` operation (IAM action
  * `glacier:GetJobOutput` on the vault ARN).
  *
- * Downloads the output of a completed job on the bound {@link Vault} — the
+ * Downloads the output of a completed job on the bound {@link Vault} -- the
  * archive bytes for an archive-retrieval job, or the JSON inventory for an
  * inventory-retrieval job. Supports ranged reads via the `range` header
  * field for chunked downloads.

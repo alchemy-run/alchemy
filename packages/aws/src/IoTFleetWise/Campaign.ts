@@ -74,7 +74,7 @@ export interface ConditionBasedCollectionScheme {
 }
 
 /**
- * When to collect data — exactly one of a time-based or condition-based
+ * When to collect data -- exactly one of a time-based or condition-based
  * scheme.
  */
 export type CollectionScheme =
@@ -128,7 +128,7 @@ export type SignalFetchConfig =
 export interface SignalFetchInformation {
   /** The fully-qualified name of the signal to fetch. */
   fullyQualifiedName: string;
-  /** When the fetch runs — time-based or condition-based. */
+  /** When the fetch runs -- time-based or condition-based. */
   signalFetchConfig: SignalFetchConfig;
   /**
    * Version of the condition language used by condition-based configs.
@@ -208,7 +208,7 @@ export interface CampaignProps {
    */
   targetArn: string;
   /**
-   * When to collect data — a time-based or condition-based scheme.
+   * When to collect data -- a time-based or condition-based scheme.
    * Changing it replaces the campaign.
    */
   collectionScheme: CollectionScheme;
@@ -243,20 +243,20 @@ export interface CampaignProps {
    */
   postTriggerCollectionDuration?: Duration.Input;
   /**
-   * Whether to send active diagnostic trouble codes — `"OFF"` or
+   * Whether to send active diagnostic trouble codes -- `"OFF"` or
    * `"SEND_ACTIVE_DTCS"`. Changing it replaces the campaign.
    * @default "OFF"
    */
   diagnosticsMode?: iotfleetwise.DiagnosticsMode;
   /**
    * Whether to store collected data offline when a vehicle lacks
-   * connectivity — `"OFF"` or `"TO_DISK"`. Changing it replaces the
+   * connectivity -- `"OFF"` or `"TO_DISK"`. Changing it replaces the
    * campaign.
    * @default "OFF"
    */
   spoolingMode?: iotfleetwise.SpoolingMode;
   /**
-   * Whether to compress vehicle-to-cloud transmissions — `"OFF"` or
+   * Whether to compress vehicle-to-cloud transmissions -- `"OFF"` or
    * `"SNAPPY"`. Changing it replaces the campaign.
    * @default "OFF"
    */
@@ -308,13 +308,13 @@ export interface Campaign extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise campaign — the orchestration of data-collection
+ * An AWS IoT FleetWise campaign -- the orchestration of data-collection
  * rules that the Edge Agent uses to decide which signals to collect from
  * a {@link Fleet} or {@link Vehicle} and where to deliver them.
  *
  * Campaigns are created in `WAITING_FOR_APPROVAL` status; set
  * `autoApprove: true` to have the provider approve them into `RUNNING`.
- * Only the description and extra dimensions are mutable — every other
+ * Only the description and extra dimensions are mutable -- every other
  * change replaces the campaign. AWS IoT FleetWise is allowlist-gated and
  * offered in `us-east-1`/`eu-central-1` only.
  * ### Creating a Campaign
@@ -456,10 +456,10 @@ export const CampaignProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCampaign(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createCampaign({
@@ -488,7 +488,7 @@ export const CampaignProvider = () =>
           }
           observed = yield* waitUntilSettled(name);
 
-          // 3. Sync mutable aspects — description / dataExtraDimensions via
+          // 3. Sync mutable aspects -- description / dataExtraDimensions via
           //    the UPDATE action, applied only on an observed delta.
           const descriptionChanged =
             news.description !== undefined && news.description !== observed.description;

@@ -39,7 +39,7 @@ import { logCommandFailure, VersionCheck } from "./instrument.ts";
  * this must be present in the env of every spawned child (the exec worker, the
  * RPC sidecar, and the workerd instances they start). `ensureFloci` refreshes
  * the bundle at this stable path (and sets the variable itself once written);
- * never clobber a value the caller set, and don't point at a missing file —
+ * never clobber a value the caller set, and don't point at a missing file --
  * Node/Bun warn about it on every startup.
  */
 
@@ -68,7 +68,7 @@ export const devCommand = Command.make(
       yield* resolveStackEntrypoint(options.main);
       // Providers' dev environment (e.g. a local emulator's CA bundle). Set on
       // THIS process, so the RPC spawner's sidecars (and the workerd they
-      // launch) inherit it — they are forked from here, not from the exec
+      // launch) inherit it -- they are forked from here, not from the exec
       // child below.
       const env = yield* Contributions.devEnv().pipe(
         Effect.catchTag("ContributionError", (error) =>
@@ -95,7 +95,7 @@ export const devCommand = Command.make(
         // this module's source or compiled location; the entry is always JS.
         // Node's own TypeScript support is never relied on. `process.execPath`,
         // not "node": the hooks are gated on THIS node's version. A
-        // duplicate --import inherited via execArgv is harmless — the
+        // duplicate --import inherited via execArgv is harmless -- the
         // second import of the same URL hits the module cache.
         command = [
           process.execPath,

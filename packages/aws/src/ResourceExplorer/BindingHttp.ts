@@ -5,8 +5,8 @@ import type { View } from "./View.ts";
 /**
  * Shared HTTP scaffolding for the AWS Resource Explorer runtime bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate.
  */
@@ -59,7 +59,7 @@ export const makeResourceExplorerViewHttpBinding = <
 /**
  * Build the impl Effect for an account-level Resource Explorer operation
  * (e.g. enumerating the searchable resource types). The deploy-time half
- * grants `actions` on `*` — these operations are not scoped to a single
+ * grants `actions` on `*` -- these operations are not scoped to a single
  * Resource Explorer resource.
  */
 export const makeResourceExplorerAccountHttpBinding = <I, A, E, R>(options: {

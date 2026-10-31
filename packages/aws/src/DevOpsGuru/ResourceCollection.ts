@@ -25,7 +25,7 @@ export interface ResourceCollectionProps {
   /**
    * Analyze resources belonging to the named CloudFormation stacks. Use
    * `{ stackNames: ["*"] }` to analyze every stack in the account. Mutually
-   * exclusive with `tags` — an account's collection uses one filter type at
+   * exclusive with `tags` -- an account's collection uses one filter type at
    * a time.
    */
   cloudFormation?: {
@@ -54,7 +54,7 @@ export interface ResourceCollection extends Resource<
 > {}
 
 /**
- * The DevOps Guru resource collection — the account/region singleton that
+ * The DevOps Guru resource collection -- the account/region singleton that
  * defines which AWS resources DevOps Guru analyzes for operational insights,
  * either by CloudFormation stack or by app-boundary tag. Configuring a
  * collection is what "enables" DevOps Guru analysis in an account.
@@ -92,7 +92,7 @@ export interface ResourceCollection extends Resource<
 export const ResourceCollection = Resource<ResourceCollection>("AWS.DevOpsGuru.ResourceCollection");
 
 /**
- * Concurrent `UpdateResourceCollection` calls conflict server-side — retry
+ * Concurrent `UpdateResourceCollection` calls conflict server-side -- retry
  * the typed conflict tag on a short bounded schedule.
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -117,7 +117,7 @@ export const ResourceCollectionProvider = () =>
     Effect.gen(function* () {
       // GetResourceCollection fails with a typed ResourceNotFoundException
       // ("No CustomerResourceFilter present") when nothing has ever been
-      // configured — treat that as an empty collection.
+      // configured -- treat that as an empty collection.
       const observeType = Effect.fn(function* (type: devopsguru.ResourceCollectionType) {
         return yield* devopsguru.getResourceCollection.pages({ ResourceCollectionType: type }).pipe(
           Stream.runCollect,
@@ -146,7 +146,7 @@ export const ResourceCollectionProvider = () =>
           }
         }
         // AWS keeps an app-boundary key with an empty TagValues list after
-        // its last value is removed — a key selecting no values analyzes
+        // its last value is removed -- a key selecting no values analyzes
         // nothing, so it is treated as absent.
         const tags = [...tagMap.entries()]
           .filter(([, values]) => values.size > 0)
@@ -176,7 +176,7 @@ export const ResourceCollectionProvider = () =>
       });
 
       return {
-        // Account/region singleton — the one collection, when configured.
+        // Account/region singleton -- the one collection, when configured.
         list: () =>
           observe.pipe(
             Effect.map((observed) =>
@@ -190,7 +190,7 @@ export const ResourceCollectionProvider = () =>
             return undefined;
           }
           const attrs = toAttrs(observed);
-          // The collection can't carry ownership tags — a configured
+          // The collection can't carry ownership tags -- a configured
           // collection we have no record of belongs to someone else until
           // explicitly adopted.
           return output !== undefined ? attrs : Unowned(attrs);
@@ -200,10 +200,10 @@ export const ResourceCollectionProvider = () =>
           const desiredStacks = news.cloudFormation?.stackNames ?? [];
           const desiredTags = news.tags ?? [];
 
-          // 1. OBSERVE — the live account collection is authoritative.
+          // 1. OBSERVE -- the live account collection is authoritative.
           const observed = yield* observe;
 
-          // 2. SYNC (removals first) — the two filter types are mutually
+          // 2. SYNC (removals first) -- the two filter types are mutually
           //    exclusive, so pruning before adding also handles switching
           //    between CloudFormation- and tag-based coverage.
           const stacksToRemove = observed.stackNames.filter(
@@ -231,7 +231,7 @@ export const ResourceCollectionProvider = () =>
             }
           }
 
-          // 3. SYNC (additions) — apply only the delta.
+          // 3. SYNC (additions) -- apply only the delta.
           const stacksToAdd = desiredStacks.filter((name) => !observed.stackNames.includes(name));
           if (stacksToAdd.length > 0) {
             yield* update("ADD", {

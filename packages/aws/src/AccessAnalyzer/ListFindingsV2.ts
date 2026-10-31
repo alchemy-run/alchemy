@@ -8,7 +8,7 @@ export interface ListFindingsV2Request extends Omit<aa.ListFindingsV2Request, "a
 
 /**
  * Runtime binding for the `ListFindingsV2` operation (IAM action
- * `access-analyzer:ListFindings` — shared with the V1 API).
+ * `access-analyzer:ListFindings` -- shared with the V1 API).
  *
  * Lists the analyzer's findings (external-access and unused-access), with
  * optional filter and sort criteria. Provide the implementation with
@@ -16,10 +16,10 @@ export interface ListFindingsV2Request extends Omit<aa.ListFindingsV2Request, "a
  * ### Reading Findings
  * **Example:** List Active Findings
  * ```typescript
- * // init — bind the operation to the analyzer
+ * // init -- bind the operation to the analyzer
  * const listFindings = yield* AWS.AccessAnalyzer.ListFindingsV2(analyzer);
  *
- * // runtime — page through active findings
+ * // runtime -- page through active findings
  * const page = yield* listFindings({
  *   filter: { status: { eq: ["ACTIVE"] } },
  *   maxResults: 50,

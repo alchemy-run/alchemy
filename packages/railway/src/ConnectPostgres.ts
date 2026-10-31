@@ -10,7 +10,7 @@ import type { Postgres } from "./Postgres.ts";
  * {@link Function} and obtain the Effect-native connection string for
  * `Drizzle.Postgres` / `SQL.Postgres`.
  *
- * `ConnectPostgres` is the Context tag, the type, and the callable —
+ * `ConnectPostgres` is the Context tag, the type, and the callable --
  * `yield* Railway.ConnectPostgres(Db)`. Provide {@link ConnectPostgresHttp}.
  *
  * **Example:** Bind Postgres in a Function
@@ -84,7 +84,7 @@ export interface ConnectPostgresClient {
    */
   connectionString: Effect.Effect<Redacted.Redacted<string>, PostgresUrlMissing, RuntimeContext>;
   /**
-   * Same private URI — Railway Postgres has no PgBouncer split. Kept so
+   * Same private URI -- Railway Postgres has no PgBouncer split. Kept so
    * callers matching the Fly `ConnectPostgres` shape keep working.
    */
   directConnectionString: Effect.Effect<

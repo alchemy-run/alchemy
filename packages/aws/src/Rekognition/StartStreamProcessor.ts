@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StartStreamProcessor` — start a stream processor that analyzes a Kinesis Video Stream (face search or connected-home label detection).
+ * Runtime binding for `rekognition:StartStreamProcessor` -- start a stream processor that analyzes a Kinesis Video Stream (face search or connected-home label detection).
  *
  * The binding takes no arguments and grants the function
  * `rekognition:StartStreamProcessor` on `*` (Rekognition data-plane resources such

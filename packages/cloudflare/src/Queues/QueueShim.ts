@@ -6,30 +6,30 @@ import { Random } from "alchemy/Random";
  *
  * Cloudflare's preview/remote-binding sessions reject queue bindings
  * outright (a preview worker carrying one serves 503 for every request;
- * wrangler has the same gap — cloudflare/workers-sdk#9929), so a locally
+ * wrangler has the same gap -- cloudflare/workers-sdk#9929), so a locally
  * running worker cannot produce to a live queue through the usual
  * remote-binding proxy. Instead, alchemy deploys a REAL shim worker that
  * holds the actual queue binding:
  *
- *   local worker ── env.QUEUE.send() ──▶ forwarder service (local workerd)
+ *   local worker -- env.QUEUE.send() --> forwarder service (local workerd)
  *        POST /message | /batch  +  Authorization: Bearer <token>
- *                                   │
- *                                   ▼
+ *                                   |
+ *                                   v
  *                     deployed shim worker (workers.dev)
- *                                   │  env.QUEUE.send(body, { contentType })
- *                                   ▼
+ *                                   |  env.QUEUE.send(body, { contentType })
+ *                                   v
  *                            real Cloudflare Queue
  *
  * The shim and its bearer token are ordinary engine-managed resources
  * ({@link Worker} + {@link Random}), conditionally instantiated at eval
- * time when a LOCAL worker binds a LIVE queue — the same idiom as
+ * time when a LOCAL worker binds a LIVE queue -- the same idiom as
  * `AccountApiToken` (capability layers minting token resources) and
  * event-source mappings. The engine gives the full lifecycle for free:
  * Output-based ordering (shim deploys before the local worker serves),
  * stable-name updates, deletion on destroy, and orphan GC on promotion
  * (`alchemy deploy` no longer registers the shim, so it is cleaned up).
  *
- * NOT exported from `index.ts` — binding-internal scaffolding.
+ * NOT exported from `index.ts` -- binding-internal scaffolding.
  */
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -42,8 +42,8 @@ import type { Queue } from "./Queue.ts";
  * payloads) back into `send()`/`sendBatch()` calls on its real queue
  * binding, gated by a bearer token.
  *
- * `v8`-serialized messages cannot cross the boundary — deserializing V8
- * payloads in userland is not possible — so they are rejected with a clear
+ * `v8`-serialized messages cannot cross the boundary -- deserializing V8
+ * payloads in userland is not possible -- so they are rejected with a clear
  * error telling the caller to pass an explicit contentType.
  */
 const QUEUE_SHIM_SCRIPT = `class HttpError extends Error {
@@ -111,7 +111,7 @@ export default {
       const url = new URL(request.url);
       switch (url.pathname) {
         case "/message": {
-          // workerd's absent-header default is "v8" — mirrored here so an
+          // workerd's absent-header default is "v8" \u2014 mirrored here so an
           // unmarked payload is rejected rather than misparsed.
           const contentType = request.headers.get("X-Msg-Fmt") ?? "v8";
           const delaySeconds = getDelay(request.headers.get("X-Msg-Delay-Secs"));
@@ -160,7 +160,7 @@ export interface QueueShimBinding {
  * Conditionally instantiate the queue shim for a producer binding: when a
  * LOCAL host worker binds a LIVE queue (dev run + `Alchemy.remote()` on the
  * queue), register the shim worker + its token and return their outputs
- * for the binding data. Any other mode combination returns `undefined` —
+ * for the binding data. Any other mode combination returns `undefined` --
  * including the shim worker's own eval of its queue binding (the shim is
  * pinned live, so no recursion).
  */

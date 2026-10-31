@@ -17,9 +17,9 @@ import type { Providers } from "../Providers.ts";
 /**
  * The kind of value the parameter stores.
  *
- * - `String` — plain text value (the default).
- * - `StringList` — comma-separated list of values.
- * - `SecureString` — value encrypted at rest with a KMS key.
+ * - `String` -- plain text value (the default).
+ * - `StringList` -- comma-separated list of values.
+ * - `SecureString` -- value encrypted at rest with a KMS key.
  */
 export type ParameterType = "String" | "StringList" | "SecureString";
 
@@ -44,7 +44,7 @@ export interface ParameterProps {
    */
   type?: ParameterType;
   /**
-   * The parameter value. Accepts a plain string or a `Redacted` string —
+   * The parameter value. Accepts a plain string or a `Redacted` string --
    * use `Redacted.make(...)` for `SecureString` values so they never leak
    * into logs.
    */
@@ -338,7 +338,7 @@ export const ParameterProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // The API cannot downgrade an Advanced parameter back to Standard —
+          // The API cannot downgrade an Advanced parameter back to Standard --
           // the only way to converge is delete + recreate.
           const oldTier = olds?.tier ?? "Standard";
           const newTier = news?.tier ?? "Standard";
@@ -358,7 +358,7 @@ export const ParameterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative. `output` is only a
+          // 1. OBSERVE -- cloud state is authoritative. `output` is only a
           //    cache of the physical name; if the parameter was deleted
           //    out-of-band we fall through to create.
           const observed = yield* ssm.getParameter({ Name: name, WithDecryption: true }).pipe(
@@ -369,7 +369,7 @@ export const ParameterProvider = () =>
           let version: number | undefined;
 
           if (observed === undefined) {
-            // 2. ENSURE — create with tags in one call. PutParameter rejects
+            // 2. ENSURE -- create with tags in one call. PutParameter rejects
             //    Tags together with Overwrite, so if a concurrent reconciler
             //    won the race we fall back to an overwrite put (the tag sync
             //    below converges tags).
@@ -404,7 +404,7 @@ export const ParameterProvider = () =>
                 ),
               );
           } else {
-            // 3. SYNC — diff observed cloud state against desired and only
+            // 3. SYNC -- diff observed cloud state against desired and only
             //    call PutParameter when something actually drifted.
             //    DescribeParameters carries the metadata GetParameter omits
             //    (tier, description, allowedPattern, KMS key id); it is
@@ -440,7 +440,7 @@ export const ParameterProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags (never olds or
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags (never olds or
           //     output) so adoption converges. Internal Alchemy tags always
           //     win over user tags.
           const observedTags = yield* fetchObservedTags(name);
@@ -474,7 +474,7 @@ export const ParameterProvider = () =>
               );
           }
 
-          // 4. RETURN — resolve the encryption key ARN after the put so a
+          // 4. RETURN -- resolve the encryption key ARN after the put so a
           //    first SecureString write has already materialized the
           //    AWS-managed alias/aws/ssm key.
           const keyArn =

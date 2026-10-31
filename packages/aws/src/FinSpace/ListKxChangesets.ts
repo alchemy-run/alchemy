@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:ListKxChangesets` — lists the changesets of a kdb database in the bound environment, newest first.
+ * Runtime binding for `finspace:ListKxChangesets` -- lists the changesets of a kdb database in the bound environment, newest first.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.ListKxChangesetsHttp)`.
  * ### Ingesting Data

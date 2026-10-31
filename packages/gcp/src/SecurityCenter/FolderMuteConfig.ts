@@ -32,14 +32,14 @@ export type FolderMuteConfigProps = {
    * Mute config id (the `{muteConfig}` segment of
    * `folders/{folder}/muteConfigs/{muteConfig}`). If omitted, a unique id
    * is generated from the stack, stage, and logical id. Letters, digits,
-   * and hyphens; max 63 characters. Immutable — changing it replaces the
+   * and hyphens; max 63 characters. Immutable -- changing it replaces the
    * config.
    */
   muteConfigId?: string;
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder ancestor.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   folder?: string;
   /**
@@ -47,7 +47,7 @@ export type FolderMuteConfigProps = {
    */
   filter: string;
   /**
-   * Mute config type. Immutable — changing it replaces the config.
+   * Mute config type. Immutable -- changing it replaces the config.
    * @default "STATIC"
    */
   type?: scc.GoogleCloudSecuritycenterV1MuteConfigTypeEnum | (string & {});
@@ -61,7 +61,7 @@ export type FolderMuteConfigProps = {
   displayName?: string;
   /**
    * Human-readable description. Mute configs have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -105,7 +105,7 @@ export type FolderMuteConfig = Resource<
 /**
  * A folder-scoped Security Command Center mute config.
  *
- * Mute configs have no labels field — Alchemy stamps ownership into the
+ * Mute configs have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Mute config id, folder, and
  * type are identity. Filter, description, display name, and expiry update
  * in place.

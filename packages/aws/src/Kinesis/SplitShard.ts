@@ -12,7 +12,7 @@ export interface SplitShardRequest extends Omit<
  * Runtime binding for `kinesis:SplitShard`.
  *
  * Bind this operation to a `Stream` to split one shard of a
- * PROVISIONED-mode stream into two — the stream ARN is injected
+ * PROVISIONED-mode stream into two -- the stream ARN is injected
  * automatically. Useful for building custom shard-scaling logic that
  * targets a hot shard directly (the `Stream` resource's `shardCount`
  * prop covers uniform scaling via `UpdateShardCount`). Provide the
@@ -20,10 +20,10 @@ export interface SplitShardRequest extends Omit<
  * ### Managing Shards
  * **Example:** Split a Hot Shard
  * ```typescript
- * // init — bind the operation to the stream
+ * // init -- bind the operation to the stream
  * const splitShard = yield* AWS.Kinesis.SplitShard(stream);
  *
- * // runtime — split at the midpoint of the shard's hash-key range
+ * // runtime -- split at the midpoint of the shard's hash-key range
  * yield* splitShard({
  *   ShardToSplit: "shardId-000000000000",
  *   NewStartingHashKey: "170141183460469231731687303715884105728",

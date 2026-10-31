@@ -8,12 +8,12 @@ import type { TrustStore } from "./TrustStore.ts";
 /**
  * Shared scaffolding for ELBv2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate: the runtime callable injects the bound resource's ARN
  * (`TargetGroupArn` / `LoadBalancerArn`) into the request and the deploy-time
- * half grants `actions` on that ARN — or on `*` for `Describe*` actions,
+ * half grants `actions` on that ARN -- or on `*` for `Describe*` actions,
  * which do not support resource-level permissions in ELBv2.
  *
  * Hosts: Lambda Functions plus self-registering compute (ECS Tasks and EC2

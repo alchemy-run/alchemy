@@ -146,8 +146,8 @@ export class StateExplorerStore {
 
   /**
    * Fork the effect in the CLI's ambient services and hand its exit to the
-   * caller. A fiber the store no longer tracks — dropped by `refresh` or
-   * `dispose` — is stale, and its result is discarded even if it managed to
+   * caller. A fiber the store no longer tracks -- dropped by `refresh` or
+   * `dispose` -- is stale, and its result is discarded even if it managed to
    * complete before the interrupt landed.
    */
   private run<A>(
@@ -207,8 +207,8 @@ export class StateExplorerStore {
   };
 
   /**
-   * Re-list only what a deletion could have changed — the parent listing of
-   * each target — and drop cached files under it. Every other cached column
+   * Re-list only what a deletion could have changed -- the parent listing of
+   * each target -- and drop cached files under it. Every other cached column
    * survives, so the explorer keeps its position instead of collapsing to
    * the stack list the way `refresh` does.
    */
@@ -409,11 +409,11 @@ const nodeStyle: Record<
   StateBrowserNode["kind"],
   { readonly color: string; readonly icon: string; readonly asciiIcon: string }
 > = {
-  stack: { color: theme.color.brand, icon: "◆", asciiIcon: "#" },
-  stage: { color: theme.color.warning, icon: "●", asciiIcon: "@" },
-  namespace: { color: theme.color.accent, icon: "▸", asciiIcon: ">" },
-  resource: { color: theme.color.info, icon: "▪", asciiIcon: "-" },
-  output: { color: theme.color.success, icon: "◇", asciiIcon: "=" },
+  stack: { color: theme.color.brand, icon: "\u25c6", asciiIcon: "#" },
+  stage: { color: theme.color.warning, icon: "\u25cf", asciiIcon: "@" },
+  namespace: { color: theme.color.accent, icon: "\u25b8", asciiIcon: ">" },
+  resource: { color: theme.color.info, icon: "\u25aa", asciiIcon: "-" },
+  output: { color: theme.color.success, icon: "\u25c7", asciiIcon: "=" },
 };
 
 const childrenFor = (
@@ -507,7 +507,7 @@ function Column({ column, selected, focused, height, query, marked }: ColumnProp
               <Text color={style.color}>
                 {marked.has(node.id)
                   ? unicode
-                    ? "● "
+                    ? "\u25cf "
                     : "* "
                   : `${unicode ? style.icon : style.asciiIcon} `}
               </Text>
@@ -523,7 +523,7 @@ function Column({ column, selected, focused, height, query, marked }: ColumnProp
             </Text>
             {(node.kind === "stack" || node.kind === "stage" || node.kind === "namespace") && (
               <Box flexGrow={1} justifyContent="flex-end">
-                <Text tone="muted">{unicode ? "›" : ">"}</Text>
+                <Text tone="muted">{unicode ? "\u203a" : ">"}</Text>
               </Box>
             )}
           </Box>
@@ -869,7 +869,7 @@ function StateExplorer({
         borderDimColor
       >
         <Box gap={1}>
-          <Text color={theme.color.brand}>●</Text>
+          <Text color={theme.color.brand}>&#x25CF;</Text>
           <Text bold>state</Text>
           <Text color={theme.color.accent} wrap="truncate-middle">
             · {displayPath}
@@ -881,7 +881,7 @@ function StateExplorer({
       </Box>
       {notice === undefined ? null : (
         <Box paddingX={1} flexShrink={0}>
-          <Text color={theme.color.success}>✓ {notice}</Text>
+          <Text color={theme.color.success}>&#x2713; {notice}</Text>
         </Box>
       )}
       {searching ? (

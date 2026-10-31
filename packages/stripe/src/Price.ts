@@ -35,7 +35,7 @@ export type PriceType = "one_time" | "recurring";
 
 export interface PriceRecurring {
   /**
-   * Billing frequency. Create-only — changing it replaces the price.
+   * Billing frequency. Create-only -- changing it replaces the price.
    */
   interval: PriceInterval;
   /**
@@ -63,18 +63,18 @@ export interface PriceRecurring {
 
 export interface PriceProps {
   /**
-   * Stripe Product this price belongs to — the resource, or a `prod_…`
-   * id. Create-only — changing it replaces the price.
+   * Stripe Product this price belongs to -- the resource, or a `prod_...`
+   * id. Create-only -- changing it replaces the price.
    */
   product: string | Product;
   /**
    * Three-letter ISO currency code, lowercase (e.g. `"usd"`). Create-only
-   * — changing it replaces the price.
+   * -- changing it replaces the price.
    */
   currency: string;
   /**
    * Amount in the currency's minor units (e.g. cents). Required unless
-   * `unitAmountDecimal` is set or the price is tiered. Create-only —
+   * `unitAmountDecimal` is set or the price is tiered. Create-only --
    * changing it replaces the price.
    */
   unitAmount?: number;
@@ -85,7 +85,7 @@ export interface PriceProps {
   unitAmountDecimal?: string;
   /**
    * Recurring billing configuration. Omit for a one-time price.
-   * Create-only — changing it replaces the price.
+   * Create-only -- changing it replaces the price.
    */
   recurring?: PriceRecurring;
   /**
@@ -114,7 +114,7 @@ export type Price = Resource<
   "Stripe.Price",
   PriceProps,
   {
-    /** Stripe price id (`price_…`). */
+    /** Stripe price id (`price_...`). */
     id: string;
     /** Id of the product this price belongs to. */
     product: string;
@@ -146,7 +146,7 @@ export type Price = Resource<
 >;
 
 /**
- * A Stripe Price — the unit cost attached to a Product. Currency, amount,
+ * A Stripe Price -- the unit cost attached to a Product. Currency, amount,
  * product, and recurring interval are immutable (changing them replaces
  * the price). Nickname, metadata, lookup key, and `active` update in
  * place. Prices cannot be deleted; destroy deactivates them
@@ -400,7 +400,7 @@ export const PriceProvider = () =>
         logicalId: id,
       });
       // A previous generation (same logical id, different immutable
-      // fields) must not be reused — Stripe prices cannot change amount,
+      // fields) must not be reused -- Stripe prices cannot change amount,
       // currency, product, or recurring interval.
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
         current = undefined;

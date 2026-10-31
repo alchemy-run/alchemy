@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:CancelJob` — permanently cancel a
+ * Runtime binding for `mediaconvert:CancelJob` -- permanently cancel a
  * submitted transcode job that has not finished (canceled jobs cannot be
  * restarted).
  *
@@ -19,7 +19,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * yield* cancelJob({ Id: jobId }).pipe(
- *   // already finished / already gone — nothing to cancel
+ *   // already finished / already gone -- nothing to cancel
  *   Effect.catchTag(["NotFoundException", "ConflictException"], () => Effect.void),
  * );
  * ```

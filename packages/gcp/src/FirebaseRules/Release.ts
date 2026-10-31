@@ -26,7 +26,7 @@ export type ReleaseProps = {
    * `cloud.firestore` or `prod/v23`). If omitted, a unique `alc-`
    * prefixed name is generated from the stack, stage, and logical id.
    * Firebase Rules releases have no labels field, so generated ids carry
-   * the `alc-` prefix for `list` / nuke. Immutable — changing it
+   * the `alc-` prefix for `list` / nuke. Immutable -- changing it
    * replaces the release.
    */
   releaseId?: string;
@@ -63,7 +63,7 @@ export type Release = Resource<
  * A named Firebase Security Rules release pointing at a `Ruleset`.
  *
  * Releases have no labels field. Generated release ids are prefixed
- * `alc-` so `list` / nuke can find them. `releaseId` is identity —
+ * `alc-` so `list` / nuke can find them. `releaseId` is identity --
  * changing it replaces the release. `rulesetName` updates in place.
  *
  * ### Creating a Release

@@ -10,7 +10,7 @@ export interface DisconnectParticipantRequest extends Omit<
 > {}
 
 /**
- * Forcibly disconnect a participant from the bound stage — the moderation
+ * Forcibly disconnect a participant from the bound stage -- the moderation
  * call made from a deployed Lambda or Task. If the participant is publishing
  * via an ingest configuration, its `stageArn` attachment is also cleared.
  *

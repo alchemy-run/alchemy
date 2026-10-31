@@ -18,7 +18,7 @@ export class PolicyStoreAliasUnexpectedResponse extends Data.TaggedError(
 export interface PolicyStoreAliasProps {
   /**
    * The ID of the policy store the alias points at. There is no update API
-   * for aliases — changing the store replaces the alias.
+   * for aliases -- changing the store replaces the alias.
    */
   policyStoreId: string;
   /**
@@ -45,7 +45,7 @@ export interface PolicyStoreAlias extends Resource<
   PolicyStoreAliasProps,
   {
     /**
-     * Full name of the alias, including the `policy-store-alias/` prefix —
+     * Full name of the alias, including the `policy-store-alias/` prefix --
      * usable in place of a policy store ID in authorization requests.
      */
     aliasName: string;
@@ -98,7 +98,7 @@ export const PolicyStoreAlias = Resource<PolicyStoreAlias>(
 );
 
 /**
- * Every alias name must carry this prefix — CreatePolicyStoreAlias,
+ * Every alias name must carry this prefix -- CreatePolicyStoreAlias,
  * GetPolicyStoreAlias, and DeletePolicyStoreAlias reject bare names with a
  * ValidationException.
  */
@@ -160,7 +160,7 @@ export const PolicyStoreAliasProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // no UpdatePolicyStoreAlias API — name and target changes replace;
+          // no UpdatePolicyStoreAlias API -- name and target changes replace;
           // deletionMode only affects delete-time behavior
           if (
             olds.policyStoreId !== news.policyStoreId ||
@@ -175,10 +175,10 @@ export const PolicyStoreAliasProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const aliasName = output?.aliasName ?? (yield* toAliasName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const existing = yield* observe(aliasName);
 
-          // 2. ENSURE — tolerate the AlreadyExists race
+          // 2. ENSURE -- tolerate the AlreadyExists race
           if (existing === undefined || existing.state === "PendingDeletion") {
             const created = yield* avp
               .createPolicyStoreAlias({

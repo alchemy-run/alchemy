@@ -226,7 +226,7 @@ export interface Subnet extends Resource<
   Providers
 > {}
 /**
- * A subnet within a VPC — a range of IP addresses bound to a single
+ * A subnet within a VPC -- a range of IP addresses bound to a single
  * Availability Zone where you place instances and other resources. Create
  * public subnets (with `mapPublicIpOnLaunch`) for internet-facing resources
  * and private subnets for internal ones.
@@ -281,7 +281,7 @@ export interface Subnet extends Resource<
  * });
  * ```
  *
- * `mapPublicIpOnLaunch: true` makes this a "public" subnet — instances launched
+ * `mapPublicIpOnLaunch: true` makes this a "public" subnet -- instances launched
  * here automatically get a public IPv4 address. Combine it with an internet
  * gateway route so those instances can reach the internet.
  *
@@ -417,7 +417,7 @@ export const SubnetProvider = () =>
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = { ...alchemyTags, ...news.tags };
 
-          // Observe — find the subnet via cached id, else fall through to
+          // Observe -- find the subnet via cached id, else fall through to
           // create.
           let subnet: ec2.Subnet | undefined;
           if (output?.subnetId) {
@@ -429,7 +429,7 @@ export const SubnetProvider = () =>
             subnet = lookup.Subnets?.[0];
           }
 
-          // Ensure — create the subnet when missing.
+          // Ensure -- create the subnet when missing.
           if (subnet === undefined) {
             const newSubnetId = yield* ec2
               .createSubnet({
@@ -464,7 +464,7 @@ export const SubnetProvider = () =>
                 Effect.catchTag("InvalidSubnet.Conflict", (error) =>
                   Effect.gen(function* () {
                     // The CIDR is occupied. A prior interrupted run may have
-                    // created this subnet but failed to persist state —
+                    // created this subnet but failed to persist state --
                     // observe by VPC + CIDR and take it over only when it
                     // carries our ownership tags; a foreign subnet re-fails
                     // with the typed conflict.
@@ -504,7 +504,7 @@ export const SubnetProvider = () =>
 
           const subnetId = subnet.SubnetId! as SubnetId;
 
-          // Sync subnet attributes — diff observed cloud state against desired
+          // Sync subnet attributes -- diff observed cloud state against desired
           // and only call modifySubnetAttribute on real drift.
           const desiredMapPublicIp = news.mapPublicIpOnLaunch ?? false;
           if ((subnet.MapPublicIpOnLaunch ?? false) !== desiredMapPublicIp) {
@@ -563,7 +563,7 @@ export const SubnetProvider = () =>
             }
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (subnet.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -621,7 +621,7 @@ export const SubnetProvider = () =>
           yield* session.note(`Deleting subnet: ${subnetId}`);
 
           // 1. Attempt to delete subnet. DependencyViolation means resources
-          // still occupy it — ENIs from a just-deleted ALB, CloudFront VPC
+          // still occupy it -- ENIs from a just-deleted ALB, CloudFront VPC
           // origin, or a VPC-attached Lambda can take minutes to release
           // after the owning resource is gone. Lambda Hyperplane ENIs are
           // reaped explicitly between attempts (they otherwise linger up to

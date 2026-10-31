@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:SynthesizeSpeech` — synthesize UTF-8 plain
+ * Runtime binding for `polly:SynthesizeSpeech` -- synthesize UTF-8 plain
  * text or SSML into a stream of audio bytes.
  *
  * Polly is a pure pay-per-call service with no resource to manage: the
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const synthesizeSpeech = yield* AWS.Polly.SynthesizeSpeech();
  *
- * // runtime — AudioStream is a byte Stream of the encoded audio
+ * // runtime -- AudioStream is a byte Stream of the encoded audio
  * const result = yield* synthesizeSpeech({
  *   Engine: "neural",
  *   OutputFormat: "mp3",

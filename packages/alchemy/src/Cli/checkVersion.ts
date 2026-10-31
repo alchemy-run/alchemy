@@ -28,7 +28,7 @@ const SYNC_WAIT = Duration.seconds(3);
 
 interface VersionCheckCache {
   checkedAt: number;
-  /** Absent when the last check attempt failed (offline, timeout, …). */
+  /** Absent when the last check attempt failed (offline, timeout, ...). */
   distTags?: Record<string, string>;
 }
 
@@ -81,7 +81,7 @@ const fetchDistTags = Effect.gen(function* () {
  */
 const refreshDistTags = Effect.fn(function* (cachePath: string) {
   const fetch = yield* fetchDistTags.pipe(
-    // The fiber owns all cache writes, whenever it completes — even after
+    // The fiber owns all cache writes, whenever it completes -- even after
     // the sync wait below has given up on it. A failed attempt is cached
     // too (a bare checkedAt), so a dead network costs at most one blocking
     // wait per TTL window, not one per run.

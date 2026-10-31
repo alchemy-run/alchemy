@@ -54,7 +54,7 @@ export const toRuntimeBinding = Effect.fn(function* (
   b: WorkerBinding,
   /**
    * Dev-only channel from the Worker's binding data (see the `devRemote`
-   * member of the Worker binding contract): binding name → opt-out of local
+   * member of the Worker binding contract): binding name -> opt-out of local
    * emulation for the capabilities that support it (browser / images /
    * stream / send_email).
    */
@@ -147,8 +147,8 @@ export const toRuntimeBinding = Effect.fn(function* (
       return Text.local(b.name, b.text);
     case "queue": {
       // A real queueId belongs to an `Alchemy.remote()` queue. Queue bindings
-      // are NOT supported in Cloudflare's remote/preview sessions — a
-      // platform limitation (cloudflare/workers-sdk#9929) — so live
+      // are NOT supported in Cloudflare's remote/preview sessions -- a
+      // platform limitation (cloudflare/workers-sdk#9929) -- so live
       // production goes through the deployed shim worker registered at
       // eval time (see `Queues/QueueShim.ts`): the local binding targets a
       // forwarder service that relays the queue wire protocol to the shim
@@ -162,7 +162,7 @@ export const toRuntimeBinding = Effect.fn(function* (
           return yield* WorkerValidationError.make({
             message:
               `Queue binding "${b.name}" targets a live queue ` +
-              "(Alchemy.remote()) but no producer shim was registered for it — " +
+              "(Alchemy.remote()) but no producer shim was registered for it \u2014 " +
               "re-deploy, or remove remote() from the queue (local emulation).",
             value: b,
           });
@@ -181,7 +181,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     }
     case "r2_bucket":
       // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
-      // (R2 has no opaque id — the name is the identity); a real name is a
+      // (R2 has no opaque id -- the name is the identity); a real name is a
       // live bucket the dev worker proxies to. Local buckets are also served
       // on the Worker's local S3 endpoint, so presigned URLs and S3 clients
       // work in dev without extra configuration.
@@ -201,7 +201,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "secret_key":
       // workerd imports the key natively: raw material passes through as
       // base64, pkcs8/spki base64 DER is PEM-wrapped, and JWK objects are
-      // serialized — all handled by the hook.
+      // serialized -- all handled by the hook.
       return SecretKey.local({
         binding: b.name,
         format: b.format,
@@ -258,7 +258,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "vpc_service":
-      // A VPC service tunnels into a private network — nothing to emulate
+      // A VPC service tunnels into a private network -- nothing to emulate
       // locally, so the dev worker always proxies to the real service
       // through the remote-binding bridge.
       return VpcService.remote(b.name, b.serviceId);
@@ -288,7 +288,7 @@ export const toRuntimeBinding = Effect.fn(function* (
  * graph. Binding hooks themselves are Effects and cannot cross a process
  * boundary.
  *
- * `config.env` must already be resolved to plain values — `Worker.URL`
+ * `config.env` must already be resolved to plain values -- `Worker.URL`
  * sentinels substituted with the actual dev-proxy URL by the caller.
  */
 export const materializeRuntimeBindings = Effect.fn(function* (
@@ -297,7 +297,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     env?: Record<string, unknown>;
     hasAssets: boolean;
     bindingDescriptors: WorkerBinding[];
-    /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
+    /** Binding name -> opt-out of local emulation (`Alchemy.remote()`). */
     devRemote?: Record<string, boolean>;
     /**
      * Simulated Cloudflare Access config (`dev: { access: ... }`), lowered
@@ -313,7 +313,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
   },
 ) {
   // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
-  // represented by their binding descriptor (same name) — don't ALSO
+  // represented by their binding descriptor (same name) -- don't ALSO
   // serialize the resolved attributes as a duplicate json binding.
   const descriptorNames = new Set(config.bindingDescriptors.map((descriptor) => descriptor.name));
   const workerBindings: BindingHook<BindingServices>[] = [
@@ -335,7 +335,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
   ];
   for (const descriptor of config.bindingDescriptors) {
     if (descriptor.type === "self_url") {
-      // Lowered here rather than in `toRuntimeBinding` — only the caller
+      // Lowered here rather than in `toRuntimeBinding` -- only the caller
       // knows the worker's own dev-proxy URL.
       workerBindings.push(Text.local(descriptor.name, options.selfUrl!));
       continue;

@@ -13,7 +13,7 @@ import type { WriteNamespaceClient } from "./WriteNamespace.ts";
  * `delete`).
  *
  * `ReadWriteNamespace` is a single identifier that is simultaneously the
- * binding's Context tag, its type, and the callable —
+ * binding's Context tag, its type, and the callable --
  * `yield* Cloudflare.KV.ReadWriteNamespace(ns)`.
  *
  * Also accepts InstantNamespace, returning a client without metadata or

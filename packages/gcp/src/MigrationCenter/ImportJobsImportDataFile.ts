@@ -33,7 +33,7 @@ export type ImportJobsImportDataFileProps = {
   /**
    * Parent import job. Full name
    * `projects/{project}/locations/{location}/importJobs/{importJob}` or
-   * the import job id (combined with `location`). Immutable — changing it
+   * the import job id (combined with `location`). Immutable -- changing it
    * replaces the file.
    */
   importJob: string;
@@ -45,19 +45,19 @@ export type ImportJobsImportDataFileProps = {
   location?: string;
   /**
    * Import data file id (the `{importDataFile}` segment). If omitted, a
-   * unique RFC1035 name is generated. Immutable — changing it replaces
+   * unique RFC1035 name is generated. Immutable -- changing it replaces
    * the file.
    */
   importDataFileId?: string;
   /**
-   * Payload format. Immutable — changing it replaces the file.
+   * Payload format. Immutable -- changing it replaces the file.
    * @default "IMPORT_JOB_FORMAT_RVTOOLS_CSV"
    */
   format?: ImportDataFileFormat;
   /**
    * User-friendly display name. Maximum length is 63 characters including
    * Alchemy's ownership marker. Import data files have no labels field,
-   * so ownership is stored in a `[alchemy …]` prefix and stripped from
+   * so ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
@@ -99,7 +99,7 @@ export type ImportJobsImportDataFile = Resource<
  * file returns a signed URI that the client uploads inventory CSV/XLSX
  * into.
  *
- * Import data files have no labels field — Alchemy stamps ownership into
+ * Import data files have no labels field -- Alchemy stamps ownership into
  * the display name so `list` / nuke can find them. The API has no patch
  * method; changing format or display name replaces the file.
  *

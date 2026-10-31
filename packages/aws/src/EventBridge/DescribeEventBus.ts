@@ -18,10 +18,10 @@ export interface DescribeEventBusRequest extends Omit<
  * ### Describing Event Buses
  * **Example:** Describe the Bound Bus
  * ```typescript
- * // init — bind the bus (provide AWS.EventBridge.DescribeEventBusHttp on the Function)
+ * // init -- bind the bus (provide AWS.EventBridge.DescribeEventBusHttp on the Function)
  * const describeEventBus = yield* AWS.EventBridge.DescribeEventBus(bus);
  *
- * // runtime — read the bus configuration
+ * // runtime -- read the bus configuration
  * const info = yield* describeEventBus();
  * console.log(info.Arn, info.Policy);
  * ```

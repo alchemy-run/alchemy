@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Endpoint } from "./Endpoint.ts";
 
 /**
- * Runtime binding for `sagemaker:DescribeEndpoint` — read a live endpoint's
+ * Runtime binding for `sagemaker:DescribeEndpoint` -- read a live endpoint's
  * status, variants, and deployment state from a function runtime.
  *
  * Bind this operation to an `Endpoint` inside a function runtime to get a

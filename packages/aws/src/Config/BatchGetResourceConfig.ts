@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:BatchGetResourceConfig` — fetch the current
+ * Runtime binding for `config:BatchGetResourceConfig` -- fetch the current
  * configuration item for up to 100 recorded resources identified by
  * resource keys. Keys the recorder has not discovered come back in
  * `unprocessedResourceKeys`.
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Resource Configurations
  * **Example:** Batch-Read Current Configurations
  * ```typescript
- * // init — grants config:BatchGetResourceConfig
+ * // init -- grants config:BatchGetResourceConfig
  * const batchGetResourceConfig = yield* AWS.Config.BatchGetResourceConfig();
  *
  * // runtime

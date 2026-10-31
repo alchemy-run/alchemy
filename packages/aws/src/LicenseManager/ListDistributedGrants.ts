@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListDistributedGrantsRequest extends licensemanager.ListDistributedGrantsRequest {}
 
 /**
- * Runtime binding for `license-manager:ListDistributedGrants` — list the
+ * Runtime binding for `license-manager:ListDistributedGrants` -- list the
  * grants this account has distributed to other accounts.
  *
  * Provide the implementation with

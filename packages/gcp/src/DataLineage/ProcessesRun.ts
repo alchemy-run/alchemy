@@ -31,7 +31,7 @@ export type ProcessesRunProps = {
   /**
    * Parent process. Full name
    * `projects/{project}/locations/{location}/processes/{process}` or the
-   * process id (combined with `location`). Immutable — changing it
+   * process id (combined with `location`). Immutable -- changing it
    * replaces the run.
    */
   process: string;
@@ -39,7 +39,7 @@ export type ProcessesRunProps = {
    * Run id (the `{run}` segment of
    * `.../processes/{process}/runs/{run}`). If omitted, a unique name is
    * generated. Max 200 characters: letters, digits, underscores, hyphens,
-   * colons, periods. Immutable — changing it replaces the run.
+   * colons, periods. Immutable -- changing it replaces the run.
    */
   runId?: string;
   /**
@@ -91,7 +91,7 @@ export type ProcessesRun = Resource<
     startTime: string | undefined;
     /** RFC3339 end time. */
     endTime: string | undefined;
-    /** Run state (`STARTED`, `COMPLETED`, …). */
+    /** Run state (`STARTED`, `COMPLETED`, ...). */
     state: string | undefined;
     /** Human-readable display name. */
     displayName: string | undefined;
@@ -103,7 +103,7 @@ export type ProcessesRun = Resource<
 >;
 
 /**
- * A Data Lineage run — one execution of a process that produces lineage
+ * A Data Lineage run -- one execution of a process that produces lineage
  * events.
  *
  * Runs have no labels field, so Alchemy stamps ownership into

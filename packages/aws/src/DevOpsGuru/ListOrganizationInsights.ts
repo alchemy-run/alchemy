@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Visibility
  * **Example:** List Insights Across Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listOrganizationInsights = yield* AWS.DevOpsGuru.ListOrganizationInsights();
  *
  * // runtime

@@ -4,8 +4,8 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for X-Ray HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in
- * this service is a thin `Layer.effect(Cap, makeXRayHttpBinding({ … }))`
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in
+ * this service is a thin `Layer.effect(Cap, makeXRayHttpBinding({ ... }))`
  * over the builder below. Everything except the operation and the IAM
  * action is boilerplate.
  *

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:DetectPHI` — detect protected health
- * information (PHI) entities (name, address, age, ID numbers, dates…) in
+ * Runtime binding for `comprehendmedical:DetectPHI` -- detect protected health
+ * information (PHI) entities (name, address, age, ID numbers, dates...) in
  * clinical text.
  *
  * Comprehend Medical is a pure pay-per-call service with no resource to
  * manage: the binding takes no arguments and grants the function
  * `comprehendmedical:DetectPHI` (the action has no resource-level IAM). Pass
- * the clinical note as raw text — no marshalling.
+ * the clinical note as raw text -- no marshalling.
  *
  * ### Detecting PHI
  * **Example:** Detect PHI in a Clinical Note

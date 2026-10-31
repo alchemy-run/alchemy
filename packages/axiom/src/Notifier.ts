@@ -15,7 +15,7 @@ export type Notifier = Resource<
 >;
 
 /**
- * An Axiom notifier — an alert destination (Slack, email, PagerDuty,
+ * An Axiom notifier -- an alert destination (Slack, email, PagerDuty,
  * Opsgenie, Discord, Microsoft Teams, generic webhook, or a fully custom
  * webhook with templated body/headers) that {@link Monitor monitors} target
  * via `notifierIds`. Exactly one channel under `properties` should be set.
@@ -85,7 +85,7 @@ export const NotifierProvider = () =>
         // Enumerate every notifier in the org. Axiom exposes a single
         // account-wide `GET /v2/notifiers` collection op (no pagination), so we
         // fetch it once and hydrate each row into the exact `read` Attributes
-        // shape (`CreateNotifierOutput & { id: string }`) — directly usable by
+        // shape (`CreateNotifierOutput & { id: string }`) -- directly usable by
         // `delete` with no follow-up get.
         list: () =>
           Effect.gen(function* () {
@@ -93,7 +93,7 @@ export const NotifierProvider = () =>
             return notifiers.map((n) => ({ ...n, id: n.id ?? "" }));
           }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — Axiom assigns the notifier id server-side, so the
+          // Observe -- Axiom assigns the notifier id server-side, so the
           // only handle to a previously-created notifier is the cached
           // `output.id`. Probe for live state with that id; treat NotFound
           // (deleted out-of-band) as "no observed state" so we converge
@@ -104,7 +104,7 @@ export const NotifierProvider = () =>
               )
             : undefined;
 
-          // Ensure — POST mints a new notifier. The Axiom create response
+          // Ensure -- POST mints a new notifier. The Axiom create response
           // sometimes omits `id` on the body; default to "" to keep the
           // attribute shape stable until the next read populates it.
           if (observed === undefined) {
@@ -112,7 +112,7 @@ export const NotifierProvider = () =>
             return { ...result, id: result.id ?? "" };
           }
 
-          // Sync — the notifier exists; PATCH against its id with the
+          // Sync -- the notifier exists; PATCH against its id with the
           // desired props. Preserve the cached id if the API response
           // omits it.
           const result = yield* update({ ...news, id: observed.id! });

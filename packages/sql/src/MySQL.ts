@@ -94,7 +94,7 @@ export const resolveMySQLConfig = <E = never, R = never>(
 
 /**
  * Open an `@effect/sql-mysql2` client (a connection pool) from a connection
- * URL — a plain `Redacted` or an Effect of one, e.g. Hyperdrive's
+ * URL -- a plain `Redacted` or an Effect of one, e.g. Hyperdrive's
  * `connectionString`:
  *
  * ```typescript

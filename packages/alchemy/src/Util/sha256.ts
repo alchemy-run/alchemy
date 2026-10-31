@@ -14,7 +14,7 @@ export const sha256Object = (input: object) => sha256(JSON.stringify(stableValue
 
 /**
  * Stable sha256 hex digest of a resolved Task input. Unlike
- * {@link sha256Object} this does not stabilize key ordering — it hashes the
+ * {@link sha256Object} this does not stabilize key ordering -- it hashes the
  * raw `JSON.stringify(input ?? null)` so identical inputs map to identical
  * hashes for caching/equality checks.
  */

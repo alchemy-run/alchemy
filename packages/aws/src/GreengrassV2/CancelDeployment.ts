@@ -8,13 +8,13 @@ import type { Deployment } from "./Deployment.ts";
  *
  * Halts the bound {@link Deployment}'s rollout: core devices that already
  * received it keep running its components, but devices that have not yet
- * applied it never will. The deployment id is injected from the binding —
+ * applied it never will. The deployment id is injected from the binding --
  * the canonical emergency-stop for a bad rollout. Provide the implementation
  * with `Effect.provide(AWS.GreengrassV2.CancelDeploymentHttp)`.
  * ### Monitoring Deployments
  * **Example:** Emergency-Stop A Rollout
  * ```typescript
- * // init — bind the operation to the deployment
+ * // init -- bind the operation to the deployment
  * const cancelDeployment = yield* AWS.GreengrassV2.CancelDeployment(deployment);
  *
  * // runtime

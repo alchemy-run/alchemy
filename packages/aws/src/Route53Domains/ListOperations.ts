@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ListOperationsRequest extends route53domains.ListOperationsRequest {}
 
 /**
- * Runtime binding for `route53domains:ListOperations` — list the
+ * Runtime binding for `route53domains:ListOperations` -- list the
  * asynchronous Route 53 Domains operations (registrations, renewals,
  * transfers, nameserver updates) performed on domains registered by the
  * current AWS account, optionally filtered by status, type, or submission

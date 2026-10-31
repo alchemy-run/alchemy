@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetContentModeration` — get the results of an asynchronous inappropriate or offensive content detection job started by StartContentModeration.
+ * Runtime binding for `rekognition:GetContentModeration` -- get the results of an asynchronous inappropriate or offensive content detection job started by StartContentModeration.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetContentModeration` on `*` (Rekognition data-plane resources such

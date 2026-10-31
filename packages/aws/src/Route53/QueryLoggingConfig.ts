@@ -51,11 +51,11 @@ export interface QueryLoggingConfig extends Resource<
  * Route 53 publishes query logs to a CloudWatch Logs log group in
  * `us-east-1`. The log group needs a CloudWatch Logs resource policy (also in
  * `us-east-1`) that allows the `route53.amazonaws.com` service principal to
- * create log streams and put log events — model it with
+ * create log streams and put log events -- model it with
  * `AWS.Logs.ResourcePolicy`.
  *
  * A hosted zone can have at most one query logging configuration, and the
- * configuration is immutable — changing either property replaces it.
+ * configuration is immutable -- changing either property replaces it.
  * ### Enabling Query Logging
  * **Example:** Log Queries for a Hosted Zone
  * ```typescript
@@ -95,7 +95,7 @@ const toAttrs = (config: route53.QueryLoggingConfig): QueryLoggingConfig["Attrib
  * `createQueryLoggingConfig` validates the CloudWatch Logs resource policy
  * at call time. A policy that was just put (same deploy) can take a few
  * seconds to become visible to Route 53, surfacing as
- * `InsufficientCloudWatchLogsResourcePolicy` — retry it (and
+ * `InsufficientCloudWatchLogsResourcePolicy` -- retry it (and
  * `ConcurrentModification`) on a bounded schedule (~40s).
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -153,7 +153,7 @@ export const QueryLoggingConfigProvider = () =>
               Array.from(chunk).flatMap((page) => (page.QueryLoggingConfigs ?? []).map(toAttrs)),
             ),
           ),
-        // The configuration is immutable (no update API) — any property
+        // The configuration is immutable (no update API) -- any property
         // change replaces it.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -167,7 +167,7 @@ export const QueryLoggingConfigProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           // Prefer the stored config id; fall back to the zone lookup
           // (state-loss recovery). A half-created state row can't round-trip
-          // an Output-valued `hostedZoneId` — report "not found".
+          // an Output-valued `hostedZoneId` -- report "not found".
           const config = output?.id
             ? yield* observeById(output.id)
             : olds?.hostedZoneId !== undefined
@@ -179,10 +179,10 @@ export const QueryLoggingConfigProvider = () =>
           return toAttrs(config);
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — the zone's (at most one) live configuration.
+          // Observe -- the zone's (at most one) live configuration.
           let observed = yield* observeByZone(news.hostedZoneId);
 
-          // Sync — the configuration is immutable; an adopted/drifted config
+          // Sync -- the configuration is immutable; an adopted/drifted config
           // pointing at a different log group is converged by delete +
           // recreate (routine prop changes replace via `diff` instead).
           if (observed && observed.CloudWatchLogsLogGroupArn !== news.cloudWatchLogsLogGroupArn) {
@@ -190,7 +190,7 @@ export const QueryLoggingConfigProvider = () =>
             observed = undefined;
           }
 
-          // Ensure — create when missing. `QueryLoggingConfigAlreadyExists`
+          // Ensure -- create when missing. `QueryLoggingConfigAlreadyExists`
           // is a race with a peer reconciler; re-observe.
           if (!observed) {
             observed = yield* retryQueryLoggingCreate(

@@ -14,7 +14,7 @@ import { StateStoreError, type PersistedState, type StateService } from "./State
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
- * Persisted shape of an HTTP state store endpoint — `{ url, authToken }`.
+ * Persisted shape of an HTTP state store endpoint -- `{ url, authToken }`.
  * Stored in the credentials file alongside other per-profile secrets.
  * Deliberately separate from {@link HttpStateStoreProps}: `id` and
  * `transformClient` are deployment-time choices, not credentials.
@@ -27,7 +27,7 @@ export interface HttpStateStoreCredentials {
 
 export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   /**
-   * `StateService.id` slug for telemetry — e.g. `"http"` for a bare
+   * `StateService.id` slug for telemetry -- e.g. `"http"` for a bare
    * HTTP store, `"cloudflare-http"` for the Cloudflare-deployed
    * variant. Required so every concrete deployment of this state-store
    * shape shows up distinctly on the adoption dashboard.
@@ -54,7 +54,7 @@ export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authT
           // the store failing behind the API is as transient as a 5xx
           error._tag === "StateStoreFailure" ||
           (error._tag === "HttpClientError" &&
-            // transport-level failures (no response — DNS, TCP reset, TLS,
+            // transport-level failures (no response -- DNS, TCP reset, TLS,
             // "fetch failed") are as transient as the post-deploy 404s
             (!error.response ||
               // worker can 404 for a bit on first deploy
@@ -178,7 +178,7 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
  * for failures we expect to clear up on their own.
  *
  * We retry:
- * - all transport-level errors (no `response` — DNS, TCP reset, TLS,
+ * - all transport-level errors (no `response` -- DNS, TCP reset, TLS,
  *   abort, etc.)
  * - 408 (request timeout) and 429 (rate limit)
  * - 404, which is normal in the seconds after a worker is first

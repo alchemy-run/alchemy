@@ -290,13 +290,13 @@ export const DBProxyProvider = () =>
           const name = output?.dbProxyName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          // Duration prop → the wire unit the RDS API expects (whole seconds).
+          // Duration prop -> the wire unit the RDS API expects (whole seconds).
           const idleClientTimeoutSeconds = toWireSeconds(news.idleClientTimeout);
 
-          // Observe — fetch live proxy state.
+          // Observe -- fetch live proxy state.
           let observed = yield* readProxy(name);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBProxyAlreadyExistsFault` as a race with a peer reconciler.
           if (!observed?.DBProxyArn) {
             yield* rds
@@ -321,7 +321,7 @@ export const DBProxyProvider = () =>
 
             observed = yield* waitForProxy(name);
           } else {
-            // Sync mutable proxy config — push desired shape via
+            // Sync mutable proxy config -- push desired shape via
             // `modifyDBProxy`. Rename via `NewDBProxyName` is a no-op when
             // the desired name already matches the observed name.
             yield* rds.modifyDBProxy({
@@ -341,7 +341,7 @@ export const DBProxyProvider = () =>
           const dbProxyArn = observed.DBProxyArn ?? "";
           const finalName = observed.DBProxyName ?? name;
 
-          // Sync tags — diff prior recorded tags against desired (describe
+          // Sync tags -- diff prior recorded tags against desired (describe
           // does not surface tags inline).
           const observedTags = output?.tags ?? {};
           const { removed, upsert } = diffTags(observedTags, desiredTags);

@@ -10,7 +10,7 @@ import type * as GitHub from "./Providers.ts";
 
 export interface TeamAccessProps {
   /**
-   * Repository owner — must be an organization login.
+   * Repository owner -- must be an organization login.
    */
   owner: string;
 
@@ -26,11 +26,11 @@ export interface TeamAccessProps {
 
   /**
    * Permission level to grant.
-   * - `pull` — read-only access
-   * - `push` — read and write access
-   * - `maintain` — read, write, and manage issues/PRs
-   * - `triage` — read and manage issues/PRs without write access
-   * - `admin` — full admin access
+   * - `pull` -- read-only access
+   * - `push` -- read and write access
+   * - `maintain` -- read, write, and manage issues/PRs
+   * - `triage` -- read and manage issues/PRs without write access
+   * - `admin` -- full admin access
    *
    * @default "push"
    */
@@ -40,7 +40,7 @@ export interface TeamAccessProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -68,10 +68,10 @@ export interface TeamAccess extends Resource<
  * A GitHub team repository access grant.
  *
  * `TeamAccess` grants a team access to a repository within an organization.
- * Teams provide a scalable way to manage repository permissions — add users
+ * Teams provide a scalable way to manage repository permissions -- add users
  * to teams instead of granting individual collaborator access.
  *
- * Team access grants default to **retain** on removal — destroying the stack
+ * Team access grants default to **retain** on removal -- destroying the stack
  * does NOT remove the team's access, preventing accidental lockout. Opt in
  * to actual removal by wrapping the resource in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
@@ -166,7 +166,7 @@ export const TeamAccessProvider = () =>
 
     reconcile: Effect.fn(
       function* ({ news }) {
-        // Ensure & Sync — PUT is idempotent; adds team or updates permission
+        // Ensure & Sync -- PUT is idempotent; adds team or updates permission
         yield* Teams.addOrUpdateRepoPermissionsInOrg({
           org: news.owner,
           team_slug: news.teamSlug,

@@ -26,18 +26,18 @@ const MAX_NAME_LENGTH = 63;
 export type ExternalVpnGatewayInterfaceProps = {
   /**
    * Numeric interface id. `0` for `SINGLE_IP_INTERNALLY_REDUNDANT`,
-   * `0` and `1` for `TWO_IPS_REDUNDANCY`, `0`–`3` for
+   * `0` and `1` for `TWO_IPS_REDUNDANCY`, `0`-`3` for
    * `FOUR_IPS_REDUNDANCY`.
    */
   id?: number;
   /**
    * IPv4 address of the peer VPN gateway interface. Must not be a
-   * Compute Engine IP. Immutable — changing it replaces the gateway.
+   * Compute Engine IP. Immutable -- changing it replaces the gateway.
    */
   ipAddress?: string;
   /**
    * IPv6 address of the peer VPN gateway interface (RFC 4291). Must
-   * not be a Compute Engine IP. Immutable — changing it replaces the
+   * not be a Compute Engine IP. Immutable -- changing it replaces the
    * gateway.
    */
   ipv6Address?: string;
@@ -55,25 +55,25 @@ export type ExternalVpnGatewayInterface = {
 export type ExternalVpnGatewayProps = {
   /**
    * Gateway name. If omitted, a unique RFC1035 name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the gateway.
    */
   externalVpnGatewayName?: string;
   /**
-   * Optional description. Immutable — changing it replaces the
+   * Optional description. Immutable -- changing it replaces the
    * gateway.
    */
   description?: string;
   /**
    * Peer redundancy. `SINGLE_IP_INTERNALLY_REDUNDANT` (one interface),
    * `TWO_IPS_REDUNDANCY` (two interfaces), or `FOUR_IPS_REDUNDANCY`
-   * (four interfaces, typically AWS). Immutable — changing it
+   * (four interfaces, typically AWS). Immutable -- changing it
    * replaces the gateway.
    * @default "TWO_IPS_REDUNDANCY"
    */
   redundancyType?: compute.ExternalVpnGatewayRedundancyTypeEnum | (string & {});
   /**
-   * Peer interfaces. Count must match `redundancyType`. Immutable —
+   * Peer interfaces. Count must match `redundancyType`. Immutable --
    * changing them replaces the gateway.
    */
   interfaces?: ExternalVpnGatewayInterfaceProps[];
@@ -112,7 +112,7 @@ export type ExternalVpnGateway = Resource<
 >;
 
 /**
- * A global Compute Engine external VPN gateway — the on-premises or
+ * A global Compute Engine external VPN gateway -- the on-premises or
  * other-cloud peer that an HA VPN gateway connects to.
  *
  * Labels are the only in-place update (`externalVpnGateways.setLabels`).

@@ -47,7 +47,7 @@ export interface OptOutList extends Resource<
 > {}
 
 /**
- * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) opt-out list — a
+ * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) opt-out list -- a
  * list of destination phone numbers that opted out of receiving your SMS
  * or voice messages.
  *
@@ -76,7 +76,7 @@ export const OptOutList = Resource<OptOutList>("AWS.PinpointSMSVoiceV2.OptOutLis
 
 /**
  * Raised when an opt-out list cannot be observed immediately after it
- * was created — the create call succeeded (or raced a peer) but the
+ * was created -- the create call succeeded (or raced a peer) but the
  * follow-up describe found nothing.
  */
 export class SmsVoiceOptOutListMissing extends Data.TaggedError("SmsVoiceOptOutListMissing")<{
@@ -131,10 +131,10 @@ export const OptOutListProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getByName(name);
 
-          // 2. Ensure — create if missing; a ConflictException is a race
+          // 2. Ensure -- create if missing; a ConflictException is a race
           // with a peer reconciler, so fall through to re-observe.
           if (observed === undefined) {
             yield* smsvoice
@@ -155,7 +155,7 @@ export const OptOutListProvider = () =>
             });
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncSmsVoiceTags(observed.OptOutListArn, desiredTags);
 
           yield* session.note(observed.OptOutListArn);
@@ -181,7 +181,7 @@ export const OptOutListProvider = () =>
                 // The `Default` opt-out list is service-managed: End User
                 // Messaging recreates it automatically and then rejects
                 // DeleteOptOutList with ConflictException
-                // RESOURCE_MODIFICATION_NOT_ALLOWED (verified live) — keep
+                // RESOURCE_MODIFICATION_NOT_ALLOWED (verified live) -- keep
                 // it out of enumeration for account-wide teardown (nuke).
                 .filter((l) => l.OptOutListName !== "Default")
                 .map((l) => ({

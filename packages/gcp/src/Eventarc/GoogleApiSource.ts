@@ -59,13 +59,13 @@ export type GoogleApiSourceProps = {
    * Google API source id (the `{googleApiSource}` segment of
    * `projects/{project}/locations/{location}/googleApiSources/{googleApiSource}`).
    * If omitted, a unique name is generated. Must match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable —
+   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable --
    * changing it replaces the source.
    */
   googleApiSourceId?: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
-   * — changing it replaces the source. `US-CENTRAL1` is accepted and
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...). Immutable
+   * -- changing it replaces the source. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. One source is allowed per project per
    * region.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -121,7 +121,7 @@ export type GoogleApiSource = Resource<
     googleApiSourceId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Destination MessageBus resource name. */
     destination: string | undefined;
@@ -157,7 +157,7 @@ export type GoogleApiSource = Resource<
  * API events onto a MessageBus. One source is allowed per project per
  * region.
  *
- * `googleApiSourceId` and `location` are identity — changing either
+ * `googleApiSourceId` and `location` are identity -- changing either
  * replaces the source. Destination, display name, labels, annotations,
  * logging, CMEK, and subscription config update in place.
  *

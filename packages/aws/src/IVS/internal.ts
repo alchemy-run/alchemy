@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 /**
- * IVS wire tags allow `undefined` values in the record type — flatten to a
+ * IVS wire tags allow `undefined` values in the record type -- flatten to a
  * plain string record, dropping malformed entries.
  */
 export const toTagRecord = (
@@ -17,7 +17,7 @@ export const toTagRecord = (
   );
 
 /**
- * Read the observed tags of an IVS resource. Tag reads are best-effort —
+ * Read the observed tags of an IVS resource. Tag reads are best-effort --
  * a failure (e.g. a race with deletion) reports no tags.
  */
 export const readIvsTags = Effect.fn(function* (arn: string) {
@@ -51,7 +51,7 @@ export const syncIvsTags = Effect.fn(function* (arn: string, desiredTags: Record
  * Explicitly-typed pipeable retry helper. Inlining `Effect.retry` in a
  * provider op lets `Retry.Return`'s conditional type survive into
  * declaration emit and widens the provider layer to `unknown` for every
- * `AWS.providers()` consumer — keep the annotation explicit.
+ * `AWS.providers()` consumer -- keep the annotation explicit.
  *
  * Retries `ConflictException` (e.g. deleting a channel while a stream is
  * live, or a resource is mid-transition) on a bounded schedule.

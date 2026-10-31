@@ -6,8 +6,8 @@ import type { Task } from "./Task.ts";
 /**
  * Runtime binding for `datasync:DescribeTaskExecution`.
  *
- * Reads one execution of the bound {@link Task} — status, bytes/files
- * transferred, per-phase results — to monitor an ongoing transfer or check
+ * Reads one execution of the bound {@link Task} -- status, bytes/files
+ * transferred, per-phase results -- to monitor an ongoing transfer or check
  * a finished one. Address the execution with the ARN returned by
  * `StartTaskExecution`; access is granted on the bound task's executions.
  * Provide the implementation with
@@ -15,7 +15,7 @@ import type { Task } from "./Task.ts";
  * ### Running Transfers
  * **Example:** Watch A Transfer's Progress
  * ```typescript
- * // init — bind the operation to the task
+ * // init -- bind the operation to the task
  * const describeTaskExecution = yield* AWS.DataSync.DescribeTaskExecution(task);
  *
  * // runtime

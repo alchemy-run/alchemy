@@ -20,7 +20,7 @@ export interface LabelProps {
   repository: string;
 
   /**
-   * Label name. The name is the label's identity — changing it replaces the
+   * Label name. The name is the label's identity -- changing it replaces the
    * label.
    */
   name: string;
@@ -40,7 +40,7 @@ export interface LabelProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -221,7 +221,7 @@ export const LabelProvider = () =>
   Provider.succeed(Label, {
     stables: ["labelId", "nodeId"],
 
-    // A label belongs to (host, owner, repository, name) — changing any of
+    // A label belongs to (host, owner, repository, name) -- changing any of
     // these replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -240,12 +240,12 @@ export const LabelProvider = () =>
       function* ({ news }) {
         const scope = { owner: news.owner, repo: news.repository, name: news.name };
 
-        // Observe — probe for an existing label by name
+        // Observe -- probe for an existing label by name
         const observed = yield* Issues.getLabel(scope).pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
-        // Ensure — when no label exists, create one
+        // Ensure -- when no label exists, create one
         if (observed === undefined) {
           return attrsOf(
             yield* Issues.createLabel({
@@ -256,7 +256,7 @@ export const LabelProvider = () =>
           );
         }
 
-        // Sync — update the existing label if any properties differ
+        // Sync -- update the existing label if any properties differ
         return attrsOf(
           yield* Issues.updateLabel({ ...scope, color: news.color, description: news.description }),
         );
@@ -264,7 +264,7 @@ export const LabelProvider = () =>
       (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
     ),
 
-    // Enumerate every label across the repositories the token can see —
+    // Enumerate every label across the repositories the token can see --
     // labels are keyed by {owner, repository, name} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
@@ -282,7 +282,7 @@ export const LabelProvider = () =>
             }),
           ).pipe(
             Effect.map((labels) => labels.map(attrsOf)),
-            // Repos where the token lacks label access reject with 403/404 —
+            // Repos where the token lacks label access reject with 403/404 --
             // skip them rather than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

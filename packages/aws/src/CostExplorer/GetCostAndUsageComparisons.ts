@@ -16,7 +16,7 @@ export interface GetCostAndUsageComparisonsRequest extends ce.GetCostAndUsageCom
  * ### Querying Cost and Usage
  * **Example:** Compare Two Billing Periods
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getCostAndUsageComparisons = yield* AWS.CostExplorer.GetCostAndUsageComparisons();
  *
  * // runtime

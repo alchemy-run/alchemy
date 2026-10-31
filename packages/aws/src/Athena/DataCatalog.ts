@@ -13,16 +13,16 @@ export type DataCatalogArn = `arn:aws:athena:${RegionID}:${AccountID}:datacatalo
 
 export interface DataCatalogProps {
   /**
-   * Name of the data catalog. This is the catalog's identity — changing it
+   * Name of the data catalog. This is the catalog's identity -- changing it
    * replaces the resource. Up to 256 characters.
    */
   name: string;
   /**
    * Catalog type. Changing this replaces the resource.
-   * - `LAMBDA` — a federated connector backed by a Lambda metadata function.
-   * - `GLUE` — an AWS Glue Data Catalog (typically in another account).
-   * - `HIVE` — an external Apache Hive metastore via a Lambda function.
-   * - `FEDERATED` — a managed federated connector.
+   * - `LAMBDA` -- a federated connector backed by a Lambda metadata function.
+   * - `GLUE` -- an AWS Glue Data Catalog (typically in another account).
+   * - `HIVE` -- an external Apache Hive metastore via a Lambda function.
+   * - `FEDERATED` -- a managed federated connector.
    */
   type: "LAMBDA" | "GLUE" | "HIVE" | "FEDERATED";
   /**
@@ -75,7 +75,7 @@ export interface DataCatalog extends Resource<
 > {}
 
 /**
- * An Amazon Athena data catalog — registers an external metadata source (a
+ * An Amazon Athena data catalog -- registers an external metadata source (a
  * federated Lambda connector, an external Hive metastore, or a cross-account
  * Glue Data Catalog) that Athena queries can reference as a `catalog`.
  *
@@ -113,7 +113,7 @@ export const DataCatalogProvider = () =>
     DataCatalog,
     Effect.gen(function* () {
       const getOne = (name: string) =>
-        // GetDataCatalog resolves catalogs through a workgroup — without one it
+        // GetDataCatalog resolves catalogs through a workgroup -- without one it
         // reports even existing catalogs as not-found, so scope to `primary`.
         athena.getDataCatalog({ Name: name, WorkGroup: "primary" }).pipe(
           Effect.map((res) => res.DataCatalog),
@@ -184,10 +184,10 @@ export const DataCatalogProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredParams = news.parameters ?? {};
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let dc = yield* getOne(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!dc) {
             yield* athena.createDataCatalog({
               Name: name,
@@ -201,7 +201,7 @@ export const DataCatalogProvider = () =>
             });
             dc = yield* getOne(name);
           } else {
-            // Sync — AWS derives extra parameter keys (e.g. `catalog`) beyond
+            // Sync -- AWS derives extra parameter keys (e.g. `catalog`) beyond
             // what we sent, so only update when a DESIRED key is missing or
             // differs from the observed value (ignore AWS-added keys).
             const observedParams = paramsOf(dc.Parameters);
@@ -219,7 +219,7 @@ export const DataCatalogProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const observed = yield* fetchTags(arn);
           const { upsert, removed } = diffTags(observed, desiredTags);
           if (upsert.length > 0) {

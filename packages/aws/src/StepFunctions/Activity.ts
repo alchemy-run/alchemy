@@ -33,7 +33,7 @@ export interface Activity extends Resource<
      */
     activityName: string;
     /**
-     * ARN of the activity — reference it from a state machine Task state's
+     * ARN of the activity -- reference it from a state machine Task state's
      * `Resource` field.
      */
     activityArn: string;
@@ -43,7 +43,7 @@ export interface Activity extends Resource<
 > {}
 
 /**
- * An AWS Step Functions activity — a named endpoint that external workers
+ * An AWS Step Functions activity -- a named endpoint that external workers
  * poll for tasks (`GetActivityTask`) and complete with the `SendTask*`
  * callback operations.
  *
@@ -179,10 +179,10 @@ export const ActivityProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* describeOrUndefined(activityArn);
 
-          // 2. ENSURE — createActivity is idempotent for an identical
+          // 2. ENSURE -- createActivity is idempotent for an identical
           //    configuration; ActivityAlreadyExists only fires when the
           //    existing activity differs (encryption config), in which case
           //    we keep the existing one (the ARN is deterministic).
@@ -192,7 +192,7 @@ export const ActivityProvider = () =>
               .pipe(Effect.catchTag("ActivityAlreadyExists", () => Effect.void));
           }
 
-          // 3. SYNC TAGS — against OBSERVED cloud tags (create-time tags
+          // 3. SYNC TAGS -- against OBSERVED cloud tags (create-time tags
           //    only apply on first create; adoption may carry foreign tags).
           const observedTags = yield* fetchObservedTags(activityArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -217,7 +217,7 @@ export const ActivityProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // deleteActivity is idempotent — deleting a non-existent activity
+          // deleteActivity is idempotent -- deleting a non-existent activity
           // succeeds.
           yield* sfn.deleteActivity({ activityArn: output.activityArn });
         }),

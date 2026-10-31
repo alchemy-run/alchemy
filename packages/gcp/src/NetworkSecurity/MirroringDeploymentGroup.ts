@@ -29,7 +29,7 @@ const COLLECTION = "mirroringDeploymentGroups";
 export type MirroringLocation = {
   /** Cloud location, e.g. `us-central1-a`. */
   location: string | undefined;
-  /** Association state in this location (`ACTIVE`, `OUT_OF_SYNC`, …). */
+  /** Association state in this location (`ACTIVE`, `OUT_OF_SYNC`, ...). */
   state: string | undefined;
 };
 
@@ -50,12 +50,12 @@ export type MirroringDeploymentGroupProps = {
    * Deployment group id (the `{mirroringDeploymentGroup}` segment of
    * `projects/{project}/locations/{location}/mirroringDeploymentGroups/{mirroringDeploymentGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the group.
+   * and logical id. Immutable -- changing it replaces the group.
    */
   mirroringDeploymentGroupId?: string;
   /**
-   * Location of the group. Deployment groups are global — always
-   * `"global"`. Immutable — changing it replaces the group. `GLOBAL` is
+   * Location of the group. Deployment groups are global -- always
+   * `"global"`. Immutable -- changing it replaces the group. `GLOBAL` is
    * accepted and normalized to `global`.
    * @default "global"
    */
@@ -63,7 +63,7 @@ export type MirroringDeploymentGroupProps = {
   /**
    * VPC used by every child deployment, as a name (`app-vpc`), resource
    * path (`projects/{project}/global/networks/{network}`), or Compute
-   * self-link. Immutable — changing it replaces the group.
+   * self-link. Immutable -- changing it replaces the group.
    */
   network: string;
   /**
@@ -96,7 +96,7 @@ export type MirroringDeploymentGroup = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether the API is still reconciling intended vs actual state. */
     reconciling: boolean;
@@ -116,7 +116,7 @@ export type MirroringDeploymentGroup = Resource<
 >;
 
 /**
- * A Network Security Integration mirroring deployment group — the global
+ * A Network Security Integration mirroring deployment group -- the global
  * backend that aggregates zonal mirroring collectors.
  *
  * Changing `mirroringDeploymentGroupId`, `location`, or `network` replaces

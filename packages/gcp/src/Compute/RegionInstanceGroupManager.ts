@@ -20,7 +20,7 @@ const MAX_BASE_NAME_LENGTH = 58;
 export type RegionInstanceGroupManagerNamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
   name: string;
-  /** TCP port number (`1`–`65535`). */
+  /** TCP port number (`1`-`65535`). */
   port: number;
 };
 
@@ -47,7 +47,7 @@ export type RegionInstanceGroupManagerProps = {
    */
   managerName?: string;
   /**
-   * Region the manager lives in (e.g. `us-central1`). Immutable —
+   * Region the manager lives in (e.g. `us-central1`). Immutable --
    * changing it replaces the manager. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -62,7 +62,7 @@ export type RegionInstanceGroupManagerProps = {
   /**
    * Prefix attached to every VM name in the group (RFC1035, 1-58
    * characters). Defaults to the manager name truncated to 58 characters.
-   * Immutable — changing it replaces the manager.
+   * Immutable -- changing it replaces the manager.
    */
   baseInstanceName?: string;
   /**
@@ -100,7 +100,7 @@ export type RegionInstanceGroupManagerProps = {
    */
   updatePolicy?: compute.InstanceGroupManagerUpdatePolicy;
   /**
-   * Zone distribution for the regional group. `zones` is immutable —
+   * Zone distribution for the regional group. `zones` is immutable --
    * changing it replaces the manager. `targetShape` updates in place.
    */
   distributionPolicy?: compute.DistributionPolicy;
@@ -161,11 +161,11 @@ export type RegionInstanceGroupManager = Resource<
  * The manager creates and heals VMs from an instance template, spread
  * across zones in a region. Compute Engine has no labels on this
  * resource, so Alchemy stamps ownership into the description
- * (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`) so `list` /
+ * (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`) so `list` /
  * `pnpm nuke:gcp` can find them.
  *
  * Name, region, `baseInstanceName`, and `distributionPolicy.zones` are
- * immutable — changing them replaces the manager. `targetSize`,
+ * immutable -- changing them replaces the manager. `targetSize`,
  * `instanceTemplate` / `versions`, description, autohealing, and update
  * policy patch in place. Named ports are synced onto the complementary
  * regional instance group.

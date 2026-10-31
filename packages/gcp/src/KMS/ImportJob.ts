@@ -17,13 +17,13 @@ export type ImportJobProps = {
   /**
    * Parent KeyRing. Full name
    * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the
-   * key ring id (combined with `location`). Immutable — changing it
+   * key ring id (combined with `location`). Immutable -- changing it
    * replaces the import job.
    */
   keyRing: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
-   * `keyRing` is a bare id. Immutable — changing it replaces the import
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
+   * `keyRing` is a bare id. Immutable -- changing it replaces the import
    * job. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -31,7 +31,7 @@ export type ImportJobProps = {
   /**
    * Import job id (the last path segment). If omitted, a unique name is
    * generated from the stack, stage, and logical id. Must match
-   * `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the job.
+   * `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it replaces the job.
    */
   importJobId?: string;
   /**
@@ -60,7 +60,7 @@ export type ImportJobAttrs = {
   importJobId: string;
   /** Parent KeyRing resource name. */
   keyRing: string;
-  /** Location id (`us-central1`, `global`, …). */
+  /** Location id (`us-central1`, `global`, ...). */
   location: string;
   /** Project id. */
   project: string;
@@ -95,7 +95,7 @@ export type ImportJob = Resource<
 >;
 
 /**
- * A Cloud KMS ImportJob — a wrapping-key job used to import pre-existing
+ * A Cloud KMS ImportJob -- a wrapping-key job used to import pre-existing
  * key material into a CryptoKeyVersion.
  *
  * Parent KeyRing, location, and id are identity (changing them replaces
@@ -487,7 +487,7 @@ export const ImportJobProvider = () =>
       // Cloud KMS has no ImportJob delete API. Forget it from state; the
       // job remains until it expires (~3 days) and Google GC's it.
       yield* Effect.logWarning(
-        `GCP Cloud KMS has no ImportJob delete API — "${output.name}" was removed from state but still exists.`,
+        `GCP Cloud KMS has no ImportJob delete API \u2014 "${output.name}" was removed from state but still exists.`,
       );
     }),
   });

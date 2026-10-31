@@ -8,7 +8,7 @@ import type { Broker } from "./Broker.ts";
  * scoped to one {@link Broker}.
  *
  * Promotes a cross-region data replication (CRDR) replica broker to the
- * primary role — `SWITCHOVER` performs a coordinated role exchange with the
+ * primary role -- `SWITCHOVER` performs a coordinated role exchange with the
  * current primary, `FAILOVER` promotes the replica unilaterally when the
  * primary is unreachable. Only meaningful for brokers created with
  * `dataReplicationMode: "CRDR"`. Provide the implementation with

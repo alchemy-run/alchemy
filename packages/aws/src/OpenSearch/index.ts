@@ -23,7 +23,7 @@ export * from "./DomainReadWrite.ts";
 export * from "./DomainReadWriteHttp.ts";
 export * from "./DomainWrite.ts";
 export * from "./DomainWriteHttp.ts";
-// NOTE: BindingHttp.ts and DataPlaneHttp.ts are internal scaffolding —
+// NOTE: BindingHttp.ts and DataPlaneHttp.ts are internal scaffolding --
 // deliberately NOT exported.
 export * from "./GetCompatibleVersions.ts";
 export * from "./GetCompatibleVersionsHttp.ts";

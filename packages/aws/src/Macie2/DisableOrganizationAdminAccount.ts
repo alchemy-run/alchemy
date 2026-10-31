@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:DisableOrganizationAdminAccount`.
  *
  * Disables an account as the delegated Amazon Macie administrator account for an organization in Organizations.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DisableOrganizationAdminAccountHttp)`.
  * ### Organization & Members
  * **Example:** Remove the Delegated Administrator
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disableOrganizationAdminAccount = yield* AWS.Macie2.DisableOrganizationAdminAccount();
  *
  * // runtime

@@ -8,7 +8,7 @@ import type { Workspace } from "./Workspace.ts";
  * (IAM action `grafana:DeleteWorkspaceServiceAccountToken`), scoped to one
  * {@link Workspace}.
  *
- * Revokes a service account API token — the other half of a token-rotation
+ * Revokes a service account API token -- the other half of a token-rotation
  * loop. Provide the implementation with
  * `Effect.provide(AWS.Grafana.DeleteWorkspaceServiceAccountTokenHttp)`.
  * ### Managing Service Accounts

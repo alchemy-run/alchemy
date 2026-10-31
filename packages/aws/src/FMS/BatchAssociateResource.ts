@@ -15,7 +15,7 @@ export interface BatchAssociateResourceRequest extends fms.BatchAssociateResourc
  * ### Resource Sets
  * **Example:** Associate Resources into a Resource Set
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const batchAssociateResource = yield* AWS.FMS.BatchAssociateResource();
  *
  * // runtime

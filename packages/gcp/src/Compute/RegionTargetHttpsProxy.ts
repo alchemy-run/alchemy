@@ -20,14 +20,14 @@ export type RegionTargetHttpsProxyProps = {
    */
   targetHttpsProxyName?: string;
   /**
-   * Region the proxy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the proxy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute
    * RegionTargetHttpsProxy has no labels field).
    */
@@ -51,7 +51,7 @@ export type RegionTargetHttpsProxyProps = {
   sslPolicy?: string;
   /**
    * HTTP keep-alive timeout in seconds after a response while idle.
-   * Regional Application Load Balancers allow 5–600 (default 610).
+   * Regional Application Load Balancers allow 5-600 (default 610).
    */
   httpKeepAliveTimeoutSec?: number;
   /**
@@ -115,7 +115,7 @@ export type RegionTargetHttpsProxy = Resource<
  *
  * This resource maps to the `regionTargetHttpsProxies` collection (the
  * global `targetHttpsProxies` collection is `GCP.Compute.TargetHttpsProxy`).
- * Compute RegionTargetHttpsProxy has no labels field — Alchemy ownership
+ * Compute RegionTargetHttpsProxy has no labels field -- Alchemy ownership
  * is stored in the description so nuke can find leaked proxies. Url map
  * and certificates update in place; name and region replace.
  *

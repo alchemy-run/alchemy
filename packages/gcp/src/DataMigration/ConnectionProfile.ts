@@ -44,12 +44,12 @@ export type ConnectionProfileProps = {
   /**
    * Connection profile id (the `{connectionProfile}` segment of
    * `projects/{project}/locations/{location}/connectionProfiles/{connectionProfile}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the profile.
    */
   connectionProfileId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * profile. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -92,13 +92,13 @@ export type ConnectionProfileProps = {
    */
   sqlserver?: SqlServerConnectionProfile;
   /**
-   * Cloud SQL destination. `settings` are immutable after create —
+   * Cloud SQL destination. `settings` are immutable after create --
    * changing them replaces the profile. Creating this engine provisions a
    * Cloud SQL replica. Delete always force-deletes that replica.
    */
   cloudsql?: CloudSqlConnectionProfile;
   /**
-   * AlloyDB destination. `clusterId` and `settings` are immutable —
+   * AlloyDB destination. `clusterId` and `settings` are immutable --
    * changing them replaces the profile.
    */
   alloydb?: AlloyDbConnectionProfile;

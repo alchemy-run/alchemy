@@ -49,7 +49,7 @@ export interface VirtualClusterProps {
   virtualClusterName?: string;
   /**
    * The EKS cluster and namespace this virtual cluster maps to. Virtual
-   * clusters are immutable — any change replaces the virtual cluster.
+   * clusters are immutable -- any change replaces the virtual cluster.
    */
   containerProvider: VirtualClusterContainerProvider;
   /**
@@ -84,7 +84,7 @@ export interface VirtualCluster extends Resource<
 > {}
 
 /**
- * An Amazon EMR on EKS virtual cluster — a registration of a Kubernetes
+ * An Amazon EMR on EKS virtual cluster -- a registration of a Kubernetes
  * namespace on an EKS cluster as an EMR job-submission target. Virtual
  * clusters consume no resources themselves (no cost while idle); jobs
  * submitted to the virtual cluster run as pods in the mapped namespace.
@@ -92,7 +92,7 @@ export interface VirtualCluster extends Resource<
  * The underlying EKS cluster must grant Amazon EMR on EKS access to the
  * namespace (via EKS access entries when the cluster's authentication mode
  * includes `API`, or the legacy `aws-auth` ConfigMap). Everything except tags
- * is immutable — changes replace the virtual cluster.
+ * is immutable -- changes replace the virtual cluster.
  *
  * ### Creating Virtual Clusters
  * **Example:** Register an EKS Namespace with EMR
@@ -245,10 +245,10 @@ export const VirtualClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache
           let vc = yield* observe(output?.virtualClusterId, name);
 
-          // 2. ENSURE — create if missing (synchronous; RUNNING immediately)
+          // 2. ENSURE -- create if missing (synchronous; RUNNING immediately)
           if (vc === undefined) {
             const created = yield* emrc
               .createVirtualCluster({
@@ -282,7 +282,7 @@ export const VirtualClusterProvider = () =>
             }
           }
 
-          // 3. SYNC TAGS — the only mutable aspect; diff observed vs desired
+          // 3. SYNC TAGS -- the only mutable aspect; diff observed vs desired
           yield* syncTags(vc, desiredTags);
 
           yield* session.note(vc.id!);

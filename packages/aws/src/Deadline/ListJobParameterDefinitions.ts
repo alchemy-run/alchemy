@@ -8,14 +8,14 @@ import type { Queue } from "./Queue.ts";
  *
  * Lists the parameter definitions a job's Open Job Description template
  * declares (name, type, default, allowed values) for a job in the bound
- * {@link Queue} — useful to introspect what a resubmission would accept.
+ * {@link Queue} -- useful to introspect what a resubmission would accept.
  * The queue's `farmId`/`queueId` are injected from the binding. Provide the
  * implementation with
  * `Effect.provide(AWS.Deadline.ListJobParameterDefinitionsHttp)`.
  * ### Monitoring Jobs
  * **Example:** Introspect A Job's Parameters
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const listJobParameterDefinitions =
  *   yield* AWS.Deadline.ListJobParameterDefinitions(queue);
  *

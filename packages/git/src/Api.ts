@@ -12,9 +12,9 @@ import * as HttpApi from "effect/http-api/HttpApi";
  * | --- | --- | --- |
  * | {@link Repos} | `/api/v1/repos` | create, get, update, list, delete, fork, import, compact |
  * | {@link Refs} | `/api/v1/repos/:owner/:repo/ref(s)` | list, get, update, remove |
- * | {@link Objects} | `/api/v1/repos/:owner/:repo/…` | commit, log, tree, blob, diff, compare, blobRaw, file |
+ * | {@link Objects} | `/api/v1/repos/:owner/:repo/...` | commit, log, tree, blob, diff, compare, blobRaw, file |
  * | {@link Pulls} | `/api/v1/repos/:owner/:repo/pulls` | create, list, get, update, merge |
- * | {@link Protocol} | `/:owner/:repo/…` | infoRefs, uploadPack, receivePack |
+ * | {@link Protocol} | `/:owner/:repo/...` | infoRefs, uploadPack, receivePack |
  * | {@link GitHub} | `/api/v3` | the GitHub REST v3 facade |
  *
  * No route carries middleware: apply application HttpRouter middleware to
@@ -64,7 +64,7 @@ export class GitApi extends HttpApi.make("git-service")
  *   Effect.gen(function* () {
  *     const request = yield* HttpServerRequest.HttpServerRequest;
  *     if (Git.isRead(request) && (yield* isPublic)) return yield* httpEffect;
- *     // …
+ *     // ...
  *   })
  * ```
  */

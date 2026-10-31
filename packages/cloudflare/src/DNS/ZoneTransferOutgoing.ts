@@ -14,14 +14,14 @@ type TypeId = typeof TypeId;
 export interface ZoneTransferOutgoingProps {
   /**
    * Primary zone whose outgoing transfer configuration is managed.
-   * Stable — the configuration is a per-zone singleton, so changing the
+   * Stable -- the configuration is a per-zone singleton, so changing the
    * zone triggers a replacement.
    */
   zoneId: string;
   /**
    * Zone name (e.g. `example.com.`).
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   name: string;
   /**
@@ -29,7 +29,7 @@ export interface ZoneTransferOutgoingProps {
    * Reference {@link ZoneTransferPeer} resources via their `peerId`
    * attribute.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   peers: string[];
   /**
@@ -37,7 +37,7 @@ export interface ZoneTransferOutgoingProps {
    * dedicated enable/disable endpoints, separate from the
    * configuration's CRUD.
    *
-   * Mutable — toggled in place.
+   * Mutable -- toggled in place.
    * @default true
    */
   enabled?: boolean;
@@ -74,7 +74,7 @@ export type ZoneTransferOutgoing = Resource<
 
 /**
  * The outgoing zone-transfer configuration of a primary zone
- * (`/zones/{zone_id}/secondary_dns/outgoing`) — links the zone to the
+ * (`/zones/{zone_id}/secondary_dns/outgoing`) -- links the zone to the
  * {@link ZoneTransferPeer | peers} Cloudflare NOTIFYs and serves
  * AXFR/IXFR to, and toggles transfers on or off via the dedicated
  * enable/disable endpoints.
@@ -129,7 +129,7 @@ export const ZoneTransferOutgoingProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The outgoing transfer config is a per-zone singleton with no
-      // account-wide enumeration API — walk every zone and read its
+      // account-wide enumeration API -- walk every zone and read its
       // config. Most zones have none (or lack the Secondary DNS
       // entitlement); skip those via the typed not-found/not-allowed
       // tags rather than failing the whole enumeration.
@@ -156,7 +156,7 @@ export const ZoneTransferOutgoingProvider = () =>
       const o = olds as ZoneTransferOutgoingProps;
       const n = news as ZoneTransferOutgoingProps;
       // zoneId is the resource's identity (per-zone singleton).
-      // Input<string> — compare only once concrete.
+      // Input<string> -- compare only once concrete.
       const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
       if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
@@ -183,18 +183,18 @@ export const ZoneTransferOutgoingProvider = () =>
       const peers = news.peers as string[];
       const desiredEnabled = news.enabled ?? true;
 
-      // Observe — singleton keyed by the zone itself.
+      // Observe -- singleton keyed by the zone itself.
       let observed = yield* getOutgoing(zoneId);
 
       if (!observed) {
-        // Ensure — first-time link of the zone to its peers.
+        // Ensure -- first-time link of the zone to its peers.
         observed = yield* dns.createZoneTransferOutgoing({
           zoneId,
           name: news.name,
           peers,
         });
       } else {
-        // Sync — PUT with the full desired body; skip the call when the
+        // Sync -- PUT with the full desired body; skip the call when the
         // observed configuration already matches.
         const dirty = undef(observed.name) !== news.name || !samePeers(observed.peers ?? [], peers);
         if (dirty) {
@@ -206,7 +206,7 @@ export const ZoneTransferOutgoingProvider = () =>
         }
       }
 
-      // Sync enabled state — the enable/disable toggle lives on its own
+      // Sync enabled state -- the enable/disable toggle lives on its own
       // endpoints; diff the observed status and only call on a delta.
       const observedEnabled = yield* getEnabled(zoneId);
       if (observedEnabled !== desiredEnabled) {
@@ -223,7 +223,7 @@ export const ZoneTransferOutgoingProvider = () =>
         Effect.catchTags({
           OutgoingZoneTransferNotFound: () => Effect.void,
           // Cloudflare answers DELETE on a zone without the outgoing
-          // entitlement (or with no configuration) with a 401 — if we
+          // entitlement (or with no configuration) with a 401 -- if we
           // could never have created it, there is nothing to delete.
           OutgoingZoneTransfersNotAllowed: () => Effect.void,
         }),

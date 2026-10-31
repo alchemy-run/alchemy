@@ -69,13 +69,13 @@ export const makeArtifactsRepoClient = (raw: RepoHandle): RepoClient => ({
 /**
  * Builds the full Artifacts client over the native worker binding. Each access
  * level (Read / Write / ReadWrite) returns this same object typed to its subset
- * — least-privilege by construction at the call site.
+ * -- least-privilege by construction at the call site.
  */
 export const makeArtifactsNamespaceClient = (
   env: Record<string, any>,
   namespace: Namespace,
 ): ReadWriteNamespaceClient => {
-  // Lazy — the WorkerEnvironment binding is not populated until runtime.
+  // Lazy -- the WorkerEnvironment binding is not populated until runtime.
   const raw = Effect.sync(() => (env as Record<string, Artifacts>)[namespace.name]!);
   const use = <T>(fn: (raw: Artifacts) => Promise<T>): Effect.Effect<T, ArtifactsError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));

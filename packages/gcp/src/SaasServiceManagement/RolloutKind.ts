@@ -53,12 +53,12 @@ export type RolloutKindProps = {
   /**
    * RolloutKind id (the `{rollout_kind_id}` segment of
    * `projects/{project}/locations/{location}/rolloutKinds/{rollout_kind_id}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the rollout kind.
    */
   rolloutKindId?: string;
   /**
-   * Region of the rollout kind (`us-central1`, …). Immutable — changing
+   * Region of the rollout kind (`us-central1`, ...). Immutable -- changing
    * it replaces the rollout kind. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -66,7 +66,7 @@ export type RolloutKindProps = {
   location?: string;
   /**
    * UnitKind whose units this rollout kind targets. Accepts a unit kind
-   * id or a full resource name. Immutable — changing it replaces the
+   * id or a full resource name. Immutable -- changing it replaces the
    * rollout kind.
    */
   unitKind: string;
@@ -146,7 +146,7 @@ export type RolloutKind = Resource<
 >;
 
 /**
- * An App Lifecycle Manager rollout kind — the policy a Rollout follows
+ * An App Lifecycle Manager rollout kind -- the policy a Rollout follows
  * when upgrading units of a UnitKind.
  *
  * `rolloutKindId`, `location`, and `unitKind` replace the rollout kind.

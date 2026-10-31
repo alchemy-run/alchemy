@@ -34,18 +34,18 @@ import {
 export type CustomersDeploymentProps = {
   /**
    * Parent SAS customer, as `customers/{customer}` or the customer id.
-   * Immutable — changing it replaces the deployment.
+   * Immutable -- changing it replaces the deployment.
    */
   parent: string;
   /**
    * Server-assigned deployment resource name
-   * (`customers/{customer}/deployments/{deployment}`). Immutable —
+   * (`customers/{customer}/deployments/{deployment}`). Immutable --
    * changing it replaces the deployment.
    */
   name?: string;
   /**
    * Display name. SAS Portal deployments have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   displayName?: string;

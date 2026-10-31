@@ -33,7 +33,7 @@ export type MetadataStoresArtifactProps = {
   /**
    * Parent MetadataStore resource name
    * `projects/{project}/locations/{location}/metadataStores/{metadatastore}`.
-   * Immutable — changing it replaces the artifact.
+   * Immutable -- changing it replaces the artifact.
    */
   metadataStore: string;
   /**

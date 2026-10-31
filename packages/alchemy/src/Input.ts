@@ -35,8 +35,8 @@ export type InputProps<T extends Record<string, any>, Static extends keyof T = n
 /**
  * Distributes {@link Input} over each member of a (possibly union) Props
  * type. A resource whose Props form a discriminated union (e.g. Access
- * IdentityProvider's `type` ↔ `config` pairing) must keep the correlation
- * between the discriminant and its payload — a non-distributive mapped
+ * IdentityProvider's `type` <-> `config` pairing) must keep the correlation
+ * between the discriminant and its payload -- a non-distributive mapped
  * type over the union collapses `keyof` to the common keys and severs
  * that link, silently accepting a `config` from the wrong variant.
  */

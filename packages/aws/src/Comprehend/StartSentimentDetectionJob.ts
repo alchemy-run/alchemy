@@ -20,7 +20,7 @@ export interface StartSentimentDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartSentimentDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartSentimentDetectionJob` -- start an asynchronous
  * sentiment detection job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -35,7 +35,7 @@ export interface StartSentimentDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous Sentiment Detection Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startSentimentDetectionJob = yield* AWS.Comprehend.StartSentimentDetectionJob(dataAccessRole);
  *
  * // runtime

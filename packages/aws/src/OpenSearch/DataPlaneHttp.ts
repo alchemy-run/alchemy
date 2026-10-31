@@ -6,11 +6,11 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
  *
  * An OpenSearch domain serves its search/index REST API under the domain's
  * `endpoint`, authorized by the IAM method actions (`es:ESHttpGet`,
- * `es:ESHttpPut`, …). There is no distilled operation for these — every
+ * `es:ESHttpPut`, ...). There is no distilled operation for these -- every
  * request is a SigV4-signed HTTP call (service `"es"`) made with the host
  * Function's own credentials.
  *
- * NOT exported from `index.ts` — only the per-capability contracts
+ * NOT exported from `index.ts` -- only the per-capability contracts
  * (`DomainRead` / `DomainWrite` / `DomainReadWrite`) and their `*Http`
  * layers are public.
  */
@@ -50,7 +50,7 @@ export interface OpenSearchHttpRequest {
 
 /**
  * Signs and sends one {@link OpenSearchHttpRequest} and returns the parsed
- * JSON body (`undefined` for empty bodies, e.g. `HEAD` responses — check
+ * JSON body (`undefined` for empty bodies, e.g. `HEAD` responses -- check
  * `status` instead).
  */
 export type OpenSearchSend = (

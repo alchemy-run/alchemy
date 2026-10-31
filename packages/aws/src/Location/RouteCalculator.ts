@@ -20,13 +20,13 @@ export class RouteCalculatorUnexpectedResponse extends Data.TaggedError(
 
 export interface RouteCalculatorProps {
   /**
-   * Name of the route calculator. Immutable — changing it replaces the
+   * Name of the route calculator. Immutable -- changing it replaces the
    * calculator.
    * @default ${app}-${stage}-${id}
    */
   calculatorName?: string;
   /**
-   * Data provider for routing. Immutable — changing it replaces the
+   * Data provider for routing. Immutable -- changing it replaces the
    * calculator. One of `Esri`, `Grab`, or `Here`.
    */
   dataSource: string;

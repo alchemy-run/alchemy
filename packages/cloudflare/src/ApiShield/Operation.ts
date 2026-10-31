@@ -31,13 +31,13 @@ export interface OperationProps {
   /**
    * Zone the operation is registered on.
    *
-   * Immutable — moving an operation between zones triggers a replacement.
+   * Immutable -- moving an operation between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * The HTTP method used to access the endpoint.
    *
-   * Immutable — an operation is the `(method, host, endpoint)` tuple, so
+   * Immutable -- an operation is the `(method, host, endpoint)` tuple, so
    * changing the method triggers a replacement.
    */
   method: OperationMethod;
@@ -45,15 +45,15 @@ export interface OperationProps {
    * RFC3986-compliant host the endpoint lives on (e.g. `api.example.com`).
    * Must belong to the zone.
    *
-   * Immutable — changing the host triggers a replacement.
+   * Immutable -- changing the host triggers a replacement.
    */
   host: string;
   /**
    * The endpoint path, which may contain path-parameter templates in curly
    * braces (e.g. `/api/v1/users/{id}`). Cloudflare normalizes variable
-   * names left-to-right to `{var1}`, `{var2}`, … on insertion.
+   * names left-to-right to `{var1}`, `{var2}`, ... on insertion.
    *
-   * Immutable — changing the (normalized) endpoint triggers a replacement.
+   * Immutable -- changing the (normalized) endpoint triggers a replacement.
    */
   endpoint: string;
 }
@@ -68,8 +68,8 @@ export interface OperationAttributes {
   /** RFC3986-compliant host the endpoint lives on. */
   host: string;
   /**
-   * The endpoint path as stored by Cloudflare — variable names are
-   * normalized left-to-right to `{var1}`, `{var2}`, …
+   * The endpoint path as stored by Cloudflare -- variable names are
+   * normalized left-to-right to `{var1}`, `{var2}`, ...
    */
   endpoint: string;
   /** ISO8601 timestamp of the last update. */
@@ -79,18 +79,18 @@ export interface OperationAttributes {
 export type Operation = Resource<TypeId, OperationProps, OperationAttributes, never, Providers>;
 
 /**
- * A Cloudflare API Shield operation — a registered API endpoint on a zone,
+ * A Cloudflare API Shield operation -- a registered API endpoint on a zone,
  * identified by the `(method, host, endpoint)` tuple. Registered operations
  * are the unit other API Shield features (schema validation, rate limiting
  * recommendations, API Discovery) attach to.
  *
  * An operation is pure identity: there is no update API, so changing any
- * property triggers a replacement. Cloudflare upserts by identity — creating
- * an already-registered tuple returns the existing operation — which makes
+ * property triggers a replacement. Cloudflare upserts by identity -- creating
+ * an already-registered tuple returns the existing operation -- which makes
  * reconciliation race-free.
  *
  * Endpoint paths may contain `{placeholder}` templates; Cloudflare
- * normalizes the variable names left-to-right to `{var1}`, `{var2}`, … and
+ * normalizes the variable names left-to-right to `{var1}`, `{var2}`, ... and
  * the normalized form is what is stored and diffed.
  * ### Registering an Operation
  * **Example:** Register a GET endpoint
@@ -130,14 +130,14 @@ export const isOperation = (value: unknown): value is Operation =>
 
 export const OperationProvider = () =>
   Provider.succeed(Operation, {
-    // An operation has no mutable aspect — every attribute except the
+    // An operation has no mutable aspect -- every attribute except the
     // last-updated timestamp survives any non-replacing deploy.
     stables: ["operationId", "zoneId", "method", "host", "endpoint"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Operations live inside a zone (`/zones/{id}/api_gateway/operations`)
-      // with no account-wide enumeration API — fan out over every zone and
+      // with no account-wide enumeration API -- fan out over every zone and
       // exhaustively paginate each zone's operations.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -168,7 +168,7 @@ export const OperationProvider = () =>
       const o = olds as OperationProps | undefined;
       const n = news as OperationProps;
       if (o?.endpoint === undefined) return undefined;
-      // The tuple is the operation's identity — any change replaces.
+      // The tuple is the operation's identity -- any change replaces.
       if (o.method !== n.method || o.host !== n.host) {
         return { action: "replace" } as const;
       }
@@ -214,14 +214,14 @@ export const OperationProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the operation id cached on `output` is a hint, not a
+      // 1. Observe -- the operation id cached on `output` is a hint, not a
       //    guarantee: a missing operation falls through to ensure.
       const observed = output?.operationId
         ? yield* getOperation(zoneId, output.operationId)
         : undefined;
       if (observed) return toAttributes(observed, zoneId);
 
-      // 2. Ensure — Cloudflare upserts by identity: registering an existing
+      // 2. Ensure -- Cloudflare upserts by identity: registering an existing
       //    `(method, host, endpoint)` tuple returns the existing operation,
       //    so there is no AlreadyExists race to tolerate.
       const created = yield* apiGateway.createOperation({
@@ -231,7 +231,7 @@ export const OperationProvider = () =>
         endpoint: news.endpoint,
       });
       return toAttributes(created, zoneId);
-      // 3. Sync — nothing to do: an operation is existence-only.
+      // 3. Sync -- nothing to do: an operation is existence-only.
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -251,7 +251,7 @@ type ObservedOperation = Pick<
 
 /**
  * Normalize an endpoint path the way Cloudflare does on insertion: each
- * `{placeholder}` is replaced left-to-right with `{var1}`, `{var2}`, …
+ * `{placeholder}` is replaced left-to-right with `{var1}`, `{var2}`, ...
  */
 export const normalizeEndpoint = (endpoint: string): string => {
   let n = 0;

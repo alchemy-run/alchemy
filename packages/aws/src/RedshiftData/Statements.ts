@@ -199,10 +199,10 @@ export interface StatementsClient {
 
 /**
  * Runtime binding for the Amazon Redshift Data API against a Serverless
- * {@link Workgroup}. Exposes the full Data API surface —
+ * {@link Workgroup}. Exposes the full Data API surface --
  * `execute`/`executeBatch`/`describe`/`cancel`/`getResult`/`getResultV2`,
  * the metadata reads (`describeTable`, `listDatabases`, `listSchemas`,
- * `listTables`, `listStatements`) — plus a composite `query` that submits a
+ * `listTables`, `listStatements`) -- plus a composite `query` that submits a
  * statement and polls until it finishes.
  *
  * At deploy time it grants the workgroup-scoped Data API actions on the
@@ -210,7 +210,7 @@ export interface StatementsClient {
  * statement-scoped actions (`DescribeStatement`, `GetStatementResult`,
  * `GetStatementResultV2`, `CancelStatement`, `ListStatements`) which AWS
  * authorizes per statement owner rather than by ARN. The Data API is
- * HTTP-based — no driver, no VPC reach, and no credential plumbing required.
+ * HTTP-based -- no driver, no VPC reach, and no credential plumbing required.
  * Provide the implementation with
  * `Effect.provide(AWS.RedshiftData.StatementsHttp)`.
  *
@@ -260,14 +260,14 @@ export interface StatementsClient {
  *       namespaceName: namespace.namespaceName,
  *       baseCapacity: 8,
  *     });
- *     // init — bind the Data API to the workgroup
+ *     // init -- bind the Data API to the workgroup
  *     const sql = yield* RedshiftData.Statements(workgroup, {
  *       database: "analytics",
  *     });
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — submit a statement and wait for its rows
+ *         // runtime -- submit a statement and wait for its rows
  *         const result = yield* sql.query("SELECT count(*) AS n FROM events");
  *         return yield* HttpServerResponse.json({ records: result.Records });
  *       }).pipe(Effect.orDie),

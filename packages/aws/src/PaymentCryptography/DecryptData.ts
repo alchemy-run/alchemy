@@ -9,7 +9,7 @@ export interface DecryptDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:DecryptData` — decrypts
+ * Runtime binding for `payment-cryptography:DecryptData` -- decrypts
  * ciphertext under a {@link Key}. Provide `DecryptDataHttp` on the Function
  * to satisfy this service.
  * ### Decrypting Data

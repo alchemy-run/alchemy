@@ -159,7 +159,7 @@ export interface Volume extends Resource<
   Providers
 > {}
 /**
- * An Elastic Block Store (EBS) volume — durable block storage you attach to an
+ * An Elastic Block Store (EBS) volume -- durable block storage you attach to an
  * EC2 instance via a {@link VolumeAttachment}. Volumes live in a single
  * Availability Zone and persist independently of any instance.
  *
@@ -288,7 +288,7 @@ export const VolumeProvider = () =>
           ) {
             return { action: "replace" };
           }
-          // Shrinking a volume is not supported in place — replace.
+          // Shrinking a volume is not supported in place -- replace.
           if (olds.size !== undefined && news.size !== undefined && news.size < olds.size) {
             return { action: "replace" };
           }
@@ -309,11 +309,11 @@ export const VolumeProvider = () =>
             "alchemy::instance": instanceId,
           };
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id
           //    cache. A volume in a terminal state is treated as missing.
           let volume = yield* observeVolume(id, instanceId, output?.volumeId);
 
-          // 2. ENSURE — create the volume when missing, then wait until it is
+          // 2. ENSURE -- create the volume when missing, then wait until it is
           //    available. The ClientToken is this generation plus the last
           //    volume it created, so a create retried after a lost reply
           //    returns the first volume, and a recreate after the volume was
@@ -364,7 +364,7 @@ export const VolumeProvider = () =>
 
           const volumeId = volume.VolumeId! as VolumeId;
 
-          // 3. SYNC — grow size / adjust performance in place. Only include a
+          // 3. SYNC -- grow size / adjust performance in place. Only include a
           //    field when the user specified it AND it drifts from observed
           //    cloud state, so a no-op reconcile never triggers the 6h
           //    modification cooldown.
@@ -391,7 +391,7 @@ export const VolumeProvider = () =>
             yield* session.note(`Volume modified: ${volumeId}`);
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const currentTags = Object.fromEntries(
             (volume.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -436,7 +436,7 @@ export const VolumeProvider = () =>
           yield* ec2.deleteVolume({ VolumeId: volumeId, DryRun: false }).pipe(
             Effect.tapError(Effect.logDebug),
             Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
-            // A volume that is still detaching reports VolumeInUse — retry
+            // A volume that is still detaching reports VolumeInUse -- retry
             // until the detach completes.
             Effect.retry({
               while: (e) => e._tag === "VolumeInUse",

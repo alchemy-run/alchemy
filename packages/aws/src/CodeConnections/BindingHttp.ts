@@ -8,7 +8,7 @@ import type { SyncConfiguration } from "./SyncConfiguration.ts";
 /**
  * Shared HTTP scaffolding for the CodeConnections runtime bindings.
  *
- * Every capability follows the same shape — resolve the distilled
+ * Every capability follows the same shape -- resolve the distilled
  * operation, register an IAM policy statement on the binding host, and
  * return a runtime callable. The only variation is the operation, the IAM
  * action(s), and the identifier(s) injected from the bound resource:

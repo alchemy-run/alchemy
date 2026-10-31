@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/astro/aws` — the AWS Lambda deploy target
+ * `@alchemy.run/frontend-frameworks/astro/aws` -- the AWS Lambda deploy target
  * for the Astro integration.
  *
  * Astro's AWS story is a plain Node SSR bundle behind a Lambda Function
@@ -9,17 +9,17 @@
  * to be **self-contained** (`vite.ssr.noExternal: true`) so `dist/server`
  * can ship to Lambda as-is (`bundle: false`). What this target owns:
  *
- * - **`integration`** — the adapter integration: registers itself via
+ * - **`integration`** -- the adapter integration: registers itself via
  *   `setAdapter` at `astro:config:done` (rejecting a user-declared adapter
  *   with an actionable error), pins the `aws-server` entrypoint, and
  *   configures the server build for self-containment.
- * - **`finish`** — a fully-static build (`output: "static"`: every route
+ * - **`finish`** -- a fully-static build (`output: "static"`: every route
  *   prerendered) deploys ASSETS-ONLY: `serverModules` is dropped so the
  *   composite skips the Lambda entirely.
- * - **`selectServerEntry`** — pins the adapter's entry chunk as
+ * - **`selectServerEntry`** -- pins the adapter's entry chunk as
  *   `serverModules[0]` (astro's page modules are rolldown inputs in the
  *   same environment, so the entry environment emits many entry chunks).
- * - **`bundle`** — Node resolve conditions and the `@aws-sdk/` externals
+ * - **`bundle`** -- Node resolve conditions and the `@aws-sdk/` externals
  *   (the Lambda Node.js runtime ships SDK v3) for callers that post-process
  *   server code.
  *
@@ -34,7 +34,7 @@ import { make } from "./Astro.ts";
 import type { AstroTarget, AstroTargetBuildContext } from "./Target.ts";
 
 /**
- * The importable specifier of this package's AWS Lambda server entrypoint —
+ * The importable specifier of this package's AWS Lambda server entrypoint --
  * the module the adapter pins as `serverEntrypoint`. It exports the Lambda
  * `handler` (streaming by default).
  */
@@ -45,8 +45,8 @@ export interface AstroAwsConfig {
   /**
    * Whether the emitted Lambda handler streams its response
    * (`awslambda.streamifyResponse`, requires a Function URL with
-   * `invokeMode: RESPONSE_STREAM`). With `false` — or whenever the
-   * `awslambda` global is absent — the buffered handler answers
+   * `invokeMode: RESPONSE_STREAM`). With `false` -- or whenever the
+   * `awslambda` global is absent -- the buffered handler answers
    * APIGW/Function-URL events with a complete payload-v2 response object.
    * @default true
    */
@@ -86,11 +86,11 @@ export interface DistilledAwsOptions {
 export const distilledAws = (options: DistilledAwsOptions = {}): AstroIntegration => {
   // Whether WE satisfied `config.adapter`. The user's astro.config.* loads
   // natively and this integration is injected via `integrations`, but
-  // astro's build refuses server output unless `config.adapter` is set — so
+  // astro's build refuses server output unless `config.adapter` is set -- so
   // `astro:config:setup` injects a hookless marker when the config declares
   // no adapter (the real adapter registration is `setAdapter` at
   // `astro:config:done`). When the flag is still false at
-  // `astro:config:done`, the user declared their own adapter — a conflict.
+  // `astro:config:done`, the user declared their own adapter -- a conflict.
   let injectedAdapterMarker = false;
   return {
     name: "@alchemy.run/frontend-frameworks/astro-aws",
@@ -111,7 +111,7 @@ export const distilledAws = (options: DistilledAwsOptions = {}): AstroIntegratio
           throw new Error(
             `@alchemy.run/frontend-frameworks/astro/aws: the Astro config declares the adapter "${config.adapter.name}", ` +
               "but the deploy target already provides the AWS Lambda adapter. " +
-              "Remove `adapter` from your astro.config file — user integrations " +
+              "Remove `adapter` from your astro.config file \u2014 user integrations " +
               "(react, mdx, tailwind, ...) are honored, and the adapter is injected by the toolchain.",
           );
         }
@@ -168,7 +168,7 @@ const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "aws", message, cause });
 
 /**
- * The adapter-driven target — the shape the framework's regular
+ * The adapter-driven target -- the shape the framework's regular
  * build/finish pipeline consumes. Used directly in the build child (where
  * `cwd === root` holds); {@link target} wraps it with the wholesale
  * `build` hook that spawns the child.
@@ -215,7 +215,7 @@ const makeAwsAdapterTarget = (config: AstroAwsConfig = {}): AstroAwsTarget => {
 
 /**
  * The natively-loaded `astro.config.*` executes user plugins/integrations
- * that may read the cwd, mutate `process.env`, or `process.chdir` — none of
+ * that may read the cwd, mutate `process.env`, or `process.chdir` -- none of
  * which may touch the engine process (many deploys share one event loop).
  * This target's wholesale `build` therefore runs the framework in a
  * disposable child process whose working directory IS the project root (see
@@ -268,6 +268,6 @@ export const target = (config: AstroAwsConfig = {}): AstroAwsTarget => ({
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export default target;

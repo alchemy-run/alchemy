@@ -65,7 +65,7 @@ export interface RpcDurableObject<Self, Rpcs extends Rpc.Any = Rpc.Any> extends 
   DurableObjectType<{ fetch: HttpEffect<DurableObjectState> }>,
   "getByName" | "get" | "Shape"
 > {
-  /** @internal phantom — keeps `Self` reachable through the inferred type */
+  /** @internal phantom -- keeps `Self` reachable through the inferred type */
   Self?: Self;
   /**
    * Select a named instance and forward an HTTP request or WebSocket upgrade.
@@ -236,7 +236,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ### Defining the rpc group
  * **Example:** DO-scoped rpc schemas
  * The DO instance *is* the session, so the group payloads typically
- * don't include any per-session identifier — only the per-call inputs.
+ * don't include any per-session identifier -- only the per-call inputs.
  * ```typescript
  * import * as Schema from "effect/Schema";
  * import { Rpc, RpcGroup } from "effect/rpc";
@@ -256,7 +256,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *
  * ### Implementing the Durable Object
  * **Example:** Class form (recommended)
- * Mirrors `Cloudflare.DurableObject<Self>()(...)` — same
+ * Mirrors `Cloudflare.DurableObject<Self>()(...)` -- same
  * outer/inner Effect pattern. The outer Effect resolves shared deps;
  * the per-instance inner Effect returns the RPC handler Layer.
  * ```typescript
@@ -287,7 +287,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * **Example:** Typed rpc client at the call site
  * `yield* Counter` resolves to a value whose `getByName(id)` returns
  * an `Effect<RpcClient<CounterRpcs>>`. Each rpc method is a typed
- * Effect/Stream factory — no `RpcClient.make` setup needed. Yield
+ * Effect/Stream factory -- no `RpcClient.make` setup needed. Yield
  * the client inside a per-request `Effect.scoped` handler so it's
  * freed with the request.
  * ```typescript
@@ -373,7 +373,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * arg of `Worker<Self, Bindings, Deps>` or second of
  * `RpcWorker<Self, Deps>`) and provides `CounterLive`. Any other
  * Worker uses `Counter.from(HostWorker)` to bind to the same DO
- * instances — writes through `HostWorker.getByName(name)` are
+ * instances -- writes through `HostWorker.getByName(name)` are
  * visible from `Counter.from(HostWorker).getByName(name)`.
  * ```typescript
  * // host worker (declares + provides Counter)
@@ -410,7 +410,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *
  * **Example:** Self-hosted isolated namespace
  * A Worker that declares `Counter` in its own `Deps` and provides
- * `CounterLive` hosts its own isolated namespace — instances under
+ * `CounterLive` hosts its own isolated namespace -- instances under
  * it are separate from any other host's. Use `Counter.from(Self)`
  * inside the host to be explicit about which script's namespace
  * you're binding to.
@@ -430,7 +430,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *
  * ### Yielding the surrounding namespace from inside a DO
  * **Example:** `yield* RpcDurableObject` inside the DO impl
- * Lets a DO instance refer to its own namespace — e.g. to fan a call
+ * Lets a DO instance refer to its own namespace -- e.g. to fan a call
  * out to sibling instances. Mirrors `yield* DurableObject`
  * on the regular `DurableObject`.
  * ```typescript
@@ -449,7 +449,7 @@ export const RpcDurableObject: RpcDurableObjectClass = taggedFunction(
   RpcDurableObjectScope,
   (...args: any[]) => {
     // Class-form: zero args returns the inner builder. Inner-arg arity
-    // distinguishes modular (`(name, { schema })`, no impl — `static
+    // distinguishes modular (`(name, { schema })`, no impl -- `static
     // from`/`static make` provide the runtime) from inline-impl
     // (`(name, { schema }, impl)`).
     if (args.length === 0) {
@@ -466,7 +466,7 @@ export const RpcDurableObject: RpcDurableObjectClass = taggedFunction(
         return build(name, props, impl);
       };
     }
-    // Descriptor-only form: `(name, { schema })` — no impl.
+    // Descriptor-only form: `(name, { schema })` -- no impl.
     if (args.length === 2) {
       const [name, props] = args as [
         string,

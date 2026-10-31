@@ -163,10 +163,10 @@ export const DBSubnetGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live subnet-group state.
+          // Observe -- fetch live subnet-group state.
           let observed = yield* readGroup(dbSubnetGroupName);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBSubnetGroupAlreadyExistsFault` as a race with a peer
           // reconciler by re-reading.
           if (!observed?.DBSubnetGroupName) {
@@ -188,7 +188,7 @@ export const DBSubnetGroupProvider = () =>
               });
             }
           } else {
-            // Sync description and subnet membership — `modifyDBSubnetGroup`
+            // Sync description and subnet membership -- `modifyDBSubnetGroup`
             // accepts the full desired set and is idempotent for unchanged
             // input.
             yield* rds.modifyDBSubnetGroup({
@@ -206,7 +206,7 @@ export const DBSubnetGroupProvider = () =>
 
           const dbSubnetGroupArn = observed.DBSubnetGroupArn;
 
-          // Sync tags — diff observed cloud tags against desired (describe
+          // Sync tags -- diff observed cloud tags against desired (describe
           // does not surface tags inline).
           const observedTags = yield* readTags(dbSubnetGroupArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
@@ -247,7 +247,7 @@ export const DBSubnetGroupProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBSubnetGroups ?? []).flatMap((group) =>
                   // `default` is the RDS-family subnet group AWS auto-creates
-                  // for the default VPC — never ours, never census/nuke it.
+                  // for the default VPC -- never ours, never census/nuke it.
                   group.DBSubnetGroupName && group.DBSubnetGroupName !== "default"
                     ? [
                         {

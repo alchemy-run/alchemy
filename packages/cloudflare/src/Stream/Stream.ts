@@ -26,12 +26,12 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
 
 /**
  * A Cloudflare Stream binding for managing videos, captions, downloads and
- * watermarks from Workers — a Worker-only binding with no backing cloud
+ * watermarks from Workers -- a Worker-only binding with no backing cloud
  * resource.
  *
  * `Stream` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces a {@link StreamBinding}, and the type. Declare it on a
- * Worker's `env` (it flows through `InferEnv` → the runtime `StreamBinding`
+ * Worker's `env` (it flows through `InferEnv` -> the runtime `StreamBinding`
  * handle) or `yield*` it inside an Effect-native Worker to attach the binding
  * and obtain the {@link StreamClient}.
  *
@@ -82,7 +82,7 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * ```typescript
  * // Default: videos land in the local video store under `alchemy dev`.
  * // Alchemy.remote() opts the binding into the real Stream service
- * // instead — in an Effect-native Worker:
+ * // instead -- in an Effect-native Worker:
  * const stream = yield* Cloudflare.Stream.Stream("STREAM").pipe(Alchemy.remote());
  *
  * // or declared on an async Worker's env:
@@ -97,7 +97,7 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  */
 export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @default "STREAM"
    */
   (name?: string): StreamBinding;
@@ -127,7 +127,7 @@ export interface StreamClient {
   upload(url: string, params?: cf.StreamUrlUploadParams): StreamEffect<cf.StreamVideo>;
   /**
    * Create a direct-creator upload (video uploads without an API key).
-   * Unsupported by the local dev simulator — fails with {@link StreamError}.
+   * Unsupported by the local dev simulator -- fails with {@link StreamError}.
    */
   createDirectUpload(
     params: cf.StreamDirectUploadCreateParams,

@@ -106,7 +106,7 @@ export interface TableProps {
   partitionKeys?: GlueColumn[];
   /**
    * Free-form key/value properties stored on the table. Alchemy adds its own
-   * `alchemy::*` ownership markers here (Glue tables are not ARN-taggable) —
+   * `alchemy::*` ownership markers here (Glue tables are not ARN-taggable) --
    * user keys are preserved.
    */
   parameters?: Record<string, string>;
@@ -135,7 +135,7 @@ export interface Table extends Resource<
 > {}
 
 /**
- * An AWS Glue Data Catalog table — a schema (columns), storage location, and
+ * An AWS Glue Data Catalog table -- a schema (columns), storage location, and
  * SerDe over data in S3 (or another store). This is the unit Athena, Redshift
  * Spectrum, and EMR query; it is the analytics foundation of a Glue database.
  * ### Creating Tables
@@ -317,7 +317,7 @@ export const TableProvider = () =>
           if ((olds.catalogId ?? undefined) !== (news.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // schema / storage / partition keys / parameters → update
+          // schema / storage / partition keys / parameters -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

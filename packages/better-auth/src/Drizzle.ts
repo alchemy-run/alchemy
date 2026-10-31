@@ -34,7 +34,7 @@ export interface DrizzleLayerConfig {
  * Accepts a plain drizzle instance, or an Effect resolving to one for
  * databases that only materialize at runtime. NOTE: alchemy's own
  * `Drizzle.Postgres`/`Drizzle.D1` chainable proxies yield Effects rather
- * than thenables and cannot back the (promise-based) adapter — pass the
+ * than thenables and cannot back the (promise-based) adapter -- pass the
  * raw `drizzle(...)` instance instead.
  *
  * Schema management is yours: this layer has no automatic migration

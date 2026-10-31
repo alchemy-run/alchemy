@@ -35,11 +35,11 @@ export type ApiHubInstanceConfig = {
   /**
    * Customer-managed encryption key
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    */
   cmekKeyName?: string;
   /**
-   * Encryption type. Immutable — changing it replaces the instance.
+   * Encryption type. Immutable -- changing it replaces the instance.
    * @default "GMEK"
    */
   encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED" | "GMEK" | "CMEK" | (string & {});
@@ -54,18 +54,18 @@ export type ApiHubInstanceProps = {
    * ApiHub instance id (the `{apiHubInstance}` segment of
    * `projects/{project}/locations/{location}/apiHubInstances/{apiHubInstance}`).
    * If omitted, a unique id is generated. Must be 4-40 characters matching
-   * `[a-z0-9-_]+`. Immutable — changing it replaces the instance.
+   * `[a-z0-9-_]+`. Immutable -- changing it replaces the instance.
    */
   apiHubInstanceId?: string;
   /**
-   * Location (`us-central1`, …). Only one ApiHub instance is allowed per
-   * project. Immutable — changing it replaces the instance.
+   * Location (`us-central1`, ...). Only one ApiHub instance is allowed per
+   * project. Immutable -- changing it replaces the instance.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Human-readable description. Ownership is stored in labels; the
-   * description is also stamped with `[alchemy …]` so `list` / nuke can
+   * description is also stamped with `[alchemy ...]` so `list` / nuke can
    * find instances that predate label updates.
    */
   description?: string;

@@ -73,7 +73,7 @@ export const tagRecord = (
 
 /**
  * API Gateway v2 collection operations (`getApis`, `getRoutes`, `getStages`,
- * …) return `{ Items, NextToken }` pages without a Smithy pagination trait,
+ * ...) return `{ Items, NextToken }` pages without a Smithy pagination trait,
  * so distilled exposes no `.pages` stream for them. Collect every page
  * manually, bounded at 100 pages so a misbehaving token can never hang the
  * engine.

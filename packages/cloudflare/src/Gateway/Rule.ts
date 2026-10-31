@@ -40,7 +40,7 @@ export type RuleAction =
 
 /**
  * Filter Cloudflare Gateway evaluates the rule against. Selects the layer the
- * `traffic` expression operates on — DNS, HTTP, raw L4, the egress path, or
+ * `traffic` expression operates on -- DNS, HTTP, raw L4, the egress path, or
  * the `dns_resolver` plane (which is what private-app destinations use when
  * Gateway needs to override the answer for an internal hostname).
  */
@@ -49,7 +49,7 @@ export type RuleFilter = "http" | "dns" | "l4" | "egress" | "dns_resolver" | (st
 /**
  * Settings the rule applies when it matches. Re-exports distilled's request
  * shape so every server-recognised knob (override host, block page, DNS
- * resolvers, BISO controls, egress IPs, redirect target, …) is available
+ * resolvers, BISO controls, egress IPs, redirect target, ...) is available
  * without re-declaring the structure.
  *
  * Only a subset is meaningful for any given `action`; consult Cloudflare's
@@ -78,7 +78,7 @@ export interface RuleProps {
   filters: ReadonlyArray<RuleFilter>;
   /**
    * Wirefilter expression used for traffic matching. Cloudflare auto-formats
-   * and sanitises this server-side — to avoid perpetual diffs, prefer the
+   * and sanitises this server-side -- to avoid perpetual diffs, prefer the
    * formatted form (e.g. `'any(dns.domains[*] == "internal.example")'`).
    */
   traffic?: string;
@@ -106,7 +106,7 @@ export interface RuleProps {
    */
   ruleSettings?: RuleSettings;
   /**
-   * Rule precedence — lower values evaluate first. When unset, Cloudflare
+   * Rule precedence -- lower values evaluate first. When unset, Cloudflare
    * picks one server-side; we then echo whatever it assigned back through
    * the output attributes.
    */
@@ -160,7 +160,7 @@ export type Rule = Resource<"Cloudflare.Gateway.Rule", RuleProps, RuleAttributes
  * the authenticated identity, and the device posture. The most common
  * companion to {@link Application} with a `private` destination is a
  * `dns` rule with `action: "override"` that points an internal hostname at
- * a Cloudflare Tunnel — without it, WARP intercepts the lookup but has
+ * a Cloudflare Tunnel -- without it, WARP intercepts the lookup but has
  * nowhere to send the answer.
  * ### DNS override for a private app
  * **Example:** Resolve an internal hostname through a Cloudflare Tunnel
@@ -216,7 +216,7 @@ export const RuleProvider = () =>
           return yield* createPhysicalName({ id });
         });
 
-      // Locate an existing rule by name when no ruleId is cached — used for
+      // Locate an existing rule by name when no ruleId is cached -- used for
       // adoption and as a recovery path after a create returns a conflict.
       const findRuleByName = (accountId: string, name: string) =>
         listRules.items({ accountId }).pipe(
@@ -298,7 +298,7 @@ export const RuleProvider = () =>
             observed = yield* observeById(accountId, output.ruleId);
           }
           if (!observed) {
-            // Adoption / recovery path — look up by name. Cheap relative to
+            // Adoption / recovery path -- look up by name. Cheap relative to
             // the create call we'd otherwise blow up on a duplicate name.
             observed = yield* findRuleByName(accountId, resolvedName);
           }
@@ -318,7 +318,7 @@ export const RuleProvider = () =>
               enabled: body.enabled,
               description: body.description,
             }).pipe(
-              // Distilled does not tag Conflict — fall back to a name lookup
+              // Distilled does not tag Conflict -- fall back to a name lookup
               // before re-failing so a racing create still converges.
               Effect.catch((err) =>
                 Effect.gen(function* () {

@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/git/Hasher` — every pack hasher implementation (DESIGN §22).
+ * `@alchemy.run/git/Hasher` -- every pack hasher implementation (DESIGN §22).
  * The contract and the cloud-neutral layers ({@link HasherInline},
  * {@link HasherSelf}) are also re-exported from `@alchemy.run/git`; this entry
  * adds the ones that bring their own compute: {@link HasherLambda} (an AWS

@@ -24,7 +24,7 @@ export type ConnectionArn =
 export interface ConnectionApiKeyAuthParameters {
   /** Header name the API key is sent under (e.g. `x-api-key`). */
   apiKeyName: string;
-  /** The API key value. Wrap with `Redacted.make(...)` — stored by EventBridge in Secrets Manager. */
+  /** The API key value. Wrap with `Redacted.make(...)` -- stored by EventBridge in Secrets Manager. */
   apiKeyValue: Redacted.Redacted<string>;
 }
 
@@ -242,7 +242,7 @@ export const ConnectionProvider = () =>
       const awaitSettled = (name: string) =>
         eventbridge.describeConnection({ Name: name }).pipe(
           // A describe fired immediately after create can be eventually
-          // consistent — absorb NotFound briefly before polling the state.
+          // consistent -- absorb NotFound briefly before polling the state.
           Effect.retry({
             while: (e): boolean => e._tag === "ResourceNotFoundException",
             schedule: Schedule.spaced("1 second"),
@@ -319,14 +319,14 @@ export const ConnectionProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const connectionName = output?.connectionName ?? (yield* createConnectionName(id, news));
 
-          // Observe — live cloud state is authoritative; a vanished
+          // Observe -- live cloud state is authoritative; a vanished
           // connection falls through to create.
           const observed = yield* eventbridge
             .describeConnection({ Name: connectionName })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ConnectionArn) {
-            // Ensure — create the connection; tolerate an AlreadyExists race
+            // Ensure -- create the connection; tolerate an AlreadyExists race
             // with a peer reconciler and converge via the update below.
             yield* eventbridge
               .createConnection({
@@ -339,7 +339,7 @@ export const ConnectionProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
-            // Sync — updateConnection overwrites description, authorization
+            // Sync -- updateConnection overwrites description, authorization
             // type/parameters, and KMS key in one shot. The update-parameter
             // shape is structurally compatible with the create shape (all
             // fields optional).

@@ -30,7 +30,7 @@ export type DatasetsFhirStoreProps = {
   /**
    * Parent dataset. Full name
    * `projects/{project}/locations/{location}/datasets/{dataset}` or the
-   * dataset id (combined with `location`). Immutable — changing it
+   * dataset id (combined with `location`). Immutable -- changing it
    * replaces the FHIR store.
    */
   dataset: string;
@@ -41,12 +41,12 @@ export type DatasetsFhirStoreProps = {
   location?: string;
   /**
    * FHIR store id. Must match letters, numbers, underscores, hyphens,
-   * and periods; 1-256 characters. Immutable — changing it replaces the
+   * and periods; 1-256 characters. Immutable -- changing it replaces the
    * store.
    */
   fhirStoreId?: string;
   /**
-   * Native FHIR version. Immutable — changing it replaces the store.
+   * Native FHIR version. Immutable -- changing it replaces the store.
    * @default "R4"
    */
   version?: healthcare.FhirStoreVersionEnum | (string & {});
@@ -60,13 +60,13 @@ export type DatasetsFhirStoreProps = {
    */
   enableUpdateCreate?: boolean;
   /**
-   * Disable referential integrity checks. Immutable — changing it
+   * Disable referential integrity checks. Immutable -- changing it
    * replaces the store.
    * @default false
    */
   disableReferentialIntegrity?: boolean;
   /**
-   * Disable resource versioning. Immutable — changing it replaces the
+   * Disable resource versioning. Immutable -- changing it replaces the
    * store.
    * @default false
    */

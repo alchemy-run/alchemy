@@ -27,24 +27,24 @@ export type DataCollectorType = apigee.GoogleCloudApigeeV1DataCollectorTypeEnum 
 export type DatacollectorProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the collector.
+   * current GCP project id. Immutable -- changing it replaces the collector.
    */
   organization?: string;
   /**
    * Data collector id (the `{data_collector}` segment of
    * `organizations/{org}/datacollectors/{data_collector}`). Must begin with
    * `dc_` and contain only letters, numbers, and underscores. If omitted,
-   * a unique `dc_` name is generated. Immutable — changing it replaces the
+   * a unique `dc_` name is generated. Immutable -- changing it replaces the
    * collector.
    */
   dataCollectorId?: string;
   /**
    * Human-readable description. Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
-   * Type of data this collector records. Immutable — changing it replaces
+   * Type of data this collector records. Immutable -- changing it replaces
    * the collector.
    * @default "STRING"
    */
@@ -78,7 +78,7 @@ export type Datacollector = Resource<
  * An Apigee data collector used to capture custom analytics dimensions.
  *
  * Apigee collectors have no labels field, so Alchemy stamps ownership into
- * the description for `list` / nuke. Name and type are identity — changing
+ * the description for `list` / nuke. Name and type are identity -- changing
  * `dataCollectorId` or `type` replaces the collector. Description updates
  * in place.
  *

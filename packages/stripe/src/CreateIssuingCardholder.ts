@@ -8,7 +8,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 /**
- * Create a Stripe Issuing Cardholder over HTTP. Account-scoped — binds
+ * Create a Stripe Issuing Cardholder over HTTP. Account-scoped -- binds
  * the API key onto the host, not a specific cardholder resource.
  *
  * ### Creating a Cardholder at runtime

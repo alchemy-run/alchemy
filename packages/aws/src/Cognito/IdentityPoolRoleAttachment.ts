@@ -39,7 +39,7 @@ export interface IdentityPoolRoleAttachment extends Resource<
 
 /**
  * Attaches the authenticated/unauthenticated IAM roles to an Amazon Cognito
- * identity pool. A singleton child of the pool — one attachment manages the
+ * identity pool. A singleton child of the pool -- one attachment manages the
  * pool's role configuration.
  * ### Attaching Roles
  * **Example:** Authenticated Role
@@ -117,7 +117,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
         stables: ["identityPoolId"],
 
         // Sub-resource keyed entirely by its identity pool (identityPoolId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -148,7 +148,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
           const identityPoolId = news.identityPoolId;
           const desired = desiredRoles(news);
 
-          // 1. OBSERVE — the attachment is a singleton child; observed state
+          // 1. OBSERVE -- the attachment is a singleton child; observed state
           //    is the pool's current role map.
           const observed = yield* getRoles(identityPoolId);
           const observedRoles = Object.fromEntries(
@@ -157,7 +157,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
             ),
           );
 
-          // 2/3. ENSURE + SYNC — SetIdentityPoolRoles is a full PUT; skip it
+          // 2/3. ENSURE + SYNC -- SetIdentityPoolRoles is a full PUT; skip it
           //      when the observed map already matches.
           const same =
             JSON.stringify(Object.entries(observedRoles).sort(([a], [b]) => a.localeCompare(b))) ===

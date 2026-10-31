@@ -41,7 +41,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 /**
  * Standalone operation helpers own a private auth registry because they run
  * outside a Stack. Credential resolution stays eager here so constructing
- * `managementApi()` preserves its existing fail-fast behavior — which also
+ * `managementApi()` preserves its existing fail-fast behavior -- which also
  * lets the distilled `Credentials` service read the already-resolved
  * {@link PrismaEnvironment} rather than building its own.
  */
@@ -64,7 +64,7 @@ const standaloneManagementApiLayer = () =>
     ),
     // Provide (NOT provideMerge) the node transport privately: it must serve
     // only the Prisma management client. Exposing it from `providers()` would
-    // override the ambient HttpClient for every other provider in the stack —
+    // override the ambient HttpClient for every other provider in the stack --
     // Cloudflare Worker script uploads then go out via node:http, which
     // streams multipart bodies as `Transfer-Encoding: chunked`, and
     // api.cloudflare.com never answers chunked uploads.
@@ -138,7 +138,7 @@ const stackManagementApiLayer = () =>
  * (`destroyApp`, `destroyDeployment`, `destroyProjectApps`,
  * `waitForDeploymentStatus`, `syncComputeEnvironment`) also need an
  * `HttpClient` from the caller, because the Prisma-scoped node transport is
- * `Layer.provide`d privately here — see the comment on the private provide
+ * `Layer.provide`d privately here -- see the comment on the private provide
  * above for why it must not reach the surrounding stack. Add one, e.g.:
  *
  * ```typescript

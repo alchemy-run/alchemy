@@ -37,7 +37,7 @@ export type ReleaseBlueprint = {
    * the regional Artifact Registry path. Immutable.
    */
   package?: string;
-  /** Actuation engine (`terraform`, `helm`, …). Output-only. */
+  /** Actuation engine (`terraform`, `helm`, ...). Output-only. */
   engine?: string;
   /** Version metadata from the image manifest. Output-only. */
   version?: string;
@@ -53,12 +53,12 @@ export type ReleaseProps = {
   /**
    * Release id (the `{release}` segment of
    * `projects/{project}/locations/{location}/releases/{release}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the release.
    */
   releaseId?: string;
   /**
-   * Region of the release (`us-central1`, …). Immutable — changing it
+   * Region of the release (`us-central1`, ...). Immutable -- changing it
    * replaces the release. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -66,12 +66,12 @@ export type ReleaseProps = {
   location?: string;
   /**
    * UnitKind this release belongs to. Accepts a unit kind id or a full
-   * resource name. Immutable — changing it replaces the release.
+   * resource name. Immutable -- changing it replaces the release.
    */
   unitKind: string;
   /**
    * Blueprint package that actuates units of this release. `package` is
-   * immutable — changing it replaces the release.
+   * immutable -- changing it replaces the release.
    */
   blueprint?: ReleaseBlueprint;
   /**
@@ -138,7 +138,7 @@ export type Release = Resource<
 >;
 
 /**
- * An App Lifecycle Manager release — a version of a UnitKind packaged
+ * An App Lifecycle Manager release -- a version of a UnitKind packaged
  * as an OCI blueprint.
  *
  * `releaseId`, `location`, `unitKind`, and `blueprint.package` replace

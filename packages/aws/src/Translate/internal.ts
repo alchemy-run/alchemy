@@ -11,7 +11,7 @@ export const toTagRecord = (tags: readonly translate.Tag[] | undefined): Record<
 
 /**
  * Read the observed tags of a Translate resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readTranslateTags = Effect.fn(function* (arn: string) {
   const response = yield* translate

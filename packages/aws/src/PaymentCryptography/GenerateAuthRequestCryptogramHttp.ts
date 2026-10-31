@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { GenerateAuthRequestCryptogram } from "./GenerateAuthRequestCryptogram.ts";
 
 /**
- * HTTP implementation of {@link GenerateAuthRequestCryptogram} — grants the
+ * HTTP implementation of {@link GenerateAuthRequestCryptogram} -- grants the
  * host Function `payment-cryptography:GenerateAuthRequestCryptogram` on the
  * issuer master key and calls the Payment Cryptography Data API at runtime.
  */

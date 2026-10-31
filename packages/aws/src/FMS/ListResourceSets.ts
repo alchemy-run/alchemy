@@ -15,7 +15,7 @@ export interface ListResourceSetsRequest extends fms.ListResourceSetsRequest {}
  * ### Resource Sets
  * **Example:** List Resource Sets
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listResourceSets = yield* AWS.FMS.ListResourceSets();
  *
  * // runtime

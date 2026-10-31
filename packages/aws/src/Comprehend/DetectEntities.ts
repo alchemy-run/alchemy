@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectEntities` — detect named entities
- * (people, places, organizations, dates, quantities, …) in the input text
+ * Runtime binding for `comprehend:DetectEntities` -- detect named entities
+ * (people, places, organizations, dates, quantities, ...) in the input text
  * using the pre-trained model, or custom entities via a custom entity
  * recognizer endpoint (`EndpointArn`).
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "Bob moved to Seattle in 2017.",
  *   LanguageCode: "en",
  * });
- * // result.Entities: [{ Type: "PERSON", Text: "Bob" }, { Type: "LOCATION", Text: "Seattle" }, …]
+ * // result.Entities: [{ Type: "PERSON", Text: "Bob" }, { Type: "LOCATION", Text: "Seattle" }, ...]
  * ```
  *
  * @binding

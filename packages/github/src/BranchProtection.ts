@@ -20,7 +20,7 @@ export interface BranchProtectionProps {
 
   /**
    * Name of the branch to protect (e.g. `main`). The branch is the rule's
-   * identity — changing it replaces the protection. The branch must exist.
+   * identity -- changing it replaces the protection. The branch must exist.
    */
   branch: string;
 
@@ -76,7 +76,7 @@ export interface BranchProtectionProps {
     requireCodeOwnerReviews?: boolean;
 
     /**
-     * Number of approving reviews required (0–6).
+     * Number of approving reviews required (0-6).
      * @default 0
      */
     requiredApprovingReviewCount?: number;
@@ -211,7 +211,7 @@ export interface BranchProtectionProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same branch on a
+   * provider. Changing it replaces the resource -- the same branch on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -413,7 +413,7 @@ export const BranchProtectionProvider = () =>
   Provider.succeed(BranchProtection, {
     stables: ["url", "branch"],
 
-    // {owner, repository, branch, host} is the rule's path identity — GitHub
+    // {owner, repository, branch, host} is the rule's path identity -- GitHub
     // has no rename, so changing any of them replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (olds === undefined) return;
@@ -433,7 +433,7 @@ export const BranchProtectionProvider = () =>
       function* ({ news }) {
         const branch = { owner: news.owner, repo: news.repository, branch: news.branch };
 
-        // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
+        // Ensure & Sync -- the PUT is a full upsert of the rule. Send explicit
         // values (or `null`) for every aspect so removed props converge back
         // to their defaults rather than being left as-is.
         const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
@@ -488,7 +488,7 @@ export const BranchProtectionProvider = () =>
           allow_fork_syncing: news.allowForkSyncing ?? false,
         });
 
-        // Sync — required signatures live behind dedicated endpoints that the
+        // Sync -- required signatures live behind dedicated endpoints that the
         // top-level PUT does not touch. Diff the observed flag against the
         // desired one and only call the API on a real change.
         const observed: ProtectionPayload = yield* Repos.getBranchProtection(branch);
@@ -510,7 +510,7 @@ export const BranchProtectionProvider = () =>
     ),
 
     // Refresh from the live rule. A 404 means either the branch is no longer
-    // protected or the branch/repository is gone — both are "missing".
+    // protected or the branch/repository is gone -- both are "missing".
     read: Effect.fn(
       function* ({ olds }) {
         return yield* Repos.getBranchProtection({
@@ -526,7 +526,7 @@ export const BranchProtectionProvider = () =>
     ),
 
     // Enumerate every protected branch across the repositories the token can
-    // see — protection rules are keyed by {owner, repository, branch} with no
+    // see -- protection rules are keyed by {owner, repository, branch} with no
     // account-wide list endpoint, so walk the repos like the Environment
     // provider does and fetch the rule for each protected branch.
     list: Effect.fn(function* () {
@@ -552,7 +552,7 @@ export const BranchProtectionProvider = () =>
             ),
             Effect.map((rules) => rules.flat()),
             // Repos without branch protection support (plan limits) or where
-            // the token lacks access reject with 403/404 — skip them rather
+            // the token lacks access reject with 403/404 -- skip them rather
             // than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           );

@@ -62,7 +62,7 @@ export interface BundleWorkerResult {
 
 /**
  * The "final bundle pass" wrangler normally performs at deploy time:
- * `.open-next/worker.js` (and its deliberately-unresolved relative imports —
+ * `.open-next/worker.js` (and its deliberately-unresolved relative imports --
  * `cloudflare/*.js`, `middleware/handler.mjs`, `.build/durable-objects/*.js`)
  * is bundled into a self-contained ESM module set.
  *
@@ -71,7 +71,7 @@ export interface BundleWorkerResult {
  * 1. `format: "esm"` + `splitting: true` keeps the upstream
  *    `await import("./server-functions/default/handler.mjs")` a lazy chunk.
  * 2. `conditions: ["workerd", "worker"]` resolves workerd-flavored exports.
- * 3. `external: ["cloudflare:*", "node:*"]` — provided by workerd and
+ * 3. `external: ["cloudflare:*", "node:*"]` -- provided by workerd and
  *    `nodejs_compat` respectively.
  * 4. {@link CREATE_REQUIRE_BANNER} per output file (see its doc).
  *
@@ -91,7 +91,7 @@ export const bundleWorker = (
         esbuild.build({
           // Pin the build's working directory: without it, esbuild uses its
           // long-lived shared service process's cwd, which is captured when
-          // the service first spawns — under a concurrent engine that can be
+          // the service first spawns -- under a concurrent engine that can be
           // another build's transient chdir target (possibly deleted by the
           // time this build runs), which fails resolution of even absolute
           // entry paths.

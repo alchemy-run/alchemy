@@ -13,7 +13,7 @@ export interface GetSnapshotsRequest extends Omit<kendra.GetSnapshotsRequest, "I
  * `kendra:GetSnapshots`), scoped to one {@link Index}.
  *
  * Fetches search-analytics metric snapshots for the index (click-through
- * rate, zero-result queries, top queries, …) over a time interval.
+ * rate, zero-result queries, top queries, ...) over a time interval.
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.GetSnapshotsHttp)`.
  *

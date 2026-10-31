@@ -65,7 +65,7 @@ export interface Queue extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaConvert queue — the pool that submitted transcode jobs
+ * An AWS Elemental MediaConvert queue -- the pool that submitted transcode jobs
  * are scheduled against. Every account has a system `Default` on-demand queue;
  * create additional queues to isolate workloads or to purchase reserved
  * render capacity.
@@ -119,7 +119,7 @@ export const QueueProvider = () =>
         pricingPlan: queue.PricingPlan,
       });
 
-      /** Get a queue by name; typed not-found → undefined. */
+      /** Get a queue by name; typed not-found -> undefined. */
       const getQueue = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getQueue({ Name: name })
@@ -156,10 +156,10 @@ export const QueueProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = output?.queueName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let queue = yield* getQueue(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (queue === undefined) {
             const created = yield* mediaconvert.createQueue({
               Name: name,
@@ -172,7 +172,7 @@ export const QueueProvider = () =>
             });
             queue = created.Queue!;
           } else {
-            // 3. Sync — MediaConvert's UpdateQueue is a full in-place update of
+            // 3. Sync -- MediaConvert's UpdateQueue is a full in-place update of
             // the mutable fields. Apply whenever any of them drift.
             const statusDrift = (news.status ?? "ACTIVE") !== (queue.Status ?? "ACTIVE");
             const descDrift = (news.description ?? undefined) !== (queue.Description ?? undefined);
@@ -190,7 +190,7 @@ export const QueueProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMcTags(queue.Arn!, desiredTags);
 
           yield* session.note(name);
@@ -215,7 +215,7 @@ export const QueueProvider = () =>
             Effect.map((queues) =>
               queues
                 // The built-in `Default` queue is an AWS SYSTEM queue that
-                // always exists and can never be deleted — keep it out of
+                // always exists and can never be deleted -- keep it out of
                 // enumeration for account-wide teardown (nuke).
                 .filter((q) => q.Type !== "SYSTEM")
                 .map(toAttrs),

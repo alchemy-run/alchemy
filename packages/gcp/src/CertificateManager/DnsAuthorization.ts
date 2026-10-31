@@ -31,12 +31,12 @@ export type DnsAuthorizationProps = {
    * `projects/{project}/locations/{location}/dnsAuthorizations/{dnsAuthorization}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the
+   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable -- changing it replaces the
    * authorization.
    */
   dnsAuthorizationId?: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …). Immutable —
+   * Certificate Manager location (`global`, `us-central1`, ...). Immutable --
    * changing it replaces the authorization. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. `FIXED_RECORD` authorizations live in
    * `global`; regional locations default to `PER_PROJECT_RECORD`.
@@ -45,12 +45,12 @@ export type DnsAuthorizationProps = {
   location?: string;
   /**
    * Domain being authorized. Covers this domain and its wildcard
-   * (`example.com` also covers `*.example.com`). Immutable — changing it
+   * (`example.com` also covers `*.example.com`). Immutable -- changing it
    * replaces the authorization.
    */
   domain: string;
   /**
-   * Authorization type. Immutable — changing it replaces the
+   * Authorization type. Immutable -- changing it replaces the
    * authorization. Defaults to `FIXED_RECORD` in `global` and
    * `PER_PROJECT_RECORD` in regional locations.
    */
@@ -75,7 +75,7 @@ export type DnsAuthorization = Resource<
     dnsAuthorizationId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Authorized domain. */
     domain: string;

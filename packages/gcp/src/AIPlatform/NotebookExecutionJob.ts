@@ -59,12 +59,12 @@ export type CustomEnvironmentSpec = {
 
 export type NotebookExecutionJobProps = {
   /**
-   * Job id. If omitted, a unique RFC1035 name is generated. Immutable —
+   * Job id. If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the job (a new execution is started).
    */
   notebookExecutionJobId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -138,7 +138,7 @@ export type NotebookExecutionJob = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Job state (`JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, …). */
+    /** Job state (`JOB_STATE_RUNNING`, `JOB_STATE_SUCCEEDED`, ...). */
     jobState: string | undefined;
     /** Cloud Storage output URI. */
     gcsOutputUri: string | undefined;
@@ -156,7 +156,7 @@ export type NotebookExecutionJob = Resource<
 >;
 
 /**
- * A Vertex AI notebook execution job — runs an ipynb once against a
+ * A Vertex AI notebook execution job -- runs an ipynb once against a
  * runtime template or custom environment.
  *
  * There is no update API. Changing identity (`notebookExecutionJobId`,

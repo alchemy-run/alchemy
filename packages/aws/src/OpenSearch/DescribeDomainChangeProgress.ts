@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomainChangeProgress` operation (IAM action
  * `es:DescribeDomainChangeProgress`).
  *
- * Tracks the stage-by-stage progress of a domain's in-flight configuration change (blue/green deployment) — e.g. to report how far along a cluster resize is. Provide the implementation with
+ * Tracks the stage-by-stage progress of a domain's in-flight configuration change (blue/green deployment) -- e.g. to report how far along a cluster resize is. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainChangeProgressHttp)`.
  * ### Monitoring Domains
  * **Example:** Track a Configuration Change
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomainChangeProgress = yield* OpenSearch.DescribeDomainChangeProgress();
  *
  * const result = yield* describeDomainChangeProgress({ DomainName: name });
- * // result.ChangeProgressStatus?.Status → "COMPLETED"
+ * // result.ChangeProgressStatus?.Status -> "COMPLETED"
  * ```
  *
  * @binding

@@ -1,7 +1,7 @@
 /**
  * Internal kubeconfig resolution for the built-in cluster adapters: parse a
  * kubeconfig file, resolve a context to (cluster, user), and turn its auth
- * stanza — static token, client certificate, or `exec` credential plugin —
+ * stanza -- static token, client certificate, or `exec` credential plugin --
  * into a {@link ClusterTransport}. This is the "anything kubectl can reach"
  * path: AKS/GKE/EKS CLI-managed contexts work through their exec plugins
  * (`kubelogin`, `gke-gcloud-auth-plugin`, `aws eks get-token`).
@@ -86,7 +86,7 @@ const expandHome = Effect.fn(function* (input: string) {
   return path.join(home, input.slice(1));
 });
 
-/** Resolve the kubeconfig file path: explicit → `$KUBECONFIG` → default. */
+/** Resolve the kubeconfig file path: explicit -> `$KUBECONFIG` -> default. */
 export const resolveKubeConfigPath = Effect.fn(function* (explicit: string | undefined) {
   if (explicit) return yield* expandHome(explicit);
   const fromEnv = yield* Config.String("KUBECONFIG").pipe(Effect.orElseSucceed(() => undefined));
@@ -127,7 +127,7 @@ export const resolveKubeContext = Effect.fn(function* (options: {
   const contextName = options.context ?? parsed["current-context"];
   if (!contextName) {
     return yield* new KubeConfigError({
-      message: `Kubeconfig '${configPath}' has no current-context — pass an explicit context`,
+      message: `Kubeconfig '${configPath}' has no current-context \u2014 pass an explicit context`,
     });
   }
 
@@ -185,7 +185,7 @@ export interface MintedCredentials {
 
 // Exec plugin invocations are cached per (command, args) until their
 // expirationTimestamp (or briefly, when the plugin doesn't declare one).
-// Plain cached values, no finalizers — module scope is safe.
+// Plain cached values, no finalizers -- module scope is safe.
 const execCache = new Map<string, { credentials: MintedCredentials; expiresAt: number }>();
 
 /**

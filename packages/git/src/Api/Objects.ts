@@ -54,7 +54,7 @@ export const GetTree = HttpApiEndpoint.get("tree", "/repos/:owner/:repo/trees/:o
   error: [RepoNotFound, ObjectNotFound, WrongObjectType],
 });
 
-/** Reads a small blob as base64 JSON (≤ 1 MiB; 422 otherwise — use /raw). */
+/** Reads a small blob as base64 JSON (<= 1 MiB; 422 otherwise -- use /raw). */
 export const GetBlob = HttpApiEndpoint.get("blob", "/repos/:owner/:repo/blobs/:oid", {
   params: RepoOidPath,
   success: Schema.Struct({
@@ -62,7 +62,7 @@ export const GetBlob = HttpApiEndpoint.get("blob", "/repos/:owner/:repo/blobs/:o
     /** Uncompressed size in bytes. */
     size: Schema.Number,
     encoding: Schema.Literals(["base64"]),
-    /** Base64 content — blobs ≤ 1 MiB only (422 otherwise; use /raw). */
+    /** Base64 content -- blobs <= 1 MiB only (422 otherwise; use /raw). */
     content: Schema.String,
   }),
   error: [RepoNotFound, ObjectNotFound, WrongObjectType, ObjectTooLarge],
@@ -70,7 +70,7 @@ export const GetBlob = HttpApiEndpoint.get("blob", "/repos/:owner/:repo/blobs/:o
 
 /**
  * The changed-file list of a commit vs its FIRST parent (empty tree for a
- * root commit). Merge commits are diffed against parent[0] only — the
+ * root commit). Merge commits are diffed against parent[0] only -- the
  * GitHub default. No rename detection in v1: a rename appears as
  * `removed` + `added`; clients may pair entries whose old/new oids match
  * for a cheap exact-rename display.

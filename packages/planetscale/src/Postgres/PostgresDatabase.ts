@@ -138,7 +138,7 @@ export const PostgresDatabaseProvider = () =>
 
       // Database names are rename-mutable (reconcile folds `new_name`
       // into the settings sync), so `name` cannot live in the
-      // provider-level stables. Almost no update is a rename though —
+      // provider-level stables. Almost no update is a rename though --
       // for those, advertise `name` as stable on the update so
       // downstream consumers (branches, roles) still resolve
       // `database.name` at plan time instead of seeing `undefined` and
@@ -174,10 +174,10 @@ export const PostgresDatabaseProvider = () =>
         }
       }
 
-      // Remaining prop changes (rename, settings, clusterSize, …) are
+      // Remaining prop changes (rename, settings, clusterSize, ...) are
       // in-place updates. Decide them here instead of falling back to
       // the engine's default deep-compare so the conditional `name`
-      // stable above is attached — the default path uses the
+      // stable above is attached -- the default path uses the
       // provider-level stables, which strip `name` from downstream plan
       // resolution.
       if (havePropsChanged(olds, news)) {
@@ -261,10 +261,10 @@ export const PostgresDatabaseProvider = () =>
         region: news.region?.slug,
       });
 
-      // Observe — read live state under either the cached name (rename
+      // Observe -- read live state under either the cached name (rename
       // / refresh) or the freshly-derived name (greenfield). Observing
       // unconditionally absorbs the race between `read` and `reconcile`
-      // — if a foreign actor (or a previously-failed-to-persist
+      // -- if a foreign actor (or a previously-failed-to-persist
       // create) produced a database under the desired name in the
       // meantime, we'll find it here and skip the duplicate create.
       // Adoption routing has already been gated by `read` returning
@@ -278,7 +278,7 @@ export const PostgresDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-      // Ensure — if missing, create.
+      // Ensure -- if missing, create.
       if (!observed) {
         yield* session.note("Creating database...");
         observed = yield* planetscale.createDatabase({
@@ -308,7 +308,7 @@ export const PostgresDatabaseProvider = () =>
         });
       }
 
-      // Sync — ensure a non-`main` default branch exists before
+      // Sync -- ensure a non-`main` default branch exists before
       // referencing it via `default_branch`. The branch is created
       // empty (no cluster size yet); we'll size it below.
       if (news.defaultBranch && news.defaultBranch !== "main") {
@@ -333,7 +333,7 @@ export const PostgresDatabaseProvider = () =>
         }
       }
 
-      // Sync settings — `updateSettings` is upsert-shaped, so we can
+      // Sync settings -- `updateSettings` is upsert-shaped, so we can
       // call it with the full desired payload on every reconcile.
       // Folds the rename in via `new_name` so we don't pay for a
       // separate PATCH.

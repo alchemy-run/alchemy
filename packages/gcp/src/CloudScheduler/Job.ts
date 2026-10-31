@@ -48,7 +48,7 @@ export type OAuthToken = {
 
 export type HttpTarget = {
   /**
-   * Full URI the job POSTs (or GETs, …) to. Must start with `http://` or
+   * Full URI the job POSTs (or GETs, ...) to. Must start with `http://` or
    * `https://`.
    */
   uri: string;
@@ -131,7 +131,7 @@ export type AppEngineHttpTarget = {
 
 export type RetryConfig = {
   /**
-   * Retry attempts after a failed execution (0–5).
+   * Retry attempts after a failed execution (0-5).
    * @default 0
    */
   retryCount?: number;
@@ -162,11 +162,11 @@ export type JobProps = {
    * Job id (the `{job}` segment of
    * `projects/{project}/locations/{location}/jobs/{job}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id. Must
-   * match `[A-Za-z0-9_-]{1,500}`. Immutable — changing it replaces the job.
+   * match `[A-Za-z0-9_-]{1,500}`. Immutable -- changing it replaces the job.
    */
   jobId?: string;
   /**
-   * Cloud Scheduler location (`us-central1`, `us-east1`, …). Immutable —
+   * Cloud Scheduler location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the job. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -226,7 +226,7 @@ export type Job = Resource<
     name: string;
     /** Job id (last path segment). */
     jobId: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Project id. */
     project: string;

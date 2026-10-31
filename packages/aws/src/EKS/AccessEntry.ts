@@ -189,13 +189,13 @@ export const AccessEntryProvider = () =>
         ...news.tags,
       };
 
-      // Observe — fetch live cloud state by (clusterName, principalArn).
+      // Observe -- fetch live cloud state by (clusterName, principalArn).
       let state = yield* readAccessEntry({
         clusterName,
         principalArn,
       });
 
-      // Ensure — create the entry if missing. Tolerate
+      // Ensure -- create the entry if missing. Tolerate
       // `ResourceInUseException` as a race with a peer reconciler.
       let created = false;
       if (!state) {
@@ -225,7 +225,7 @@ export const AccessEntryProvider = () =>
         }
       }
 
-      // Sync kubernetesGroups + username — observed ↔ desired. Groups are a
+      // Sync kubernetesGroups + username -- observed <-> desired. Groups are a
       // set. An update that omits the username resets it to the EKS-generated
       // default, which can't be told apart from a custom one by observation.
       // So an omitted username is only re-sent when one may have been set:
@@ -247,7 +247,7 @@ export const AccessEntryProvider = () =>
         });
       }
 
-      // Sync tags — diff observed cloud tags against desired.
+      // Sync tags -- diff observed cloud tags against desired.
       const { removed, upsert } = diffTags(state.tags, desiredTags);
       if (upsert.length > 0) {
         yield* eks.tagResource({
@@ -262,7 +262,7 @@ export const AccessEntryProvider = () =>
         });
       }
 
-      // Sync access policy associations — diff observed against desired.
+      // Sync access policy associations -- diff observed against desired.
       const observedPolicies = state.accessPolicies;
       const desiredPolicies = normalizeAccessPolicies(news.accessPolicies);
       const observedPolicyMap = new Map(

@@ -67,13 +67,13 @@ export type BackendProps = {
    * `projects/{project}/locations/{location}/backends/{backendId}`).
    * Also used as the Cloud Run service id and as part of the default
    * domain name. If omitted, a unique RFC1035 name is generated from the
-   * stack, stage, and logical id. Immutable — changing it replaces the
+   * stack, stage, and logical id. Immutable -- changing it replaces the
    * backend. Must start with a letter, contain only lowercase letters,
    * digits, and hyphens, and be at most 49 characters.
    */
   backendId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the backend. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -88,7 +88,7 @@ export type BackendProps = {
   /**
    * How App Hosting serves this backend. `REGIONAL_STRICT` keeps
    * traffic in one region; `GLOBAL_ACCESS` uses App Hosting's
-   * global-replicated serving. Immutable — changing it replaces the
+   * global-replicated serving. Immutable -- changing it replaces the
    * backend.
    * @default "GLOBAL_ACCESS"
    */
@@ -175,7 +175,7 @@ export type Backend = Resource<
 >;
 
 /**
- * A Firebase App Hosting backend — the primary resource that provisions
+ * A Firebase App Hosting backend -- the primary resource that provisions
  * a Cloud Run service and default domain for a web app.
  *
  * Changing `backendId`, `location`, or `servingLocality` replaces the

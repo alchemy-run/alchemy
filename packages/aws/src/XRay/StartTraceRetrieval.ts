@@ -18,7 +18,7 @@ export interface StartTraceRetrievalRequest extends xray.StartTraceRetrievalRequ
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:StartTraceRetrieval
+ * // init -- grants xray:StartTraceRetrieval
  * const startTraceRetrieval = yield* XRay.StartTraceRetrieval();
  *
  * // runtime

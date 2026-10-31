@@ -17,9 +17,9 @@ import { syncDataZoneTags, toTagRecord, unredact } from "./internal.ts";
  * Single sign-on configuration for a DataZone domain via IAM Identity Center.
  */
 export interface DomainSingleSignOn {
-  /** The SSO type — `IAM_IDC` to enable IAM Identity Center, `DISABLED` otherwise. */
+  /** The SSO type -- `IAM_IDC` to enable IAM Identity Center, `DISABLED` otherwise. */
   type?: string;
-  /** How users are assigned — `AUTOMATIC` or `MANUAL`. */
+  /** How users are assigned -- `AUTOMATIC` or `MANUAL`. */
   userAssignment?: string;
   /** The ARN of the IAM Identity Center instance. */
   idcInstanceArn?: string;
@@ -28,7 +28,7 @@ export interface DomainSingleSignOn {
 export interface DomainProps {
   /**
    * Display name of the domain. If omitted, a deterministic physical name is
-   * generated from the app, stage, and logical ID. The name is mutable — it
+   * generated from the app, stage, and logical ID. The name is mutable -- it
    * converges via `UpdateDomain` without replacement.
    */
   name?: string;
@@ -54,7 +54,7 @@ export interface DomainProps {
    */
   kmsKeyIdentifier?: string;
   /**
-   * The version of the domain — `"V1"` (classic DataZone) or `"V2"`
+   * The version of the domain -- `"V1"` (classic DataZone) or `"V2"`
    * (SageMaker Unified Studio). Changing it triggers a replacement.
    * @default "V1"
    */
@@ -96,11 +96,11 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An Amazon DataZone domain — the top-level container for data-governance
+ * An Amazon DataZone domain -- the top-level container for data-governance
  * projects, environments, glossaries, and assets.
  *
  * `Domain` owns the domain lifecycle. Domain creation is asynchronous
- * (typically 1–2 minutes) and is polled to `AVAILABLE` with a bounded wait.
+ * (typically 1-2 minutes) and is polled to `AVAILABLE` with a bounded wait.
  * An execution role is created automatically (trusted by
  * `datazone.amazonaws.com`, with the `AmazonDataZoneDomainExecutionRolePolicy`
  * managed policy) unless an explicit `domainExecutionRole` is supplied.
@@ -137,7 +137,7 @@ export interface Domain extends Resource<
  */
 export const Domain = Resource<Domain>("AWS.DataZone.Domain");
 
-/** The domain never leaves a failed create — surface it as a typed error. */
+/** The domain never leaves a failed create -- surface it as a typed error. */
 export class DomainCreationFailed extends Data.TaggedError("AWS.DataZone.DomainCreationFailed")<{
   readonly domainId: string;
   readonly status: string;
@@ -180,7 +180,7 @@ export const DomainProvider = () =>
 
       // A deleted (or never-existing) domain is reported by GetDomain as
       // AccessDeniedException ("User is not permitted to perform operation:
-      // GetDomain"), NOT ResourceNotFoundException — DataZone evaluates
+      // GetDomain"), NOT ResourceNotFoundException -- DataZone evaluates
       // domain-scoped authorization before existence. Both mean "absent".
       const getDomainOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* datazone.getDomain({ identifier }).pipe(
@@ -202,7 +202,7 @@ export const DomainProvider = () =>
       });
 
       // Poll the domain to a settled (non-transient) status. V1 domains are
-      // usually AVAILABLE synchronously; V2 creation takes 1-2 minutes —
+      // usually AVAILABLE synchronously; V2 creation takes 1-2 minutes --
       // bounded at ~3 minutes. An "absent" observation keeps polling: right
       // after createDomain the creator's user profile can lag, surfacing the
       // same AccessDenied that a deleted domain does.
@@ -217,7 +217,7 @@ export const DomainProvider = () =>
       });
 
       // Poll the domain until it no longer exists. Domain deletion typically
-      // completes in 1-2 minutes — bounded at ~3 minutes.
+      // completes in 1-2 minutes -- bounded at ~3 minutes.
       const waitForGone = Effect.fn(function* (identifier: string) {
         yield* getDomainOrUndefined(identifier).pipe(
           Effect.repeat({
@@ -344,7 +344,7 @@ export const DomainProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Ensure the execution role first — the domain cannot exist without
+          // Ensure the execution role first -- the domain cannot exist without
           // one. Managed unless an explicit domainExecutionRole is provided.
           let executionRoleArn = news.domainExecutionRole;
           let roleName = output?.roleName;
@@ -357,7 +357,7 @@ export const DomainProvider = () =>
             });
           }
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
           let domain = output?.domainId ? yield* getDomainOrUndefined(output.domainId) : undefined;
           if (domain === undefined) {
@@ -368,7 +368,7 @@ export const DomainProvider = () =>
           }
 
           if (domain === undefined) {
-            // 2. ENSURE — create and wait out the async provisioning.
+            // 2. ENSURE -- create and wait out the async provisioning.
             const created = yield* retryWhileRoleAssumeFails(
               datazone.createDomain({
                 name,
@@ -389,7 +389,7 @@ export const DomainProvider = () =>
               });
             }
           } else {
-            // 3. SYNC — wait out any in-flight transition, then converge the
+            // 3. SYNC -- wait out any in-flight transition, then converge the
             //    mutable aspects by diffing OBSERVED state against desired.
             domain = (yield* waitForSettled(domain.id)) ?? domain;
             const drifted =
@@ -415,7 +415,7 @@ export const DomainProvider = () =>
           const domainId = domain.id;
           const domainArn = domain.arn ?? domainArnOf(region, accountId, domainId);
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags (create-time tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags (create-time tags
           //     only apply on first create; adoption may carry foreign tags).
           yield* syncDataZoneTags(domainArn, toTagRecord(domain.tags), desiredTags);
 
@@ -442,10 +442,10 @@ export const DomainProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // an already-deleted domain surfaces as AccessDenied ("User is
-                // not permitted to perform operation: DeleteDomain") — DataZone
+                // not permitted to perform operation: DeleteDomain") -- DataZone
                 // checks domain-scoped auth before existence.
                 AccessDeniedException: () => Effect.void,
-                // a concurrent DELETING domain rejects a second delete — the
+                // a concurrent DELETING domain rejects a second delete -- the
                 // wait below observes it through to gone either way.
                 ConflictException: () => Effect.void,
               }),

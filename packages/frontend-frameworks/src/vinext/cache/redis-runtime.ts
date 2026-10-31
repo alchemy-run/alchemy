@@ -3,7 +3,7 @@
  * factory `virtual:vinext-cache-adapters` calls as
  * `({ env, options }) => CacheHandler`.
  *
- * Speaks RESP through `connect` from `@alchemy.run/redis` — the same client
+ * Speaks RESP through `connect` from `@alchemy.run/redis` -- the same client
  * Fly/Railway `*RedisHttp` layers use. One process-lifetime connection
  * per URL. Prerender artifacts are seeded into Redis in the background.
  */

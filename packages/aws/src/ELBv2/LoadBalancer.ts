@@ -328,7 +328,7 @@ export const LoadBalancerProvider = () =>
             ...news.tags,
           };
 
-          // Observe — look up by deterministic name.
+          // Observe -- look up by deterministic name.
           let described = yield* elbv2
             .describeLoadBalancers({
               Names: [name],
@@ -344,7 +344,7 @@ export const LoadBalancerProvider = () =>
             SourceNatIpv6Prefix: m.sourceNatIpv6Prefix,
           }));
 
-          // Ensure — create if missing. The replacement axes (scheme, type,
+          // Ensure -- create if missing. The replacement axes (scheme, type,
           // customerOwnedIpv4Pool) are handled by diff so we don't need to
           // deal with mismatches here.
           if (!loadBalancer?.LoadBalancerArn) {
@@ -371,7 +371,7 @@ export const LoadBalancerProvider = () =>
 
           const loadBalancerArn = loadBalancer.LoadBalancerArn as LoadBalancerArn;
 
-          // Sync subnets — diff observed against desired. Only applies to
+          // Sync subnets -- diff observed against desired. Only applies to
           // application/network LBs that manage subnets in place.
           const observedSubnets =
             loadBalancer.AvailabilityZones?.flatMap((z) => (z.SubnetId ? [z.SubnetId] : [])) ?? [];
@@ -390,7 +390,7 @@ export const LoadBalancerProvider = () =>
             });
           }
 
-          // Sync security groups — diff observed against desired.
+          // Sync security groups -- diff observed against desired.
           if (news.securityGroups) {
             const observedSgs = loadBalancer.SecurityGroups ?? [];
             const desiredSgs = news.securityGroups as string[];
@@ -407,7 +407,7 @@ export const LoadBalancerProvider = () =>
             }
           }
 
-          // Sync IP address type — diff observed against desired.
+          // Sync IP address type -- diff observed against desired.
           if (news.ipAddressType && news.ipAddressType !== loadBalancer.IpAddressType) {
             yield* elbv2.setIpAddressType({
               LoadBalancerArn: loadBalancerArn,
@@ -415,7 +415,7 @@ export const LoadBalancerProvider = () =>
             });
           }
 
-          // Sync attributes — diff the observed values of the declared keys
+          // Sync attributes -- diff the observed values of the declared keys
           // against desired and apply only the delta.
           let attributes = yield* readAttributes(loadBalancerArn, news.attributes);
           const attributeChanges = attributeDelta(news.attributes, attributes);
@@ -430,7 +430,7 @@ export const LoadBalancerProvider = () =>
             };
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const tagDescriptions = yield* elbv2.describeTags({
             ResourceArns: [loadBalancerArn],
           });

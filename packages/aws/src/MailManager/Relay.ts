@@ -60,7 +60,7 @@ export interface Relay extends Resource<
 > {}
 
 /**
- * An SES Mail Manager relay — a downstream SMTP destination that rule-set
+ * An SES Mail Manager relay -- a downstream SMTP destination that rule-set
  * `Relay` actions forward incoming email to (e.g. an on-prem Exchange
  * server or a third-party filter).
  *
@@ -180,7 +180,7 @@ export const RelayProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Every prop updates in place — no replacement triggers, so the
+        // Every prop updates in place -- no replacement triggers, so the
         // engine's default update path applies (no diff needed).
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -191,7 +191,7 @@ export const RelayProvider = () =>
           // 1. OBSERVE.
           let relay = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes.
+          // 2. ENSURE -- create if missing; a Conflict race re-observes.
           if (relay === undefined) {
             yield* session.note(`creating relay ${name}`);
             const created = yield* mm
@@ -214,7 +214,7 @@ export const RelayProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED state against desired; apply only the
+          // 3. SYNC -- diff OBSERVED state against desired; apply only the
           //    delta.
           if (
             relay.RelayName !== name ||

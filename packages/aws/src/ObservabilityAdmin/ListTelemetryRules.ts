@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `observabilityadmin:ListTelemetryRules` — enumerates
+ * Runtime binding for `observabilityadmin:ListTelemetryRules` -- enumerates
  * the account's telemetry rules (name, ARN, telemetry type, source types),
  * e.g. for an audit function that reports which auto-enable rules exist.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Listing Telemetry Rules
  * **Example:** Enumerate the account's telemetry rules
  * ```typescript
- * // init — grants observabilityadmin:ListTelemetryRules
+ * // init -- grants observabilityadmin:ListTelemetryRules
  * const listTelemetryRules = yield* AWS.ObservabilityAdmin.ListTelemetryRules();
  *
  * // runtime

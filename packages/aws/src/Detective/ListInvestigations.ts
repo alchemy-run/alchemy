@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for `detective:ListInvestigations`.
  *
  * Enumerates the behavior graph's investigations with optional filter and
- * sort criteria — list everything triaged in the last week, or every
+ * sort criteria -- list everything triaged in the last week, or every
  * investigation still `ACTIVE`. The graph ARN is injected from the bound
  * {@link Graph}.
  * Provide the implementation with

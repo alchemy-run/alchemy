@@ -17,7 +17,7 @@ export interface RejectPredictionsRequest extends Omit<
  * ### Publishing Assets
  * **Example:** Reject All Predictions
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const rejectPredictions = yield* AWS.DataZone.RejectPredictions(domain);
  *
  * // runtime

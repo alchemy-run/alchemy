@@ -9,7 +9,7 @@ import type { Broker } from "./Broker.ts";
  *
  * Reboots the broker to apply pending modifications (engine version,
  * host instance type, configuration revision, user changes). The reboot is
- * asynchronous — the broker transitions through `REBOOT_IN_PROGRESS` back to
+ * asynchronous -- the broker transitions through `REBOOT_IN_PROGRESS` back to
  * `RUNNING`. Provide the implementation with
  * `Effect.provide(AWS.MQ.RebootBrokerHttp)`.
  * ### Managing a Broker

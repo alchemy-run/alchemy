@@ -31,12 +31,12 @@ export type SecurityProfileGroupProps = {
    * `projects/{project}/locations/{location}/securityProfileGroups/{securityProfileGroup}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, letters, numbers, hyphens, and
-   * underscores, and must not start with a number. Immutable — changing
+   * underscores, and must not start with a number. Immutable -- changing
    * it replaces the group.
    */
   securityProfileGroupId?: string;
   /**
-   * Location. Security profile groups live in `global`. Immutable —
+   * Location. Security profile groups live in `global`. Immutable --
    * changing it replaces the group.
    * @default "global"
    */
@@ -105,7 +105,7 @@ export type SecurityProfileGroup = Resource<
 >;
 
 /**
- * A Network Security SecurityProfileGroup — a named bundle of
+ * A Network Security SecurityProfileGroup -- a named bundle of
  * SecurityProfile references applied together by firewall policy rules.
  *
  * Changing `securityProfileGroupId` or `location` replaces the group.

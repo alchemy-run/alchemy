@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:GetManagedScalingPolicy` — reads the bound cluster's managed scaling policy (compute limits), if one is attached.
+ * Runtime binding for `elasticmapreduce:GetManagedScalingPolicy` -- reads the bound cluster's managed scaling policy (compute limits), if one is attached.
  * ### Scaling the Cluster
  * **Example:** Read the Scaling Limits
  * ```typescript

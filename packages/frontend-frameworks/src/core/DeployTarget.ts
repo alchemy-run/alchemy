@@ -23,7 +23,7 @@ export type DeployTargetServices = FileSystem.FileSystem | Path.Path;
 
 /**
  * Bundler-facing settings a target contributes to any pass that resolves or
- * bundles *server* code for it — the framework's own server build and/or the
+ * bundles *server* code for it -- the framework's own server build and/or the
  * target's finishing pass. Platform-neutral: just conditions and externals,
  * no bundler-specific plugin types.
  */
@@ -44,7 +44,7 @@ export interface DeployTargetBundleOptions {
 }
 
 /**
- * The user's own server entry — the generic carriage for "a user worker/
+ * The user's own server entry -- the generic carriage for "a user worker/
  * function entry that wraps the framework's emitted entry".
  *
  * Some apps need their own module to be the deployed entry point instead of
@@ -80,7 +80,7 @@ export interface DeployTargetEntry {
 /**
  * Resolve a target's user-entry module ({@link DeployTargetEntry}) to an
  * absolute path against the project root. Returns `undefined` when the target
- * (or its entry) is absent — the framework's own entry should be used.
+ * (or its entry) is absent -- the framework's own entry should be used.
  */
 export const resolveDeployTargetEntry = (
   target: Pick<DeployTarget, "entry"> | undefined,
@@ -103,7 +103,7 @@ export interface DeployTargetContext {
 export interface DeployTargetBuildContext extends DeployTargetContext {
   /**
    * Process environment for a wholesale `build` child. Applied only in
-   * that process — never on the engine.
+   * that process -- never on the engine.
    */
   readonly env?: Record<string, string> | undefined;
 }
@@ -138,30 +138,30 @@ export interface DeployTargetServer {
 }
 
 /**
- * A deploy target — the platform a framework build is produced *for*, passed
+ * A deploy target -- the platform a framework build is produced *for*, passed
  * to framework integrations as a plain value (a prop). Cloudflare Workers is
  * the first implementation; future targets (AWS Lambda, ...) implement the
  * same seams without any change to the framework packages.
  *
  * Only the platform-generic seams live here:
  *
- * - `bundle` — resolve/bundle conditions for server code.
- * - `build` — optional *wholesale* build takeover: when defined, the
+ * - `bundle` -- resolve/bundle conditions for server code.
+ * - `build` -- optional *wholesale* build takeover: when defined, the
  *   framework package delegates its entire production build to the target
  *   (the OpenNext case for Next.js). Most targets leave this undefined and
  *   let the framework drive the build.
- * - `finish` — optional finishing pass over the framework-produced
+ * - `finish` -- optional finishing pass over the framework-produced
  *   {@link BuildOutput} (the SvelteKit-style post-adapt re-bundle for the
  *   target runtime). Use {@link applyDeployTargetFinish} to run it.
- * - `serve` — the target's local serving story for *built* server code
+ * - `serve` -- the target's local serving story for *built* server code
  *   (preview-parity: miniflare / cloudflare-runtime today, a Lambda emulator
  *   later). Scoped: closing the Scope stops the server. The framework's own
- *   HMR dev server is NOT this seam — dev integration that reaches inside the
+ *   HMR dev server is NOT this seam -- dev integration that reaches inside the
  *   framework's toolchain lives in the per-framework target module.
- * - `config` — opaque target configuration carriage (Cloudflare: worker
+ * - `config` -- opaque target configuration carriage (Cloudflare: worker
  *   name/bindings/compatibility; AWS later: its own shape). Framework-core
  *   never inspects it.
- * - `entry` — the user's own server entry, when the target's config carries
+ * - `entry` -- the user's own server entry, when the target's config carries
  *   one: a module that wraps the framework's emitted entry (and, on
  *   Cloudflare, re-exports Durable Object classes). See
  *   {@link DeployTargetEntry}.
@@ -216,12 +216,12 @@ export const isDeployTarget = (value: unknown): value is DeployTarget =>
 /**
  * How a target is passed to a framework integration:
  *
- * - a {@link DeployTarget} value — used as-is (full type safety over the
+ * - a {@link DeployTarget} value -- used as-is (full type safety over the
  *   target's config; build it in your config file by importing the target
  *   module directly)
- * - a factory `(config) => DeployTarget` — applied to the framework-provided
+ * - a factory `(config) => DeployTarget` -- applied to the framework-provided
  *   config (the shape a target module's default export takes)
- * - a module specifier string (e.g. `"@alchemy.run/frontend-frameworks/waku/cloudflare"`) —
+ * - a module specifier string (e.g. `"@alchemy.run/frontend-frameworks/waku/cloudflare"`) --
  *   loaded from the *project's* `node_modules`; the module must
  *   default-export (or named-export `target`) a target value or factory
  */

@@ -5,7 +5,7 @@ import * as AWSBindings from "../AWSBindings.ts";
 import { ListDomains } from "./ListDomains.ts";
 
 /**
- * Account-level binding — bespoke rather than `makeSimpleDbBinding` because
+ * Account-level binding -- bespoke rather than `makeSimpleDbBinding` because
  * `ListDomains` targets no single domain: SimpleDB IAM cannot scope it
  * narrower than every domain in the account, so the grant is
  * `sdb:ListDomains` on `domain/*` (expressed as `*`).

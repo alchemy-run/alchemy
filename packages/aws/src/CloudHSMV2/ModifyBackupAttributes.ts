@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ModifyBackupAttributes` operation (IAM action
  * `cloudhsm:ModifyBackupAttributes`).
  *
- * Toggles a backup's `NeverExpires` attribute — pin a golden backup so the
+ * Toggles a backup's `NeverExpires` attribute -- pin a golden backup so the
  * cluster's retention policy never deletes it, or unpin it again. Provide
  * the implementation with
  * `Effect.provide(AWS.CloudHSMV2.ModifyBackupAttributesHttp)`.

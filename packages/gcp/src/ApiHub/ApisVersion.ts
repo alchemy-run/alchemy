@@ -34,14 +34,14 @@ export type ApisVersionProps = {
   /**
    * Parent API. Full name
    * `projects/{project}/locations/{location}/apis/{api}` or the API id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * version.
    */
   api: string;
   /**
    * Version id (the `{version}` segment of
    * `.../apis/{api}/versions/{version}`). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the version.
+   * generated. Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
@@ -55,7 +55,7 @@ export type ApisVersionProps = {
   displayName?: string;
   /**
    * Human-readable description. Versions have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;
@@ -129,7 +129,7 @@ export type ApisVersion = Resource<
  *
  * Parent API, location, and id are immutable. Display name, description,
  * documentation, deployments, and attributes update in place. Versions have
- * no labels field — Alchemy stamps ownership into the description.
+ * no labels field -- Alchemy stamps ownership into the description.
  *
  * ### Creating a Version
  * **Example:** Version under an API

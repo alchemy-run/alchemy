@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:ListBuildBatchesForProject` — lists the
+ * Runtime binding for `codebuild:ListBuildBatchesForProject` -- lists the
  * bound project's batch build ids, optionally filtered by status.
  * ### Batch Builds
  * **Example:** List Batch Builds

@@ -20,7 +20,7 @@ export type IssueAutomationTriggerType = workers.ObservabilityIssueAutomationTri
 export interface IssueAutomationProps {
   /**
    * Name of the automation. If omitted, a unique name is generated.
-   * Mutable — renames are applied in place.
+   * Mutable -- renames are applied in place.
    * @default ${app}-${id}-${stage}-${suffix}
    */
   name?: string;
@@ -232,7 +232,7 @@ export const IssueAutomationProvider = () =>
       const name = news.name ?? output?.name ?? (yield* createAutomationName(id));
       const desired = buildBody(name, news);
 
-      // 1. Observe — by cached id first, then by name (ownership of a name
+      // 1. Observe -- by cached id first, then by name (ownership of a name
       //    match has already been checked by `read` + the adopt policy).
       let observed: workers.ObservabilityIssueAutomation | undefined;
       if (output?.automationId) {
@@ -242,7 +242,7 @@ export const IssueAutomationProvider = () =>
         observed = yield* findAutomationByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const { automation } = yield* workers.createObservabilityIssueAutomation({
           accountId,
@@ -251,7 +251,7 @@ export const IssueAutomationProvider = () =>
         return toAttributes(automation, accountId);
       }
 
-      // 3. Sync — PUT is a full replace, so send the whole desired body
+      // 3. Sync -- PUT is a full replace, so send the whole desired body
       //    when any field drifts from the observed automation.
       if (!matchesObserved(desired, observed)) {
         const { automation } = yield* workers.updateObservabilityIssueAutomation({

@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/octane/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/octane/node` -- the Node container deploy
  * target for the Octane integration.
  *
  * Node-hosted `Website.Octane` resources select this target, which
@@ -10,18 +10,18 @@
  * The finishing pass writes a Node HTTP program that serves
  * `clientDirectory` first, then falls through to that handler on `PORT`
  * (default 3000), and answers `GET /health`. It re-reads `dist/server`
- * so runtime inputs — notably the SSR `index.html` the entry reads via
- * `join(__dirname, "./index.html")` — stay in the output. Container
+ * so runtime inputs -- notably the SSR `index.html` the entry reads via
+ * `join(__dirname, "./index.html")` -- stay in the output. Container
  * FrameworkSites extraFile that template to dest `"index.html"` next to
  * the bundled `index.mjs` (not into `dist/`, or NodeServe would serve
  * the unrendered shell at `GET /`). The finish pass also disables
  * Octane's `isMainModule` auto-listen so rolldown flattening `entry.js`
  * into `index.mjs` cannot bind `PORT` before the generated serve entry.
  *
- * - **`adapterName` / `adapterPackage`** — identify the optional legacy Node
+ * - **`adapterName` / `adapterPackage`** -- identify the optional legacy Node
  *   marker adapter, still accepted for existing projects.
- * - **`serverEntryFileName`** — `entry.js`, Octane's emitted node entry.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`serverEntryFileName`** -- `entry.js`, Octane's emitted node entry.
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

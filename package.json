@@ -41,6 +41,8 @@
     "floci:build:native": "docker build -t floci:dev -f submodules/floci/docker/Dockerfile.native submodules/floci",
     "floci:dev": "cd submodules/floci && ./mvnw quarkus:dev",
     "install:clean": "rm -rf node_modules examples/**/node_modules alchemy/node_modules && pnpm install",
+    "latin1:check": "node scripts/latin1.ts --check",
+    "latin1:fix": "node scripts/latin1.ts",
     "lint:providers": "node scripts/lint-providers.ts",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- pnpm -C stacks alchemy logs ./src/otel.ts",
     "logs:otel:prod": "bun logs:otel --profile prod --stage prod",

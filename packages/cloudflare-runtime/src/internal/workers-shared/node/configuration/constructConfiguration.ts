@@ -34,13 +34,13 @@ export const constructRedirects = Effect.fn("constructRedirects")(function* ({
   // a non-existing redirects file
   const redirectsRelativePath = redirectsFile ? relative(process.cwd(), redirectsFile) : "";
 
-  yield* Effect.log(`✨ Parsed ${num_valid} valid redirect rule${num_valid === 1 ? "" : "s"}.`);
+  yield* Effect.log(`\u2728 Parsed ${num_valid} valid redirect rule${num_valid === 1 ? "" : "s"}.`);
 
   if (num_invalid > 0) {
     let invalidRedirectRulesList = ``;
 
     for (const { line, lineNumber, message } of redirects.invalid) {
-      invalidRedirectRulesList += `▶︎ ${message}\n`;
+      invalidRedirectRulesList += `\u25b6\ufe0e ${message}\n`;
 
       if (line) {
         invalidRedirectRulesList += `    at ${redirectsRelativePath}${lineNumber ? `:${lineNumber}` : ""} | ${line}\n\n`;
@@ -72,7 +72,7 @@ export const constructRedirects = Effect.fn("constructRedirects")(function* ({
         continue;
       } else {
         yield* Effect.logInfo(
-          `The redirect rule ${rule.from} → ${rule.status} ${rule.to} could be made more performant by bringing it above any lines with splats or placeholders.`,
+          `The redirect rule ${rule.from} \u2192 ${rule.status} ${rule.to} could be made more performant by bringing it above any lines with splats or placeholders.`,
         );
       }
     }
@@ -108,13 +108,13 @@ export const constructHeaders = Effect.fn("constructHeaders")(function* ({
   // a non-existing headers file
   const headersRelativePath = headersFile ? relative(process.cwd(), headersFile) : "";
 
-  yield* Effect.log(`✨ Parsed ${num_valid} valid header rule${num_valid === 1 ? "" : "s"}.`);
+  yield* Effect.log(`\u2728 Parsed ${num_valid} valid header rule${num_valid === 1 ? "" : "s"}.`);
 
   if (num_invalid > 0) {
     let invalidHeaderRulesList = ``;
 
     for (const { line, lineNumber, message } of headers.invalid) {
-      invalidHeaderRulesList += `▶︎ ${message}\n`;
+      invalidHeaderRulesList += `\u25b6\ufe0e ${message}\n`;
 
       if (line) {
         invalidHeaderRulesList += `    at ${headersRelativePath}${lineNumber ? `:${lineNumber}` : ""} | ${line}\n\n`;

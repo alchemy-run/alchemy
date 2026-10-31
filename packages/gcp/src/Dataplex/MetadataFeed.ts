@@ -50,12 +50,12 @@ export type MetadataFeedProps = {
   /**
    * Feed id (the `{metadataFeed}` segment of
    * `projects/{project}/locations/{location}/metadataFeeds/{metadataFeed}`).
-   * If omitted, a unique name is generated. Immutable — changing it
+   * If omitted, a unique name is generated. Immutable -- changing it
    * replaces the feed.
    */
   metadataFeedId?: string;
   /**
-   * Region. Immutable — changing it replaces the feed.
+   * Region. Immutable -- changing it replaces the feed.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;

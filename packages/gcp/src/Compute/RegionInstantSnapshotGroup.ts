@@ -21,7 +21,7 @@ export type RegionInstantSnapshotGroupProps = {
    */
   instantSnapshotGroupName?: string;
   /**
-   * Region the group lives in (e.g. `us-central1`). Immutable — changing
+   * Region the group lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -31,13 +31,13 @@ export type RegionInstantSnapshotGroupProps = {
    * Disk consistency-group resource policy used as the source. Accepts a
    * ResourcePolicy self-link, a
    * `projects/{project}/regions/{region}/resourcePolicies/{name}` path, or
-   * the policy name. Immutable — changing it replaces the group. Member
+   * the policy name. Immutable -- changing it replaces the group. Member
    * disks must already be attached to the consistency group.
    */
   sourceConsistencyGroup: string;
   /**
    * Optional description. Instant snapshot groups have no labels field
-   * and no update API, so Alchemy ownership is stored in a `[alchemy …]`
+   * and no update API, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and any description change replaces the group.
    */
   description?: string;
@@ -59,7 +59,7 @@ export type RegionInstantSnapshotGroup = Resource<
     sourceConsistencyGroup: string | undefined;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, ...). */
     status: string | undefined;
     /** Server-defined URL. */
     selfLink: string | undefined;
@@ -80,7 +80,7 @@ export type RegionInstantSnapshotGroup = Resource<
  * An instant snapshot group is a crash-consistent set of instant snapshots
  * taken from every disk in a disk consistency group (a ResourcePolicy
  * with `diskConsistencyGroupPolicy`). There is no update API and no
- * labels field — Alchemy stamps ownership into the description so nuke
+ * labels field -- Alchemy stamps ownership into the description so nuke
  * can find leaked groups, and every user-facing field change replaces
  * the resource.
  *

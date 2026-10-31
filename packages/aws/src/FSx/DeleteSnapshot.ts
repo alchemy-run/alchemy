@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DeleteSnapshot` operation (IAM action
- * `fsx:DeleteSnapshot` on `*` — runtime-created snapshots have ARNs
+ * `fsx:DeleteSnapshot` on `*` -- runtime-created snapshots have ARNs
  * unknowable at deploy time).
  *
- * Deletes an FSx for OpenZFS snapshot by id — the teardown half of a
+ * Deletes an FSx for OpenZFS snapshot by id -- the teardown half of a
  * runtime snapshot rotation built with {@link CreateSnapshot}. Deleting an
  * already-deleted snapshot surfaces the typed `SnapshotNotFound`. Provide
  * the implementation with `Effect.provide(AWS.FSx.DeleteSnapshotHttp)`.

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `greengrass:ListEffectiveDeployments`.
  *
  * Enumerates the deployments that apply to a core device, with each one's
- * per-device execution status (`SUCCEEDED`, `FAILED`, `IN_PROGRESS`, …) —
+ * per-device execution status (`SUCCEEDED`, `FAILED`, `IN_PROGRESS`, ...) --
  * how a rollout monitor tracks a deployment landing on real hardware. The
  * caller supplies the core device thing name at runtime. Provide the
  * implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Core Devices
  * **Example:** Track A Rollout On A Device
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listEffectiveDeployments = yield* AWS.GreengrassV2.ListEffectiveDeployments();
  *
  * // runtime

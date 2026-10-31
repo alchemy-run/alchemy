@@ -56,7 +56,7 @@ export interface DBInstanceProps {
   engineVersion?: string;
   /**
    * Standalone (non-Aurora) database name created with the instance.
-   * Immutable — forces replacement.
+   * Immutable -- forces replacement.
    */
   dbName?: string;
   /**
@@ -102,7 +102,7 @@ export interface DBInstanceProps {
    */
   storageThroughput?: number;
   /**
-   * Master username (standalone instances). Immutable — forces replacement.
+   * Master username (standalone instances). Immutable -- forces replacement.
    */
   masterUsername?: string;
   /**
@@ -145,7 +145,7 @@ export interface DBInstanceProps {
    */
   multiAZ?: boolean;
   /**
-   * Availability zone (standalone single-AZ). Immutable — forces replacement.
+   * Availability zone (standalone single-AZ). Immutable -- forces replacement.
    */
   availabilityZone?: string;
   /**
@@ -194,11 +194,11 @@ export interface DBInstanceProps {
    */
   licenseModel?: string;
   /**
-   * Whether storage is encrypted. Immutable — forces replacement.
+   * Whether storage is encrypted. Immutable -- forces replacement.
    */
   storageEncrypted?: boolean;
   /**
-   * KMS key for storage encryption. Immutable — forces replacement.
+   * KMS key for storage encryption. Immutable -- forces replacement.
    */
   kmsKeyId?: string;
   /**
@@ -288,7 +288,7 @@ export interface DBInstanceProps {
   tags?: Record<string, string>;
   /**
    * Skip the final snapshot when the instance is deleted. Set `false` to
-   * have RDS take a final snapshot on teardown — belt-and-suspenders beyond
+   * have RDS take a final snapshot on teardown -- belt-and-suspenders beyond
    * `deletionProtection` for databases whose data must survive a deliberate
    * destroy. Persisted into state so `delete` honors it without props.
    * @default true
@@ -514,7 +514,7 @@ export interface DBInstance extends Resource<
     finalDBSnapshotIdentifier: string | undefined;
     /**
      * Salted SHA-256 fingerprint of the last `masterUserPassword` this
-     * provider sent to RDS — `sha256(`${dbInstanceIdentifier}:${password}`)`,
+     * provider sent to RDS -- `sha256(`${dbInstanceIdentifier}:${password}`)`,
      * never the secret itself. Lets reconcile skip the `MasterUserPassword`
      * modify (and the `resetting-master-credentials` cycle it triggers) when
      * the configured password has not changed.
@@ -569,7 +569,7 @@ export interface DBInstance extends Resource<
 > {}
 
 /**
- * An RDS database instance — either a standalone (non-Aurora) database or a
+ * An RDS database instance -- either a standalone (non-Aurora) database or a
  * member of an Aurora `DBCluster`.
  *
  * Exposes the full storage, backup, monitoring, performance-insights,
@@ -1890,7 +1890,7 @@ export const DBInstanceProvider = () =>
         // Pattern (a) AWS account/region collection: `describeDBInstances` is
         // paginated (items: "DBInstances") and returns each instance's
         // `TagList` inline, so we hydrate directly into the same shape `read`
-        // produces — no per-item tag fetch needed. An empty/no-instances
+        // produces -- no per-item tag fetch needed. An empty/no-instances
         // account simply yields no pages. `DBInstanceNotFoundFault` is in the
         // op's typed error union; treat a stray one as "nothing to list".
         list: () =>
@@ -1930,7 +1930,7 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh instance.
+          // Immutable props -- any change forces a fresh instance.
           if (
             olds !== undefined &&
             (olds.engine !== news.engine ||
@@ -1995,7 +1995,7 @@ export const DBInstanceProvider = () =>
           return toAttrs({
             instance,
             tags: toTagRecord(instance.TagList),
-            // Not observable from AWS — carry the stored deletion behavior
+            // Not observable from AWS -- carry the stored deletion behavior
             // and last-sent fingerprint forward so a refresh drops neither.
             skipFinalSnapshot: output?.skipFinalSnapshot,
             finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
@@ -2011,7 +2011,7 @@ export const DBInstanceProvider = () =>
           );
           const identifier = output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           // AWS never returns the master password, so there is nothing to
-          // observe-and-diff — fingerprint the configured value instead and
+          // observe-and-diff -- fingerprint the configured value instead and
           // only send `MasterUserPassword` when the fingerprint changed.
           // Without this, every reconcile of an instance whose props carry a
           // password triggers a live `resetting-master-credentials` modify.
@@ -2026,7 +2026,7 @@ export const DBInstanceProvider = () =>
               : undefined;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          // Duration props → the exact wire units the RDS API expects.
+          // Duration props -> the exact wire units the RDS API expects.
           const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
           const performanceInsightsRetentionDays = toWireDays(
             news.performanceInsightsRetentionPeriod,
@@ -2034,7 +2034,7 @@ export const DBInstanceProvider = () =>
           const monitoringIntervalSeconds = toWireSeconds(news.monitoringInterval);
 
           const storage = yield* toStorageConfiguration(news);
-          // Observe — fetch live instance state.
+          // Observe -- fetch live instance state.
           let observed = yield* observeReadiness(identifier);
           if (observed?.DBInstanceArn) {
             observed = yield* waitForInstance(identifier);
@@ -2057,7 +2057,7 @@ export const DBInstanceProvider = () =>
           let associations = yield* resolveAssociations(news, observed);
           let desiredStorage = yield* resolveStorage(news, observed?.AllocatedStorage);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
           let created = false;
           if (!observed?.DBInstanceArn) {
@@ -2126,7 +2126,7 @@ export const DBInstanceProvider = () =>
 
             associations = yield* resolveAssociations(news, observed);
 
-            // syncCoreSettings — single `modifyDBInstance` carrying scalar
+            // syncCoreSettings -- single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
             // from the observed cloud state, to avoid spurious
             // `PendingModifiedValues`. The listener port is synchronized below.
@@ -2187,10 +2187,10 @@ export const DBInstanceProvider = () =>
             if (news.allowMajorVersionUpgrade) {
               core.AllowMajorVersionUpgrade = true;
             }
-            // syncMasterPassword — rotation or explicit password update. The
+            // syncMasterPassword -- rotation or explicit password update. The
             // explicit branch is fingerprint-guarded: send only when the
             // configured password actually changed (or was never
-            // fingerprinted — pre-existing state sends once, then records).
+            // fingerprinted -- pre-existing state sends once, then records).
             if (
               news.manageMasterUserPassword &&
               !observed.MasterUserSecret?.SecretArn &&
@@ -2356,7 +2356,7 @@ export const DBInstanceProvider = () =>
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = toTagRecord(observed.TagList);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbInstanceArn) {
@@ -2377,7 +2377,7 @@ export const DBInstanceProvider = () =>
             observed,
             news.masterUserSecretResourcePolicy,
           );
-          // Sync migrations — the shared pipeline skips already-applied ones.
+          // Sync migrations -- the shared pipeline skips already-applied ones.
           const migrationsInput = migrationsInputOf(news);
           const migrations = migrationsInput
             ? yield* runDBInstanceMigrations({
@@ -2407,7 +2407,7 @@ export const DBInstanceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Default preserves the existing behavior (no final snapshot). When
           // the resource was declared with `skipFinalSnapshot: false`, take
-          // one — timestamped by default so repeated destroy/create cycles
+          // one -- timestamped by default so repeated destroy/create cycles
           // never collide on snapshot names.
           const skipFinalSnapshot = output.skipFinalSnapshot ?? true;
           const finalDBSnapshotIdentifier = skipFinalSnapshot

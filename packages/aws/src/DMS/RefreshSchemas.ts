@@ -9,14 +9,14 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  *
  * Bind this operation to a ({@link ReplicationInstance}, {@link Endpoint})
  * pair to (re)discover the schemas at the endpoint's database using the
- * instance's compute. The refresh runs asynchronously — poll it with
+ * instance's compute. The refresh runs asynchronously -- poll it with
  * {@link DescribeRefreshSchemasStatus}, then list the result with
  * {@link DescribeSchemas}. Provide the implementation with
  * `Effect.provide(AWS.DMS.RefreshSchemasHttp)`.
  * ### Refreshing Schemas
  * **Example:** Kick Off a Schema Refresh
  * ```typescript
- * // init — bind the operation to the instance + endpoint
+ * // init -- bind the operation to the instance + endpoint
  * const refreshSchemas = yield* AWS.DMS.RefreshSchemas(instance, source);
  *
  * // runtime

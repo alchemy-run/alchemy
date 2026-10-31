@@ -1,12 +1,12 @@
 /**
  * Shared child-process ENTRY for framework dev servers.
  *
- * Executed only as a spawned process by `runDevChild` (`DevChild.ts`) —
+ * Executed only as a spawned process by `runDevChild` (`DevChild.ts`) --
  * never imported. `argv[2]` carries the JSON {@link DevChildPayload}: the
  * framework-integration module specifier, the options for its `make(...)`,
  * and the dev options. The process's working directory IS the project root
  * (the parent spawns it with `cwd = rootDir`), so toolchains that resolve
- * from the cwd — or `process.chdir` around startup — are isolated here and
+ * from the cwd -- or `process.chdir` around startup -- are isolated here and
  * never touch the process hosting other sites' dev servers.
  *
  * The parent sets `ALCHEMY_FRAMEWORK_DEV_CHILD=1` in this process's env, so

@@ -29,10 +29,10 @@ export interface WorkflowDefinitionS3Location {
 
 export interface WorkflowEncryptionConfiguration {
   /**
-   * How workflow data is encrypted — `"AWS_MANAGED_KEY"` (the default) or
+   * How workflow data is encrypted -- `"AWS_MANAGED_KEY"` (the default) or
    * `"CUSTOMER_MANAGED_KEY"`.
    *
-   * Encryption cannot be changed in place — changing it replaces the
+   * Encryption cannot be changed in place -- changing it replaces the
    * workflow.
    * @default "AWS_MANAGED_KEY"
    */
@@ -75,7 +75,7 @@ export interface WorkflowProps {
    */
   name?: string;
   /**
-   * S3 location of the workflow definition — a YAML file that defines the
+   * S3 location of the workflow definition -- a YAML file that defines the
    * DAG structure using supported AWS operators.
    *
    * Updating the definition creates a new workflow version and disables
@@ -145,7 +145,7 @@ export interface Workflow extends Resource<
 > {}
 
 /**
- * An Amazon Managed Workflows for Apache Airflow **Serverless** workflow —
+ * An Amazon Managed Workflows for Apache Airflow **Serverless** workflow --
  * a serverless Airflow DAG defined by a YAML file in S3 and executed by
  * AWS-managed, multi-tenant Airflow infrastructure without provisioning an
  * environment.
@@ -199,7 +199,7 @@ export const Workflow = Resource<Workflow>("AWS.MWAAServerless.Workflow");
 
 /**
  * Bounded retry for `createWorkflow` while a freshly created IAM execution
- * role propagates — the service validates that it can assume the role at
+ * role propagates -- the service validates that it can assume the role at
  * create time, which surfaces as a ValidationException/AccessDeniedException
  * mentioning the role for the first seconds of the role's life.
  *
@@ -339,7 +339,7 @@ export const WorkflowProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // Encryption cannot be updated in place — UpdateWorkflow does not
+          // Encryption cannot be updated in place -- UpdateWorkflow does not
           // accept EncryptionConfiguration.
           const oldEncryption = olds?.encryptionConfiguration;
           const newEncryption = news.encryptionConfiguration;
@@ -357,11 +357,11 @@ export const WorkflowProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output.workflowArn is
+          // 1. OBSERVE -- cloud state is authoritative; output.workflowArn is
           //    only a cache of the identifier.
           let live = yield* observe(name, output?.workflowArn);
 
-          // 2. ENSURE — create when missing. A ConflictException means a
+          // 2. ENSURE -- create when missing. A ConflictException means a
           //    concurrent create (or a previous run's create whose state
           //    persistence failed) raced us: converge on the workflow with
           //    OUR name if one now exists, otherwise propagate.
@@ -411,10 +411,10 @@ export const WorkflowProvider = () =>
 
           const arn = live?.WorkflowArn ?? output?.workflowArn;
 
-          // 3. SYNC — diff each OBSERVED mutable aspect against the desired
+          // 3. SYNC -- diff each OBSERVED mutable aspect against the desired
           //    state; UpdateWorkflow requires the definition and role, so
           //    issue one full update when any managed aspect drifted (each
-          //    update creates a new workflow version — skip on no-op).
+          //    update creates a new workflow version -- skip on no-op).
           if (live !== undefined && arn !== undefined) {
             const drifted =
               !sameDefinition(live.DefinitionS3Location, news.definitionS3Location) ||
@@ -453,7 +453,7 @@ export const WorkflowProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time tags only apply on first create).
           if (arn !== undefined) {
             const currentTags = yield* observedTags(arn);
@@ -492,13 +492,13 @@ export const WorkflowProvider = () =>
           // `/aws/mwaa-serverless/{name}-{id}/` (the ARN's resource id,
           // which includes the service-assigned 10-char suffix, plus a
           // trailing slash) at CREATE time, and deleteWorkflow does NOT
-          // remove it — without this reap every deleted workflow (including
+          // remove it -- without this reap every deleted workflow (including
           // the old workflow of a replacement) leaks an orphaned log group.
           // A group with no streams or provably-quiescent ingestion (last
           // ingestion > 2 minutes ago) has no pending flush and deletes in
           // a single call, so routine deletes of never-run workflows stay
-          // fast. A group with recent ingestion — or one that does not
-          // exist yet — is re-reaped on a short bounded schedule
+          // fast. A group with recent ingestion -- or one that does not
+          // exist yet -- is re-reaped on a short bounded schedule
           // (t=0s / 20s / 40s) to catch a late log flush from the
           // workflow's final runs; each attempt is idempotent.
           const workflowId = output.workflowArn.split(":workflow/")[1];

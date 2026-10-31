@@ -69,7 +69,7 @@ export const AccountPasswordPolicyProvider = () =>
     reconcile: Effect.fn(function* ({ news, session }) {
       // The account password policy is a singleton driven entirely by
       // `updateAccountPasswordPolicy`, which is itself a full upsert.
-      // Observation is implicit in the API — there is nothing meaningful
+      // Observation is implicit in the API -- there is nothing meaningful
       // to diff because the request payload *is* the desired state.
       const request = {
         ...news,

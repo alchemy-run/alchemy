@@ -56,11 +56,11 @@ type DistilledWorkerBinding = Exclude<
 
 /**
  * The `durable_object_namespace` metadata binding extended with alchemy-only
- * transfer metadata. `transferredFrom` names the Worker(s) — by logical id in
- * this stack + stage, or by physical script name — that previously hosted the
+ * transfer metadata. `transferredFrom` names the Worker(s) -- by logical id in
+ * this stack + stage, or by physical script name -- that previously hosted the
  * class, so the provider can drive Cloudflare's data-preserving
  * `transferred_classes` migration. It is stripped from the binding before the
- * script upload — Cloudflare never sees it.
+ * script upload -- Cloudflare never sees it.
  */
 export type DurableObjectNamespaceWorkerBinding = Extract<
   DistilledWorkerBinding,
@@ -75,7 +75,7 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
  * Alchemy-only binding: the host Worker's own public URL (`Worker.URL`). The
  * provider resolves the URL the Worker will be served at (first custom domain,
  * else its `workers.dev` URL) and lowers this into a `plain_text` binding
- * before the script upload — Cloudflare never sees this type.
+ * before the script upload -- Cloudflare never sees this type.
  */
 export interface SelfUrlWorkerBinding {
   type: "self_url";
@@ -86,7 +86,7 @@ export interface SelfUrlWorkerBinding {
  * Alchemy-only binding: a service binding that points at the host Worker
  * ITSELF (`Worker.Self`). The provider lowers this into a
  * `service` binding targeting the Worker's own physical name just before
- * the script upload — Cloudflare never sees this type. In local dev it
+ * the script upload -- Cloudflare never sees this type. In local dev it
  * lowers to the runtime's in-process self service (bypassing the assets
  * middleware), matching production semantics.
  *
@@ -96,7 +96,7 @@ export interface SelfUrlWorkerBinding {
 export interface SelfServiceWorkerBinding {
   type: "self_service";
   name: string;
-  /** Named `WorkerEntrypoint` class to target; omitted → default export. */
+  /** Named `WorkerEntrypoint` class to target; omitted -> default export. */
   entrypoint?: string;
   /** `ctx.props` delivered to the entrypoint. */
   props?: Record<string, unknown>;
@@ -107,7 +107,7 @@ export interface SelfServiceWorkerBinding {
  * (`dev:`) bucket (`Cloudflare.R2.S3Credentials`). The local runtime lowers
  * it into a text binding holding the credentials JSON for the Worker's local
  * S3 endpoint (`{worker url}/cdn-cgi/local/r2/s3`) and serves the bucket on
- * that endpoint. Deployed Workers receive a `secret_text` binding instead —
+ * that endpoint. Deployed Workers receive a `secret_text` binding instead --
  * Cloudflare never sees this type.
  */
 export interface R2S3CredentialsWorkerBinding {
@@ -119,9 +119,9 @@ export interface R2S3CredentialsWorkerBinding {
 /**
  * The `queue` metadata binding extended with the alchemy-only `queueId`.
  * The local worker provider uses it to discriminate a locally-emulated
- * queue (`dev:` id → local broker) from an `Alchemy.remote()` queue in dev
- * (real id → remote-proxied producer). Stripped from the binding before
- * the script upload — Cloudflare never sees it.
+ * queue (`dev:` id -> local broker) from an `Alchemy.remote()` queue in dev
+ * (real id -> remote-proxied producer). Stripped from the binding before
+ * the script upload -- Cloudflare never sees it.
  */
 export type QueueWorkerBinding = Extract<DistilledWorkerBinding, { type: "queue" }> & {
   queueId?: string;
@@ -158,7 +158,7 @@ export type ServiceWorkerBinding = Extract<DistilledWorkerBinding, { type: "serv
 };
 
 /**
- * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
+ * The wire-shape binding union the Cloudflare API accepts -- {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
 export type WireWorkerBinding = Exclude<

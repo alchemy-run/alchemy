@@ -25,13 +25,13 @@ export type DataDomainsBindingProps = {
   /**
    * Parent DataDomain resource name
    * (`projects/{project}/locations/{location}/dataDomains/{dataDomain}`).
-   * Immutable — changing it replaces the binding.
+   * Immutable -- changing it replaces the binding.
    */
   parent: string;
   /**
    * Binding id. If omitted, a unique name is generated. Must contain
    * only lowercase letters, numbers and hyphens, start with a letter,
-   * end with a letter or number, and be 1-63 characters. Immutable —
+   * end with a letter or number, and be 1-63 characters. Immutable --
    * changing it replaces the binding.
    */
   dataDomainBindingId?: string;
@@ -75,7 +75,7 @@ export type DataDomainsBinding = Resource<
  *
  * Bindings have no labels or description. `list` walks alchemy-labeled
  * DataDomains and returns their bindings so nuke can find them. Parent,
- * binding id, and resource are identity — there is no in-place update
+ * binding id, and resource are identity -- there is no in-place update
  * API.
  *
  * ### Creating a DataDomainBinding

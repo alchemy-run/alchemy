@@ -144,7 +144,7 @@ const findListener = Effect.fn(function* (
 export const ListenerProvider = () =>
   Provider.succeed(Listener, {
     stables: ["listenerArn", "acceleratorArn"],
-    // Sub-resource keyed entirely by its parent accelerator (and untagged) —
+    // Sub-resource keyed entirely by its parent accelerator (and untagged) --
     // account-wide enumeration happens via the Accelerator resource.
     list: () => Effect.succeed([]),
     read: Effect.fn(function* ({ olds, output }) {
@@ -164,7 +164,7 @@ export const ListenerProvider = () =>
       // portRanges / protocol / clientAffinity update in place.
     }),
     reconcile: Effect.fn(function* ({ news, output, instanceId, session }) {
-      // Observe — cached ARN first, then match by port ranges under the
+      // Observe -- cached ARN first, then match by port ranges under the
       // parent accelerator (covers create-then-persist-failure).
       let listenerArn: string | undefined;
       let live: ga.Listener | undefined;
@@ -180,7 +180,7 @@ export const ListenerProvider = () =>
         }
       }
 
-      // Ensure — create if missing.
+      // Ensure -- create if missing.
       if (!listenerArn) {
         const created = yield* withGaRegion(
           ga.createListener({
@@ -198,7 +198,7 @@ export const ListenerProvider = () =>
         listenerArn = created.ListenerArn;
       }
 
-      // Sync — diff observed vs desired; single update applies the delta.
+      // Sync -- diff observed vs desired; single update applies the delta.
       const desiredAffinity = news.clientAffinity ?? "NONE";
       const drift =
         normalizeRanges(fromWirePortRanges(live?.PortRanges)) !==

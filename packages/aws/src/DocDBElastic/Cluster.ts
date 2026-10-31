@@ -45,7 +45,7 @@ export interface ClusterProps {
    */
   adminUserPassword: Redacted.Redacted<string>;
   /**
-   * Authentication type — `"PLAIN_TEXT"` (the password is the literal
+   * Authentication type -- `"PLAIN_TEXT"` (the password is the literal
    * credential) or `"SECRET_ARN"` (the password is a Secrets Manager ARN).
    * @default "PLAIN_TEXT"
    */
@@ -145,7 +145,7 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Amazon DocumentDB elastic cluster — a MongoDB-compatible, sharded
+ * An Amazon DocumentDB elastic cluster -- a MongoDB-compatible, sharded
  * document database that scales workloads to millions of reads/writes per
  * second without managing instances.
  *
@@ -332,12 +332,12 @@ export const ClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           // ARN cache.
           let observed = yield* readCluster(name, output?.clusterArn);
           let created = false;
 
-          // 2. Ensure — create if missing; tolerate a create race
+          // 2. Ensure -- create if missing; tolerate a create race
           // (ConflictException) by re-reading.
           if (observed === undefined) {
             const response = yield* docdbelastic
@@ -373,7 +373,7 @@ export const ClusterProvider = () =>
           // ConflictException.
           observed = yield* waitForActive(name, arn);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: docdbelastic.UpdateClusterInput = { clusterArn: arn };
           let mutated = false;
           if (props.shardCapacity !== undefined && props.shardCapacity !== observed.shardCapacity) {
@@ -433,7 +433,7 @@ export const ClusterProvider = () =>
             mutated = true;
           } else if (
             // The cloud never reports the password; the previously deployed
-            // value is the only diff baseline (skipped right after create —
+            // value is the only diff baseline (skipped right after create --
             // the password was just applied).
             !created &&
             olds !== undefined &&
@@ -447,7 +447,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForActive(name, arn);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readTags(arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -469,7 +469,7 @@ export const ClusterProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A cluster mid-create/modify rejects deletion with
-          // ConflictException — retry (bounded) while it settles. A cluster
+          // ConflictException -- retry (bounded) while it settles. A cluster
           // already deleting (or gone) is success.
           //
           // Only an ACTIVE cluster is deletable: STOPPING, STOPPED and

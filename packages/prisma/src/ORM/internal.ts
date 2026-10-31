@@ -1,6 +1,6 @@
 import { exec } from "alchemy/Util/exec";
 // Shared scaffolding for the Prisma ORM v8 deploy-time resources.
-// NOT exported from the ORM index — service-internal only.
+// NOT exported from the ORM index -- service-internal only.
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -51,7 +51,7 @@ const causeMessage = (cause: unknown): string =>
 
 /**
  * Resolve the unified `prisma` CLI entrypoint (`prisma` v8 mounts the ORM
- * commands — `contract emit`, `migration plan`, `db migrate` — that the
+ * commands -- `contract emit`, `migration plan`, `db migrate` -- that the
  * retired `prisma-next` bin used to serve). The package is an optional peer,
  * so it resolves out of the *user's* project and their pinned CLI version is
  * the one that runs.
@@ -159,7 +159,7 @@ const parseEnvelope = (stdout: string): CliEnvelope | undefined => {
 
 /**
  * Run a `prisma` subcommand with `--json --no-interactive` from `cwd` (the
- * directory containing `prisma.config.ts` — all config-relative paths
+ * directory containing `prisma.config.ts` -- all config-relative paths
  * resolve against it, matching a user running the CLI in their project) and
  * parse the structured result envelope.
  */
@@ -200,7 +200,7 @@ export const runPrismaCli = <T>(
       )?.label;
       return yield* new CliError({
         code: error.code,
-        message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
+        message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" \u2014 ") || "unknown error"}`,
         fix,
         meta: error.meta,
       });
@@ -213,7 +213,7 @@ export const runPrismaCli = <T>(
 /** `prisma contract emit --json` result. */
 export interface EmitResult {
   ok: true;
-  /** Canonical hash of the emitted contract's storage shape — the contract identity the migration graph and DB marker track. */
+  /** Canonical hash of the emitted contract's storage shape -- the contract identity the migration graph and DB marker track. */
   storageHash: string;
   /** Only emitted for TypeScript-authored contracts. */
   executionHash?: string;
@@ -302,7 +302,7 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
         message: [
           `Emitted ${dtsPath} references an unpublished @internal/* module this`,
           `integration does not know how to map yet: ${leftover?.trim()}`,
-          "Please report this — the emitted types will not resolve until it is mapped.",
+          "Please report this \u2014 the emitted types will not resolve until it is mapped.",
         ].join("\n"),
       });
     }
@@ -314,7 +314,7 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
  *
  * `opsEmpty` distinguishes a fully-emitted package (`ops.json` holds the
  * rendered operations) from one still carrying unfilled `placeholder(...)`
- * closures — `migration plan` writes `ops.json` as `[]` until the user edits
+ * closures -- `migration plan` writes `ops.json` as `[]` until the user edits
  * `migration.ts` and self-emits it.
  */
 export interface MigrationPackage {

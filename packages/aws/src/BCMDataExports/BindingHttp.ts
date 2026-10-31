@@ -5,18 +5,18 @@ import type { Export } from "./Export.ts";
 /**
  * Shared HTTP scaffolding for the BCM Data Exports runtime bindings.
  *
- * Every capability follows the same shape — resolve the distilled operation,
+ * Every capability follows the same shape -- resolve the distilled operation,
  * register an IAM policy statement on the binding host, and return a runtime
  * callable. The only variation is the operation, the IAM action(s), and
  * whether the binding is scoped to one {@link Export} (injecting its
  * `ExportArn`) or to the whole account (table-dictionary and list
  * operations, which are not resource-scoped).
  *
- * BCM Data Exports is a global service — its endpoint resolver routes every
+ * BCM Data Exports is a global service -- its endpoint resolver routes every
  * standard-partition region to the implicit global endpoint, so no region
  * pinning is needed.
  *
- * @internal — not exported from `index.ts`.
+ * @internal -- not exported from `index.ts`.
  */
 
 /**
@@ -67,7 +67,7 @@ export const makeExportHttpBinding = <I extends { ExportArn: string }, A, E, R>(
 
 /**
  * Build the implementation effect for an account-level capability (no
- * export argument — the table dictionary and list operations). The
+ * export argument -- the table dictionary and list operations). The
  * deploy-time half grants `iamActions` on `*` because these operations are
  * not resource-scoped.
  */

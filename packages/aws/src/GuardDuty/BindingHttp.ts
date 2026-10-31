@@ -5,8 +5,8 @@ import type { Detector } from "./Detector.ts";
 /**
  * Shared scaffolding for Amazon GuardDuty HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -32,7 +32,7 @@ export const makeGuardDutyDetectorHttpBinding = <
   actions: readonly string[];
   /**
    * Whether the IAM action supports resource-level permissions on the
-   * detector ARN. Most GuardDuty detector-scoped actions do NOT — IAM only
+   * detector ARN. Most GuardDuty detector-scoped actions do NOT -- IAM only
    * evaluates them against `Resource: "*"` (verified empirically: an
    * ARN-scoped Allow is an implicit deny for e.g. `ListFindings`,
    * `ListMembers`, `CreateSampleFindings`). Only the coverage actions
@@ -68,7 +68,7 @@ export const makeGuardDutyDetectorHttpBinding = <
   });
 
 /**
- * Build the impl Effect for an account-level GuardDuty operation — the
+ * Build the impl Effect for an account-level GuardDuty operation -- the
  * member-account invitation flow (`ListInvitations`, `DeclineInvitations`,
  * `DeleteInvitations`, `GetInvitationsCount`), the organization-admin
  * actions, and the on-demand malware scan operations. The deploy-time half

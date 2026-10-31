@@ -32,7 +32,7 @@ export interface SignalingChannelProps {
    */
   type?: "SINGLE_MASTER" | "FULL_MESH";
   /**
-   * How long an undelivered signaling message is retained (5–120 seconds).
+   * How long an undelivered signaling message is retained (5-120 seconds).
    * Accepts any `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`;
    * a bare number is milliseconds); the wire unit is whole seconds. Updated
    * in place.
@@ -57,7 +57,7 @@ export interface SignalingChannel extends Resource<
 > {}
 
 /**
- * An Amazon Kinesis Video Streams WebRTC signaling channel — the rendezvous
+ * An Amazon Kinesis Video Streams WebRTC signaling channel -- the rendezvous
  * point that WebRTC master and viewer peers use to exchange SDP offers,
  * answers, and ICE candidates.
  *
@@ -85,7 +85,7 @@ export interface SignalingChannel extends Resource<
  * // init
  * const getIceServers = yield* AWS.KinesisVideo.GetIceServerConfig(channel);
  *
- * // runtime — TURN URIs + short-lived credentials for a WebRTC peer
+ * // runtime -- TURN URIs + short-lived credentials for a WebRTC peer
  * const { IceServerList } = yield* getIceServers({ ClientId: "viewer-1" });
  * ```
  *
@@ -167,7 +167,7 @@ export const SignalingChannelProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // `news` is undefined when the resource is declared without props
-          // (`SignalingChannel("Id")`) — normalize WITHOUT a destructuring
+          // (`SignalingChannel("Id")`) -- normalize WITHOUT a destructuring
           // default (defaults widen the inferred Props type).
           const props = news ?? {};
           const channelName = output?.channelName ?? (yield* createName(id, props));
@@ -180,7 +180,7 @@ export const SignalingChannelProvider = () =>
           let info = yield* observeChannel(channelName);
 
           // A previous incarnation still in DELETING blocks re-creation of
-          // the same name — wait for the purge to finish, then recreate.
+          // the same name -- wait for the purge to finish, then recreate.
           if (info?.ChannelStatus === "DELETING") {
             yield* session.note(
               `waiting for previous channel ${channelName} to finish deleting...`,
@@ -189,7 +189,7 @@ export const SignalingChannelProvider = () =>
             info = undefined;
           }
 
-          // 2. ENSURE — create if missing; tolerate the concurrent-create
+          // 2. ENSURE -- create if missing; tolerate the concurrent-create
           // race and wait for ACTIVE (creation is async but fast).
           if (info === undefined) {
             yield* retryWhileResourceInUse(
@@ -215,7 +215,7 @@ export const SignalingChannelProvider = () =>
           }
           const channelArn = info.ChannelARN!;
 
-          // 3. SYNC — message TTL (versioned update; only on observed drift)
+          // 3. SYNC -- message TTL (versioned update; only on observed drift)
           const observedTtl = info.SingleMasterConfiguration?.MessageTtlSeconds;
           if (desiredTtl !== undefined && desiredTtl !== observedTtl) {
             yield* retryWhileSettling(
@@ -230,7 +230,7 @@ export const SignalingChannelProvider = () =>
             info = yield* waitForChannelActive(channelName, info.Version);
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(channelArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -256,7 +256,7 @@ export const SignalingChannelProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A CREATING/UPDATING channel rejects deletion with
-          // ResourceInUseException — retry through the transition (bounded).
+          // ResourceInUseException -- retry through the transition (bounded).
           yield* retryWhileResourceInUse(
             kv.deleteSignalingChannel({ ChannelARN: output.channelArn }),
           ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));

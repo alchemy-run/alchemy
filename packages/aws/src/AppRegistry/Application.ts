@@ -44,7 +44,7 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An AWS Service Catalog AppRegistry application — the top-level node that
+ * An AWS Service Catalog AppRegistry application -- the top-level node that
  * groups related cloud resources and metadata under a single logical
  * application (surfaced in myApplications and the `awsApplication` tag).
  *
@@ -114,7 +114,7 @@ export const ApplicationProvider = () =>
           };
           return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
-        // The application name is its user-facing identity — changing it
+        // The application name is its user-facing identity -- changing it
         // replaces the application.
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -130,13 +130,13 @@ export const ApplicationProvider = () =>
             ...internalTags,
           };
 
-          // 1. OBSERVE — cloud is authoritative; output caches the ID only.
+          // 1. OBSERVE -- cloud is authoritative; output caches the ID only.
           let found = output?.applicationId ? yield* observe(output.applicationId) : undefined;
           if (!found?.id) {
             found = yield* observe(applicationName);
           }
 
-          // 2. ENSURE — create when missing; tolerate a concurrent-create
+          // 2. ENSURE -- create when missing; tolerate a concurrent-create
           // race (ConflictException) by re-reading.
           if (!found?.id) {
             yield* appregistry
@@ -153,7 +153,7 @@ export const ApplicationProvider = () =>
           const applicationId = found!.id!;
           const applicationArn = found!.arn!;
 
-          // 3a. SYNC description — apply only when it actually changed.
+          // 3a. SYNC description -- apply only when it actually changed.
           if (news.description !== undefined && found!.description !== news.description) {
             yield* appregistry.updateApplication({
               application: applicationId,
@@ -161,7 +161,7 @@ export const ApplicationProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges.
           const observedTags = stripAwsSystemTags(tagRecord(found!.tags));
           const { upsert, removed } = diffTags(observedTags, desiredTags);

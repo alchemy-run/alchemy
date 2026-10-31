@@ -13,7 +13,7 @@ export interface ListUsageForLicenseConfigurationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `license-manager:ListUsageForLicenseConfiguration` —
+ * Runtime binding for `license-manager:ListUsageForLicenseConfiguration` --
  * list per-resource license usage (consumed licenses per instance/AMI)
  * tracked by the bound license configuration.
  *

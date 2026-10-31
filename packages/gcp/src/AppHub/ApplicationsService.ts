@@ -38,7 +38,7 @@ export type ApplicationsServiceProps = {
   /**
    * Parent Application. Full name
    * `projects/{project}/locations/{location}/applications/{application}`
-   * or the application id (combined with `location`). Immutable —
+   * or the application id (combined with `location`). Immutable --
    * changing it replaces the service.
    */
   application: string;
@@ -50,14 +50,14 @@ export type ApplicationsServiceProps = {
   location?: string;
   /**
    * Service id (the `{service}` segment). Must be RFC1035 (63 chars).
-   * If omitted, a unique name is generated. Immutable — changing it
+   * If omitted, a unique name is generated. Immutable -- changing it
    * replaces the service.
    */
   serviceId?: string;
   /**
    * Resource name of the original discovered service, or the underlying
    * resource URI (looked up via `discoveredServices:lookup`). Immutable
-   * — changing it replaces the service.
+   * -- changing it replaces the service.
    */
   discoveredService: string;
   /**
@@ -68,7 +68,7 @@ export type ApplicationsServiceProps = {
   /**
    * User-defined description. Maximum length is 2048 characters.
    * Services have no labels field, so Alchemy stamps ownership into a
-   * `[alchemy …]` prefix and strips it from attributes.
+   * `[alchemy ...]` prefix and strips it from attributes.
    */
   description?: string;
   /**
@@ -119,7 +119,7 @@ export type ApplicationsService = Resource<
 /**
  * An App Hub service registered onto an Application. A service is a
  * discovered network or API interface (forwarding rule, URL map, Cloud
- * Run service, …) that exposes functionality over the network.
+ * Run service, ...) that exposes functionality over the network.
  *
  * Services have no labels field, so Alchemy stamps ownership into the
  * description for `list` / nuke. Application, service id, and

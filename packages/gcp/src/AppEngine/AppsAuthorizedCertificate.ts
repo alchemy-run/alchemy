@@ -39,17 +39,17 @@ export type AppsAuthorizedCertificateProps = {
   /**
    * App Engine application id (the `{appsId}` segment of
    * `apps/{appsId}/authorizedCertificates/{id}`). Defaults to the current
-   * GCP project. Immutable — changing it replaces the certificate.
+   * GCP project. Immutable -- changing it replaces the certificate.
    */
   appsId?: string;
   /**
-   * Server-assigned certificate id. Immutable — changing it replaces
+   * Server-assigned certificate id. Immutable -- changing it replaces
    * the certificate.
    */
   certificateId?: string;
   /**
    * User-specified display name. App Engine certificates have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   displayName?: string;
@@ -105,7 +105,7 @@ export type AppsAuthorizedCertificate = Resource<
  *
  * App Engine certificates have no labels field, so Alchemy stamps
  * ownership into `displayName` for `list` / nuke. The application id and
- * server-assigned certificate id are identity — changing either replaces
+ * server-assigned certificate id are identity -- changing either replaces
  * the certificate. Display name and PEM data update in place.
  *
  * ### Creating a Certificate

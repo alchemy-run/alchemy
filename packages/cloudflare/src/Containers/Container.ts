@@ -30,7 +30,7 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
 }> {}
 
 /**
- * No container instance could be allocated within the start budget — the
+ * No container instance could be allocated within the start budget -- the
  * account is at its concurrent-instance cap (`maxInstances`) or the platform
  * is still provisioning. Mirrors `@cloudflare/containers`'
  * `NO_CONTAINER_INSTANCE_ERROR` (surfaced as HTTP 503 by native).
@@ -52,7 +52,7 @@ export class ContainerRateLimitedError extends Data.TaggedError("ContainerRateLi
 }> {}
 
 /**
- * The container instance exited/crashed while we were waiting for its port —
+ * The container instance exited/crashed while we were waiting for its port --
  * the entrypoint failed to bind or died. Mirrors native's "container exited"
  * detection (`!this.container.running` mid-wait); not curable by continuing to
  * poll the same instance.
@@ -90,7 +90,7 @@ export type {
 };
 
 /**
- * Props for an image-backed container declaration — either the plain props
+ * Props for an image-backed container declaration -- either the plain props
  * object, or an Effect that produces it.
  *
  * The Effect form is how a container reaches another resource's outputs. A
@@ -143,7 +143,7 @@ type ContainerShape<Shape> = {
  * A Cloudflare Container that runs a long-lived process alongside a
  * Durable Object.
  *
- * Containers always use the **Container Layer** pattern — the class
+ * Containers always use the **Container Layer** pattern -- the class
  * and `.make()` must live in separate files. A Container must be
  * bound to a Durable Object, and the DO imports the class to get a
  * typed handle. If the class and `.make()` lived in the same file,
@@ -161,12 +161,12 @@ type ContainerShape<Shape> = {
  * declares the container's identity, configuration, and typed
  * shape. `.make()` provides the runtime implementation as a
  * default export. Use `Container.of` to construct the typed
- * shape — it ensures your implementation matches the methods
+ * shape -- it ensures your implementation matches the methods
  * declared on the class.
  *
  * **Example:** Container class
  * ```typescript
- * // src/Sandbox.ts — the tag carries only the name + typed shape;
+ * // src/Sandbox.ts -- the tag carries only the name + typed shape;
  * // configuration lives on `.make()`.
  * export class Sandbox extends Cloudflare.Container<
  *   Sandbox,
@@ -182,7 +182,7 @@ type ContainerShape<Shape> = {
  *
  * **Example:** Container .make()
  * ```typescript
- * // src/Sandbox.runtime.ts — props are the first argument to `.make()`
+ * // src/Sandbox.runtime.ts -- props are the first argument to `.make()`
  * export default Sandbox.make(
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
@@ -210,7 +210,7 @@ type ContainerShape<Shape> = {
  *
  * ### Async Workers
  * An async Worker can host a container-backed Durable Object class that
- * ships as plain JavaScript — `@cloudflare/sandbox`'s `Sandbox`, or your
+ * ships as plain JavaScript -- `@cloudflare/sandbox`'s `Sandbox`, or your
  * own class extending `@cloudflare/containers`' `Container`. The class
  * lives in the worker script; `Container` (the npm one) handles the
  * lifecycle and forwards `fetch` to the port inside the container.
@@ -226,7 +226,7 @@ type ContainerShape<Shape> = {
  * ```
  *
  * Declare it in the stack by binding a `Cloudflare.Container` in the
- * Worker's `env` — the Container **is** the Durable Object binding and its
+ * Worker's `env` -- the Container **is** the Durable Object binding and its
  * ContainerApplication together. Alchemy emits the
  * `durable_object_namespace` binding, marks the class as container-backed
  * in the script metadata, provisions the ContainerApplication, and attaches
@@ -249,7 +249,7 @@ type ContainerShape<Shape> = {
  * });
  * ```
  *
- * The type parameter (`Container<Sandbox>`) is the class from `worker.ts` —
+ * The type parameter (`Container<Sandbox>`) is the class from `worker.ts` --
  * it types `env.Sandbox` as `DurableObjectNamespace<Sandbox>` via
  * `Cloudflare.InferEnv`, so the handler reaches the container with full
  * types.
@@ -446,11 +446,11 @@ type ContainerShape<Shape> = {
  * A container's image comes from one of three sources, picked by which
  * prop you set:
  *
- * - `main` — bundle your Effect program into a generated image.
- * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — pull a pre-built remote image and re-push it.
+ * - `main` -- bundle your Effect program into a generated image.
+ * - `context` (+ optional `dockerfile`) -- build your own Dockerfile.
+ * - `image` -- pull a pre-built remote image and re-push it.
  *
- * Only the `main` source bundles and injects an Effect runtime — so it
+ * Only the `main` source bundles and injects an Effect runtime -- so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
  * ship an arbitrary image as-is: they have no runtime to provide, so
  * you declare the class with its props inline and bind it with
@@ -478,7 +478,7 @@ type ContainerShape<Shape> = {
  *
  * **Example:** Build your own Dockerfile (`context` / `dockerfile`)
  * ```typescript
- * // Alchemy builds the Dockerfile against the context directory — no
+ * // Alchemy builds the Dockerfile against the context directory -- no
  * // Effect bundling, no `.make()`. `dockerfile` defaults to
  * // `<context>/Dockerfile`. The props are declared inline on the tag.
  * export class Web extends Cloudflare.Container<Web>()("Web", {
@@ -564,7 +564,7 @@ type ContainerShape<Shape> = {
  * **Example:** Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's
- * // registry — no build, no bundling, no `.make()`.
+ * // registry -- no build, no bundling, no `.make()`.
  * export class Echo extends Cloudflare.Container<Echo>()("Echo", {
  *   image: "mendhak/http-https-echo:latest",
  * }) {}
@@ -619,7 +619,7 @@ type ContainerShape<Shape> = {
  * ```
  *
  * ### Configuration
- * The props object — the first argument to `.make()` — accepts `main`
+ * The props object -- the first argument to `.make()` -- accepts `main`
  * (entrypoint file), `instanceType` (compute size), `runtime`
  * (`"bun"` or `"node"`), and `observability` settings. Use
  * `Stack.useSync` to read the surrounding stack and pick a beefier
@@ -643,7 +643,7 @@ type ContainerShape<Shape> = {
  * ### Environment Variables
  * A container is a process, not a Worker: it has no bindings, so every
  * piece of configuration reaches it through `env`. Each entry lands on
- * the deployment and shows up in `process.env` inside the image —
+ * the deployment and shows up in `process.env` inside the image --
  * generated (`main`), built (`context`), or pre-built (`image`) alike.
  * Wrap a secret in `Redacted` to keep it encrypted in state and out of
  * plan output; the container still reads a plain string.
@@ -662,7 +662,7 @@ type ContainerShape<Shape> = {
  *
  * ### Props from Other Resources
  * A class body is module scope, so there is nowhere to `yield*` the
- * database, queue, or bucket whose output you need — and a bare
+ * database, queue, or bucket whose output you need -- and a bare
  * declaration is an Effect, not a resolved handle, so
  * `Uploads.bucketName` reads as `undefined`. Pass the props as an
  * `Effect.gen` instead: inside it sibling resources resolve normally,
@@ -686,7 +686,7 @@ type ContainerShape<Shape> = {
  *
  * ### Database Connections
  * An effectful (`main`) container runs your Effect program, so it
- * resolves a database capability the same way a Worker does — you never
+ * resolves a database capability the same way a Worker does -- you never
  * name `DATABASE_URL`. The container has no bindings (it is a process,
  * not a Worker), so `Prisma.Connect` writes the connection's outputs
  * onto the deployment as environment variables and reads them back at
@@ -711,7 +711,7 @@ type ContainerShape<Shape> = {
  * ```
  *
  * An image you brought yourself knows nothing about alchemy, so there is
- * no capability to bind — name the variable and hand it the provider's
+ * no capability to bind -- name the variable and hand it the provider's
  * **pooled** connection string.
  *
  * **Example:** Passing a pooled database URL to an arbitrary image
@@ -728,7 +728,7 @@ type ContainerShape<Shape> = {
  * ) {}
  * ```
  *
- * Either way, start it with `api.start({ enableInternet: true })` — without
+ * Either way, start it with `api.start({ enableInternet: true })` -- without
  * outbound networking the container never reaches the database.
  * `Cloudflare.Hyperdrive.Connect` is the one that cannot work here: it
  * *is* a workerd binding, so no container process can resolve it.
@@ -788,7 +788,7 @@ type ContainerShape<Shape> = {
  * ```
  *
  * A container's shape cannot declare a method the handle already has
- * (`start`, `exec`, `image`, `getTcpPort`, …); declaring one is a type
+ * (`start`, `exec`, `image`, `getTcpPort`, ...); declaring one is a type
  * error, because the handle's method would shadow the RPC call.
  *
  * ### Using a Container from a Layer
@@ -871,7 +871,7 @@ export const Container: ResourceClassLike<ContainerApplication> &
           const tag = ContainerPlatform()(id);
           // `yield* MyContainer` binds the container to the hosting Durable
           // Object and returns its handle. It never starts the container.
-          // NOTE: no `~alchemy/Container/ClassName` marker here — an
+          // NOTE: no `~alchemy/Container/ClassName` marker here -- an
           // effectful (`main`) container is not bindable on an async
           // Worker's `env` (its application is created by the `.make()`
           // Layer inside an Effect-native Durable Object host), so it must
@@ -933,20 +933,20 @@ export declare namespace Container {
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
     /**
-     * @internal phantom — the Durable Object class type backing this
+     * @internal phantom -- the Durable Object class type backing this
      * container when it is bound on an async Worker's `env`. Drives
      * `InferEnv` (`env.NAME` becomes `DurableObjectNamespace<DOShape>`).
      */
     readonly "~alchemy/Container/Shape": DOShape;
     /**
-     * @internal — the explicit `className` from props (`undefined` defaults
+     * @internal -- the explicit `className` from props (`undefined` defaults
      * to the binding name at bind time). Doubles as the runtime marker that
      * identifies an async-bindable Container declaration in a Worker's `env`
      * (see `bindWorkerAsyncBindings`).
      */
     readonly "~alchemy/Container/ClassName": string | undefined | Effect.Effect<string | undefined>;
     /**
-     * The underlying {@link ContainerApplication} resource declaration —
+     * The underlying {@link ContainerApplication} resource declaration --
      * `yield*` it to get the application's Output attributes.
      */
     Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;

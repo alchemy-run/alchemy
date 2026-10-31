@@ -2,7 +2,7 @@
  * Deploy-time Cloudflare KV sink for prerender seed.
  *
  * Runtime Workers use {@link kvAdapter} (`env.VINEXT_KV_CACHE` binding).
- * Deploy cannot call that binding — it talks the distilled KV HTTP API
+ * Deploy cannot call that binding -- it talks the distilled KV HTTP API
  * with `accountId` + `namespaceId` from the Worker env. Both write the
  * same {@link DataCacheStore} shape (`putText`) so Redis / S3 / KV seed
  * through one function.

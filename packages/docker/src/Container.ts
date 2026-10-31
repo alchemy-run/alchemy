@@ -75,7 +75,7 @@ export interface ContainerProps {
    * developer's machine from inside the container.
    *
    * On Linux `host-gateway` is the bridge gateway address, so those packets
-   * traverse the host's `INPUT` chain — under a default-deny firewall the
+   * traverse the host's `INPUT` chain -- under a default-deny firewall the
    * name resolves and the connection then times out. See the Host Access
    * examples.
    */
@@ -249,8 +249,8 @@ export interface Container extends Resource<
  *
  * On Linux `host-gateway` is the Docker bridge gateway (typically
  * `172.17.0.1`), so a container's packets to it arrive on the host's `INPUT`
- * chain. Under a default-deny firewall — ufw ships
- * `DEFAULT_INPUT_POLICY="DROP"` — the hostname resolves correctly and the
+ * chain. Under a default-deny firewall -- ufw ships
+ * `DEFAULT_INPUT_POLICY="DROP"` -- the hostname resolves correctly and the
  * connection then times out, which reads like an application bug rather than a
  * firewall one. Allow the bridge subnet to fix it:
  * `sudo ufw allow from 172.16.0.0/12`.
@@ -273,7 +273,7 @@ export interface Container extends Resource<
  * ```typescript
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
- *   // Any `hostname:address` pair — host access is just the common case.
+ *   // Any `hostname:address` pair -- host access is just the common case.
  *   extraHosts: ["service.example:192.0.2.10"],
  *   start: true,
  * });
@@ -413,7 +413,7 @@ export const ContainerProvider = () =>
           }
         }
         // Only networks alchemy itself attached are alchemy's to detach, and
-        // `olds.networks` is the sole record of which those are — the live
+        // `olds.networks` is the sole record of which those are -- the live
         // container cannot say who connected a network. Sweeping every live
         // network instead tore off the default `bridge` and anything a user,
         // compose file, or another tool had attached out of band (#1386).
@@ -460,7 +460,7 @@ export const ContainerProvider = () =>
           const info = yield* inspect(name, context);
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
-          // persisted before upstream Outputs resolved — fall back to the
+          // persisted before upstream Outputs resolved -- fall back to the
           // live container's actual image.
           const attrs = toContainerAttributes(
             info,
@@ -475,7 +475,7 @@ export const ContainerProvider = () =>
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
           if (!isResolved(news)) return undefined;
           // An Output-valued `image` doesn't survive a `creating`-state
-          // round-trip (it deserializes as `undefined`) — without comparable
+          // round-trip (it deserializes as `undefined`) -- without comparable
           // prior create args, let the engine apply its default update logic.
           if (olds.image === undefined) return undefined;
           if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
@@ -748,7 +748,7 @@ const boundHostPort = (
 
 /**
  * `HostConfig.PortBindings` is what was *requested*, `NetworkSettings.Ports`
- * what Docker actually *assigned* — so the assignment wins wherever both
+ * what Docker actually *assigned* -- so the assignment wins wherever both
  * exist. A container published with `external: 0` (or any random-publish
  * mapping) has no requested host port at all, and reading the request over
  * the assignment reported 0 instead of the port the container is reachable
@@ -786,7 +786,7 @@ const normalizeDuration = (input: Duration.Input | undefined): string | undefine
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
   // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which
-  // requires a unit suffix — a bare nanosecond count is rejected with "missing
+  // requires a unit suffix -- a bare nanosecond count is rejected with "missing
   // unit in duration". `ns` is the lossless Go-duration rendering of the nanos.
   return `${Duration.toNanosUnsafe(duration).toString()}ns`;
 };

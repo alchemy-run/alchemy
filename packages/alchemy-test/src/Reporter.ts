@@ -94,7 +94,7 @@ export type TestEvent =
       readonly file: string;
       /**
        * LIVE reference to the file's hook log buffer (deploy/destroy). The
-       * runner appends to it as hooks execute — single-process, so reporters
+       * runner appends to it as hooks execute -- single-process, so reporters
        * may read it incrementally (e.g. the TUI tailing a detail pane).
        */
       readonly logs?: ReadonlyArray<LogEntry>;
@@ -136,7 +136,7 @@ export type TestEvent =
  *
  * Retries re-run the test body as-is: for files whose state was torn down by
  * `afterAll` (deploy-once suites) the retried body may fail on missing
- * infrastructure — `test.provider`-style self-contained tests retry cleanly.
+ * infrastructure -- `test.provider`-style self-contained tests retry cleanly.
  */
 export interface RunController {
   /** Re-run a finished test. No-op while the test is still running/queued. */

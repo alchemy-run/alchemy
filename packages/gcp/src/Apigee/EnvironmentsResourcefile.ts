@@ -24,23 +24,23 @@ const DEFAULT_TYPE = "js";
 export type EnvironmentsResourcefileProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the file.
+   * current GCP project id. Immutable -- changing it replaces the file.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the file.
    */
   environment: string;
   /**
    * Resource file type (`js`, `java`, `properties`, `py`, `xsl`, `wsdl`,
-   * `xsd`, …). Immutable — changing it replaces the file.
+   * `xsd`, ...). Immutable -- changing it replaces the file.
    * @default "js"
    */
   fileType?: string;
   /**
    * File id. If omitted, a unique name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the file.
+   * and logical id. Immutable -- changing it replaces the file.
    */
   fileId?: string;
   /**
@@ -69,7 +69,7 @@ export type EnvironmentsResourcefile = Resource<
 >;
 
 /**
- * An environment-scoped Apigee resource file (JavaScript, Java, XSL, …).
+ * An environment-scoped Apigee resource file (JavaScript, Java, XSL, ...).
  *
  * Resource files have no labels. `list` enumerates files in Apigee
  * environments mapped to this GCP project. Type and name are identity;

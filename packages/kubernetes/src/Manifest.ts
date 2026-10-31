@@ -24,8 +24,8 @@ export class ManifestInvalidProps extends Data.TaggedError("ManifestInvalidProps
 
 /**
  * A literal Kubernetes object: `apiVersion` + `kind` + `metadata`, with the
- * rest of the object's fields (`spec`, `data`, …) carried as-is. Any kind is
- * accepted — built-in objects and CRDs alike; the API server validates the
+ * rest of the object's fields (`spec`, `data`, ...) carried as-is. Any kind is
+ * accepted -- built-in objects and CRDs alike; the API server validates the
  * shape on apply.
  */
 export interface KubernetesManifest {
@@ -50,7 +50,7 @@ export interface ManifestProps {
   cluster: ClusterLike;
   /**
    * The Kubernetes object to apply (server-side apply, field manager
-   * `alchemy`) — a literal object with `apiVersion`, `kind`, `metadata`, and
+   * `alchemy`) -- a literal object with `apiVersion`, `kind`, `metadata`, and
    * the kind's own fields. Arbitrary CRDs are supported via API discovery.
    */
   manifest: KubernetesManifest;
@@ -98,7 +98,7 @@ export interface Manifest extends Resource<
  * Applies a raw Kubernetes manifest onto any cluster via server-side
  * apply.
  *
- * Any literal object is accepted — built-in kinds and custom resources
+ * Any literal object is accepted -- built-in kinds and custom resources
  * alike; unknown kinds are resolved through the Kubernetes API discovery
  * endpoint, so CRDs work without any registration. The target `cluster`
  * can be a managed cluster resource (e.g. `AWS.EKS.Cluster`) or any
@@ -204,7 +204,7 @@ export const ManifestProvider = () =>
           const oldCluster = connectionIdentity(tryConnectionOf(olds.cluster));
           const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
           // Object identity (cluster, group/version/kind, name, namespace) is
-          // immutable — changing any of it is a replacement.
+          // immutable -- changing any of it is a replacement.
           if (
             oldManifest &&
             ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||

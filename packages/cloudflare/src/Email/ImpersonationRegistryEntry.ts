@@ -71,7 +71,7 @@ export type ImpersonationRegistryEntry = Resource<
 >;
 
 /**
- * A Cloudflare Email Security (Area 1) impersonation registry entry —
+ * A Cloudflare Email Security (Area 1) impersonation registry entry --
  * maps a protected display name (e.g. a VIP) to their legitimate email
  * address for BEC/impersonation detection.
  *
@@ -86,7 +86,7 @@ export type ImpersonationRegistryEntry = Resource<
  * yield* Cloudflare.Email.ImpersonationRegistryEntry("Ceo", {
  *   name: "Jane Smith",
  *   email: "jane.smith@example.com",
- *   comments: "CEO — high-value BEC target",
+ *   comments: "CEO -- high-value BEC target",
  * });
  * ```
  *
@@ -125,7 +125,7 @@ export const ImpersonationRegistryEntryProvider = () =>
     // Account collection: exhaustively paginate the account-scoped registry
     // list and hydrate each row into the exact `read` Attributes shape.
     // Accounts without the Email Security add-on return the typed
-    // `EmailSecurityNotEntitled` error → treat as an empty registry.
+    // `EmailSecurityNotEntitled` error -> treat as an empty registry.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* emailSecurity.listSettingImpersonationRegistries.pages({ accountId }).pipe(
@@ -140,7 +140,7 @@ export const ImpersonationRegistryEntryProvider = () =>
         // `EmailSecurityNotEntitled`, while a credential lacking the
         // Email Security scope (e.g. Cloudflare OAuth) answers a bare
         // `Forbidden`. Neither can enumerate, so both mean "none
-        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // visible" -- matching `Domain.list()`. Returning `[]` is the
         // safe direction for the callers of `list` (orphan detection
         // never deletes what it cannot see).
         Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
@@ -173,13 +173,13 @@ export const ImpersonationRegistryEntryProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — id hint first, then identity scan.
+      // 1. Observe -- id hint first, then identity scan.
       let observed = output?.entryId ? yield* getEntry(accountId, output.entryId) : undefined;
       if (!observed) {
         observed = yield* findByIdentity(accountId, news.name, news.email);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* emailSecurity.createSettingImpersonationRegistry({
           accountId,
@@ -191,7 +191,7 @@ export const ImpersonationRegistryEntryProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — patch only on a delta.
+      // 3. Sync -- patch only on a delta.
       const dirty =
         (observed.name ?? "") !== news.name ||
         (observed.email ?? "") !== news.email ||

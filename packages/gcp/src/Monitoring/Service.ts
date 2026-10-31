@@ -64,7 +64,7 @@ export type GkeNamespaceIdentifier = {
 export type BasicServiceIdentifier = {
   /**
    * Well-known service type (`APP_ENGINE`, `CLOUD_RUN`,
-   * `ISTIO_CANONICAL_SERVICE`, …).
+   * `ISTIO_CANONICAL_SERVICE`, ...).
    */
   serviceType?: string;
   /** Labels identifying the telemetry resource. */
@@ -99,7 +99,7 @@ export type CloudRunIdentifier = {
 export type GkeWorkloadIdentifier = {
   /** Cluster location. */
   location?: string;
-  /** Workload kind (`Deployment`, `DaemonSet`, …). */
+  /** Workload kind (`Deployment`, `DaemonSet`, ...). */
   topLevelControllerType?: string;
   /** Parent namespace name. */
   namespaceName?: string;
@@ -126,7 +126,7 @@ export type ServiceProps = {
    * Service id (the `{service}` segment of
    * `projects/{project}/services/{service}`). If omitted, a unique id
    * is generated from the stack, stage, and logical id. Must match
-   * `[a-z0-9-]`. Immutable — changing it replaces the service.
+   * `[a-z0-9-]`. Immutable -- changing it replaces the service.
    */
   serviceId?: string;
   /**
@@ -213,7 +213,7 @@ export type Service = Resource<
 >;
 
 /**
- * A Cloud Monitoring service — the root resource for SLO monitoring.
+ * A Cloud Monitoring service -- the root resource for SLO monitoring.
  *
  * Custom services (`custom: {}`) are the default when no other
  * identifier is set. Alchemy stamps ownership into `userLabels` so

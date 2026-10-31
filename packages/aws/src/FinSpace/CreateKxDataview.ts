@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:CreateKxDataview` — creates a dataview — a snapshot of a kdb database at a changeset, materialized onto volumes — in the bound environment.
+ * Runtime binding for `finspace:CreateKxDataview` -- creates a dataview -- a snapshot of a kdb database at a changeset, materialized onto volumes -- in the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxDataviewHttp)`.
  * ### Managing Dataviews

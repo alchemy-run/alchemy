@@ -6,12 +6,12 @@
  * resolves the file, its layers, and its modules exactly as `nuxi` would).
  * This package injects its configuration through two seams:
  *
- * 1. **`loadNuxt` overrides** — the highest-priority config layer. We put the
+ * 1. **`loadNuxt` overrides** -- the highest-priority config layer. We put the
  *    deploy target's nitro preset and integration-level Nuxt overrides here.
- * 2. **The `nitro:config` hook** — runs when Nuxt initializes Nitro, after
+ * 2. **The `nitro:config` hook** -- runs when Nuxt initializes Nitro, after
  *    every module and layer has contributed. {@link enforceNitroConfig} is
  *    registered there and gets the last word on the keys this integration
- *    owns (the preset, and `cloudflare.deployConfig: false` — we never write
+ *    owns (the preset, and `cloudflare.deployConfig: false` -- we never write
  *    a wrangler config into user projects).
  *
  * Hooks MUST be registered before `nuxt.ready()`: with `ready: true` the
@@ -23,7 +23,7 @@
  * the merged config, the user's raw value is read from the project's own
  * config layer (`nuxt.options._layers[0].config`) and a foreign preset fails
  * the build with an actionable error ({@link findPresetConflict}) instead of
- * being silently replaced — the user's nitro output would never be deployed.
+ * being silently replaced -- the user's nitro output would never be deployed.
  */
 
 /** A minimal structural slice of a resolved nitro config (`NitroConfig`). */
@@ -63,7 +63,7 @@ export interface NuxtOverridesInput {
    * The deploy target's nitro preset (e.g. `"cloudflare_module"`), injected
    * as the highest-priority config layer AND re-enforced by
    * {@link enforceNitroConfig} after modules run. Omitted for the dev
-   * server: nitro's dev flow runs its own Node dev preset — the deploy
+   * server: nitro's dev flow runs its own Node dev preset -- the deploy
    * preset only matters for `build`.
    */
   readonly nitroPreset?: string | undefined;
@@ -79,7 +79,7 @@ export interface NuxtOverridesInput {
    * Paths nitro's bundler must INLINE (`nitro.externals.inline`). Injected
    * plugins that live under `node_modules` need this: nitro's externals
    * pass would otherwise keep them external, and an externalized plugin
-   * resolves `nitropack/runtime` against the raw package — whose
+   * resolves `nitropack/runtime` against the raw package -- whose
    * `#nitro-internal-virtual/*` imports only exist inside the bundle.
    */
   readonly nitroExternalsInline?: ReadonlyArray<string> | undefined;
@@ -161,7 +161,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
  * user's foreign preset name, or `undefined` when the user set no preset or
  * set (an alias of) the target's own. Layers are the project's config plus
  * any extended layers; only values the *project tree* contributed are
- * consulted — the merged `nuxt.options.nitro.preset` is already ours because
+ * consulted -- the merged `nuxt.options.nitro.preset` is already ours because
  * overrides shadow it.
  */
 export const findPresetConflict = (
@@ -180,13 +180,13 @@ export const findPresetConflict = (
 /** The actionable error message for a user-configured foreign preset. */
 export const presetConflictMessage = (userPreset: string, targetPreset: string): string =>
   `The project's nuxt.config sets \`nitro.preset: "${userPreset}"\`, but this integration ` +
-  `deploys through the "${targetPreset}" preset — a "${userPreset}" build would never be ` +
+  `deploys through the "${targetPreset}" preset \u2014 a "${userPreset}" build would never be ` +
   "deployed. Remove the `nitro.preset` (and any `NITRO_PRESET` env var) from the project " +
   "config and let the deploy target select the preset, or run the framework's own CLI for " +
   `a "${userPreset}" build outside this integration.`;
 
 export interface EnforceNitroConfigOptions {
-  /** The deploy target's nitro preset — always wins. */
+  /** The deploy target's nitro preset -- always wins. */
   readonly preset: string;
   /**
    * Extra last-word mutation contributed by the deploy target (e.g. the

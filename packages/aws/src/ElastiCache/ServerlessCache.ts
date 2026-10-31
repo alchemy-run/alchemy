@@ -30,7 +30,7 @@ export type ServerlessCacheEngine = "valkey" | "redis" | "memcached";
 
 /**
  * Usage limits that cap how much a serverless cache can consume. Setting
- * low maximums is the primary cost-control lever — serverless caches bill
+ * low maximums is the primary cost-control lever -- serverless caches bill
  * for data stored (GB-hours) and compute (ECPUs) with a monthly floor.
  */
 export interface ServerlessCacheUsageLimits {
@@ -263,7 +263,7 @@ const usageLimitsDiffer = (
   observed: elasticache.CacheUsageLimits | undefined,
 ): boolean => {
   if (desired === undefined) return false;
-  // Only compare fields the user actually specified — the service fills in
+  // Only compare fields the user actually specified -- the service fills in
   // defaults (units, minimums) that must not trigger spurious modify calls.
   if (desired.DataStorage) {
     if (
@@ -430,10 +430,10 @@ export const ServerlessCacheProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredLimits = toWireUsageLimits(news.cacheUsageLimits);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCache(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* elasticache
               .createServerlessCache({
@@ -464,7 +464,7 @@ export const ServerlessCacheProvider = () =>
           // InvalidServerlessCacheStateFault.
           observed = yield* waitForCache(name);
 
-          // 3. Sync — compute the modify delta from OBSERVED state.
+          // 3. Sync -- compute the modify delta from OBSERVED state.
           const modify: elasticache.ModifyServerlessCacheRequest = {};
           if (news.description !== undefined && news.description !== observed.Description) {
             modify.Description = news.description;
@@ -516,7 +516,7 @@ export const ServerlessCacheProvider = () =>
             observed = yield* waitForCache(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readTags(arn);
@@ -543,14 +543,14 @@ export const ServerlessCacheProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const name = output.serverlessCacheName;
           // A cache mid-create/modify rejects deletion with
-          // InvalidServerlessCacheStateFault — wait (bounded) for it to
+          // InvalidServerlessCacheStateFault -- wait (bounded) for it to
           // settle first. A cache already deleting (or gone) is success.
           yield* waitUntilSettled(name);
           yield* elasticache.deleteServerlessCache({ ServerlessCacheName: name }).pipe(
             Effect.catchTags({
               ServerlessCacheNotFoundFault: () => Effect.void,
               InvalidServerlessCacheStateFault: () =>
-                // Already deleting — deletion is in progress.
+                // Already deleting -- deletion is in progress.
                 Effect.void,
             }),
           );

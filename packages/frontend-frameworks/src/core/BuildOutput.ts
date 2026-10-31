@@ -25,12 +25,12 @@ export interface OutputFile {
  * Every framework integration (Vite, Waku, Astro, SvelteKit, Next.js, ...)
  * produces this shape:
  *
- * - `clientDirectory` — the static-assets directory, captured as a path so
+ * - `clientDirectory` -- the static-assets directory, captured as a path so
  *   files written after the bundler finishes (SSG HTML, prerendered pages)
  *   ride along.
- * - `serverModules` — the worker modules, **entry first**, each with a sha256
+ * - `serverModules` -- the worker modules, **entry first**, each with a sha256
  *   content hash. `undefined` for assets-only builds.
- * - `externalWorkspaces` — workspace roots (directories containing a
+ * - `externalWorkspaces` -- workspace roots (directories containing a
  *   `package.json`) of modules imported from outside the project root, used
  *   for watch/memoization.
  */
@@ -62,7 +62,7 @@ export const toOutputFile = (
 
 /**
  * Sort server modules entry-first (the module named `entry` comes first, the
- * rest sorted lexicographically) — the order the `BuildOutput` contract
+ * rest sorted lexicographically) -- the order the `BuildOutput` contract
  * requires. Module names always use `/`, so a Windows-style `entry` (e.g.
  * from `path.join`) is normalized before matching.
  */
@@ -145,7 +145,7 @@ export const parseBuildOutput = (content: string): BuildOutput => {
  * Persist a {@link BuildOutput} to disk (conventionally `dist/build.json`,
  * so preview/serve flows stay uniform across frameworks).
  *
- * Creates the target's parent directory if it does not exist — with a nested
+ * Creates the target's parent directory if it does not exist -- with a nested
  * project root (e.g. `fixtures/x/app`) the framework writes its own output to
  * `app/dist`, so the harness-level `<cwd>/dist` may not exist yet.
  *

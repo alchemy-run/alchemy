@@ -37,7 +37,7 @@ export type DataExchangesQueryTemplateProps = {
    * Parent data exchange. Full name
    * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`
    * or the exchange id (combined with `location`). Query templates live
-   * in data clean room exchanges. Immutable — changing the parent
+   * in data clean room exchanges. Immutable -- changing the parent
    * replaces the template.
    */
   dataExchange: string;
@@ -45,7 +45,7 @@ export type DataExchangesQueryTemplateProps = {
    * Query template id (the `{queryTemplate}` segment of
    * `.../dataExchanges/{dataExchange}/queryTemplates/{queryTemplate}`).
    * If omitted, a unique id is generated. Letters, numbers, and
-   * underscores; max 100 bytes. Immutable — changing it replaces the
+   * underscores; max 100 bytes. Immutable -- changing it replaces the
    * template.
    */
   queryTemplateId?: string;
@@ -56,12 +56,12 @@ export type DataExchangesQueryTemplateProps = {
   location?: string;
   /**
    * Human-readable display name. Max 63 bytes. Defaults to the template
-   * id. Immutable — changing it replaces the template.
+   * id. Immutable -- changing it replaces the template.
    */
   displayName?: string;
   /**
    * Short description (max 2000 bytes). Query templates have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -110,7 +110,7 @@ export type DataExchangesQueryTemplate = Resource<
     proposer: string | undefined;
     /** Associated routine. */
     routine: QueryTemplateRoutine | undefined;
-    /** Lifecycle state (`DRAFTED`, `PENDING`, `APPROVED`, …). */
+    /** Lifecycle state (`DRAFTED`, `PENDING`, `APPROVED`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -122,7 +122,7 @@ export type DataExchangesQueryTemplate = Resource<
 >;
 
 /**
- * An Analytics Hub query template — a shared table-valued function
+ * An Analytics Hub query template -- a shared table-valued function
  * defined by contributors in a data clean room.
  *
  * Parent exchange, location, template id, and display name are

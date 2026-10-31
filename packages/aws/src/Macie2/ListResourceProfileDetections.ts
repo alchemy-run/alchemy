@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListResourceProfileDetections`.
  *
  * Retrieves information about the types and amount of sensitive data that Amazon Macie found in an S3 bucket.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListResourceProfileDetectionsHttp)`.
  * ### Automated Discovery
  * **Example:** List a Profile's Detections
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listResourceProfileDetections = yield* AWS.Macie2.ListResourceProfileDetections();
  *
  * // runtime

@@ -19,10 +19,10 @@ export interface AnomalyMonitorProps {
   /**
    * The type of monitor.
    *
-   * - `DIMENSIONAL` — monitors spend grouped by a built-in dimension
+   * - `DIMENSIONAL` -- monitors spend grouped by a built-in dimension
    *   (`monitorDimension`). AWS allows only one `SERVICE`-dimension monitor
    *   per account.
-   * - `CUSTOM` — monitors spend matching a custom `monitorSpecification`
+   * - `CUSTOM` -- monitors spend matching a custom `monitorSpecification`
    *   expression (linked accounts, cost allocation tags, or cost categories).
    *
    * Changing the type replaces the monitor.
@@ -34,7 +34,7 @@ export interface AnomalyMonitorProps {
    */
   monitorDimension?: "SERVICE" | (string & {});
   /**
-   * The expression selecting the spend a `CUSTOM` monitor evaluates —
+   * The expression selecting the spend a `CUSTOM` monitor evaluates --
    * linked accounts, cost allocation tags, or cost categories (raw
    * Cost Explorer `Expression` shape). Required when `monitorType` is
    * `CUSTOM`. Changing it replaces the monitor.
@@ -68,7 +68,7 @@ export interface AnomalyMonitor extends Resource<
  * unusual patterns; pair with an
  * {@link ../AnomalySubscription | AnomalySubscription} to receive alerts.
  *
- * Cost Explorer is a global service — all calls are pinned to `us-east-1`
+ * Cost Explorer is a global service -- all calls are pinned to `us-east-1`
  * regardless of the stack region. Monitors are free and take effect
  * immediately.
  *
@@ -108,7 +108,7 @@ export const AnomalyMonitorProvider = () =>
         return props.monitorName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      // Observe by ARN — the typed miss tag is UnknownMonitorException.
+      // Observe by ARN -- the typed miss tag is UnknownMonitorException.
       const getByArn = (monitorArn: string) =>
         pinCe(ce.getAnomalyMonitors({ MonitorArnList: [monitorArn] })).pipe(
           Effect.map((r) => r.AnomalyMonitors[0]),
@@ -161,7 +161,7 @@ export const AnomalyMonitorProvider = () =>
           if (!isResolved(news)) return;
           const prior: Partial<AnomalyMonitorProps> = olds ?? {};
           if (prior.monitorType === undefined) return;
-          // Only the name is mutable via UpdateAnomalyMonitor — the type,
+          // Only the name is mutable via UpdateAnomalyMonitor -- the type,
           // dimension, and specification are create-only.
           if (
             prior.monitorType !== news.monitorType ||
@@ -176,7 +176,7 @@ export const AnomalyMonitorProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — cloud state is authoritative; output is only an ARN
+          // OBSERVE -- cloud state is authoritative; output is only an ARN
           // cache. Monitor names are not unique identity (the ARN is), so the
           // find-by-name fallback only adopts a monitor whose create-only
           // props already match the desired state. This keeps replacement
@@ -195,11 +195,11 @@ export const AnomalyMonitorProvider = () =>
 
           let monitorArn = live?.MonitorArn;
           if (monitorArn === undefined) {
-            // ENSURE — create if missing. Monitor names are unique per
+            // ENSURE -- create if missing. Monitor names are unique per
             // account; tolerate the AlreadyExists race by adopting the
             // same-name monitor only when its create-only props match the
-            // desired state (a mismatch means a genuine conflict — e.g. a
-            // replacement targeting an explicit name — and must surface).
+            // desired state (a mismatch means a genuine conflict -- e.g. a
+            // replacement targeting an explicit name -- and must surface).
             const created = yield* pinCe(
               ce.createAnomalyMonitor({
                 AnomalyMonitor: {
@@ -223,7 +223,7 @@ export const AnomalyMonitorProvider = () =>
             );
             monitorArn = created.MonitorArn;
           } else if (live!.MonitorName !== name) {
-            // SYNC — the name is the only mutable aspect of a monitor.
+            // SYNC -- the name is the only mutable aspect of a monitor.
             yield* pinCe(
               ce.updateAnomalyMonitor({
                 MonitorArn: monitorArn,
@@ -232,7 +232,7 @@ export const AnomalyMonitorProvider = () =>
             );
           }
 
-          // SYNC TAGS — diff against observed cloud tags.
+          // SYNC TAGS -- diff against observed cloud tags.
           yield* syncCeTags(monitorArn, desiredTags);
 
           yield* session.note(monitorArn);

@@ -9,7 +9,7 @@ export interface ListDeploymentsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codedeploy:ListDeployments` — lists the deployment
+ * Runtime binding for `codedeploy:ListDeployments` -- lists the deployment
  * ids of the bound deployment group (optionally filtered by status or
  * create-time range).
  * ### Observing Deployments

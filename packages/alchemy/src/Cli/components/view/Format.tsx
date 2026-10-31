@@ -11,7 +11,7 @@ export const normalizeView = (view: View): View => {
     return <Text>{String(view)}</Text>;
   }
   // Contract: an array of primitives renders as ONE Text line with the
-  // elements concatenated (no separator) — matching how React renders
+  // elements concatenated (no separator) -- matching how React renders
   // adjacent text children. Callers wanting separators must join themselves.
   if (
     Array.isArray(view) &&

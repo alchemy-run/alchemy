@@ -13,7 +13,7 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  * ### Rebooting an Instance
  * **Example:** Reboot with Planned Failover
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const reboot = yield* AWS.DMS.RebootReplicationInstance(instance);
  *
  * // runtime

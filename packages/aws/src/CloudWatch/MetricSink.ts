@@ -7,7 +7,7 @@ import type * as Sink from "effect/Sink";
 /**
  * A raw `MetricDatum` as accepted by `PutMetricData`. Callers stay in control
  * of `MetricName`, `Dimensions`, `Timestamp`, `Value`/`Values`/`Counts`,
- * `StatisticValues`, `Unit` and `StorageResolution` — no auto-marshalling.
+ * `StatisticValues`, `Unit` and `StorageResolution` -- no auto-marshalling.
  */
 export type MetricSinkDatum = cloudwatch.MetricDatum;
 
@@ -39,12 +39,12 @@ export type MetricSinkError =
  * ### Streaming Metrics
  * **Example:** Stream Datums into CloudWatch
  * ```typescript
- * // init — grants cloudwatch:PutMetricData; all datums publish under Namespace
+ * // init -- grants cloudwatch:PutMetricData; all datums publish under Namespace
  * const sink = yield* AWS.CloudWatch.MetricSink({
  *   Namespace: "MyApp/Payments",
  * });
  *
- * // runtime — datums are packed into 1000-datum PutMetricData batches
+ * // runtime -- datums are packed into 1000-datum PutMetricData batches
  * yield* Stream.fromIterable(
  *   payments.map((payment) => ({
  *     MetricName: "PaymentProcessed",

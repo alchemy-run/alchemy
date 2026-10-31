@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `GetClusterSnapshot` operation (IAM action
  * `docdb-elastic:GetClusterSnapshot`).
  *
- * Reads one elastic-cluster snapshot by ARN — status, source cluster, and
+ * Reads one elastic-cluster snapshot by ARN -- status, source cluster, and
  * the network/encryption configuration captured at snapshot time. Snapshot
  * ARNs embed server-generated UUIDs and are runtime data, so the grant spans
  * the account's snapshots. Provide the implementation with
@@ -17,7 +17,7 @@ import type * as Effect from "effect/Effect";
  * const getSnapshot = yield* DocDBElastic.GetClusterSnapshot();
  *
  * const result = yield* getSnapshot({ snapshotArn });
- * // result.snapshot.status → "AVAILABLE"
+ * // result.snapshot.status -> "AVAILABLE"
  * ```
  *
  * @binding

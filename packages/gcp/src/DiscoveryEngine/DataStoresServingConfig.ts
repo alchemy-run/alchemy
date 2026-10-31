@@ -19,12 +19,12 @@ export type DataStoresServingConfigProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the serving config.
+   * Immutable -- changing it replaces the serving config.
    */
   dataStore: string;
   /**
    * Serving config id (4-63 characters, `a-zA-Z0-9`). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the config.
+   * unique id is generated. Immutable -- changing it replaces the config.
    */
   servingConfigId?: string;
   /**
@@ -32,7 +32,7 @@ export type DataStoresServingConfigProps = {
    */
   displayName?: string;
   /**
-   * Solution type. Immutable — changing it replaces the config.
+   * Solution type. Immutable -- changing it replaces the config.
    * @default "SOLUTION_TYPE_SEARCH"
    */
   solutionType?: string;
@@ -134,7 +134,7 @@ export type DataStoresServingConfig = Resource<
  * resource it finds without prior state as unowned (adopt it with `--adopt`).
  * Parent, id, and solution type are immutable; display name, attached
  * controls, and ranking update in place. The console only shows the default
- * serving config — additional configs are API-only.
+ * serving config -- additional configs are API-only.
  *
  * ### Creating a Serving Config
  * **Example:** Search serving config

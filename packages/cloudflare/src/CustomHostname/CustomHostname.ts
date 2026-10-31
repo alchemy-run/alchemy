@@ -91,7 +91,7 @@ export type Ssl = {
 
 export interface Props {
   /**
-   * Zone the custom hostname is onboarded onto (the SaaS zone). Stable —
+   * Zone the custom hostname is onboarded onto (the SaaS zone). Stable --
    * changing the zone triggers replacement.
    */
   zoneId: string;
@@ -99,13 +99,13 @@ export interface Props {
    * The customer-owned hostname that will point at your zone via CNAME
    * (e.g. `app.customer.com`).
    *
-   * Stable — the hostname is the resource's identity and is not
+   * Stable -- the hostname is the resource's identity and is not
    * patchable; a rename is a delete + create. Declared as plain `string`
    * (not `string`) so it is statically knowable inside `diff`.
    */
   hostname: string;
   /**
-   * SSL configuration for the managed certificate. Mutable — patched in
+   * SSL configuration for the managed certificate. Mutable -- patched in
    * place (note that changing `ssl` can trigger certificate
    * reissuance).
    *
@@ -115,7 +115,7 @@ export interface Props {
   /**
    * Unique key/value metadata for this hostname, available to Workers
    * via the request. Requires the Enterprise Cloudflare for SaaS
-   * entitlement — the API rejects it otherwise.
+   * entitlement -- the API rejects it otherwise.
    */
   customMetadata?: Record<string, unknown>;
   /**
@@ -186,12 +186,12 @@ export interface Attributes {
   /** The customer-owned hostname. */
   hostname: string;
   /**
-   * Activation status of the hostname (`pending`, `active`, …). A
+   * Activation status of the hostname (`pending`, `active`, ...). A
    * hostname for a domain whose DNS the customer has not pointed yet
-   * stays `pending` — activation is asynchronous and not blocked on.
+   * stays `pending` -- activation is asynchronous and not blocked on.
    */
   status: string | undefined;
-  /** Certificate status (`initializing`, `pending_validation`, `active`, …). */
+  /** Certificate status (`initializing`, `pending_validation`, `active`, ...). */
   sslStatus: string | undefined;
   /** TXT record the customer must create to verify ownership. */
   ownershipVerification: OwnershipVerification | undefined;
@@ -289,7 +289,7 @@ export const CustomHostnameProvider = () =>
     // over every zone in the account, exhaustively paginate each zone's custom
     // hostnames, and hydrate each into the same Attributes shape `read`
     // produces. Zones without the SaaS entitlement reject with the typed
-    // `SaasQuotaNotAllocated`/`Forbidden` errors — skip them.
+    // `SaasQuotaNotAllocated`/`Forbidden` errors -- skip them.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -341,7 +341,7 @@ export const CustomHostnameProvider = () =>
       }
 
       // 2. Fall back to scanning the zone for the hostname (unique per
-      //    zone). Ownership has already been verified upstream — `read`
+      //    zone). Ownership has already been verified upstream -- `read`
       //    reports existing hostnames as `Unowned` and the engine gates
       //    takeover behind the adopt policy before reconcile runs.
       if (!observed) {
@@ -375,7 +375,7 @@ export const CustomHostnameProvider = () =>
         justCreated = true;
       }
 
-      // 4. Sync — diff each mutable aspect against observed cloud state
+      // 4. Sync -- diff each mutable aspect against observed cloud state
       //    and PATCH only the delta. `ssl` is only sent when it actually
       //    differs because patching it can trigger certificate
       //    reissuance.
@@ -424,14 +424,14 @@ export const CustomHostnameProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // Owned path: we have persisted state (our own id) — refresh it.
+      // Owned path: we have persisted state (our own id) -- refresh it.
       if (output?.customHostnameId) {
         const observed = yield* observeById(output.zoneId, output.customHostnameId);
         if (observed) return toAttributes(observed, output.zoneId);
       }
       // Adoption path: no state of our own, but the hostname may already
       // exist on the zone. Custom hostnames carry no ownership markers we
-      // can inspect, so brand any match `Unowned` — the engine refuses to
+      // can inspect, so brand any match `Unowned` -- the engine refuses to
       // take over unless `adopt` is set.
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostname = output?.hostname ?? olds?.hostname;
@@ -448,7 +448,7 @@ export const CustomHostnameProvider = () =>
 // ---------------------------------------------------------------------------
 
 // A missing hostname is reported by the custom-hostnames API with code
-// 1436 ("Custom hostname not found") on a 404 envelope — typed in the
+// 1436 ("Custom hostname not found") on a 404 envelope -- typed in the
 // distilled union as `CustomHostnameNotFound`.
 const observeById = (zoneId: string, customHostnameId: string) =>
   customHostnames.getCustomHostname({ zoneId, customHostnameId }).pipe(

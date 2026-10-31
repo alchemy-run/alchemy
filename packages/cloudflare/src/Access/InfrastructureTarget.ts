@@ -42,13 +42,13 @@ export interface InfrastructureTargetIp {
 export interface InfrastructureTargetProps {
   /**
    * Hostname identifying the target. Non-unique, case-insensitive, max
-   * 255 characters; supports dashes and periods, no spaces. Mutable —
+   * 255 characters; supports dashes and periods, no spaces. Mutable --
    * updated in place via PUT.
    */
   hostname: string;
   /**
    * The IPv4/IPv6 address that identifies where to reach the target. At
-   * least one of `ipv4` / `ipv6` is required. Mutable — updated in
+   * least one of `ipv4` / `ipv6` is required. Mutable -- updated in
    * place via PUT.
    */
   ip: InfrastructureTargetIp;
@@ -81,7 +81,7 @@ export type InfrastructureTarget = Resource<
 >;
 
 /**
- * A Cloudflare Access Infrastructure Target — a server (hostname +
+ * A Cloudflare Access Infrastructure Target -- a server (hostname +
  * IPv4/IPv6 address) protected by Access for Infrastructure (SSH).
  *
  * Targets are referenced by infrastructure Access applications, which
@@ -113,7 +113,7 @@ export type InfrastructureTarget = Resource<
  * ### Updating
  * **Example:** Re-point the target at a new address
  * ```typescript
- * // Hostname and IP update in place — same targetId, no replacement.
+ * // Hostname and IP update in place -- same targetId, no replacement.
  * const target = yield* Cloudflare.Access.InfrastructureTarget("Bastion", {
  *   hostname: "bastion.internal",
  *   ip: { ipv4: { ipAddr: "10.0.0.6" } },
@@ -163,19 +163,19 @@ export const InfrastructureTargetProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached id.
+      // Owned path -- refresh by the cached id.
       if (output?.targetId) {
         const observed = yield* getTarget(acct, output.targetId);
         if (observed) return toAttributes(observed, acct);
       }
 
-      // Cold read — hostnames are non-unique, so only an exact
+      // Cold read -- hostnames are non-unique, so only an exact
       // hostname + address match identifies the target. Targets carry no
       // ownership markers, so gate adoption behind Unowned.
       const hostname = olds?.hostname ?? output?.hostname;
       if (!hostname) return undefined;
       // `olds.ip` may be `undefined` when a `creating` row was persisted
-      // before upstream Outputs resolved — fall back to the output hint.
+      // before upstream Outputs resolved -- fall back to the output hint.
       const desiredIp = olds?.ip !== undefined ? resolvedIp(olds.ip) : output?.ip;
       const match = yield* findByIdentity(acct, hostname, desiredIp);
       if (match) return Unowned(toAttributes(match, acct));
@@ -186,13 +186,13 @@ export const InfrastructureTargetProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const desired = { hostname: news.hostname, ip: resolvedIp(news.ip) };
 
-      // 1. Observe — the cached id is a hint, not a guarantee.
+      // 1. Observe -- the cached id is a hint, not a guarantee.
       let observed = output?.targetId ? yield* getTarget(accountId, output.targetId) : undefined;
       if (!observed) {
         observed = yield* findByIdentity(accountId, desired.hostname, desired.ip);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         observed = yield* zeroTrust.createAccessInfrastructureTarget({
           accountId,
@@ -201,7 +201,7 @@ export const InfrastructureTargetProvider = () =>
         });
       }
 
-      // 3. Sync — PUT the full desired state only when the observed
+      // 3. Sync -- PUT the full desired state only when the observed
       //    hostname or addresses differ; skip the call on a no-op.
       const dirty =
         observed.hostname !== desired.hostname || !ipEquals(observedIp(observed), desired.ip);

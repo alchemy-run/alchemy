@@ -7,7 +7,7 @@ export interface OptInPhoneNumberRequest extends sns.OptInPhoneNumberInput {}
 /**
  * Runtime binding for `sns:OptInPhoneNumber`.
  *
- * An account-scoped operation — opts a previously opted-out phone number
+ * An account-scoped operation -- opts a previously opted-out phone number
  * back in to SMS delivery (allowed once every 30 days per number).
  * Provide the `OptInPhoneNumberHttp` layer on the Function to implement the binding.
  * ### SMS Opt-Out Management

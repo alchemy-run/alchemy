@@ -9,7 +9,7 @@ export interface RetryStageExecutionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:RetryStageExecution` — re-runs a failed
+ * Runtime binding for `codepipeline:RetryStageExecution` -- re-runs a failed
  * stage, either just the failed actions (`FAILED_ACTIONS`) or the whole
  * stage from its first action (`ALL_ACTIONS`).
  * ### Operating Stages

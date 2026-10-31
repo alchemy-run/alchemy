@@ -158,14 +158,14 @@ export interface FrameworkSiteProps {
    * A string (or `{ name }`) creates an `A` {@link RecordSet} in
    * {@link zone}. Set `dns` (e.g.
    * `{ name: "app.example.com", dns: Cloudflare.DNS.Adapter() }`) to
-   * publish the `A` record through that DNS host instead — any adapter
+   * publish the `A` record through that DNS host instead -- any adapter
    * works, including `Hetzner.DNS.Adapter()` and `AWS.Route53.Adapter()`.
    * See [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;
   /**
    * Existing Hetzner DNS Zone `domain` is created in. Required when
-   * {@link domain} is set without `dns` — v1 does not provision a Zone.
+   * {@link domain} is set without `dns` -- v1 does not provision a Zone.
    * Ignored when `domain.dns` is set.
    */
   zone?: Ref<Zone>;
@@ -345,7 +345,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
   }
 
   // The build runs at APPLY time (`Website.Server` is a resource), so its
-  // attributes are Outputs here — derive every deploy input lazily and let
+  // attributes are Outputs here -- derive every deploy input lazily and let
   // the engine resolve them once the build has produced real paths. Reading
   // `build.distDir` eagerly in the composite body would observe an Output
   // proxy, not a string.
@@ -432,7 +432,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
 
 /**
  * Composite-level tagged errors (`FrameworkSiteError`, filesystem) are
- * defects — `Alchemy.Stack` only admits `ConfigError` on the user effect.
+ * defects -- `Alchemy.Stack` only admits `ConfigError` on the user effect.
  */
 export const makeFrameworkSite = (
   id: string,

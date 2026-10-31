@@ -249,7 +249,7 @@ export interface FunctionCommonProps extends PlatformProps {
   /**
    * Serve the Function on a custom domain. Function URLs cannot take custom
    * hostnames, so this composes an API Gateway v2 HTTP API in front of the
-   * Function (`$default` route, payload 2.0 — the Function URL event shape,
+   * Function (`$default` route, payload 2.0 -- the Function URL event shape,
    * so an Effect `fetch` handler works unchanged), a regional ACM
    * certificate, an API Gateway domain name + API mapping per hostname, and
    * the DNS records. The Function's `domainUrl` attribute is
@@ -284,8 +284,8 @@ export interface FunctionCommonProps extends PlatformProps {
   };
   /**
    * EFS file systems to mount into the function's execution environment.
-   * Each entry mounts an EFS access point — pass the `AWS.EFS.AccessPoint`
-   * resource itself (or its ARN) — at a local path that must begin with
+   * Each entry mounts an EFS access point -- pass the `AWS.EFS.AccessPoint`
+   * resource itself (or its ARN) -- at a local path that must begin with
    * `/mnt/`. Requires `vpc`: the function must be attached to a VPC that can
    * reach an available EFS mount target for the file system. The execution
    * role is automatically granted EFS client access
@@ -293,13 +293,13 @@ export interface FunctionCommonProps extends PlatformProps {
    *
    * Prefer the host-agnostic `AWS.EFS.Mount` binding
    * (`yield* AWS.EFS.mount(accessPoint, { path: "/mnt/data" })` inside the
-   * function body with the `AWS.EFS.MountLive` layer) — it wires the same
+   * function body with the `AWS.EFS.MountLive` layer) -- it wires the same
    * config plus least-privilege IAM through the binding channel and also
    * works on ECS.
    */
   fileSystemConfigs?: {
     /**
-     * The EFS access point to mount — an `AWS.EFS.AccessPoint` resource or
+     * The EFS access point to mount -- an `AWS.EFS.AccessPoint` resource or
      * its ARN. Exactly one of `accessPoint` or `arn` is required.
      */
     accessPoint?: AccessPointRef;
@@ -402,7 +402,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * `.output/server`, OpenNext's server functions) where re-bundling can
    * break `require`s of packaged `node_modules`. Implies external mode:
    * `handler` names an export of `main`, and the Lambda handler string is
-   * derived from `main`'s basename (e.g. `index.mjs` → `index.default`).
+   * derived from `main`'s basename (e.g. `index.mjs` -> `index.default`).
    * @default true
    */
   bundle?: false;
@@ -417,7 +417,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
   /**
-   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
+   * Lambda layers to attach -- pass an `AWS.Lambda.LayerVersion` resource
    * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
    * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
    * every layer.
@@ -436,7 +436,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
   /**
    * Wire-level `DurableConfig` applied at `CreateFunction`.
    *
-   * @internal Set exclusively by the `AWS.Lambda.DurableFunction` wrapper —
+   * @internal Set exclusively by the `AWS.Lambda.DurableFunction` wrapper --
    * never set this directly. Durability is a **create-time** property of a
    * Lambda function, so a presence change replaces the function (see `diff`).
    * The base Function is otherwise durability-agnostic; author durable
@@ -464,7 +464,7 @@ export interface FunctionImageProps extends FunctionCommonProps {
   build?: never;
   uploadSourceMap?: never;
   exports?: never;
-  // Durability needs a `main` for the orchestrator body — see
+  // Durability needs a `main` for the orchestrator body -- see
   // DurableFunctionProps.
   durableConfig?: never;
 }
@@ -612,7 +612,7 @@ export interface Function extends Resource<
     functionName: string;
     /**
      * ARN that invokes the Function: the alias ARN
-     * (`arn:…:function:name:alias`) when `alias` is set, otherwise the
+     * (`arn:...:function:name:alias`) when `alias` is set, otherwise the
      * unqualified {@link functionArn}. Use {@link qualifiedArnOf} to wire it.
      */
     qualifiedArn: string;
@@ -745,7 +745,7 @@ export interface Function extends Resource<
     /**
      * VPC attachment requested by a binding (e.g. `RDS.Connect` with
      * `subnetIds`/`securityGroupIds`). Merged (set-union) with the
-     * Function's own `vpc` prop and any other bindings' requests — both
+     * Function's own `vpc` prop and any other bindings' requests -- both
      * paths converge on the same underlying Lambda VPC config.
      */
     vpc?: {
@@ -851,22 +851,22 @@ export const normalizeFunctionUrl = (
  *
  * Zip-packaged functions can be defined in two ways:
  *
- * - **Async** — plain handler export, no Effect runtime in the bundle.
- * - **Effect** — Effect implementation with typed bindings and event sources.
+ * - **Async** -- plain handler export, no Effect runtime in the bundle.
+ * - **Effect** -- Effect implementation with typed bindings and event sources.
  *
  * See [Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
  * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
  *
- * :::caution[Request finalizers block the response — there is no `waitUntil` on Lambda]
+ * :::caution[Request finalizers block the response -- there is no `waitUntil` on Lambda]
  * `Effect.addFinalizer` in a handler runs **before the response is
  * returned**: a buffered invocation's response is not released until the
  * Invoke phase completes, and no deferral scheme is reliable (dangling
  * promises are dropped on crash/timeout resets and their sockets rarely
- * survive the freeze — silent data loss). Keep request finalizers cheap
+ * survive the freeze -- silent data loss). Keep request finalizers cheap
  * (closing a pool is milliseconds), and write anything that must not be
- * lost durably — a queue, a table — inside the handler itself. Init-level
+ * lost durably -- a queue, a table -- inside the handler itself. Init-level
  * finalizers instead run in the 500 ms `SIGTERM` window at sandbox
  * shutdown, which the generated entry obtains by registering an internal
  * extension. See
@@ -1098,7 +1098,7 @@ export const normalizeFunctionUrl = (
  *
  * ### Custom Domains
  * Function URLs cannot serve a custom hostname, so `domain` puts an API
- * Gateway v2 HTTP API in front of the Function (payload 2.0 — the same
+ * Gateway v2 HTTP API in front of the Function (payload 2.0 -- the same
  * event shape as a Function URL, so a `fetch` handler works unchanged),
  * with a regional ACM certificate, an API Gateway domain name per
  * hostname, and the DNS records. `domainUrl` is `https://{domain.name}`.
@@ -1165,7 +1165,7 @@ export const normalizeFunctionUrl = (
  * ```
  *
  * ### EFS File Systems
- * Mount an EFS access point into the function's `/mnt/…` file system. The
+ * Mount an EFS access point into the function's `/mnt/...` file system. The
  * function must be attached to a VPC that can reach an EFS mount target for
  * the file system.
  *
@@ -1391,14 +1391,14 @@ export const Function: Platform<
         Effect.sync(() => {
           // Key is already canonical (see RuntimeContext.sanitizeKey); store it
           // verbatim. `packEnvValue` marker-packs Redacted values so they
-          // survive the Output → Lambda env var round-trip.
+          // survive the Output -> Lambda env var round-trip.
           const key = id;
           env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
-        // straight from `process.env` — see `unpackEnvValue` for why this
+        // straight from `process.env` -- see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
@@ -1437,7 +1437,7 @@ export const Function: Platform<
                 // response is not released to the caller until the Invoke
                 // phase completes, so deferring cleanup (e.g. via an
                 // INVOKE-subscribed extension window) shows up as response
-                // latency anyway — keep request finalizers fast. A failing
+                // latency anyway -- keep request finalizers fast. A failing
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
                 //
@@ -1489,7 +1489,7 @@ export const Function: Platform<
                   // its finalizers ran and its telemetry flushed. Hold the
                   // invocation until Lambda's own timeout ends it, so Lambda
                   // reports and retries a real timeout and resets the
-                  // sandbox — work that ignored the interruption can never
+                  // sandbox -- work that ignored the interruption can never
                   // resume in the next invocation.
                   await new Promise<never>(() => {});
                 }
@@ -1580,7 +1580,7 @@ export const FunctionProvider = () =>
             })) ?? [],
         );
         // VPC attachments requested through the binding channel (DECISION
-        // #5) — set-union across bindings; merged with the `vpc` prop in
+        // #5) -- set-union across bindings; merged with the `vpc` prop in
         // `reconcile`.
         const vpcRequests = activeBindings.flatMap((binding) =>
           binding?.data?.vpc ? [binding.data.vpc] : [],
@@ -1592,7 +1592,7 @@ export const FunctionProvider = () =>
                 securityGroupIds: [...new Set(vpcRequests.flatMap((v) => v.securityGroupIds))],
               }
             : undefined;
-        // EFS mounts requested through the binding channel (`EFS.Mount`) —
+        // EFS mounts requested through the binding channel (`EFS.Mount`) --
         // deduped by mount path; merged with the `fileSystemConfigs` prop in
         // `reconcile`.
         const fileSystemConfigs = [
@@ -1676,7 +1676,7 @@ export const FunctionProvider = () =>
           .getRole({ RoleName: roleName })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         if (role === undefined) {
-          // Engine has cleared us via `read` or `observe` — foreign-tagged
+          // Engine has cleared us via `read` or `observe` -- foreign-tagged
           // functions are surfaced as `Unowned` and require `--adopt`. On a race between
           // observe and create, read the role created by the peer reconciler.
           role = yield* iam
@@ -2179,10 +2179,10 @@ export const FunctionProvider = () =>
         // Resolved EFS mounts. `undefined` leaves the function's existing
         // config untouched (precreate stub); `[]` explicitly clears mounts.
         fileSystemConfigs?: Lambda.FileSystemConfig[];
-        // Effective VPC attachment (prop ∪ binding-channel requests).
+        // Effective VPC attachment (prop U binding-channel requests).
         // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
         // (Output-valued subnet/security-group ids would fail to serialize),
-        // and the stub doesn't need connectivity — `reconcile` attaches the
+        // and the stub doesn't need connectivity -- `reconcile` attaches the
         // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
@@ -2275,7 +2275,7 @@ export const FunctionProvider = () =>
               }
             : {
                 // Effect-mode functions are wrapped in a generated entry whose
-                // ONLY export is `default` — `handler` names an export of the
+                // ONLY export is `default` -- `handler` names an export of the
                 // USER's module and can only address it when the module is
                 // bundled as-is (isExternal). Honoring it in Effect mode
                 // deploys a Lambda that dies at init with
@@ -2321,7 +2321,7 @@ export const FunctionProvider = () =>
         };
 
         // Update an existing function in place. Only an engine-admitted
-        // function reaches this directly — see `preferUpdate`.
+        // function reaches this directly -- see `preferUpdate`.
         const update = Effect.gen(function* () {
           yield* Effect.logDebug(`updating function code ${id}`);
           yield* Lambda.updateFunctionCode({
@@ -2384,7 +2384,7 @@ export const FunctionProvider = () =>
         }).pipe(
           // If it exists and contains these tags, we will assume it was created
           // by alchemy but state was lost, so if it exists, let's adopt it.
-          // Some backends (e.g. local emulators) omit `Tags` on GetFunction —
+          // Some backends (e.g. local emulators) omit `Tags` on GetFunction --
           // fall back to ListTags before concluding the function is foreign.
           Effect.flatMap((f) =>
             f.Tags !== undefined
@@ -2754,7 +2754,7 @@ export const FunctionProvider = () =>
             !isFunctionImageProps(news) &&
             !!olds.durableConfig !== !!news.durableConfig
           ) {
-            // DurableConfig can only be enabled/disabled at CreateFunction —
+            // DurableConfig can only be enabled/disabled at CreateFunction --
             // switching a logical id between Function and DurableFunction (or
             // vice versa) must replace the physical function.
             return {
@@ -2904,7 +2904,7 @@ export const FunctionProvider = () =>
         // `read` pulls from `getFunction().Configuration`), then hydrate each
         // into the exact `read` Attributes shape with a bounded fan-out. The
         // code hash is not recoverable from the API (it lives in persisted
-        // state), so it is left empty — `delete`/nuke only needs the
+        // state), so it is left empty -- `delete`/nuke only needs the
         // function/role identifiers.
         list: () =>
           Effect.gen(function* () {
@@ -2924,7 +2924,7 @@ export const FunctionProvider = () =>
                   }).pipe(
                     Effect.map((f) => f.FunctionUrl),
                     // No URL config (or the function vanished between the
-                    // list and the hydrate) — surface `undefined`, matching
+                    // list and the hydrate) -- surface `undefined`, matching
                     // `read`.
                     Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
@@ -2952,7 +2952,7 @@ export const FunctionProvider = () =>
           }),
 
         observe: Effect.fn(function* ({ id, news }) {
-          // Precreate creates — or updates — the function named here. Its
+          // Precreate creates -- or updates -- the function named here. Its
           // execution role is named from the logical id alone.
           if (!isResolved(news.functionName)) return Unresolved;
           const functionName = yield* createFunctionName(id, news.functionName);
@@ -3101,7 +3101,7 @@ export const FunctionProvider = () =>
               : undefined;
 
           // The role may predate the VPC request (precreate stub, or a
-          // binding newly asking for attachment) — the ENI permissions must
+          // binding newly asking for attachment) -- the ENI permissions must
           // be on the role before the function config references the VPC.
           // Attaching is idempotent.
           if (vpc) {
@@ -3130,7 +3130,7 @@ export const FunctionProvider = () =>
                   const arn = accessPointArnOf(c);
                   if (arn === undefined) {
                     throw new Error(
-                      `Function(${id}): fileSystemConfigs entry for ${c.localMountPath} needs an access point — set \`accessPoint\` (an AWS.EFS.AccessPoint resource or its ARN) or \`arn\``,
+                      `Function(${id}): fileSystemConfigs entry for ${c.localMountPath} needs an access point \u2014 set \`accessPoint\` (an AWS.EFS.AccessPoint resource or its ARN) or \`arn\``,
                     );
                   }
                   return { Arn: arn, LocalMountPath: c.localMountPath };
@@ -3144,7 +3144,7 @@ export const FunctionProvider = () =>
           ];
 
           // EFS mounts authenticate the execution role against the access
-          // point at sandbox start — grant client access before the function
+          // point at sandbox start -- grant client access before the function
           // configuration references the file system. Attaching is
           // idempotent; the policy is detached with the rest on delete.
           if (desiredFileSystemConfigs.length > 0) {
@@ -3190,8 +3190,8 @@ export const FunctionProvider = () =>
             Effect.andThen(waitForFunctionUpdate(functionName, session, vpc !== undefined)),
             // The create/update call can succeed while Lambda's ASYNC
             // provisioning (VPC ENIs, EFS mounts) still fails with
-            // `InsufficientRolePermissions` — "The function's execution role
-            // doesn't have permission to perform this operation." — because
+            // `InsufficientRolePermissions` -- "The function's execution role
+            // doesn't have permission to perform this operation." -- because
             // the just-attached AWSLambdaVPCAccessExecutionRole /
             // EFS client policy has not propagated yet. That is IAM eventual
             // consistency, not a misconfiguration: re-apply the function
@@ -3290,7 +3290,7 @@ export const FunctionProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // The role may already be gone (e.g. deleted out-of-band or by a
-          // previous partial delete) — treat every step as idempotent.
+          // previous partial delete) -- treat every step as idempotent.
           yield* iam
             .listRolePolicies({
               RoleName: output.roleName,

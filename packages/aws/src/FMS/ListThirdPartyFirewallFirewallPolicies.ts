@@ -16,7 +16,7 @@ export interface ListThirdPartyFirewallFirewallPoliciesRequest
  * ### Third-Party Firewalls
  * **Example:** List Third-Party Firewall Policies
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listThirdPartyFirewallFirewallPolicies =
  *   yield* AWS.FMS.ListThirdPartyFirewallFirewallPolicies();
  *

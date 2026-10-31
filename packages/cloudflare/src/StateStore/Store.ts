@@ -24,7 +24,7 @@ export const retrySecretRead = <A, E, R>(read: Effect.Effect<A, E, R>) =>
 export default class Store extends DurableObject<Store>()(
   "Store",
   Effect.gen(function* () {
-    // Outer (class-level) phase — resolve the binding factory once.
+    // Outer (class-level) phase -- resolve the binding factory once.
     // The actual secret read happens inside each DO instance below,
     // since `SecretClient.get()` needs the per-instance worker env.
     const encryptionSecret = yield* Secret.ReadSecret(EncryptionKey);
@@ -97,7 +97,7 @@ export default class Store extends DurableObject<Store>()(
         }),
 
         /**
-         * (Root DO only) Register a stack name. Idempotent — safe to
+         * (Root DO only) Register a stack name. Idempotent -- safe to
          * call on every `set` to the corresponding stack DO.
          */
         registerStack: ({ stack }: { stack: string }) =>

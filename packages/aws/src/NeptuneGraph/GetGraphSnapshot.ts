@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for the `GetGraphSnapshot` operation (IAM action `neptune-graph:GetGraphSnapshot`).
  *
- * Reads one graph snapshot by id — status, source graph, and encryption key. Snapshot ids are server-generated runtime data, so the grant spans the account's snapshots. Provide the implementation with
+ * Reads one graph snapshot by id -- status, source graph, and encryption key. Snapshot ids are server-generated runtime data, so the grant spans the account's snapshots. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.GetGraphSnapshotHttp)`.
  * ### Managing Snapshots
  * **Example:** Poll a snapshot until available
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * const getSnapshot = yield* NeptuneGraph.GetGraphSnapshot();
  *
  * const snapshot = yield* getSnapshot({ snapshotIdentifier });
- * // snapshot.status → "AVAILABLE"
+ * // snapshot.status -> "AVAILABLE"
  * ```
  *
  * @binding

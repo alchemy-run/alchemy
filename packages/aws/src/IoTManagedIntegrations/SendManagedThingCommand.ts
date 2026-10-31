@@ -18,7 +18,7 @@ export interface SendManagedThingCommandRequest extends Omit<
  * {@link ManagedThing}.
  *
  * Sends a command to the bound device using its Matter-derived capability
- * data model — the primary control-plane-to-device data path. Provide the
+ * data model -- the primary control-plane-to-device data path. Provide the
  * implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.SendManagedThingCommandHttp)`.
  *

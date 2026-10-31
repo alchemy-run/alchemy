@@ -9,7 +9,7 @@ import type { Providers } from "../Providers.ts";
 
 export interface RegistryPolicyProps {
   /**
-   * The registry permissions policy — grants other AWS accounts registry
+   * The registry permissions policy -- grants other AWS accounts registry
    * level permissions such as `ecr:ReplicateImage` (cross-account
    * replication) or `ecr:CreateRepository`. Accepts either a structured IAM
    * {@link PolicyDocument} or a raw JSON string (escape hatch / adoption of
@@ -32,7 +32,7 @@ export interface RegistryPolicy extends Resource<
 > {}
 
 /**
- * The permissions policy for a private Amazon ECR registry — an
+ * The permissions policy for a private Amazon ECR registry -- an
  * account/region **singleton** used to grant other AWS accounts
  * registry-level permissions (most commonly `ecr:ReplicateImage` when
  * configuring cross-account replication).
@@ -96,7 +96,7 @@ export const RegistryPolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const desired = toPolicyText(news.policy);
 
-          // Observe — compare the live policy against the desired one via
+          // Observe -- compare the live policy against the desired one via
           // `normalizePolicyDocument` (key order / whitespace insensitive)
           // so a re-deploy of an equivalent document is a no-op.
           const observed = yield* readPolicy;

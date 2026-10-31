@@ -30,7 +30,7 @@ import {
 export type ContactProps = {
   /**
    * Email address that receives Google Cloud notifications. Does not
-   * need to be a Google Account. Immutable — changing it replaces the
+   * need to be a Google Account. Immutable -- changing it replaces the
    * contact. If omitted, a unique `example.com` address is generated.
    * Essential Contacts have no labels field, so Alchemy stamps
    * ownership into a `+alc.{stack}.{stage}.{id}` plus-tag and strips it
@@ -39,7 +39,7 @@ export type ContactProps = {
   email?: string;
   /**
    * Preferred notification language as a BCP-47 / ISO 639-1 tag
-   * (`en-US`, `en-GB`, `ja`, …).
+   * (`en-US`, `en-GB`, `ja`, ...).
    * @default "en-US"
    */
   languageTag?: string;
@@ -81,7 +81,7 @@ export type Contact = Resource<
  * A project-level Google Cloud Essential Contact.
  *
  * Essential Contacts have no labels field, so Alchemy stamps ownership
- * into the email plus-tag for `list` / nuke. Email is identity —
+ * into the email plus-tag for `list` / nuke. Email is identity --
  * changing it replaces the contact. Language and notification
  * categories update in place.
  *

@@ -7,14 +7,14 @@ import type { FileSystem } from "./FileSystem.ts";
  * Runtime binding for the `DescribeFileSystems` operation scoped to one file
  * system (IAM action `fsx:DescribeFileSystems` on the file system ARN).
  *
- * Reads the bound {@link FileSystem}'s live description — lifecycle state,
- * storage capacity, DNS name, engine configuration — from inside a function
+ * Reads the bound {@link FileSystem}'s live description -- lifecycle state,
+ * storage capacity, DNS name, engine configuration -- from inside a function
  * runtime. Useful for storage dashboards and capacity monitors. Provide the
  * implementation with `Effect.provide(AWS.FSx.DescribeFileSystemHttp)`.
  * ### Inspecting File Systems
  * **Example:** Read the file system's state and capacity
  * ```typescript
- * // init — bind the operation to the file system
+ * // init -- bind the operation to the file system
  * const describeFileSystem = yield* AWS.FSx.DescribeFileSystem(files);
  *
  * // runtime

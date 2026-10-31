@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:GetExpenseAnalysis` — read the status and
+ * Runtime binding for `textract:GetExpenseAnalysis` -- read the status and
  * results of an asynchronous expense-analysis job started with
  * `StartExpenseAnalysis`.
  *

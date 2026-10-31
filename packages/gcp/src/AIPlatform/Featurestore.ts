@@ -40,11 +40,11 @@ export type FeaturestoreOnlineServingConfig = {
 export type FeaturestoreProps = {
   /**
    * Featurestore id. Valid characters `[a-z0-9_]`, must start with a
-   * letter, max 60. Immutable — changing it replaces the store.
+   * letter, max 60. Immutable -- changing it replaces the store.
    */
   featurestoreId?: string;
   /**
-   * Region. Immutable — changing it replaces the store.
+   * Region. Immutable -- changing it replaces the store.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -100,7 +100,7 @@ export type Featurestore = Resource<
 >;
 
 /**
- * A Vertex AI Feature Store (legacy) — a container for Entity Types and
+ * A Vertex AI Feature Store (legacy) -- a container for Entity Types and
  * Features.
  *
  * Id, location, and encryption are identity. Labels, online serving, and

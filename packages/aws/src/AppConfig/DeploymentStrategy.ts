@@ -45,7 +45,7 @@ export interface DeploymentStrategyProps {
    */
   finalBakeTime?: Duration.Input;
   /**
-   * Where to save a copy of the applied configuration. Immutable — changing
+   * Where to save a copy of the applied configuration. Immutable -- changing
    * it replaces the strategy.
    * @default "NONE"
    */
@@ -73,7 +73,7 @@ export interface DeploymentStrategy extends Resource<
 > {}
 
 /**
- * An AWS AppConfig deployment strategy — defines how a configuration version
+ * An AWS AppConfig deployment strategy -- defines how a configuration version
  * rolls out to an environment: the total duration, the per-interval growth,
  * and the final bake time during which alarms can trigger a rollback.
  *
@@ -182,7 +182,7 @@ export const DeploymentStrategyProvider = () =>
               Tags: desiredTags,
             });
           } else {
-            // 3. Sync — everything but Name and ReplicateTo is mutable.
+            // 3. Sync -- everything but Name and ReplicateTo is mutable.
             observed = yield* appconfig.updateDeploymentStrategy({
               DeploymentStrategyId: observed.Id,
               Description: news.description,
@@ -226,7 +226,7 @@ export const DeploymentStrategyProvider = () =>
               s.Name !== undefined &&
               // AWS-predefined strategies (AppConfig.AllAtOnce,
               // AppConfig.Linear50PercentEvery30Seconds, ...) are managed by
-              // AWS and cannot be deleted — deleteDeploymentStrategy rejects
+              // AWS and cannot be deleted -- deleteDeploymentStrategy rejects
               // them with "Cannot delete predefined Deployment Strategy".
               !s.Id.startsWith("AppConfig.")
                 ? [

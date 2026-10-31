@@ -2,8 +2,8 @@ import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework production builds.
  *
- * Framework builds load and execute USER code — `astro.config.*`,
- * `nuxt.config.ts` modules, `vite.config.*` plugins, `open-next.config.ts` —
+ * Framework builds load and execute USER code -- `astro.config.*`,
+ * `nuxt.config.ts` modules, `vite.config.*` plugins, `open-next.config.ts` --
  * which may read `process.cwd()`, mutate `process.env`, or `process.chdir`.
  * Some toolchains additionally require `cwd === project root` outright
  * (kit's postbuild workers re-derive `outDir` from the cwd; waku/rolldown
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
  * problem alchemy solved for Vite (#1102) and Next.js (`runner.mjs`).
  *
  * Instead, every production build runs in a disposable child process whose
- * working directory IS the project root — no chdir anywhere, no lock,
+ * working directory IS the project root -- no chdir anywhere, no lock,
  * unbounded build concurrency:
  *
  * - The **parent** ({@link runBuildChild}) spawns the shared
@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
  *   {@link BuildOutput} back from a temp `build.json` (`readBuildOutput`
  *   revives Buffers and the workspaces Set).
  * - The **child** (`BuildChildRunner`) imports the framework's source module
- *   and calls its exported `buildInChild(config)` — a PURE function
+ *   and calls its exported `buildInChild(config)` -- a PURE function
  *   returning an Effect (see {@link BuildChildModule}), so importing any
  *   source module never has side effects; process concerns (argv, exit
  *   codes) live only in the runner entry, which is never imported.
@@ -84,12 +84,12 @@ export interface BuildChildOptions {
   /** Use Node from PATH for toolchains that cannot build under Bun. Requires native TypeScript support when running source modules. */
   readonly runtime?: "node" | undefined;
   /**
-   * File URL of the module exporting `buildInChild` — pass
+   * File URL of the module exporting `buildInChild` -- pass
    * `import.meta.url`. The shared runner entry (resolved as a sibling of
    * this module's `core/` directory) imports it in the child.
    */
   readonly module: string;
-  /** Project root — becomes the child's working directory. */
+  /** Project root -- becomes the child's working directory. */
   readonly rootDir: string;
   /** JSON-serializable config handed to the module's `buildInChild`. */
   readonly config: unknown;
@@ -100,7 +100,7 @@ export interface BuildChildOptions {
    * at spawn time so Vite/nitro/`import.meta.env` see site `env` without
    * the parent mutating `process.env`. NODE_ENV defaults to production;
    * an explicit value here overrides that default (plugins in the child may still
-   * mutate theirs — that is why this is a child).
+   * mutate theirs -- that is why this is a child).
    */
   readonly env?: Record<string, string> | undefined;
 }
@@ -132,7 +132,7 @@ export const resolveBuildEnv = (
  * Run a framework production build in a disposable child process with
  * `cwd = rootDir` and return its {@link BuildOutput}.
  *
- * Build output becomes log records — NOT `stdio: "inherit"` — so the
+ * Build output becomes log records -- NOT `stdio: "inherit"` -- so the
  * process that renders logs shows it and in-process capture (a test
  * runner's log file) sees it.
  */
@@ -155,8 +155,8 @@ export const runBuildChild = (
       const errorPath = path.join(outputDir, "error.txt");
 
       // The runner entry lives beside this module's core/ directory in both
-      // layouts (src/{fw}/source.ts → src/core/BuildChildRunner.ts,
-      // dist/{fw}/source.js → dist/core/BuildChildRunner.js), so it resolves
+      // layouts (src/{fw}/source.ts -> src/core/BuildChildRunner.ts,
+      // dist/{fw}/source.js -> dist/core/BuildChildRunner.js), so it resolves
       // relative to the FRAMEWORK module's own stable URL.
       const entry = fileURLToPath(
         new URL(

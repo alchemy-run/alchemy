@@ -415,7 +415,7 @@ const normalizeInput = (
  * Resolve path-like input entries against the Vite root. Worker entries are
  * round-tripped through a synthetic `\0distilled:user-entry:` id and resolved
  * with no importer, so a relative input (`./workers/app.ts`) would otherwise
- * resolve against `process.cwd()` — the wrong base whenever the build runs
+ * resolve against `process.cwd()` -- the wrong base whenever the build runs
  * outside the project root (e.g. from a monorepo infra package). A bare
  * specifier that names a real file under the root (`workers/app.ts`) is
  * treated as a path input, matching Vite's own input semantics; anything else

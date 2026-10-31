@@ -4,7 +4,7 @@ import * as Schedule from "effect/Schedule";
 /**
  * Derives a deterministic Service Catalog idempotency token from the
  * resource's instance ID so retried creates never double-provision.
- * Tokens must match `[a-zA-Z0-9][a-zA-Z0-9_-]*` and be ≤ 128 chars.
+ * Tokens must match `[a-zA-Z0-9][a-zA-Z0-9_-]*` and be <= 128 chars.
  */
 export const idempotencyToken = (instanceId: string): string =>
   instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) || "alchemy";
@@ -15,7 +15,7 @@ export const idempotencyToken = (instanceId: string): string =>
  * portfolio or product right after its associations were removed can
  * transiently hit this due to eventual consistency.
  *
- * NOTE: extracted to module scope with an explicit return annotation —
+ * NOTE: extracted to module scope with an explicit return annotation --
  * inlining `Effect.retry` in a provider lifecycle op leaves `Retry.Return`'s
  * conditional type unresolved in declaration emit, which widens the
  * provider's layer to an `unknown` R and poisons `AWS.providers()` for

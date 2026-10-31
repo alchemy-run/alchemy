@@ -23,7 +23,7 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfigProps = {
   /**
    * Channel partner link that receives this repricing config. Full name
    * `accounts/{account}/channelPartnerLinks/{channelPartner}` or the
-   * partner id (combined with `account`). Immutable — changing it
+   * partner id (combined with `account`). Immutable -- changing it
    * replaces the config.
    */
   parent: string;
@@ -33,12 +33,12 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfigProps = {
   account?: string;
   /**
    * Config id (last segment of the resource name). Server-assigned on
-   * create. Immutable — changing it replaces the config.
+   * create. Immutable -- changing it replaces the config.
    */
   configId?: string;
   /**
    * Year/month when the adjustment activates. Day must be `0`. You can
-   * only create or update configs for a future month. Immutable —
+   * only create or update configs for a future month. Immutable --
    * changing it replaces the config.
    */
   effectiveInvoiceMonth?: cloudchannel.GoogleTypeDate;
@@ -100,7 +100,7 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfig = Resource<
  * Repricing configs have no labels field. `list` / nuke returns configs
  * under channel partner links of the configured Cloud Channel account
  * (`GOOGLE_CLOUDCHANNEL_ACCOUNT`). Parent partner link and effective
- * invoice month are identity — changing either replaces the config.
+ * invoice month are identity -- changing either replaces the config.
  * Adjustment, rebilling basis, entitlement, and overrides update in
  * place for a future month.
  *

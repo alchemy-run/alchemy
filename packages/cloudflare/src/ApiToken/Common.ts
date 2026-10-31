@@ -6,7 +6,7 @@ import { PERMISSION_GROUPS_BY_NAME, type PermissionGroupName } from "./Permissio
  *
  * Cloudflare requires the account ID to be embedded directly in the resource
  * key (e.g. `com.cloudflare.api.account.<accountId>`); pass the fully-qualified
- * key — no rewriting is performed.
+ * key -- no rewriting is performed.
  *
  * Individual-Worker roles (e.g. `"Individual Workers Editor"`) take a
  * `com.cloudflare.edge.worker.script.<workerId>` key, where `<workerId>` is the
@@ -37,9 +37,9 @@ export type PermissionGroupMeta = TokensCreateRequestPoliciesItemPermissionGroup
 
 /**
  * Value of a resource entry in an {@link Policy}. Usually `"*"`, but
- * account-owned tokens must nest zone resources under the account resource —
+ * account-owned tokens must nest zone resources under the account resource --
  * e.g. `{ "com.cloudflare.api.account.<id>": { "com.cloudflare.api.account.zone.*": "*" } }`
- * — so a nested object is also allowed.
+ * -- so a nested object is also allowed.
  */
 export type ResourceScope = string | { [K in ResourceKey]?: string };
 

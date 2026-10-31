@@ -38,7 +38,7 @@ export interface AppSyncApiAssociation extends Resource<
 
 /**
  * Associates a GraphQL API with a custom {@link DomainName}
- * (existence-only resource — a domain serves exactly one API).
+ * (existence-only resource -- a domain serves exactly one API).
  * ### Associating an API
  * **Example:** Serve an API at a custom domain
  * ```typescript
@@ -82,7 +82,7 @@ export const ApiAssociationProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
-      /** Associations transition PROCESSING → SUCCESS/FAILED (~seconds). */
+      /** Associations transition PROCESSING -> SUCCESS/FAILED (~seconds). */
       const waitForSettled = (domainName: string) =>
         getAssociationSafe(domainName).pipe(
           Effect.repeat({
@@ -97,7 +97,7 @@ export const ApiAssociationProvider = () =>
         stables: ["domainName", "apiId"],
 
         // Sub-resource keyed entirely by its custom domain (domainName) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -118,7 +118,7 @@ export const ApiAssociationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Existence-only: observe → associate when missing or pointing
+          // Existence-only: observe -> associate when missing or pointing
           // at a different API (associateApi is an upsert per domain).
           const observed = yield* getAssociationSafe(news.domainName);
           if (observed?.apiId !== news.apiId) {

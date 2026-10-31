@@ -10,7 +10,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * publishes the cache endpoint as `ELASTICACHE_{LOGICAL_ID}_{HOST,PORT,TLS}`
  * environment variables on the host Function; at runtime it resolves the
  * same values into a typed connection descriptor. No IAM policy is attached
- * — the classic valkey/redis/memcached data plane is governed by VPC
+ * -- the classic valkey/redis/memcached data plane is governed by VPC
  * security groups, not IAM.
  */
 export const ConnectHttp = Layer.effect(
@@ -28,7 +28,7 @@ export const ConnectHttp = Layer.effect(
         yield* bind`AWS.ElastiCache.Connect(${cache})`({
           env: {
             [`${prefix}_HOST`]: cache.endpointAddress,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${cache.endpointPort}`,
             // Serverless caches are TLS-only.
             [`${prefix}_TLS`]: "true",

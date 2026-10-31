@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ListSteps` — lists the bound cluster's steps, newest first (optionally filtered by state or id). Page with `Marker`.
+ * Runtime binding for `elasticmapreduce:ListSteps` -- lists the bound cluster's steps, newest first (optionally filtered by state or id). Page with `Marker`.
  * ### Running Steps
  * **Example:** List Running Steps
  * ```typescript

@@ -21,8 +21,8 @@ export interface DBInstanceProps {
    */
   dbInstanceIdentifier?: string;
   /**
-   * DocumentDB cluster the instance belongs to. Required — every DocumentDB
-   * instance is a cluster member. Immutable — forces replacement.
+   * DocumentDB cluster the instance belongs to. Required -- every DocumentDB
+   * instance is a cluster member. Immutable -- forces replacement.
    */
   dbClusterIdentifier: string;
   /**
@@ -36,7 +36,7 @@ export interface DBInstanceProps {
    */
   engine?: string;
   /**
-   * Availability zone. Immutable — forces replacement.
+   * Availability zone. Immutable -- forces replacement.
    */
   availabilityZone?: string;
   /**
@@ -131,7 +131,7 @@ export interface DBInstance extends Resource<
 > {}
 
 /**
- * An Amazon DocumentDB instance — a compute member of a DocumentDB
+ * An Amazon DocumentDB instance -- a compute member of a DocumentDB
  * {@link DBCluster}. Storage, backup, and endpoints are managed at the cluster
  * level; the instance contributes CPU/RAM and can serve as a writer or reader.
  * Provisioning takes several minutes.
@@ -288,7 +288,7 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh instance.
+          // Immutable props -- any change forces a fresh instance.
           if (
             olds !== undefined &&
             ((olds.engine ?? "docdb") !== (news.engine ?? "docdb") ||
@@ -321,10 +321,10 @@ export const DBInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live instance state.
+          // Observe -- fetch live instance state.
           let observed = yield* readInstance(identifier);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
           if (!observed?.DBInstanceArn) {
             yield* docdb
@@ -354,7 +354,7 @@ export const DBInstanceProvider = () =>
             // doesn't hit `InvalidDBInstanceStateFault`.
             observed = yield* waitForInstance(identifier);
 
-            // syncCoreSettings — single `modifyDBInstance` carrying scalar
+            // syncCoreSettings -- single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
             // from the observed cloud state.
             const core: docdb.ModifyDBInstanceMessage = {
@@ -388,7 +388,7 @@ export const DBInstanceProvider = () =>
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(dbInstanceArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbInstanceArn) {

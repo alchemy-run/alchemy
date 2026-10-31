@@ -15,7 +15,7 @@ export interface PutBackupPolicyRequest extends Omit<efs.PutBackupPolicyRequest,
  *
  * Starts or stops AWS Backup automatic backups for the bound
  * {@link FileSystem} at runtime. For declarative control, prefer the
- * FileSystem resource's `backup` prop — this binding is for operational
+ * FileSystem resource's `backup` prop -- this binding is for operational
  * tooling that toggles backups on demand. Provide the implementation with
  * `Effect.provide(AWS.EFS.PutBackupPolicyHttp)`.
  * ### Backup Policy

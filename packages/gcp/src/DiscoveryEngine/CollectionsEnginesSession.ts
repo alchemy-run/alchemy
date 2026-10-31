@@ -13,11 +13,11 @@ export type CollectionsEnginesSessionProps = {
   /**
    * Parent Engine resource name
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}`.
-   * Immutable — changing it replaces the session.
+   * Immutable -- changing it replaces the session.
    */
   engine: string;
   /**
-   * Session id. If omitted, a unique id is generated. Immutable —
+   * Session id. If omitted, a unique id is generated. Immutable --
    * changing it replaces the session.
    */
   sessionId?: string;

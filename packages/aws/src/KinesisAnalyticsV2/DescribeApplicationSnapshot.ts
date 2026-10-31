@@ -9,8 +9,8 @@ export interface DescribeApplicationSnapshotRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:DescribeApplicationSnapshot` —
- * reads a snapshot's status (`CREATING` → `READY` / `FAILED`), e.g. to poll
+ * Runtime binding for `kinesisanalytics:DescribeApplicationSnapshot` --
+ * reads a snapshot's status (`CREATING` -> `READY` / `FAILED`), e.g. to poll
  * a savepoint taken with {@link CreateApplicationSnapshot} to completion.
  * ### Managing Snapshots
  * **Example:** Poll a snapshot until READY

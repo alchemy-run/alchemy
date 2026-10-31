@@ -29,7 +29,7 @@ export interface CatalogSyncProps {
    * Type of destination the sync materializes into. `ZERO_TRUST_LIST`
    * provisions a Zero Trust list owned by the sync.
    *
-   * Immutable — the destination is provisioned at create time, so changing
+   * Immutable -- the destination is provisioned at create time, so changing
    * it triggers a replacement.
    */
   destinationType: CatalogSyncDestinationType;
@@ -96,7 +96,7 @@ export type CatalogSync = Resource<
 >;
 
 /**
- * A Magic Cloud Networking catalog sync — continuously materializes the
+ * A Magic Cloud Networking catalog sync -- continuously materializes the
  * catalog of discovered cloud resources (filtered by a policy expression)
  * into a destination such as a Zero Trust list.
  *
@@ -177,7 +177,7 @@ export const CatalogSyncProvider = () =>
         return undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Syncs carry no ownership markers, so report a match
       // as Unowned and let the engine gate adoption.
       const name = yield* syncName(id, olds?.name);
@@ -190,7 +190,7 @@ export const CatalogSyncProvider = () =>
       const name = yield* syncName(id, news.name);
       const deleteDestination = news.deleteDestination ?? true;
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing sync falls through to the name scan and create.
       let observed = output?.syncId
         ? yield* getSync(output.accountId ?? accountId, output.syncId)
@@ -199,7 +199,7 @@ export const CatalogSyncProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side so there is no AlreadyExists race to tolerate.
       if (!observed) {
         observed = yield* mcn.createCatalogSync({
@@ -213,7 +213,7 @@ export const CatalogSyncProvider = () =>
         return toAttributes(observed, accountId, deleteDestination);
       }
 
-      // 3. Sync — diff observed cloud state against desired; PATCH only the
+      // 3. Sync -- diff observed cloud state against desired; PATCH only the
       //    delta and skip the call entirely on a no-op.
       const patch: mcn.PatchCatalogSyncRequest = {
         accountId,
@@ -257,7 +257,7 @@ export const CatalogSyncProvider = () =>
     // API. `deleteDestination` is an alchemy-only prop with no cloud
     // representation, so it defaults to `true`. Magic Cloud Networking is an
     // entitlement-gated add-on; an unentitled account rejects the list with
-    // the typed `FeatureNotEnabled` error — treat that as "nothing to list".
+    // the typed `FeatureNotEnabled` error -- treat that as "nothing to list".
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* mcn.listCatalogSyncs.pages({ accountId }).pipe(

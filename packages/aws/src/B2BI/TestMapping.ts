@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `b2bi:TestMapping`.
  *
  * Synchronously maps sample content with a mapping template (JSONATA or
- * XSLT) — the inline counterpart of a transformer's mapping step, useful for
+ * XSLT) -- the inline counterpart of a transformer's mapping step, useful for
  * validating templates or transforming small documents on the fly without a
  * deployed transformer. Provide the implementation with
  * `Effect.provide(AWS.B2BI.TestMappingHttp)`.
  * ### Testing Mappings
  * **Example:** Map a JSON Document with a JSONATA Template
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const testMapping = yield* AWS.B2BI.TestMapping();
  *
  * // runtime

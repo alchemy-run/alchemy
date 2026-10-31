@@ -21,12 +21,12 @@ import type { InheritedRole } from "./PostgresRole.ts";
  */
 export interface PostgresDefaultRoleProps {
   /**
-   * PostgreSQL database — string name or {@link PostgresDatabase} resource.
+   * PostgreSQL database -- string name or {@link PostgresDatabase} resource.
    */
   database: string | PostgresDatabase;
 
   /**
-   * Branch — string name or {@link PostgresBranch} resource.
+   * Branch -- string name or {@link PostgresBranch} resource.
    * @default "main"
    */
   branch?: string | PostgresBranch;
@@ -137,7 +137,7 @@ export const PostgresDefaultRoleProvider = () =>
       // and either fails (no forceReset) or resets (forceReset).
       if (!output) return undefined;
 
-      // Refresh — verify the default role still exists and re-emit
+      // Refresh -- verify the default role still exists and re-emit
       // the persisted output (with plaintext intact). If gone,
       // return undefined so the engine routes through reconcile,
       // which will recreate via reset.
@@ -163,7 +163,7 @@ export const PostgresDefaultRoleProvider = () =>
       const databaseName = resolveDatabaseName(news.database);
       const branchName = resolveBranchName(news.branch);
 
-      // 1. Observe — the default role is the singleton for this
+      // 1. Observe -- the default role is the singleton for this
       //    (database, branch); we key on those rather than an id.
       //    Observation runs unconditionally so the adoption guard
       //    below fires on greenfield deploys against branches that
@@ -177,7 +177,7 @@ export const PostgresDefaultRoleProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-      // 2. Sync (no-op) — we own the role and it still exists in the
+      // 2. Sync (no-op) -- we own the role and it still exists in the
       //    cloud. Default roles have nothing mutable in place: their
       //    plaintext password isn't retrievable, so we retain the cached
       //    credentials while refreshing the private connection details.
@@ -190,7 +190,7 @@ export const PostgresDefaultRoleProvider = () =>
         };
       }
 
-      // 3. Adoption guard — observed exists but we have no prior
+      // 3. Adoption guard -- observed exists but we have no prior
       //    output (greenfield against a pre-existing default role).
       //    Taking over requires a reset (which destroys the existing
       //    password), so gate on an explicit forceReset opt-in.
@@ -200,7 +200,7 @@ export const PostgresDefaultRoleProvider = () =>
         });
       }
 
-      // 4. Ensure — (re)create the default role. This branch runs
+      // 4. Ensure -- (re)create the default role. This branch runs
       //    for greenfield (no output, no observed), drift recovery
       //    (output cached but cloud state gone), and authorised
       //    adoption (observed present + forceReset).
@@ -243,7 +243,7 @@ export const PostgresDefaultRoleProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // No delete endpoint — reset to invalidate existing credentials.
+      // No delete endpoint -- reset to invalidate existing credentials.
       yield* planetscale
         .resetDefaultRole({
           organization: output.organization,
@@ -319,7 +319,7 @@ export const PostgresDefaultRoleProvider = () =>
     }),
   });
 
-// Structural shapes for runtime-resolved Resource references — see
+// Structural shapes for runtime-resolved Resource references -- see
 // notes in Password.ts.
 type DatabaseRef = string | { name: string; organization?: string };
 type BranchRef = string | { name: string };

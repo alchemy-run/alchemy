@@ -137,7 +137,7 @@ export interface GroupProps {
    */
   name?: string;
   /**
-   * Members to place in the group — services, databases, volumes, and
+   * Members to place in the group -- services, databases, volumes, and
    * buckets. Service membership is persisted as `groupId`; volume ids
    * are observed from `canvasGroupRefs`; bucket ids from `Bucket.groupId`.
    */
@@ -176,7 +176,7 @@ export type Group = Resource<
     icon: string | undefined;
     /** Whether the group is collapsed on the canvas. */
     collapsed: boolean;
-    /** Member service ids (`Service.groupId` / Postgres / Redis / …). */
+    /** Member service ids (`Service.groupId` / Postgres / Redis / ...). */
     serviceIds: string[];
     /** Member volume ids. */
     volumeIds: string[];
@@ -975,7 +975,7 @@ export const GroupProvider = () =>
 
       // Railway IaC keys new groups by name (`isCreated: true`) and stamps
       // `service.groupId = name`. After apply, Railway remaps the key to a
-      // UUID — observe-by-name picks that up.
+      // UUID -- observe-by-name picks that up.
       const groupId = current?.groupId ?? output?.groupId ?? name;
 
       if (current === undefined) {

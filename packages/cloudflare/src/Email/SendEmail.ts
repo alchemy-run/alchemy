@@ -30,7 +30,7 @@ export type SendEmailProps = {
 /**
  * A Cloudflare Workers `send_email` binding descriptor.
  *
- * `SendEmail` is a Worker-only binding — it does not create any cloud-side
+ * `SendEmail` is a Worker-only binding -- it does not create any cloud-side
  * resource. The descriptor names the binding and records optional
  * destination/sender restrictions; the actual `send_email` entry is attached
  * to the Worker via {@link SendBinding}.
@@ -39,7 +39,7 @@ export type SendEmailProps = {
  * `send()` validates the message and persists it as a `.eml` under
  * `.alchemy/local/email` instead of delivering mail. Pipe the descriptor
  * through `Alchemy.remote()` to send through the live Cloudflare Email
- * service in dev — the same opt-out aspect resources use.
+ * service in dev -- the same opt-out aspect resources use.
  *
  *
  * ### Binding to a Worker
@@ -81,7 +81,7 @@ export type SendEmail = SendEmailProps & {
   kind: SendEmailTypeId;
   name: string;
   /**
-   * Alchemy-internal: opt-out of local emulation in `alchemy dev` — the
+   * Alchemy-internal: opt-out of local emulation in `alchemy dev` -- the
    * `Alchemy.remote()` decoration captured at registration time. Registered
    * on the host Worker via the binding-data `devRemote` channel, never on
    * the wire binding itself.
@@ -97,7 +97,7 @@ export const isSendEmail = (value: unknown): value is SendEmail =>
 
 export const SendEmail: (id: string, props?: SendEmailProps) => Effect.Effect<SendEmail> =
   Effect.fn(function* (id: string, props?: SendEmailProps) {
-    // Capture the `Alchemy.remote()` decoration the same way resources do —
+    // Capture the `Alchemy.remote()` decoration the same way resources do --
     // at registration time, from the ambient ProviderModePolicy reference.
     // `send_email` has no cloud-side resource (and thus no provider mode to
     // stamp), so the captured flag rides on the descriptor instead.

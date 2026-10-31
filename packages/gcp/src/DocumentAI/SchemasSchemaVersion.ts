@@ -35,7 +35,7 @@ export type SchemasSchemaVersionProps = {
   /**
    * Parent schema. Full name
    * `projects/{project}/locations/{location}/schemas/{schema}` or the
-   * schema id (combined with `location`). Immutable — changing it
+   * schema id (combined with `location`). Immutable -- changing it
    * replaces the schema version.
    */
   schema: string;
@@ -46,7 +46,7 @@ export type SchemasSchemaVersionProps = {
   location?: string;
   /**
    * Schema version id (the `{schemaVersion}` segment). Assigned by the
-   * API on create. Immutable — changing it replaces the version. Supply
+   * API on create. Immutable -- changing it replaces the version. Supply
    * it to adopt an existing version.
    */
   schemaVersionId?: string;
@@ -55,7 +55,7 @@ export type SchemasSchemaVersionProps = {
    */
   displayName?: string;
   /**
-   * Document schema describing extraction output. Immutable — changing it
+   * Document schema describing extraction output. Immutable -- changing it
    * replaces the schema version.
    */
   documentSchema: DocumentSchemaSpec;
@@ -93,7 +93,7 @@ export type SchemasSchemaVersion = Resource<
 >;
 
 /**
- * A Document AI schema version — an immutable snapshot of a document
+ * A Document AI schema version -- an immutable snapshot of a document
  * schema under a Schema.
  *
  * Parent schema, version id, and the document schema body are immutable.

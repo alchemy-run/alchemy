@@ -29,7 +29,7 @@ export type FeaturestoresEntityTypesFeatureProps = {
   /**
    * Parent EntityType resource name
    * `projects/{project}/locations/{location}/featurestores/{featurestore}/entityTypes/{entityType}`.
-   * Immutable — changing it replaces the feature.
+   * Immutable -- changing it replaces the feature.
    */
   entityType: string;
   /**
@@ -38,7 +38,7 @@ export type FeaturestoresEntityTypesFeatureProps = {
    */
   featureId?: string;
   /**
-   * Feature value type. Immutable — changing it replaces the feature.
+   * Feature value type. Immutable -- changing it replaces the feature.
    * @default "STRING"
    */
   valueType?: aiplatform.GoogleCloudAiplatformV1FeatureValueTypeEnum | (string & {});

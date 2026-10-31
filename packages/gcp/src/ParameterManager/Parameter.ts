@@ -33,12 +33,12 @@ export type ParameterProps = {
    * `projects/{project}/locations/{location}/parameters/{parameter}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the
+   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable -- changing it replaces the
    * parameter.
    */
   parameterId?: string;
   /**
-   * Parameter Manager location (`global`, `us-central1`, …). Immutable —
+   * Parameter Manager location (`global`, `us-central1`, ...). Immutable --
    * changing it replaces the parameter. `GLOBAL` is accepted and
    * normalized to `global`. Regional locations require Parameter Manager
    * regional access on the project.
@@ -46,7 +46,7 @@ export type ParameterProps = {
    */
   location?: string;
   /**
-   * Payload format. Immutable — changing it replaces the parameter. The
+   * Payload format. Immutable -- changing it replaces the parameter. The
    * API defaults unspecified values to `UNFORMATTED`. `JSON` and `YAML`
    * enable secret-reference rendering on versions.
    * @default "UNFORMATTED"
@@ -75,7 +75,7 @@ export type Parameter = Resource<
     parameterId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `global`, …). */
+    /** Location id (`us-central1`, `global`, ...). */
     location: string;
     /** Payload format (`UNFORMATTED`, `YAML`, `JSON`). */
     format: string;
@@ -97,7 +97,7 @@ export type Parameter = Resource<
 >;
 
 /**
- * A Parameter Manager parameter — metadata and encryption for versioned
+ * A Parameter Manager parameter -- metadata and encryption for versioned
  * payloads. Version data lives on {@link ParametersVersion}.
  *
  * Changing `parameterId`, `location`, or `format` replaces the parameter.

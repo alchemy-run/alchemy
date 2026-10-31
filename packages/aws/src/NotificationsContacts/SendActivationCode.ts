@@ -14,11 +14,11 @@ import type { EmailContact } from "./EmailContact.ts";
  * ### Activating a Contact
  * **Example:** Re-send the Activation Email
  * ```typescript
- * // init — bind the operation to the contact
+ * // init -- bind the operation to the contact
  * const sendActivationCode =
  *   yield* AWS.NotificationsContacts.SendActivationCode(contact);
  *
- * // runtime — e.g. behind a "resend confirmation email" button
+ * // runtime -- e.g. behind a "resend confirmation email" button
  * yield* sendActivationCode();
  * ```
  *

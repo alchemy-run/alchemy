@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:UpdateSecurityControl`.
  *
  * Updates the customizable parameters of a security control.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.UpdateSecurityControlHttp)`.
  * ### Standards & Controls
  * **Example:** Tune a Control Parameter
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateSecurityControl = yield* AWS.SecurityHub.UpdateSecurityControl();
  *
  * // runtime

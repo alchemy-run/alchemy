@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ListDomainsRequest extends route53domains.ListDomainsRequest {}
 
 /**
- * Runtime binding for `route53domains:ListDomains` — list all domain names
+ * Runtime binding for `route53domains:ListDomains` -- list all domain names
  * registered with Route 53 for the current AWS account.
  *
  * Route 53 Domains is a global registration API with no resource-level IAM:

@@ -90,10 +90,10 @@ export interface ReportGroup extends Resource<
 > {}
 
 /**
- * An AWS CodeBuild report group — a named collection of test or
+ * An AWS CodeBuild report group -- a named collection of test or
  * code-coverage reports produced by builds. A build's buildspec `reports:`
  * section uploads its test results into a report group, and the report-read
- * bindings ({@link BatchGetReports}, {@link DescribeTestCases}, …) let
+ * bindings ({@link BatchGetReports}, {@link DescribeTestCases}, ...) let
  * runtime code query them.
  *
  * ### Creating a Report Group
@@ -213,15 +213,15 @@ export const ReportGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredExport = toWireExportConfig(news.exportConfig);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getReportGroup(arn);
 
-          // 3. Sync — diff observed export config + tags against desired
+          // 3. Sync -- diff observed export config + tags against desired
           // and skip the API entirely on a no-op. updateReportGroup is a
-          // full upsert of both mutable aspects. A delete→redeploy race can
+          // full upsert of both mutable aspects. A delete->redeploy race can
           // leave batchGetReportGroups returning the just-deleted group;
           // updateReportGroup then reports the truth with a typed
-          // ResourceNotFoundException — treat it as missing.
+          // ResourceNotFoundException -- treat it as missing.
           if (
             observed !== undefined &&
             (!sameExportConfig(observed.exportConfig, desiredExport) ||
@@ -239,7 +239,7 @@ export const ReportGroupProvider = () =>
               );
           }
 
-          // 2. Ensure — create if missing; tolerate the create/create race.
+          // 2. Ensure -- create if missing; tolerate the create/create race.
           if (observed === undefined) {
             observed = yield* codebuild
               .createReportGroup({
@@ -268,7 +268,7 @@ export const ReportGroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ olds, output }) {
-          // deleteReportGroup is idempotent — deleting a missing group
+          // deleteReportGroup is idempotent -- deleting a missing group
           // returns success. `deleteReports` clears contained reports first
           // (a non-empty group cannot be deleted otherwise).
           yield* codebuild.deleteReportGroup({

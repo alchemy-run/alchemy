@@ -50,7 +50,7 @@ export interface ChannelGroup extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaPackage v2 channel group — the top-level container
+ * An AWS Elemental MediaPackage v2 channel group -- the top-level container
  * for channels and origin endpoints. All channels and origin endpoints in a
  * group share one egress domain, giving downstream players and CDNs
  * predictable URLs for stream delivery.
@@ -97,7 +97,7 @@ export const ChannelGroupProvider = () =>
         egressDomain: group.EgressDomain,
       });
 
-      /** Get a channel group by name; typed not-found → undefined. */
+      /** Get a channel group by name; typed not-found -> undefined. */
       const getGroup = Effect.fn(function* (channelGroupName: string) {
         return yield* mediapackagev2
           .getChannelGroup({ ChannelGroupName: channelGroupName })
@@ -128,10 +128,10 @@ export const ChannelGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = output?.channelGroupName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let group = yield* getGroup(name);
 
-          // 2. Ensure — create if missing; a Conflict means a peer created it
+          // 2. Ensure -- create if missing; a Conflict means a peer created it
           //    concurrently, so fall through to observing the winner.
           if (group === undefined) {
             group = yield* mediapackagev2
@@ -146,14 +146,14 @@ export const ChannelGroupProvider = () =>
                 ),
               );
           } else if ((news.description ?? "") !== (group.Description ?? "")) {
-            // 3. Sync — the description is the only mutable field.
+            // 3. Sync -- the description is the only mutable field.
             group = yield* mediapackagev2.updateChannelGroup({
               ChannelGroupName: name,
               Description: news.description,
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMpTags(group.Arn, toMpTagRecord(group.Tags), desiredTags);
 
           yield* session.note(name);
@@ -164,7 +164,7 @@ export const ChannelGroupProvider = () =>
           const channelGroupName = output.channelGroupName;
           // Reap child channels (and their origin endpoints) first. A normal
           // stack destroy deletes children before the group, so this observes
-          // nothing — but an orphan sweep can target a group whose children
+          // nothing -- but an orphan sweep can target a group whose children
           // it never enumerated, and deleting the group would then Conflict
           // until the retry budget ran out and leak the group.
           const channels = yield* listGroupChannels(channelGroupName);

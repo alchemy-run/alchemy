@@ -70,12 +70,12 @@ export type RepositoryProps = {
   /**
    * Repository id (the `{repository}` segment of
    * `projects/{project}/locations/{location}/repositories/{repository}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the repository.
    */
   repositoryId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * repository. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -158,7 +158,7 @@ export type Repository = Resource<
 >;
 
 /**
- * A Dataform Git repository — the container for workspaces, release
+ * A Dataform Git repository -- the container for workspaces, release
  * configs, workflow configs, and workflow invocations.
  *
  * Changing `repositoryId`, `location`, or `kmsKeyName` replaces the

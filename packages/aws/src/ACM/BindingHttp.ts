@@ -8,7 +8,7 @@ import type { Certificate } from "./Certificate.ts";
 /**
  * Shared HTTP scaffolding for the ACM runtime bindings.
  *
- * Every ACM capability follows the same shape — resolve the distilled
+ * Every ACM capability follows the same shape -- resolve the distilled
  * operation, register an IAM policy statement on the binding host, and return
  * a runtime callable that injects the certificate ARN. The only variation is
  * the operation, the IAM action(s), and whether the binding is scoped to one
@@ -18,7 +18,7 @@ import type { Certificate } from "./Certificate.ts";
  * {@link Certificate} resource provider requests certificates (the region
  * required for CloudFront viewer certificates).
  *
- * @internal — not exported from `index.ts`.
+ * @internal -- not exported from `index.ts`.
  */
 
 const ACM_REGION = "us-east-1" as const;
@@ -58,7 +58,7 @@ export interface AcmHttpBindingConfig<Req extends object, Out, Err> {
  * `Req` infers as the operation's *full* distilled request (inference against
  * `Req & { CertificateArn: string }` captures the whole source type). The
  * runtime callable injects the bound certificate's ARN, so its request type
- * is `Omit<Req, "CertificateArn">` — matching the capability contracts, which
+ * is `Omit<Req, "CertificateArn">` -- matching the capability contracts, which
  * declare `Omit<acm.XRequest, "CertificateArn">`.
  */
 export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
@@ -91,7 +91,7 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
         // an unresolved type parameter, hence the precise assertion.
         //
         // The region must be pinned HERE, at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it, so pinning only at
         // the yield would silently route the call to the wrong region.
         return yield* withAcmRegion(
@@ -145,7 +145,7 @@ export const makeAcmAccountHttpBinding = <Req extends object, Out, Err>(
         });
       }
       return Effect.fn(`AWS.ACM.${config.capability}`)(function* (request?: Req) {
-        // Call-site pin — see makeAcmCertificateHttpBinding above.
+        // Call-site pin -- see makeAcmCertificateHttpBinding above.
         return yield* withAcmRegion(op(request ?? ({} as Req)));
       });
     });

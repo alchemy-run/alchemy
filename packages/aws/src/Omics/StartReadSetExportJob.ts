@@ -11,7 +11,7 @@ export interface StartReadSetExportJobRequest extends Omit<
 /**
  * Runtime binding for `omics:StartReadSetExportJob`.
  *
- * Bind this operation to a `SequenceStore` to get a callable that starts a job that exports read sets to S3 — the
+ * Bind this operation to a `SequenceStore` to get a callable that starts a job that exports read sets to S3 -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.StartReadSetExportJobHttp)`.

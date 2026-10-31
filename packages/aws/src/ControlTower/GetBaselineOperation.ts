@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Polling Asynchronous Operations
  * **Example:** Poll a Baseline Operation
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getBaselineOperation = yield* AWS.ControlTower.GetBaselineOperation();
  *
  * // runtime

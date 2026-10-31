@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxCluster` — reads one kdb cluster of the bound environment — status, mounted databases, code configuration, and endpoints — for runtime monitoring and orchestration.
+ * Runtime binding for `finspace:GetKxCluster` -- reads one kdb cluster of the bound environment -- status, mounted databases, code configuration, and endpoints -- for runtime monitoring and orchestration.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxClusterHttp)`.
  * ### Monitoring Clusters

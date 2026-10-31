@@ -6,7 +6,7 @@ import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 
 /**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
+ * A domain definition error (duplicate tag, missing `keyOf`, ...), raised while
  * the kernel is built, or when a handler returns something its declaration
  * does not allow.
  */

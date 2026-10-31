@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:ListOrganizationAdminAccounts`.
  *
  * Lists the accounts delegated as GuardDuty administrator for the organization.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.ListOrganizationAdminAccountsHttp)`.
  * ### Organization Administration
  * **Example:** List Delegated Administrators
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listOrganizationAdminAccounts = yield* AWS.GuardDuty.ListOrganizationAdminAccounts();
  *
  * // runtime

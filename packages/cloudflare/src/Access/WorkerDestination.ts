@@ -7,7 +7,7 @@
 
 /**
  * Destination covering the **production** traffic of every Worker on the
- * account — including Workers created later. Hostname-level policies take
+ * account -- including Workers created later. Hostname-level policies take
  * precedence over Worker-level policies, which take precedence over this
  * account-level policy, so an individual Worker can still be opened up with
  * its own application.
@@ -24,7 +24,7 @@ export const AllWorkers: { type: "all_workers" } = { type: "all_workers" };
 
 /**
  * Destination covering the **version preview URLs** of every Worker on the
- * account — including Workers created later.
+ * account -- including Workers created later.
  *
  * ```typescript
  * yield* Cloudflare.Access.Application("ProtectAllPreviews", {

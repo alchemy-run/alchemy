@@ -31,8 +31,8 @@ export type GroupRule = zeroTrust.CreateAccessGroupForAccountRequest["include"][
 /**
  * One arm of the exclude-side rule union, and its require-side twin.
  * Cloudflare's spec types the exclude/require rule lists separately from
- * include — a few rule kinds (e.g. the GitHub-organization rule) carry the
- * raw wire shape there — so these props use the SDK's own unions rather
+ * include -- a few rule kinds (e.g. the GitHub-organization rule) carry the
+ * raw wire shape there -- so these props use the SDK's own unions rather
  * than reusing {@link GroupRule}.
  */
 export type GroupExcludeRule = NonNullable<
@@ -92,7 +92,7 @@ export type Group = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust Access group — a reusable, account-scoped set of
+ * A Cloudflare Zero Trust Access group -- a reusable, account-scoped set of
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.
@@ -201,7 +201,7 @@ export const GroupProvider = () =>
       const name = yield* createGroupName(id, news.name);
       const acct = output?.accountId ?? accountId;
 
-      // Observe — prefer the cached groupId, fall back to a name lookup so
+      // Observe -- prefer the cached groupId, fall back to a name lookup so
       // we recover from out-of-band deletes and partial state-persistence
       // failures.
       let observed: ObservedGroup | undefined;
@@ -220,7 +220,7 @@ export const GroupProvider = () =>
         observed = yield* findGroupByName(acct, name);
       }
 
-      // Ensure — create the group when missing. Tolerate a race where a
+      // Ensure -- create the group when missing. Tolerate a race where a
       // parallel actor created the same-named group by re-observing.
       let ensured: ObservedGroup;
       if (!observed || !observed.id) {
@@ -244,7 +244,7 @@ export const GroupProvider = () =>
             ),
           );
       } else {
-        // Sync — Cloudflare PUTs the group as a whole replacement, so a
+        // Sync -- Cloudflare PUTs the group as a whole replacement, so a
         // single update converges every mutable field (name, rule sets,
         // isDefault). The API is idempotent for equal payloads.
         const prior = observed;

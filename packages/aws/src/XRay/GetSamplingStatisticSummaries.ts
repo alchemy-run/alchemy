@@ -18,7 +18,7 @@ export interface GetSamplingStatisticSummariesRequest
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetSamplingStatisticSummaries
+ * // init -- grants xray:GetSamplingStatisticSummaries
  * const getSamplingStatisticSummaries =
  *   yield* XRay.GetSamplingStatisticSummaries();
  *

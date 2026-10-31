@@ -28,17 +28,17 @@ export type AgentsToolsVersionProps = {
   /**
    * Parent tool resource name
    * `projects/{project}/locations/{location}/agents/{agent}/tools/{tool}`.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   tool: string;
   /**
    * Version id (the `{version}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
    * Human-readable name. Tool versions have no labels field, so Alchemy
-   * stamps ownership into this field. Versions are immutable snapshots —
+   * stamps ownership into this field. Versions are immutable snapshots --
    * changing the display name after create is a no-op.
    */
   displayName?: string;
@@ -72,7 +72,7 @@ export type AgentsToolsVersion = Resource<
 /**
  * A Dialogflow CX tool version (immutable snapshot of a tool).
  *
- * Versions have no labels field and no update RPC — Alchemy stamps
+ * Versions have no labels field and no update RPC -- Alchemy stamps
  * ownership into `displayName` so `list` / nuke can find them. Reconcile
  * is observe-ensure: if the snapshot is missing it is created; later
  * display-name edits are ignored.

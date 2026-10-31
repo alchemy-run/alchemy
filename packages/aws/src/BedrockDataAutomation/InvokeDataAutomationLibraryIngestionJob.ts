@@ -15,7 +15,7 @@ export interface InvokeDataAutomationLibraryIngestionJobRequest extends Omit<
 /**
  * Runtime binding for the `InvokeDataAutomationLibraryIngestionJob`
  * operation (IAM action `bedrock:InvokeDataAutomationLibraryIngestionJob` on
- * the library ARN) — start an asynchronous ingestion job that upserts or
+ * the library ARN) -- start an asynchronous ingestion job that upserts or
  * deletes entities in the bound library from a deployed Function.
  *
  * Entities can be passed inline (`inputConfiguration.inlinePayload`) or as
@@ -25,11 +25,11 @@ export interface InvokeDataAutomationLibraryIngestionJobRequest extends Omit<
  * ### Library Ingestion
  * **Example:** Upsert A Vocabulary Entity Inline
  * ```typescript
- * // deploy time — bind the library
+ * // deploy time -- bind the library
  * const ingest =
  *   yield* AWS.BedrockDataAutomation.InvokeDataAutomationLibraryIngestionJob(library);
  *
- * // runtime — upsert one vocabulary entity
+ * // runtime -- upsert one vocabulary entity
  * const { jobArn } = yield* ingest({
  *   entityType: "VOCABULARY",
  *   operationType: "UPSERT",

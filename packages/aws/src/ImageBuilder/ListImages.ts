@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `imagebuilder:ListImages`.
  *
  * Enumerates the image versions you have access to (owned, shared, or
- * Amazon-managed) — e.g. to discover the latest parent image version.
+ * Amazon-managed) -- e.g. to discover the latest parent image version.
  * Newly created images can take up to two minutes to appear. Provide the
  * implementation with `Effect.provide(AWS.ImageBuilder.ListImagesHttp)`.
  * ### Observing Builds
  * **Example:** List Your Account's Images
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listImages = yield* AWS.ImageBuilder.ListImages();
  *
  * // runtime

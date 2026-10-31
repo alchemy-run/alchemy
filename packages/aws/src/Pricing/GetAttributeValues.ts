@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetAttributeValuesRequest extends pricing.GetAttributeValuesRequest {}
 
 /**
- * Runtime binding for `pricing:GetAttributeValues` — list the values of a
+ * Runtime binding for `pricing:GetAttributeValues` -- list the values of a
  * filterable attribute (e.g. every `volumeType` AWS prices for
  * `AmazonEC2`).
  *

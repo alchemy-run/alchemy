@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeServerlessCacheSnapshots` operation (IAM
  * action `elasticache:DescribeServerlessCacheSnapshots`).
  *
- * Lists serverless cache snapshots — all of them, one by name, or those of a
+ * Lists serverless cache snapshots -- all of them, one by name, or those of a
  * particular cache. Available for valkey, redis, and serverless memcached.
  * Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.DescribeServerlessCacheSnapshotsHttp)`.

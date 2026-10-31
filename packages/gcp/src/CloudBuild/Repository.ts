@@ -26,13 +26,13 @@ export type RepositoryProps = {
   /**
    * Parent Cloud Build connection. Full name
    * `projects/{project}/locations/{location}/connections/{connection}` or
-   * the connection id (combined with `location`). Immutable — changing it
+   * the connection id (combined with `location`). Immutable -- changing it
    * replaces the repository.
    */
   connection: string;
   /**
-   * Cloud Build location (`us-central1`, `us-east1`, …). Used when
-   * `connection` is a bare id. Immutable — changing it replaces the
+   * Cloud Build location (`us-central1`, `us-east1`, ...). Used when
+   * `connection` is a bare id. Immutable -- changing it replaces the
    * repository. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -41,19 +41,19 @@ export type RepositoryProps = {
    * Repository id (the `{repository}` segment of
    * `projects/{project}/locations/{location}/connections/{connection}/repositories/{repository}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Unique within the connection. Immutable — changing it
+   * logical id. Unique within the connection. Immutable -- changing it
    * replaces the repository.
    */
   repositoryId?: string;
   /**
    * Git clone HTTPS URI (e.g. `https://github.com/{owner}/{repo}.git`).
-   * Immutable — changing it replaces the repository.
+   * Immutable -- changing it replaces the repository.
    */
   remoteUri: string;
   /**
    * User annotations. Cloud Build repositories have no labels, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * here for `list` / nuke. The API has no update method — changing
+   * here for `list` / nuke. The API has no update method -- changing
    * annotations replaces the repository.
    */
   annotations?: Record<string, string>;
@@ -73,7 +73,7 @@ export type Repository = Resource<
     connectionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Git clone HTTPS URI. */
     remoteUri: string;
@@ -93,7 +93,7 @@ export type Repository = Resource<
 >;
 
 /**
- * A Cloud Build v2 repository — links a remote Git repository to a
+ * A Cloud Build v2 repository -- links a remote Git repository to a
  * {@link Connection}.
  *
  * Changing `repositoryId`, `connection`, `location`, `remoteUri`, or

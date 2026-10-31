@@ -26,14 +26,14 @@ export type VpcPeeringConnectionStatus =
   | "provisioning"
   | "deleting";
 
-// Terminal states from which a peering connection cannot recover — observing
+// Terminal states from which a peering connection cannot recover -- observing
 // one of these means the cached connection is dead and must be recreated.
 const DEAD_STATES = new Set<string>(["deleted", "deleting", "rejected", "failed", "expired"]);
 
 export interface VpcPeeringConnectionProps {
   /**
    * The ID of the requester VPC (the VPC you own that initiates the peering).
-   * Immutable — changing it replaces the connection.
+   * Immutable -- changing it replaces the connection.
    */
   vpcId: VpcId;
 
@@ -267,7 +267,7 @@ export const VpcPeeringConnectionProvider = () =>
           const sameRegion = news.peerRegion === undefined || news.peerRegion === region;
           const autoAccept = news.autoAccept ?? (sameAccount && sameRegion);
 
-          // Observe — the cached connection may have been deleted or moved to a
+          // Observe -- the cached connection may have been deleted or moved to a
           // terminal state, in which case we recreate.
           let pcx: ec2.VpcPeeringConnection | undefined;
           if (output?.vpcPeeringConnectionId) {
@@ -277,7 +277,7 @@ export const VpcPeeringConnectionProvider = () =>
             }
           }
 
-          // Ensure — create the connection if missing.
+          // Ensure -- create the connection if missing.
           if (pcx === undefined) {
             yield* session.note("Creating VPC peering connection...");
             const result = yield* ec2.createVpcPeeringConnection({
@@ -298,7 +298,7 @@ export const VpcPeeringConnectionProvider = () =>
 
           const pcxId = pcx.VpcPeeringConnectionId!;
 
-          // Accept — for same-account/same-Region peering, wait for the request
+          // Accept -- for same-account/same-Region peering, wait for the request
           // to settle into pending-acceptance, then accept it.
           if (autoAccept) {
             const settled = yield* waitFor(pcxId, "pending-acceptance");
@@ -315,7 +315,7 @@ export const VpcPeeringConnectionProvider = () =>
             }
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({
@@ -355,7 +355,7 @@ export const VpcPeeringConnectionProvider = () =>
           const pcxId = output.vpcPeeringConnectionId;
 
           // A connection already in a terminal state cannot (and need not) be
-          // deleted — AWS rejects deleting failed/rejected connections.
+          // deleted -- AWS rejects deleting failed/rejected connections.
           const observed = yield* describePeering(pcxId);
           if (!observed || DEAD_STATES.has(observed.Status?.Code ?? "")) {
             return;

@@ -61,7 +61,7 @@ export interface LocationEfs extends Resource<
   {
     /** ARN of the DataSync location. */
     locationArn: string;
-    /** URI of the location (`efs://…`). */
+    /** URI of the location (`efs://...`). */
     locationUri: string;
   },
   {},
@@ -163,12 +163,12 @@ export const LocationEfsProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — output cache is the identity (EFS location URIs are
+          // 1. OBSERVE -- output cache is the identity (EFS location URIs are
           //    not deterministically reconstructable).
           let arn = output?.locationArn;
           let loc = arn ? yield* describe(arn) : undefined;
 
-          // 2. ENSURE — create if missing.
+          // 2. ENSURE -- create if missing.
           if (loc === undefined) {
             const created = yield* retryWhileRoleNotAssumable(
               datasync.createLocationEfs({

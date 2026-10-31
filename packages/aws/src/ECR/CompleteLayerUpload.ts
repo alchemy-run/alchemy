@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link CompleteLayerUpload} — `repositoryName` is injected from the
+ * Request for {@link CompleteLayerUpload} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface CompleteLayerUploadRequest extends Omit<

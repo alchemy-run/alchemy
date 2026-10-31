@@ -54,7 +54,7 @@ export interface Swarm extends Resource<
 > {}
 
 /**
- * Swarm mode on a Docker engine — an idempotent `docker swarm init`.
+ * Swarm mode on a Docker engine -- an idempotent `docker swarm init`.
  *
  * Turns the engine behind the given `context` (or the local engine) into a
  * single-node swarm: the node becomes a manager that can run `Docker.Service`
@@ -64,10 +64,10 @@ export interface Swarm extends Resource<
  * `Docker.Network`: the workload then deploys after the swarm exists and
  * inherits its Docker context.
  *
- * An engine that is already in swarm mode is treated as foreign — adopt it
+ * An engine that is already in swarm mode is treated as foreign -- adopt it
  * with `adopt(true)` (or `--adopt`) to manage it. Destroying the resource
  * dissolves the node's swarm membership (`docker swarm leave --force`),
- * which stops every service running on it — services managed by the same
+ * which stops every service running on it -- services managed by the same
  * stack are destroyed first via their dependency edges.
  *
  * Growing the cluster beyond one node is host-level setup: run
@@ -94,7 +94,7 @@ export interface Swarm extends Resource<
  * ### Using an Existing Swarm
  * **Example:** Reference without owning
  * ```typescript
- * // Services don't require a Swarm resource — point them at an engine that
+ * // Services don't require a Swarm resource -- point them at an engine that
  * // is already a manager and the swarm's lifecycle stays external: destroy
  * // removes the services, never the swarm.
  * const web = yield* Docker.Service("web", {
@@ -105,7 +105,7 @@ export interface Swarm extends Resource<
  *
  * **Example:** Adopt an already-initialized engine
  * ```typescript
- * // Adoption makes the swarm part of the stack — destroy then dissolves
+ * // Adoption makes the swarm part of the stack -- destroy then dissolves
  * // the node's membership.
  * const swarm = yield* Docker.Swarm("swarm").pipe(adopt(true));
  * ```
@@ -151,7 +151,7 @@ export const SwarmProvider = () =>
           const attrs = toSwarmAttributes(info, context);
           if (output) return attrs;
           // A swarm carries no labels to brand, so an already-initialized
-          // engine can never be proven ours — adoption is gated behind
+          // engine can never be proven ours -- adoption is gated behind
           // `--adopt` / `adopt(true)`.
           return Unowned(attrs);
         }),
@@ -179,7 +179,7 @@ export const SwarmProvider = () =>
             })
             .pipe(
               // A concurrent init (or an interrupted prior reconcile) already
-              // made this node a swarm member — converge on the observation.
+              // made this node a swarm member -- converge on the observation.
               Effect.catchIf(
                 (error) => /already part of a swarm/i.test(String(error)),
                 () => Effect.void,

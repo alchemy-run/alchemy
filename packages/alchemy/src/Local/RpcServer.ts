@@ -33,7 +33,7 @@ export class RpcServer extends Context.Service<RpcServer, never>()("alchemy/Loca
 /**
  * The provider shape served over RPC. The `mode`/`modes` variant machinery
  * (lazy Layer-built Effects, see `ProviderLayer.dual`) is process-local and
- * cannot cross the RPC boundary — the sidecar serves the concrete provider
+ * cannot cross the RPC boundary -- the sidecar serves the concrete provider
  * implementation, never the mode-dispatching wrapper.
  */
 export type RpcProviderService<R extends ResourceLike> = Omit<ProviderService<R>, "mode" | "modes">;
@@ -309,7 +309,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
  * `PlatformServices` and `HttpClient` are also included.
  *
  * Pass a layer to serve a fixed set of providers, or a
- * {@link ProviderGroupLoader} to resolve the group each client names — the
+ * {@link ProviderGroupLoader} to resolve the group each client names -- the
  * dev sidecar (`Local/Sidecar.ts`) imports the group module on demand, so
  * one process serves every provider group without loading the ones a run
  * never touches.

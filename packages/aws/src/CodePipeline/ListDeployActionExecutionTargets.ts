@@ -9,7 +9,7 @@ export interface ListDeployActionExecutionTargetsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:ListDeployActionExecutionTargets` —
+ * Runtime binding for `codepipeline:ListDeployActionExecutionTargets` --
  * enumerates the targets (instances, tasks, functions) a deploy action
  * execution rolled out to.
  * ### Observing Pipelines

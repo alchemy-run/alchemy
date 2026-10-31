@@ -11,7 +11,7 @@ import type {
 } from "./Client.ts";
 
 /**
- * Issue (and revoke) certificates at runtime as an {@link Account} — for
+ * Issue (and revoke) certificates at runtime as an {@link Account} -- for
  * services that terminate TLS themselves and need certificates on demand,
  * like a relay minting `*.<tenant>.example.com` when a tenant first
  * connects.

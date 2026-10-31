@@ -56,11 +56,11 @@ export type PipelineProps = {
    * Pipeline id (the `{pipeline}` segment of
    * `projects/{project}/locations/{location}/pipelines/{pipeline}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the pipeline.
+   * and logical id. Immutable -- changing it replaces the pipeline.
    */
   pipelineId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * pipeline. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * Data Pipelines is only available in App Engine regions.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -74,13 +74,13 @@ export type PipelineProps = {
   /**
    * Pipeline type (`PIPELINE_TYPE_BATCH` or `PIPELINE_TYPE_STREAMING`).
    * Batch pipelines run on `scheduleInfo`; streaming pipelines launch a
-   * job at create time. Immutable — changing it replaces the pipeline.
+   * job at create time. Immutable -- changing it replaces the pipeline.
    * @default "PIPELINE_TYPE_BATCH"
    */
   type?: PipelineType;
   /**
    * Desired execution state (`STATE_ACTIVE`, `STATE_PAUSED`,
-   * `STATE_ARCHIVED`, …). Applied on create. Later archive requests call
+   * `STATE_ARCHIVED`, ...). Applied on create. Later archive requests call
    * `pipelines.stop` (permanent). State cannot be patched.
    * @default "STATE_ACTIVE"
    */
@@ -152,7 +152,7 @@ export type Pipeline = Resource<
  *
  * Pipelines have no labels field, so Alchemy stamps ownership into
  * `pipelineSources` for `list` / nuke. Pipeline id, location, and type
- * are identity — changing any of them replaces the pipeline. Display
+ * are identity -- changing any of them replaces the pipeline. Display
  * name, workload, schedule, and scheduler service account update in
  * place. Archiving uses `pipelines.stop` and is permanent. Creating a
  * pipeline requires the Data Pipelines API

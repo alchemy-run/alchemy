@@ -115,7 +115,7 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * N Services can share one Server. Each Service is bundled with rolldown,
  * copied over SSH, and restarted as its own unit. Bind
  * `Hetzner.MountVolume` inside the impl to attach a Volume and mount it
- * at a path — the same `(volume, server, path)` from two Services is one
+ * at a path -- the same `(volume, server, path)` from two Services is one
  * attach and one mount.
  *
  * @see https://docs.hetzner.cloud/reference/cloud#servers
@@ -296,7 +296,7 @@ export const ServiceProvider = () =>
               yield* hosted.waitForSsh(ssh);
               // Attach (no automount) then mkdir+mount+fstab. The same
               // (volume, server, path) from two Services is one attach
-              // and one mount — both steps are independently idempotent.
+              // and one mount -- both steps are independently idempotent.
               yield* hosted.attachAndMount({
                 ssh,
                 serverId,

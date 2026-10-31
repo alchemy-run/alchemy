@@ -9,7 +9,7 @@ export interface VerifyAuthRequestCryptogramRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:VerifyAuthRequestCryptogram` —
+ * Runtime binding for `payment-cryptography:VerifyAuthRequestCryptogram` --
  * verifies an Authorization Request Cryptogram (ARQC) during EMV transaction
  * processing under an issuer master {@link Key}, optionally producing the
  * Authorization Response Cryptogram (ARPC). A mismatch fails with the typed

@@ -6,16 +6,16 @@ import type { Channel } from "./Channel.ts";
 /**
  * Runtime binding for `medialive:DescribeChannel`.
  *
- * Reads the bound {@link Channel}'s live state — lifecycle state
+ * Reads the bound {@link Channel}'s live state -- lifecycle state
  * (`IDLE`/`RUNNING`), pipeline details, egress endpoints, and attached
- * inputs — e.g. for an operations dashboard or a scheduler that only
+ * inputs -- e.g. for an operations dashboard or a scheduler that only
  * starts a channel that is not already running. The channel id is
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.MediaLive.DescribeChannelHttp)`.
  * ### Observing Channels
  * **Example:** Read the Channel's Current State
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const describeChannel = yield* AWS.MediaLive.DescribeChannel(channel);
  *
  * // runtime

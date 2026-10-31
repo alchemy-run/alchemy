@@ -39,7 +39,7 @@ export interface ResourcePolicy extends Resource<
 > {}
 
 /**
- * The resource-based policy of a CloudWatch RUM app monitor — controls which
+ * The resource-based policy of a CloudWatch RUM app monitor -- controls which
  * principals may send events to (`rum:PutRumEvents`) or read data from the
  * app monitor. An app monitor has at most one.
  *
@@ -94,7 +94,7 @@ export const ResourcePolicyProvider = () =>
   Provider.effect(
     ResourcePolicy,
     Effect.gen(function* () {
-      /** Read the live policy; typed not-found (policy or monitor) → undefined. */
+      /** Read the live policy; typed not-found (policy or monitor) -> undefined. */
       const describe = Effect.fn(function* (appMonitorName: string) {
         return yield* rum
           .getResourcePolicy({ Name: appMonitorName })
@@ -121,7 +121,7 @@ export const ResourcePolicyProvider = () =>
           if (!appMonitorName) return undefined;
           const policy = yield* describe(appMonitorName);
           if (policy === undefined) return undefined;
-          // Resource policies are not taggable — ownership is implied by the
+          // Resource policies are not taggable -- ownership is implied by the
           // owned parent app monitor.
           return { appMonitorName, policyRevisionId: policy.PolicyRevisionId };
         }),
@@ -129,10 +129,10 @@ export const ResourcePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const appMonitorName = news!.appMonitorName;
 
-          // 1. Observe — the live policy is authoritative.
+          // 1. Observe -- the live policy is authoritative.
           const existing = yield* describe(appMonitorName);
 
-          // 2/3. Ensure + sync — `putResourcePolicy` is a true upsert; call
+          // 2/3. Ensure + sync -- `putResourcePolicy` is a true upsert; call
           // it only when the canonical document drifts (the observed
           // revision id guards against concurrent writers).
           const policy =
@@ -154,7 +154,7 @@ export const ResourcePolicyProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* rum.deleteResourcePolicy({ Name: output.appMonitorName }).pipe(
-            // idempotent — the policy (or its whole monitor) may be gone
+            // idempotent -- the policy (or its whole monitor) may be gone
             Effect.catchTag(
               ["PolicyNotFoundException", "ResourceNotFoundException"],
               () => Effect.void,

@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `cloudtrail:ListInsightsData`.
  *
  * An account-level operation (no resource argument) that reads the raw
- * Insights events recorded for an insight source — empty when Insights has
+ * Insights events recorded for an insight source -- empty when Insights has
  * recorded no anomalies. Rate-limited by AWS to two requests per second,
  * per account, per Region. Provide the implementation with
  * `Effect.provide(AWS.CloudTrail.ListInsightsDataHttp)`.
  * ### Reading Insights Events
  * **Example:** List Insights Events
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listInsightsData = yield* AWS.CloudTrail.ListInsightsData();
  *
  * // runtime

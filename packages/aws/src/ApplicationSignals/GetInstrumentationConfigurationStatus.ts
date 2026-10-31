@@ -26,11 +26,11 @@ export interface GetInstrumentationConfigurationStatusRequest extends Omit<
  * ### Monitoring Instrumentation
  * **Example:** Check Whether the Probe Applied
  * ```typescript
- * // init — bind the operation to the configuration
+ * // init -- bind the operation to the configuration
  * const getStatus =
  *   yield* AWS.ApplicationSignals.GetInstrumentationConfigurationStatus(probe);
  *
- * // runtime — the configuration's identity is injected automatically
+ * // runtime -- the configuration's identity is injected automatically
  * const result = yield* getStatus({ Status: "ACTIVE" });
  * yield* Effect.log(`${result.Events.length} ACTIVE events`);
  * ```

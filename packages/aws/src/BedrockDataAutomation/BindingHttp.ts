@@ -8,8 +8,8 @@ import type { DataAutomationProject } from "./DataAutomationProject.ts";
 /**
  * Shared scaffolding for Bedrock Data Automation HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -19,7 +19,7 @@ import type { DataAutomationProject } from "./DataAutomationProject.ts";
  * async invoke APIs). The runtime callable injects the bound
  * {@link DataAutomationProject}'s ARN + stage as `dataAutomationConfiguration`
  * and the deploy-time half grants `actions` on the project ARN plus the
- * account's data automation profiles in every region — cross-region
+ * account's data automation profiles in every region -- cross-region
  * inference profiles (e.g. `us.data-automation-v1`) fan requests out to
  * sibling regions, so the profile grant cannot be scoped to one region.
  */
@@ -93,8 +93,8 @@ export const makeBdaLibraryHttpBinding = <I extends { libraryArn: string }, A, E
   /** IAM actions granted on the library ARN (+ `additionalResources`). */
   actions: readonly string[];
   /**
-   * Extra resource ARNs the actions authorize against — the ingestion-job
-   * APIs check `…:data-automation-library-ingestion-job/{id}` (minted at
+   * Extra resource ARNs the actions authorize against -- the ingestion-job
+   * APIs check `...:data-automation-library-ingestion-job/{id}` (minted at
    * runtime), not the library ARN.
    */
   additionalResources?: readonly string[];
@@ -232,8 +232,8 @@ export const makeBdaBlueprintHttpBinding = <I extends { blueprintArn: string }, 
 
 /**
  * Build the impl Effect for an account-level runtime operation (job status
- * polling). The deploy-time half grants `actions` on `*` — invocation ARNs
- * (`…:data-automation-invocation/{id}`) are minted at runtime and unknowable
+ * polling). The deploy-time half grants `actions` on `*` -- invocation ARNs
+ * (`...:data-automation-invocation/{id}`) are minted at runtime and unknowable
  * at deploy time.
  */
 export const makeBdaAccountHttpBinding = <I, A, E, R>(options: {

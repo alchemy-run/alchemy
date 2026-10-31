@@ -6,7 +6,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
 /**
  * Runtime binding for `mediapackagev2:GetHarvestJob`.
  *
- * Reads the status of a harvest job on the bound {@link OriginEndpoint} —
+ * Reads the status of a harvest job on the bound {@link OriginEndpoint} --
  * e.g. polling until a clip export reaches `COMPLETED` before publishing
  * the VOD asset. The endpoint's group, channel, and name are injected from
  * the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * ### Harvesting Live-to-VOD Clips
  * **Example:** Poll a Harvest Job Until It Completes
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const getHarvestJob = yield* AWS.MediaPackageV2.GetHarvestJob(endpoint);
  *
  * // runtime

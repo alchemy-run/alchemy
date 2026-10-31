@@ -30,7 +30,7 @@ interface HarnessOptions {
  * The e2e-harness framework factory contract: default-export a
  * `(options) => Layer<Framework>` factory. Reads the harness's cloudflare
  * worker configuration (`options.target?.cloudflare?.worker`, falling back to
- * the deprecated `options.vite` alias) and hands it — opaquely — to the
+ * the deprecated `options.vite` alias) and hands it -- opaquely -- to the
  * default Cloudflare target module as its config.
  */
 const framework = (options?: HarnessOptions) =>

@@ -149,7 +149,7 @@ export interface WebFunctionProps extends PlatformProps {
    * Upper bound on concurrent HTTP requests per execution environment.
    * Lambda manages a dynamic per-environment limit that can be lower, but
    * never exceeds this value. This is not a total: the endpoint's peak is
-   * `maxEnvironments × maxConcurrencyPerEnvironment`. Valid range: 1–128.
+   * `maxEnvironments × maxConcurrencyPerEnvironment`. Valid range: 1-128.
    * Lower it for CPU- or memory-bound servers: every environment has a
    * fixed 2 GB of memory and 2 vCPUs. Changing it creates a new revision.
    * @default 64
@@ -179,7 +179,7 @@ export interface WebFunctionProps extends PlatformProps {
   regions?: string[];
   /**
    * Maximum number of execution environments the built-in endpoint uses per
-   * Region (2–10,000). Changes apply in place.
+   * Region (2-10,000). Changes apply in place.
    */
   maxEnvironments?: number;
   /**
@@ -235,7 +235,7 @@ export interface WebFunction extends Resource<
   {
     /** Name of the Web Function. */
     functionName: string;
-    /** ARN of the Web Function (`arn:aws:lambda:…:web-function/<name>`). */
+    /** ARN of the Web Function (`arn:aws:lambda:...:web-function/<name>`). */
     functionArn: string;
     /** Name of the built-in endpoint. */
     endpointName: string;
@@ -316,7 +316,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * requests (up to 128), streams responses to the client as they are
  * produced, scales to zero, and gives every function an HTTPS endpoint.
  *
- * Use a Web Function for anything that answers HTTP — APIs, server-rendered
+ * Use a Web Function for anything that answers HTTP -- APIs, server-rendered
  * apps, streaming AI responses. Use `AWS.Lambda.Function` for event sources
  * (SQS, DynamoDB Streams, S3 notifications, schedules) and direct invokes;
  * a Web Function only receives HTTP. Event sources and background loops
@@ -1287,7 +1287,7 @@ export const WebFunctionProvider = () =>
             canary: news.canary,
           };
 
-          // Observe → ensure the function. `CreateWebFunction` creates the
+          // Observe -> ensure the function. `CreateWebFunction` creates the
           // first revision and the endpoint together; both are re-observed
           // and synced below like any existing function.
           const internalTags = yield* createInternalTags(id);
@@ -1415,7 +1415,7 @@ export const WebFunctionProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ id, output, session }) {
-          // The role may already be gone — every step is idempotent. Grants
+          // The role may already be gone -- every step is idempotent. Grants
           // go first; the log-group guard stays until the function is gone.
           yield* iam.listRolePolicies({ RoleName: output.roleName }).pipe(
             Effect.flatMap((policies) =>

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DetectModerationLabels` — detect unsafe or inappropriate content (explicit nudity, violence, etc.) in an image for content moderation.
+ * Runtime binding for `rekognition:DetectModerationLabels` -- detect unsafe or inappropriate content (explicit nudity, violence, etc.) in an image for content moderation.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DetectModerationLabels` on `*` (Rekognition data-plane resources such

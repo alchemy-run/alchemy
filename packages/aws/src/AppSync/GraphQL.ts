@@ -7,7 +7,7 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
 
 /**
  * The GraphQL endpoint returned a non-2xx response or an unparseable body.
- * GraphQL *field* errors do NOT fail the effect — they are surfaced on
+ * GraphQL *field* errors do NOT fail the effect -- they are surfaced on
  * {@link GraphQLResult.errors} alongside any partial `data`.
  */
 export class GraphQLApiError extends Data.TaggedError("GraphQLApiError")<{
@@ -48,7 +48,7 @@ export interface GraphQLRequest {
 export interface GraphQLClient {
   /**
    * Execute a GraphQL operation (query or mutation), SigV4-signed with the
-   * host Function's credentials. Fails only on transport/HTTP errors —
+   * host Function's credentials. Fails only on transport/HTTP errors --
    * GraphQL field errors are returned on `result.errors`.
    */
   execute<T = unknown>(
@@ -60,7 +60,7 @@ export interface GraphQLClient {
 }
 
 /**
- * Runtime binding for the `appsync:GraphQL` data-plane action — execute
+ * Runtime binding for the `appsync:GraphQL` data-plane action -- execute
  * GraphQL operations against a {@link GraphqlApi}'s endpoint from a Lambda
  * (or other AWS runtime), SigV4-signed with the host Function's IAM role.
  *

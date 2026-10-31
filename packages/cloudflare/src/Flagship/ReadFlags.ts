@@ -7,10 +7,10 @@ import type { App } from "./App.ts";
 
 /**
  * Bind a {@link App} to a Worker and obtain the Effect-native flag-evaluation
- * client (`get`, `getBooleanValue`, `getStringValue`, …).
+ * client (`get`, `getBooleanValue`, `getStringValue`, ...).
  *
  * `ReadFlags` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.Flagship.ReadFlags(app)`.
  *
  * **Example:** Evaluating a flag inside a Worker
@@ -48,8 +48,8 @@ export type EvaluationDetails<T> = cf.FlagshipEvaluationDetails<T>;
  * Effect-native client for a Cloudflare Flagship (feature flags) binding.
  *
  * Mirrors the runtime {@link cf.Flagship} binding one-to-one, translating each
- * promise-returning method into an Effect. Flagship evaluation never throws —
- * it falls back to the provided `defaultValue` — so the {@link FlagshipError}
+ * promise-returning method into an Effect. Flagship evaluation never throws --
+ * it falls back to the provided `defaultValue` -- so the {@link FlagshipError}
  * channel only surfaces unexpected runtime failures (e.g. a misconfigured
  * binding). Use `Cloudflare.Flagship.ReadFlags(app)` inside a Worker's init
  * phase to obtain it.

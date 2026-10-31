@@ -114,8 +114,8 @@ export type ContainerShape = Main<ContainerServices>;
  * port): binding adds it to the service's revision and holds the service
  * back until the container passes its startup probe.
  *
- * Give it `main` and an Effect implementation to run your own program —
- * Alchemy bundles it into its own image — or just an `image`.
+ * Give it `main` and an Effect implementation to run your own program --
+ * Alchemy bundles it into its own image -- or just an `image`.
  *
  * ### Declaring a Container
  * **Example:** An Effect-native container with RPC methods

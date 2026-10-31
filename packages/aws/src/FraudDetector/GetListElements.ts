@@ -13,7 +13,7 @@ export interface GetListElementsRequest extends Omit<
 > {}
 
 /**
- * Read the elements of a bound Amazon Fraud Detector list — the effectful
+ * Read the elements of a bound Amazon Fraud Detector list -- the effectful
  * lookup call made from a deployed Lambda or Task, e.g. to check an incoming
  * value against a deny-list outside of a detector evaluation.
  *

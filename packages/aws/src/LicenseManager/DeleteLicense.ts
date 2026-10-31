@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface DeleteLicenseRequest extends licensemanager.DeleteLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:DeleteLicense` — delete a
+ * Runtime binding for `license-manager:DeleteLicense` -- delete a
  * seller-issued license (e.g. on refund or subscription cancellation). The
  * license's current version must be passed as `SourceVersion`.
  *

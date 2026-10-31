@@ -1,7 +1,7 @@
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 /**
- * The compaction alarm job (DESIGN.md §12.1) — the v2 storage plane.
+ * The compaction alarm job (DESIGN.md §12.1) -- the v2 storage plane.
  *
  * v1 keeps every object's bytes in a DO SQLite row, which caps a repo at the
  * 10 GB DO limit and puts all clone bandwidth behind one single-threaded
@@ -9,8 +9,8 @@ import * as Effect from "effect/Effect";
  * R2 packs** and leaves only the index behind:
  *
  * ```
- * objects.location: 'row'  →  'pack'
- * objects.zdata:    BLOB   →  NULL     (bytes now live in R2)
+ * objects.location: 'row'  ->  'pack'
+ * objects.zdata:    BLOB   ->  NULL     (bytes now live in R2)
  * objects.pack_id / pack_offset:       (where in R2 they live)
  * ```
  *
@@ -22,7 +22,7 @@ import * as Effect from "effect/Effect";
  * is a copy, never a recompression.
  *
  * `pack_offset` deliberately addresses each object's **zdata span**, not its
- * entry header — a read is then one ranged R2 GET returning exactly the
+ * entry header -- a read is then one ranged R2 GET returning exactly the
  * bytes a `location='row'` object would have held (see `ObjectStore`).
  *
  * Bounded per run and alarm-re-armable, like the purge job: at most
@@ -67,9 +67,9 @@ export const COMPACT_COUNT_THRESHOLD = 4_000;
  * Only blobs (git type 3) are ever moved into R2 packs. Commits, trees and
  * tags stay `location='row'` in SQLite for the life of the repo.
  *
- * Measured (DESIGN §22): a fetch's want→have closure is a tree walk, and a
+ * Measured (DESIGN §22): a fetch's want->have closure is a tree walk, and a
  * tree walk over pack storage is the worst access pattern a window cache
- * can see — trees are tiny and, packed in oid order, scattered across
+ * can see -- trees are tiny and, packed in oid order, scattered across
  * every 4 MiB window of every pack. On a 15.6k-object repo the walk alone
  * cost 12 s of TTFB (27 s before batching); the same walk over rows is a
  * handful of batched SELECTs. Trees + commits are a few percent of a
@@ -86,7 +86,7 @@ export interface CompactOutcome {
   readonly bytes: number;
   /** sha1 of the pack written (the rows' `pack_id`), else `undefined`. */
   readonly packId: string | undefined;
-  /** True when loose objects remain — the caller re-arms the alarm. */
+  /** True when loose objects remain -- the caller re-arms the alarm. */
   readonly more: boolean;
 }
 
@@ -259,13 +259,13 @@ export const shouldCompact = (
     );
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Geometric pack merging (DESIGN.md §21, Continuity learnings)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Merge whenever a pack is smaller than FACTOR × the sum of all packs
- * smaller than it — the classic geometric invariant. Holding it bounds
+ * smaller than it -- the classic geometric invariant. Holding it bounds
  * pack count at O(log(total bytes)), which bounds the fan-out of ranged
  * reads on the serving path.
  */
@@ -305,9 +305,9 @@ const noMerge: MergeOutcome = {
  * Restores the geometric invariant over a repo's compacted packs by
  * merging the smallest run of violating packs into one.
  *
- * Merging is pure concatenation — our packs store non-delta entries
- * (varint header + zdata), so a merged pack is `header(Σcounts) +
- * body₁ + … + bodyₙ + sha1`, and every row's offset shifts by a single
+ * Merging is pure concatenation -- our packs store non-delta entries
+ * (varint header + zdata), so a merged pack is `header(sum(counts)) +
+ * body_1 + ... + body_n + sha1`, and every row's offset shifts by a single
  * per-source delta (the bytes of bodies concatenated before it). No
  * recompression, no delta re-resolution: O(bytes) of blob IO plus one
  * UPDATE per source pack.
@@ -340,7 +340,7 @@ export const runGeometricMergeJob = (options: {
       const meta = yield* runR2(`merge head ${row.pack_id}`)(
         options.blobs.head(packKeyOf(options.repoId, row.pack_id)),
       );
-      // A pack R2 lost (or a crash orphaned) cannot be merged; skip it —
+      // A pack R2 lost (or a crash orphaned) cannot be merged; skip it --
       // reads through it will surface the real error on their own path.
       if (meta !== null) {
         packs.push({ id: row.pack_id, count: row.n, size: meta.size });
@@ -361,7 +361,7 @@ export const runGeometricMergeJob = (options: {
     }
     if (mergeCount < 2) return noMerge;
 
-    // Cap the run's input; ≥2 sources or there is nothing useful to do.
+    // Cap the run's input; >=2 sources or there is nothing useful to do.
     let inputBytes = 0;
     let take = 0;
     while (take < mergeCount && inputBytes + packs[take]!.size <= maxInput) {

@@ -10,7 +10,7 @@ export interface DisassociateCustomDomainRequest extends Omit<
 
 /**
  * Disassociate a custom domain from an App Runner {@link Service} from a
- * Lambda (or other AWS runtime) — the teardown half of the multi-tenant
+ * Lambda (or other AWS runtime) -- the teardown half of the multi-tenant
  * SaaS domain flow when a customer removes their domain.
  *
  * Provide `AppRunner.DisassociateCustomDomainHttp` on the hosting

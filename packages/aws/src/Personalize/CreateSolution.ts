@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:CreateSolution` — Creates a solution (a recipe + configuration to train models with)
- * for a dataset group — set `performAutoTraining` to keep models fresh
+ * Runtime binding for `personalize:CreateSolution` -- Creates a solution (a recipe + configuration to train models with)
+ * for a dataset group -- set `performAutoTraining` to keep models fresh
  * automatically.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.CreateSolutionHttp)`.

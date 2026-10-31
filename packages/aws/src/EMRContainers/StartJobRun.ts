@@ -16,7 +16,7 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
  * ### Running Jobs
  * **Example:** Start A Templated Spark Job
  * ```typescript
- * // init — bind the operation to the virtual cluster
+ * // init -- bind the operation to the virtual cluster
  * const startJobRun = yield* AWS.EMRContainers.StartJobRun(virtualCluster);
  *
  * // runtime

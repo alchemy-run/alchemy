@@ -135,14 +135,14 @@ export interface WebACL extends Resource<
 > {}
 
 /**
- * An AWS WAFv2 Web ACL — a collection of rules that inspect and control web
+ * An AWS WAFv2 Web ACL -- a collection of rules that inspect and control web
  * requests for the AWS resources it is associated with.
  *
  * `REGIONAL` web ACLs protect regional resources (Application Load Balancer,
  * API Gateway, AppSync, Cognito user pools, App Runner, Verified Access) via
  * {@link WebACLAssociation}. `CLOUDFRONT` web ACLs protect CloudFront
  * distributions (set `Distribution.webAclId` to the web ACL's ARN) and are
- * always provisioned in `us-east-1` — the provider pins the region for you.
+ * always provisioned in `us-east-1` -- the provider pins the region for you.
  *
  * ### Creating Web ACLs
  * **Example:** Allow-by-Default Web ACL with a Managed Rule Group
@@ -309,7 +309,7 @@ export const WebACLProvider = () =>
       const buildDesired = (name: string, props: WebACLProps) => ({
         DefaultAction: props.defaultAction ?? { Allow: {} },
         Description: props.description,
-        // props survive engine serialization as plain JSON — restore
+        // props survive engine serialization as plain JSON -- restore
         // ByteMatchStatement SearchString blobs to Uint8Array
         Rules: normalizeWafRules(props.rules),
         VisibilityConfig: props.visibilityConfig ?? defaultVisibilityConfig(name),
@@ -390,10 +390,10 @@ export const WebACLProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = buildDesired(name, news);
 
-          // 1. Observe — cloud state is authoritative; output only caches Id.
+          // 1. Observe -- cloud state is authoritative; output only caches Id.
           let observed = yield* findWebACL(scope, name, output?.webAclId);
 
-          // 2. Ensure — create if missing; a WAFDuplicateItemException is a
+          // 2. Ensure -- create if missing; a WAFDuplicateItemException is a
           //    race with a concurrent creator, so fall through to re-read.
           if (!observed?.WebACL) {
             yield* retryUnavailableEntity(
@@ -421,7 +421,7 @@ export const WebACLProvider = () =>
           const acl = observed.WebACL;
           yield* session.note(acl.ARN);
 
-          // 3. Sync — diff the OBSERVED mutable aspects against desired and
+          // 3. Sync -- diff the OBSERVED mutable aspects against desired and
           //    apply a single updateWebACL when drifted. The update re-reads
           //    the LockToken inside the retry so optimistic-lock conflicts
           //    converge.

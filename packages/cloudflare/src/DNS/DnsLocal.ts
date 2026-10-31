@@ -14,7 +14,7 @@ import type { DnsAuth } from "./DnsHttp.ts";
  * variant uses. DNS is a zone-management capability with no native Worker
  * binding, so there is no `*Binding` counterpart.
  *
- * NOT exported from `index.ts` — this is internal scaffolding shared by the
+ * NOT exported from `index.ts` -- this is internal scaffolding shared by the
  * three access-level Local layers.
  */
 export const makeLocalDnsBinding = <Client>(options: {
@@ -23,12 +23,12 @@ export const makeLocalDnsBinding = <Client>(options: {
   Effect.gen(function* () {
     // Credentials are ambient during stack-eval (the stack's providers layer).
     // Capture the full context so DNS HTTP ops can run with the current
-    // credentials — no `host.bind`, no minted token. DNS record ops are
+    // credentials -- no `host.bind`, no minted token. DNS record ops are
     // zone-scoped, so no accountId is needed.
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (zone: Zone) {
-      // Deferred accessor — resolves the zoneId against the tracker at apply
+      // Deferred accessor -- resolves the zoneId against the tracker at apply
       // time (in an Action, that's the engine's resolve context).
       const zoneId = yield* zone.zoneId;
       const auth: DnsAuth = {

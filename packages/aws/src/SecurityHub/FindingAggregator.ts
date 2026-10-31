@@ -49,7 +49,7 @@ export interface FindingAggregator extends Resource<
 > {}
 
 /**
- * The Security Hub cross-Region finding aggregator — replicates findings
+ * The Security Hub cross-Region finding aggregator -- replicates findings
  * from linked Regions into the home Region. Only one aggregator can exist
  * per account, so this is a singleton: adopting a pre-existing aggregator
  * that Alchemy did not create requires `--adopt`.
@@ -87,7 +87,7 @@ export const FindingAggregatorProvider = () =>
           }),
         );
 
-      // At most one aggregator exists per account — a single page suffices.
+      // At most one aggregator exists per account -- a single page suffices.
       const findAggregator = securityhub.listFindingAggregators({}).pipe(
         Effect.map((r) => r.FindingAggregators?.[0]?.FindingAggregatorArn),
         Effect.catchTag("InvalidAccessException", () => Effect.undefined),
@@ -122,7 +122,7 @@ export const FindingAggregatorProvider = () =>
             return live ? [buildAttrs(live)] : [];
           }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — the account's single aggregator is authoritative.
+          // 1. OBSERVE -- the account's single aggregator is authoritative.
           const arn = output?.findingAggregatorArn ?? (yield* findAggregator);
           const live = arn ? yield* getAggregator(arn) : undefined;
 
@@ -135,11 +135,11 @@ export const FindingAggregatorProvider = () =>
             });
           } else if (
             live.RegionLinkingMode !== news.regionLinkingMode ||
-            // The API returns Regions in normalized order — compare as sets.
+            // The API returns Regions in normalized order -- compare as sets.
             JSON.stringify([...(live.Regions ?? [])].sort()) !==
               JSON.stringify([...(news.regions ?? [])].sort())
           ) {
-            // 3. SYNC — observed ↔ desired.
+            // 3. SYNC -- observed <-> desired.
             final = yield* securityhub.updateFindingAggregator({
               FindingAggregatorArn: live.FindingAggregatorArn!,
               RegionLinkingMode: news.regionLinkingMode,
@@ -154,7 +154,7 @@ export const FindingAggregatorProvider = () =>
           return buildAttrs(final);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the aggregator (or the whole hub) may already be gone.
+          // Idempotent -- the aggregator (or the whole hub) may already be gone.
           yield* securityhub
             .deleteFindingAggregator({
               FindingAggregatorArn: output.findingAggregatorArn,

@@ -36,18 +36,18 @@ export type ImageImportProps = {
   /**
    * Image import id (the `{imageImport}` segment of
    * `projects/{project}/locations/{location}/imageImports/{imageImport}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the import.
    */
   imageImportId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * import. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
-   * Cloud Storage URI of the image to import. Immutable — changing it
+   * Cloud Storage URI of the image to import. Immutable -- changing it
    * replaces the import.
    */
   cloudStorageUri: string;
@@ -64,7 +64,7 @@ export type ImageImportProps = {
    */
   machineImageTargetDefaults?: MachineImageTargetDetails;
   /**
-   * Encryption used during image adaptation. Immutable — changing it
+   * Encryption used during image adaptation. Immutable -- changing it
    * replaces the import.
    */
   encryption?: vm.Encryption;
@@ -103,7 +103,7 @@ export type ImageImport = Resource<
  * A VM Migration image import from a Cloud Storage file into a Compute
  * Engine disk or machine image.
  *
- * Image imports are immutable — every field is a replacement trigger.
+ * Image imports are immutable -- every field is a replacement trigger.
  * The resource has no labels field; Alchemy stamps ownership into the
  * target details' `labels` and `description` so `list` / nuke can find
  * them.

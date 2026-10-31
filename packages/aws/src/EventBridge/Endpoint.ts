@@ -186,10 +186,10 @@ export class EndpointFailed extends Data.TaggedError("EndpointFailed")<{
  * ### Publishing Through the Endpoint
  * **Example:** Publish from a Function
  * ```typescript
- * // init — bind the endpoint (provide AWS.EventBridge.PutEventsHttp)
+ * // init -- bind the endpoint (provide AWS.EventBridge.PutEventsHttp)
  * const putEvents = yield* AWS.EventBridge.PutEvents(endpoint);
  *
- * // runtime — EventBridge routes the event to the healthy region
+ * // runtime -- EventBridge routes the event to the healthy region
  * yield* putEvents({
  *   Entries: [
  *     {
@@ -262,7 +262,7 @@ export const EndpointProvider = () =>
       const awaitSettled = (name: string) =>
         eventbridge.describeEndpoint({ Name: name }).pipe(
           // A describe fired immediately after create can be eventually
-          // consistent — absorb NotFound briefly before polling the state.
+          // consistent -- absorb NotFound briefly before polling the state.
           Effect.retry({
             while: (e): boolean => e._tag === "ResourceNotFoundException",
             schedule: Schedule.spaced("1 second"),
@@ -396,7 +396,7 @@ export const EndpointProvider = () =>
             RoleArn: news.roleArn,
           } satisfies Omit<eventbridge.UpdateEndpointRequest, "Name">;
 
-          // Observe — live cloud state is authoritative. A vanished endpoint
+          // Observe -- live cloud state is authoritative. A vanished endpoint
           // falls through to create, and so does one a previous run left in
           // CREATE_FAILED (it can never become ACTIVE).
           let observed = yield* describe(name);
@@ -408,7 +408,7 @@ export const EndpointProvider = () =>
             }
           }
 
-          // Ensure — create the endpoint and wait for it to settle. The
+          // Ensure -- create the endpoint and wait for it to settle. The
           // replication role is checked again after the endpoint is accepted:
           // while its policy is still propagating, the endpoint ends in
           // CREATE_FAILED ("does not grant EventBridge the PutRule
@@ -423,7 +423,7 @@ export const EndpointProvider = () =>
             );
           }
 
-          // Sync — diff the observed configuration against the desired one
+          // Sync -- diff the observed configuration against the desired one
           // and update only when something differs (or the last update
           // failed).
           const drifted =

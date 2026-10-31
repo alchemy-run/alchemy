@@ -72,7 +72,7 @@ export const AccountProvider = () =>
             managesCloudwatchRoleArn: output?.managesCloudwatchRoleArn ?? false,
           };
         }),
-        // Account settings are an account/region singleton — there is no
+        // Account settings are an account/region singleton -- there is no
         // collection API, only `getAccount`. Return the single instance as a
         // one-element array (account singleton pattern).
         list: () =>
@@ -91,7 +91,7 @@ export const AccountProvider = () =>
           }
           const news = newsIn as AccountProps;
 
-          // Observe — read the current account-level CloudWatch role from
+          // Observe -- read the current account-level CloudWatch role from
           // API Gateway. The account settings resource is a singleton per
           // region, so there is no `ensure` step: we always sync.
           const observed = yield* ag
@@ -99,7 +99,7 @@ export const AccountProvider = () =>
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           const observedRoleArn = observed?.cloudwatchRoleArn;
 
-          // Sync the cloudwatchRoleArn — observed ↔ desired. We treat
+          // Sync the cloudwatchRoleArn -- observed <-> desired. We treat
           // `undefined` desired as "do not manage the field" so the user
           // can opt out without us clobbering whatever was already set
           // out of band.

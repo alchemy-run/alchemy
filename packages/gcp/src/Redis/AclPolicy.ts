@@ -32,11 +32,11 @@ export type AclPolicyProps = {
    * `projects/{project}/locations/{location}/aclPolicies/{acl_policy}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$` (1-63
-   * characters). Immutable — changing it replaces the policy.
+   * characters). Immutable -- changing it replaces the policy.
    */
   aclPolicyId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -58,11 +58,11 @@ export type AclPolicy = Resource<
     aclPolicyId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** ACL rules. */
     rules: AclRule[];
-    /** Server-reported state (`ACTIVE`, `UPDATING`, `DELETING`, …). */
+    /** Server-reported state (`ACTIVE`, `UPDATING`, `DELETING`, ...). */
     state: string | undefined;
     /** Server etag for optimistic concurrency. */
     etag: string | undefined;
@@ -79,7 +79,7 @@ export type AclPolicy = Resource<
  * ACL policies have no labels field, so Alchemy identifies a policy by
  * its id: a policy found under the generated id is adopted, one found
  * under an explicit `aclPolicyId` without state is reported as unowned.
- * `aclPolicyId` and `location` are identity — changing either replaces
+ * `aclPolicyId` and `location` are identity -- changing either replaces
  * the policy. `rules` update in place. Create is synchronous; patch and
  * delete return long-running operations.
  *

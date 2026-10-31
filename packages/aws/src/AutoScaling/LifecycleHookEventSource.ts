@@ -192,7 +192,7 @@ export const consumeLifecycleActions = <StreamReq = never, Req = never>(
     // Subscribe the host Function to the matching lifecycle events. The pattern
     // uses only literal `source` + `detail-type` so it round-trips through both
     // the deploy-time rule and the runtime matcher (Output values cannot appear
-    // in the pattern — they don't resolve inside the deployed bundle).
+    // in the pattern -- they don't resolve inside the deployed bundle).
     yield* consumeBusEvents(
       `${idPrefix}-LifecycleEvents`,
       {

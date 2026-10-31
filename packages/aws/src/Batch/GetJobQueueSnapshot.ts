@@ -11,7 +11,7 @@ export interface GetJobQueueSnapshotRequest extends Omit<
 
 /**
  * Snapshot the head of the bound AWS Batch job queue (the next ~100 `RUNNABLE`
- * jobs the scheduler will run, in dispatch order) — queue introspection for
+ * jobs the scheduler will run, in dispatch order) -- queue introspection for
  * dashboards and backpressure decisions from runtime code.
  *
  * ### Inspecting the Queue

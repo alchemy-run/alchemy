@@ -41,7 +41,7 @@ export interface VariableProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -70,7 +70,7 @@ export interface Variable extends Resource<
  * instead.
  *
  * Authentication is resolved via the GitHub `Credentials` service supplied
- * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
+ * by `GitHub.providers()` (which uses the Alchemy AuthProvider -- env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
  * ### Repository Variables
@@ -144,10 +144,10 @@ export const Variable = Resource<Variable>("GitHub.Variable");
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
     // A variable's entire identity is (host, owner, repository, environment,
-    // name) — GitHub has no rename/move API for variables, so changing any
+    // name) -- GitHub has no rename/move API for variables, so changing any
     // of them replaces the resource: the engine creates the new variable
     // first, then `delete` removes the old one from its old location.
-    // Replacement is safe here — a variable is declarative config that is
+    // Replacement is safe here -- a variable is declarative config that is
     // fully re-creatable from props.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -167,7 +167,7 @@ export const VariableProvider = () =>
       // A variable is keyed by its location (repo vs. environment). A
       // location change normally arrives as a replacement (see `diff`); this
       // guard is the safety net for the plan-time path where `news` contained
-      // unresolved outputs and diff could not compare — delete the orphaned
+      // unresolved outputs and diff could not compare -- delete the orphaned
       // variable from its old location before converging the new one.
       if (
         olds !== undefined &&
@@ -176,18 +176,18 @@ export const VariableProvider = () =>
         yield* deleteVariable(olds);
       }
 
-      // Observe — `name` is the path identifier; ask GitHub directly for the
+      // Observe -- `name` is the path identifier; ask GitHub directly for the
       // live row. A 404 means it doesn't exist (deleted out-of-band, or never
       // created), so we converge by creating it; otherwise we PATCH the value.
       const observed = yield* getVariable(news);
 
-      // Ensure — POST creates the variable.
+      // Ensure -- POST creates the variable.
       if (observed === undefined) {
         yield* createVariable(news);
         return { updatedAt: new Date().toISOString() };
       }
 
-      // Sync — PATCH the value if it drifted; skip the call when the
+      // Sync -- PATCH the value if it drifted; skip the call when the
       // observed value already matches to keep the API quiet.
       if (observed.value !== news.value) {
         yield* updateVariable(news);
@@ -220,7 +220,7 @@ export const VariableProvider = () =>
             Effect.map((variables) => variables.map((v) => ({ updatedAt: v.updated_at }))),
             // Repos with Actions disabled, or where the token lacks the
             // `repo`/`actions` scope, reject the variables endpoint with
-            // 403/404 — skip them per the per-item not-found rule rather
+            // 403/404 -- skip them per the per-item not-found rule rather
             // than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

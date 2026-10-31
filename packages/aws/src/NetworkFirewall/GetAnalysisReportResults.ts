@@ -9,7 +9,7 @@ export interface GetAnalysisReportResultsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:GetAnalysisReportResults` — read the
+ * Runtime binding for `network-firewall:GetAnalysisReportResults` -- read the
  * results of a completed traffic analysis report on the bound
  * {@link Firewall}; the firewall ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface GetAnalysisReportResultsRequest extends Omit<
  * ### Analysis Reports
  * **Example:** Read Analysis Report Results
  * ```typescript
- * // init — grants network-firewall:GetAnalysisReportResults on the firewall
+ * // init -- grants network-firewall:GetAnalysisReportResults on the firewall
  * const getAnalysisReportResults =
  *   yield* AWS.NetworkFirewall.GetAnalysisReportResults(firewall);
  *

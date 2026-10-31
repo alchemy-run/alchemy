@@ -113,7 +113,7 @@ export interface DataLakeSettings extends Resource<
 > {}
 
 /**
- * The Lake Formation data lake settings for the account — an account/region
+ * The Lake Formation data lake settings for the account -- an account/region
  * singleton controlling who the data lake administrators are, the default
  * permissions for new databases/tables, and external data filtering.
  *
@@ -163,7 +163,7 @@ const toWireDefaults = (specs: DefaultPermissionSpec[]): lf.PrincipalPermissions
 const dedupe = (values: string[]): string[] => [...new Set(values)];
 
 /**
- * Stable fingerprint of the aspects of the settings this resource manages —
+ * Stable fingerprint of the aspects of the settings this resource manages --
  * used to skip the `PutDataLakeSettings` call when nothing changed.
  */
 const fingerprint = (s: lf.DataLakeSettings): string =>
@@ -344,7 +344,7 @@ export const DataLakeSettingsProvider = () =>
       return DataLakeSettings.Provider.of({
         stables: ["catalogId"],
 
-        // Account/region singleton — return the single instance.
+        // Account/region singleton -- return the single instance.
         list: () =>
           Effect.gen(function* () {
             const observed = yield* observe(undefined);
@@ -383,19 +383,19 @@ export const DataLakeSettingsProvider = () =>
           if ((news.catalogId ?? undefined) !== (olds.catalogId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // everything else → update (singleton sync)
+          // everything else -> update (singleton sync)
         }),
 
         reconcile: Effect.fn(function* ({ news, olds, output, session }) {
           const { accountId } = yield* AWSEnvironment.current;
           const catalogId = news.catalogId ?? accountId;
 
-          // 1. OBSERVE — cloud settings are authoritative; capture the
+          // 1. OBSERVE -- cloud settings are authoritative; capture the
           //    pre-existing settings the first time we manage them.
           const observed = yield* observe(news.catalogId);
           const captured = output?.captured ?? snapshot(observed);
 
-          // 2. SYNC — start from observed, overlay the aspects we manage.
+          // 2. SYNC -- start from observed, overlay the aspects we manage.
           const desired = snapshot(observed);
 
           const managedAdmins = news.dataLakeAdmins ?? [];
@@ -422,7 +422,7 @@ export const DataLakeSettingsProvider = () =>
             if (news[field] !== undefined) {
               applyField(desired, news, field);
             } else if (olds?.[field] !== undefined) {
-              // field was managed before and is no longer — restore the
+              // field was managed before and is no longer -- restore the
               // captured pre-management value.
               copyField(desired, captured, field);
             }

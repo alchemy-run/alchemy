@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:PutFeedback`.
  *
- * Records feedback on an insight's usefulness (`VALID` / `NOT_VALID` and variants) — feeding triage decisions back into DevOps Guru.
+ * Records feedback on an insight's usefulness (`VALID` / `NOT_VALID` and variants) -- feeding triage decisions back into DevOps Guru.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.PutFeedbackHttp)`.
  * ### Feedback
  * **Example:** Rate an Insight
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const putFeedback = yield* AWS.DevOpsGuru.PutFeedback();
  *
  * // runtime

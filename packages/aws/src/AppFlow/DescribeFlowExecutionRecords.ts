@@ -12,7 +12,7 @@ export interface DescribeFlowExecutionRecordsRequest extends Omit<
  * Runtime binding for `appflow:DescribeFlowExecutionRecords`.
  *
  * Bind this operation to a {@link Flow} in the function's init phase to get a
- * callable that pages through the flow's run history — each record carries
+ * callable that pages through the flow's run history -- each record carries
  * the `executionId`, status, timing, and record counts of one run. The flow
  * name is injected automatically and `appflow:DescribeFlowExecutionRecords`
  * is granted on the flow. Provide the implementation with
@@ -20,11 +20,11 @@ export interface DescribeFlowExecutionRecordsRequest extends Omit<
  * ### Monitoring Flow Runs
  * **Example:** Check the Status of the Latest Run
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const describeFlowExecutionRecords =
  *   yield* AWS.AppFlow.DescribeFlowExecutionRecords(flow);
  *
- * // runtime — read the most recent run
+ * // runtime -- read the most recent run
  * const records = yield* describeFlowExecutionRecords({ maxResults: 1 });
  * const latest = records.flowExecutions?.[0];
  * // latest?.executionStatus === "Successful"

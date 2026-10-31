@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:DescribeBatchInferenceJob` — Polls a batch inference job for completion — pairs with
+ * Runtime binding for `personalize:DescribeBatchInferenceJob` -- Polls a batch inference job for completion -- pairs with
  * {@link CreateBatchInferenceJob}.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.DescribeBatchInferenceJobHttp)`.

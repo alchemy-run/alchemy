@@ -6,8 +6,8 @@ import type { Vault } from "./Vault.ts";
 /**
  * Shared scaffolding for the Glacier runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeGlacierVaultHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeGlacierVaultHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate: Glacier's REST API scopes every data-plane operation to a
  * vault, so the runtime callable injects the bound {@link Vault}'s name (and

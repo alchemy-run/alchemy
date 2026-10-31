@@ -33,23 +33,23 @@ export type InterconnectApplicationAware = compute.InterconnectApplicationAwareI
 export type InterconnectProps = {
   /**
    * Interconnect name (RFC1035, 1-63 characters). If omitted, a unique
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the interconnect.
    */
   interconnectName?: string;
   /**
    * URL or name of the InterconnectLocation (for example
-   * `iad-zone1-1`). Immutable — changing it replaces the interconnect.
+   * `iad-zone1-1`). Immutable -- changing it replaces the interconnect.
    */
   location: string;
   /**
-   * Dedicated physical interconnection or partner-managed. Immutable —
+   * Dedicated physical interconnection or partner-managed. Immutable --
    * changing it replaces the interconnect.
    * @default "DEDICATED"
    */
   interconnectType?: InterconnectType;
   /**
-   * Speed of each physical link in the bundle. Immutable — changing it
+   * Speed of each physical link in the bundle. Immutable -- changing it
    * replaces the interconnect.
    * @default "LINK_TYPE_ETHERNET_10G_LR"
    */
@@ -60,7 +60,7 @@ export type InterconnectProps = {
    */
   requestedLinkCount?: number;
   /**
-   * Customer name for the Letter of Authorization. Immutable — changing
+   * Customer name for the Letter of Authorization. Immutable -- changing
    * it replaces the interconnect.
    */
   customerName?: string;
@@ -79,7 +79,7 @@ export type InterconnectProps = {
    */
   adminEnabled?: boolean;
   /**
-   * Cross-Cloud Interconnect remote location URL. Immutable — changing
+   * Cross-Cloud Interconnect remote location URL. Immutable -- changing
    * it replaces the interconnect.
    */
   remoteLocation?: string;
@@ -94,7 +94,7 @@ export type InterconnectProps = {
   macsec?: InterconnectMacsec;
   /**
    * Features requested at create time (`IF_MACSEC`,
-   * `IF_CROSS_SITE_NETWORK`). Immutable — changing them replaces the
+   * `IF_CROSS_SITE_NETWORK`). Immutable -- changing them replaces the
    * interconnect.
    */
   requestedFeatures?: string[];

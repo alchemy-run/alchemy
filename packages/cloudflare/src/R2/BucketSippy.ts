@@ -29,7 +29,7 @@ export interface BucketSippyAwsSource {
   region: string;
   /**
    * Access Key ID of an AWS IAM credential with read access to the
-   * source bucket. Write-only — Cloudflare never returns it.
+   * source bucket. Write-only -- Cloudflare never returns it.
    */
   accessKeyId: Redacted.Redacted<string>;
   /**
@@ -54,7 +54,7 @@ export interface BucketSippyGcsSource {
    */
   clientEmail: string;
   /**
-   * Private key of the GCP service account. Write-only — Cloudflare
+   * Private key of the GCP service account. Write-only -- Cloudflare
    * never returns it.
    */
   privateKey: Redacted.Redacted<string>;
@@ -72,7 +72,7 @@ export type BucketSippySource = BucketSippyAwsSource | BucketSippyGcsSource;
  */
 export interface BucketSippyDestination {
   /**
-   * Access Key ID of the R2 API token. Write-only at the secret level —
+   * Access Key ID of the R2 API token. Write-only at the secret level --
    * Cloudflare echoes only the key ID back.
    */
   accessKeyId: Redacted.Redacted<string>;
@@ -87,20 +87,20 @@ export interface BucketSippyProps {
    * Name of the R2 bucket to enable incremental migration into. Pass
    * `bucket.bucketName` from a `Cloudflare.R2.Bucket`.
    *
-   * Immutable — changing the bucket triggers a replacement.
+   * Immutable -- changing the bucket triggers a replacement.
    */
   bucketName: string;
   /**
    * Jurisdiction of the bucket (must match the bucket's own
    * jurisdiction).
    *
-   * Immutable — changing the jurisdiction triggers a replacement.
+   * Immutable -- changing the jurisdiction triggers a replacement.
    * @default "default"
    */
   jurisdiction?: Bucket.Jurisdiction;
   /**
    * The upstream AWS S3 or Google Cloud Storage bucket to migrate
-   * objects from. Source credentials are write-only — they are sent to
+   * objects from. Source credentials are write-only -- they are sent to
    * Cloudflare but never read back.
    */
   source: BucketSippySource;
@@ -135,12 +135,12 @@ export type BucketSippy = Resource<
 >;
 
 /**
- * Sippy — incremental migration from AWS S3 or Google Cloud Storage
+ * Sippy -- incremental migration from AWS S3 or Google Cloud Storage
  * into a Cloudflare R2 bucket.
  *
  * When Sippy is enabled on a bucket, any object requested from R2 that
  * is not yet present is fetched from the configured source bucket,
- * served, and copied into R2 — migrating data on demand without a bulk
+ * served, and copied into R2 -- migrating data on demand without a bulk
  * transfer and without paying double storage during the transition.
  *
  * One Sippy configuration exists per bucket (it is a singleton
@@ -228,7 +228,7 @@ export const BucketSippyProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
-      // The bucket is the configuration's identity — moving Sippy to a
+      // The bucket is the configuration's identity -- moving Sippy to a
       // different bucket (or jurisdiction) is a replacement. Compare
       // only once both sides are concrete strings.
       if (
@@ -259,16 +259,16 @@ export const BucketSippyProvider = () =>
 
       const observed = yield* r2.getBucketSippy({ accountId: acct, bucketName, jurisdiction }).pipe(
         Effect.map((config): r2.GetBucketSippyResponse | undefined => config),
-        // The bucket itself is gone — so is its Sippy configuration.
+        // The bucket itself is gone -- so is its Sippy configuration.
         Effect.catchTag("NoSuchBucket", () => Effect.undefined),
       );
       // A bucket with Sippy never configured (or disabled) reads back as
-      // `{ enabled: false }` — that is "absent" for this resource.
+      // `{ enabled: false }` -- that is "absent" for this resource.
       if (!observed || observed.enabled !== true) return undefined;
 
       const attrs = toAttributes(observed, acct, bucketName, jurisdiction);
       // Sippy configs carry no ownership markers. With no prior output we
-      // cannot prove we enabled it — brand it `Unowned` so takeover is
+      // cannot prove we enabled it -- brand it `Unowned` so takeover is
       // gated behind the adopt policy.
       return output ? attrs : Unowned(attrs);
     }),
@@ -281,8 +281,8 @@ export const BucketSippyProvider = () =>
       const jurisdiction = news.jurisdiction ?? "default";
 
       // The PUT is a full upsert of the bucket's single Sippy
-      // configuration — enabling when absent and re-configuring when
-      // present — so observe/ensure/sync collapse into one idempotent
+      // configuration -- enabling when absent and re-configuring when
+      // present -- so observe/ensure/sync collapse into one idempotent
       // call. Source/destination secrets are write-only, so an observed
       // config can never be diffed against the desired one anyway.
       const synced = yield* r2.putBucketSippy({
@@ -303,7 +303,7 @@ export const BucketSippyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Disabling Sippy on a bucket where it is already disabled is a
       // success (`{ enabled: false }`); a missing bucket means there is
-      // nothing left to disable — both make delete idempotent.
+      // nothing left to disable -- both make delete idempotent.
       yield* r2
         .deleteBucketSippy({
           accountId: output.accountId,
@@ -336,7 +336,7 @@ export const BucketSippyProvider = () =>
                 : [],
             ),
             // A bucket that vanished mid-enumeration, or one whose plan
-            // rejects the Sippy route, contributes nothing — skip it.
+            // rejects the Sippy route, contributes nothing -- skip it.
             Effect.catchTag(["NoSuchBucket", "InvalidRoute", "Forbidden"], () =>
               Effect.succeed([] as BucketSippyAttributes[]),
             ),

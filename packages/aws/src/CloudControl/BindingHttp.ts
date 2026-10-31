@@ -5,8 +5,8 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
 /**
  * Shared scaffolding for Cloud Control HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeCloudControlHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeCloudControlHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action is
  * boilerplate.
  *

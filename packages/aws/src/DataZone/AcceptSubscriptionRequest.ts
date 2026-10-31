@@ -11,13 +11,13 @@ export interface AcceptSubscriptionRequestRequest extends Omit<
 /**
  * Runtime binding for `datazone:AcceptSubscriptionRequest`.
  *
- * Approves a pending subscription request in the bound domain — the core of an automated approval workflow. The domain id is injected from the binding.
+ * Approves a pending subscription request in the bound domain -- the core of an automated approval workflow. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.AcceptSubscriptionRequestHttp)`.
  * ### Subscription Workflows
  * **Example:** Auto-approve a Request
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const acceptSubscriptionRequest = yield* AWS.DataZone.AcceptSubscriptionRequest(domain);
  *
  * // runtime

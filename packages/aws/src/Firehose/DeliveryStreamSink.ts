@@ -7,7 +7,7 @@ import type { DeliveryStream } from "./DeliveryStream.ts";
 
 /**
  * The raw distilled `PutRecordBatch` entry. Callers stay in control of the
- * record payload (including any delimiters — Firehose does not add newlines
+ * record payload (including any delimiters -- Firehose does not add newlines
  * between records).
  */
 export type DeliveryStreamSinkRecord = Firehose.Record;
@@ -24,7 +24,7 @@ export type DeliveryStreamSinkError =
  * callers stay in control of encoding and record framing.
  *
  * Even a 200 response can carry per-record failures (`FailedPutCount > 0`,
- * per-record `ErrorCode` — `ServiceUnavailableException` / internal failure).
+ * per-record `ErrorCode` -- `ServiceUnavailableException` / internal failure).
  * All of them are transient, so the failed subset is re-submitted in input
  * order on a bounded schedule; exhausting retries fails the sink with a typed
  * `BatchRetryExhaustedError` carrying the stranded records.
@@ -32,12 +32,12 @@ export type DeliveryStreamSinkError =
  * ### Streaming Records
  * **Example:** Run a Stream of Records into the Delivery Stream
  * ```typescript
- * // init — bind the sink (provide AWS.Firehose.DeliveryStreamSinkHttp on the Function)
+ * // init -- bind the sink (provide AWS.Firehose.DeliveryStreamSinkHttp on the Function)
  * const sink = yield* AWS.Firehose.DeliveryStreamSink(deliveryStream);
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // runtime — stream newline-framed records into Firehose
+ *     // runtime -- stream newline-framed records into Firehose
  *     yield* Stream.fromIterable(lines).pipe(
  *       Stream.map((line) => ({
  *         Data: new TextEncoder().encode(`${line}\n`),

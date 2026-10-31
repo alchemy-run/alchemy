@@ -36,7 +36,7 @@ export interface ViewProps {
   /**
    * The root ARN the view is scoped to. Defaults to the account
    * (`arn:aws:iam::<account>:root`). Changing the scope requires
-   * replacement — the API offers no scope update.
+   * replacement -- the API offers no scope update.
    */
   scope?: string;
 
@@ -63,7 +63,7 @@ export interface View extends Resource<
 > {}
 
 /**
- * An AWS Resource Explorer view — a saved search lens with an optional
+ * An AWS Resource Explorer view -- a saved search lens with an optional
  * filter and a set of included properties that `Search` queries run
  * through.
  *
@@ -107,7 +107,7 @@ export { ViewResource as View };
 
 /**
  * Raised when a view can neither be created (a peer holds the name) nor
- * observed afterwards — i.e. reconciliation raced a concurrent delete.
+ * observed afterwards -- i.e. reconciliation raced a concurrent delete.
  */
 export class ViewUnobservable extends Data.TaggedError("ResourceExplorerViewUnobservable")<{
   message: string;
@@ -116,7 +116,7 @@ export class ViewUnobservable extends Data.TaggedError("ResourceExplorerViewUnob
 /**
  * Resource Explorer answers `GetView`/`DeleteView` for a nonexistent or
  * deleted view with the typed `UnauthorizedException` (HTTP 401, empty
- * message) rather than `ResourceNotFoundException` — both mean "the view
+ * message) rather than `ResourceNotFoundException` -- both mean "the view
  * is not there for you".
  */
 const getViewSafe = Effect.fn(function* (viewArn: string) {
@@ -142,7 +142,7 @@ const findViewArnByName = Effect.fn(function* (name: string) {
  * Creating a view while the region's index is still provisioning (or
  * missing) is rejected with the typed `UnauthorizedException`. When an
  * `Index` and a `View` deploy concurrently this is a transient ordering
- * race — retry through it on a bounded schedule (an index becomes ACTIVE
+ * race -- retry through it on a bounded schedule (an index becomes ACTIVE
  * in ~15s). Explicitly-typed helper: an inline `Effect.retry` widens the
  * provider layer's declaration-emitted R to `unknown`.
  */
@@ -196,7 +196,7 @@ export const ViewProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Views ?? [])),
             );
-            // A view can vanish between enumeration and hydration — drop it.
+            // A view can vanish between enumeration and hydration -- drop it.
             const items = yield* Effect.forEach(
               arns,
               (arn) =>
@@ -235,7 +235,7 @@ export const ViewProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // Scope has no update API — a change requires replacement.
+          // Scope has no update API -- a change requires replacement.
           if ((olds ?? {}).scope !== news.scope) {
             return { action: "replace" } as const;
           }
@@ -249,7 +249,7 @@ export const ViewProvider = () =>
           const desiredProperties = news.includedProperties ?? [];
           const desiredFilter = news.filterString;
 
-          // 1. OBSERVE — by cached ARN first, then by name (covers
+          // 1. OBSERVE -- by cached ARN first, then by name (covers
           //    adoption and lost state).
           let found =
             output?.viewArn !== undefined ? yield* getViewSafe(output.viewArn) : undefined;
@@ -258,7 +258,7 @@ export const ViewProvider = () =>
             found = arn !== undefined ? yield* getViewSafe(arn) : undefined;
           }
 
-          // 2. ENSURE — create when missing. Retries through the window
+          // 2. ENSURE -- create when missing. Retries through the window
           //    where the region's index is still provisioning, and
           //    tolerates a duplicate-name Conflict as a race (observe the
           //    winner and converge below).
@@ -294,7 +294,7 @@ export const ViewProvider = () =>
             });
           }
 
-          // 3. SYNC — UpdateView REPLACES both Filters and
+          // 3. SYNC -- UpdateView REPLACES both Filters and
           //    IncludedProperties (omitted fields are cleared), so always
           //    send the full desired shape when either differs.
           const observedFilter = view.Filters?.FilterString;
@@ -310,7 +310,7 @@ export const ViewProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(found.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

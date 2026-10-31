@@ -118,14 +118,14 @@ export interface TerminalCellular {
   enabled: boolean;
 }
 
-/** Daily reboot window (hours in 0–23). */
+/** Daily reboot window (hours in 0-23). */
 export interface TerminalRebootWindow {
   /**
-   * Start hour of the reboot window (0–23).
+   * Start hour of the reboot window (0-23).
    */
   startHour: number;
   /**
-   * End hour of the reboot window (0–23). Must differ from `startHour`.
+   * End hour of the reboot window (0-23). Must differ from `startHour`.
    */
   endHour: number;
 }
@@ -244,7 +244,7 @@ export interface TerminalConfigurationProps {
   /**
    * Display name of the configuration. If omitted, a unique name is
    * generated from the stack, stage, and logical id. Mutable. Used as the
-   * lookup key when the Stripe id is missing — this object has no
+   * lookup key when the Stripe id is missing -- this object has no
    * metadata.
    */
   name?: string;
@@ -353,7 +353,7 @@ export type TerminalConfiguration = Resource<
   "Stripe.TerminalConfiguration",
   TerminalConfigurationProps,
   {
-    /** Stripe Terminal configuration id (`tmc_…`). */
+    /** Stripe Terminal configuration id (`tmc_...`). */
     id: string;
     /** Display name of the configuration, if set. */
     name: string | undefined;
@@ -377,7 +377,7 @@ export type TerminalConfiguration = Resource<
 >;
 
 /**
- * A Stripe Terminal Configuration — splash screens, tipping, offline
+ * A Stripe Terminal Configuration -- splash screens, tipping, offline
  * mode, reboot window, cellular, and Wi-Fi for smart readers. Name and
  * nested settings update in place. Destroy hard-deletes the
  * configuration. The account default configuration is never adopted or

@@ -40,13 +40,13 @@ export type NetworkEndpointSpec = {
 
 export type NetworkEndpointGroupProps = {
   /**
-   * Name of the network endpoint group. Must be 1–63 characters and comply
+   * Name of the network endpoint group. Must be 1-63 characters and comply
    * with RFC1035. If omitted, a unique name is generated from the stack,
    * stage, and logical id. Changing this replaces the group.
    */
   networkEndpointGroupName?: string;
   /**
-   * Zone of the group (e.g. `"us-central1-a"`). Immutable — changing it
+   * Zone of the group (e.g. `"us-central1-a"`). Immutable -- changing it
    * replaces the group. This resource maps to the zonal
    * `networkEndpointGroups` collection (regional/global NEGs are separate).
    * @default "us-central1-a"
@@ -61,25 +61,25 @@ export type NetworkEndpointGroupProps = {
   description?: string;
   /**
    * VPC network URL or name (`default`, `global/networks/default`, or
-   * `projects/{project}/global/networks/{name}`). Immutable — changing it
+   * `projects/{project}/global/networks/{name}`). Immutable -- changing it
    * replaces the group.
    * @default "default"
    */
   network?: string;
   /**
-   * Subnetwork URL or name. Immutable — changing it replaces the group.
+   * Subnetwork URL or name. Immutable -- changing it replaces the group.
    * Optional for auto-mode networks such as `default`.
    */
   subnetwork?: string;
   /**
-   * Type of endpoints in this group. Immutable — changing it replaces the
+   * Type of endpoints in this group. Immutable -- changing it replaces the
    * group.
    * @default "GCE_VM_IP_PORT"
    */
   networkEndpointType?: NetworkEndpointType;
   /**
    * Default port used when an endpoint omits `port`. Must not be set for
-   * `GCE_VM_IP`. Immutable — changing it replaces the group.
+   * `GCE_VM_IP`. Immutable -- changing it replaces the group.
    */
   defaultPort?: number;
   /**
@@ -128,7 +128,7 @@ export type NetworkEndpointGroup = Resource<
  * A zonal Compute Engine network endpoint group (NEG).
  *
  * Zonal NEGs hold VM IP/port endpoints (or hybrid `NON_GCP_PRIVATE_IP_PORT`
- * endpoints) for load balancing. They have no labels API — Alchemy records
+ * endpoints) for load balancing. They have no labels API -- Alchemy records
  * ownership in the description so `list` / `pnpm nuke:gcp` can find them.
  * Serverless, PSC, and internet NEGs use the regional/global collections
  * and are not this resource.

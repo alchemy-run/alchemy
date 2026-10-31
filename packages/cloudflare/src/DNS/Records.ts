@@ -26,7 +26,7 @@ export type RecordsBinding = {
 
 export interface RecordsProps {
   /**
-   * Zone that owns the records — a zone id, zone name, or `Zone`
+   * Zone that owns the records -- a zone id, zone name, or `Zone`
    * resource. When omitted, the
    * zone containing the set's first name is inferred by walking its parent
    * domains; the deploy fails actionably when no zone matches. Every name in
@@ -34,7 +34,7 @@ export interface RecordsProps {
    */
   zone?: ZoneReference;
   /**
-   * Record type shared by every record in the set. Stable — changing it
+   * Record type shared by every record in the set. Stable -- changing it
    * replaces the set.
    */
   type: RecordsType;
@@ -54,7 +54,7 @@ export interface RecordsProps {
    */
   proxied?: boolean;
   /**
-   * TTL in seconds (`60`–`86400`), or `1` for Cloudflare's "automatic"
+   * TTL in seconds (`60`-`86400`), or `1` for Cloudflare's "automatic"
    * setting. Must be `1` when `proxied` is `true`.
    * @default 1
    */
@@ -64,7 +64,7 @@ export interface RecordsProps {
 export interface RecordsAttributes {
   /**
    * Zone that owns the records. `undefined` only while the set is empty
-   * with no explicit zone — resolved on the first reconcile that has a
+   * with no explicit zone -- resolved on the first reconcile that has a
    * name.
    */
   zoneId: string | undefined;
@@ -93,7 +93,7 @@ export type Records = Resource<
 
 /**
  * A dynamic set of identically-configured Cloudflare DNS records that differ
- * only by name — the Cloudflare counterpart of `AWS.Route53.Records`.
+ * only by name -- the Cloudflare counterpart of `AWS.Route53.Records`.
  *
  * Unlike `Cloudflare.DNS.Record` (one resource per record), `Records`
  * reconciles a whole name set against the zone: names added to the set are
@@ -175,7 +175,7 @@ const sameContent = (a: string | null | undefined, b: string) =>
  * Converge `(name, type)` to exactly one record with `body`'s value: create
  * it when missing, overwrite a record that differs (Route 53 `UPSERT`
  * semantics), and remove extra records sharing the name. A concurrent
- * create (`DnsRecordAlreadyExists`) is a race — re-observe and converge.
+ * create (`DnsRecordAlreadyExists`) is a race -- re-observe and converge.
  */
 const upsertRecordAt = (
   zoneId: string,
@@ -247,7 +247,7 @@ export const RecordsProvider = () =>
       if (output === undefined) {
         // No state of our own: records already at the declared names were
         // not created by this set (DNS records carry no ownership markers),
-        // so brand them `Unowned` — the engine refuses to overwrite them
+        // so brand them `Unowned` -- the engine refuses to overwrite them
         // unless `adopt` is set.
         const names = resolveDesiredNames(olds?.names, []);
         if (olds === undefined || names.length === 0) return undefined;
@@ -318,7 +318,7 @@ export const RecordsProvider = () =>
       });
 
       // `output.names` is the cache of which records this resource managed
-      // before — the only way to know what to garbage-collect. A zone move
+      // before -- the only way to know what to garbage-collect. A zone move
       // leaves every previously managed name stale in the old zone.
       const movedZone = output?.zoneId !== undefined && output.zoneId !== zoneId;
       const desiredSet = new Set(desired);
@@ -326,7 +326,7 @@ export const RecordsProvider = () =>
         (name) => movedZone || !desiredSet.has(normalizeName(name)),
       );
 
-      // Sync — observe each desired name and write only the delta.
+      // Sync -- observe each desired name and write only the delta.
       for (const name of desired) {
         yield* upsertRecordAt(zoneId, {
           type: news.type,
@@ -356,7 +356,7 @@ export const RecordsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The set never resolved a zone — it never created records.
+      // The set never resolved a zone -- it never created records.
       if (output.zoneId === undefined) return;
       yield* deleteAtNames(output.zoneId, output.type, output.names);
     }),

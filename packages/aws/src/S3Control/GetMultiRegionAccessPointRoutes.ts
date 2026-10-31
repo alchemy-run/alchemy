@@ -7,14 +7,14 @@ import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
  * Runtime binding for `s3:GetMultiRegionAccessPointRoutes`.
  *
  * Reads the bound {@link MultiRegionAccessPoint}'s per-region routing
- * configuration (each region's `TrafficDialPercentage`) — the observe half
+ * configuration (each region's `TrafficDialPercentage`) -- the observe half
  * of an active/passive failover controller. Requests are routed to the
  * `us-west-2` MRAP control plane. Provide the implementation with
  * `Effect.provide(AWS.S3Control.GetMultiRegionAccessPointRoutesHttp)`.
  * ### Controlling Multi-Region Failover
  * **Example:** Read the Current Routes
  * ```typescript
- * // init — bind the operation to the Multi-Region Access Point
+ * // init -- bind the operation to the Multi-Region Access Point
  * const getRoutes =
  *   yield* AWS.S3Control.GetMultiRegionAccessPointRoutes(mrap);
  *

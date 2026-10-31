@@ -5,18 +5,18 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:TerminateProvisionedProduct`.
  *
- * Terminates a provisioned product, deleting the underlying CloudFormation stack. Returns the in-flight record — poll it with `DescribeRecord`.
+ * Terminates a provisioned product, deleting the underlying CloudFormation stack. Returns the in-flight record -- poll it with `DescribeRecord`.
  *
  * Also grants the CloudFormation stack-deletion actions Service Catalog performs with the caller's credentials when the product has no launch-role constraint.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.TerminateProvisionedProductHttp)`.
  * ### Provisioning Products
  * **Example:** Terminate a Provisioned Product
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const terminateProvisionedProduct = yield* AWS.ServiceCatalog.TerminateProvisionedProduct();
  *
  * // runtime

@@ -6,7 +6,7 @@ import type { DataSet } from "./DataSet.ts";
 /**
  * Runtime binding for `dataexchange:ListDataSetRevisions`.
  *
- * Enumerates the bound data set's revisions, newest first — the
+ * Enumerates the bound data set's revisions, newest first -- the
  * building block of "process the latest published revision" consumers.
  * The data set id is injected from the binding.
  * Provide the implementation with

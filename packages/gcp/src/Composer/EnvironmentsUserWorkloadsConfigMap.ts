@@ -20,14 +20,14 @@ export type EnvironmentsUserWorkloadsConfigMapProps = {
   /**
    * Parent environment resource name
    * (`projects/{project}/locations/{location}/environments/{environment}`).
-   * Immutable — changing it replaces the ConfigMap.
+   * Immutable -- changing it replaces the ConfigMap.
    */
   environmentName: string;
   /**
    * ConfigMap id (the last path segment). If omitted, a unique RFC1035
    * name is generated from the stack, stage, and logical id. Must start
    * with a lowercase letter, be 1-63 characters, and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * ConfigMap.
    */
   configMapId?: string;
@@ -50,7 +50,7 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
     environmentName: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Parent environment id. */
     environmentId: string;
@@ -68,7 +68,7 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
  * Supported on Cloud Composer 3 (`composer-3-airflow-2` and newer).
  * ConfigMaps have no labels field, so Alchemy tracks them by name and
  * never adds keys to `data`. `environmentName` and `configMapId` are
- * identity — changing either replaces the ConfigMap.
+ * identity -- changing either replaces the ConfigMap.
  *
  * ### Creating a User Workloads ConfigMap
  * **Example:** Generated name

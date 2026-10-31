@@ -12,7 +12,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the association or its pinned certificate. Changes
- * propagate asynchronously (`pending_deployment` → `active`), typically
+ * propagate asynchronously (`pending_deployment` -> `active`), typically
  * settling within seconds.
  */
 export type HostnameAssociationStatus =
@@ -28,14 +28,14 @@ export type HostnameAssociationStatus =
 
 export type HostnameAssociationProps = {
   /**
-   * Zone the hostname belongs to. Cannot be changed — updating this property
+   * Zone the hostname belongs to. Cannot be changed -- updating this property
    * triggers a replacement.
    */
   zoneId: string;
   /**
    * The hostname on the origin for which the client certificate will be
    * presented. Must be a hostname of the zone. This is the association's
-   * identity — updating it triggers a replacement (the old hostname's
+   * identity -- updating it triggers a replacement (the old hostname's
    * association is voided).
    */
   hostname: string;
@@ -43,12 +43,12 @@ export type HostnameAssociationProps = {
    * Identifier of the hostname client certificate
    * ({@link HostnameCertificate}) presented to the origin
    * for this hostname. Required by Cloudflare for every hostname AOP
-   * configuration. Mutable — updated in place.
+   * configuration. Mutable -- updated in place.
    */
   certId: string;
   /**
    * Whether hostname-level Authenticated Origin Pulls is enabled for this
-   * hostname. Mutable — updated in place. On destroy the association is
+   * hostname. Mutable -- updated in place. On destroy the association is
    * voided (Cloudflare's `enabled: null`), restoring the hostname to
    * zone-level behavior.
    */
@@ -154,7 +154,7 @@ export const HostnameAssociationProvider = () =>
         return { action: "replace" } as const;
       }
       // The hostname is the association's identity in Cloudflare's bulk
-      // upsert — changing it must void the old hostname's entry, so it is a
+      // upsert -- changing it must void the old hostname's entry, so it is a
       // replacement.
       if (olds.hostname !== news.hostname) {
         return { action: "replace" } as const;
@@ -170,7 +170,7 @@ export const HostnameAssociationProvider = () =>
       if (!observed) return undefined;
       const attrs = toAttributes(observed, zoneId, hostname);
       // Cold read (no prior output): an association for this hostname exists
-      // but carries no ownership markers, so we cannot prove we created it —
+      // but carries no ownership markers, so we cannot prove we created it --
       // brand it `Unowned` so the engine refuses to take it over unless
       // `adopt` is set.
       return output === undefined ? Unowned(attrs) : attrs;
@@ -182,11 +182,11 @@ export const HostnameAssociationProvider = () =>
       const certId = news.certId as string;
       const hostname = news.hostname;
 
-      // 1. Observe — the hostname is the deterministic identity; a voided
+      // 1. Observe -- the hostname is the deterministic identity; a voided
       //    (`enabled: null`) or missing entry reads as absent.
       const observed = yield* observeAssociation(zoneId, hostname);
 
-      // 2. Sync — the PUT is a true upsert; skip it when the observed entry
+      // 2. Sync -- the PUT is a true upsert; skip it when the observed entry
       //    already matches the desired certificate and enablement.
       if (observed && observed.certId === certId && observed.enabled === news.enabled) {
         return toAttributes(observed, zoneId, hostname);
@@ -197,14 +197,14 @@ export const HostnameAssociationProvider = () =>
       });
       const result = put.result.find((r) => r.hostname === hostname);
 
-      // 3. Return — propagation is asynchronous (`pending_deployment` →
+      // 3. Return -- propagation is asynchronous (`pending_deployment` ->
       //    `active`); we do not block on activation.
       return toAttributes(result ?? { certId, enabled: news.enabled }, zoneId, hostname);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, hostname } = output;
-      // Observe first — voiding an already-voided / never-created hostname
+      // Observe first -- voiding an already-voided / never-created hostname
       // is a no-op, and the PUT needs the certificate id currently pinned to
       // the association.
       const observed = yield* observeAssociation(zoneId, hostname);
@@ -225,7 +225,7 @@ export const HostnameAssociationProvider = () =>
         .pipe(
           // Code 1415: the pinned certificate was already deleted out from
           // under the association, which Cloudflare rejects even for a void.
-          // The association is inert without its certificate — treat as done.
+          // The association is inert without its certificate -- treat as done.
           Effect.catchTag("InvalidHostnameConfig", () => Effect.void),
         );
     }),

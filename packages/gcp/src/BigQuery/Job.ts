@@ -31,18 +31,18 @@ export type JobProps = {
    * Job id (the `{jobId}` segment of `projects/{project}/jobs/{jobId}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Letters, numbers, underscores, and dashes; max 1,024
-   * characters. Immutable — changing it replaces the job.
+   * characters. Immutable -- changing it replaces the job.
    */
   jobId?: string;
   /**
-   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
-   * Immutable — changing it replaces the job.
+   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, ...).
+   * Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * Immutable after create — changing labels replaces the job.
+   * Immutable after create -- changing labels replaces the job.
    */
   labels?: Record<string, string>;
   /**
@@ -92,7 +92,7 @@ export type Job = Resource<
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Job kind (`QUERY`, `LOAD`, `EXTRACT`, `COPY`, …). */
+    /** Job kind (`QUERY`, `LOAD`, `EXTRACT`, `COPY`, ...). */
     jobType: string | undefined;
     /** Running state (`PENDING`, `RUNNING`, `DONE`). */
     state: string | undefined;
@@ -116,7 +116,7 @@ export type Job = Resource<
 >;
 
 /**
- * A Google BigQuery job — a one-shot query, load, copy, or extract.
+ * A Google BigQuery job -- a one-shot query, load, copy, or extract.
  *
  * Jobs are immutable after insert. Changing `jobId`, `location`, labels,
  * or the job configuration replaces the job. BigQuery job ids cannot be

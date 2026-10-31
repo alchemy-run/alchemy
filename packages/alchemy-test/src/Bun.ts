@@ -110,12 +110,12 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // workerd children) must outlive a single `Effect.runPromise` boundary,
   // otherwise the proxy is killed the moment `beforeAll(deploy(Stack))`
   // resolves and every later `HttpClient.get(workerUrl)` hits a dead port.
-  // The scope is closed by `destroy(...)` (or never — the next test run
+  // The scope is closed by `destroy(...)` (or never -- the next test run
   // reclaims any leaked sidecar via the lock file).
   const sharedScope = Scope.makeUnsafe("sequential");
   // In dev mode, run local providers behind one file-scoped RPC sidecar
-  // (the `alchemy dev` topology). Lives in its own scope — NOT sharedScope,
-  // which `destroy(Stack)` closes mid-file in self-contained tests — and is
+  // (the `alchemy dev` topology). Lives in its own scope -- NOT sharedScope,
+  // which `destroy(Stack)` closes mid-file in self-contained tests -- and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
   const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope, sidecar);
@@ -172,7 +172,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   // bun:test stops running later `afterAll` hooks once one throws, which
-  // would skip the fallback cleanup hook below — leaking the shared scope
+  // would skip the fallback cleanup hook below -- leaking the shared scope
   // and the sidecar for the rest of the process whenever a teardown
   // assertion fails. Guard every user teardown: on failure, run the
   // (idempotent) cleanup before rethrowing so the failure still fails the

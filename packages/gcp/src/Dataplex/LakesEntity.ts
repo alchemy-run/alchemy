@@ -26,7 +26,7 @@ export type EntitySchemaField = {
   name: string;
   /** Field description. */
   description?: string;
-  /** Field type (`STRING`, `INT64`, …). */
+  /** Field type (`STRING`, `INT64`, ...). */
   type: dataplex.GoogleCloudDataplexV1SchemaSchemaFieldTypeEnum | (string & {});
   /** Field mode (`REQUIRED`, `NULLABLE`, `REPEATED`). */
   mode: dataplex.GoogleCloudDataplexV1SchemaSchemaFieldModeEnum | (string & {});
@@ -56,7 +56,7 @@ export type EntitySchema = {
 };
 
 export type EntityStorageFormat = {
-  /** File format (`PARQUET`, `CSV`, `JSON`, …). */
+  /** File format (`PARQUET`, `CSV`, `JSON`, ...). */
   format?: dataplex.GoogleCloudDataplexV1StorageFormatFormatEnum | (string & {});
   /** Compression (`GZIP`, `BZIP2`). */
   compressionFormat?:
@@ -89,12 +89,12 @@ export type LakesEntityProps = {
   /**
    * Parent zone. Full name
    * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
-   * Immutable — changing it replaces the entity.
+   * Immutable -- changing it replaces the entity.
    */
   zone: string;
   /**
    * Entity id used as the published table name. Letters, numbers, and
-   * underscores; at most 256 characters. Immutable — changing it
+   * underscores; at most 256 characters. Immutable -- changing it
    * replaces the entity.
    */
   entityId?: string;
@@ -107,18 +107,18 @@ export type LakesEntityProps = {
    */
   description?: string;
   /**
-   * Entity type. Immutable — changing it replaces the entity.
+   * Entity type. Immutable -- changing it replaces the entity.
    * @default "TABLE"
    */
   type?: dataplex.GoogleCloudDataplexV1EntityTypeEnum | (string & {});
   /**
    * Asset id (not a full resource name) that stores the entity data.
-   * Immutable — changing it replaces the entity.
+   * Immutable -- changing it replaces the entity.
    */
   asset: string;
   /**
    * Storage path (`gs://bucket/path` or a BigQuery table name). Immutable
-   * — changing it replaces the entity.
+   * -- changing it replaces the entity.
    */
   dataPath: string;
   /**
@@ -126,7 +126,7 @@ export type LakesEntityProps = {
    */
   dataPathPattern?: string;
   /**
-   * Storage system. Immutable — changing it replaces the entity.
+   * Storage system. Immutable -- changing it replaces the entity.
    * @default "CLOUD_STORAGE"
    */
   system?: dataplex.GoogleCloudDataplexV1EntitySystemEnum | (string & {});
@@ -184,7 +184,7 @@ export type LakesEntity = Resource<
 >;
 
 /**
- * A Dataplex metadata entity — a table or fileset registered in a zone.
+ * A Dataplex metadata entity -- a table or fileset registered in a zone.
  *
  * Entities have no labels field: `read` reports an entity it finds
  * without prior state as unowned (adopt it with `--adopt`), and `list`

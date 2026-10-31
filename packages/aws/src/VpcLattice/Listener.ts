@@ -26,23 +26,23 @@ export type ListenerAction = vpclattice.RuleAction;
 
 export interface ListenerProps {
   /**
-   * ID or ARN of the lattice service the listener belongs to. Immutable —
+   * ID or ARN of the lattice service the listener belongs to. Immutable --
    * changing it replaces the listener.
    */
   serviceIdentifier: string;
   /**
-   * Name of the listener. If omitted, a unique name is generated. Immutable —
+   * Name of the listener. If omitted, a unique name is generated. Immutable --
    * changing it replaces the listener.
    */
   name?: string;
   /**
-   * Listener protocol (`HTTP`, `HTTPS`, or `TLS_PASSTHROUGH`). Immutable —
+   * Listener protocol (`HTTP`, `HTTPS`, or `TLS_PASSTHROUGH`). Immutable --
    * changing it replaces the listener.
    */
   protocol: "HTTP" | "HTTPS" | "TLS_PASSTHROUGH";
   /**
    * Listener port. Defaults to the protocol's default port (80 for HTTP,
-   * 443 for HTTPS). Immutable — changing it replaces the listener.
+   * 443 for HTTPS). Immutable -- changing it replaces the listener.
    */
   port?: number;
   /**
@@ -98,7 +98,7 @@ export interface Listener extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice listener — the process on a lattice service that
+ * An Amazon VPC Lattice listener -- the process on a lattice service that
  * checks for connection requests on a protocol/port and routes them via its
  * default action and rules.
  *
@@ -224,12 +224,12 @@ export const ListenerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the stable id cache, fall back to name lookup.
+          // Observe -- prefer the stable id cache, fall back to name lookup.
           let listener = output?.listenerId
             ? yield* observe(news.serviceIdentifier, output.listenerId)
             : yield* findByName(news.serviceIdentifier, name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!listener?.arn || !listener.id) {
             listener = yield* retryOnConflict(
               vpclattice.createListener({
@@ -250,7 +250,7 @@ export const ListenerProvider = () =>
           } else if (
             JSON.stringify(listener.defaultAction) !== JSON.stringify(news.defaultAction)
           ) {
-            // Sync default action — the only mutable setting.
+            // Sync default action -- the only mutable setting.
             yield* retryOnConflict(
               vpclattice.updateListener({
                 serviceIdentifier: news.serviceIdentifier,

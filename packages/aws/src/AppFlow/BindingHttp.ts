@@ -43,7 +43,7 @@ export interface AppFlowHttpBindingOptions<
  * request/response/error types are still checked against the capability
  * contract at the `Layer.effect` site.
  *
- * Internal scaffolding — NOT exported from `index.ts`.
+ * Internal scaffolding -- NOT exported from `index.ts`.
  */
 export const makeAppFlowHttpBinding = <
   R extends { readonly LogicalId: string },

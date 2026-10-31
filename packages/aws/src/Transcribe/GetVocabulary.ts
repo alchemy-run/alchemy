@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:GetVocabulary` — read a custom vocabulary's processing state and download URI.
+ * Runtime binding for `transcribe:GetVocabulary` -- read a custom vocabulary's processing state and download URI.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:GetVocabulary` on `*`.

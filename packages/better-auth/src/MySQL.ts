@@ -47,7 +47,7 @@ export const makeMySQLService = (
             migrate: makeMigrateSupport(
               migrateSource,
               open,
-              "Failed to load `mysql2` — install it to migrate a MySQL-backed BetterAuth",
+              "Failed to load `mysql2` \u2014 install it to migrate a MySQL-backed BetterAuth",
             ),
           }),
     } satisfies DatabaseService;
@@ -63,7 +63,7 @@ export const makeMySQLService = (
  *
  *
  * ### Connecting to PlanetScale MySQL
- * PlanetScale requires TLS — pass it in the URL's `ssl` query parameter
+ * PlanetScale requires TLS -- pass it in the URL's `ssl` query parameter
  * (mysql2 parses it as JSON).
  * **Example:** PlanetScale MySQL with TLS
  * ```typescript

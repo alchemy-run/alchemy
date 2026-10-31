@@ -104,7 +104,7 @@ export interface NetworkAcl extends Resource<
   Providers
 > {}
 /**
- * A network ACL — a stateless firewall that controls inbound and outbound
+ * A network ACL -- a stateless firewall that controls inbound and outbound
  * traffic at the *subnet* level, evaluated as an ordered list of numbered
  * allow/deny rules.
  *
@@ -123,7 +123,7 @@ export interface NetworkAcl extends Resource<
  *   tags: { Name: "private-nacl" },
  * });
  * ```
- * This creates an empty custom ACL in the VPC — it starts with only the implicit
+ * This creates an empty custom ACL in the VPC -- it starts with only the implicit
  * default-deny rules, so until you add entries it blocks all traffic on any
  * subnet you associate with it.
  *
@@ -236,7 +236,7 @@ export const NetworkAclProvider = () =>
           Effect.gen(function* () {
             // Filter default NACLs at the API: every VPC has one, they
             // cannot be deleted, and paging through them under a concurrent
-            // suite stalls the list test past the per-test timeout — which
+            // suite stalls the list test past the per-test timeout -- which
             // then skips destroy and leaks the custom ACL + VPC.
             const acls = yield* ec2.describeNetworkAcls
               .pages({
@@ -268,7 +268,7 @@ export const NetworkAclProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the NACL via cached id, else fall through to create.
+          // Observe -- find the NACL via cached id, else fall through to create.
           let acl: ec2.NetworkAcl | undefined;
           if (output?.networkAclId) {
             const lookup = yield* ec2
@@ -281,7 +281,7 @@ export const NetworkAclProvider = () =>
             acl = lookup.NetworkAcls?.[0];
           }
 
-          // Ensure — create the NACL when missing.
+          // Ensure -- create the NACL when missing.
           if (acl === undefined) {
             yield* session.note("Creating Network ACL...");
             const result = yield* ec2.createNetworkAcl({
@@ -301,7 +301,7 @@ export const NetworkAclProvider = () =>
 
           const networkAclId = acl.NetworkAclId!;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (acl.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;

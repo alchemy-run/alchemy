@@ -21,7 +21,7 @@ import {
 
 export interface PrivateDnsNamespaceProps {
   /**
-   * Name of the namespace — services are discoverable in DNS as
+   * Name of the namespace -- services are discoverable in DNS as
    * `{service}.{name}` inside the associated VPC (e.g. `internal.example.com`
    * yields `backend.internal.example.com`). Changing the name replaces the
    * namespace.
@@ -76,13 +76,13 @@ export interface PrivateDnsNamespace extends Resource<
 > {}
 
 /**
- * An AWS Cloud Map private DNS namespace — the DNS-based service registry
+ * An AWS Cloud Map private DNS namespace -- the DNS-based service registry
  * that ECS Service Connect and `serviceRegistries` point at. Services
  * registered in the namespace are discoverable inside the associated VPC via
  * DNS (`{service}.{namespace}`) and from anywhere via the
  * `DiscoverInstances` API.
  *
- * Namespace creation and deletion are asynchronous — the provider polls the
+ * Namespace creation and deletion are asynchronous -- the provider polls the
  * Cloud Map operations API (bounded) until they complete, which typically
  * takes 30-60 seconds.
  * ### Creating Namespaces
@@ -189,10 +189,10 @@ export const PrivateDnsNamespaceProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredTtl = toWireSeconds(news.ttl);
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache
           let namespace = yield* observeNamespace("DNS_PRIVATE", name, output?.namespaceId);
 
-          // 2. ENSURE — create if missing; namespace creation is async. The
+          // 2. ENSURE -- create if missing; namespace creation is async. The
           // created namespace is observed by the operation's target id,
           // riding out a same-name predecessor still deleting
           if (namespace === undefined) {
@@ -221,7 +221,7 @@ export const PrivateDnsNamespaceProvider = () =>
             });
           }
 
-          // 3. SYNC — description + SOA TTL, observed vs desired
+          // 3. SYNC -- description + SOA TTL, observed vs desired
           const observedTtl = namespace.Properties?.DnsProperties?.SOA?.TTL;
           const descriptionDelta =
             news.description !== undefined && news.description !== namespace.Description;
@@ -239,7 +239,7 @@ export const PrivateDnsNamespaceProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(namespace.Arn!);
           yield* syncTags(namespace.Arn!, observedTags, desiredTags);
 
@@ -253,7 +253,7 @@ export const PrivateDnsNamespaceProvider = () =>
           ).pipe(
             Effect.catchTags({
               NamespaceNotFound: () => Effect.succeed({ OperationId: undefined }),
-              // an identical delete is already in flight — await THAT operation
+              // an identical delete is already in flight -- await THAT operation
               // instead of silently skipping the deletion
               DuplicateRequest: (e) => Effect.succeed({ OperationId: e.DuplicateOperationId }),
             }),

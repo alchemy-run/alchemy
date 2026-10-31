@@ -7,8 +7,8 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 /**
  * The mode a resource's provider operates in.
  *
- * - `"live"`  — the provider converges real cloud state.
- * - `"local"` — the provider emulates the resource on the developer's
+ * - `"live"`  -- the provider converges real cloud state.
+ * - `"local"` -- the provider emulates the resource on the developer's
  *   machine (`alchemy dev`), typically as a long-running process managed
  *   by the dev sidecar.
  *
@@ -28,9 +28,9 @@ export type ProviderMode = "live" | "local";
  * Apply it with the {@link remote} combinator. During `alchemy deploy`
  * everything is live anyway, so the policy only has an effect in dev.
  *
- * Tri-state `Context.Reference`: `undefined` (the default — no explicit
+ * Tri-state `Context.Reference`: `undefined` (the default -- no explicit
  * decoration, inherit/run default), `true` (`remote()`), `false`
- * (`remote(false)` — explicitly follow the run default again). The unset vs
+ * (`remote(false)` -- explicitly follow the run default again). The unset vs
  * explicit distinction is load-bearing for conflict detection at
  * registration (see `Resource.ts`).
  */
@@ -40,7 +40,7 @@ export const ProviderModePolicy = Context.Reference<boolean | undefined>("Provid
 
 /**
  * The same resource (identified by FQN) was registered (`yield*`ed) from two
- * places whose ambient {@link ProviderModePolicy} disagree — e.g. once inside
+ * places whose ambient {@link ProviderModePolicy} disagree -- e.g. once inside
  * `remote()` and once without it. Context-based decoration cannot decide which
  * one wins, so the engine fails loudly instead of silently picking one.
  *
@@ -66,7 +66,7 @@ export class ConflictingProviderModeError extends Data.TaggedError("ConflictingP
 export const LOCAL_ID_PREFIX = "dev:";
 
 /**
- * Does a persisted attributes value carry a local identity marker — any
+ * Does a persisted attributes value carry a local identity marker -- any
  * string value (at any depth) with the {@link LOCAL_ID_PREFIX}? Persisted
  * attrs are plain JSON (state commits strip unresolved values), so a
  * structural scan is safe.
@@ -82,17 +82,17 @@ export const hasLocalIdentity = (value: unknown): boolean => {
 
 /**
  * The mode a persisted state row was actually reconciled with: its stamped
- * `providerMode`, or — for legacy rows written before stamping existed —
+ * `providerMode`, or -- for legacy rows written before stamping existed --
  * `"local"` when the persisted attributes carry a {@link LOCAL_ID_PREFIX}
  * identity marker, `"live"` otherwise.
  *
  * An unstamped row without a marker predates provider modes or was written
- * by a mode-agnostic provider — in both cases the write acted on the REAL
+ * by a mode-agnostic provider -- in both cases the write acted on the REAL
  * cloud, so the row's physical resource is `"live"`. Assuming the current
  * run's mode instead silently adopts a deployed cloud resource as a local
  * instance during `alchemy dev`: the row noops (or restarts locally over
  * the live attrs), gets re-stamped `"local"`, and the live resource becomes
- * untracked — it is never deleted by a later destroy or replacement, and
+ * untracked -- it is never deleted by a later destroy or replacement, and
  * its deployed URL keeps serving.
  *
  * An unstamped row WITH a marker (e.g. a queue with a `dev:<uuid>` id
@@ -113,7 +113,7 @@ export const stampedMode = (row: {
 
 /**
  * Run the wrapped resources **remotely (against the real cloud) even during
- * `alchemy dev`** — the opt-out from local emulation. During `alchemy deploy`
+ * `alchemy dev`** -- the opt-out from local emulation. During `alchemy deploy`
  * this is a no-op (everything is remote).
  *
  * Captured at registration time like `adopt()` / `retain()`, so it can be
@@ -131,7 +131,7 @@ export const stampedMode = (row: {
  * ```
  *
  * `remote(false)` (or an `Effect<boolean>` resolving to false) removes the
- * pin — the resource follows the run default again.
+ * pin -- the resource follows the run default again.
  *
  * Providers with a single implementation are mode-agnostic and already run
  * live in dev; `remote()` on them is a no-op.
@@ -156,7 +156,7 @@ export const remote: {
  *
  * 1. An ambient {@link ProviderModePolicy} of `true` (e.g. `remote()` wrapped
  *    around a whole program) forces `"live"`.
- * 2. Otherwise `AlchemyContext.dev` decides: `dev: true` → `"local"`.
+ * 2. Otherwise `AlchemyContext.dev` decides: `dev: true` -> `"local"`.
  * 3. Without an AlchemyContext (bare engine tests), default to `"live"`.
  */
 export const defaultProviderMode: Effect.Effect<ProviderMode> = Effect.gen(function* () {

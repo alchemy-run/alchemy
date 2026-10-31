@@ -44,7 +44,7 @@ export type DataExchangesListingProps = {
   /**
    * Parent data exchange. Full name
    * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`
-   * or the exchange id (combined with `location`). Immutable — changing
+   * or the exchange id (combined with `location`). Immutable -- changing
    * it replaces the listing.
    */
   dataExchange: string;
@@ -52,7 +52,7 @@ export type DataExchangesListingProps = {
    * Listing id (the `{listing}` segment of
    * `.../dataExchanges/{dataExchange}/listings/{listing}`). If omitted, a
    * unique id is generated. Letters, numbers, and underscores; max 100
-   * bytes. Immutable — changing it replaces the listing.
+   * bytes. Immutable -- changing it replaces the listing.
    */
   listingId?: string;
   /**
@@ -67,7 +67,7 @@ export type DataExchangesListingProps = {
   displayName?: string;
   /**
    * Short description (max 2000 bytes). Listings have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -90,13 +90,13 @@ export type DataExchangesListingProps = {
   /**
    * Shared BigQuery dataset. Provide `dataset` as
    * `projects/{project}/datasets/{dataset}` or a dataset id. The dataset
-   * location must match the exchange. Immutable — changing the dataset
+   * location must match the exchange. Immutable -- changing the dataset
    * replaces the listing.
    */
   bigqueryDataset?: ListingBigQueryDatasetSource;
   /**
    * Shared Pub/Sub topic. Provide `topic` as
-   * `projects/{project}/topics/{topic}`. Immutable — changing the topic
+   * `projects/{project}/topics/{topic}`. Immutable -- changing the topic
    * replaces the listing.
    */
   pubsubTopic?: ListingPubSubTopicSource;

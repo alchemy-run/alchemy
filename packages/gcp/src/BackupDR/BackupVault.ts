@@ -43,12 +43,12 @@ export type BackupVaultProps = {
    * Backup vault id (the `{backupvault}` segment of
    * `projects/{project}/locations/{location}/backupVaults/{backupvault}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. 3-63 characters. Immutable — changing it replaces the
+   * and logical id. 3-63 characters. Immutable -- changing it replaces the
    * vault.
    */
   backupVaultId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the vault. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -56,7 +56,7 @@ export type BackupVaultProps = {
   location?: string;
   /**
    * Default and minimum enforced retention for each backup. Duration
-   * string (`86400s`, `259200s`, …). Longer values raise storage cost.
+   * string (`86400s`, `259200s`, ...). Longer values raise storage cost.
    * @default "86400s"
    */
   backupMinimumEnforcedRetentionDuration?: string;
@@ -141,7 +141,7 @@ export type BackupVault = Resource<
 >;
 
 /**
- * A Backup and DR backup vault — the storage location for backups created
+ * A Backup and DR backup vault -- the storage location for backups created
  * by Backup Plans.
  *
  * Changing `backupVaultId`, `location`, or `encryptionConfig` replaces

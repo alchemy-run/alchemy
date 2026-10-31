@@ -69,7 +69,7 @@ export interface Records extends Resource<
   {
     /**
      * Hosted zone that owns the records. `undefined` only while the set
-     * is empty with no explicit zone — resolved (explicit or inferred) on
+     * is empty with no explicit zone -- resolved (explicit or inferred) on
      * the first reconcile that has a name.
      */
     hostedZoneId: string | undefined;
@@ -104,7 +104,7 @@ export interface Records extends Resource<
  * by name.
  *
  * Unlike {@link Record} (one resource per record), `Records` reconciles a
- * whole name set against the hosted zone — names added to the set are
+ * whole name set against the hosted zone -- names added to the set are
  * upserted, names removed from the set are deleted. The set is the union of
  * the declared `names` prop and names contributed through the
  * {@link RecordsBinding} binding contract, which is how composites (e.g. a
@@ -126,7 +126,7 @@ export interface Records extends Resource<
  *
  * **Example:** Binding Target For Composite-Contributed Names
  * ```typescript
- * // Names may also arrive through the binding contract — an
+ * // Names may also arrive through the binding contract -- an
  * // `AWS.Website.Router` declares an empty set and attached sites bind
  * // their hostnames onto it:
  * const records = yield* Records("SiteAliasRecords", {
@@ -241,7 +241,7 @@ export const RecordsProvider = () =>
         );
       };
 
-      /** Delete `names` (exact live shape) tolerantly — missing records,
+      /** Delete `names` (exact live shape) tolerantly -- missing records,
        * missing zones, and already-deleted batches are all no-ops. */
       const deleteNames = Effect.fn(function* (
         hostedZoneId: string,
@@ -279,11 +279,11 @@ export const RecordsProvider = () =>
         stables: ["hostedZoneId", "type"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // Identity change → replace (same rule as `Record`); the names
-          // themselves are mutable — prop/binding deltas fall through to
+          // Identity change -> replace (same rule as `Record`); the names
+          // themselves are mutable -- prop/binding deltas fall through to
           // the engine's default update logic.
           if (
-            // An undefined side means "inferred" — reconcile resolves it
+            // An undefined side means "inferred" -- reconcile resolves it
             // against the live account, so only two explicit, differing
             // zones are a replacement.
             (olds.hostedZoneId !== undefined &&
@@ -298,12 +298,12 @@ export const RecordsProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (output === undefined) {
             // Without the previously-managed name set there is no identity
-            // to look up — report "not found" so the engine re-drives the
+            // to look up -- report "not found" so the engine re-drives the
             // reconcile (upserts converge on any half-created records).
             return undefined;
           }
           if (output.hostedZoneId === undefined) {
-            // An empty set that never resolved a zone — nothing to observe.
+            // An empty set that never resolved a zone -- nothing to observe.
             return output;
           }
           const found: string[] = [];
@@ -327,7 +327,7 @@ export const RecordsProvider = () =>
           const desired = resolveDesiredNames(news.names, bindings);
           // Resolve the zone: explicit prop, else the zone this set already
           // resolved to, else infer from the first name in the set. A set
-          // that is still empty with no explicit zone stays unresolved —
+          // that is still empty with no explicit zone stays unresolved --
           // the zone materializes on the first reconcile that has a name.
           const explicitZoneId = news.hostedZoneId ?? output?.hostedZoneId;
           if (explicitZoneId === undefined && desired.length === 0) {
@@ -343,7 +343,7 @@ export const RecordsProvider = () =>
           }
           const hostedZoneId = yield* resolveHostedZoneId(explicitZoneId, desired[0] ?? "");
           // `output.names` is the cache of which records this resource
-          // managed before — the only way to know what to garbage-collect
+          // managed before -- the only way to know what to garbage-collect
           // (Route 53 records carry no tags to observe ownership from).
           const previous = output?.names ?? [];
           const desiredKeys = new Set(desired.map((name) => normalizeName(name).toLowerCase()));
@@ -351,7 +351,7 @@ export const RecordsProvider = () =>
             (name) => !desiredKeys.has(normalizeName(name).toLowerCase()),
           );
 
-          // Sync — observe each desired name and upsert only the delta.
+          // Sync -- observe each desired name and upsert only the delta.
           const changes: route53.Change[] = [];
           for (const name of desired) {
             const target = desiredRecordSet(news, name);
@@ -394,7 +394,7 @@ export const RecordsProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (output.hostedZoneId === undefined) {
-            // The set never resolved a zone — it never created records.
+            // The set never resolved a zone -- it never created records.
             return;
           }
           yield* deleteNames(output.hostedZoneId, output.type, output.names);

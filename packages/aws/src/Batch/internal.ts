@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
  *
  * Explicitly annotated so the `Effect.repeat` conditional return type never
  * survives into declaration emit (which would widen the provider layers of
- * every `AWS.providers()` consumer — see processes/AWS/PATTERNS.md §7).
+ * every `AWS.providers()` consumer -- see processes/AWS/PATTERNS.md §7).
  */
 export const pollBatch = <A, E, R>(
   self: Effect.Effect<A, E, R>,

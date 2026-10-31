@@ -15,7 +15,7 @@ import type { Channel } from "./Channel.ts";
  * ### Controlling Live Streams
  * **Example:** Kick the Current Broadcast
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const stopStream = yield* AWS.IVS.StopStream(channel);
  *
  * // runtime

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { SyncConfiguration } from "./SyncConfiguration.ts";
 
 /**
- * Request for {@link UpdateSyncBlocker} — the blocker ID and resolution
+ * Request for {@link UpdateSyncBlocker} -- the blocker ID and resolution
  * reason; the sync configuration's identity is injected from the bound
  * resource.
  */
@@ -23,7 +23,7 @@ export interface UpdateSyncBlockerRequest extends Omit<
  * ### Monitoring Git Sync
  * **Example:** Resolve a Sync Blocker
  * ```typescript
- * // init — bind the operation to the sync configuration
+ * // init -- bind the operation to the sync configuration
  * const updateSyncBlocker = yield* AWS.CodeConnections.UpdateSyncBlocker(sync);
  *
  * // runtime

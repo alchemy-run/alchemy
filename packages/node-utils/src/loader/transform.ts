@@ -30,7 +30,7 @@ const nodeFormat = (format: string | null | undefined): ModuleFormat | undefined
 };
 
 /**
- * Format of a module Node gave no format for — resolved by our own
+ * Format of a module Node gave no format for -- resolved by our own
  * resolver, so Node never looked at it: the extension, then the nearest
  * `package.json#type`, memoized per directory.
  */
@@ -103,8 +103,8 @@ export class SourceTransformer {
    * Cache key for one transform, or `undefined` when the result must not be
    * cached. Every input Oxc's output depends on is part of it: the file's
    * path (source maps name it), its size and mtime standing in for its
-   * contents — a stat instead of a read plus a hash per module on the warm
-   * path — the effective transform options, Node's module format, and the
+   * contents -- a stat instead of a read plus a hash per module on the warm
+   * path -- the effective transform options, Node's module format, and the
    * tsconfig that would be discovered for the file, resolved through the
    * same cache `transformSync` uses with the `extends` chain already
    * merged, so editing any tsconfig in the chain is a new key.
@@ -182,7 +182,7 @@ export class SourceTransformer {
     }
     const source = readFileSync(filePath, "utf8");
     // A `.ts` file in a CommonJS package that uses `import`/`export` runs
-    // as ESM — the same call Node's own module-syntax detection makes for
+    // as ESM -- the same call Node's own module-syntax detection makes for
     // `.js`. Explicit `.cts` stays CommonJS regardless.
     if (
       moduleFormat === "commonjs" &&

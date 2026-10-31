@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `greengrass:GetCoreDevice`.
  *
- * Reads one core device's metadata — status (`HEALTHY` / `UNHEALTHY`),
+ * Reads one core device's metadata -- status (`HEALTHY` / `UNHEALTHY`),
  * nucleus version, platform, and last status-update timestamp. Core devices
  * register themselves (they are not Alchemy resources), so the caller
  * supplies the core device thing name at runtime. Provide the implementation
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Core Devices
  * **Example:** Check A Core Device's Health
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getCoreDevice = yield* AWS.GreengrassV2.GetCoreDevice();
  *
  * // runtime

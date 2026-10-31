@@ -18,7 +18,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * ### Managing Message Media
  * **Example:** Upload Media from S3
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const postMedia = yield* AWS.SocialMessaging.PostWhatsAppMessageMedia(account);
  *
  * // runtime

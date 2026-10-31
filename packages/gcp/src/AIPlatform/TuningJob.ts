@@ -25,7 +25,7 @@ import { listLocations } from "./names.ts";
 
 export type TuningJobProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -109,7 +109,7 @@ export type TuningJob = Resource<
  * A Vertex AI TuningJob (supervised fine-tune / preference optimization).
  *
  * Creating a TuningJob starts it immediately. There is no update API, so
- * reconcile is observe-ensure (create if missing). There is no delete RPC —
+ * reconcile is observe-ensure (create if missing). There is no delete RPC --
  * destroy cancels the job. Alchemy ownership labels are merged into `labels`
  * so `list` / nuke can find it.
  *
@@ -254,7 +254,7 @@ export const TuningJobProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const jobs = yield* listJobs(env.project, env.region);
-        // Tuning jobs have no delete API — `delete` cancels. A terminal job
+        // Tuning jobs have no delete API -- `delete` cancels. A terminal job
         // holds no resources and can never be removed, so it is not a
         // reclaimable leftover (nuke / census would report it forever).
         return jobs

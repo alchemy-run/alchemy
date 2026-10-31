@@ -40,7 +40,7 @@ interface EventDescriptor {
  * ### Consuming Events
  * **Example:** Consume Matching Events on a Lambda Function
  * ```typescript
- * // init — subscribe to matching events (provide AWS.Lambda.EventSource on the Function)
+ * // init -- subscribe to matching events (provide AWS.Lambda.EventSource on the Function)
  * yield* AWS.EventBridge.consumeBusEvents(
  *   bus,
  *   { source: ["my.app"] },

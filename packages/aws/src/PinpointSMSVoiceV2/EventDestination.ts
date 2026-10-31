@@ -116,7 +116,7 @@ export interface EventDestination extends Resource<
 
 /**
  * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) event
- * destination — routes message events (sends, deliveries, failures) from
+ * destination -- routes message events (sends, deliveries, failures) from
  * a `ConfigurationSet` to CloudWatch Logs, Kinesis Data Firehose, or SNS.
  *
  * Each configuration set holds up to five event destinations; each event
@@ -166,7 +166,7 @@ export const EventDestination = Resource<EventDestination>(
 
 /**
  * Raised when an event destination cannot be observed immediately after
- * it was created — the create call succeeded (or raced a peer) but the
+ * it was created -- the create call succeeded (or raced a peer) but the
  * follow-up describe found nothing.
  */
 export class SmsVoiceEventDestinationMissing extends Data.TaggedError(
@@ -233,7 +233,7 @@ export const EventDestinationProvider = () =>
           );
           if (set === undefined || observed === undefined) return undefined;
           // Event destinations are not taggable, so there is no ownership
-          // marker to check — existence is the whole story.
+          // marker to check -- existence is the whole story.
           return {
             configurationSetName: set.ConfigurationSetName,
             configurationSetArn: set.ConfigurationSetArn,
@@ -262,14 +262,14 @@ export const EventDestinationProvider = () =>
           const desiredEnabled = news.enabled ?? true;
           const desiredDestinations = toWireDestinations(news);
 
-          // 1. Observe — the event destination lives inside its parent
+          // 1. Observe -- the event destination lives inside its parent
           // configuration set's describe output.
           const set = yield* getConfigurationSet(configurationSetName);
           let observed = set?.EventDestinations?.find(
             (ed) => ed.EventDestinationName === eventDestinationName,
           );
 
-          // 2. Ensure — create if missing; a ConflictException is a race
+          // 2. Ensure -- create if missing; a ConflictException is a race
           // with a peer reconciler, so fall through to the sync step.
           if (observed === undefined) {
             yield* smsvoice
@@ -298,7 +298,7 @@ export const EventDestinationProvider = () =>
             });
           }
 
-          // 3. Sync — apply a single update when any mutable aspect
+          // 3. Sync -- apply a single update when any mutable aspect
           // (enabled, event types, delivery target) drifted.
           const drifted =
             observed.Enabled !== desiredEnabled ||

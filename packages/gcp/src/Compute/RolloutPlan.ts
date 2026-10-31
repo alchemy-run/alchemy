@@ -29,18 +29,18 @@ export type RolloutPlanProps = {
   /**
    * Optional description. Compute rollout plans have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
-   * Location scope of the plan (`ZONAL` or `REGIONAL`). Immutable —
+   * Location scope of the plan (`ZONAL` or `REGIONAL`). Immutable --
    * changing it replaces the plan.
    * @default "ZONAL"
    */
   locationScope?: RolloutPlanLocationScope;
   /**
    * Waves that divide the rollout. The Compute API has no update method
-   * for rollout plans — changing waves replaces the plan.
+   * for rollout plans -- changing waves replaces the plan.
    */
   waves?: ReadonlyArray<RolloutPlanWave>;
 };

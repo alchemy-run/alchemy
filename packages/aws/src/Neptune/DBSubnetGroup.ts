@@ -60,7 +60,7 @@ export interface DBSubnetGroup extends Resource<
 > {}
 
 /**
- * An Amazon Neptune DB subnet group — the set of VPC subnets a Neptune
+ * An Amazon Neptune DB subnet group -- the set of VPC subnets a Neptune
  * cluster and its instances are placed into. Neptune is VPC-only, so a
  * subnet group spanning at least two Availability Zones is required before a
  * cluster can be created.
@@ -127,10 +127,10 @@ export const DBSubnetGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live subnet-group state.
+          // Observe -- fetch live subnet-group state.
           let observed = yield* readGroup(dbSubnetGroupName);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBSubnetGroupAlreadyExistsFault` as a race with a peer
           // reconciler by re-reading.
           if (!observed?.DBSubnetGroupName) {
@@ -152,7 +152,7 @@ export const DBSubnetGroupProvider = () =>
               });
             }
           } else {
-            // Sync description and subnet membership — `modifyDBSubnetGroup`
+            // Sync description and subnet membership -- `modifyDBSubnetGroup`
             // accepts the full desired set and is idempotent for unchanged
             // input.
             yield* neptune.modifyDBSubnetGroup({
@@ -170,7 +170,7 @@ export const DBSubnetGroupProvider = () =>
 
           const dbSubnetGroupArn = observed.DBSubnetGroupArn;
 
-          // Sync tags — diff prior recorded tags against desired (describe
+          // Sync tags -- diff prior recorded tags against desired (describe
           // does not surface tags inline).
           const observedTags = output?.tags ?? {};
           const { removed, upsert } = diffTags(observedTags, desiredTags);
@@ -203,7 +203,7 @@ export const DBSubnetGroupProvider = () =>
           // AWS account/region collection: `describeDBSubnetGroups` is
           // paginated (items field `DBSubnetGroups`). Subnet groups are shared
           // across the RDS-family engines (RDS/DocumentDB/Neptune), so this
-          // enumerates all of them — mirroring the DocDB provider. `read` does
+          // enumerates all of them -- mirroring the DocDB provider. `read` does
           // not hydrate tags from the cloud (it returns the cached
           // `output.tags`), so we mirror that here with an empty tag map.
           neptune.describeDBSubnetGroups.pages({}).pipe(
@@ -212,7 +212,7 @@ export const DBSubnetGroupProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBSubnetGroups ?? []).flatMap((group) =>
                   // `default` is the RDS-family subnet group AWS auto-creates
-                  // for the default VPC — never ours, never census/nuke it.
+                  // for the default VPC -- never ours, never census/nuke it.
                   group.DBSubnetGroupName && group.DBSubnetGroupName !== "default"
                     ? [
                         {

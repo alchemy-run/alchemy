@@ -6,8 +6,8 @@ import type { FileSystem } from "./FileSystem.ts";
 /**
  * Shared scaffolding for the EFS runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeEfs…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeEfs...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for file-system-scoped operations) the injected `FileSystemId` is
  * boilerplate.

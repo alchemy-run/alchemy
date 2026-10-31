@@ -5,7 +5,7 @@ import { inspect } from "node:util";
  *
  * Discovers `*.test.ts` files, imports them concurrently with an AsyncLocalStorage
  * per-file collector (see Registry.ts), then executes every collected
- * test as an Effect — files run concurrently up to a limit, tests within a
+ * test as an Effect -- files run concurrently up to a limit, tests within a
  * file run sequentially unless their suite is `describe.concurrent`. Each
  * test gets a buffering Effect Logger + Console so its output can be shown
  * in isolation.
@@ -82,7 +82,7 @@ export interface RunOptions {
 
 /**
  * Strip ANSI escape sequences (SGR colors, cursor movement, OSC). Captured
- * output is re-rendered by the reporters — embedded escapes corrupt the
+ * output is re-rendered by the reporters -- embedded escapes corrupt the
  * TUI's cell-based rendering and garble plain output.
  */
 const ANSI_RE =
@@ -139,7 +139,7 @@ const withCapture =
       Effect.provide(
         Logger.layer([
           Logger.make((options) => {
-            // `Effect.log("a", "b")` delivers the message as an array —
+            // `Effect.log("a", "b")` delivers the message as an array --
             // unwrap it so buffered output reads exactly like console output
             // instead of `[ 'a', 'b' ]`.
             const parts = Array.isArray(options.message) ? options.message : [options.message];
@@ -200,7 +200,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
     }
   }
   // Roots the user asked for explicitly (before defaulting to `test`) are
-  // exempt from `--exclude` — a baked-in package-script exclusion must not
+  // exempt from `--exclude` -- a baked-in package-script exclusion must not
   // make `alchemy-test test/Railway/Foo.test.ts` silently run nothing.
   const explicitRoots = [...roots];
   if (roots.length === 0) {
@@ -531,7 +531,7 @@ const hookError = (attempt: TestAttempt): string | undefined => {
  * included) may run before the runner abandons the fiber and reports the
  * timeout anyway. Without this bound, a finalizer blocked on the same wedged
  * machinery the timeout just interrupted (e.g. a `test.provider` scratch
- * destroy against a hung dev deploy) — or simply an uninterruptible region —
+ * destroy against a hung dev deploy) -- or simply an uninterruptible region --
  * swallows the report entirely: the test/hook never finishes and the run
  * (or the `--plan` phase) never advances.
  *
@@ -615,7 +615,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   }
 
   // One stable buffer for the whole runTest call (cleared in place between
-  // retry attempts) — TestStart shares the LIVE reference so the TUI can
+  // retry attempts) -- TestStart shares the LIVE reference so the TUI can
   // tail a running test's output.
   const logs = ctx.capture.create((entry) =>
     ctx.fileLog.appendTestLine(`${meta.file} > ${meta.titlePath.join(" > ")}`, entry),
@@ -700,7 +700,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   let exit = yield* runAttempt();
   while (attemptNeedsRetry(exit, test.fails) && retries < (test.retry ?? ctx.options.retry)) {
     retries++;
-    // Clear IN PLACE — TestStart handed this array's reference out.
+    // Clear IN PLACE -- TestStart handed this array's reference out.
     ctx.capture.release(logs);
     exit = yield* runAttempt();
   }
@@ -805,7 +805,7 @@ const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> = Effect
   }
 
   const body = Effect.gen(function* () {
-    // beforeAll — captured into the file-level log buffer. Emits hook events
+    // beforeAll -- captured into the file-level log buffer. Emits hook events
     // so the TUI can show "setting up" instead of an unexplained queue.
     if (previousSetup === undefined && suite.beforeAll.length > 0) {
       yield* ctx.emit({
@@ -856,7 +856,7 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "afterAll" });
   // Unlike beforeAll (where a failure invalidates everything after it),
   // every teardown hook runs even when an earlier one fails: a failing
-  // teardown assertion must not drop later cleanup — in particular
+  // teardown assertion must not drop later cleanup -- in particular
   // Test.make's fallback hook that closes the shared scope and local
   // provider sidecar, which registers last and would otherwise leak the
   // sidecar for the rest of the process. Failures aggregate.
@@ -994,7 +994,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
   // file while imports overlap. Bound collection to avoid loader saturation.
   const collectConcurrency =
     options.concurrency === "unbounded" ? 32 : Math.min(options.concurrency, 32);
-  // collectFile never fails — import errors are captured on the result.
+  // collectFile never fails -- import errors are captured on the result.
   const collected = yield* Effect.forEach(
     absoluteFiles.map((absolute, i) => [absolute, relative[i]!, roots[i]!] as const),
     ([absolute, rel, suite]) =>
@@ -1097,7 +1097,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
     tests: allMetas,
   });
 
-  // Phase 2 — run files concurrently.
+  // Phase 2 -- run files concurrently.
   const allResults = new Map<string, { meta: TestMeta; result: TestResult }>();
   const fileFailures: Array<{ file: string; error: string }> = [];
   const interactive = reporter.attachController !== undefined;

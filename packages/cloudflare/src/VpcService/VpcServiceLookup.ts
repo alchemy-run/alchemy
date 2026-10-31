@@ -21,7 +21,7 @@ export type VpcServiceLookupProps =
     };
 
 /**
- * The resolved value of a {@link lookup} — the service's {@link Attributes}
+ * The resolved value of a {@link lookup} -- the service's {@link Attributes}
  * branded with the VpcService resource `Type`, so Worker binding
  * classification treats it exactly like the managed resource.
  */
@@ -36,7 +36,7 @@ const toLookup = (attrs: Attributes): VpcServiceLookup => ({
 
 /**
  * Look up an existing Cloudflare VPC service (managed outside this stack)
- * without managing its lifecycle — the data-source form (what Terraform
+ * without managing its lifecycle -- the data-source form (what Terraform
  * calls a data source and Pulumi an invoke). Reads the service by
  * `serviceId` or `name` and returns an `Output` of its {@link Attributes},
  * resolved during plan/deploy and inert inside deployed bundles. Place it

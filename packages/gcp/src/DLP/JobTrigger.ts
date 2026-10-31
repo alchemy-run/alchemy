@@ -32,7 +32,7 @@ export type JobTriggerProps = {
    * Trigger id (the `{jobTrigger}` segment of
    * `projects/{project}/jobTriggers/{jobTrigger}`). If omitted, a unique
    * name is generated. Must match `[a-zA-Z0-9_-]+` and is at most 100
-   * characters. Immutable — changing it replaces the trigger.
+   * characters. Immutable -- changing it replaces the trigger.
    */
   triggerId?: string;
   /**
@@ -41,7 +41,7 @@ export type JobTriggerProps = {
   displayName?: string;
   /**
    * Human-readable description (max 256 characters). Job triggers have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -96,7 +96,7 @@ export type JobTrigger = Resource<
  * A project-scoped Cloud DLP job trigger.
  *
  * Job triggers have no labels field, so Alchemy stamps ownership into
- * the description for `list` / nuke. Trigger id is identity — changing
+ * the description for `list` / nuke. Trigger id is identity -- changing
  * it replaces the trigger. Display name, description, status, inspect
  * job, and schedule update in place.
  *

@@ -212,11 +212,11 @@ export const OriginAccessControlProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // Observe — locate the OAC by id (cached on `output`) or by
+          // Observe -- locate the OAC by id (cached on `output`) or by
           // name. Trust observed cloud state, not stale `olds`.
           const observed = (yield* getCurrent(output)) ?? (yield* getByName(name));
 
-          // Ensure — create the OAC if it's missing. Tolerate
+          // Ensure -- create the OAC if it's missing. Tolerate
           // `OriginAccessControlAlreadyExists` (race with a peer
           // reconciler).
           if (!observed?.OriginAccessControl?.Id) {
@@ -256,7 +256,7 @@ export const OriginAccessControlProvider = () =>
             return toAttrs(created.OriginAccessControl, created.ETag, name);
           }
 
-          // Sync — patch the observed config to the desired state. The
+          // Sync -- patch the observed config to the desired state. The
           // freshly observed ETag handles optimistic concurrency.
           const observedConfig = observed.OriginAccessControl.OriginAccessControlConfig;
           const updated = yield* cloudfront.updateOriginAccessControl({

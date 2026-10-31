@@ -35,7 +35,7 @@ export type SettingsSearchapplicationProps = {
   /**
    * Search application id (`{application_id}` or
    * `searchapplications/{application_id}`). Server assigned on create.
-   * Immutable — changing it replaces the application.
+   * Immutable -- changing it replaces the application.
    */
   searchApplicationId?: string;
   /**
@@ -121,7 +121,7 @@ export type SettingsSearchapplication = Resource<
  *
  * Search applications have no labels field, so without state Alchemy finds
  * one by `displayName` and reports it unowned unless the name is
- * generated. The server-assigned application id is identity — changing
+ * generated. The server-assigned application id is identity -- changing
  * `searchApplicationId` replaces the application. Display name, audit
  * logging, sources, scoring, and facet options update in place. Admin
  * credentials are required.

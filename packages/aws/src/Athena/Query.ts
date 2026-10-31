@@ -6,7 +6,7 @@ import type { Bucket } from "../S3/Bucket.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 /**
- * The query request — the workgroup is injected by the binding (which also
+ * The query request -- the workgroup is injected by the binding (which also
  * supplies the enforced result location), so callers pass the SQL text and any
  * execution context/parameters as the raw distilled shape.
  */
@@ -18,7 +18,7 @@ export interface RunQueryRequest extends Omit<
 /**
  * The fully-resolved result of a query: the terminal state plus the decoded
  * result set (column names + rows of string cells, exactly as Athena returns
- * them — the first row of a `SELECT` is the header).
+ * them -- the first row of a `SELECT` is the header).
  */
 export interface QueryResult {
   readonly queryExecutionId: string;

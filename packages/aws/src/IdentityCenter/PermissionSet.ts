@@ -142,7 +142,7 @@ export const PermissionSetProvider = () =>
               ? toIsoSessionDuration(news.sessionDuration)
               : undefined;
 
-          // Observe — find the permission set by ARN (when we already
+          // Observe -- find the permission set by ARN (when we already
           // have one) or by name on the resolved instance.
           let existing =
             (output?.permissionSetArn
@@ -156,7 +156,7 @@ export const PermissionSetProvider = () =>
               instanceArn: instance.InstanceArn,
             }));
 
-          // Ensure — create the permission set if missing.
+          // Ensure -- create the permission set if missing.
           if (!existing) {
             const response = yield* retryIdentityCenter(
               ssoAdmin.createPermissionSet({
@@ -191,7 +191,7 @@ export const PermissionSetProvider = () =>
             return existing;
           }
 
-          // Sync mutable attributes — `updatePermissionSet` overwrites
+          // Sync mutable attributes -- `updatePermissionSet` overwrites
           // description, sessionDuration, relayState. Diff against
           // observed cloud state so adoption converges; only call when
           // there's a real delta.
@@ -242,7 +242,7 @@ export const PermissionSetProvider = () =>
 
 /**
  * Format a {@link Duration.Input} as the canonical ISO-8601 duration string
- * (`PT8H`, `PT1H30M`, …) the `SessionDuration` wire field expects. ISO-8601
+ * (`PT8H`, `PT1H30M`, ...) the `SessionDuration` wire field expects. ISO-8601
  * is semantically part of the AWS field, so only the normalization (state
  * round-trip re-hydration) comes from the central Duration util.
  */

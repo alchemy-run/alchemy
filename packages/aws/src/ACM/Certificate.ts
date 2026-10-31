@@ -60,13 +60,13 @@ export interface CertificateProps {
    * Who publishes the DNS validation records (with `validationMethod:
    * "DNS"`).
    *
-   * - `"route53"` — the provider upserts them into Route 53
+   * - `"route53"` -- the provider upserts them into Route 53
    *   ({@link hostedZoneId}, or the inferred public zone) and waits for
    *   issuance.
-   * - `"external"` — the provider only waits until ACM has computed the
+   * - `"external"` -- the provider only waits until ACM has computed the
    *   records and returns the certificate `PENDING_VALIDATION` with
-   *   `domainValidationOptions` filled in. Publish them yourself — e.g.
-   *   through a DNS adapter with {@link validationRecordsOf} — and wait for
+   *   `domainValidationOptions` filled in. Publish them yourself -- e.g.
+   *   through a DNS adapter with {@link validationRecordsOf} -- and wait for
    *   issuance with `AWS.ACM.CertificateValidation`. This is what AWS
    *   composites do for a `domain.dns` outside Route 53.
    *
@@ -89,9 +89,9 @@ export interface CertificateProps {
    * `acm:ExportCertificate` (see the `ExportCertificate` binding).
    * Exportable public certificates carry an additional charge.
    *
-   * Exportability can only be chosen when the certificate is requested —
+   * Exportability can only be chosen when the certificate is requested --
    * ACM rejects `UpdateCertificateOptions` for it ("Export option for
-   * certificates cannot be updated") — so changing this on an existing
+   * certificates cannot be updated") -- so changing this on an existing
    * certificate forces a replacement.
    */
   export?: "ENABLED" | "DISABLED" | undefined;
@@ -99,7 +99,7 @@ export interface CertificateProps {
    * AWS region to request the certificate in.
    *
    * Defaults to `us-east-1` (the region CloudFront viewer certificates must
-   * live in). Set this to the region of a regional consumer — e.g. an ALB
+   * live in). Set this to the region of a regional consumer -- e.g. an ALB
    * HTTPS listener requires the certificate in the load balancer's own
    * region. Changing the region replaces the certificate.
    * @default "us-east-1"
@@ -115,7 +115,7 @@ export interface CertificateProps {
  * Binding contract of {@link Certificate}: composites contribute additional
  * subject alternative names without a circular input prop (e.g. a site
  * attached to an `AWS.Website.Router` binds its hostnames onto the Router's
- * certificate). ACM certificates are immutable — a change in the bound SAN
+ * certificate). ACM certificates are immutable -- a change in the bound SAN
  * set plans a REPLACEMENT (new certificate requested and validated first,
  * consumers re-pointed, old certificate deleted last).
  */
@@ -213,7 +213,7 @@ const resolveEffectiveSans = (
 
 /**
  * ACM refused to issue the certificate because a CAA record on the domain
- * does not authorize Amazon. Alchemy never writes CAA records itself — add
+ * does not authorize Amazon. Alchemy never writes CAA records itself -- add
  * the records named in the message at the zone apex and redeploy.
  */
 export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")<{
@@ -223,7 +223,7 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
   override get message() {
     return (
       `ACM could not issue ${this.certificateArn} for ${this.domainName}: a CAA record on the domain does not authorize Amazon (CAA_ERROR). ` +
-      `Add CAA records at the zone apex — \`0 issue "amazon.com"\` and \`0 issue "amazonaws.com"\` (plus the same with \`issuewild\` for wildcard names) — then redeploy.`
+      `Add CAA records at the zone apex \u2014 \`0 issue "amazon.com"\` and \`0 issue "amazonaws.com"\` (plus the same with \`issuewild\` for wildcard names) \u2014 then redeploy.`
     );
   }
 }
@@ -236,7 +236,7 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
  * the provider creates or updates the Route 53 validation records
  * (`hostedZoneId`, or the inferred public zone) and waits for the
  * certificate to be issued. With `dnsValidation: "external"` the records
- * are published elsewhere — e.g. through a DNS adapter — and
+ * are published elsewhere -- e.g. through a DNS adapter -- and
  * `AWS.ACM.CertificateValidation` waits for issuance.
  * ### Requesting Certificates
  * **Example:** DNS-Validated Certificate
@@ -292,7 +292,7 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
  * **Example:** React to Approaching Expiration
  * ```typescript
  * // ACM emits "ACM Certificate Approaching Expiration" events through
- * // EventBridge — consume them with the ACM expiry event source, scoped
+ * // EventBridge -- consume them with the ACM expiry event source, scoped
  * // to this certificate.
  * yield* AWS.ACM.consumeExpiryEvents(
  *   { certificateArns: [cert.certificateArn] },
@@ -359,7 +359,7 @@ export const CertificateProvider = () =>
                   }
                   // Exportability is fixed at request time, so a certificate
                   // with a different export option can never converge to these
-                  // props — it is the doomed half of a replacement, not a
+                  // props -- it is the doomed half of a replacement, not a
                   // match.
                   if ((props.export ?? "DISABLED") !== (detail.Options?.Export ?? "DISABLED")) {
                     return undefined;
@@ -443,7 +443,7 @@ export const CertificateProvider = () =>
           Effect.gen(function* () {
             // ACM certificates default to us-east-1 (CloudFront), but a
             // `region` prop can place them in the ambient region (e.g. for
-            // ALB listeners) — enumerate both and dedupe by ARN, then
+            // ALB listeners) -- enumerate both and dedupe by ARN, then
             // hydrate each to the full Attributes shape via describe + tags.
             const listPage = acm.listCertificates.pages({}).pipe(
               Stream.runCollect,
@@ -491,8 +491,8 @@ export const CertificateProvider = () =>
           const newBindings = _newBindings as ResourceBinding<CertificateBinding>[];
           if (
             olds.domainName !== news.domainName ||
-            // ACM certificates are immutable: the SAN set — declared props
-            // plus SANs contributed through the binding contract — cannot
+            // ACM certificates are immutable: the SAN set -- declared props
+            // plus SANs contributed through the binding contract -- cannot
             // change in place, so any delta plans a replacement.
             !deepEqual(
               normalizeSanList(resolveEffectiveSans(olds.subjectAlternativeNames, oldBindings)),
@@ -500,15 +500,15 @@ export const CertificateProvider = () =>
             ) ||
             (olds.validationMethod ?? defaultValidationMethod) !==
               (news.validationMethod ?? defaultValidationMethod) ||
-            // An undefined side means "inferred" — only two explicit,
+            // An undefined side means "inferred" -- only two explicit,
             // differing zones are a replacement.
             (olds.hostedZoneId !== undefined &&
               news.hostedZoneId !== undefined &&
               olds.hostedZoneId !== news.hostedZoneId) ||
             olds.keyAlgorithm !== news.keyAlgorithm ||
-            // Certificates cannot move regions — a region change replaces.
+            // Certificates cannot move regions -- a region change replaces.
             (olds.region ?? ACM_REGION) !== (news.region ?? ACM_REGION) ||
-            // Exportability is fixed at request time — ACM rejects
+            // Exportability is fixed at request time -- ACM rejects
             // `UpdateCertificateOptions` for it ("Export option for
             // certificates cannot be updated").
             (olds.export ?? "DISABLED") !== (news.export ?? "DISABLED")
@@ -516,12 +516,12 @@ export const CertificateProvider = () =>
             return { action: "replace" } as const;
           }
           // `certificateTransparencyLoggingPreference` is intentionally NOT
-          // a replacement trigger — it is updated in place via
+          // a replacement trigger -- it is updated in place via
           // `UpdateCertificateOptions` in `reconcile`.
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // `olds.domainName` may be `undefined` when a `creating` row was
-          // persisted before upstream Outputs resolved — without a domain
+          // persisted before upstream Outputs resolved -- without a domain
           // there is nothing to search for, so report "not found" and let
           // the engine re-drive the create (reconcile finds any managed
           // certificate by tags before requesting a new one).
@@ -547,8 +547,8 @@ export const CertificateProvider = () =>
           bindings,
         }) {
           // Fold bound SANs (see `CertificateBinding`) into the desired
-          // props up front so every downstream step — managed-certificate
-          // lookup, request, attrs — sees the effective SAN set.
+          // props up front so every downstream step -- managed-certificate
+          // lookup, request, attrs -- sees the effective SAN set.
           const news: typeof _news = {
             ..._news,
             subjectAlternativeNames: resolveEffectiveSans(_news.subjectAlternativeNames, bindings),
@@ -556,7 +556,7 @@ export const CertificateProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — find the live certificate. Domain + SAN combo plus
+          // Observe -- find the live certificate. Domain + SAN combo plus
           // alchemy-owned tags identify a certificate uniquely; if we have
           // a cached ARN, prefer that as the fast path. ACM certificates
           // can't be renamed, and most fields trigger replace via diff,
@@ -569,7 +569,7 @@ export const CertificateProvider = () =>
             certificate = yield* findManagedCertificate(id, news);
           }
 
-          // Ensure — request a new certificate if none exists. The
+          // Ensure -- request a new certificate if none exists. The
           // `IdempotencyToken` (derived from `instanceId`) makes the
           // request safe to retry.
           if (!certificate?.CertificateArn) {
@@ -577,7 +577,7 @@ export const CertificateProvider = () =>
               acm
                 .requestCertificate({
                   DomainName: news.domainName,
-                  // ACM rejects an empty list (min length 1) — composites
+                  // ACM rejects an empty list (min length 1) -- composites
                   // pass `[]` for a domain without aliases.
                   SubjectAlternativeNames:
                     news.subjectAlternativeNames && news.subjectAlternativeNames.length > 0
@@ -626,7 +626,7 @@ export const CertificateProvider = () =>
           // the explicit `hostedZoneId` when given, or the most specific
           // public zone containing `domainName`; when neither yields a zone,
           // validation is left to the caller (external DNS) and the
-          // certificate is returned pending — the pre-inference behavior.
+          // certificate is returned pending -- the pre-inference behavior.
           // For an already-issued cert this is a fast-path: we only wait
           // for validation records when the cert isn't already issued.
           if (
@@ -648,7 +648,7 @@ export const CertificateProvider = () =>
             }
           }
 
-          // Sync options — only the CT logging preference is mutable in
+          // Sync options -- only the CT logging preference is mutable in
           // place via UpdateCertificateOptions (ACM rejects updating the
           // export option; diff treats an `export` change as replacement).
           // Diff OBSERVED options (adoption may hand us a certificate with
@@ -673,7 +673,7 @@ export const CertificateProvider = () =>
             certificate = (yield* describeCertificate(certificateArn))!;
           }
 
-          // Sync tags — diff observed cloud tags against desired so
+          // Sync tags -- diff observed cloud tags against desired so
           // adoption rewrites ownership tags correctly.
           const observedTags = yield* listCertificateTags(certificateArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
@@ -709,7 +709,7 @@ export const CertificateProvider = () =>
                 // `ResourceInUseException` covers the certificate-swap path:
                 // when a SAN change replaces the certificate, CloudFront can
                 // keep reporting the detached old certificate as in-use for a
-                // few minutes after the distribution update deploys — ride
+                // few minutes after the distribution update deploys -- ride
                 // that out with a bounded wait instead of failing the delete.
                 Effect.retry({
                   while: (e): boolean =>
@@ -758,7 +758,7 @@ const regionOfCertificateArn = (certificateArn: string) =>
 const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // `AwsRegion`'s service value is an `Effect<RegionName>` (see
   // `@distilled.cloud/aws/Region`), so it must be provided as an effect, not a
-  // bare string — providing a raw string yields a primitive into the run loop.
+  // bare string -- providing a raw string yields a primitive into the run loop.
   effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
 
 /**

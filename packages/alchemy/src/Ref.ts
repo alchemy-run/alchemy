@@ -20,8 +20,8 @@ export interface RefMetadata<R extends ResourceLike> {
   stage?: string;
   /**
    * The resource type of the ref's target (e.g.
-   * `"Cloudflare.KV.Namespace"`). Known statically — `MyResource.ref`
-   * carries its own type — so duck-typing classifiers (Worker env
+   * `"Cloudflare.KV.Namespace"`). Known statically -- `MyResource.ref`
+   * carries its own type -- so duck-typing classifiers (Worker env
    * bindings, capability helpers) that read `.Type` can identify a ref
    * exactly like a locally-declared resource.
    */

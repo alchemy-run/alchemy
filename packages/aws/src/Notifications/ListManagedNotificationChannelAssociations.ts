@@ -18,7 +18,7 @@ export interface ListManagedNotificationChannelAssociationsRequest
  * ### Reading AWS-Managed Notifications
  * **Example:** List a Managed Configuration's Channel Associations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listManagedNotificationChannelAssociations =
  *   yield* AWS.Notifications.ListManagedNotificationChannelAssociations();
  *

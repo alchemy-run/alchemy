@@ -15,7 +15,7 @@ export interface DeleteKeyRequest extends Omit<kvs.DeleteKeyRequest, "KvsARN"> {
  * ### Writing KeyValueStore Data
  * **Example:** Delete a Key
  * ```typescript
- * // init — bind the operations to the store
+ * // init -- bind the operations to the store
  * const describeStore = yield* CloudFront.DescribeKeyValueStore(store);
  * const deleteKey = yield* CloudFront.DeleteKey(store);
  *

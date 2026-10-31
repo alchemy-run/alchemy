@@ -152,7 +152,7 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An Amazon Q Business application — the top-level container that indices,
+ * An Amazon Q Business application -- the top-level container that indices,
  * retrievers, data sources, and web experiences attach to.
  *
  * :::caution
@@ -235,7 +235,7 @@ const findApplicationByName = Effect.fn(function* (displayName: string) {
 });
 
 /**
- * An application still transitioning toward the awaited status — retried by
+ * An application still transitioning toward the awaited status -- retried by
  * {@link waitForApplicationStatus}'s bounded schedule.
  */
 class ApplicationNotReady extends Data.TaggedError("ApplicationNotReady")<{
@@ -254,7 +254,7 @@ export class ApplicationProvisioningFailed extends Data.TaggedError(
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -353,13 +353,13 @@ export const ApplicationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.applicationId
             ? yield* readApplicationById(output.applicationId)
             : yield* findApplicationByName(displayName);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* qbusiness.createApplication({
               displayName,
@@ -396,7 +396,7 @@ export const ApplicationProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateApplication — only when drifted.
+          // Sync mutable settings via UpdateApplication -- only when drifted.
           const described = state.described;
           const needsUpdate =
             displayName !== described.displayName ||
@@ -432,7 +432,7 @@ export const ApplicationProvider = () =>
             yield* session.note(`Updated application ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* qbusiness.untagResource({

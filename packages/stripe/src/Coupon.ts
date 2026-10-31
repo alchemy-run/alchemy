@@ -34,7 +34,7 @@ export type CouponDuration = "forever" | "once" | "repeating";
 
 export interface CouponAppliesTo {
   /**
-   * Product ids this coupon applies to. Create-only — changing it
+   * Product ids this coupon applies to. Create-only -- changing it
    * replaces the coupon.
    */
   products?: string[];
@@ -59,19 +59,19 @@ export interface CouponProps {
    */
   name?: string;
   /**
-   * Percent taken off the invoice subtotal (0–100). Required unless
-   * `amountOff` is set. Create-only — changing it replaces the coupon.
+   * Percent taken off the invoice subtotal (0-100). Required unless
+   * `amountOff` is set. Create-only -- changing it replaces the coupon.
    */
   percentOff?: number;
   /**
    * Amount (in `currency` minor units) taken off the invoice subtotal.
-   * Required unless `percentOff` is set. Create-only — changing it
+   * Required unless `percentOff` is set. Create-only -- changing it
    * replaces the coupon.
    */
   amountOff?: number;
   /**
    * Three-letter ISO currency code for `amountOff`. Required when
-   * `amountOff` is set. Create-only — changing it replaces the coupon.
+   * `amountOff` is set. Create-only -- changing it replaces the coupon.
    */
   currency?: string;
   /**
@@ -150,7 +150,7 @@ export type Coupon = Resource<
 >;
 
 /**
- * A Stripe Coupon — a percent-off or amount-off discount applied to
+ * A Stripe Coupon -- a percent-off or amount-off discount applied to
  * subscriptions, invoices, Checkout sessions, and quotes. Coupons do not
  * apply to one-off charges or PaymentIntents.
  *

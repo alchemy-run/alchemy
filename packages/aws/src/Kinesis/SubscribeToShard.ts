@@ -12,7 +12,7 @@ export interface SubscribeToShardRequest extends Omit<
  * Runtime binding for `kinesis:SubscribeToShard` (enhanced fan-out).
  *
  * Bind this operation to a `StreamConsumer` (a registered enhanced fan-out
- * consumer) to open a push-based subscription to a shard — the consumer ARN
+ * consumer) to open a push-based subscription to a shard -- the consumer ARN
  * is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.SubscribeToShardHttp)`.
  * ### Enhanced Fan-Out
@@ -21,10 +21,10 @@ export interface SubscribeToShardRequest extends Omit<
  * const consumer = yield* AWS.Kinesis.StreamConsumer("Analytics", {
  *   streamArn: stream.streamArn,
  * });
- * // init — bind the operation to the registered consumer
+ * // init -- bind the operation to the registered consumer
  * const subscribeToShard = yield* AWS.Kinesis.SubscribeToShard(consumer);
  *
- * // runtime — open the subscription
+ * // runtime -- open the subscription
  * const result = yield* subscribeToShard({
  *   ShardId: shardId,
  *   StartingPosition: { Type: "LATEST" },

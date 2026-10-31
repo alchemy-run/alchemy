@@ -62,17 +62,17 @@ export type TargetServerTlsInfo = {
 export type EnvironmentsTargetserverProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the server.
+   * current GCP project id. Immutable -- changing it replaces the server.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the server.
    */
   environment: string;
   /**
    * Target server id. If omitted, a unique name is generated from the
-   * stack, stage, and logical id. Immutable — changing it replaces the
+   * stack, stage, and logical id. Immutable -- changing it replaces the
    * server.
    */
   targetserverId?: string;
@@ -85,12 +85,12 @@ export type EnvironmentsTargetserverProps = {
    */
   port: number;
   /**
-   * Protocol. Immutable — changing it replaces the server.
+   * Protocol. Immutable -- changing it replaces the server.
    */
   protocol?: apigee.GoogleCloudApigeeV1TargetServerProtocolEnum | (string & {});
   /**
    * Human-readable description. Alchemy stamps ownership into a
-   * `[alchemy …]` prefix because target servers have no labels field.
+   * `[alchemy ...]` prefix because target servers have no labels field.
    */
   description?: string;
   /**
@@ -134,7 +134,7 @@ export type EnvironmentsTargetserver = Resource<
 >;
 
 /**
- * An Apigee environment TargetServer — a named backend host:port used by
+ * An Apigee environment TargetServer -- a named backend host:port used by
  * proxy TargetEndpoints.
  *
  * Target servers have no labels, so Alchemy stamps ownership into

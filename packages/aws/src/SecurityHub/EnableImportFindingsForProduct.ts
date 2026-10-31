@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:EnableImportFindingsForProduct`.
  *
  * Enables a product integration so its findings flow into Security Hub.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.EnableImportFindingsForProductHttp)`.
  * ### Product Integrations
  * **Example:** Enable a Product Integration
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const enableImportFindingsForProduct = yield* AWS.SecurityHub.EnableImportFindingsForProduct();
  *
  * // runtime

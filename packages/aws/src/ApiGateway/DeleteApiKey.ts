@@ -6,7 +6,7 @@ export interface DeleteApiKeyRequest extends ag.DeleteApiKeyRequest {}
 
 /**
  * Runtime binding for deleting an API Gateway API key
- * (`apigateway:DELETE` on `/apikeys/{id}`). Account-scoped — takes no
+ * (`apigateway:DELETE` on `/apikeys/{id}`). Account-scoped -- takes no
  * resource.
  *
  * Provide `ApiGateway.DeleteApiKeyHttp` on the Function effect to

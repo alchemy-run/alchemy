@@ -55,12 +55,12 @@ export type ConnectionProfileProps = {
   /**
    * Connection profile id (the `{connectionProfile}` segment of
    * `projects/{project}/locations/{location}/connectionProfiles/{connectionProfile}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the profile.
    */
   connectionProfileId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * profile. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -99,7 +99,7 @@ export type ConnectionProfileProps = {
    */
   mongodbProfile?: MongodbProfile;
   /**
-   * Spanner source profile. `database` is immutable — changing it
+   * Spanner source profile. `database` is immutable -- changing it
    * replaces the profile.
    */
   spannerProfile?: SpannerProfile;

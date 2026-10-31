@@ -15,7 +15,7 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * output (and `public/` when present) is baked into the image; `next` is
  * installed unbundled.
  *
- * Do not use OpenNext AWS/CF wrappers — those are Lambda/workerd.
+ * Do not use OpenNext AWS/CF wrappers -- those are Lambda/workerd.
  *
  * During `alchemy dev` the site is `next dev` and no cloud resources are
  * declared; `Alchemy.remote()` opts back into the live Service path.

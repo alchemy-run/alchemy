@@ -16,7 +16,7 @@ export interface GetImageSetMetadataRequest extends Omit<
  * Runtime binding for the `GetImageSetMetadata` operation (IAM action
  * `medical-imaging:GetImageSetMetadata`), scoped to one {@link Datastore}.
  *
- * Streams the DICOM JSON metadata blob of an image set (gzip-encoded —
+ * Streams the DICOM JSON metadata blob of an image set (gzip-encoded --
  * check `contentEncoding`). The metadata carries the patient/study/series
  * DICOM attributes plus the image frame ids used with {@link GetImageFrame}.
  * Provide the implementation with

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:StopExperiment`.
  *
- * Stops a running experiment — the manual abort switch for a
+ * Stops a running experiment -- the manual abort switch for a
  * chaos-engineering run that a monitoring function decides has gone far
  * enough. Experiments are created dynamically, so this is an account-level
  * binding addressed by experiment id. Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Running Experiments
  * **Example:** Abort a Running Experiment
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const stopExperiment = yield* AWS.FIS.StopExperiment();
  *
  * // runtime

@@ -28,20 +28,20 @@ export type AuthorizedViewSetsAuthorizedViewProps = {
   /**
    * Parent AuthorizedViewSet resource name
    * (`projects/{project}/locations/{location}/authorizedViewSets/{authorized_view_set}`).
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   parent: string;
   /**
    * AuthorizedView id (the `{authorized_view}` segment). If omitted, a
    * unique id is generated. Must match
-   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable — changing it replaces
+   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable -- changing it replaces
    * the view.
    */
   authorizedViewId?: string;
   /**
    * Display name (max 64 characters including Alchemy's ownership
    * marker, which takes at least 55). AuthorizedViews have no labels
-   * field, so ownership is stored in a `[alchemy …]` prefix and stripped
+   * field, so ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes; longer names are truncated.
    */
   displayName?: string;
@@ -83,7 +83,7 @@ export type AuthorizedViewSetsAuthorizedView = Resource<
  * A Contact Center AI Insights AuthorizedView, a filtered view of
  * conversations and related Insights resources.
  *
- * AuthorizedViews have no labels field — Alchemy stamps ownership into
+ * AuthorizedViews have no labels field -- Alchemy stamps ownership into
  * the display name. Parent set and id are immutable. Display name and
  * conversation filter update in place.
  *

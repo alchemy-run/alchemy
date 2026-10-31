@@ -4,13 +4,13 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for AWS Security Hub HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeSecurityHubHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeSecurityHubHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * Security Hub is an account/region singleton service: every operation is
- * implicitly scoped to the caller's Hub, so there is no identifier to inject —
+ * implicitly scoped to the caller's Hub, so there is no identifier to inject --
  * the caller's request is passed through as-is. The deploy-time half grants
  * `actions` on `*`: Security Hub IAM actions are evaluated against the
  * account's `hub/default` ARN (or take no resource at all), which is not

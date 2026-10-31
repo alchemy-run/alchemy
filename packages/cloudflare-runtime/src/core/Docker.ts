@@ -90,7 +90,7 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
 );
 
 /**
- * The Docker privileges FUSE filesystems (s3fs, tigrisfs, …) need to mount
+ * The Docker privileges FUSE filesystems (s3fs, tigrisfs, ...) need to mount
  * inside a container. Deployed Containers can always mount FUSE, so every
  * local container gets them too.
  */
@@ -125,7 +125,7 @@ const BUILDKIT_MISSING_MARKERS = [
 /** Names the missing buildx plugin when docker's own stderr only names the flag. */
 export const buildFailureHint = (stderr: string): string | undefined =>
   BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
-    ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry — e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
+    ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry \u2014 e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
     : undefined;
 
 /**
@@ -133,7 +133,7 @@ export const buildFailureHint = (stderr: string): string | undefined =>
  * where it denotes a connection target inside an env value: at the start of
  * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
  * keyword form, `host=localhost`), or after whitespace/comma/semicolon
- * delimiters — and followed by a port, path, delimiter, or the end.
+ * delimiters -- and followed by a port, path, delimiter, or the end.
  */
 const LOOPBACK_HOST =
   /(^|[\s,;=]|\/\/(?:[^/\s@]*@)?)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/?#]|[\s,;]|$)/g;
@@ -147,7 +147,7 @@ const LOOPBACK_HOST =
  * only fires against local emulators.
  *
  * Native Linux: the alias is `/etc/hosts`-mapped to `127.0.0.1` in the
- * sidecar netns, and a unix-socket tunnel reaches the host process — a
+ * sidecar netns, and a unix-socket tunnel reaches the host process -- a
  * SYN to Docker's bridge IP would hit UFW INPUT. Docker Desktop: mapped
  * to `host-gateway`, which already forwards to host loopback.
  */
@@ -158,7 +158,7 @@ export const rewriteLoopbackHosts = (value: string) =>
  * Merge workerd's create-body `Env` with the deployment env alchemy injects,
  * rewriting loopback hosts and **replacing by name**.
  *
- * Appending would leave the original `DATABASE_URL=…127.0.0.1…` in place and
+ * Appending would leave the original `DATABASE_URL=...127.0.0.1...` in place and
  * add a rewritten copy. glibc/`os.Getenv` (Go, C, Python, Node on Linux)
  * return the first match, so the container would still dial `127.0.0.1`
  * inside its own netns.
@@ -309,7 +309,7 @@ export const DockerLive = Layer.effect(
           if (isCreateRequest) {
             // workerd creates two containers per instance: the user container
             // and a `<name>-proxy` networking sidecar whose namespace the user
-            // container joins (`NetworkMode: container:<sidecar>`) — so the
+            // container joins (`NetworkMode: container:<sidecar>`) -- so the
             // sidecar's /etc/hosts is what the user container resolves against.
             // Docker Desktop maps the alias through host-gateway (reaches host
             // 127.0.0.1). Native Linux maps it to 127.0.0.1 in this netns and
@@ -547,7 +547,7 @@ export const DockerLive = Layer.effect(
       // Skip the eager pull when the interceptor image is already present
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
       // local-only tag that exists in the Docker daemon but resolves in no
-      // registry (e.g. a locally-built dev image) — an unconditional
+      // registry (e.g. a locally-built dev image) -- an unconditional
       // `docker pull` there fails, this startup fiber dies, and every
       // caller of `getWorkerdDockerConfiguration` (joined on first use)
       // fails with it. `docker image inspect` prints the image id when
@@ -758,7 +758,7 @@ const sendDockerRequest = (
     // docker daemon never responds and workerd blocks forever before it can
     // create the container. Strip the header and let the runtime derive the
     // framing from the body we actually write. (Node tolerates it, Bun does
-    // not — and Alchemy dev runs the runtime under Bun.)
+    // not -- and Alchemy dev runs the runtime under Bun.)
     delete headers["transfer-encoding"];
     if (body !== undefined) headers["content-length"] = Buffer.byteLength(body).toString();
     const upstream = NodeHttp.request(

@@ -7,7 +7,7 @@ import type { Broker } from "./Broker.ts";
  * Runtime binding for the `DeleteUser` operation (IAM action
  * `mq:DeleteUser`), scoped to one {@link Broker}.
  *
- * Deletes a broker user — e.g. revoking per-tenant credentials at runtime.
+ * Deletes a broker user -- e.g. revoking per-tenant credentials at runtime.
  * On ActiveMQ the change is staged and applied at the next broker reboot or
  * maintenance window; on RabbitMQ it takes effect immediately. Provide the
  * implementation with `Effect.provide(AWS.MQ.DeleteUserHttp)`.

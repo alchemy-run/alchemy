@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeRestoreJob` operation (IAM action
  * `backup:DescribeRestoreJob`).
  *
- * Returns the details of a restore job by its ID — poll a job started with
+ * Returns the details of a restore job by its ID -- poll a job started with
  * `StartRestoreJob` until it completes. Provide the implementation with
  * `Effect.provide(AWS.Backup.DescribeRestoreJobHttp)`.
  * ### Restoring Recovery Points

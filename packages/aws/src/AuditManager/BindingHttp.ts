@@ -6,8 +6,8 @@ import type { Assessment } from "./Assessment.ts";
 /**
  * Shared scaffolding for Audit Manager HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for assessment-scoped operations) the injected `assessmentId` is
  * boilerplate.
@@ -61,7 +61,7 @@ export const makeAssessmentScopedHttpBinding = <
 
 /**
  * Build the impl Effect for an account-level operation (no target assessment
- * — registration status, account-wide insights, report listings, presigned
+ * -- registration status, account-wide insights, report listings, presigned
  * evidence-upload URLs). The deploy-time half grants `actions` on `*`
  * because these IAM actions do not support resource-level scoping.
  */

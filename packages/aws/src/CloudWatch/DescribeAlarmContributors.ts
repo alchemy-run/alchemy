@@ -9,7 +9,7 @@ export interface DescribeAlarmContributorsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:DescribeAlarmContributors` — list the
+ * Runtime binding for `cloudwatch:DescribeAlarmContributors` -- list the
  * time-series contributors currently in ALARM for a contributor-enabled
  * metric-math alarm. Bind it to the {@link Alarm}; the alarm name is
  * injected automatically.
@@ -19,11 +19,11 @@ export interface DescribeAlarmContributorsRequest extends Omit<
  * ### Reading Alarm State
  * **Example:** List an Alarm's Contributors
  * ```typescript
- * // init — grants cloudwatch:DescribeAlarmContributors on the alarm
+ * // init -- grants cloudwatch:DescribeAlarmContributors on the alarm
  * const describeAlarmContributors =
  *   yield* AWS.CloudWatch.DescribeAlarmContributors(alarm);
  *
- * // runtime — plain metric alarms have no contributor data; the typed
+ * // runtime -- plain metric alarms have no contributor data; the typed
  * // errors let you treat that as an empty result
  * const contributors = yield* describeAlarmContributors().pipe(
  *   Effect.map((r) => r.AlarmContributors ?? []),

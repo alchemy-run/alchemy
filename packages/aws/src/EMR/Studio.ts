@@ -23,7 +23,7 @@ export interface StudioProps {
    */
   studioName?: string;
   /**
-   * Authentication mode — `IAM` or `SSO` (IAM Identity Center). Changing the
+   * Authentication mode -- `IAM` or `SSO` (IAM Identity Center). Changing the
    * mode replaces the Studio.
    * @default "IAM"
    */
@@ -124,7 +124,7 @@ export interface Studio extends Resource<
 > {}
 
 /**
- * An Amazon EMR Studio — a web-based IDE for notebooks and interactive
+ * An Amazon EMR Studio -- a web-based IDE for notebooks and interactive
  * workloads that attaches to EMR clusters.
  *
  * A Studio itself is free; you pay for the clusters it attaches to. Each
@@ -189,10 +189,10 @@ const sameStringSet = (
  * seconds to propagate (IAM eventual consistency); CreateStudio validates
  * both assumability and S3-location access at create time and surfaces that
  * window as the typed StudioServiceRoleNotAssumable /
- * StudioServiceRoleMissingS3Access tags. Bounded retry (~40s max) — a
+ * StudioServiceRoleMissingS3Access tags. Bounded retry (~40s max) -- a
  * genuinely misconfigured role still fails, just slower.
  *
- * NOTE: keep this helper at module scope with an EXPLICIT return annotation —
+ * NOTE: keep this helper at module scope with an EXPLICIT return annotation --
  * an inlined `Effect.retry` in provider lifecycle code leaves `Retry.Return`'s
  * conditional type unresolved in the provider's inferred layer type, which
  * TypeScript's declaration emit widens to an `unknown` R.
@@ -318,13 +318,13 @@ export const StudioProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output is only an id
+          // 1. Observe -- cloud state is authoritative; output is only an id
           //    cache.
           let observed = output?.studioId
             ? yield* readStudio(output.studioId)
             : yield* findStudioByName(name);
 
-          // 2. Ensure — create if missing. Create errors (invalid security
+          // 2. Ensure -- create if missing. Create errors (invalid security
           //    groups, role, subnets) propagate directly.
           if (observed === undefined) {
             const created = yield* retryWhileRolePropagates(
@@ -365,7 +365,7 @@ export const StudioProvider = () =>
           }
           const studioId = observed.StudioId!;
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: emr.UpdateStudioInput = { StudioId: studioId };
           let mutated = false;
           if (observed.Name !== name) {
@@ -388,7 +388,7 @@ export const StudioProvider = () =>
             yield* emr.updateStudio(update);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(observed.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

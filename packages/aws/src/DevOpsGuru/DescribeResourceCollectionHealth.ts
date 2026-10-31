@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:DescribeResourceCollectionHealth`.
  *
- * Returns the number of open insights per analyzed CloudFormation stack or app-boundary tag — where the operational pain is concentrated.
+ * Returns the number of open insights per analyzed CloudFormation stack or app-boundary tag -- where the operational pain is concentrated.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.DescribeResourceCollectionHealthHttp)`.
  * ### Coverage Health
  * **Example:** Read Per-Stack Health
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeResourceCollectionHealth = yield* AWS.DevOpsGuru.DescribeResourceCollectionHealth();
  *
  * // runtime

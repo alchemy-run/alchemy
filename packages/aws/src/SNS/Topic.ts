@@ -230,7 +230,7 @@ export const TopicProvider = () =>
       const desiredAttributes = toAttributes(news);
       const isFifo = news.fifo ?? false;
 
-      // Observe + ensure — `createTopic` is idempotent for an identical
+      // Observe + ensure -- `createTopic` is idempotent for an identical
       // (name, FifoTopic) pair, so we use it both to ensure-on-greenfield
       // and to fetch the ARN for adoption. We deliberately pass ONLY the
       // FifoTopic attribute (which is stable at create time): AWS rejects
@@ -246,7 +246,7 @@ export const TopicProvider = () =>
         return yield* Effect.die(new Error(`createTopic returned no ARN`));
       }
 
-      // Sync attributes — fetch observed cloud attributes and apply only
+      // Sync attributes -- fetch observed cloud attributes and apply only
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
@@ -264,7 +264,7 @@ export const TopicProvider = () =>
       }
 
       // Reset previously-user-specified attributes that the user no
-      // longer specifies. Use `olds.attributes` (the prior props) — NOT
+      // longer specifies. Use `olds.attributes` (the prior props) -- NOT
       // `output.attributes`, which on adoption holds every attribute SNS
       // returns and would erroneously try to reset SNS-managed values
       // like the auto-generated Policy.
@@ -278,7 +278,7 @@ export const TopicProvider = () =>
         }
       }
 
-      // Sync tags — diff observed cloud tags against desired so that an
+      // Sync tags -- diff observed cloud tags against desired so that an
       // adoption-takeover (cloud tags identify a different logical id)
       // correctly rewrites ownership tags.
       const observedTagsResp = yield* sns
@@ -305,7 +305,7 @@ export const TopicProvider = () =>
         });
       }
 
-      // Sync data protection policy — observed ↔ desired. SNS rejects
+      // Sync data protection policy -- observed <-> desired. SNS rejects
       // getDataProtectionPolicy on FIFO topics, so we skip it there.
       let observedPolicy: string | undefined;
       if (!isFifo) {
@@ -445,7 +445,7 @@ const readTopic = Effect.fn(function* ({
       InvalidParameterException: () => Effect.undefined,
     }),
     // `list()` hydrates every topic in the account, so a topic deleted by a
-    // parallel test between enumeration and hydration surfaces here —
+    // parallel test between enumeration and hydration surfaces here --
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
     Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),

@@ -7,7 +7,7 @@ import type { DataSource } from "./DataSource.ts";
  * Runtime binding for the `StartDataSourceSyncJob` operation (IAM action
  * `kendra:StartDataSourceSyncJob`), scoped to one {@link DataSource}.
  *
- * Starts an on-demand sync of the data source into its index — the
+ * Starts an on-demand sync of the data source into its index -- the
  * programmatic alternative to the data source's cron `schedule`. Fails
  * with `ResourceInUseException` while another sync is already running.
  * Provide the implementation with

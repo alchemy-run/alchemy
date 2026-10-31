@@ -53,7 +53,7 @@ export interface AddressList extends Resource<
 > {}
 
 /**
- * An SES Mail Manager address list — a named set of email addresses that
+ * An SES Mail Manager address list -- a named set of email addresses that
  * traffic policies and rule conditions can match against (allow lists,
  * block lists, routing groups).
  *
@@ -74,7 +74,7 @@ export interface AddressList extends Resource<
  * ### Managing Members at Runtime
  * **Example:** Register and List Members from a Lambda
  * ```typescript
- * // init — bind the member capabilities to the list
+ * // init -- bind the member capabilities to the list
  * const registerMember = yield* MailManager.RegisterMemberToAddressList(blockList);
  * const listMembers = yield* MailManager.ListMembersOfAddressList(blockList);
  *
@@ -100,7 +100,7 @@ export const AddressListProvider = () =>
           .getAddressList({ AddressListId: addressListId })
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-      // Address lists have no name-keyed Get — enumerate and match. The
+      // Address lists have no name-keyed Get -- enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
       // lost state write.
       const findByName = (name: string) =>
@@ -158,7 +158,7 @@ export const AddressListProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Mail Manager exposes no UpdateAddressList — a name change can only
+        // Mail Manager exposes no UpdateAddressList -- a name change can only
         // be realized by replacement.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -173,10 +173,10 @@ export const AddressListProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let list = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes by
+          // 2. ENSURE -- create if missing; a Conflict race re-observes by
           //    name instead of failing.
           if (list === undefined) {
             yield* session.note(`creating address list ${name}`);
@@ -197,7 +197,7 @@ export const AddressListProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — the only mutable aspect; diffed against observed
+          // 3. SYNC TAGS -- the only mutable aspect; diffed against observed
           //    cloud tags so adoption converges.
           yield* syncMailManagerTags(list.AddressListArn, desiredTags);
 
@@ -206,9 +206,9 @@ export const AddressListProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteAddressList's error union carries no not-found tag —
+          // DeleteAddressList's error union carries no not-found tag --
           // deletion is natively idempotent. A list referenced by an
-          // in-flight import job reports Conflict — retry through it.
+          // in-flight import job reports Conflict -- retry through it.
           yield* retryWhileMailManagerConflict(
             mm.deleteAddressList({ AddressListId: output.addressListId }),
           ).pipe(Effect.asVoid);

@@ -128,7 +128,7 @@ export const ImportRepo = HttpApiEndpoint.post("import", "/repos/import", {
 /**
  * Forces a compaction run now (`Maintain`): moves loose object bytes into
  * an immutable pack. Normally armed automatically by size thresholds after
- * a push — this is the operator/benchmark handle. Returns immediately; poll
+ * a push -- this is the operator/benchmark handle. Returns immediately; poll
  * `GET /repos/:owner/:repo` and watch `objects.loose` fall to zero.
  */
 export const CompactRepo = HttpApiEndpoint.post("compact", "/repos/:owner/:repo/compact", {

@@ -20,23 +20,23 @@ import {
 
 export type MonetizationSubscriptionsBasePlansOfferProps = {
   /**
-   * Play package name of the parent app. Immutable — changing it
+   * Play package name of the parent app. Immutable -- changing it
    * replaces the offer.
    */
   packageName: string;
   /**
-   * Parent subscription product id. Immutable — changing it replaces
+   * Parent subscription product id. Immutable -- changing it replaces
    * the offer.
    */
   productId: string;
   /**
-   * Parent auto-renewing base plan id. Immutable — changing it
+   * Parent auto-renewing base plan id. Immutable -- changing it
    * replaces the offer.
    */
   basePlanId: string;
   /**
    * Unique offer id within the base plan. If omitted, a unique id is
-   * generated. Immutable — changing it replaces the offer.
+   * generated. Immutable -- changing it replaces the offer.
    */
   offerId?: string;
   /**
@@ -112,7 +112,7 @@ export type MonetizationSubscriptionsBasePlansOffer = Resource<
  * Offers have no labels field, so ownership rests on the deterministic
  * offer id: `read` reports an offer it finds without prior state as
  * unowned (adopt it with `--adopt`). `packageName`, `productId`,
- * `basePlanId`, and `offerId` are identity — changing any of them
+ * `basePlanId`, and `offerId` are identity -- changing any of them
  * replaces the offer. Phases, regional configs, tags, and targeting
  * update in place. Only draft offers can be deleted. The parent base
  * plan must be auto-renewing.

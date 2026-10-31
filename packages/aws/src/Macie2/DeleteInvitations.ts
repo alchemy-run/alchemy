@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:DeleteInvitations`.
  *
  * Deletes Amazon Macie membership invitations that were received from specific accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DeleteInvitationsHttp)`.
  * ### Administrator & Invitations
  * **Example:** Delete Received Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteInvitations = yield* AWS.Macie2.DeleteInvitations();
  *
  * // runtime

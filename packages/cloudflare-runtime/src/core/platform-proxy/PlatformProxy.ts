@@ -5,23 +5,23 @@
  * {@link open} starts a workerd instance hosting the requested bindings behind
  * the internal proxy worker and returns Node-side proxies:
  *
- * - `env` — every binding callable from Node. Plain values (`Text`, `Json`,
+ * - `env` -- every binding callable from Node. Plain values (`Text`, `Json`,
  *   `Data`) are materialised eagerly; everything else is a lazy stub that
  *   forwards method chains to the worker (`env.KV.get("key")`,
  *   `env.DO.get(env.DO.idFromName("a")).increment()`,
  *   `env.DB.prepare("...").all()`). `fetch()` calls on stubs (service
  *   bindings, Durable Object stubs) stream through a raw HTTP passthrough.
- * - `cf` — a frozen mock of `request.cf` (same shape miniflare falls back to).
- * - `ctx` — an `ExecutionContext` mock whose methods are no-ops (matching
+ * - `cf` -- a frozen mock of `request.cf` (same shape miniflare falls back to).
+ * - `ctx` -- an `ExecutionContext` mock whose methods are no-ops (matching
  *   wrangler's `getPlatformProxy().ctx` contract, including the
  *   "Illegal invocation" guard).
- * - `caches` — a functional Cache API proxy backed by an in-memory store in
+ * - `caches` -- a functional Cache API proxy backed by an in-memory store in
  *   the proxy worker (unlike wrangler, whose `caches` is a no-op,
  *   `put`/`match`/`delete` actually round-trip).
  *
  * The proxies themselves are built by the runtime-free client in
  * {@link ./connect.ts}; the instance exposes its `connectInfo`
- * (`{ url, token }` — two plain strings) so additional clients (worker
+ * (`{ url, token }` -- two plain strings) so additional clients (worker
  * threads, child processes) can reconstruct the same proxies against the
  * same live binding state with `connect(connectInfo)`.
  *
@@ -90,9 +90,9 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
   readonly compatibilityDate?: string;
   readonly compatibilityFlags?: Array<string>;
   /**
-   * Bindings to expose on `env` — the same hook shapes `Runtime.start`
+   * Bindings to expose on `env` -- the same hook shapes `Runtime.start`
    * accepts (`Text.local`, `Json.local`, `KvNamespace.local`,
-   * `DurableObjectNamespace.local`, `Service.local`, remote bindings, …).
+   * `DurableObjectNamespace.local`, `Service.local`, remote bindings, ...).
    */
   readonly bindings: B;
   /**
@@ -119,7 +119,7 @@ export interface PlatformProxyInstance<
   /** Base URL of the proxy worker (mainly for debugging). */
   readonly url: URL;
   /**
-   * Everything a client needs to (re)connect to this instance —
+   * Everything a client needs to (re)connect to this instance --
    * `connect(connectInfo)` (see {@link ./connect.ts}) rebuilds
    * `{ env, cf, ctx, caches }` from any thread or process that can reach
    * `url`, sharing this instance's live binding state.

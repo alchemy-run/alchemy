@@ -14,7 +14,7 @@ import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
 /**
- * An IVS Chat message review invocation — the PascalCase
+ * An IVS Chat message review invocation -- the PascalCase
  * `Content`/`MessageId`/`RoomArn` envelope IVS Chat sends the handler for
  * every `SendMessage` request.
  */
@@ -75,7 +75,7 @@ export const RoomMessageReviewEventSource = Layer.effect(
             // associated (CreateRoom/UpdateRoom fails with "invalid lambda
             // permission" otherwise), so the Permission must exist BEFORE
             // the room and cannot reference the room's ARN (that would be
-            // circular). Scope it to this account's rooms instead — the
+            // circular). Scope it to this account's rooms instead -- the
             // pattern the IVS Chat resource-policy docs recommend.
             const { accountId, region } =
               yield* AWSEnvironment.current as unknown as Effect.Effect<{
@@ -91,7 +91,7 @@ export const RoomMessageReviewEventSource = Layer.effect(
             });
 
             // The Permission echoes the `functionName` prop (the function
-            // ARN) as an attribute — threading it as the handler `uri`
+            // ARN) as an attribute -- threading it as the handler `uri`
             // makes the room reconcile only AFTER the invoke permission
             // exists.
             yield* room.bind`AWS.IVSChat.RoomMessageReview(${host}, ${room})`({

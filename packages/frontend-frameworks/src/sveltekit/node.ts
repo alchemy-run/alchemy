@@ -1,7 +1,7 @@
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 /**
- * `@alchemy.run/frontend-frameworks/sveltekit/node` — the Node container
+ * `@alchemy.run/frontend-frameworks/sveltekit/node` -- the Node container
  * deploy target for `@alchemy.run/frontend-frameworks/sveltekit`.
  *
  * SvelteKit's Node story mirrors adapter-node: kit's server graph
@@ -11,11 +11,11 @@ import * as NodePath from "node:path";
  * through to kit's `Server.respond` on `PORT` (default 3000), and answers
  * `GET /health`.
  *
- * - **`adapter(context)`** — an in-memory kit `Adapter` that writes client
+ * - **`adapter(context)`** -- an in-memory kit `Adapter` that writes client
  *   assets + prerendered pages and an unbundled fetch-handler entry.
- * - **`finish(output, context)`** — re-bundles the entry for Node, writes
+ * - **`finish(output, context)`** -- re-bundles the entry for Node, writes
  *   the HTTP serve entry, pins it as `serverModules[0]`.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  */
 import type { Builder } from "@sveltejs/kit";
 import * as Effect from "effect/Effect";

@@ -43,11 +43,11 @@ export interface GenerateEmbedUrlForAnonymousUserRequest extends Omit<
  * ### Embedding Dashboards
  * **Example:** Embed The Bound Dashboard Anonymously
  * ```typescript
- * // init — bind the operation to the dashboard
+ * // init -- bind the operation to the dashboard
  * const generateEmbedUrl =
  *   yield* AWS.QuickSight.GenerateEmbedUrlForAnonymousUser(dashboard);
  *
- * // runtime — namespace, authorized ARNs, and experience default to the dashboard
+ * // runtime -- namespace, authorized ARNs, and experience default to the dashboard
  * const { EmbedUrl } = yield* generateEmbedUrl({
  *   SessionLifetimeInMinutes: 60,
  * });

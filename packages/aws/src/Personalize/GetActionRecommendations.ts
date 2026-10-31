@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:GetActionRecommendations` — Returns a list of recommended actions (next best action) for a user
+ * Runtime binding for `personalize:GetActionRecommendations` -- Returns a list of recommended actions (next best action) for a user
  * from a campaign backed by the NEXT_BEST_ACTION recipe. Campaign ARNs
  * are chosen at runtime, so the binding takes no arguments and grants
  * `personalize:GetActionRecommendations` on `*`.

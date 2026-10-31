@@ -46,8 +46,8 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   /**
    * Names of tail consumer workers (the deployed `tail_consumers` setting).
    * workerd delivers this worker's trace events to each consumer's `tail()`
-   * handler. Consumers are resolved through the on-disk dev registry — the
-   * same path service bindings to other local workers take — so a consumer
+   * handler. Consumers are resolved through the on-disk dev registry -- the
+   * same path service bindings to other local workers take -- so a consumer
    * may run in a separate `cloudflare-runtime` or `wrangler dev` process and
    * may (re)start at any time. Events produced while a consumer is not
    * running are dropped with a warning, matching dev-registry semantics.
@@ -62,12 +62,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * which is invoked with the invocation's `onset` event as soon as the
    * producer starts executing and returns a handler (a function, or an object
    * keyed by event type) that receives every subsequent event (`spanOpen` /
-   * `spanClose`, `log`, `exception`, `diagnosticChannel`, `return`, …)
+   * `spanClose`, `log`, `exception`, `diagnosticChannel`, `return`, ...)
    * streamed live during execution, ending with the terminal `outcome` event.
    * Consumers are resolved through the on-disk dev registry exactly like
-   * `tails` — the registry proxy's `ExternalService` entrypoint forwards the
+   * `tails` -- the registry proxy's `ExternalService` entrypoint forwards the
    * `tailStream()` session to the consumer's process via the workerd debug
-   * port — so a consumer may run in a separate process and may (re)start at
+   * port -- so a consumer may run in a separate process and may (re)start at
    * any time. Sessions started while a consumer is not running are dropped
    * with a warning, matching dev-registry semantics.
    */
@@ -79,7 +79,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cache?: boolean;
   /**
-   * Per-worker `request.cf` blob. Merged the way Miniflare does — used
+   * Per-worker `request.cf` blob. Merged the way Miniflare does -- used
    * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
    * to the runtime-wide `Cf` reference (a static placeholder by default).
    */
@@ -103,7 +103,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * Controls how output from the underlying `workerd` process is surfaced.
    *
    * By default, workerd does not log uncaught exceptions thrown by the
-   * worker — they surface as bare `500 Internal Server Error` responses with
+   * worker -- they surface as bare `500 Internal Server Error` responses with
    * no output anywhere. Set `verbose: true` to have workerd log them
    * (message + stack) to stderr, and optionally `onOutput` to capture the
    * process output instead of inheriting the parent process's stdio.
@@ -125,7 +125,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * Runs once, after bindings are prepared and container images are built or
    * pulled, immediately before the first `workerd` process is spawned. A
    * caller replacing a previous instance of this worker uses it to tear that
-   * instance down first when the two cannot overlap — e.g. containers, whose
+   * instance down first when the two cannot overlap -- e.g. containers, whose
    * deterministic names make a new process adopt ("recover") the previous
    * process's still-running container, which that process's teardown then
    * removes.
@@ -138,7 +138,7 @@ export interface WorkerdLogging {
   /**
    * Pass `--verbose` to workerd. Enables INFO-level logging, which includes
    * uncaught exceptions thrown by the worker (message + stack, written to
-   * stderr) — without it, those exceptions surface as bare
+   * stderr) -- without it, those exceptions surface as bare
    * `500 Internal Server Error` responses with no log output anywhere.
    */
   readonly verbose?: boolean;

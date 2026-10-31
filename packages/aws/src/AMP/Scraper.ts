@@ -45,7 +45,7 @@ export interface ScraperVpcSource {
 }
 
 /**
- * Where the scraper collects metrics from — an Amazon EKS cluster or a
+ * Where the scraper collects metrics from -- an Amazon EKS cluster or a
  * VPC-based source (Amazon MSK, self-managed Kubernetes, or any
  * Prometheus-compatible endpoint discoverable via DNS in the VPC).
  */
@@ -81,7 +81,7 @@ export interface ScraperProps {
    */
   scrapeConfiguration: string;
   /**
-   * Where the scraper collects metrics from. The source is immutable —
+   * Where the scraper collects metrics from. The source is immutable --
    * changing it replaces the scraper.
    */
   source: ScraperSource;
@@ -117,7 +117,7 @@ export interface Scraper extends Resource<
 > {}
 
 /**
- * An Amazon Managed Service for Prometheus scraper — a fully-managed,
+ * An Amazon Managed Service for Prometheus scraper -- a fully-managed,
  * agentless collector that pulls metrics from an Amazon EKS cluster (or a
  * VPC-based Prometheus-compatible source) and remote-writes them into an AMP
  * workspace.
@@ -194,7 +194,7 @@ export const ScraperProvider = () =>
         status: scraper.status.statusCode,
       });
 
-      /** Describe a scraper by id; typed not-found → undefined. */
+      /** Describe a scraper by id; typed not-found -> undefined. */
       const describe = Effect.fn(function* (scraperId: string) {
         const response = yield* amp
           .describeScraper({ scraperId })
@@ -221,7 +221,7 @@ export const ScraperProvider = () =>
       /**
        * Poll until the scraper leaves CREATING/UPDATING. Scraper
        * provisioning creates network interfaces in each subnet and can take
-       * many minutes — the wait is bounded at 25 minutes and fails fast on a
+       * many minutes -- the wait is bounded at 25 minutes and fails fast on a
        * *_FAILED terminal status.
        */
       const waitActive = Effect.fn(function* (scraperId: string) {
@@ -248,7 +248,7 @@ export const ScraperProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // The metric source is immutable — a change replaces the scraper.
+          // The metric source is immutable -- a change replaces the scraper.
           if (olds !== undefined && canonicalSource(olds.source) !== canonicalSource(news.source)) {
             return { action: "replace" } as const;
           }
@@ -270,11 +270,11 @@ export const ScraperProvider = () =>
           const desiredTags = { ...internalTags, ...news!.tags };
           const desiredConfig = news!.scrapeConfiguration;
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let scraper =
             output?.scraperId !== undefined ? yield* describe(output.scraperId) : undefined;
 
-          // 2. Ensure — create if missing, then wait for ACTIVE.
+          // 2. Ensure -- create if missing, then wait for ACTIVE.
           if (scraper === undefined) {
             const created = yield* amp.createScraper({
               alias: news!.alias,
@@ -295,7 +295,7 @@ export const ScraperProvider = () =>
 
           const scraperId = scraper.scraperId;
 
-          // 3. Sync mutable aspects — diff OBSERVED state against desired
+          // 3. Sync mutable aspects -- diff OBSERVED state against desired
           // and issue a single update only when something drifted.
           const observedConfig = yield* decodeDefinition(
             scraper.scrapeConfiguration.configurationBlob,
@@ -332,7 +332,7 @@ export const ScraperProvider = () =>
             scraper = yield* waitActive(scraperId);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAmpTags(scraper.arn, desiredTags);
 
           yield* session.note(scraperId);

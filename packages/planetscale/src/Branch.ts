@@ -72,7 +72,7 @@ export interface BaseBranchProps {
    *
    * Adding a file is an in-place update. Editing or removing an
    * already-applied file replaces a non-production branch (re-forked from
-   * its parent) and fails on a current or desired production branch — add
+   * its parent) and fails on a current or desired production branch -- add
    * a forward migration instead.
    */
   migrations?: MigrationsInput;
@@ -131,7 +131,7 @@ export interface BaseBranchAttributes {
 }
 
 // Runtime-resolved Database/Branch references. `news.database` can be a
-// plain string OR (after resolution) the Database resource's attributes —
+// plain string OR (after resolution) the Database resource's attributes --
 // which contain plain values for `name` / `organization`. The static
 // Database type has those fields as `Output<...>`, so we cast through a
 // structural shape here.
@@ -250,7 +250,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               ),
             ),
             // A database can be deleted between enumeration and the
-            // per-database branch list — skip it rather than fail.
+            // per-database branch list -- skip it rather than fail.
             Effect.catchTag("NotFound", () => Effect.succeed([] as BaseBranchAttributes[])),
           ),
         { concurrency: 10 },
@@ -264,7 +264,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
       // Branch names are rename-mutable (reconcile syncs `news.name` in
       // place), so `name` cannot live in the provider-level stables. But
-      // almost no update is a rename — for those, advertise `name` as
+      // almost no update is a rename -- for those, advertise `name` as
       // stable on the update so downstream consumers referencing this
       // branch still resolve `branch.name` at plan time. Without it, a
       // metadata-only update (e.g. an embedded database ref whose
@@ -275,7 +275,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       // The name only changes when the `name` prop itself changes: an
       // explicit name renames iff it differs from the observed name, and
       // an omitted name is engine-generated deterministically (stable
-      // across updates — the instance id only rotates on replacement).
+      // across updates -- the instance id only rotates on replacement).
       const nameIsStable =
         output?.name !== undefined &&
         (news.name !== undefined ? news.name === output.name : olds?.name === undefined);
@@ -347,7 +347,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       // Remaining prop changes (rename, safeMigrations, clusterSize,
       // metadata embedded in resource refs) are all in-place updates.
       // Decide them here instead of falling back to the engine's default
-      // deep-compare so the conditional `name` stable above is attached —
+      // deep-compare so the conditional `name` stable above is attached --
       // the default path uses the provider-level stables, which strip
       // `name` from downstream plan resolution.
       if (havePropsChanged(olds, news)) {
@@ -363,7 +363,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
     read: Effect.fn(function* ({ id, olds, output }: any) {
       // If we have neither a cached output nor a usable `olds.database`
-      // there's no way to identify which branch to refresh — most often
+      // there's no way to identify which branch to refresh -- most often
       // this is destroy of a partially-created resource whose props
       // never got fully persisted. Return `undefined` so the engine
       // treats it as already-gone and drops the state entry.
@@ -433,7 +433,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         yield* waitForBranchReady(organization, databaseName, parentBranchName, session);
       }
 
-      // Observe — fetch the live branch state.
+      // Observe -- fetch the live branch state.
       let current = yield* planetscale
         .getBranch({
           organization,
@@ -442,7 +442,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-      // Ensure — if missing, create. The parent must be ready before
+      // Ensure -- if missing, create. The parent must be ready before
       // the child can fork from it. PostgreSQL short cluster sizes need
       // to be expanded against the parent's region so the API call lands
       // with a valid sku.
@@ -487,7 +487,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
       yield* waitForBranchReady(organization, databaseName, current.name, session);
 
-      // Sync name — branch names are mutable. Continue subsequent syncs
+      // Sync name -- branch names are mutable. Continue subsequent syncs
       // under the name returned by the API.
       if (current.name !== desiredBranchName) {
         current = yield* planetscale.updateBranch({
@@ -530,7 +530,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      // Sync safeMigrations — observed via `current.safe_migrations`,
+      // Sync safeMigrations -- observed via `current.safe_migrations`,
       // skip the API call entirely on no-op.
       if (news.safeMigrations !== undefined && current.safe_migrations !== news.safeMigrations) {
         if (news.safeMigrations) {
@@ -572,7 +572,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      // Sync clusterSize — only meaningful on production branches.
+      // Sync clusterSize -- only meaningful on production branches.
       if (news.clusterSize) {
         if (current.kind === "postgresql") {
           yield* ensurePostgresProductionBranchClusterSize(

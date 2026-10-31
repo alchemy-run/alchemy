@@ -9,7 +9,7 @@ import type * as rolldown from "rolldown";
  * `node.js` sets up `createCachedImport(() => import("./build.js"))` at
  * module level, and `build.js` imports `node.js` back. So a Worker that only
  * reaches `import("vite")` through deploy-time code tree-shaking removes
- * still got ~1 MB of chunks (Vite, rolldown, esbuild, postcss, …) that
+ * still got ~1 MB of chunks (Vite, rolldown, esbuild, postcss, ...) that
  * nothing loads, and every output file is uploaded.
  *
  * `dynamicImports` is computed before constant inlining, so it can list an

@@ -8,7 +8,7 @@ import * as NodePath from "node:path";
  * integration over `@alchemy.run/cloudflare-runtime/vite`, its vendored
  * server entrypoints, workerd dev via the vite module runner) and exposes it
  * through the `AstroTarget` contract. The framework module
- * (`Astro.ts`/`index.ts`) never imports anything Cloudflare-specific — it
+ * (`Astro.ts`/`index.ts`) never imports anything Cloudflare-specific -- it
  * receives this target as a value (or resolves this module by specifier when
  * no target is given).
  *
@@ -74,11 +74,11 @@ export interface AstroCloudflareTarget extends AstroTarget<AstroCloudflareConfig
 /**
  * Build the Cloudflare Workers deploy target for Astro.
  *
- * - `integration` — the wrangler-free `@astrojs/cloudflare` fork over
+ * - `integration` -- the wrangler-free `@astrojs/cloudflare` fork over
  *   `@alchemy.run/cloudflare-runtime/vite` (entry env `ssr`, node-side
  *   `astro` environment skipped, workerd prerendering by default with a
  *   `'node'` fallback, passthrough image service).
- * - `bundle` — workerd resolve conditions + `cloudflare:` externals
+ * - `bundle` -- workerd resolve conditions + `cloudflare:` externals
  *   (informational for Astro: the integration configures the bundler itself).
  */
 export const target = (config: AstroCloudflareConfig = {}): AstroCloudflareTarget => {

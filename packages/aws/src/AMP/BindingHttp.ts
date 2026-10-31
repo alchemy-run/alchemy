@@ -7,11 +7,11 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
  * Amazon Managed Service for Prometheus exposes its data plane as a
  * Prometheus-compatible HTTP API under the workspace's `prometheusEndpoint`
  * (`aps:RemoteWrite`, `aps:QueryMetrics`, `aps:GetLabels`, `aps:GetSeries`,
- * `aps:GetMetricMetadata`). There is no distilled operation for these — every
+ * `aps:GetMetricMetadata`). There is no distilled operation for these -- every
  * request is a SigV4-signed HTTP call (service `"aps"`) made with the host
  * Function's own credentials.
  *
- * NOT exported from `index.ts` — only the per-capability contracts and
+ * NOT exported from `index.ts` -- only the per-capability contracts and
  * `*Http` layers are public.
  */
 import { toWireSeconds } from "alchemy/Util/Duration";
@@ -133,7 +133,7 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
           body = form.toString();
           headers["content-type"] = "application/x-www-form-urlencoded";
         } else if (request.bytes !== undefined) {
-          // Copy into a fresh ArrayBuffer-backed view — `fetch`'s `BodyInit`
+          // Copy into a fresh ArrayBuffer-backed view -- `fetch`'s `BodyInit`
           // rejects `Uint8Array<ArrayBufferLike>` (SharedArrayBuffer-backed).
           body = new Uint8Array(request.bytes.data);
           headers["content-type"] = request.bytes.contentType;

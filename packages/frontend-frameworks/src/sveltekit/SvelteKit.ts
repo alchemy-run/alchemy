@@ -68,7 +68,7 @@ export interface SvelteKitTargetConfig {
    * The kit config the framework half was constructed with
    * ({@link SvelteKitOptions.kit}). Carried on the target config so
    * wholesale targets that re-run the framework in a child process (the
-   * AWS target — kit's postbuild workers require `cwd === root`) can
+   * AWS target -- kit's postbuild workers require `cwd === root`) can
    * reconstruct the framework with the same options.
    */
   readonly kit?: Record<string, unknown> | undefined;
@@ -86,13 +86,13 @@ export interface SvelteKitAdapterContext {
   readonly dev?:
     | {
         /**
-         * Literal `platform.env` overrides — a same-named literal wins over
+         * Literal `platform.env` overrides -- a same-named literal wins over
          * any target-provided platform value.
          */
         readonly env?: Record<string, unknown> | undefined;
         /**
          * Target-specific binding specs the dev platform should serve
-         * (opaque to the framework half — e.g. the Cloudflare target takes
+         * (opaque to the framework half -- e.g. the Cloudflare target takes
          * `cloudflare-runtime` binding hooks and proxies them onto
          * `platform.env`).
          */
@@ -124,12 +124,12 @@ export interface SvelteKitAdapterContext {
 export interface SvelteKitAdapterResult {
   /**
    * The static-assets directory the adapter wrote (client build +
-   * prerendered pages) — becomes `BuildOutput.clientDirectory`.
+   * prerendered pages) -- becomes `BuildOutput.clientDirectory`.
    */
   readonly dest: string;
   /**
    * Absolute path of the on-disk (unbundled) server entry the adapter
-   * generated — passed to the target's `finish` pass as `context.entry`.
+   * generated -- passed to the target's `finish` pass as `context.entry`.
    */
   readonly workerEntry: string;
 }
@@ -150,7 +150,7 @@ export interface SvelteKitAdapter extends Adapter {
 
 /**
  * A deploy target for SvelteKit: the generic `DeployTarget` seams plus the
- * one framework-specific hook kit needs — the `Adapter` instance to hand to
+ * one framework-specific hook kit needs -- the `Adapter` instance to hand to
  * `sveltekit(config)`. The target's `finish` pass receives the adapter's
  * on-disk `workerEntry` (via `context.entry`) and is responsible for turning
  * it into `BuildOutput.serverModules` for the target runtime.
@@ -163,7 +163,7 @@ export interface SvelteKitTarget extends DeployTarget<SvelteKitTargetConfig> {
 /**
  * How a deploy target is passed to this package: a `SvelteKitTarget` value, a
  * factory `(config) => SvelteKitTarget`, or a module specifier resolved from
- * the *project's* `node_modules` (default-export — or named export `target` —
+ * the *project's* `node_modules` (default-export -- or named export `target` --
  * a value or factory).
  */
 export type SvelteKitTargetInput = DeployTargetInput<SvelteKitTarget, SvelteKitTargetConfig>;
@@ -218,7 +218,7 @@ export interface SvelteKitOptions {
         /**
          * Literal values exposed on the dev `platform.env`. Applied on top
          * of the values the target's dev platform serves for
-         * {@link SvelteKitOptions.dev.bindings} — a same-named literal
+         * {@link SvelteKitOptions.dev.bindings} -- a same-named literal
          * always wins.
          */
         readonly env?: Record<string, unknown> | undefined;
@@ -226,7 +226,7 @@ export interface SvelteKitOptions {
          * Target-specific binding specs the dev platform should serve on
          * `platform.env`. Opaque to the framework half; the Cloudflare
          * target accepts `cloudflare-runtime` binding hooks (`Text.local`,
-         * `KvNamespace.local`, …) and proxies them into kit's Node SSR via
+         * `KvNamespace.local`, ...) and proxies them into kit's Node SSR via
          * a workerd-backed platform proxy.
          */
         readonly bindings?: ReadonlyArray<unknown> | undefined;
@@ -286,8 +286,8 @@ const KIT_PACKAGE_MARKER = "/@sveltejs/kit/";
  * client/server modules embed `path.relative(absoluteBase, relativeId)`
  * output (whose `relativeId` is resolved against the cwd). Kit therefore
  * assumes `process.cwd() === root`. When the dev server is driven
- * programmatically from another directory — alchemy's dev sidecar, a
- * monorepo root — those ids re-root outside the project and every SSR
+ * programmatically from another directory -- alchemy's dev sidecar, a
+ * monorepo root -- those ids re-root outside the project and every SSR
  * request 500s with `Failed to load url
  * /@fs/<wrong-base>/.../@sveltejs/kit/src/runtime/components/layout.svelte`.
  *
@@ -324,7 +324,7 @@ const makeKitRuntimeRealignPlugin = (kitDirectory: string): ViteModule.Plugin =>
       const query = queryIndex === -1 ? "" : source.slice(queryIndex);
       if (bare.startsWith("/@fs/")) {
         // Vite serves absolute fs paths as `/@fs/<path>` (`/@fs/C:/...` on
-        // Windows — strip the extra leading slash before a drive letter).
+        // Windows -- strip the extra leading slash before a drive letter).
         const fsPath = bare.slice("/@fs".length);
         return realign(/^\/[A-Za-z]:[/\\]/.test(fsPath) ? fsPath.slice(1) : fsPath, query);
       }
@@ -349,7 +349,7 @@ const makeKitRuntimeRealignPlugin = (kitDirectory: string): ViteModule.Plugin =>
  *   the adapter's on-disk worker entry to the target's `finish` pass, which
  *   produces the final `BuildOutput.serverModules`. A project-owned
  *   `vite.config.ts` loads natively (the user's `sveltekit(...)` call and
- *   plugins apply; the target's adapter is injected into it — see
+ *   plugins apply; the target's adapter is injected into it -- see
  *   `UserConfig.ts`); without one, the config is fully programmatic.
  * - `dev` runs kit's own Vite dev server (Node SSR, full HMR) with the
  *   target-provided adapter supplying the `platform` emulation.
@@ -453,12 +453,12 @@ export const make: (
      * Assemble the Vite inline config for a build/dev invocation.
      *
      * - Project has its own Vite config file: the file loads natively
-     *   (`configFile` is left to Vite's discovery — the user's plugins,
+     *   (`configFile` is left to Vite's discovery -- the user's plugins,
      *   including their `sveltekit(...)` call, all apply) and the inline
      *   config only injects `makeSvelteKitConfigPlugin`, which installs the
      *   deploy target's adapter (and `options.kit` overrides) into the
      *   user's kit config before kit processes it.
-     * - No config file on disk: internal fallback — `configFile: false` with
+     * - No config file on disk: internal fallback -- `configFile: false` with
      *   the `sveltekit()` plugin constructed programmatically from
      *   `options.kit` + the target's adapter.
      */
@@ -582,7 +582,7 @@ export const make: (
       const vite = yield* loadVite(root);
       const config = yield* resolveViteConfig(root, adapter);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-      // on older Vite — see `resolveViteDevPort`.
+      // on older Vite -- see `resolveViteDevPort`.
       const port = yield* FrameworkCore.resolveViteDevPort(
         vite.version,
         devOptions?.port ?? options?.dev?.port,
@@ -615,13 +615,13 @@ export const make: (
 
     // Constructing the SvelteKit plugin loads the project's `@sveltejs/kit`
     // module graph, which misbehaves when several projects load it
-    // concurrently in one process (partially-initialized module bindings —
+    // concurrently in one process (partially-initialized module bindings --
     // `Cannot access 'kit_options' before initialization`). A process hosting
     // many sites' dev servers (the alchemy dev sidecar) hits exactly that, so
     // run the dev server in a dedicated child process instead (see
-    // core/DevChild.ts). Inside that child — or when the options cannot cross
+    // core/DevChild.ts). Inside that child -- or when the options cannot cross
     // the process boundary (deploy-target VALUES, live vite plugins from the
-    // e2e harness) — the in-process path runs directly.
+    // e2e harness) -- the in-process path runs directly.
     const dev: Framework["Service"]["dev"] = (devOptions) => {
       if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
         return devInProcess(devOptions);
@@ -647,7 +647,7 @@ export const make: (
 
 /**
  * A `Layer` providing framework-core's `Framework` service for a SvelteKit
- * project — the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
+ * project -- the fully-typed entrypoint for `e2e.config.ts` (harness form 4)
  * and alchemy's `Website.SvelteKit` composite.
  */
 export const layer = (

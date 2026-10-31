@@ -30,26 +30,26 @@ export type RepositoryProps = {
    * `projects/{project}/locations/{location}/repositories/{repository}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 2-63 characters, start with a letter, and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * repository.
    */
   repositoryId?: string;
   /**
-   * Artifact Registry location (`us-central1`, `us`, `europe`, …).
-   * Immutable — changing it replaces the repository. `US-CENTRAL1` is
+   * Artifact Registry location (`us-central1`, `us`, `europe`, ...).
+   * Immutable -- changing it replaces the repository. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
    * Package format (`DOCKER`, `MAVEN`, `NPM`, `PYTHON`, `APT`, `YUM`,
-   * `GO`, `GENERIC`, `KFP`, `RUBY`, `GOOGET`). Immutable — changing it
+   * `GO`, `GENERIC`, `KFP`, `RUBY`, `GOOGET`). Immutable -- changing it
    * replaces the repository.
    * @default "DOCKER"
    */
   format?: artifactregistry.RepositoryFormatEnum | (string & {});
   /**
-   * Repository mode. Immutable — changing it replaces the repository.
+   * Repository mode. Immutable -- changing it replaces the repository.
    * @default "STANDARD_REPOSITORY"
    */
   mode?: artifactregistry.RepositoryModeEnum | (string & {});
@@ -63,7 +63,7 @@ export type RepositoryProps = {
   labels?: Record<string, string>;
   /**
    * Cloud KMS key used to encrypt repository contents, as
-   * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`. Immutable —
+   * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`. Immutable --
    * changing it replaces the repository.
    */
   kmsKeyName?: string;
@@ -79,7 +79,7 @@ export type RepositoryProps = {
   };
   /**
    * Maven repository config. Only applied when `format` is `MAVEN`.
-   * Immutable — changing it replaces the repository.
+   * Immutable -- changing it replaces the repository.
    */
   mavenConfig?: {
     /** Allow republishing the same snapshot versions. */
@@ -108,11 +108,11 @@ export type Repository = Resource<
     repositoryId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `us`, …). */
+    /** Location id (`us-central1`, `us`, ...). */
     location: string;
-    /** Package format (`DOCKER`, `NPM`, …). */
+    /** Package format (`DOCKER`, `NPM`, ...). */
     format: string;
-    /** Repository mode (`STANDARD_REPOSITORY`, …). */
+    /** Repository mode (`STANDARD_REPOSITORY`, ...). */
     mode: string;
     /** User-provided description. */
     description: string | undefined;

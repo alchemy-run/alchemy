@@ -7,7 +7,7 @@ import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 
 /**
  * Anything persistable under an FQN. Resources are discriminated by status
- * strings ("creating", "created", …) and Tasks by `kind: "action"`.
+ * strings ("creating", "created", ...) and Tasks by `kind: "action"`.
  */
 export type PersistedState = ResourceState | ActionState;
 

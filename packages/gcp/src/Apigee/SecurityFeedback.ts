@@ -34,14 +34,14 @@ export type SecurityFeedbackContext = {
 export type SecurityFeedbackProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the feedback report.
+   * Immutable -- changing it replaces the feedback report.
    */
   organization?: string;
   /**
    * Feedback id (the `{feedback}` segment of
    * `organizations/{org}/securityFeedback/{feedback}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the report.
+   * Immutable -- changing it replaces the report.
    */
   securityFeedbackId?: string;
   /**
@@ -62,7 +62,7 @@ export type SecurityFeedbackProps = {
    */
   feedbackContexts: SecurityFeedbackContext[];
   /**
-   * Free-form comment. Alchemy ownership is stored in a `[alchemy …]`
+   * Free-form comment. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes. Feedback reports have no
    * labels field.
    */
@@ -103,7 +103,7 @@ export type SecurityFeedback = Resource<
  *
  * Feedback reports have no labels field, so Alchemy stamps ownership
  * into the comment for `list` / nuke. Name and organization are
- * identity — changing them replaces the report. Display name, type,
+ * identity -- changing them replaces the report. Display name, type,
  * reason, contexts, and comment update in place.
  *
  * ### Creating Feedback

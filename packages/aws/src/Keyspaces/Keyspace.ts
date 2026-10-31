@@ -52,7 +52,7 @@ export interface Keyspace extends Resource<
 > {}
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) keyspace — the top-level
+ * An Amazon Keyspaces (for Apache Cassandra) keyspace -- the top-level
  * container for Cassandra tables.
  *
  * Keyspaces are serverless, free to create, and provisioned near-instantly,
@@ -144,10 +144,10 @@ export const KeyspaceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readKeyspace(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* keyspaces
               .createKeyspace({
@@ -172,7 +172,7 @@ export const KeyspaceProvider = () =>
             );
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readTags(observed.resourceArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -201,14 +201,14 @@ export const KeyspaceProvider = () =>
           yield* keyspaces.deleteKeyspace({ keyspaceName: name }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             // A keyspace whose tables are still deleting rejects with
-            // ConflictException until they are gone — minutes for PITR and
+            // ConflictException until they are gone -- minutes for PITR and
             // restored tables, beyond the point GetTable already 404s.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
               schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(48)]),
             }),
           );
-          // Deletion is asynchronous — wait (bounded) until the keyspace is
+          // Deletion is asynchronous -- wait (bounded) until the keyspace is
           // actually gone so a subsequent recreate with the same name does not
           // hit ConflictException.
           yield* readKeyspace(name).pipe(

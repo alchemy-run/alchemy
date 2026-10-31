@@ -13,7 +13,7 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
  * ### Real-Time Matching
  * **Example:** Generate Match IDs for Records
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const generateMatchId = yield* AWS.EntityResolution.GenerateMatchId(workflow);
  *
  * // runtime

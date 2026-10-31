@@ -21,7 +21,7 @@ import type { Zone } from "../Zone/Zone.ts";
  * `zoneId`.
  *
  * The zone's `zoneId` is bound into the Worker at init time, so the resulting
- * client closes over it and callers never pass it per request — the
+ * client closes over it and callers never pass it per request -- the
  * provisioned token only grants access to that one zone anyway.
  */
 export const makeHttpDnsBinding = <Client>(options: {

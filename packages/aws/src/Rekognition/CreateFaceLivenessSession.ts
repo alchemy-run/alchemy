@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:CreateFaceLivenessSession` — create a Face Liveness session whose ID the client-side FaceLivenessDetector component uses to run the liveness check.
+ * Runtime binding for `rekognition:CreateFaceLivenessSession` -- create a Face Liveness session whose ID the client-side FaceLivenessDetector component uses to run the liveness check.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:CreateFaceLivenessSession` on `*` (Rekognition data-plane resources such

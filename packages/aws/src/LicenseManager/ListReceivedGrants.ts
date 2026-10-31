@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListReceivedGrantsRequest extends licensemanager.ListReceivedGrantsRequest {}
 
 /**
- * Runtime binding for `license-manager:ListReceivedGrants` — list the
+ * Runtime binding for `license-manager:ListReceivedGrants` -- list the
  * grants distributed to this account, e.g. to find pending grants to
  * {@link AcceptGrant}.
  *

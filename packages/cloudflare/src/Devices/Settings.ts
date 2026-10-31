@@ -102,7 +102,7 @@ export type DeviceSettings = Resource<
 
 /**
  * Manages the **singleton** Cloudflare Zero Trust **device settings** for
- * an account (`/accounts/{accountId}/devices/settings`) — account-wide
+ * an account (`/accounts/{accountId}/devices/settings`) -- account-wide
  * WARP toggles like the Gateway TCP/UDP proxy, managed root certificate
  * installation, and CGNAT virtual IP.
  *
@@ -146,7 +146,7 @@ export const DeviceSettingsProvider = () =>
     stables: ["accountId", "initialSettings"],
 
     // Account singleton: there is exactly one device-settings object per
-    // account and no enumeration API. Mirror `read` — observe the single
+    // account and no enumeration API. Mirror `read` -- observe the single
     // singleton and return it as a one-element array. With no prior
     // output, the observed snapshot is itself the restore target.
     list: Effect.fn(function* () {
@@ -159,7 +159,7 @@ export const DeviceSettingsProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const observed = yield* observeSettings(acct);
-      // The singleton always exists with account defaults — there is
+      // The singleton always exists with account defaults -- there is
       // nothing to "own", so a cold read adopts freely. The observed
       // snapshot at adoption time becomes the restore target.
       const initialSettings = output?.initialSettings ?? observed;
@@ -169,15 +169,15 @@ export const DeviceSettingsProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the singleton always exists; read its live state.
+      // 1. Observe -- the singleton always exists; read its live state.
       const observed = yield* observeSettings(accountId);
 
-      // 2. Capture — the pre-management snapshot, restored on destroy.
+      // 2. Capture -- the pre-management snapshot, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch.
       const initialSettings = output?.initialSettings ?? observed;
 
-      // 3. Sync — patch only the declared fields that differ.
+      // 3. Sync -- patch only the declared fields that differ.
       const changes: Partial<DeviceSettingsSnapshot> = {};
       const assign = <K extends keyof DeviceSettingsSnapshot>(
         key: K,
@@ -199,14 +199,14 @@ export const DeviceSettingsProvider = () =>
       }
       yield* zeroTrust.patchDeviceSetting({ accountId, ...changes });
 
-      // 4. Return — re-read so attrs reflect post-sync truth.
+      // 4. Return -- re-read so attrs reflect post-sync truth.
       const final = yield* observeSettings(accountId);
       return toAttributes(accountId, final, initialSettings);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialSettings } = output;
-      // Observe — skip the restore when the account already matches the
+      // Observe -- skip the restore when the account already matches the
       // captured snapshot (idempotent re-delete after a crashed run).
       const observed = yield* observeSettings(accountId);
       if (sameSnapshot(observed, initialSettings)) return;

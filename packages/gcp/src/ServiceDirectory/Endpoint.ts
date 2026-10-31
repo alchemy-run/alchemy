@@ -25,7 +25,7 @@ export type EndpointProps = {
   /**
    * Parent Service Directory service. Full name
    * `projects/{project}/locations/{location}/namespaces/{namespace}/services/{service}`
-   * or the service id (combined with `namespace`). Immutable — changing
+   * or the service id (combined with `namespace`). Immutable -- changing
    * it replaces the endpoint.
    */
   service: string;
@@ -33,12 +33,12 @@ export type EndpointProps = {
    * Parent namespace. Full name
    * `projects/{project}/locations/{location}/namespaces/{namespace}` or
    * the namespace id (combined with `location`). Used when `service` is
-   * a bare id. Immutable — changing it replaces the endpoint.
+   * a bare id. Immutable -- changing it replaces the endpoint.
    */
   namespace?: string;
   /**
    * Location of the endpoint (e.g. `us-central1`). Used when `service`
-   * is a bare id. Immutable — changing it replaces the endpoint.
+   * is a bare id. Immutable -- changing it replaces the endpoint.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -49,7 +49,7 @@ export type EndpointProps = {
    * `.../services/{service}/endpoints/{endpoint}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Must be
    * 1-63 characters and match `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`.
-   * Immutable — changing it replaces the endpoint.
+   * Immutable -- changing it replaces the endpoint.
    */
   endpointId?: string;
   /**
@@ -72,7 +72,7 @@ export type EndpointProps = {
   /**
    * Google Compute Engine network of the endpoint, as
    * `projects/{projectNumber}/locations/global/networks/{network}`. The
-   * project must be a project *number*. Immutable — changing it
+   * project must be a project *number*. Immutable -- changing it
    * replaces the endpoint.
    */
   network?: string;
@@ -110,7 +110,7 @@ export type Endpoint = Resource<
 >;
 
 /**
- * A Service Directory endpoint — an address/port registration on a
+ * A Service Directory endpoint -- an address/port registration on a
  * service. The parent service must already exist.
  *
  * Changing `endpointId`, `service`, `namespace`, `location`, or

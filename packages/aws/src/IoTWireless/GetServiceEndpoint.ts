@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iotwireless:GetServiceEndpoint` — read the
+ * Runtime binding for `iotwireless:GetServiceEndpoint` -- read the
  * account's CUPS or LNS endpoint (and its server trust certificate) from a
  * deployed Lambda or Task. Useful for gateway provisioning flows.
  *

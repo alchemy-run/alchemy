@@ -9,7 +9,7 @@ export interface ListResolverEndpointIpAddressesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `route53resolver:ListResolverEndpointIpAddresses` —
+ * Runtime binding for `route53resolver:ListResolverEndpointIpAddresses` --
  * discover the IP addresses the bound {@link ResolverEndpoint}'s network
  * interfaces answer/forward on (one per subnet); the endpoint ID is injected
  * automatically.
@@ -23,7 +23,7 @@ export interface ListResolverEndpointIpAddressesRequest extends Omit<
  * ### Discovering Endpoint IPs
  * **Example:** List the Endpoint's IP Addresses
  * ```typescript
- * // init — grants route53resolver:ListResolverEndpointIpAddresses on the endpoint
+ * // init -- grants route53resolver:ListResolverEndpointIpAddresses on the endpoint
  * const listIps = yield* AWS.Route53Resolver.ListResolverEndpointIpAddresses(endpoint);
  *
  * // runtime

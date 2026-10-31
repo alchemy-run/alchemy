@@ -27,14 +27,14 @@ export type WireGroupProps = {
    */
   wireGroupName?: string;
   /**
-   * Parent cross-site network name. Immutable — changing it replaces the
+   * Parent cross-site network name. Immutable -- changing it replaces the
    * group.
    */
   crossSiteNetwork: string;
   /**
    * Optional description. Compute wire groups have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -91,7 +91,7 @@ export type WireGroup = Resource<
  * has no labels on this resource, so Alchemy stamps ownership into the
  * description so `list` / `pnpm nuke:gcp` can find them.
  *
- * Name and parent `crossSiteNetwork` are immutable — changing them
+ * Name and parent `crossSiteNetwork` are immutable -- changing them
  * replaces the group. `adminEnabled`, `wireProperties`, `endpoints`, and
  * description update in place via `wireGroups.patch`.
  *

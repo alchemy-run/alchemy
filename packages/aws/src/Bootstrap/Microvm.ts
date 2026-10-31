@@ -10,7 +10,7 @@ import {
  * so the platform-specific layers are supplied by the thin entry modules
  * {@link ./MicrovmBun.ts} / {@link ./MicrovmNode.ts} rather than imported
  * here. The generated entry imports one of those and the user's `main`,
- * nothing else — see `alchemy/Runtime/Bootstrap` for why.
+ * nothing else -- see `alchemy/Runtime/Bootstrap` for why.
  */
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

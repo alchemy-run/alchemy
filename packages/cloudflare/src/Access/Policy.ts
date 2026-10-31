@@ -30,8 +30,8 @@ export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
 /**
  * One arm of the exclude-side rule union, and its require-side twin.
  * Cloudflare's spec types the exclude/require rule lists separately from
- * include — a few rule kinds (e.g. the GitHub-organization rule) carry the
- * raw wire shape there — so these props use the SDK's own unions rather
+ * include -- a few rule kinds (e.g. the GitHub-organization rule) carry the
+ * raw wire shape there -- so these props use the SDK's own unions rather
  * than reusing {@link PolicyRule}.
  */
 export type PolicyExcludeRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["exclude"]>[number];
@@ -39,7 +39,7 @@ export type PolicyRequireRule = NonNullable<zeroTrust.CreateAccessPolicyRequest[
 
 /**
  * Scalar shorthand for rule kinds with a single parameter (and bare names
- * for the parameter-less kinds) — expanded to Cloudflare's wire shape by
+ * for the parameter-less kinds) -- expanded to Cloudflare's wire shape by
  * the providers, so both spellings are equivalent:
  *
  * ```ts
@@ -51,7 +51,7 @@ export type PolicyRequireRule = NonNullable<zeroTrust.CreateAccessPolicyRequest[
  *
  * Multi-parameter kinds (`gsuite`, `okta`, `saml`, `oidc`, `azureAD`,
  * `githubOrganization`, `externalEvaluation`, `authContext`) keep their
- * wire shape — there is no scalar to collapse them to.
+ * wire shape -- there is no scalar to collapse them to.
  */
 export type PolicyRuleShorthand =
   | "everyone"
@@ -78,7 +78,7 @@ export type PolicyRuleInput = PolicyRule | PolicyRuleShorthand;
 export type PolicyExcludeRuleInput = PolicyExcludeRule | PolicyRuleShorthand;
 export type PolicyRequireRuleInput = PolicyRequireRule | PolicyRuleShorthand;
 
-/** Rule kind → its single parameter's (camelCase) member name. */
+/** Rule kind -> its single parameter's (camelCase) member name. */
 const SCALAR_RULE_PARAMS: Record<string, string> = {
   email: "email",
   emailDomain: "domain",
@@ -133,10 +133,10 @@ export function normalizePolicyRules<Rule>(
 /**
  * Decision Cloudflare Access takes when a request matches this policy.
  *
- * - `"allow"` — admit the user.
- * - `"deny"` — block the user.
- * - `"non_identity"` — admit without requiring an identity provider login.
- * - `"bypass"` — skip Access entirely.
+ * - `"allow"` -- admit the user.
+ * - `"deny"` -- block the user.
+ * - `"non_identity"` -- admit without requiring an identity provider login.
+ * - `"bypass"` -- skip Access entirely.
  */
 export type PolicyDecision =
   | "allow"
@@ -275,7 +275,7 @@ export type Policy = Resource<
 
 /**
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
- * inline policies attached directly to an `Application` — a reusable
+ * inline policies attached directly to an `Application` -- a reusable
  * policy can be referenced by multiple applications by id.
  *
  * Optional fields you leave out keep their live value on update, so adopting
@@ -361,7 +361,7 @@ export const PolicyProvider = () =>
       const name = yield* createPolicyName(id, news.name ?? output?.name);
       const acct = output?.accountId ?? accountId;
 
-      // Observe — prefer cached policyId, fall back to a name lookup so
+      // Observe -- prefer cached policyId, fall back to a name lookup so
       // we recover from out-of-band deletes and partial state-persistence
       // failures.
       let observed: RawPolicy | undefined;
@@ -377,7 +377,7 @@ export const PolicyProvider = () =>
         observed = yield* findPolicyByName(acct, name);
       }
 
-      // Ensure — create the policy if missing. Tolerate a race where a
+      // Ensure -- create the policy if missing. Tolerate a race where a
       // parallel actor created the same-named policy by re-observing.
       let ensured: ObservedPolicy;
       if (!observed || !observed.id) {
@@ -394,7 +394,7 @@ export const PolicyProvider = () =>
             ),
           );
       } else {
-        // Sync — Cloudflare PUTs the policy as a whole replacement and
+        // Sync -- Cloudflare PUTs the policy as a whole replacement and
         // resets every field the body omits, so undeclared optional fields
         // are sent back with their live value.
         const prior = observed;

@@ -10,12 +10,12 @@ export interface PutPolicyRequest extends fms.PutPolicyRequest {}
 /**
  * Runtime binding for `fms:PutPolicy`.
  *
- * Creates or updates a Firewall Manager policy — a WAF, Shield Advanced, security group, Network Firewall, DNS Firewall, or network ACL policy applied across the organization's accounts. Provide the
+ * Creates or updates a Firewall Manager policy -- a WAF, Shield Advanced, security group, Network Firewall, DNS Firewall, or network ACL policy applied across the organization's accounts. Provide the
  * implementation with `Effect.provide(AWS.FMS.PutPolicyHttp)`.
  * ### Managing Policies
  * **Example:** Create a Policy
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const putPolicy = yield* AWS.FMS.PutPolicy();
  *
  * // runtime

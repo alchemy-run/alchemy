@@ -17,7 +17,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * const describeTopicPartitions = yield* Kafka.DescribeTopicPartitions(cluster);
  *
  * const page = yield* describeTopicPartitions({ TopicName: "orders" });
- * // page.Partitions → [{ Partition: 0, Leader: …, Isr: […] }, …]
+ * // page.Partitions -> [{ Partition: 0, Leader: ..., Isr: [...] }, ...]
  * ```
  *
  * @binding

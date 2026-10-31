@@ -34,7 +34,7 @@ export type ReportConfigsReportProps = {
   /**
    * Parent report config. Full name
    * `projects/{project}/locations/{location}/reportConfigs/{reportConfig}`
-   * or the report config id (combined with `location`). Immutable —
+   * or the report config id (combined with `location`). Immutable --
    * changing it replaces the report.
    */
   reportConfig: string;
@@ -46,7 +46,7 @@ export type ReportConfigsReportProps = {
   location?: string;
   /**
    * Report id (the `{report}` segment). If omitted, a unique RFC1035 name
-   * is generated. Immutable — changing it replaces the report.
+   * is generated. Immutable -- changing it replaces the report.
    */
   reportId?: string;
   /**
@@ -61,7 +61,7 @@ export type ReportConfigsReportProps = {
   displayName?: string;
   /**
    * Free-text description. Reports have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
@@ -102,7 +102,7 @@ export type ReportConfigsReport = Resource<
  * A point-in-time Migration Center report rendered from a report config
  * (typically a total cost of ownership view).
  *
- * Reports have no labels field — Alchemy stamps ownership into the
+ * Reports have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. The API has no patch
  * method; changing type, display name, or description replaces the
  * report.

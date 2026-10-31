@@ -71,11 +71,11 @@ export type ServiceLbPolicyProps = {
    * Policy id (the `{serviceLbPolicy}` segment of
    * `projects/{project}/locations/{location}/serviceLbPolicies/{serviceLbPolicy}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the policy.
+   * logical id. Immutable -- changing it replaces the policy.
    */
   serviceLbPolicyId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -117,7 +117,7 @@ export type ServiceLbPolicy = Resource<
     serviceLbPolicyId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;

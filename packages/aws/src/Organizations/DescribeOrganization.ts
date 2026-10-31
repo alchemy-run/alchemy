@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:DescribeOrganization`.
  *
- * Retrieves information about the organization that the calling account belongs to — its id, ARN, feature set, and management account. Available from any account in the organization.
- * Account-level operation — Organizations is a management-account-scoped
+ * Retrieves information about the organization that the calling account belongs to -- its id, ARN, feature set, and management account. Available from any account in the organization.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DescribeOrganizationHttp)`.
  * ### Reading the Organization Tree
  * **Example:** Read the Organization
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeOrganization = yield* AWS.Organizations.DescribeOrganization();
  *
  * // runtime

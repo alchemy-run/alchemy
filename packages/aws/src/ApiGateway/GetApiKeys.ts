@@ -6,7 +6,7 @@ export interface GetApiKeysRequest extends ag.GetApiKeysRequest {}
 
 /**
  * Runtime binding for listing API Gateway API keys
- * (`apigateway:GET` on `/apikeys`). Account-scoped — takes no resource.
+ * (`apigateway:GET` on `/apikeys`). Account-scoped -- takes no resource.
  *
  * Provide `ApiGateway.GetApiKeysHttp` on the Function effect to implement
  * the binding.

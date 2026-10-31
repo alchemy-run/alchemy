@@ -7,8 +7,8 @@ import type { PlaybackConfiguration } from "./PlaybackConfiguration.ts";
  * Shared HTTP scaffolding for the AWS Elemental MediaTailor runtime
  * bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the identifier resolver,
  * and the IAM action list is boilerplate.
  */
@@ -56,7 +56,7 @@ export const makeMediaTailorHttpBinding = <I, A, E, R>(options: {
  * prefetch-schedule data plane). The runtime callable injects the bound
  * configuration's name as `PlaybackConfigurationName`, and the deploy-time
  * half grants `iamActions` on the configuration's ARN and the derived
- * `…:prefetchSchedule/{name}/*` ARN space.
+ * `...:prefetchSchedule/{name}/*` ARN space.
  */
 export const makeMediaTailorPlaybackHttpBinding = <
   I extends { PlaybackConfigurationName: string },
@@ -89,13 +89,13 @@ export const makeMediaTailorPlaybackHttpBinding = <
               Resource: [
                 Output.interpolate`${config.playbackConfigurationArn}`,
                 // Prefetch schedules live in a sibling ARN space:
-                // arn:…:prefetchSchedule/{configurationName}/{name}
+                // arn:...:prefetchSchedule/{configurationName}/{name}
                 Output.map(
                   config.playbackConfigurationArn,
                   (arn) => `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
                 ),
                 // ListPrefetchSchedules is authorized against the bare
-                // account/region wildcard `…:prefetchSchedule/*` (the
+                // account/region wildcard `...:prefetchSchedule/*` (the
                 // configuration name is not part of the authorization
                 // resource), so every prefetch binding also grants it.
                 Output.map(config.playbackConfigurationArn, (arn) =>

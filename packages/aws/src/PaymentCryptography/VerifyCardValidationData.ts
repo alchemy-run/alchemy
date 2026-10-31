@@ -9,7 +9,7 @@ export interface VerifyCardValidationDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:VerifyCardValidationData` —
+ * Runtime binding for `payment-cryptography:VerifyCardValidationData` --
  * verifies card validation values (CVV/CVV2, dCVV, CSC) under the same Card
  * Verification Key (CVK) {@link Key} used to generate them. A mismatch fails
  * with the typed `VerificationFailedException`. Provide

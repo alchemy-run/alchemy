@@ -27,17 +27,17 @@ export interface DatasetGroupProps {
   name?: string;
   /**
    * ARN of an IAM role Personalize assumes to access a customer-managed KMS
-   * key. Immutable — changing it replaces the group.
+   * key. Immutable -- changing it replaces the group.
    */
   roleArn?: string;
   /**
    * ARN of a customer-managed KMS key used to encrypt the datasets. Immutable
-   * — changing it replaces the group.
+   * -- changing it replaces the group.
    */
   kmsKeyArn?: string;
   /**
    * The domain of a domain dataset group (`ECOMMERCE` or `VIDEO_ON_DEMAND`).
-   * Omit for a custom dataset group. Immutable — changing it replaces the
+   * Omit for a custom dataset group. Immutable -- changing it replaces the
    * group.
    */
   domain?: string;
@@ -74,7 +74,7 @@ export interface DatasetGroup extends Resource<
 > {}
 
 /**
- * An Amazon Personalize dataset group — the top-level container that holds the
+ * An Amazon Personalize dataset group -- the top-level container that holds the
  * datasets, solutions, and campaigns for a single use case. Creating a dataset
  * group is cheap and fast; the expensive training work lives in solutions and
  * campaigns provisioned separately.
@@ -229,7 +229,7 @@ export const DatasetGroupProvider = () =>
             );
             yield* personalize.deleteSolution({ solutionArn: s.solutionArn! }).pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Campaign deletion is async — retry while it drains.
+              // Campaign deletion is async -- retry while it drains.
               Effect.retry(inUseRetry),
             );
           }),
@@ -246,7 +246,7 @@ export const DatasetGroupProvider = () =>
           { concurrency: 4 },
         );
 
-        // All child deletes are asynchronous — wait (bounded) until the group
+        // All child deletes are asynchronous -- wait (bounded) until the group
         // reports no remaining children so DeleteDatasetGroup succeeds.
         const remaining = yield* listChildren(datasetGroupArn).pipe(
           Effect.repeat({
@@ -302,15 +302,15 @@ export const DatasetGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output is an ARN cache.
+          // 1. Observe -- cloud state is authoritative; output is an ARN cache.
           let group =
             output?.datasetGroupArn !== undefined
               ? yield* describe(output.datasetGroupArn)
               : undefined;
 
-          // 2. Ensure — create if missing, then wait for ACTIVE. A crashed
+          // 2. Ensure -- create if missing, then wait for ACTIVE. A crashed
           //    prior run may have left a same-named group behind with no
-          //    persisted state — adopt it by name and converge.
+          //    persisted state -- adopt it by name and converge.
           if (group === undefined) {
             const arn = yield* personalize
               .createDatasetGroup({
@@ -336,7 +336,7 @@ export const DatasetGroupProvider = () =>
             group = yield* waitActive(arn);
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags (no-op after a
+          // 3. Sync tags -- diff against OBSERVED cloud tags (no-op after a
           //    fresh create; converges an adopted leftover).
           yield* syncPersonalizeTags(group.datasetGroupArn!, desiredTags);
 
@@ -345,8 +345,8 @@ export const DatasetGroupProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteDatasetGroup requires every child — event trackers, filters,
-          // campaigns, solutions, and datasets — to be deleted first, and each
+          // DeleteDatasetGroup requires every child -- event trackers, filters,
+          // campaigns, solutions, and datasets -- to be deleted first, and each
           // child delete is itself asynchronous. Deletion ordering can't
           // guarantee children-before-parent (bindings/tests create children
           // out-of-band that are not tracked in state), so drain the group's
@@ -365,7 +365,7 @@ export const DatasetGroupProvider = () =>
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
-          // Deletion is asynchronous (DELETE IN_PROGRESS) — wait until the
+          // Deletion is asynchronous (DELETE IN_PROGRESS) -- wait until the
           // group is actually gone so the run leaves no lingering resources
           // (the group's auto-created event schema is removed with it).
           const remaining = yield* describe(output.datasetGroupArn).pipe(

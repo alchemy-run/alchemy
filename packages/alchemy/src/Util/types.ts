@@ -31,7 +31,7 @@ export type IsNever<T> = [T] extends [never] ? true : false;
 /**
  * `Omit` that distributes over a union instead of collapsing it.
  *
- * Bare `Omit<A | B, K>` computes `keyof (A | B)` — the COMMON keys — and
+ * Bare `Omit<A | B, K>` computes `keyof (A | B)` -- the COMMON keys -- and
  * merges the members into one object type. For discriminated prop unions
  * (e.g. a Function's zip-XOR-image props) that silently erases the
  * discrimination: required members become optional and mutually exclusive

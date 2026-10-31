@@ -33,8 +33,8 @@ export interface ConnectionInfo {
   /** Password read from the secret. */
   password: Redacted.Redacted<string>;
   /**
-   * Connection URL over the Unix socket — `postgresql://…?host=/cloudsql/…`
-   * for PostgreSQL, `mysql://…?socketPath=/cloudsql/…` for MySQL. Feed it
+   * Connection URL over the Unix socket -- `postgresql://...?host=/cloudsql/...`
+   * for PostgreSQL, `mysql://...?socketPath=/cloudsql/...` for MySQL. Feed it
    * to `Drizzle.Postgres` / your driver. `Redacted` because it embeds the
    * password.
    */
@@ -48,7 +48,7 @@ export class PasswordMissing extends Data.TaggedError("GCP.SQL.PasswordMissing")
 
 /**
  * Runtime binding that connects a Cloud Run service to a Cloud SQL
- * instance over the Cloud SQL Unix socket — no public IP allow-list, no
+ * instance over the Cloud SQL Unix socket -- no public IP allow-list, no
  * VPC.
  *
  * Binding it at init grants `roles/cloudsql.client` on the project under
@@ -71,7 +71,7 @@ export class PasswordMissing extends Data.TaggedError("GCP.SQL.PasswordMissing")
  * const db = yield* Drizzle.Postgres(
  *   connect.pipe(Effect.map((info) => info.url)),
  * );
- * // …provided with Effect.provide(GCP.SQL.ConnectHttp)
+ * // ...provided with Effect.provide(GCP.SQL.ConnectHttp)
  * ```
  *
  * @binding

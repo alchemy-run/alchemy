@@ -112,7 +112,7 @@ export type GatewaySpendLimitRule = {
   limitType: "cost";
   /**
    * Rolling window over which `limit` accumulates. Accepts an Effect
-   * `Duration.Input` — e.g. `"1 minute"`, `"1 day"`, or a `Duration` — and is
+   * `Duration.Input` -- e.g. `"1 minute"`, `"1 day"`, or a `Duration` -- and is
    * sent to Cloudflare as whole seconds.
    */
   window: Duration.Input;
@@ -140,14 +140,14 @@ export type GatewaySpendLimitRule = {
    */
   provider?: { mode: "filter"; values: string[] };
   /**
-   * Enforcement algorithm — `fixed` resets on the window boundary, `sliding`
+   * Enforcement algorithm -- `fixed` resets on the window boundary, `sliding`
    * tracks a rolling window.
    */
   technique?: GatewayRateLimitingTechnique;
 };
 
 /**
- * Per-gateway spend limits — Cloudflare's replacement for the deprecated
+ * Per-gateway spend limits -- Cloudflare's replacement for the deprecated
  * account-level AI Gateway spending limit. Attach cost caps directly to a
  * gateway via {@link GatewayProps.spendLimits}.
  *
@@ -312,7 +312,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * endpoint that can route model requests through Cloudflare. Once bound to a
  * Worker, `aiGateway.model({...})` returns an `effect/ai`
  * `LanguageModel` Layer so you use the standard `generateText` / `streamText`
- * APIs — provider-agnostic, with caching, rate limiting, retries, and a
+ * APIs -- provider-agnostic, with caching, rate limiting, retries, and a
  * unified request log handled by the gateway.
  * ### Creating a Gateway
  * **Example:** Basic gateway
@@ -360,7 +360,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // …routes
+ *         // ...routes
  *       }),
  *     };
  *   }).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding)),
@@ -370,7 +370,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * ### Building a LanguageModel
  * **Example:** `aiGateway.model(...)` -> Effect AI `LanguageModel`
  * Call `aiGateway.model({...})` with a Workers AI model id. It returns a
- * `Layer<LanguageModel, never, RuntimeContext>` directly — no API key and no
+ * `Layer<LanguageModel, never, RuntimeContext>` directly -- no API key and no
  * `Layer.unwrap`, since the binding handles auth and the gateway URL. Build it
  * in the Init phase; construction is pure.
  * ```typescript
@@ -386,7 +386,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * **Example:** Generate text on a route
  * Provide the `languageModel` layer to the handler and call
  * `LanguageModel.generateText` like any other Effect. `Effect.orDie` collapses
- * `AiError` to a defect (a 500); use `Effect.catchTag("AiError", …)` for typed
+ * `AiError` to a defect (a 500); use `Effect.catchTag("AiError", ...)` for typed
  * handling instead.
  * ```typescript
  * import { LanguageModel } from "effect/ai";
@@ -432,7 +432,7 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  *
  * ### Tuning the Gateway
  * **Example:** Production-grade caching, rate limits, and DLP
- * Every prop maps to an in-place update — no replacement, no downtime.
+ * Every prop maps to an in-place update -- no replacement, no downtime.
  * ```typescript
  * export const Gateway = Cloudflare.AI.Gateway("Gateway", {
  *   id: "prod-gateway",
@@ -501,7 +501,7 @@ export const GatewayResourceProvider = () =>
       const acct = output?.accountId ?? accountId;
       const gatewayId = output?.gatewayId ?? (yield* createGatewayId(id, news.id));
 
-      // Observe — fetch the gateway's current state. The Cloudflare API
+      // Observe -- fetch the gateway's current state. The Cloudflare API
       // returns 404 when the gateway is missing, which we tolerate so the
       // reconciler can fall through to create.
       const observed = yield* aiGateway
@@ -511,7 +511,7 @@ export const GatewayResourceProvider = () =>
         })
         .pipe(Effect.catchTag("GatewayNotFound", () => Effect.undefined));
 
-      // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
+      // Ensure -- create if missing. Tolerate `GatewayAlreadyExists` for
       // idempotency: a peer reconciler may have created it concurrently,
       // or state persistence may have failed after a previous create.
       if (observed === undefined) {
@@ -527,7 +527,7 @@ export const GatewayResourceProvider = () =>
           );
       }
 
-      // Sync — the Cloudflare.AI. Gateway update API is a full PATCH that
+      // Sync -- the Cloudflare.AI. Gateway update API is a full PATCH that
       // overwrites all mutable fields. We always apply the desired shape
       // so adoption, drift, and routine updates all converge.
       // Prefer the deployed id: regenerating would target a different
@@ -659,7 +659,7 @@ const mapGateway = (
   logManagementStrategy: gateway.logManagementStrategy ?? "STOP_INSERTING",
   logpush: gateway.logpush ?? false,
   logpushPublicKey: gateway.logpushPublicKey ?? undefined,
-  // The wire shape uses explicit nulls and an open content-type union —
+  // The wire shape uses explicit nulls and an open content-type union --
   // normalize into our prop shape so attributes diff cleanly against props.
   otel: gateway.otel?.map((o): GatewayOtel => ({
     url: o.url,
@@ -675,7 +675,7 @@ const mapGateway = (
 
 // Normalize spend limits into the user-facing shape and drop server-managed
 // noise so attributes diff cleanly against props. Cloudflare assigns a stable
-// `id` to each rule and echoes back an explicit `enabled` flag — fold the
+// `id` to each rule and echoes back an explicit `enabled` flag -- fold the
 // per-rule `enabled` default (`true`) and `null`s away so a gateway the user
 // configured without ids converges to a no-op instead of perpetual drift.
 const normalizeSpendLimits = (

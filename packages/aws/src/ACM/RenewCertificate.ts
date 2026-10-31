@@ -7,14 +7,14 @@ import type { Certificate } from "./Certificate.ts";
  * Runtime binding for `acm:RenewCertificate`.
  *
  * Bind this operation to a {@link Certificate} to get a callable that forces
- * managed renewal of an eligible certificate — typically an exported
+ * managed renewal of an eligible certificate -- typically an exported
  * certificate whose renewal is not fully automatic. Useful in rotation
  * functions that renew and then re-export a certificate. Provide the
  * implementation with `Effect.provide(AWS.ACM.RenewCertificateHttp)`.
  * ### Renewing Certificates
  * **Example:** Force a Managed Renewal
  * ```typescript
- * // init — bind the operation to the certificate
+ * // init -- bind the operation to the certificate
  * const renewCertificate = yield* AWS.ACM.RenewCertificate(certificate);
  *
  * // runtime

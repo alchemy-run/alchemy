@@ -58,13 +58,13 @@ export interface WebhookEndpointProps {
    */
   description?: string;
   /**
-   * Stripe API version event payloads are rendered as. Create-only —
+   * Stripe API version event payloads are rendered as. Create-only --
    * changing it replaces the endpoint. Defaults to the account version.
    */
   apiVersion?: string;
   /**
    * When true, receive events from connected accounts instead of this
-   * account. Create-only — changing it replaces the endpoint.
+   * account. Create-only -- changing it replaces the endpoint.
    * @default false
    */
   connect?: boolean;
@@ -85,7 +85,7 @@ export type WebhookEndpoint = Resource<
   "Stripe.WebhookEndpoint",
   WebhookEndpointProps,
   {
-    /** Stripe webhook endpoint id (`we_…`). */
+    /** Stripe webhook endpoint id (`we_...`). */
     id: string;
     /** HTTPS URL Stripe POSTs event payloads to. */
     url: string;
@@ -118,7 +118,7 @@ export type WebhookEndpoint = Resource<
 >;
 
 /**
- * A Stripe webhook endpoint — the HTTPS destination Stripe POSTs
+ * A Stripe webhook endpoint -- the HTTPS destination Stripe POSTs
  * event payloads to. URL, enabled events, description, disabled, and
  * metadata update in place. The signing `secret` is returned only on
  * create and is stored as `Redacted`. Deleting the resource deletes
@@ -144,7 +144,7 @@ export type WebhookEndpoint = Resource<
  * yield* Stripe.bindWebhookSecret(api, webhook.secret);
  * ```
  *
- * On a Worker, prefer `consumeEvents` — it provisions this endpoint and
+ * On a Worker, prefer `consumeEvents` -- it provisions this endpoint and
  * binds the secret for you.
  *
  * **Example:** Description, metadata, and all events

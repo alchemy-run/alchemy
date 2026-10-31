@@ -9,7 +9,7 @@ import { GatewayProvider } from "./GatewayProvider.ts";
 export interface ProviderKeyProps {
   /**
    * The AI Gateway the provider key belongs to. The gateway must have its
-   * `storeId` set to a Secrets Store id — Cloudflare resolves the key inside
+   * `storeId` set to a Secrets Store id -- Cloudflare resolves the key inside
    * that store. Changing the gateway triggers a replacement.
    */
   gatewayId: string;
@@ -87,7 +87,7 @@ export type ProviderKey = {
  * underlying resource stays addressable.
  *
  * Rotating `value` updates the secret in place. Changing `alias` (or
- * `providerSlug`) renames the secret — a replacement — and cascades: the
+ * `providerSlug`) renames the secret -- a replacement -- and cascades: the
  * provider config is replaced and re-pointed at the new secret.
  *
  * ### Bringing your own key
@@ -109,7 +109,7 @@ export type ProviderKey = {
  * ```
  *
  * **Example:** Multiple keys for one provider
- * Distinguish keys for the same provider with an `alias` — each alias gets
+ * Distinguish keys for the same provider with an `alias` -- each alias gets
  * its own secret and provider config.
  * ```typescript
  * const production = yield* Cloudflare.AI.ProviderKey("OpenAiKey", {

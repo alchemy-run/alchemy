@@ -22,11 +22,11 @@ export class AccessLogSubscriptionUnexpectedResponse extends Data.TaggedError(
  */
 export type ServiceNetworkLogType = "SERVICE" | "RESOURCE";
 
-/** The delivery service encoded in a destination ARN (`arn:aws:<service>:…`). */
+/** The delivery service encoded in a destination ARN (`arn:aws:<service>:...`). */
 const destinationType = (arn: string) => arn.split(":")[2] ?? "";
 
 /**
- * Normalize a destination ARN for comparison — CloudWatch log-group ARNs
+ * Normalize a destination ARN for comparison -- CloudWatch log-group ARNs
  * round-trip through the API with a trailing `:*`.
  */
 const normalizeDestinationArn = (arn: string) => arn.replace(/:\*$/, "");
@@ -34,19 +34,19 @@ const normalizeDestinationArn = (arn: string) => arn.replace(/:\*$/, "");
 export interface AccessLogSubscriptionProps {
   /**
    * ID or ARN of the service network or lattice service whose traffic is
-   * logged. Immutable — changing it replaces the subscription.
+   * logged. Immutable -- changing it replaces the subscription.
    */
   resourceIdentifier: string;
   /**
    * ARN of the delivery destination: a CloudWatch log group, Firehose
    * delivery stream, or S3 bucket. The destination can be updated in place,
-   * but changing the destination *type* (e.g. CloudWatch → S3) replaces the
+   * but changing the destination *type* (e.g. CloudWatch -> S3) replaces the
    * subscription.
    */
   destinationArn: string;
   /**
    * For service networks, whether to log traffic to lattice services or to
-   * shared VPC resources. Immutable — changing it replaces the subscription.
+   * shared VPC resources. Immutable -- changing it replaces the subscription.
    * @default "SERVICE"
    */
   serviceNetworkLogType?: ServiceNetworkLogType;
@@ -90,7 +90,7 @@ export interface AccessLogSubscription extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice access log subscription — delivers per-request
+ * An Amazon VPC Lattice access log subscription -- delivers per-request
  * access logs for a service network or lattice service to CloudWatch Logs,
  * Kinesis Data Firehose, or S3.
  *
@@ -208,7 +208,7 @@ export const AccessLogSubscriptionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the stable id cache, fall back to discovering
+          // Observe -- prefer the stable id cache, fall back to discovering
           // the resource's subscription for our destination type. The create
           // response carries the same identifying fields but no timestamps,
           // so keep the local shape to the fields we actually use.
@@ -224,7 +224,7 @@ export const AccessLogSubscriptionProvider = () =>
             ? yield* observe(output.accessLogSubscriptionId)
             : yield* findByDestinationType(news.resourceIdentifier, news.destinationArn);
 
-          // Ensure — create if missing. A ConflictException means a
+          // Ensure -- create if missing. A ConflictException means a
           // subscription for this destination type already exists (a race);
           // recover it and converge below.
           if (!subscription) {
@@ -248,7 +248,7 @@ export const AccessLogSubscriptionProvider = () =>
             subscription = created;
           }
 
-          // Sync destination — mutable within the same destination type.
+          // Sync destination -- mutable within the same destination type.
           if (
             normalizeDestinationArn(subscription.destinationArn) !==
             normalizeDestinationArn(news.destinationArn)

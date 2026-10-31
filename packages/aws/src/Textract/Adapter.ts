@@ -11,14 +11,14 @@ import type { Providers } from "../Providers.ts";
 
 export interface AdapterProps {
   /**
-   * Name of the adapter — 1-128 characters matching `[a-zA-Z0-9-_]+`. If
+   * Name of the adapter -- 1-128 characters matching `[a-zA-Z0-9-_]+`. If
    * omitted, a unique name is generated. The name is updatable in place
    * (adapter identity is the server-assigned `adapterId`).
    */
   adapterName?: string;
   /**
    * Description of the adapter, updatable in place. Once set, the Textract
-   * API cannot clear it back to empty — removing this prop leaves the last
+   * API cannot clear it back to empty -- removing this prop leaves the last
    * description in place.
    */
   description?: string;
@@ -76,7 +76,7 @@ export interface Adapter extends Resource<
 > {}
 
 /**
- * An Amazon Textract adapter — a container for custom, trained adapter
+ * An Amazon Textract adapter -- a container for custom, trained adapter
  * versions that enhance the pre-trained Queries feature for your specific
  * documents. The adapter itself is cheap metadata (name, feature types,
  * auto-update, tags); versions are trained separately with
@@ -153,7 +153,7 @@ export const AdapterProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       // Confirmed live: Textract adapter ARNs use a nonstandard resource
-      // path with a leading slash — `:/adapters/{adapterId}`.
+      // path with a leading slash -- `:/adapters/{adapterId}`.
       const adapterArn = (adapterId: string) =>
         Effect.gen(function* () {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -227,12 +227,12 @@ export const AdapterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — cloud state is authoritative; `output` is only a
+          // Observe -- cloud state is authoritative; `output` is only a
           // cached id hint and may be stale.
           let adapterId = output?.adapterId ?? (yield* findByName(name));
           let observed = adapterId ? yield* getOne(adapterId) : undefined;
 
-          // Ensure — create when missing; a ConflictException means another
+          // Ensure -- create when missing; a ConflictException means another
           // writer won the race, so fall through to the name lookup.
           if (!observed) {
             const created = yield* throttleRetry(
@@ -256,7 +256,7 @@ export const AdapterProvider = () =>
           yield* session.note(adapterId!);
           const arn = yield* adapterArn(adapterId!);
 
-          // Sync mutable settings — diff observed against desired and apply
+          // Sync mutable settings -- diff observed against desired and apply
           // only the delta. UpdateAdapter treats omitted fields as unchanged.
           const update: textract.UpdateAdapterRequest = {
             AdapterId: adapterId!,
@@ -278,7 +278,7 @@ export const AdapterProvider = () =>
             yield* throttleRetry(textract.updateAdapter(update));
           }
 
-          // Sync tags — diff against the OBSERVED cloud tags (adoption may
+          // Sync tags -- diff against the OBSERVED cloud tags (adoption may
           // hand us foreign tags), not olds/output.
           const { removed, upsert } = diffTags(normalizeTags(observed?.Tags), desiredTags);
           if (upsert.length > 0) {
@@ -302,7 +302,7 @@ export const AdapterProvider = () =>
           return toAttributes(arn, final ?? { AdapterId: adapterId!, AdapterName: name });
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the adapter may already be gone.
+          // Idempotent -- the adapter may already be gone.
           yield* throttleRetry(textract.deleteAdapter({ AdapterId: output.adapterId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );

@@ -35,19 +35,19 @@ const MAX_NAME_LENGTH = 63;
 export type EnvironmentsArchiveDeploymentProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the
+   * current GCP project id. Immutable -- changing it replaces the
    * deployment.
    */
   organization?: string;
   /**
    * Environment id or `organizations/{org}/environments/{env}`. The
-   * environment must use archive deployment. Immutable — changing it
+   * environment must use archive deployment. Immutable -- changing it
    * replaces the deployment.
    */
   environment: string;
   /**
    * Archive deployment id (last path segment). If omitted, a unique name
-   * is generated. Immutable — changing it replaces the deployment.
+   * is generated. Immutable -- changing it replaces the deployment.
    */
   archiveDeploymentId?: string;
   /**
@@ -92,7 +92,7 @@ export type EnvironmentsArchiveDeployment = Resource<
 >;
 
 /**
- * An Apigee archive deployment — a zip of API proxies deployed as a unit
+ * An Apigee archive deployment -- a zip of API proxies deployed as a unit
  * to an archive-mode environment.
  *
  * Labels carry Alchemy ownership so `list` / nuke can find leaked rows.

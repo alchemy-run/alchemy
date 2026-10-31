@@ -44,7 +44,7 @@ export interface UserPoolDomain extends Resource<
     /** The ID of the user pool the domain serves. */
     userPoolId: string;
     /**
-     * The CloudFront distribution domain fronting the hosted endpoint —
+     * The CloudFront distribution domain fronting the hosted endpoint --
      * for custom domains, point a DNS alias record here.
      */
     cloudFrontDomain: string | undefined;
@@ -186,7 +186,7 @@ export const UserPoolDomainProvider = () =>
         stables: ["domain", "userPoolId"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -226,7 +226,7 @@ export const UserPoolDomainProvider = () =>
             });
             observed = yield* waitUntilActive(domain);
           } else {
-            // 3. SYNC — branding version / certificate are mutable in place.
+            // 3. SYNC -- branding version / certificate are mutable in place.
             const drift =
               (news.managedLoginVersion !== undefined &&
                 observed.ManagedLoginVersion !== news.managedLoginVersion) ||

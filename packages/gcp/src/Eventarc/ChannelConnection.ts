@@ -34,12 +34,12 @@ export type ChannelConnectionProps = {
    * Channel connection id (the `{channelConnection}` segment of
    * `projects/{project}/locations/{location}/channelConnections/{channelConnection}`).
    * If omitted, a unique name is generated. Must match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable —
+   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable --
    * changing it replaces the connection.
    */
   channelConnectionId?: string;
   /**
-   * Eventarc location (`us-central1`, `us-east1`, …). Immutable —
+   * Eventarc location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the connection. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -50,12 +50,12 @@ export type ChannelConnectionProps = {
    * Subscriber Channel this connection binds, as
    * `projects/{project}/locations/{location}/channels/{channel}` or the
    * `{channel}` segment. Created in the provider project; the channel
-   * lives in the subscriber project. Immutable — changing it replaces
+   * lives in the subscriber project. Immutable -- changing it replaces
    * the connection.
    */
   channel: string;
   /**
-   * Activation token from the subscriber Channel. Input only — used
+   * Activation token from the subscriber Channel. Input only -- used
    * during create to bind the channel to this provider project, then
    * discarded. Omit when the API no longer requires it.
    */
@@ -78,7 +78,7 @@ export type ChannelConnection = Resource<
     channelConnectionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Bound subscriber Channel resource name. */
     channel: string | undefined;
@@ -100,7 +100,7 @@ export type ChannelConnection = Resource<
  * to a subscriber Channel. Created in the provider project using the
  * subscriber Channel's activation token.
  *
- * There is no patch API — `channelConnectionId`, `location`, `channel`,
+ * There is no patch API -- `channelConnectionId`, `location`, `channel`,
  * and labels are all identity. Changing any of them replaces the
  * connection.
  *

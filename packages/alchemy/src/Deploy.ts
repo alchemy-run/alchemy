@@ -15,7 +15,7 @@ export interface DeployOptions<A> extends Plan.MakePlanOptions {
   stack: StackEffect<CompiledStack<A>, ConfigError, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
-  /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
+  /** See {@link evalStack} -- when set, scoped resources outlive `deploy`. */
   scope?: Scope.Scope;
 }
 

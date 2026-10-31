@@ -14,7 +14,7 @@ export interface StartTaskRequest extends Omit<
  *
  * Bind this operation to a `Cluster` and `Task` inside a function runtime to
  * get a callable that places the bound task definition on specific container
- * instances (EC2/EXTERNAL launch types — unlike `RunTask`, which lets ECS
+ * instances (EC2/EXTERNAL launch types -- unlike `RunTask`, which lets ECS
  * pick placement). The cluster and task definition ARNs are injected
  * automatically; the host is granted `ecs:StartTask` on the task definition
  * plus `iam:PassRole` on the task and execution roles.

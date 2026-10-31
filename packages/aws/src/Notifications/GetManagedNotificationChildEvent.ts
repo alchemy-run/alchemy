@@ -18,7 +18,7 @@ export interface GetManagedNotificationChildEventRequest
  * ### Reading AWS-Managed Notifications
  * **Example:** Fetch a Managed Notification Child Event
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getManagedNotificationChildEvent =
  *   yield* AWS.Notifications.GetManagedNotificationChildEvent();
  *

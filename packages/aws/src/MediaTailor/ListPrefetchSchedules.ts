@@ -13,7 +13,7 @@ export interface ListPrefetchSchedulesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `mediatailor:ListPrefetchSchedules` — page through the
+ * Runtime binding for `mediatailor:ListPrefetchSchedules` -- page through the
  * prefetch schedules on the bound {@link PlaybackConfiguration}, optionally
  * filtered by `StreamId` or `ScheduleType`.
  *

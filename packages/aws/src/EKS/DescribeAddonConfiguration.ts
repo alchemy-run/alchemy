@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `eks:DescribeAddonConfiguration`.
  *
- * Reads an add-on version's configuration JSON schema — the shape its `configurationValues` must satisfy.
- * `eks:DescribeAddonConfiguration` is granted on `*` — the operation is account-scoped and takes no resource.
+ * Reads an add-on version's configuration JSON schema -- the shape its `configurationValues` must satisfy.
+ * `eks:DescribeAddonConfiguration` is granted on `*` -- the operation is account-scoped and takes no resource.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeAddonConfigurationHttp)`.
  * ### Version Catalogs

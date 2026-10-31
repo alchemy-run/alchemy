@@ -32,7 +32,7 @@ export interface ACLProps {
   /**
    * Names of the {@link User}s in this ACL. The account's built-in `default`
    * user belongs to the reserved `open-access` ACL and cannot be added to a
-   * custom ACL — reference your own {@link User}s here instead.
+   * custom ACL -- reference your own {@link User}s here instead.
    * @default [] (an empty ACL)
    */
   userNames?: string[];
@@ -64,7 +64,7 @@ export interface ACL extends Resource<
 > {}
 
 /**
- * A MemoryDB Access Control List (ACL) — a named collection of {@link User}s
+ * A MemoryDB Access Control List (ACL) -- a named collection of {@link User}s
  * that a cluster authenticates against. Attach an ACL to a
  * {@link Cluster} via `aclName`.
  *
@@ -162,10 +162,10 @@ export const ACLProvider = () =>
           const desiredTags = { ...internalTags, ...props.tags };
           const desired = desiredUsers(props);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readAcl(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* memorydb
               .createACL({
@@ -185,7 +185,7 @@ export const ACLProvider = () =>
             });
           }
 
-          // 3. Sync — compute the user membership delta from OBSERVED state.
+          // 3. Sync -- compute the user membership delta from OBSERVED state.
           const observedUsers = new Set(observed.UserNames ?? []);
           const desiredSet = new Set(desired);
           const toAdd = desired.filter((u) => !observedUsers.has(u));
@@ -199,7 +199,7 @@ export const ACLProvider = () =>
             observed = (yield* waitUntilActive(name)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
@@ -244,7 +244,7 @@ export const ACLProvider = () =>
                     acl.Name !== undefined &&
                     acl.ARN !== undefined &&
                     // `open-access` is the AWS-managed default ACL that
-                    // always exists and can never be deleted — keep it out
+                    // always exists and can never be deleted -- keep it out
                     // of enumeration for account-wide teardown (nuke).
                     acl.Name !== "open-access",
                 ),

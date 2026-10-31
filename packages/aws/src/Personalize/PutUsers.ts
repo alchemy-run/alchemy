@@ -9,9 +9,9 @@ import type { Dataset } from "./Dataset.ts";
 export interface PutUsersRequest extends Omit<personalizeevents.PutUsersRequest, "datasetArn"> {}
 
 /**
- * Runtime binding for `personalize:PutUsers`, scoped to one {@link Dataset} —
+ * Runtime binding for `personalize:PutUsers`, scoped to one {@link Dataset} --
  * Adds or updates users incrementally in the bound Users {@link Dataset}
- * — the streaming alternative to a bulk dataset import job for keeping
+ * -- the streaming alternative to a bulk dataset import job for keeping
  * user metadata fresh.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.PutUsersHttp)`.

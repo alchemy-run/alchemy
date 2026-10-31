@@ -70,7 +70,7 @@ export type LakesZoneProps = {
   /**
    * Parent lake. Full name
    * `projects/{project}/locations/{location}/lakes/{lake}` or the lake id
-   * (combined with `location`). Immutable — changing it replaces the zone.
+   * (combined with `location`). Immutable -- changing it replaces the zone.
    */
   lake: string;
   /**
@@ -81,17 +81,17 @@ export type LakesZoneProps = {
   /**
    * Zone id. Must contain only lowercase letters, numbers, and hyphens;
    * start with a letter; end with a letter or number; and be 1-63
-   * characters. Unique across lakes in the project. Immutable — changing
+   * characters. Unique across lakes in the project. Immutable -- changing
    * it replaces the zone.
    */
   zoneId?: string;
   /**
-   * Zone type. Immutable — changing it replaces the zone.
+   * Zone type. Immutable -- changing it replaces the zone.
    * @default "RAW"
    */
   type?: dataplex.GoogleCloudDataplexV1ZoneTypeEnum | (string & {});
   /**
-   * Location type of attached assets. Immutable — changing it replaces
+   * Location type of attached assets. Immutable -- changing it replaces
    * the zone.
    * @default "SINGLE_REGION"
    */
@@ -154,7 +154,7 @@ export type LakesZone = Resource<
 >;
 
 /**
- * A Dataplex zone — a logical grouping of assets inside a lake (`RAW` or
+ * A Dataplex zone -- a logical grouping of assets inside a lake (`RAW` or
  * `CURATED`).
  *
  * Changing `lake`, `zoneId`, `location`, `type`, or `locationType`

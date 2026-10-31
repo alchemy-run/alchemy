@@ -111,7 +111,7 @@ export const GroupProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const identityStoreId = output?.identityStoreId ?? (yield* resolveIdentityStoreId(news));
 
-          // Observe — find the group by id (if we already have one) or
+          // Observe -- find the group by id (if we already have one) or
           // by display name. We never trust `output.groupId` blindly: a
           // group deleted out of band shows up as missing here.
           let existing =
@@ -121,7 +121,7 @@ export const GroupProvider = () =>
               identityStoreId,
             }));
 
-          // Ensure — create the group if missing.
+          // Ensure -- create the group if missing.
           if (!existing) {
             const response = yield* retryIdentityCenter(
               identitystore.createGroup({
@@ -150,7 +150,7 @@ export const GroupProvider = () =>
             return existing;
           }
 
-          // Sync mutable attributes — `updateGroup` overwrites
+          // Sync mutable attributes -- `updateGroup` overwrites
           // displayName and description in one call. We diff against
           // observed cloud state so adoption converges.
           const operations: {
@@ -226,7 +226,7 @@ const readGroupById = Effect.fn(function* (identityStoreId: string, groupId: str
   return {
     identityStoreId: response.IdentityStoreId,
     groupId: response.GroupId,
-    // Sensitive-trait fields decode to Redacted at runtime — unwrap before
+    // Sensitive-trait fields decode to Redacted at runtime -- unwrap before
     // persisting into Attributes / diffing against desired props.
     displayName: unredact(response.DisplayName),
     description: unredact(response.Description),

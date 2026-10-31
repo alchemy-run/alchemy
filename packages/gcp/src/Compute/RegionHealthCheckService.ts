@@ -35,14 +35,14 @@ export type RegionHealthCheckServiceProps = {
    */
   serviceName?: string;
   /**
-   * Region the service lives in. Immutable — changing it replaces the
+   * Region the service lives in. Immutable -- changing it replaces the
    * service. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
    * Optional description. Health check services have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;

@@ -43,14 +43,14 @@ export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
 /**
  * Lift a plan-time Effect into an {@link Output}.
  *
- * The effect runs when the stack resolves the Output during plan/deploy —
- * with the stack's services (cloud credentials, region, ...) provided — and
+ * The effect runs when the stack resolves the Output during plan/deploy --
+ * with the stack's services (cloud credentials, region, ...) provided -- and
  * never inside a deployed runtime: constructing the Output is inert, so
  * helpers built on `fromEffect` (e.g. AMI lookups) are safe to call from
  * composition code that is re-executed inside a Function/Worker/Instance
  * bundle.
  *
- * The effect must not fail (`E = never`) — die with a descriptive error for
+ * The effect must not fail (`E = never`) -- die with a descriptive error for
  * unresolvable lookups.
  */
 export const fromEffect = <A, Req = never>(
@@ -79,7 +79,7 @@ export interface Accessor<A> extends Effect.Effect<A> {}
 export type ToOutput<A, Req = never> =
   // Branded primitives (`string & Brand<"...">`) are assignable to `object`
   // via the brand intersection, so they must short-circuit to a plain Output
-  // before the object check — otherwise they explode into an ObjectExpr
+  // before the object check -- otherwise they explode into an ObjectExpr
   // mapped over every String/Number method. Date is opaque for the same
   // reason (mirrors AttrOutput in Resource.ts).
   [A] extends [Primitive | Date]
@@ -386,7 +386,7 @@ export class RefExpr<A> extends BaseExpr<A, never> {
   /**
    * Statically-known properties of the ref's target (currently its
    * resource `Type`), served as literals by the proxy instead of
-   * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
+   * `PropExpr`s -- mirrors {@link ResourceExpr}'s `stables`.
    */
   readonly stables?: Record<string, any>;
   constructor(
@@ -514,7 +514,7 @@ function proxy(self: any): any {
             //     `==` against a primitive) previously fell through to
             //     `self.toString()` and returned the inspect form
             //     (e.g. "tunnel.tunnelId"). The bogus string flowed
-            //     into resource props and into the cloud — only
+            //     into resource props and into the cloud -- only
             //     surfacing as an opaque downstream error (see PR
             //     description for a real Cloudflare DNS landing).
             //
@@ -529,7 +529,7 @@ function proxy(self: any): any {
               `Cannot coerce Output<${self[inspect]()}> to a ` +
                 `${hint === "number" ? "number" : "string"} via JS coercion. ` +
                 `Use Output.interpolate\`...\` or Output.map(output, fn) ` +
-                `to compose Outputs — the value isn't known until deploy time.`,
+                `to compose Outputs \u2014 the value isn't known until deploy time.`,
             );
           }
         : prop === ExprSymbol
@@ -581,7 +581,7 @@ export const evaluate: <A, Req = never>(
   upstream: {
     [Id in string]: any;
   },
-  // Ancestor-path cycle guard — a plain-data value that appears on its own
+  // Ancestor-path cycle guard -- a plain-data value that appears on its own
   // ancestor chain is cut to `undefined` (it could never serialize anyway).
   // Immutable per-level so legitimately-shared diamond references survive
   // (#1082).
@@ -672,7 +672,7 @@ export const evaluate: <A, Req = never>(
       }
     }
     if (Config.isConfig(expr)) {
-      // Resolve Config against the deploy environment — see resolveInput in
+      // Resolve Config against the deploy environment -- see resolveInput in
       // Plan.ts for rationale. `Config.Redacted` resolves to a `Redacted`,
       // which stays opaque via the leaf fallthrough below.
       return yield* evaluate(yield* expr, upstream, ancestors);
@@ -694,8 +694,8 @@ export const evaluate: <A, Req = never>(
     // Date, and effect runtime values (a Worker's `exports` carries each
     // DO's `constructor` Effect and captured `services` Context). Rebuilding
     // a class instance entry-by-entry strips its prototype, and effect
-    // ≥4.0.0-beta.103's Context is cyclic (#1082). This sits after
-    // `Config.isConfig` on purpose — Configs are Effects but must resolve.
+    // >=4.0.0-beta.103's Context is cyclic (#1082). This sits after
+    // `Config.isConfig` on purpose -- Configs are Effects but must resolve.
     return expr;
   }) as Effect.Effect<any>;
 
@@ -748,7 +748,7 @@ export const hasOutputs = (value: any): value is Output<any, any> =>
 /**
  * Cycle guard shared by the upstream walkers. Marks `value` as visited in
  * `seen`; returns true when it was already visited (the caller returns `{}`
- * — the first visit already contributed the subtree's resources to the
+ * -- the first visit already contributed the subtree's resources to the
  * FQN-keyed union, so skipping repeats is lossless).
  */
 const alreadySeen = (value: object, seen: WeakSet<object>): boolean => {
@@ -761,8 +761,8 @@ const alreadySeen = (value: object, seen: WeakSet<object>): boolean => {
 
 // The dependency rule (#1082): a Resource or Output IS a dependency; plain
 // data (arrays, plain objects) is traversed to find them; every other value
-// — class instances like effect's Effect/Layer/Context, Dates, SDK objects,
-// functions — is a leaf. See `isPlainData` in Util/data.ts for why leaves
+// -- class instances like effect's Effect/Layer/Context, Dates, SDK objects,
+// functions -- is a leaf. See `isPlainData` in Util/data.ts for why leaves
 // must never be walked.
 
 export const upstreamAny = (

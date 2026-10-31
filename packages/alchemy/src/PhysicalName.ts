@@ -13,7 +13,7 @@ const TRUNCATION_HASH_LENGTH = 8;
 export const createPhysicalName = Effect.fn(function* ({
   id,
   prefix: _prefix,
-  // 16 base32 characters = 80 bits of entropy = 4 × 10⁻⁷
+  // 16 base32 characters = 80 bits of entropy = 4 × 10^-7
   instanceId,
   suffixLength = 16,
   maxLength = 64,
@@ -49,8 +49,8 @@ export const createPhysicalName = Effect.fn(function* ({
   lowercase?: boolean;
   /**
    * Service-reserved name prefixes (matched case-insensitively). When the
-   * generated prefix would start with one of these — e.g. a stack named
-   * `aws-*` colliding with S3 Tables' reserved `aws` bucket prefix — a safe
+   * generated prefix would start with one of these -- e.g. a stack named
+   * `aws-*` colliding with S3 Tables' reserved `aws` bucket prefix -- a safe
    * `x${delimiter}` is prepended so the name stays valid. Names that don't
    * collide are unaffected, so existing deployments never rename.
    */
@@ -77,7 +77,7 @@ export const createPhysicalName = Effect.fn(function* ({
   if (maxLength && name.length > maxLength) {
     // The instance suffix alone cannot disambiguate: every name derived from
     // the same resource shares one instance ID, so two prefixes that differ
-    // only in their truncated tail (e.g. `…-task-role-` vs `…-execution-role-`)
+    // only in their truncated tail (e.g. `...-task-role-` vs `...-execution-role-`)
     // would collapse to the same string. Keep a stable hash of the full name
     // next to the suffix so truncated names remain unique.
     const hash = yield* Effect.sync(() =>
@@ -85,7 +85,7 @@ export const createPhysicalName = Effect.fn(function* ({
     );
     // The hash is what keeps same-resource names distinct, so it always
     // survives in full; when maxLength is tight (e.g. DAX's 20-char limit)
-    // the instance suffix shrinks instead — 12 base32 chars still carry 60
+    // the instance suffix shrinks instead -- 12 base32 chars still carry 60
     // bits of instance entropy.
     const tail = `${hash}${suffix}`.slice(0, maxLength);
     return sanitize(`${prefix.slice(0, Math.max(0, maxLength - tail.length))}${tail}`);

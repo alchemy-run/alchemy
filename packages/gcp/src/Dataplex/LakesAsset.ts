@@ -31,12 +31,12 @@ export type AssetResourceSpec = {
   /**
    * Relative name of the attached cloud resource
    * (`projects/{project}/buckets/{bucket}` or
-   * `projects/{project}/datasets/{dataset}`). Immutable — changing it
+   * `projects/{project}/datasets/{dataset}`). Immutable -- changing it
    * replaces the asset.
    */
   name?: string;
   /**
-   * Resource type. Immutable — changing it replaces the asset.
+   * Resource type. Immutable -- changing it replaces the asset.
    */
   type: dataplex.GoogleCloudDataplexV1AssetResourceSpecTypeEnum | (string & {});
   /**
@@ -75,7 +75,7 @@ export type LakesAssetProps = {
   /**
    * Parent zone. Full name
    * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
-   * Immutable — changing it replaces the asset.
+   * Immutable -- changing it replaces the asset.
    */
   zone: string;
   /**
@@ -87,7 +87,7 @@ export type LakesAssetProps = {
   /**
    * Asset id. Must contain only lowercase letters, numbers, and hyphens;
    * start with a letter; end with a letter or number; and be 1-63
-   * characters. Immutable — changing it replaces the asset.
+   * characters. Immutable -- changing it replaces the asset.
    */
   assetId?: string;
   /**
@@ -136,7 +136,7 @@ export type LakesAsset = Resource<
     resourceType: string | undefined;
     /** Attached resource name. */
     resourceName: string | undefined;
-    /** Resource status (`READY`, `ERROR`, …). */
+    /** Resource status (`READY`, `ERROR`, ...). */
     resourceState: string | undefined;
     /** Lifecycle state. */
     state: string | undefined;
@@ -152,7 +152,7 @@ export type LakesAsset = Resource<
 >;
 
 /**
- * A Dataplex asset — a Cloud Storage bucket or BigQuery dataset managed
+ * A Dataplex asset -- a Cloud Storage bucket or BigQuery dataset managed
  * inside a lake zone.
  *
  * Changing `zone`, `assetId`, `location`, or the attached resource

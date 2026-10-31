@@ -7,7 +7,7 @@ export interface ListDeliveryStreamsRequest extends Firehose.ListDeliveryStreams
 /**
  * Runtime binding for `firehose:ListDeliveryStreams`.
  *
- * An account-level binding — call it with no arguments to get a callable
+ * An account-level binding -- call it with no arguments to get a callable
  * that lists delivery stream names in the region (paged via
  * `ExclusiveStartDeliveryStreamName` + `HasMoreDeliveryStreams`). Provide
  * the `ListDeliveryStreamsHttp` layer on the Function to satisfy the

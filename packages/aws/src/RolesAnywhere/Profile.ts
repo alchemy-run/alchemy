@@ -79,7 +79,7 @@ export interface ProfileProps {
   duration?: Duration.Input;
   /**
    * Whether temporary credential requests must include instance properties.
-   * Immutable after creation — changing it replaces the profile.
+   * Immutable after creation -- changing it replaces the profile.
    * @default false
    */
   requireInstanceProperties?: boolean;
@@ -138,7 +138,7 @@ export interface Profile extends Resource<
 > {}
 
 /**
- * An IAM Roles Anywhere profile — the list of IAM roles that the Roles
+ * An IAM Roles Anywhere profile -- the list of IAM roles that the Roles
  * Anywhere service is trusted to assume for authenticated certificate
  * identities, optionally intersected with managed policies and an inline
  * session policy.
@@ -239,7 +239,7 @@ export const ProfileProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // requireInstanceProperties has no member on updateProfile — it is
+          // requireInstanceProperties has no member on updateProfile -- it is
           // immutable after create, so a change forces a replacement.
           if (
             (olds?.requireInstanceProperties ?? false) !== (news.requireInstanceProperties ?? false)
@@ -265,10 +265,10 @@ export const ProfileProvider = () =>
           const desiredEnabled = news.enabled ?? true;
           const desiredDurationSeconds = toWireSeconds(news.duration);
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let live = output?.profileId ? yield* getById(output.profileId) : yield* findByName(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (live === undefined) {
             const created = yield* rolesanywhere.createProfile({
               name,
@@ -286,7 +286,7 @@ export const ProfileProvider = () =>
               return yield* new ProfileMissing({ resourceName: name });
             }
           } else {
-            // 3. Sync — converge the mutable aspects (name, roleArns,
+            // 3. Sync -- converge the mutable aspects (name, roleArns,
             // sessionPolicy, managedPolicyArns, duration,
             // acceptRoleSessionName) by diffing observed against desired.
             const desiredName = news.profileName ?? live.name!;
@@ -319,7 +319,7 @@ export const ProfileProvider = () =>
           // inferred `ProfileDetail | undefined`.
           let profile: rolesanywhere.ProfileDetail = live;
 
-          // 3a. Sync attribute mappings — diff the OBSERVED mappings against
+          // 3a. Sync attribute mappings -- diff the OBSERVED mappings against
           // the desired set. A fresh profile carries AWS default mappings
           // that must not be touched unless the user manages that field, so
           // deletions are driven by the fields previously declared in `olds`
@@ -365,7 +365,7 @@ export const ProfileProvider = () =>
           }
 
           if ((profile.enabled ?? false) !== desiredEnabled) {
-            // The enable/disable response can echo the pre-toggle state — the
+            // The enable/disable response can echo the pre-toggle state -- the
             // successful call itself is authoritative for the flag.
             yield* desiredEnabled
               ? rolesanywhere.enableProfile({ profileId: profile.profileId! })

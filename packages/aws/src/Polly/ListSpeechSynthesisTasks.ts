@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:ListSpeechSynthesisTasks` — list asynchronous
+ * Runtime binding for `polly:ListSpeechSynthesisTasks` -- list asynchronous
  * synthesis tasks ordered by creation date, optionally filtered by status.
  *
  * The binding takes no arguments and grants the function

@@ -7,7 +7,7 @@ import type { Application } from "./Application.ts";
  * Runtime binding for `emr-serverless:StopApplication`.
  *
  * Stops the bound {@link Application}, releasing its pre-initialized
- * capacity so it stops billing — e.g. a scheduled cost-control function that
+ * capacity so it stops billing -- e.g. a scheduled cost-control function that
  * shuts the application down outside business hours. Provide the
  * implementation with `Effect.provide(AWS.EMRServerless.StopApplicationHttp)`.
  * ### Application Control

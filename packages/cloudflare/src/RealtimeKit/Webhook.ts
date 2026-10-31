@@ -94,7 +94,7 @@ export type WebhookAttributes = {
 export type Webhook = Resource<TypeId, WebhookProps, WebhookAttributes, never, Providers>;
 
 /**
- * A Cloudflare RealtimeKit webhook — receives meeting, recording,
+ * A Cloudflare RealtimeKit webhook -- receives meeting, recording,
  * livestream, transcript, and summary events for a RealtimeKit app.
  *
  * Name, URL, events, and enablement are all mutable in place; only moving
@@ -154,7 +154,7 @@ export const WebhookProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The app is a path parameter — a webhook cannot move between apps in
+      // The app is a path parameter -- a webhook cannot move between apps in
       // place. By diff time both sides are resolved strings.
       const oldAppId = output?.appId ?? olds?.appId;
       if (
@@ -176,7 +176,7 @@ export const WebhookProvider = () =>
         const observed = yield* getWebhook(acct, appId, output.webhookId);
         return observed ? toAttributes(observed, acct, appId) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createWebhookName(id, olds?.name);
@@ -194,14 +194,14 @@ export const WebhookProvider = () =>
         enabled: news.enabled ?? true,
       };
 
-      // Observe — the webhookId cached on `output` is a hint, not a
+      // Observe -- the webhookId cached on `output` is a hint, not a
       // guarantee: a missing webhook falls through and we recreate.
       const observed = output?.webhookId
         ? yield* getWebhook(output.accountId ?? accountId, appId, output.webhookId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the full
+        // Ensure -- greenfield (or out-of-band delete): create with the full
         // desired body. The API rejects a duplicate name in the same app
         // with a 409 (`RealtimeKitWebhookExists`); this happens when a prior
         // run leaked a same-named webhook (lost state) or when a retried
@@ -216,7 +216,7 @@ export const WebhookProvider = () =>
         }
         const existing = yield* findByName(accountId, appId, name);
         if (!existing) {
-          // Conflict reported but the webhook isn't visible yet — let the
+          // Conflict reported but the webhook isn't visible yet -- let the
           // engine retry the reconcile rather than silently succeeding.
           return yield* realtimeKit
             .createWebhookWebhook({ accountId, appId, ...desired })
@@ -236,7 +236,7 @@ export const WebhookProvider = () =>
         return toAttributes(adopted.data, accountId, appId);
       }
 
-      // Sync — diff observed cloud state against desired; the update API is
+      // Sync -- diff observed cloud state against desired; the update API is
       // a PUT that takes the full body, so send everything, but skip the
       // call entirely on a no-op.
       const observedShape = {
@@ -255,7 +255,7 @@ export const WebhookProvider = () =>
         webhookId: observed.id,
         ...desired,
       });
-      // The PUT response is a partial echo — re-read for fresh attributes.
+      // The PUT response is a partial echo -- re-read for fresh attributes.
       const fresh = yield* realtimeKit.getWebhookByIdWebhook({
         accountId,
         appId,
@@ -275,7 +275,7 @@ export const WebhookProvider = () =>
     // Webhooks are keyed by {accountId, appId, webhookId} with no account-wide
     // enumeration API, so fan out: enumerate every RealtimeKit app in the
     // account, then list each app's webhooks and flatten. The apps endpoint
-    // 403s (`Forbidden`) when RealtimeKit isn't enabled on the account — an
+    // 403s (`Forbidden`) when RealtimeKit isn't enabled on the account -- an
     // unentitled account simply has no webhooks. Neither endpoint paginates.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -317,7 +317,7 @@ const getWebhook = (accountId: string, appId: string, webhookId: string) =>
 
 /**
  * Find a webhook by exact name. The list endpoint 404s
- * (`RealtimeKitWebhookNotFound`) when the app has no webhooks at all —
+ * (`RealtimeKitWebhookNotFound`) when the app has no webhooks at all --
  * treat that as an empty list. If several webhooks carry the same name,
  * pick the oldest for determinism.
  */

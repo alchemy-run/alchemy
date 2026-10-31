@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetFindings`.
  *
  * Retrieves the details of one or more findings.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetFindingsHttp)`.
  * ### Working with Findings
  * **Example:** Hydrate Finding Details
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getFindings = yield* AWS.Macie2.GetFindings();
  *
  * // runtime

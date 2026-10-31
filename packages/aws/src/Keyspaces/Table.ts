@@ -217,7 +217,7 @@ export interface Table extends Resource<
  *     viewType: "NEW_AND_OLD_IMAGES",
  *   },
  * });
- * // table.latestStreamArn → consume via the TableStreams binding
+ * // table.latestStreamArn -> consume via the TableStreams binding
  * ```
  *
  * @resource
@@ -306,7 +306,7 @@ export const TableProvider = () =>
 
       // Bounded readiness wait; Keyspaces tables typically reach ACTIVE within
       // a minute. Budget ~5 min (60 * 5s). When `requiredColumns` is provided
-      // the wait also blocks until those columns are visible in the schema —
+      // the wait also blocks until those columns are visible in the schema --
       // AddColumn updates return before the table transitions out of ACTIVE and
       // the new columns propagate to GetTable with a short lag.
       const waitForActive = Effect.fn(function* (
@@ -425,10 +425,10 @@ export const TableProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readTable(keyspaceName, tableName);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* keyspaces
               .createTable({
@@ -524,7 +524,7 @@ export const TableProvider = () =>
             );
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readTags(observed.resourceArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

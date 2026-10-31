@@ -54,12 +54,12 @@ export type GlossariesGlossaryEntryProps = {
   /**
    * Parent glossary resource name
    * `projects/{project}/locations/{location}/glossaries/{glossary}`
-   * or the glossary id (combined with `location`). Immutable — changing
+   * or the glossary id (combined with `location`). Immutable -- changing
    * it replaces the entry.
    */
   parent: string;
   /**
-   * Location used when `parent` is a bare glossary id. Immutable —
+   * Location used when `parent` is a bare glossary id. Immutable --
    * changing it replaces the entry.
    * @default "us-central1"
    */
@@ -67,7 +67,7 @@ export type GlossariesGlossaryEntryProps = {
   /**
    * Server-assigned integer entry id (the `{entry}` segment of
    * `.../glossaries/{glossary}/glossaryEntries/{entry}`). Leave blank on
-   * create. Immutable — changing it replaces the entry.
+   * create. Immutable -- changing it replaces the entry.
    */
   glossaryEntryId?: string;
   /**
@@ -117,7 +117,7 @@ export type GlossariesGlossaryEntry = Resource<
  * resource it finds without prior state as unowned (adopt it with `--adopt`).
  * Entries are nested under a glossary and have no labels field. Term pair /
  * term set and description update in place via patch. Parent glossary and
- * entry id are identity — changing them replaces the entry.
+ * entry id are identity -- changing them replaces the entry.
  *
  * ### Creating an Entry
  * **Example:** Unidirectional term pair

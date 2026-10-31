@@ -20,7 +20,7 @@ export const STREAM_BINDING_ENTRYPOINT = "StreamBinding";
 
 /**
  * Name of the single Durable Object instance (and `BlobStore` namespace) all
- * stream data lives in — Miniflare's `idFromName("stream-data")` /
+ * stream data lives in -- Miniflare's `idFromName("stream-data")` /
  * `BLOB_NAMESPACE` (`workers/stream/{binding,object}.worker.ts`).
  */
 export const STREAM_OBJECT_NAME = "stream-data";
@@ -41,7 +41,7 @@ export const HEADER_STREAM_CONTROL_OP = "cf-stream-control-op";
 export const LOOPBACK_TARGET_STREAM = "stream";
 /**
  * Loopback path returning the runtime's public URL as a JSON string (or
- * `null` before the entry socket is bound) — the equivalent of Miniflare's
+ * `null` before the entry socket is bound) -- the equivalent of Miniflare's
  * `/core/public-url` loopback route (`workers/shared/public-url.ts`).
  */
 export const PATH_STREAM_PUBLIC_URL = "/stream/public-url";

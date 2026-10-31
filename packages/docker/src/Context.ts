@@ -18,7 +18,7 @@ export interface ContextProps {
   /**
    * Docker endpoint spec, for example `host=ssh://user@host`.
    *
-   * Connection metadata only — never credentials. SSH endpoints
+   * Connection metadata only -- never credentials. SSH endpoints
    * authenticate with keys/agent (Docker rejects passwords in the URL), and
    * TLS endpoints reference cert/key material by file path
    * (`host=tcp://...,ca=...,cert=...,key=...`), not by value. Docker itself
@@ -45,7 +45,7 @@ export interface Context extends Resource<
 > {}
 
 /**
- * A named Docker CLI context — a pointer to a Docker engine (local socket,
+ * A named Docker CLI context -- a pointer to a Docker engine (local socket,
  * SSH host, or TCP endpoint) that other Docker resources deploy through.
  *
  * Pass the context (or its name) to any Docker resource's `context` prop to

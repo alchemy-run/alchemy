@@ -54,12 +54,12 @@ export interface TaxRateProps {
    */
   displayName?: string;
   /**
-   * Tax rate percent out of 100. Create-only — changing it replaces the
+   * Tax rate percent out of 100. Create-only -- changing it replaces the
    * tax rate.
    */
   percentage: number;
   /**
-   * Whether this tax is inclusive of the listed price. Create-only —
+   * Whether this tax is inclusive of the listed price. Create-only --
    * changing it replaces the tax rate.
    */
   inclusive: boolean;
@@ -103,7 +103,7 @@ export type TaxRate = Resource<
   "Stripe.TaxRate",
   TaxRateProps,
   {
-    /** Stripe tax rate id (`txr_…`). */
+    /** Stripe tax rate id (`txr_...`). */
     id: string;
     /** Display name shown to customers. */
     displayName: string;
@@ -135,7 +135,7 @@ export type TaxRate = Resource<
 >;
 
 /**
- * A Stripe Tax Rate — a percent tax applied to invoices, subscriptions,
+ * A Stripe Tax Rate -- a percent tax applied to invoices, subscriptions,
  * and Checkout Sessions. `percentage` and `inclusive` are immutable and
  * changing them replaces the tax rate. Display name, active, description,
  * jurisdiction fields, and metadata update in place.

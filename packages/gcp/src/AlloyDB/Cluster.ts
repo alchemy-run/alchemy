@@ -26,18 +26,18 @@ const DEFAULT_NETWORK = "default";
 const MAX_NAME_LENGTH = 55;
 
 export type ClusterTimeOfDay = {
-  /** Hours of day in 24-hour format (`0`–`23`). */
+  /** Hours of day in 24-hour format (`0`-`23`). */
   hours?: number;
-  /** Minutes of hour (`0`–`59`). */
+  /** Minutes of hour (`0`-`59`). */
   minutes?: number;
-  /** Seconds of minute (`0`–`59`). */
+  /** Seconds of minute (`0`-`59`). */
   seconds?: number;
   /** Fractional seconds, in nanoseconds. */
   nanos?: number;
 };
 
 export type MaintenanceWindow = {
-  /** Preferred day of week (`MONDAY` … `SUNDAY`). */
+  /** Preferred day of week (`MONDAY` ... `SUNDAY`). */
   day?: alloydb.MaintenanceWindowDayEnum | (string & {});
   /** Preferred UTC start time. Maintenance starts within 1 hour. */
   startTime?: ClusterTimeOfDay;
@@ -85,7 +85,7 @@ export type EncryptionConfig = {
   /**
    * Customer-managed KMS key
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    */
   kmsKeyName?: string;
 };
@@ -158,12 +158,12 @@ export type ClusterProps = {
    * Cluster id (the `{cluster}` segment of
    * `projects/{project}/locations/{location}/clusters/{cluster}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must match `[a-z0-9-]{1,63}`. Immutable — changing it
+   * logical id. Must match `[a-z0-9-]{1,63}`. Immutable -- changing it
    * replaces the cluster.
    */
   clusterId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the cluster. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -197,19 +197,19 @@ export type ClusterProps = {
    */
   pscConfig?: PscConfig;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * cluster.
    */
   encryptionConfig?: EncryptionConfig;
   /**
-   * Database engine major version (`POSTGRES_14`, `POSTGRES_15`, …).
+   * Database engine major version (`POSTGRES_14`, `POSTGRES_15`, ...).
    * Upgrading patches in place; downgrading replaces the cluster. If
    * omitted at create time, AlloyDB picks a default.
    */
   databaseVersion?: alloydb.ClusterDatabaseVersionEnum | (string & {});
   /**
    * Cluster type. `SECONDARY` uses `clusters.createsecondary` and
-   * requires `secondaryConfig`. Immutable — changing it replaces the
+   * requires `secondaryConfig`. Immutable -- changing it replaces the
    * cluster.
    * @default "PRIMARY"
    */
@@ -260,7 +260,7 @@ export type Cluster = Resource<
     clusterId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** User-facing display name. */
     displayName: string | undefined;
@@ -268,7 +268,7 @@ export type Cluster = Resource<
     labels: Record<string, string>;
     /** Client annotations. */
     annotations: Record<string, string>;
-    /** Serving state (`READY`, `EMPTY`, `CREATING`, …). */
+    /** Serving state (`READY`, `EMPTY`, `CREATING`, ...). */
     state: string | undefined;
     /** Cluster type (`PRIMARY`, `SECONDARY`). */
     clusterType: string;

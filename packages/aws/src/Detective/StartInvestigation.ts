@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for `detective:StartInvestigation`.
  *
  * Kicks off a Detective investigation into an IAM user or role over a time
- * window — the programmatic version of the console's "Run investigation"
+ * window -- the programmatic version of the console's "Run investigation"
  * button. A security-automation function can trigger triage the moment a
  * GuardDuty finding lands. The graph ARN is injected from the bound
  * {@link Graph}.
@@ -16,7 +16,7 @@ import type { Graph } from "./Graph.ts";
  * ### Running Investigations
  * **Example:** Investigate A Suspicious Role
  * ```typescript
- * // init — bind the operation to the behavior graph
+ * // init -- bind the operation to the behavior graph
  * const startInvestigation = yield* AWS.Detective.StartInvestigation(graph);
  *
  * // runtime

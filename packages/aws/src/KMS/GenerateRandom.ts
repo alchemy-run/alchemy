@@ -7,12 +7,12 @@ export interface GenerateRandomRequest extends kms.GenerateRandomRequest {}
 /**
  * Runtime binding for `kms:GenerateRandom`.
  *
- * Not scoped to a key — KMS produces cryptographically secure random bytes
+ * Not scoped to a key -- KMS produces cryptographically secure random bytes
  * from its FIPS 140-3 validated HSMs. The binding grants `kms:GenerateRandom`
  * on `*` (the action does not support resource-level scoping).
  *
  * The random `Plaintext` in the response is wrapped in `Redacted` so it
- * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
+ * never leaks into logs -- unwrap with `Redacted.value(...)` at the point of
  * use.
  *
  * ### Random Bytes

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:BatchGetDeployments` — reads up to 25
+ * Runtime binding for `codedeploy:BatchGetDeployments` -- reads up to 25
  * deployments in one call. CodeDeploy authorizes the call against the
  * deployment group the deployments belong to.
  * ### Observing Deployments

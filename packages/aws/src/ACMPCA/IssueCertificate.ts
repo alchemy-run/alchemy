@@ -13,7 +13,7 @@ export interface IssueCertificateRequest extends Omit<
  *
  * Bind a {@link CertificateAuthority} inside a function runtime to sign
  * certificate signing requests (CSRs) with the CA's private key. Returns
- * the ARN of the issued certificate — retrieve the PEM with the
+ * the ARN of the issued certificate -- retrieve the PEM with the
  * {@link GetCertificate} binding (issuance is asynchronous, so poll while
  * `RequestInProgressException` is observed). Provide
  * `ACMPCA.IssueCertificateHttp` on the Function effect to implement the

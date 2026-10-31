@@ -13,7 +13,7 @@ export interface ListVariantImportJobsRequest extends omics.ListVariantImportJob
  * ### Variant Imports
  * **Example:** Call ListVariantImportJobs
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listImports = yield* AWS.Omics.ListVariantImportJobs();
  * // runtime
  * const result = yield* listImports({});

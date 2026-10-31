@@ -7,8 +7,8 @@ import type { DataSet } from "./DataSet.ts";
 /**
  * Shared scaffolding for Amazon QuickSight HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the scoping resource, and the IAM
  * action list is boilerplate.
  *
@@ -74,7 +74,7 @@ export const makeQuickSightDashboardHttpBinding = <
 /**
  * Build the impl Effect for a QuickSight operation scoped to a
  * {@link DataSet}: the deploy-time half grants `actions` on the bound
- * dataset's ARN and its `…/ingestion/*` sub-resources, and the runtime half
+ * dataset's ARN and its `.../ingestion/*` sub-resources, and the runtime half
  * injects `AwsAccountId` (parsed from the dataset ARN) and `DataSetId` into
  * every request.
  */

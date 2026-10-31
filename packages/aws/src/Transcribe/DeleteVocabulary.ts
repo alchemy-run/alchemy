@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:DeleteVocabulary` — delete a custom vocabulary.
+ * Runtime binding for `transcribe:DeleteVocabulary` -- delete a custom vocabulary.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:DeleteVocabulary` on `*`.

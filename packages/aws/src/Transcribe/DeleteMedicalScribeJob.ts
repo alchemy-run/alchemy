@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:DeleteMedicalScribeJob` — delete a Medical Scribe job.
+ * Runtime binding for `transcribe:DeleteMedicalScribeJob` -- delete a Medical Scribe job.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:DeleteMedicalScribeJob` on `*`.

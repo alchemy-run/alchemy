@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Docker.Service` (a bun process serving the
  * bundled program). The generated entry imports this module and the user's
- * `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
+ * `main`, nothing else -- see `alchemy/Runtime/Bootstrap` for why.
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";

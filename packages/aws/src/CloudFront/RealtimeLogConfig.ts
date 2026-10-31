@@ -175,7 +175,7 @@ const sameFields = (a: readonly string[], b: readonly string[]) => {
 /**
  * CloudFront validates at create/update time that it can assume the
  * endpoint's IAM role. A role created in the same deploy can take a few
- * seconds to propagate through IAM, surfacing as `InvalidArgument` — retry
+ * seconds to propagate through IAM, surfacing as `InvalidArgument` -- retry
  * it on a bounded schedule (~40s). Genuine validation errors fail after the
  * cap.
  *
@@ -196,7 +196,7 @@ const retryIamPropagation = <A, E extends { _tag: string }, R>(
 /**
  * Deleting a config shortly after a distribution stopped referencing it can
  * surface `RealtimeLogConfigInUse` until the distribution update propagates
- * — retry on a bounded schedule (~40s).
+ * -- retry on a bounded schedule (~40s).
  *
  * @internal
  */
@@ -223,7 +223,7 @@ export const RealtimeLogConfigProvider = () =>
         stables: ["arn", "name"],
         // Enumerate every config in the account. `listRealtimeLogConfigs`
         // pages via Marker/NextMarker inside a wrapper struct (no distilled
-        // paginator) — hand-roll a bounded loop; an empty NextMarker is
+        // paginator) -- hand-roll a bounded loop; an empty NextMarker is
         // terminal.
         list: () =>
           Effect.gen(function* () {
@@ -264,11 +264,11 @@ export const RealtimeLogConfigProvider = () =>
           const desiredEndpoints = news.endpoints;
           const desiredFields = news.fields;
 
-          // Observe — live config is authoritative; `output` only caches the
+          // Observe -- live config is authoritative; `output` only caches the
           // name.
           let observed = yield* observe(name);
 
-          // Ensure — create when missing; `RealtimeLogConfigAlreadyExists`
+          // Ensure -- create when missing; `RealtimeLogConfigAlreadyExists`
           // is a race with a peer reconciler, re-observe.
           if (!observed) {
             observed = yield* retryIamPropagation(
@@ -291,7 +291,7 @@ export const RealtimeLogConfigProvider = () =>
             return toAttrs(observed);
           }
 
-          // Sync — `updateRealtimeLogConfig` replaces every mutable aspect
+          // Sync -- `updateRealtimeLogConfig` replaces every mutable aspect
           // at once; skip the call entirely when observed matches desired.
           const current = toAttrs(observed);
           if (

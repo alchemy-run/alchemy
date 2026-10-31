@@ -96,12 +96,12 @@ export type EnvironmentProps = {
    * `projects/{project}/locations/{location}/environments/{environment}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must start with a lowercase letter, be 1-63 characters,
-   * and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it
+   * and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it
    * replaces the environment.
    */
   environmentId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the environment. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -116,7 +116,7 @@ export type EnvironmentProps = {
    * related settings. Node network/subnetwork, service account, encryption,
    * private-IP, python version, and storage bucket are immutable.
    *
-   * New environments require an explicit `nodeConfig.serviceAccount` —
+   * New environments require an explicit `nodeConfig.serviceAccount` --
    * Composer rejects creates without one (`Composer environment service
    * account is required to be explicitly specified`). The account needs
    * `roles/composer.worker` (or broader) on the project. Changing it
@@ -125,7 +125,7 @@ export type EnvironmentProps = {
   config?: EnvironmentConfig;
   /**
    * Cloud Storage bucket used by the environment (`bucket` has no `gs://`
-   * prefix). Immutable — changing it replaces the environment.
+   * prefix). Immutable -- changing it replaces the environment.
    */
   storageConfig?: StorageConfig;
 };
@@ -140,11 +140,11 @@ export type Environment = Resource<
     environmentId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Server-generated UUID. */
     uuid: string | undefined;
-    /** Server-reported state (`RUNNING`, `CREATING`, …). */
+    /** Server-reported state (`RUNNING`, `CREATING`, ...). */
     state: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -175,10 +175,10 @@ export type Environment = Resource<
  * Changing `environmentId`, `location`, node network/subnetwork, node
  * service account, encryption, private-IP settings, python version, or the
  * storage bucket replaces the environment. Labels, PyPI packages, Airflow config overrides, env vars,
- * image version, workloads, and environment size update in place — one
+ * image version, workloads, and environment size update in place -- one
  * update type per Composer patch, applied sequentially.
  *
- * Provisioning typically takes 20–45 minutes. Polls the LRO via
+ * Provisioning typically takes 20-45 minutes. Polls the LRO via
  * `getProjectsLocationsOperations` (Composer has no wait long-poll).
  *
  * New environments must name their service account explicitly in

@@ -26,7 +26,7 @@ export interface EventTrackerProps {
   /**
    * ARN of the dataset group the event tracker records events for. The
    * dataset group should contain an Interactions dataset (events are recorded
-   * into it). Only one event tracker can exist per dataset group. Immutable —
+   * into it). Only one event tracker can exist per dataset group. Immutable --
    * changing it replaces the tracker.
    */
   datasetGroupArn: string;
@@ -67,7 +67,7 @@ export interface EventTracker extends Resource<
 > {}
 
 /**
- * An Amazon Personalize event tracker — the ingestion endpoint for streaming
+ * An Amazon Personalize event tracker -- the ingestion endpoint for streaming
  * interaction events into a dataset group's Interactions dataset. Creating a
  * tracker yields a `trackingId` that the {@link PutEvents} data-plane binding
  * uses to record events in real time.
@@ -176,15 +176,15 @@ export const EventTrackerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output is an ARN cache.
+          // 1. Observe -- cloud state is authoritative; output is an ARN cache.
           let tracker =
             output?.eventTrackerArn !== undefined
               ? yield* describe(output.eventTrackerArn)
               : undefined;
 
-          // 2. Ensure — create if missing, then wait for ACTIVE. A crashed
+          // 2. Ensure -- create if missing, then wait for ACTIVE. A crashed
           //    prior run may have left a same-named tracker behind with no
-          //    persisted state — adopt it by name and converge.
+          //    persisted state -- adopt it by name and converge.
           if (tracker === undefined) {
             const arn = yield* personalize
               .createEventTracker({
@@ -208,7 +208,7 @@ export const EventTrackerProvider = () =>
             tracker = yield* waitActive(arn);
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags (no-op after a
+          // 3. Sync tags -- diff against OBSERVED cloud tags (no-op after a
           //    fresh create; converges an adopted leftover).
           yield* syncPersonalizeTags(tracker.eventTrackerArn!, desiredTags);
 
@@ -224,7 +224,7 @@ export const EventTrackerProvider = () =>
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
-          // Deletion is asynchronous — wait until the tracker is actually gone
+          // Deletion is asynchronous -- wait until the tracker is actually gone
           // so its dataset group can delete without ResourceInUse churn.
           const remaining = yield* describe(output.eventTrackerArn).pipe(
             Effect.repeat({

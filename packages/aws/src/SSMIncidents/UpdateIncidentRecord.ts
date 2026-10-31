@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:UpdateIncidentRecord`.
  *
- * Updates the details of an incident record — retitle, change impact, or
+ * Updates the details of an incident record -- retitle, change impact, or
  * resolve the incident by setting `status: "RESOLVED"`. Incident-record ARNs
  * only exist at runtime, so the deploy-time grant is account-level
  * (`Resource: "*"`).

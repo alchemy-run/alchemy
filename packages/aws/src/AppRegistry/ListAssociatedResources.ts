@@ -18,7 +18,7 @@ export interface ListAssociatedResourcesRequest extends Omit<
  * ### Reading Associated Resources
  * **Example:** List the Application's Resources
  * ```typescript
- * // init — bind the operation to the application
+ * // init -- bind the operation to the application
  * const listAssociatedResources =
  *   yield* AWS.AppRegistry.ListAssociatedResources(app);
  *

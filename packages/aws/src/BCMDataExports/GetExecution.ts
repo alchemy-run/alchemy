@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Export } from "./Export.ts";
 
 /**
- * Request for {@link GetExecution} — the bound export's ARN is injected
+ * Request for {@link GetExecution} -- the bound export's ARN is injected
  * automatically.
  */
 export interface GetExecutionRequest extends Omit<bcm.GetExecutionRequest, "ExportArn"> {}
@@ -13,14 +13,14 @@ export interface GetExecutionRequest extends Omit<bcm.GetExecutionRequest, "Expo
  * Runtime binding for `bcm-data-exports:GetExecution`.
  *
  * Bind this operation to an {@link Export} to read the status of one export
- * execution (delivery run) — its status code, reason, and timestamps — from
+ * execution (delivery run) -- its status code, reason, and timestamps -- from
  * inside a function runtime. Useful for delivery monitors that alert when a
  * refresh fails. Provide the implementation with
  * `Effect.provide(AWS.BCMDataExports.GetExecutionHttp)`.
  * ### Monitoring Executions
  * **Example:** Check an Execution's Status
  * ```typescript
- * // init — bind the operation to the export
+ * // init -- bind the operation to the export
  * const getExecution = yield* AWS.BCMDataExports.GetExecution(cur);
  *
  * // runtime

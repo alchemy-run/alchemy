@@ -23,7 +23,7 @@ export type DomainProps = {
   /**
    * Fully qualified domain name registered with Postmaster Tools
    * (`mail.example.com`). If omitted, a unique `alchemy-*.example.com`
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the domain. Domains have no labels field, so
    * Alchemy stamps ownership into the generated name prefix for
    * `list` / nuke.

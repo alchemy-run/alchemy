@@ -53,7 +53,7 @@ import { WorkloadIdentityProvider } from "./IAM/WorkloadIdentityProvider.ts";
  *         iam: [{ role: "roles/pubsub.publisher", resource: { kind: "pubsub.topic", name: topic.name } }],
  *       });
  *     }
- *     return (message) => publish({ topic: …, body: … });
+ *     return (message) => publish({ topic: ..., body: ... });
  *   });
  * })
  * ```
@@ -137,7 +137,7 @@ export const runsAsAwsRole = (host: ResourceLike): boolean =>
  */
 const AWS_PROVIDER_ID = "alchemy-aws";
 
-/** `arn:aws:iam::123:role/path/name` → `arn:aws:sts::123:assumed-role/name`. */
+/** `arn:aws:iam::123:role/path/name` -> `arn:aws:sts::123:assumed-role/name`. */
 const assumedRoleArn = (roleArn: string) => {
   const [, partition, , , account, resource] = roleArn.split(":");
   const name = resource?.split("/").pop();
@@ -212,7 +212,7 @@ type BindTarget = {
  *   const bind = yield* GCPBindings.Bind;
  *   return Effect.fn(function* (topic: Topic) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
- *       yield* bind`GCP.PubSub.WriteTopic(${topic})`({ iam: [ … ] });
+ *       yield* bind`GCP.PubSub.WriteTopic(${topic})`({ iam: [ ... ] });
  *     }
  *   });
  * })

@@ -8,7 +8,7 @@ import { StreamSendError, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
  * Shared record encoding + client assembly for the WriteStream / StreamSink
- * implementations. Internal — not exported from the Pipelines barrel.
+ * implementations. Internal -- not exported from the Pipelines barrel.
  */
 
 /**
@@ -17,7 +17,7 @@ import { StreamSendError, type WriteStreamClient } from "./WriteStream.ts";
  */
 export const recordSchemaOf = (stream: Stream<any> | LegacyPipeline): Schema.Top | undefined => {
   if (isLegacyPipeline(stream)) return undefined;
-  // References (`Stream.ref`) proxy unknown properties to Outputs — only a
+  // References (`Stream.ref`) proxy unknown properties to Outputs -- only a
   // real Effect Schema counts.
   const schema: unknown = stream.RecordSchema;
   return Schema.isSchema(schema) ? schema : undefined;

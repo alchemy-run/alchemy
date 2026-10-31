@@ -35,7 +35,7 @@ export interface RetentionConfiguration extends Resource<
  * retains your recorded configuration items.
  *
  * AWS allows only **one** retention configuration per account per region and
- * always names it `default` — treat this resource as an account-region
+ * always names it `default` -- treat this resource as an account-region
  * singleton.
  * ### Configuring Retention
  * **Example:** Retain configuration items for one year
@@ -84,7 +84,7 @@ export const RetentionConfigurationProvider = () =>
             Effect.map((retentions) => Array.from(retentions).map(toAttrs)),
           ),
         // Retention configurations are not taggable and AWS fixes the name to
-        // `default`, so there is no ownership marker — an existing retention
+        // `default`, so there is no ownership marker -- an existing retention
         // configuration is treated as ours (singleton adoption), matching the
         // DeliveryChannel convention.
         read: Effect.fn(function* () {
@@ -94,10 +94,10 @@ export const RetentionConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const desiredDays = toWireDays(news.retentionPeriod)!;
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeRetention;
 
-          // 2+3. ENSURE + SYNC — PutRetentionConfiguration is a full upsert
+          // 2+3. ENSURE + SYNC -- PutRetentionConfiguration is a full upsert
           //    of the account-region singleton; skip the API on no-op.
           if (observed === undefined || observed.RetentionPeriodInDays !== desiredDays) {
             yield* config.putRetentionConfiguration({

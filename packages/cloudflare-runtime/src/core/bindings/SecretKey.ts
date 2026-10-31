@@ -12,7 +12,7 @@ import { Worker_Binding_CryptoKey_Usage } from "../workerd/Config.ts";
 export interface SecretKeyProps {
   binding: string;
   /**
-   * Data format of the key material — the WebCrypto `importKey` format.
+   * Data format of the key material -- the WebCrypto `importKey` format.
    */
   format: "raw" | "pkcs8" | "spki" | "jwk" | (string & {});
   /**

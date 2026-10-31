@@ -13,16 +13,16 @@ export interface CreateMultipartUploadRequest extends Omit<
  *
  * Starts a multipart upload and returns the `UploadId` that `UploadPart`,
  * `CompleteMultipartUpload`, and `AbortMultipartUpload` reference. Use it for
- * objects too large for a single `PutObject` (parts are 5 MiB–5 GiB, uploaded
+ * objects too large for a single `PutObject` (parts are 5 MiB-5 GiB, uploaded
  * independently and in parallel). Provide the implementation with
  * `Effect.provide(AWS.S3.CreateMultipartUploadHttp)`.
  * ### Multipart Uploads
  * **Example:** Start a Multipart Upload
  * ```typescript
- * // init — bind the operation to the bucket
+ * // init -- bind the operation to the bucket
  * const createUpload = yield* AWS.S3.CreateMultipartUpload(bucket);
  *
- * // runtime — object-level metadata (ContentType, etc.) is set here,
+ * // runtime -- object-level metadata (ContentType, etc.) is set here,
  * // not on the individual parts
  * const { UploadId } = yield* createUpload({
  *   Key: "backups/archive.tar",

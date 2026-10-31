@@ -59,7 +59,7 @@ export type Customer = Resource<
   "Stripe.Customer",
   CustomerProps,
   {
-    /** Stripe customer id (`cus_…`). */
+    /** Stripe customer id (`cus_...`). */
     id: string;
     /** Customer's email address, if set. */
     email: string | undefined;
@@ -81,7 +81,7 @@ export type Customer = Resource<
 >;
 
 /**
- * A Stripe Customer — the billing identity invoices, subscriptions, and
+ * A Stripe Customer -- the billing identity invoices, subscriptions, and
  * Checkout sessions attach to. Email, name, description, phone, and
  * metadata are updated in place. Deleting a customer is permanent and
  * immediately cancels any active subscriptions.

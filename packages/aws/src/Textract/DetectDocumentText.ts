@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:DetectDocumentText` — synchronous OCR that
+ * Runtime binding for `textract:DetectDocumentText` -- synchronous OCR that
  * detects lines and words of text in a JPEG, PNG, PDF, or TIFF document.
  *
  * Textract is a pure pay-per-call service with no resource to manage: the
  * binding takes no arguments and grants the function
  * `textract:DetectDocumentText` (the action has no resource-level IAM).
  * Pass the document as raw bytes (`Document.Bytes`) or as an S3 object
- * reference (`Document.S3Object`) — raw distilled types, no marshalling.
+ * reference (`Document.S3Object`) -- raw distilled types, no marshalling.
  *
  * ### Detecting Document Text
  * **Example:** Detect Text in Document Bytes

@@ -4,7 +4,7 @@ import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { runBuildChild } from "../core/BuildChild.ts";
 /**
- * `@alchemy.run/frontend-frameworks/vinext/node` — vinext on a Node
+ * `@alchemy.run/frontend-frameworks/vinext/node` -- vinext on a Node
  * container (vinext's Vite build + vinext's production server).
  *
  * Unlike the Cloudflare integration (`./source`, Vite + the Alchemy
@@ -47,7 +47,7 @@ export interface VinextNodeOptions {
   readonly root?: string | undefined;
   /**
    * The deploy target module specifier the caller resolved this module as.
-   * This module IS the Node target — accepted and ignored (parity with
+   * This module IS the Node target -- accepted and ignored (parity with
    * `nextjs/node`).
    */
   readonly target?: string | undefined;

@@ -12,7 +12,7 @@ export interface RetrieveProductRequest extends Omit<GetProductRequest, "id"> {}
 
 /**
  * Retrieve a bound Stripe Product over HTTP. Pass the Product resource,
- * a `prod_…` id string, or an Effect resolving to a Product.
+ * a `prod_...` id string, or an Effect resolving to a Product.
  *
  * ### Reading a Product
  * **Example:** Bind and retrieve

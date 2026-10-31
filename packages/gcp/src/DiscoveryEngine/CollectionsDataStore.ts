@@ -21,18 +21,18 @@ import { waitForOperation } from "./operations.ts";
 export type CollectionsDataStoreProps = {
   /**
    * Data store id (the `{data_store}` segment). If omitted, a unique
-   * RFC-1034 id is generated. Immutable — changing it replaces the
+   * RFC-1034 id is generated. Immutable -- changing it replaces the
    * data store.
    */
   dataStoreId?: string;
   /**
-   * Location (`global`, `us`, `eu`). Immutable — changing it replaces
+   * Location (`global`, `us`, `eu`). Immutable -- changing it replaces
    * the data store.
    * @default "global"
    */
   location?: string;
   /**
-   * Collection id. Immutable — changing it replaces the data store.
+   * Collection id. Immutable -- changing it replaces the data store.
    * @default "default_collection"
    */
   collection?: string;

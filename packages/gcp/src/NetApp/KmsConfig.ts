@@ -32,11 +32,11 @@ export type KmsConfigProps = {
    * KMS config id (the `{kmsConfig}` segment of
    * `projects/{project}/locations/{location}/kmsConfigs/{kmsConfig}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the config.
+   * and logical id. Immutable -- changing it replaces the config.
    */
   kmsConfigId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the config. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -45,7 +45,7 @@ export type KmsConfigProps = {
   /**
    * Customer-managed crypto key. Format
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   cryptoKeyName: string;
   /**

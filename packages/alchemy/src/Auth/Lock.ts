@@ -11,7 +11,7 @@ import { rootDir } from "./Paths.ts";
 
 const semaphores = new Map<string, Semaphore.Semaphore>();
 
-// Keep STALE well above REFRESH — a saturated machine can starve the
+// Keep STALE well above REFRESH -- a saturated machine can starve the
 // heartbeat fiber for seconds.
 const STALE = Duration.seconds(30);
 const REFRESH = Duration.seconds(10);
@@ -34,7 +34,7 @@ class LockTimeout extends Data.TaggedError("LockTimeout")<{
  *
  * Keys are derived from user-controlled values (profile names), which
  * have shown up in production containing shell placeholders like
- * `${ALCHEMY_PROFILE:-default}` — `:`/`{`/`$` are invalid in Windows
+ * `${ALCHEMY_PROFILE:-default}` -- `:`/`{`/`$` are invalid in Windows
  * file names and mkdir fails with EINVAL. Collapse anything outside a
  * conservative allow-list to `_`.
  *
@@ -103,7 +103,7 @@ const acquireFileLock = Effect.fn(function* (lockPath: string, timeout: Duration
           lockPath,
           timeout,
           message:
-            `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
+            `Timed out waiting for the alchemy auth lock '${lockPath}' \u2014 another alchemy ` +
             `process has held it for over ${Duration.toSeconds(timeout)}s. If no other ` +
             `alchemy process is running, delete the lock directory and retry.`,
         }),
@@ -140,7 +140,7 @@ const stallNotice = (lockPath: string, label: string, phase: Phase, interval: Du
   Effect.gen(function* () {
     const start = yield* Clock.currentTimeMillis;
     const notice = Effect.gen(function* () {
-      // Report real elapsed time, not an accumulated interval count — the
+      // Report real elapsed time, not an accumulated interval count -- the
       // notice cadence and the reported wait must not drift apart.
       const now = yield* Clock.currentTimeMillis;
       const seconds = Math.round((now - start) / 1000);
@@ -154,7 +154,7 @@ const stallNotice = (lockPath: string, label: string, phase: Phase, interval: Du
     });
     // `Effect.schedule` (unlike `Effect.repeat`) consults the schedule
     // before the first run, and `Schedule.fixed`'s first recurrence comes
-    // after one full interval — so notices fire at interval, 2*interval, …
+    // after one full interval -- so notices fire at interval, 2*interval, ...
     // on true wall-clock boundaries.
     yield* Effect.schedule(notice, Schedule.fixed(interval));
   });
@@ -182,8 +182,8 @@ export const withLock = <A, E, R>(
     /**
      * Print a periodic notice to stderr while this lock is being waited on
      * or held (see {@link stallNotice}). Pass `false` for flows that
-     * legitimately block on the user — a browser OAuth round-trip, an
-     * `aws sso login` child process — where a repeating notice would be
+     * legitimately block on the user -- a browser OAuth round-trip, an
+     * `aws sso login` child process -- where a repeating notice would be
      * both wrong and destructive to the prompt on screen.
      *
      * @default true

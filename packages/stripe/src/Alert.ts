@@ -43,7 +43,7 @@ export interface AlertUsageThresholdFilter {
    */
   type: "customer";
   /**
-   * Stripe Customer id (`cus_…`) this alert is limited to.
+   * Stripe Customer id (`cus_...`) this alert is limited to.
    */
   customer?: string;
 }
@@ -51,13 +51,13 @@ export interface AlertUsageThresholdFilter {
 /** Configuration for a usage-threshold billing alert. Create-only. */
 export interface AlertUsageThreshold {
   /**
-   * Usage value at which the alert fires. Create-only — changing it
+   * Usage value at which the alert fires. Create-only -- changing it
    * replaces the alert.
    */
   gte: number;
   /**
-   * Id of the Billing Meter whose usage is monitored (`mtr_…`).
-   * Create-only — changing it replaces the alert.
+   * Id of the Billing Meter whose usage is monitored (`mtr_...`).
+   * Create-only -- changing it replaces the alert.
    */
   meter: string;
   /**
@@ -75,7 +75,7 @@ export interface AlertUsageThreshold {
 export interface AlertProps {
   /**
    * Title of the alert. If omitted, a unique title is generated from the
-   * stack, stage, and logical id. Create-only — changing it replaces the
+   * stack, stage, and logical id. Create-only -- changing it replaces the
    * alert. Max 256 characters.
    */
   title?: string;
@@ -85,7 +85,7 @@ export interface AlertProps {
    */
   alertType?: AlertType;
   /**
-   * Usage-threshold configuration. Create-only — changing `gte`, `meter`,
+   * Usage-threshold configuration. Create-only -- changing `gte`, `meter`,
    * `recurrence`, or `filters` replaces the alert.
    */
   usageThreshold: AlertUsageThreshold;
@@ -101,7 +101,7 @@ export type Alert = Resource<
   "Stripe.Alert",
   AlertProps,
   {
-    /** Stripe billing alert id (`alrt_…`). */
+    /** Stripe billing alert id (`alrt_...`). */
     id: string;
     /** Title of the alert. */
     title: string;
@@ -119,7 +119,7 @@ export type Alert = Resource<
 >;
 
 /**
- * A Stripe Billing Alert — notifies you when a usage threshold on a
+ * A Stripe Billing Alert -- notifies you when a usage threshold on a
  * [Billing Meter](https://docs.stripe.com/api/billing/meter) is crossed.
  * `title`, `alertType`, and `usageThreshold` are immutable; changing them
  * replaces the alert. `status` is changed with Stripe's activate/deactivate

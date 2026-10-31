@@ -8,15 +8,15 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
 /**
  * Shared scaffolding for AWS Elemental MediaPackage v2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate: each builder injects the bound resource's identifying
  * names (`ChannelGroupName` / `ChannelName` / `OriginEndpointName`) into
  * every request and grants `actions` on the resource's ARN.
  *
  * Harvest-job operations authorize against the *harvest job* ARN, which is
- * the origin endpoint ARN with a `/harvestJob/{name}` suffix — set
+ * the origin endpoint ARN with a `/harvestJob/{name}` suffix -- set
  * `harvestJobScoped` to grant on that pattern instead of the endpoint ARN.
  */
 
@@ -24,8 +24,8 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * Build the impl Effect for a MediaPackage v2 operation scoped to a
  * {@link ChannelGroup}: the runtime callable injects the group's
  * `ChannelGroupName` and the deploy-time half grants `actions` on the
- * group ARN (plus everything beneath it — channels, endpoints, harvest
- * jobs — for list operations that enumerate child resources).
+ * group ARN (plus everything beneath it -- channels, endpoints, harvest
+ * jobs -- for list operations that enumerate child resources).
  */
 export const makeMediaPackageV2ChannelGroupHttpBinding = <
   I extends { ChannelGroupName: string },
@@ -124,12 +124,12 @@ export const makeMediaPackageV2ChannelHttpBinding = <
  * Build the impl Effect for a MediaPackage v2 operation scoped to an
  * {@link OriginEndpoint}: the runtime callable injects the endpoint's
  * `ChannelGroupName` + `ChannelName` + `OriginEndpointName` and the
- * deploy-time half grants `actions` on the endpoint ARN — plus, when
+ * deploy-time half grants `actions` on the endpoint ARN -- plus, when
  * `harvestJobScoped` is set, on the endpoint's harvest-job ARN pattern
  * (`{endpointArn}/harvestJob/*`) and the parent channel-group ARN:
  * MediaPackage authorizes `CreateHarvestJob` against the bare channel
  * group (observed live: "not authorized to perform
- * mediapackagev2:CreateHarvestJob on resource: arn:…:channelGroup/{g}").
+ * mediapackagev2:CreateHarvestJob on resource: arn:...:channelGroup/{g}").
  */
 export const makeMediaPackageV2OriginEndpointHttpBinding = <
   I extends {
@@ -169,7 +169,7 @@ export const makeMediaPackageV2OriginEndpointHttpBinding = <
                 ...(options.harvestJobScoped
                   ? [
                       Output.interpolate`${endpoint.originEndpointArn}/harvestJob/*`,
-                      // The endpoint ARN is `…:channelGroup/{g}/channel/{c}/originEndpoint/{e}`;
+                      // The endpoint ARN is `...:channelGroup/{g}/channel/{c}/originEndpoint/{e}`;
                       // harvest-job actions authorize against the bare
                       // channel-group ARN prefix.
                       Output.map(

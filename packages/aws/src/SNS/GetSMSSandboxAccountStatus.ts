@@ -7,7 +7,7 @@ export interface GetSMSSandboxAccountStatusRequest extends sns.GetSMSSandboxAcco
 /**
  * Runtime binding for `sns:GetSMSSandboxAccountStatus`.
  *
- * An account-scoped operation — reports whether the account is still in
+ * An account-scoped operation -- reports whether the account is still in
  * the SMS sandbox (only verified destination numbers deliverable).
  * Provide the `GetSMSSandboxAccountStatusHttp` layer on the Function to implement the binding.
  * ### SMS Sandbox

@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Reads the observed tags on a Control Tower resource (landing zone,
- * enabled control, or enabled baseline). Tag reads are best-effort — any
+ * enabled control, or enabled baseline). Tag reads are best-effort -- any
  * failure degrades to an empty map so ownership checks and tag syncs never
  * block the main lifecycle flow.
  */

@@ -43,7 +43,7 @@ export interface VariantsValue {
 
 export interface VariantsProps extends VariantsValue {
   /**
-   * Zone whose Variants cache setting is managed. Stable — changing the
+   * Zone whose Variants cache setting is managed. Stable -- changing the
    * zone triggers a replacement (the old zone's setting is deleted, the
    * new zone's setting is created).
    */
@@ -71,8 +71,8 @@ export type Variants = Resource<TypeId, VariantsProps, VariantsAttributes, never
  * (`/zones/{zone_id}/cache/variants`).
  *
  * Variants lets a zone cache and serve multiple content types for the same
- * URL — e.g. serve `image/webp` to browsers that accept it for a `.jpeg`
- * URL — which is the setting behind "Serve WebP/AVIF to supported clients"
+ * URL -- e.g. serve `image/webp` to browsers that accept it for a `.jpeg`
+ * URL -- which is the setting behind "Serve WebP/AVIF to supported clients"
  * workflows (typically combined with an image-resizing origin or worker).
  *
  * Unlike most zone cache settings, Variants has true create/delete
@@ -82,7 +82,7 @@ export type Variants = Resource<TypeId, VariantsProps, VariantsAttributes, never
  * resource therefore creates the setting on first deploy and deletes it
  * on destroy.
  *
- * Only one `Variants` resource per zone makes sense — the setting is a
+ * Only one `Variants` resource per zone makes sense -- the setting is a
  * zone singleton, and two instances managing the same zone would fight
  * over it.
  * ### Managing Variants
@@ -178,7 +178,7 @@ export const VariantsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this per-zone setting — enumerate every
+      // No account-wide API for this per-zone setting -- enumerate every
       // zone in the account and read its variants setting. Unlike most
       // zone singletons, Variants has true create/delete semantics, so a
       // zone that never configured it returns `VariantsNotConfigured`;
@@ -189,7 +189,7 @@ export const VariantsProvider = () =>
         (zoneId) =>
           cache.getVariant({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed)),
-            // Setting never configured on this zone — nothing to enumerate.
+            // Setting never configured on this zone -- nothing to enumerate.
             Effect.catchTag("VariantsNotConfigured", () => Effect.undefined),
             // Plan-gated zones reject the setting (`Forbidden`, code 1135
             // "not available for your plan type") or the route entirely
@@ -216,15 +216,15 @@ export const VariantsProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* cache.getVariant({ zoneId }).pipe(
-        // The setting has never been written (or was deleted) — gone.
+        // The setting has never been written (or was deleted) -- gone.
         Effect.catchTags({
           VariantsNotConfigured: () => Effect.undefined,
-          // Zone deleted out-of-band — the setting is gone with it.
+          // Zone deleted out-of-band -- the setting is gone with it.
           InvalidRoute: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return undefined;
-      // The setting is a zone singleton with no ownership tags — a cold
+      // The setting is a zone singleton with no ownership tags -- a cold
       // read adopts freely; reconcile converges it to the desired value.
       return toAttributes(zoneId, observed);
     }),
@@ -233,12 +233,12 @@ export const VariantsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting may not exist yet (typed 404).
+      // 1. Observe -- the setting may not exist yet (typed 404).
       const observed = yield* cache
         .getVariant({ zoneId })
         .pipe(Effect.catchTag("VariantsNotConfigured", () => Effect.undefined));
 
-      // 2. Sync — PATCH both creates and replaces the full value, so a
+      // 2. Sync -- PATCH both creates and replaces the full value, so a
       //    single upsert call converges missing and divergent states.
       //    Skip the API entirely when the observed value already matches.
       const desired = desiredValue(news);

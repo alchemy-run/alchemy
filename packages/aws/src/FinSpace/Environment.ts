@@ -38,7 +38,7 @@ export interface EnvironmentProps {
    */
   kmsKeyId?: string;
   /**
-   * Authentication mode for the environment — `FEDERATED` (SAML) or `LOCAL`.
+   * Authentication mode for the environment -- `FEDERATED` (SAML) or `LOCAL`.
    */
   federationMode?: FederationMode;
   /**
@@ -109,7 +109,7 @@ export interface Environment extends Resource<
 > {}
 
 /**
- * An Amazon FinSpace environment — a managed data management and analytics
+ * An Amazon FinSpace environment -- a managed data management and analytics
  * workspace for the financial services industry.
  *
  * :::caution
@@ -191,7 +191,7 @@ const readEnvironmentById = Effect.fn(function* (environmentId: string) {
   return env;
 });
 
-// listEnvironments is not marked paginated in the Smithy model — paginate by
+// listEnvironments is not marked paginated in the Smithy model -- paginate by
 // hand, page-bounded, treating an absent/empty nextToken as terminal.
 const listAllEnvironments = Effect.gen(function* () {
   const environments: finspace.Environment[] = [];
@@ -211,7 +211,7 @@ const findEnvironmentByName = Effect.fn(function* (name: string) {
 });
 
 /**
- * An environment still transitioning toward the awaited status — retried by
+ * An environment still transitioning toward the awaited status -- retried by
  * the bounded schedule in {@link waitForEnvironmentStatus}.
  */
 class EnvironmentNotReady extends Data.TaggedError("EnvironmentNotReady")<{
@@ -230,7 +230,7 @@ export class EnvironmentProvisioningFailed extends Data.TaggedError(
   readonly status: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -304,13 +304,13 @@ export const EnvironmentProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let env = output?.environmentId
             ? yield* readEnvironmentById(output.environmentId)
             : yield* findEnvironmentByName(name);
 
-          // Ensure — create if missing, then wait for CREATED.
+          // Ensure -- create if missing, then wait for CREATED.
           if (env === undefined) {
             const created = yield* finspace.createEnvironment({
               name,
@@ -345,7 +345,7 @@ export const EnvironmentProvider = () =>
             });
           }
 
-          // Sync mutable settings — only call UpdateEnvironment on drift.
+          // Sync mutable settings -- only call UpdateEnvironment on drift.
           const needsUpdate =
             name !== env.name ||
             (props.description !== undefined && props.description !== env.description) ||
@@ -361,7 +361,7 @@ export const EnvironmentProvider = () =>
             yield* session.note(`Updated FinSpace environment ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const attrs = yield* toAttributes(env, environmentId);
           if (attrs.environmentArn) {
             const { removed, upsert } = diffTags(attrs.tags, desiredTags);

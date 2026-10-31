@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Retrieves the VPC endpoint service name of an Aurora DSQL cluster — the
+ * Retrieves the VPC endpoint service name of an Aurora DSQL cluster -- the
  * `com.amazonaws.{region}.dsql-{suffix}` PrivateLink service name used to
  * create a VPC interface endpoint that reaches the cluster privately.
  *

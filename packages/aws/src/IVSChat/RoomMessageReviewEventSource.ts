@@ -4,7 +4,7 @@ import type { Room } from "./Room.ts";
 
 /**
  * The payload Amazon IVS Chat sends to a room's message review handler for
- * every `SendMessage` request — the wire shape is PascalCase, verbatim from
+ * every `SendMessage` request -- the wire shape is PascalCase, verbatim from
  * the [message review handler contract](https://docs.aws.amazon.com/ivs/latest/ChatUserGuide/chat-message-review-handler.html).
  */
 export interface RoomMessageEvent {
@@ -30,14 +30,14 @@ export interface RoomMessageEvent {
 /**
  * The review verdict a message review handler returns to Amazon IVS Chat.
  * `ALLOW` delivers the message (with the possibly-edited `Content` /
- * `Attributes`); `DENY` drops it — the sender receives a WebSocket 406
+ * `Attributes`); `DENY` drops it -- the sender receives a WebSocket 406
  * whose message carries `Attributes.Reason` when provided.
  */
 export interface RoomMessageReview {
   /** Whether to deliver the message. */
   ReviewResult: "ALLOW" | "DENY";
   /**
-   * Content to deliver — edited or original. Defaults to the original
+   * Content to deliver -- edited or original. Defaults to the original
    * message content when omitted.
    */
   Content?: string;
@@ -74,7 +74,7 @@ export type RoomMessageReviewEventSourceService = <Req = never>(
 
 /**
  * Event source connecting an IVS Chat {@link Room}'s message review handler
- * to the hosting Lambda function — every message sent to the room is
+ * to the hosting Lambda function -- every message sent to the room is
  * synchronously reviewed (allow / modify / deny) by the handler before
  * delivery.
  *

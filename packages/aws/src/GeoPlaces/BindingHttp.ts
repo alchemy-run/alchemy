@@ -4,8 +4,8 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared HTTP scaffolding for the geo-places runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeGeoPlacesHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeGeoPlacesHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action is boilerplate.
  *
  * geo-places is a standalone, pay-per-call Amazon Location API with no

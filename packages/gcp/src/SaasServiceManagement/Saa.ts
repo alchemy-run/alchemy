@@ -45,12 +45,12 @@ export type SaaProps = {
   /**
    * SaaS id (the `{saas}` segment of
    * `projects/{project}/locations/{location}/saas/{saas}`). If omitted, a
-   * unique RFC1035 name is generated. Immutable — changing it replaces
+   * unique RFC1035 name is generated. Immutable -- changing it replaces
    * the SaaS.
    */
   saasId?: string;
   /**
-   * Region of the SaaS resource (`us-central1`, …). Immutable —
+   * Region of the SaaS resource (`us-central1`, ...). Immutable --
    * changing it replaces the SaaS. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -89,7 +89,7 @@ export type Saa = Resource<
     labels: Record<string, string>;
     /** User annotations. */
     annotations: Record<string, string>;
-    /** Server-reported state (`STATE_ACTIVE`, …). */
+    /** Server-reported state (`STATE_ACTIVE`, ...). */
     state: string | undefined;
     /** Server UUID. */
     uid: string | undefined;

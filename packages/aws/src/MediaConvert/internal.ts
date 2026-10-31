@@ -17,7 +17,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of a MediaConvert resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readMcTags = Effect.fn(function* (arn: string) {
   const response = yield* mediaconvert

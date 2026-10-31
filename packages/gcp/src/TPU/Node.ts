@@ -122,24 +122,24 @@ export type NodeProps = {
    * `projects/{project}/locations/{location}/nodes/{node}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters, start with a letter, and end
-   * with a letter or digit. Immutable — changing it replaces the node.
+   * with a letter or digit. Immutable -- changing it replaces the node.
    */
   nodeId?: string;
   /**
-   * Zone (`us-central1-c`, `us-central1-b`, …). TPU nodes are zonal.
-   * Immutable — changing it replaces the node. `US-CENTRAL1-C` is
+   * Zone (`us-central1-c`, `us-central1-b`, ...). TPU nodes are zonal.
+   * Immutable -- changing it replaces the node. `US-CENTRAL1-C` is
    * accepted and normalized to `us-central1-c`.
    * @default "us-central1-c"
    */
   location?: string;
   /**
    * Runtime version running on the node (e.g. `tpu-ubuntu2204-base`).
-   * Immutable — changing it replaces the node.
+   * Immutable -- changing it replaces the node.
    * @default "tpu-ubuntu2204-base"
    */
   runtimeVersion?: string;
   /**
-   * Accelerator type (`v2-8`, `v3-8`, `v5litepod-8`, …). Mutually
+   * Accelerator type (`v2-8`, `v3-8`, `v5litepod-8`, ...). Mutually
    * exclusive with `acceleratorConfig`. Immutable. If neither is set,
    * defaults to `v2-8`.
    */
@@ -158,7 +158,7 @@ export type NodeProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Custom VM metadata (`startup-script`, `shutdown-script`, …).
+   * Custom VM metadata (`startup-script`, `shutdown-script`, ...).
    */
   metadata?: Record<string, string>;
   /**
@@ -212,7 +212,7 @@ export type Node = Resource<
     nodeId: string;
     /** Project id. */
     project: string;
-    /** Zone id (`us-central1-c`, …). */
+    /** Zone id (`us-central1-c`, ...). */
     location: string;
     /** Server-assigned numeric id. */
     tpuId: string | undefined;
@@ -224,15 +224,15 @@ export type Node = Resource<
     metadata: Record<string, string>;
     /** Network tags. */
     networkTags: string[];
-    /** Accelerator type (`v2-8`, …). */
+    /** Accelerator type (`v2-8`, ...). */
     acceleratorType: string | undefined;
     /** Accelerator config currently applied. */
     acceleratorConfig: AcceleratorConfig | undefined;
     /** Runtime version. */
     runtimeVersion: string | undefined;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
-    /** Health (`HEALTHY`, `TIMEOUT`, …). */
+    /** Health (`HEALTHY`, `TIMEOUT`, ...). */
     health: string | undefined;
     /** Why the node is unhealthy, if populated. */
     healthDescription: string | undefined;

@@ -19,7 +19,7 @@ export interface StartCallAnalyticsJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `transcribe:StartCallAnalyticsJob` — start an asynchronous Call Analytics job (transcription plus call characteristics, sentiment, and category matching) over a call recording in S3.
+ * Runtime binding for `transcribe:StartCallAnalyticsJob` -- start an asynchronous Call Analytics job (transcription plus call characteristics, sentiment, and category matching) over a call recording in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
  * Amazon Transcribe assumes to read your Amazon S3 data and write results;
@@ -31,7 +31,7 @@ export interface StartCallAnalyticsJobRequest extends Omit<
  * ### Call Analytics Jobs
  * **Example:** Start a Call Analytics Job
  * ```typescript
- * // init — bind the Transcribe data-access role
+ * // init -- bind the Transcribe data-access role
  * const startCallAnalyticsJob = yield* AWS.Transcribe.StartCallAnalyticsJob(dataAccessRole);
  *
  * // runtime

@@ -33,7 +33,7 @@ export interface RegexPatternSetProps {
    */
   regexPatternSetName?: string;
   /**
-   * Scope of the regex pattern set — `REGIONAL` (ambient region) or
+   * Scope of the regex pattern set -- `REGIONAL` (ambient region) or
    * `CLOUDFRONT` (pinned to `us-east-1`). Must match the scope of the web
    * ACLs and rule groups that reference it. Changing the scope replaces the
    * regex pattern set.
@@ -42,7 +42,7 @@ export interface RegexPatternSetProps {
   scope?: WafScope;
   /**
    * Regular expressions in the set (1-10 patterns, each up to 200
-   * characters). Mutable — updated in place.
+   * characters). Mutable -- updated in place.
    */
   regularExpressions: string[];
   /**
@@ -68,7 +68,7 @@ export interface RegexPatternSet extends Resource<
      */
     regexPatternSetId: string;
     /**
-     * ARN of the regex pattern set — reference it from a rule's
+     * ARN of the regex pattern set -- reference it from a rule's
      * `RegexPatternSetReferenceStatement`.
      */
     regexPatternSetArn: string;
@@ -86,7 +86,7 @@ export interface RegexPatternSet extends Resource<
 > {}
 
 /**
- * An AWS WAFv2 regex pattern set — a named collection of regular expressions
+ * An AWS WAFv2 regex pattern set -- a named collection of regular expressions
  * referenced from web ACL and rule group rules via
  * `RegexPatternSetReferenceStatement`.
  *
@@ -288,7 +288,7 @@ export const RegexPatternSetProvider = () =>
           // 1. Observe.
           let observed = yield* findSet(scope, name, output?.regexPatternSetId);
 
-          // 2. Ensure — tolerate a duplicate-create race and re-read.
+          // 2. Ensure -- tolerate a duplicate-create race and re-read.
           if (!observed?.RegexPatternSet) {
             yield* withWafScope(
               scope,
@@ -316,7 +316,7 @@ export const RegexPatternSetProvider = () =>
           yield* session.note(arn);
 
           // 3. Sync expressions + description against OBSERVED state. WAF
-          //    may return the list in arbitrary order — compare as sets.
+          //    may return the list in arbitrary order -- compare as sets.
           const drifted = !deepEqual(
             {
               RegularExpressions: sorted(fromExpressionList(set.RegularExpressionList)),
@@ -363,7 +363,7 @@ export const RegexPatternSetProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const scope = output.scope;
           // A pattern set still referenced by a web ACL rule (deletion
-          // propagation) surfaces WAFAssociatedItemException — retry it.
+          // propagation) surfaces WAFAssociatedItemException -- retry it.
           yield* Effect.gen(function* () {
             const found = yield* withWafScope(
               scope,

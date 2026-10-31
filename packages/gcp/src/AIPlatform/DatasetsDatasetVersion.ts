@@ -24,7 +24,7 @@ export type DatasetsDatasetVersionProps = {
   /**
    * Parent Dataset resource name
    * `projects/{project}/locations/{location}/datasets/{dataset}`.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   dataset: string;
   /**
@@ -67,7 +67,7 @@ export type DatasetsDatasetVersion = Resource<
 >;
 
 /**
- * A Vertex AI DatasetVersion — a snapshot of a Dataset.
+ * A Vertex AI DatasetVersion -- a snapshot of a Dataset.
  *
  * Versions have no labels field, so Alchemy stamps ownership into
  * `displayName` for `list` / nuke. The parent dataset is immutable;
@@ -140,8 +140,8 @@ const getByName = (name: string) =>
 
 /**
  * Dataset versions carry ownership only in their display name, which
- * Vertex AI caps at 128 characters — too short for the full
- * `[alchemy stack=… stage=… id=…]` marker of long stack names. Stamp a
+ * Vertex AI caps at 128 characters -- too short for the full
+ * `[alchemy stack=... stage=... id=...]` marker of long stack names. Stamp a
  * fixed-width hash of the ownership labels instead.
  */
 const ownerTag = (id: string) =>

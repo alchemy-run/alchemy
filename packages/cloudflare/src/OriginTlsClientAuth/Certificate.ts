@@ -16,7 +16,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the certificate. Deploying and deleting are
- * asynchronous (`pending_deployment` → `active`, `pending_deletion` →
+ * asynchronous (`pending_deployment` -> `active`, `pending_deletion` ->
  * `deleted`), typically settling within minutes.
  */
 export type CertificateStatus =
@@ -32,20 +32,20 @@ export type CertificateStatus =
 
 export type CertificateProps = {
   /**
-   * Zone the certificate is uploaded to. Cannot be changed after upload —
+   * Zone the certificate is uploaded to. Cannot be changed after upload --
    * updating this property triggers a replacement.
    */
   zoneId: string;
   /**
    * The zone's leaf client certificate in PEM format, presented by
    * Cloudflare to your origin when Authenticated Origin Pulls is enabled.
-   * Cannot be changed after upload — updating this property triggers a
+   * Cannot be changed after upload -- updating this property triggers a
    * replacement.
    */
   certificate: string;
   /**
    * The certificate's private key in PEM format. Cannot be changed after
-   * upload — updating this property triggers a replacement.
+   * upload -- updating this property triggers a replacement.
    */
   privateKey: Redacted.Redacted<string>;
 };
@@ -85,7 +85,7 @@ export type Certificate = Resource<
  * requests really come from Cloudflare via mTLS.
  *
  * Certificates are immutable: there is no update API, so changing any
- * property triggers a replacement. Deployment is asynchronous — the
+ * property triggers a replacement. Deployment is asynchronous -- the
  * certificate starts in `pending_deployment` and becomes `active` within a
  * few minutes; deletion likewise passes through `pending_deletion`.
  * ### Uploading a certificate
@@ -145,7 +145,7 @@ export const CertificateProvider = () =>
           normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
         (o.privateKey !== undefined && unwrap(o.privateKey) !== unwrap(n.privateKey))
       ) {
-        // There is no update API for zone client certificates — every change
+        // There is no update API for zone client certificates -- every change
         // is a replacement.
         return { action: "replace" } as const;
       }
@@ -159,7 +159,7 @@ export const CertificateProvider = () =>
         const observed = yield* observeById(zoneId, output.certificateId);
         if (observed) return toAttributes(observed, zoneId);
       }
-      // Cold read — recover by listing and matching on the certificate PEM
+      // Cold read -- recover by listing and matching on the certificate PEM
       // content (the only identity available; zone client certificates have
       // no name or tags). A content match IS the desired state, so adoption
       // is safe without an `Unowned` gate.
@@ -174,7 +174,7 @@ export const CertificateProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the certificate id is the stable identifier; fall
+      // 1. Observe -- the certificate id is the stable identifier; fall
       //    through a CertificateNotFound (or a pending/completed deletion)
       //    to the list+content match so we recover from out-of-band deletes
       //    and partial state persistence.
@@ -182,12 +182,12 @@ export const CertificateProvider = () =>
         ? yield* observeById(zoneId, output.certificateId)
         : yield* findByContent(zoneId, news.certificate);
 
-      // 2. Ensure — upload if missing. Cloudflare rejects uploading a PEM
+      // 2. Ensure -- upload if missing. Cloudflare rejects uploading a PEM
       //    identical to a live certificate (code 1406); tolerate the race
       //    (or an orphaned prior upload) by re-listing and adopting the
       //    certificate with identical PEM content. Re-uploading the PEM of
       //    a certificate in `pending_deletion` resurrects it under the same
-      //    id, so a destroy→deploy cycle converges naturally.
+      //    id, so a destroy->deploy cycle converges naturally.
       if (!observed) {
         observed = yield* originTls
           .createOriginTlsClientAuth({
@@ -203,7 +203,7 @@ export const CertificateProvider = () =>
                 return match;
               }),
             ),
-            // A destroy→deploy cycle re-uploading the same PEM hits 1406 while
+            // A destroy->deploy cycle re-uploading the same PEM hits 1406 while
             // the prior certificate's tombstone is still `pending_deletion`
             // (it settles to `deleted` within ~10s, after which the same PEM
             // either resurrects under its old id or uploads fresh). Ride that
@@ -225,7 +225,7 @@ export const CertificateProvider = () =>
           );
       }
 
-      // 3. Return — deployment is asynchronous (`pending_deployment` →
+      // 3. Return -- deployment is asynchronous (`pending_deployment` ->
       //    `active`); we do not block on activation.
       return toAttributes(observed, zoneId);
     }),
@@ -260,8 +260,8 @@ export const CertificateProvider = () =>
       // Deletion is idempotent: a certificate that is already gone surfaces
       // as `CertificateNotFound`, and one already in (or past) deletion
       // answers HTTP 400 "Certificate is already deleted."
-      // (`CertificateAlreadyDeleted`). Both mean the desired end state — the
-      // certificate is not live — is reached.
+      // (`CertificateAlreadyDeleted`). Both mean the desired end state -- the
+      // certificate is not live -- is reached.
       yield* originTls
         .deleteOriginTlsClientAuth({
           zoneId: output.zoneId,
@@ -270,7 +270,7 @@ export const CertificateProvider = () =>
         .pipe(
           // A certificate still propagating its initial deployment answers
           // code 1434 "Cannot delete resource while in pending deployment
-          // state." — this is why a destroy immediately after a deploy could
+          // state." -- this is why a destroy immediately after a deploy could
           // leak the certificate. Deployment settles within seconds, so ride
           // it out with a bounded (~60s) retry.
           //
@@ -303,13 +303,13 @@ const observeById = (zoneId: string, certificateId: string) =>
   );
 
 // Locate a live certificate by exact PEM content. Tombstoned certificates
-// are excluded so a destroy→deploy cycle re-creates (resurrects) instead of
+// are excluded so a destroy->deploy cycle re-creates (resurrects) instead of
 // adopting a certificate that is on its way out.
 const findByContent = (zoneId: string, certificate: string) =>
   Effect.gen(function* () {
     const list = yield* originTls.listOriginTlsClientAuths({ zoneId });
     // Cloudflare returns `result: null` (not `[]`) for a zone whose cert store
-    // is empty — treat it as no matches.
+    // is empty -- treat it as no matches.
     return (list.result ?? []).find(
       (c) => isLive(c.status) && normalizePem(c.certificate ?? "") === normalizePem(certificate),
     );

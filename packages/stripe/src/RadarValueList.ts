@@ -32,7 +32,7 @@ const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
 
 /**
- * Type of items stored in a Radar value list. Create-only — changing it
+ * Type of items stored in a Radar value list. Create-only -- changing it
  * replaces the list.
  */
 export type RadarValueListItemType =
@@ -54,7 +54,7 @@ export interface RadarValueListProps {
    * Alias used to reference this list in Radar rules. Unique per account;
    * alphanumeric characters and underscores only, max 100 characters. If
    * omitted, a unique alias is generated from the stack, stage, and
-   * logical id. Create-only — changing it replaces the list.
+   * logical id. Create-only -- changing it replaces the list.
    */
   alias?: string;
   /**
@@ -79,7 +79,7 @@ export type RadarValueList = Resource<
   "Stripe.RadarValueList",
   RadarValueListProps,
   {
-    /** Stripe Radar value list id (`rsl_…`). */
+    /** Stripe Radar value list id (`rsl_...`). */
     id: string;
     /** Alias used to reference this list in Radar rules. */
     alias: string;
@@ -101,8 +101,8 @@ export type RadarValueList = Resource<
 >;
 
 /**
- * A Stripe Radar Value List — a named collection of values (emails, IPs,
- * card fingerprints, …) referenced from Radar rules. `alias` and
+ * A Stripe Radar Value List -- a named collection of values (emails, IPs,
+ * card fingerprints, ...) referenced from Radar rules. `alias` and
  * `itemType` are immutable and changing them replaces the list. Name and
  * metadata update in place. Destroy deletes the list and its items; a
  * list referenced by a Radar rule cannot be deleted.

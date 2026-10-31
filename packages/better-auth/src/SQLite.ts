@@ -17,7 +17,7 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
   );
 
 /**
- * Local `bun:sqlite` database layer for Better Auth — development and
+ * Local `bun:sqlite` database layer for Better Auth -- development and
  * tests on the bun runtime only (a deployed Worker/Lambda cannot open a
  * local SQLite file).
  *

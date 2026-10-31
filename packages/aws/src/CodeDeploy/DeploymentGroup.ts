@@ -86,7 +86,7 @@ const toWireBlueGreen = (
 export interface DeploymentGroupProps {
   /**
    * Name of the CodeDeploy application that owns the group. Pass an
-   * `Application`'s `applicationName` attribute. Immutable — changing it
+   * `Application`'s `applicationName` attribute. Immutable -- changing it
    * replaces the deployment group.
    */
   applicationName: string;
@@ -170,7 +170,7 @@ export interface DeploymentGroup extends Resource<
 > {}
 
 /**
- * An AWS CodeDeploy deployment group — the set of target instances/functions
+ * An AWS CodeDeploy deployment group -- the set of target instances/functions
  * plus the deployment configuration for one {@link Application}. For the
  * `Lambda` compute platform a group ties a service role and a deployment
  * config (e.g. `CodeDeployDefault.LambdaAllAtOnce`) to an application.
@@ -285,7 +285,7 @@ export const DeploymentGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // The parent application is immutable — replace on change.
+          // The parent application is immutable -- replace on change.
           if ((news?.applicationName ?? "") !== (olds?.applicationName ?? "")) {
             return { action: "replace" } as const;
           }
@@ -321,10 +321,10 @@ export const DeploymentGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let group = yield* getGroup(appName, name);
 
-          // 2. Ensure — create if missing; otherwise converge via update.
+          // 2. Ensure -- create if missing; otherwise converge via update.
           if (group?.deploymentGroupId === undefined) {
             yield* retryThroughRolePropagation(
               codedeploy.createDeploymentGroup({
@@ -353,7 +353,7 @@ export const DeploymentGroupProvider = () =>
             );
             group = yield* getGroup(appName, name);
           } else {
-            // 3. Sync — converge mutable configuration in place.
+            // 3. Sync -- converge mutable configuration in place.
             yield* codedeploy.updateDeploymentGroup({
               applicationName: appName,
               currentDeploymentGroupName: name,
@@ -374,7 +374,7 @@ export const DeploymentGroupProvider = () =>
             group = yield* getGroup(appName, name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(arn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -391,7 +391,7 @@ export const DeploymentGroupProvider = () =>
         delete: Effect.fn(function* ({ output, olds }) {
           const appName = output.applicationName || olds?.applicationName;
           if (appName === undefined) return;
-          // DeleteDeploymentGroup is idempotent — deleting a non-existent
+          // DeleteDeploymentGroup is idempotent -- deleting a non-existent
           // group (or one under a deleted application) succeeds; its typed
           // error union has no not-found variants.
           yield* codedeploy.deleteDeploymentGroup({

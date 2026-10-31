@@ -28,10 +28,10 @@ export interface MonitorProps {
    */
   monitorName?: string;
   /**
-   * ARNs of the resources to monitor — VPCs, Network Load Balancers,
+   * ARNs of the resources to monitor -- VPCs, Network Load Balancers,
    * CloudFront distributions, or Amazon WorkSpaces directories. Added and
    * removed in place via UpdateMonitor.
-   * @default [] — no resources are monitored until some are added
+   * @default [] -- no resources are monitored until some are added
    */
   resources?: string[];
   /**
@@ -52,13 +52,13 @@ export interface MonitorProps {
    */
   internetMeasurementsLogDelivery?: im.InternetMeasurementsLogDelivery;
   /**
-   * Health-event thresholds — the percentage of overall traffic impact at
+   * Health-event thresholds -- the percentage of overall traffic impact at
    * which the monitor creates availability or performance health events.
    * @default AWS creates health events at a 95% threshold
    */
   healthEventsConfig?: im.HealthEventsConfig;
   /**
-   * Desired state of the monitor — `"ACTIVE"` (monitoring) or
+   * Desired state of the monitor -- `"ACTIVE"` (monitoring) or
    * `"INACTIVE"` (paused). Toggled in place via UpdateMonitor.
    * @default "ACTIVE"
    */
@@ -95,7 +95,7 @@ export interface Monitor extends Resource<
 > {}
 
 /**
- * An Amazon CloudWatch Internet Monitor **monitor** — measures internet
+ * An Amazon CloudWatch Internet Monitor **monitor** -- measures internet
  * availability and performance between your AWS-hosted application and your
  * end users' city-networks (client locations and ASNs, typically ISPs).
  *
@@ -263,10 +263,10 @@ export const MonitorProvider = () =>
           const desiredTags = { ...props.tags, ...internalTags };
           const desiredStatus = props.status ?? "ACTIVE";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readMonitor(name);
 
-          // 2. Ensure — create if missing; a ConflictException means a peer
+          // 2. Ensure -- create if missing; a ConflictException means a peer
           //    created the same-named monitor concurrently, so re-observe.
           if (observed === undefined) {
             yield* im
@@ -286,7 +286,7 @@ export const MonitorProvider = () =>
           // so UpdateMonitor is not rejected mid-transition.
           observed = yield* waitUntilSettled(name);
 
-          // 3. Sync — compute the update delta from OBSERVED state and
+          // 3. Sync -- compute the update delta from OBSERVED state and
           //    apply a single UpdateMonitor only when something changed.
           const update: im.UpdateMonitorInput = { MonitorName: name };
           let mutated = false;
@@ -347,7 +347,7 @@ export const MonitorProvider = () =>
             observed = yield* waitUntilSettled(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(observed.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -371,7 +371,7 @@ export const MonitorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const name = output.monitorName;
           // DeleteMonitor rejects monitors that are not INACTIVE
-          // ("must be in inactive state before deletion") — deactivate
+          // ("must be in inactive state before deletion") -- deactivate
           // first, then wait (bounded) for the transition to land.
           const observed = yield* readMonitor(name);
           if (observed === undefined) return;
@@ -400,7 +400,7 @@ export const MonitorProvider = () =>
 
           // Internet Monitor auto-creates per-monitor CloudWatch log groups
           // (/aws/internet-monitor/{name}/{byCity,byCountry,byMetro,
-          // bySubdivision}) that survive DeleteMonitor — reap them so the
+          // bySubdivision}) that survive DeleteMonitor -- reap them so the
           // monitor leaves no orphans (same doctrine as the Lambda Function
           // /aws/lambda/{name} log-group reap).
           const logGroupPrefix = `/aws/internet-monitor/${name}`;
@@ -425,7 +425,7 @@ export const MonitorProvider = () =>
               ),
             ),
           );
-          // Log-group creation/delivery is asynchronous — a group can
+          // Log-group creation/delivery is asynchronous -- a group can
           // materialize shortly after the monitor is gone, so sweep again on
           // a short bounded schedule (t=0s / 10s / 20s, each sweep idempotent).
           yield* reapLogGroups.pipe(

@@ -25,7 +25,7 @@ export interface ActiveReceiptRuleSet extends Resource<
 > {}
 
 /**
- * The account's active Amazon SES receipt rule set — the single rule set (per
+ * The account's active Amazon SES receipt rule set -- the single rule set (per
  * account, per region) that SES actually evaluates against inbound mail.
  *
  * This is an account-level singleton pointer, not a container: only one rule

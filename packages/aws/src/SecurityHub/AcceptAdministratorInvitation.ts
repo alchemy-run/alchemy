@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:AcceptAdministratorInvitation`.
  *
  * Accepts an invitation to become a member of a Security Hub administrator account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.AcceptAdministratorInvitationHttp)`.
  * ### Members & Organization
  * **Example:** Accept an Administrator Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const acceptAdministratorInvitation = yield* AWS.SecurityHub.AcceptAdministratorInvitation();
  *
  * // runtime

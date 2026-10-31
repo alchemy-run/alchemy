@@ -62,7 +62,7 @@ export type Subscription = Resource<
 >;
 
 /**
- * A K2 subscription — a named read position on a {@link Stream}. Consumers
+ * A K2 subscription -- a named read position on a {@link Stream}. Consumers
  * lease batches of records from a subscription, then acknowledge them to
  * advance it. Every subscription on a stream reads every record
  * independently; consumers sharing one subscription compete for batches.
@@ -162,13 +162,13 @@ export const SubscriptionProvider = () =>
           : yield* subscriptionName(id, news.name);
       const startAt = news.startAt ?? "latest";
 
-      // Observe — the cached id is only valid on the same stream.
+      // Observe -- the cached id is only valid on the same stream.
       let observed =
         output?.subscriptionId && output.streamId === streamId
           ? yield* getSubscription(streamId, output.subscriptionId)
           : undefined;
 
-      // Ensure — creating with the same name and settings returns the
+      // Ensure -- creating with the same name and settings returns the
       // existing subscription's id, so a lost state write converges here.
       if (!observed) {
         const created = yield* k2.createSubscription({

@@ -73,12 +73,12 @@ export type NotebookReservationAffinity = {
 export type NotebookRuntimeTemplateProps = {
   /**
    * Template id (the `{notebook_runtime_template}` segment). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it replaces
+   * a unique RFC1035 name is generated. Immutable -- changing it replaces
    * the template.
    */
   notebookRuntimeTemplateId?: string;
   /**
-   * Vertex AI location. Immutable — changing it replaces the template.
+   * Vertex AI location. Immutable -- changing it replaces the template.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -103,7 +103,7 @@ export type NotebookRuntimeTemplateProps = {
    */
   notebookRuntimeType?: string;
   /**
-   * Machine spec. Immutable — changing it replaces the template.
+   * Machine spec. Immutable -- changing it replaces the template.
    * @default { machineType: "e2-standard-4" }
    */
   machineSpec?: MachineSpec;
@@ -178,7 +178,7 @@ export type NotebookRuntimeTemplate = Resource<
 >;
 
 /**
- * A Vertex AI notebook runtime template — machine, disk, network, and
+ * A Vertex AI notebook runtime template -- machine, disk, network, and
  * software defaults used to create Colab Enterprise runtimes.
  *
  * Only `displayName` and `softwareConfig` update in place; changing

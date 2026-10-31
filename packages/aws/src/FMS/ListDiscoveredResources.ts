@@ -15,7 +15,7 @@ export interface ListDiscoveredResourcesRequest extends fms.ListDiscoveredResour
  * ### Resource Sets
  * **Example:** Discover Associable Resources
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listDiscoveredResources = yield* AWS.FMS.ListDiscoveredResources();
  *
  * // runtime

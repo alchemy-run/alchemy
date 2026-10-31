@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetResourceEvaluationSummary` — read the
+ * Runtime binding for `config:GetResourceEvaluationSummary` -- read the
  * status and compliance verdict of a proactive resource evaluation started
  * with `StartResourceEvaluation`.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Proactive Resource Evaluation
  * **Example:** Read an Evaluation's Summary
  * ```typescript
- * // init — grants config:GetResourceEvaluationSummary
+ * // init -- grants config:GetResourceEvaluationSummary
  * const getResourceEvaluationSummary = yield* AWS.Config.GetResourceEvaluationSummary();
  *
  * // runtime

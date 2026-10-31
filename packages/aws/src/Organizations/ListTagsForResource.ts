@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListTagsForResource`.
  *
- * Lists the tags attached to the specified Organizations resource — an account, root, organizational unit, or policy.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists the tags attached to the specified Organizations resource -- an account, root, organizational unit, or policy.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListTagsForResourceHttp)`.
  * ### Tags
  * **Example:** Read an Account's Organization Tags
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listTagsForResource = yield* AWS.Organizations.ListTagsForResource();
  *
  * // runtime

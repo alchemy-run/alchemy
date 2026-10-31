@@ -36,13 +36,13 @@ export type ServiceProps = {
    * Service id (the `{service}` segment of
    * `projects/{project}/locations/{location}/services/{service}`).
    * If omitted, a unique RFC1035 name is generated from the stack,
-   * stage, and logical id. Immutable — changing it replaces the
+   * stage, and logical id. Immutable -- changing it replaces the
    * service. Must start with a letter, contain only lowercase letters,
    * digits, and hyphens, and be at most 63 characters.
    */
   serviceId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the service. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -96,7 +96,7 @@ export type Service = Resource<
 >;
 
 /**
- * A Firebase Data Connect service — the parent of a GraphQL schema and
+ * A Firebase Data Connect service -- the parent of a GraphQL schema and
  * connectors.
  *
  * Changing `serviceId` or `location` replaces the service. Display

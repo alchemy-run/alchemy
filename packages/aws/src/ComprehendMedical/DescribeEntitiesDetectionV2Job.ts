@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:DescribeEntitiesDetectionV2Job` — get the properties and status of an asynchronous medical entity detection job.
+ * Runtime binding for `comprehendmedical:DescribeEntitiesDetectionV2Job` -- get the properties and status of an asynchronous medical entity detection job.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:DescribeEntitiesDetectionV2Job` on `*`. Provide the

@@ -3,7 +3,7 @@ import { readWriteClient, ReadWriteTunnel } from "./ReadWriteTunnel.ts";
 import { makeLocalTunnelClient } from "./TunnelLocalBinding.ts";
 
 /**
- * Local implementation of the {@link ReadWriteTunnel} binding — performs the
+ * Local implementation of the {@link ReadWriteTunnel} binding -- performs the
  * full cfd_tunnel CRUD surface over the HTTP API using the **current
  * credentials** instead of a native Worker binding (`ReadWriteTunnelBinding`)
  * or a scoped API token. No `host.bind`, no minted token, no Worker host.

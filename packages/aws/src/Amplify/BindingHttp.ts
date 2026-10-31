@@ -6,14 +6,14 @@ import type { App } from "./App.ts";
 /**
  * Shared scaffolding for Amplify's app-scoped HTTP bindings. Every Amplify
  * data-plane operation takes the `appId` of the {@link App} it acts on and is
- * authorized by a single `amplify:*` IAM action over an app-derived ARN — this
+ * authorized by a single `amplify:*` IAM action over an app-derived ARN -- this
  * factory captures that shape once so each `{Op}Http.ts` is a thin one-call
  * export.
  *
- * NOT exported from `index.ts` — internal scaffolding only.
+ * NOT exported from `index.ts` -- internal scaffolding only.
  */
 export interface AmplifyHttpBindingOptions<I extends { appId: string }, A, E, R> {
-  /** Capability name, e.g. `"StartJob"` — used for the bind sid and span name. */
+  /** Capability name, e.g. `"StartJob"` -- used for the bind sid and span name. */
   name: string;
   /** The distilled Amplify operation implementing the capability. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;

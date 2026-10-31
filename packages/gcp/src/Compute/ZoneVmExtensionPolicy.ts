@@ -29,7 +29,7 @@ export type ZoneVmExtensionPolicyProps = {
    */
   vmExtensionPolicyName?: string;
   /**
-   * Zone the policy lives in (e.g. `us-central1-a`). Immutable — changing
+   * Zone the policy lives in (e.g. `us-central1-a`). Immutable -- changing
    * it replaces the policy.
    * @default "us-central1-a"
    */
@@ -37,7 +37,7 @@ export type ZoneVmExtensionPolicyProps = {
   /**
    * Optional description. Zone VM extension policies have no labels
    * field, so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -77,7 +77,7 @@ export type ZoneVmExtensionPolicy = Resource<
     instanceSelectors: ReadonlyArray<ZoneVmExtensionPolicyInstanceSelector>;
     /** Extension configurations. */
     extensionPolicies: ZoneVmExtensionPolicyExtensionPolicyMap | undefined;
-    /** Server-reported state (`ACTIVE`, `DELETING`, …). */
+    /** Server-reported state (`ACTIVE`, `DELETING`, ...). */
     state: string | undefined;
     /** Whether a global policy manages this zonal policy. */
     managedByGlobal: boolean;
@@ -100,7 +100,7 @@ export type ZoneVmExtensionPolicy = Resource<
  * has no labels on this resource, so Alchemy stamps ownership into the
  * description so `list` / `pnpm nuke:gcp` can find them.
  *
- * Name and zone are immutable — changing them replaces the policy.
+ * Name and zone are immutable -- changing them replaces the policy.
  * Description, priority, selectors, and extension configurations update
  * in place via `zoneVmExtensionPolicies.patch`.
  *

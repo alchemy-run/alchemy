@@ -45,7 +45,7 @@ const makeFlociServices = (): Layer.Layer<any, FlociError, never> => {
     Region.of(FLOCI_REGION),
     Layer.succeed(Credentials, credentials),
     // Providers read `AWSEnvironment.current` inside lifecycle operations to
-    // compute ARNs/attrs (accountId, region) — override it so computed
+    // compute ARNs/attrs (accountId, region) -- override it so computed
     // identities carry the dummy account and the emulator endpoint.
     Layer.succeed(
       AWSEnvironment,
@@ -70,7 +70,7 @@ let flociServicesLayer: ReturnType<typeof makeFlociServices> | undefined;
  * **module-memoized layer reference** (see the note on
  * [Local/ProviderLayer.ts](../../Local/ProviderLayer.ts)): every
  * {@link flociDual} registration shares this one reference, so the stack
- * build's MemoMap constructs it — and runs `ensureFloci()` — exactly once
+ * build's MemoMap constructs it -- and runs `ensureFloci()` -- exactly once
  * per stack build, and only when a local-mode provider is actually demanded.
  */
 export const flociServices = () => (flociServicesLayer ??= makeFlociServices());

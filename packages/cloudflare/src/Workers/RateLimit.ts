@@ -43,12 +43,12 @@ export type RateLimitProps = {
 };
 
 /**
- * A Cloudflare Rate Limit binding for counting arbitrary keys inside Workers — a
+ * A Cloudflare Rate Limit binding for counting arbitrary keys inside Workers -- a
  * Worker-only binding with no backing cloud resource.
  *
  * `RateLimit` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces a {@link RateLimitBinding}, and the type. Declare it on
- * a Worker's `env` (it flows through `InferEnv` → the native `cf.RateLimit`) or
+ * a Worker's `env` (it flows through `InferEnv` -> the native `cf.RateLimit`) or
  * `yield*` it inside an Effect-native Worker to attach the binding and obtain
  * the {@link RateLimitClient}.
  *
@@ -66,7 +66,7 @@ export type RateLimitProps = {
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
- * //   { THROTTLE: RateLimit } — the native Cloudflare binding
+ * //   { THROTTLE: RateLimit } -- the native Cloudflare binding
  *
  * // worker.ts
  * export default {
@@ -106,7 +106,7 @@ export type RateLimitProps = {
  */
 export interface RateLimit extends Binding.Service<RateLimit, TypeId, RateLimitClient> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @param props Rate limit namespace + simple config.
    */
   (name: string, props: RateLimitProps): RateLimitBinding;

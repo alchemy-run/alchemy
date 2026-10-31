@@ -61,12 +61,12 @@ export type UnitKindProps = {
   /**
    * UnitKind id (the `{unitKind}` segment of
    * `projects/{project}/locations/{location}/unitKinds/{unitKind}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the unit kind.
    */
   unitKindId?: string;
   /**
-   * Region of the unit kind (`us-central1`, …). Immutable — changing it
+   * Region of the unit kind (`us-central1`, ...). Immutable -- changing it
    * replaces the unit kind. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -74,7 +74,7 @@ export type UnitKindProps = {
   location?: string;
   /**
    * SaaS this unit kind belongs to. Accepts a SaaS id or a full
-   * resource name. Immutable — changing it replaces the unit kind.
+   * resource name. Immutable -- changing it replaces the unit kind.
    */
   saas: string;
   /**
@@ -87,7 +87,7 @@ export type UnitKindProps = {
    */
   defaultFlagRevisions?: string[];
   /**
-   * Other unit kinds this kind depends on. Immutable — changing them
+   * Other unit kinds this kind depends on. Immutable -- changing them
    * replaces the unit kind.
    */
   dependencies?: UnitKindDependency[];
@@ -155,7 +155,7 @@ export type UnitKind = Resource<
 >;
 
 /**
- * An App Lifecycle Manager unit kind — the blueprint family that Units
+ * An App Lifecycle Manager unit kind -- the blueprint family that Units
  * of a SaaS share.
  *
  * Units of the same kind follow the same release model and are typically

@@ -124,7 +124,7 @@ export interface ComputeQuota extends Resource<
 > {}
 
 /**
- * A SageMaker HyperPod compute allocation (task governance) — reserves
+ * A SageMaker HyperPod compute allocation (task governance) -- reserves
  * instance capacity on an EKS-orchestrated HyperPod cluster for a team,
  * with fair-share weights and borrow/lend rules for idle compute.
  * ### Creating Compute Allocations
@@ -155,7 +155,7 @@ const describeQuotaOrUndefined = (quotaId: string) =>
     .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 /**
- * Look a compute allocation up by exact name — used when state was lost
+ * Look a compute allocation up by exact name -- used when state was lost
  * (read without output) or a create raced.
  */
 const findQuotaByName = Effect.fn(function* (name: string) {
@@ -194,7 +194,7 @@ const toAttrs = (described: sagemaker.DescribeComputeQuotaResponse): ComputeQuot
 };
 
 /**
- * The compute allocation is still transitioning toward the awaited state —
+ * The compute allocation is still transitioning toward the awaited state --
  * retried by the bounded wait schedule.
  */
 class ComputeQuotaNotReady extends Data.TaggedError("ComputeQuotaNotReady")<{
@@ -220,7 +220,7 @@ const FAILED_STATUSES: string[] = [
   "DeleteRollbackFailed",
 ];
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -327,7 +327,7 @@ export const ComputeQuotaProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — by cached id first, then by name (lost state or race).
+          // Observe -- by cached id first, then by name (lost state or race).
           let quotaId = output?.computeQuotaId;
           let described =
             quotaId !== undefined ? yield* describeQuotaOrUndefined(quotaId) : undefined;
@@ -339,7 +339,7 @@ export const ComputeQuotaProvider = () =>
                 : undefined;
           }
 
-          // Ensure — create if missing; a Conflict means a concurrent
+          // Ensure -- create if missing; a Conflict means a concurrent
           // create won the race, so re-observe by name.
           if (described === undefined) {
             const created = yield* sagemaker
@@ -369,7 +369,7 @@ export const ComputeQuotaProvider = () =>
             // Wait out any in-flight transition before diffing.
             yield* waitForQuota(quotaId, "Ready");
             described = yield* describeQuotaOrUndefined(quotaId);
-            // Sync — diff observed allocation against desired.
+            // Sync -- diff observed allocation against desired.
             if (
               described !== undefined &&
               (JSON.stringify(described.ComputeQuotaConfig) !==
@@ -401,7 +401,7 @@ export const ComputeQuotaProvider = () =>
           }
           const attrs = toAttrs(described);
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchQuotaTags(attrs.computeQuotaArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

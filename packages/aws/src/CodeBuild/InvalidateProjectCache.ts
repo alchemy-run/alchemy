@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:InvalidateProjectCache` — resets the
+ * Runtime binding for `codebuild:InvalidateProjectCache` -- resets the
  * bound project's build cache so the next build starts cold.
  * ### Project Cache
  * **Example:** Invalidate the Build Cache

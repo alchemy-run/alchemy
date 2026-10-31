@@ -14,12 +14,12 @@ export type CollectionsEnginesServingConfigProps = {
   /**
    * Parent Engine resource name
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}`.
-   * Immutable — changing it replaces the serving config.
+   * Immutable -- changing it replaces the serving config.
    */
   engine: string;
   /**
    * Serving config id (4-63 alphanumeric characters). If omitted, a
-   * unique id is generated. Immutable — changing it replaces the
+   * unique id is generated. Immutable -- changing it replaces the
    * serving config.
    */
   servingConfigId?: string;

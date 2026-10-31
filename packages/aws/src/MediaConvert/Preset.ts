@@ -26,9 +26,9 @@ export interface PresetProps {
    */
   category?: string;
   /**
-   * The transcode output settings this preset applies — audio descriptions,
+   * The transcode output settings this preset applies -- audio descriptions,
    * caption descriptions, container settings, and the video description
-   * (codec, resolution, bitrate, …). Required.
+   * (codec, resolution, bitrate, ...). Required.
    */
   settings: mediaconvert.PresetSettings;
   /**
@@ -51,7 +51,7 @@ export interface Preset extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaConvert output preset — a reusable, named bundle of
+ * An AWS Elemental MediaConvert output preset -- a reusable, named bundle of
  * output settings (container, video codec/resolution/bitrate, audio, and
  * captions) that job templates and jobs reference to produce one output.
  *
@@ -105,7 +105,7 @@ export const PresetProvider = () =>
         category: preset.Category,
       });
 
-      /** Get a preset by name; typed not-found → undefined. */
+      /** Get a preset by name; typed not-found -> undefined. */
       const getPreset = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getPreset({ Name: name })
@@ -137,10 +137,10 @@ export const PresetProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = output?.presetName ?? (yield* createName(id, news));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let preset = yield* getPreset(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (preset === undefined) {
             const created = yield* mediaconvert.createPreset({
               Name: name,
@@ -151,7 +151,7 @@ export const PresetProvider = () =>
             });
             preset = created.Preset!;
           } else {
-            // 3. Sync — UpdatePreset re-applies the mutable fields in place.
+            // 3. Sync -- UpdatePreset re-applies the mutable fields in place.
             const updated = yield* mediaconvert.updatePreset({
               Name: name,
               Description: news.description,
@@ -161,7 +161,7 @@ export const PresetProvider = () =>
             preset = updated.Preset!;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMcTags(preset.Arn!, desiredTags);
 
           yield* session.note(name);

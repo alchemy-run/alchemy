@@ -11,13 +11,13 @@ export interface ListSubscriptionRequestsRequest extends Omit<
 /**
  * Runtime binding for `datazone:ListSubscriptionRequests`.
  *
- * Lists subscription requests in the bound domain, optionally by status — e.g. the PENDING queue an approval bot works through. The domain id is injected from the binding.
+ * Lists subscription requests in the bound domain, optionally by status -- e.g. the PENDING queue an approval bot works through. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.ListSubscriptionRequestsHttp)`.
  * ### Subscription Workflows
  * **Example:** List Pending Requests
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const listSubscriptionRequests = yield* AWS.DataZone.ListSubscriptionRequests(domain);
  *
  * // runtime

@@ -65,12 +65,12 @@ export interface SchemaEventSourceProps extends EventRouteProps {
  * Event source connecting EventBridge schema-registry notifications to the
  * hosting compute. The registry publishes `Schema Created` and
  * `Schema Version Created` events to the account's default bus (source
- * `aws.schemas`) whenever a schema is registered — including schemas the
- * discoverer infers from live traffic — so a function can react to new or
+ * `aws.schemas`) whenever a schema is registered -- including schemas the
+ * discoverer infers from live traffic -- so a function can react to new or
  * drifting event contracts (regenerate types, notify consumers, run
  * compatibility checks).
  *
- * The registry publishes to EventBridge automatically — no additional
+ * The registry publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

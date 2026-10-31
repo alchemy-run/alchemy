@@ -21,22 +21,22 @@ export interface ConfigurationProps {
   /**
    * Name of the configuration (1-150 chars, `a-z A-Z 0-9 . _ ~ -`). If
    * omitted a deterministic physical name is generated. The name is
-   * immutable — changing it replaces the configuration.
+   * immutable -- changing it replaces the configuration.
    */
   configurationName?: string;
   /**
-   * Broker engine the configuration targets. Immutable — changing it
+   * Broker engine the configuration targets. Immutable -- changing it
    * replaces the configuration.
    */
   engineType: "ACTIVEMQ" | "RABBITMQ";
   /**
    * Broker engine version the configuration targets (e.g. `"5.18"` for
-   * ActiveMQ, `"3.13"` for RabbitMQ). Immutable — changing it replaces the
+   * ActiveMQ, `"3.13"` for RabbitMQ). Immutable -- changing it replaces the
    * configuration.
    */
   engineVersion?: string;
   /**
-   * Authentication strategy for the associated broker. Immutable —
+   * Authentication strategy for the associated broker. Immutable --
    * changing it replaces the configuration.
    * @default "SIMPLE"
    */
@@ -81,7 +81,7 @@ export interface Configuration extends Resource<
 > {}
 
 /**
- * An Amazon MQ broker configuration — a versioned document (ActiveMQ XML or
+ * An Amazon MQ broker configuration -- a versioned document (ActiveMQ XML or
  * RabbitMQ Cuttlefish) that a {@link Broker} can reference to control
  * engine-level settings. Each edit to `data` publishes a new immutable
  * revision; a broker pins a specific `{ id, revision }` pair.
@@ -156,7 +156,7 @@ export const ConfigurationProvider = () =>
       const listAllConfigurations = Effect.fn(function* () {
         const configs: mq.Configuration[] = [];
         let nextToken: string | undefined;
-        // Bounded page walk — MQ terminates on an absent NextToken.
+        // Bounded page walk -- MQ terminates on an absent NextToken.
         for (let page = 0; page < 20; page++) {
           const response = yield* mq.listConfigurations({
             MaxResults: 100,
@@ -224,7 +224,7 @@ export const ConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = output?.configurationId
             ? yield* readConfiguration(output.configurationId)
             : undefined;
@@ -232,7 +232,7 @@ export const ConfigurationProvider = () =>
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing. createConfiguration seeds an
+          // 2. Ensure -- create if missing. createConfiguration seeds an
           // initial default revision; `data` (if any) is published below.
           if (observed === undefined) {
             const created = yield* mq.createConfiguration({
@@ -252,7 +252,7 @@ export const ConfigurationProvider = () =>
 
           const configurationId = observed.Id!;
 
-          // 3. Sync configuration document — publish a new revision only when
+          // 3. Sync configuration document -- publish a new revision only when
           // the desired `data` differs from the current latest revision.
           if (news.data !== undefined) {
             const revision = observed.LatestRevision?.Revision;
@@ -273,7 +273,7 @@ export const ConfigurationProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMqTags(observed.Arn!, toTagRecord(observed.Tags), desiredTags);
 
           // 4. Re-read for the fresh latest revision + tags.

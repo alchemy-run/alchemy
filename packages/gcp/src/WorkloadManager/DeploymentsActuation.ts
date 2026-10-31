@@ -57,7 +57,7 @@ export type DeploymentsActuationProps = {
   /**
    * Parent Deployment. Full name
    * `projects/{project}/locations/{location}/deployments/{deployment}`
-   * or the deployment id (combined with `location`). Immutable —
+   * or the deployment id (combined with `location`). Immutable --
    * changing it replaces the actuation.
    */
   deployment: string;
@@ -70,8 +70,8 @@ export type DeploymentsActuationProps = {
    * Actuation id (the `{actuation}` segment). If omitted, a unique
    * RFC1035 name prefixed `alch-` is generated from the stack, stage,
    * and logical id so `list` / nuke can find it (actuations have no
-   * labels or description). Immutable — changing it replaces the
-   * actuation. The API has no patch — actuations are existence-only.
+   * labels or description). Immutable -- changing it replaces the
+   * actuation. The API has no patch -- actuations are existence-only.
    */
   actuationId?: string;
 };
@@ -106,7 +106,7 @@ export type DeploymentsActuation = Resource<
 >;
 
 /**
- * A Workload Manager actuation — a bootstrap run of a Deployment that
+ * A Workload Manager actuation -- a bootstrap run of a Deployment that
  * applies Terraform/Ansible and records infrastructure output.
  *
  * Actuations have no labels, description, or patch API. Identity is

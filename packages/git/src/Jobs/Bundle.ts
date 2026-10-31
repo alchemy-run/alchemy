@@ -2,7 +2,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 /**
- * The clone-bundle alarm job (DESIGN.md §12.2) — the v2 serving plane.
+ * The clone-bundle alarm job (DESIGN.md §12.2) -- the v2 serving plane.
  *
  * A clone is, on the wire, exactly one pack containing the closure of the
  * advertised refs. v1 recomputes that pack per clone (walk the commit graph,
@@ -14,7 +14,7 @@ import * as Stream from "effect/Stream";
  * {repoId}/bundles/bundle-{refsHash}.pack
  * ```
  *
- * Serving a clone then becomes "stream these bytes" — no closure walk, no
+ * Serving a clone then becomes "stream these bytes" -- no closure walk, no
  * per-object reads, no compression. Because the key is content-addressed by
  * its ref snapshot, the bytes are immutable and therefore cacheable at every
  * edge PoP, and the Worker can stream them straight to the client without
@@ -56,14 +56,14 @@ export interface BundleInfo {
 }
 
 /**
- * Repos larger than this are not bundled in v2.0 — the win is clone-storm
+ * Repos larger than this are not bundled in v2.0 -- the win is clone-storm
  * absorption on ordinary repos, and an unbounded bundle job would monopolise
  * the alarm budget. (The streaming multipart upgrade lifts this.)
  */
 export const MAX_BUNDLE_BYTES = 512 * 1024 * 1024;
 
 /**
- * sha1 over the sorted `"<name> <oid>"` lines — the identity of a ref
+ * sha1 over the sorted `"<name> <oid>"` lines -- the identity of a ref
  * snapshot. Two repos states with the same refs produce the same hash, so
  * the bundle key is stable and immutable.
  */
@@ -97,7 +97,7 @@ export interface BundleJobOptions {
   readonly refs: ReadonlyArray<BundleRef>;
   /** The full-clone manifest (closure of every ref). */
   readonly entries: ReadonlyArray<ManifestEntry>;
-  /** Emits the pack for `entries` — `RepoObject`'s `packStream`. */
+  /** Emits the pack for `entries` -- `RepoObject`'s `packStream`. */
   readonly packStream: (
     entries: ReadonlyArray<ManifestEntry>,
   ) => Stream.Stream<Uint8Array, StoreError>;
@@ -181,7 +181,7 @@ export const runBundleJob = (
  * request that:
  *
  * - brings no `have`s and no shallow state (it is a *clone*, not an
- *   incremental fetch — otherwise the client would receive objects it
+ *   incremental fetch -- otherwise the client would receive objects it
  *   already has, which is legal but wasteful, or miss the negotiation the
  *   protocol promised), and
  * - wants only oids the bundle actually covers.
@@ -205,14 +205,14 @@ export const bundleCovers = (
 /**
  * How much of a request this bundle can serve (DESIGN.md §21.2).
  *
- * - `undefined` — unusable: the request negotiates (haves) or is
+ * - `undefined` -- unusable: the request negotiates (haves) or is
  *   shallow. Serve dynamically.
- * - `[]` — the bundle covers every want: stream its bytes verbatim.
- * - non-empty — the wants the bundle does not name directly. Their
+ * - `[]` -- the bundle covers every want: stream its bytes verbatim.
+ * - non-empty -- the wants the bundle does not name directly. Their
  *   closure, computed with the bundle's refs as haves, is a delta pack
  *   the Worker concatenates onto the bundle.
  *
- * A want the bundle does not *name* is usually still mostly IN it — the
+ * A want the bundle does not *name* is usually still mostly IN it -- the
  * ordinary case is `main` having moved a few commits past the snapshot,
  * so the bundle holds all but the new objects. Union completeness holds
  * regardless: the bundle carries closure(bundle refs), the delta carries

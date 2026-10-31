@@ -11,7 +11,7 @@ import type { MicrovmImage } from "./MicrovmImage.ts";
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
 // identical except for the distilled operation, the IAM action(s), the policy
 // scope, and whether the bound image's identifier is injected into the request.
-// NOT exported from `index.ts` — it only backs the per-operation `*Http` files.
+// NOT exported from `index.ts` -- it only backs the per-operation `*Http` files.
 
 /** The distilled operation method, yielded to its request callable. */
 type Operation<Res, Err> = Effect.Effect<(req: any) => Effect.Effect<Res, Err, any>, never, any>;
@@ -30,7 +30,7 @@ export interface ImageBindingOptions<Req, Res, Err, Self> {
   /** The distilled operation, e.g. `microvms.runMicrovm`. */
   operation: Operation<Res, Err>;
   /**
-   * Policy scope (always limited to the bound image's identity — never `["*"]`):
+   * Policy scope (always limited to the bound image's identity -- never `["*"]`):
    * - `"image"` (default) scopes to the exact image ARN (e.g. `RunMicrovm`,
    *   image-read ops).
    * - `"microvm"` scopes to the MicroVM instances launched from this image via
@@ -47,7 +47,7 @@ export interface ImageBindingOptions<Req, Res, Err, Self> {
   injectImageIdentifier?: boolean;
   /**
    * Also grant `lambda:PassNetworkConnector` on network connectors in the
-   * image's region — both the account's own connectors and the AWS-managed
+   * image's region -- both the account's own connectors and the AWS-managed
    * ones (e.g. `INTERNET_EGRESS`). Required by `RunMicrovm`, which passes a
    * network connector (defaulting to the managed `INTERNET_EGRESS`) to the
    * launched MicroVM.
@@ -91,7 +91,7 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
         : options.scope === "microvm"
           ? [
               // Instance ops (GetMicrovm, TerminateMicrovm, CreateAuthToken,
-              // …) are authorized by AWS against the image ARN as well as the
+              // ...) are authorized by AWS against the image ARN as well as the
               // instance ARN, so grant both: the exact image and the
               // `microvm:*` instance glob derived from it.
               Output.interpolate`${image.imageArn}`,
@@ -130,7 +130,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
       return Effect.fn(function* (image: MicrovmImage) {
         // Accessors (registered on the host at deploy, resolved at runtime).
         const imageArn = yield* image.imageArn;
-        // Region is derived from the resolved image ARN — via `Effect.map` of
+        // Region is derived from the resolved image ARN -- via `Effect.map` of
         // the accessor, NOT a second Output binding (whose env key would embed
         // the mapper's source text and is brittle).
         // resolved per bind because a host with a created key signs in the image's own region

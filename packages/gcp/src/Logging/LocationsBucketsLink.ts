@@ -25,19 +25,19 @@ export type LocationsBucketsLinkProps = {
   /**
    * Full resource name of the parent analytics-enabled log bucket
    * (`{parent}/locations/{location}/buckets/{bucket}`). A bucket may
-   * contain only one link. Immutable — changing it replaces the link
+   * contain only one link. Immutable -- changing it replaces the link
    * (delete first).
    */
   bucketName: string;
   /**
    * Link id (also the BigQuery dataset id). If omitted, a unique name is
    * generated. Up to 100 characters: letters, digits, and underscores.
-   * Immutable — changing it replaces the link (delete first).
+   * Immutable -- changing it replaces the link (delete first).
    */
   linkId?: string;
   /**
    * Human-readable description. Links have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes. Changing the description replaces the link.
    */
   description?: string;
@@ -57,7 +57,7 @@ export type LocationsBucketsLink = Resource<
     description: string | undefined;
     /** BigQuery dataset resource name, if created. */
     bigqueryDatasetId: string | undefined;
-    /** Link lifecycle (`ACTIVE`, `CREATING`, …). */
+    /** Link lifecycle (`ACTIVE`, `CREATING`, ...). */
     lifecycleState: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -73,7 +73,7 @@ export type LocationsBucketsLink = Resource<
  * Create is asynchronous and also provisions a BigQuery dataset whose id
  * matches `linkId`. A bucket may currently contain only one link. Links
  * have no labels field, so Alchemy stamps ownership into the description
- * for `list` / nuke. There is no update API — changing `linkId`,
+ * for `list` / nuke. There is no update API -- changing `linkId`,
  * `bucketName`, or `description` replaces the link (delete first).
  *
  * ### Creating a Locations Bucket Link

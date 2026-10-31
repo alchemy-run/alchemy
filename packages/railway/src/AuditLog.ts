@@ -81,7 +81,7 @@ export interface ListAuditLogsOptions {
    */
   workspaceId?: string;
   /**
-   * Page size. Defaults to 50. This helper fetches one page — it does
+   * Page size. Defaults to 50. This helper fetches one page -- it does
    * not walk the whole workspace history.
    * @default 50
    */
@@ -143,7 +143,7 @@ const workspaceOf = (workspaceId: string | undefined) =>
   workspaceId !== undefined ? Effect.succeed(workspaceId) : resolveWorkspaceId();
 
 /**
- * List workspace audit logs. Query-only — Railway has no audit-log
+ * List workspace audit logs. Query-only -- Railway has no audit-log
  * create/update/delete, so this is a catalog helper, not a resource.
  *
  * Defaults to the current token workspace. Pass `project` /

@@ -39,7 +39,7 @@ export interface PromotionCodeCurrencyOption {
 export interface PromotionCodeRestrictions {
   /**
    * When true, the code can only be redeemed by customers with no successful
-   * payments or invoices. Create-only — changing it replaces the code.
+   * payments or invoices. Create-only -- changing it replaces the code.
    */
   firstTimeTransaction?: boolean;
   /**
@@ -107,7 +107,7 @@ export interface PromotionCode extends Resource<
   "Stripe.PromotionCode",
   PromotionCodeProps,
   {
-    /** Stripe promotion code id (`promo_…`). */
+    /** Stripe promotion code id (`promo_...`). */
     id: string;
     /** Customer-facing code. */
     code: string;
@@ -139,7 +139,7 @@ export interface PromotionCode extends Resource<
 > {}
 
 /**
- * A Stripe Promotion Code — a customer-redeemable code for an underlying
+ * A Stripe Promotion Code -- a customer-redeemable code for an underlying
  * coupon. Stripe does not hard-delete promotion codes; destroying this
  * resource deactivates it (`active: false`).
  *
@@ -467,7 +467,7 @@ export const PromotionCodeProvider = () =>
 
       let current = yield* observe({ id: output?.id, code });
       // A leftover inactive code with this customer-facing `code` may point
-      // at a deleted coupon. Stripe forbids reactivating it — treat it as
+      // at a deleted coupon. Stripe forbids reactivating it -- treat it as
       // missing and create a new promotion code instead.
       if (current !== undefined) {
         const observedCoupon = couponIdOf(current);

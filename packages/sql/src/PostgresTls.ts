@@ -4,11 +4,11 @@ import * as Redacted from "effect/Redacted";
 type PgSsl = PgClient.PgPoolConfig["ssl"];
 
 /**
- * `sslmode` values `@effect/sql-pg` (≥ 4.0.0-rc.113, still as of rc.115)
+ * `sslmode` values `@effect/sql-pg` (>= 4.0.0-rc.113, still as of rc.115)
  * refuses unless `ssl` is set explicitly: `sslmode "prefer" is not
  * supported: set ssl explicitly to true or false`. node-postgres treated both
  * as "TLS on" (aliases of `verify-full`), and URLs carry them by default in
- * places — Hyperdrive's local `dev` origin passthrough hands the worker
+ * places -- Hyperdrive's local `dev` origin passthrough hands the worker
  * `?sslmode=prefer`, and `prefer` is libpq's own default.
  */
 const OPPORTUNISTIC_SSL_MODES: ReadonlySet<string> = new Set(["prefer", "allow"]);

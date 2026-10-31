@@ -16,7 +16,7 @@ export interface DisassociateThirdPartyFirewallRequest
  * ### Third-Party Firewalls
  * **Example:** Offboard a Third-Party Firewall Vendor
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const disassociateThirdPartyFirewall = yield* AWS.FMS.DisassociateThirdPartyFirewall();
  *
  * // runtime

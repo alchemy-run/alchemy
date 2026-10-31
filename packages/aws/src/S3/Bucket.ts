@@ -154,7 +154,7 @@ export interface BucketProps {
    */
   versioning?: "Enabled" | "Suspended";
   /**
-   * MFA-delete status. Rarely used — enabling it requires an MFA serial and
+   * MFA-delete status. Rarely used -- enabling it requires an MFA serial and
    * the root account, so it cannot be toggled through normal credentials.
    */
   mfaDelete?: "Enabled" | "Disabled";
@@ -174,7 +174,7 @@ export interface BucketProps {
    */
   cors?: s3.CORSRule[];
   /**
-   * Object lifecycle rules (expiration, transition, abort-incomplete-MPU…).
+   * Object lifecycle rules (expiration, transition, abort-incomplete-MPU...).
    */
   lifecycleRules?: s3.LifecycleRule[];
   /**
@@ -581,11 +581,11 @@ export const BucketProvider = () =>
         yield* Effect.logInfo(`S3 Bucket delete: deleting all objects from ${bucketName}`);
         // Delete every object VERSION and DELETE MARKER, by Key+VersionId.
         // `DeleteBucket` fails with BucketNotEmpty until all of them are
-        // gone — deleting only current objects (listObjectsV2) leaves
+        // gone -- deleting only current objects (listObjectsV2) leaves
         // versions/markers behind in versioned buckets. listObjectVersions
         // also covers unversioned buckets (plain objects surface as
         // Versions with VersionId "null"), so this single loop empties
-        // both. Pagination is gated on IsTruncated — never on NextKeyMarker,
+        // both. Pagination is gated on IsTruncated -- never on NextKeyMarker,
         // which S3 may omit even mid-listing.
         let isTruncated = true;
         let keyMarker: string | undefined;
@@ -626,7 +626,7 @@ export const BucketProvider = () =>
           versionIdMarker = page.NextVersionIdMarker;
         }
 
-        // Abort any in-progress multipart uploads — their stored parts also
+        // Abort any in-progress multipart uploads -- their stored parts also
         // keep DeleteBucket failing with BucketNotEmpty.
         let uploadsTruncated = true;
         let uploadKeyMarker: string | undefined;
@@ -653,7 +653,7 @@ export const BucketProvider = () =>
                     Key: u.Key!,
                     UploadId: u.UploadId!,
                   })
-                  // Already aborted/completed concurrently — a race, not a
+                  // Already aborted/completed concurrently -- a race, not a
                   // failure.
                   .pipe(Effect.catchTag("NoSuchUpload", () => Effect.void)),
               { concurrency: 8 },
@@ -1921,7 +1921,7 @@ export const BucketProvider = () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
             // S3 only includes `BucketRegion` in the response when the request
-            // carries at least one parameter — hence the explicit MaxBuckets.
+            // carries at least one parameter -- hence the explicit MaxBuckets.
             return yield* s3.listBuckets.pages({ MaxBuckets: 1000 }).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -1929,7 +1929,7 @@ export const BucketProvider = () =>
                   (page.Buckets ?? [])
                     .filter((b): b is s3.Bucket & { Name: string } => b.Name != null)
                     .map((b) => {
-                      // ListBuckets is global — record each bucket's actual
+                      // ListBuckets is global -- record each bucket's actual
                       // region so later operations (delete) can target it.
                       const bucketRegion = (b.BucketRegion ?? region) as RegionID;
                       return {
@@ -2226,8 +2226,8 @@ export const BucketProvider = () =>
         }),
         delete: Effect.fn(function* ({ olds = {}, output, session, force }) {
           // Whether we are allowed to destroy the bucket's contents.
-          // - `olds.forceDestroy` — the user opted in on the resource props.
-          // - `force` — set only by `alchemy unsafe nuke`, an explicit
+          // - `olds.forceDestroy` -- the user opted in on the resource props.
+          // - `force` -- set only by `alchemy unsafe nuke`, an explicit
           //   operator-confirmed account teardown. Nuke enumerates buckets
           //   straight from the cloud (its `olds` is Attributes, not Props),
           //   so `forceDestroy` is never present there. S3 ownership is
@@ -2236,7 +2236,7 @@ export const BucketProvider = () =>
           //   alchemy tags on buckets, so every bucket nuke hands us is one
           //   this account owns.
           // A normal destroy without `forceDestroy` must NOT empty the
-          // bucket — a non-empty bucket fails with BucketNotEmpty, which is
+          // bucket -- a non-empty bucket fails with BucketNotEmpty, which is
           // the data-protection behavior users rely on.
           const mayEmpty = olds.forceDestroy === true || force === true;
           yield* Effect.logInfo(
@@ -2245,7 +2245,7 @@ export const BucketProvider = () =>
           const run = Effect.gen(function* () {
             // If we may destroy contents, delete all object versions and
             // delete markers first. The bucket may already be gone (deleted
-            // out-of-band, or a previous destroy partially succeeded) —
+            // out-of-band, or a previous destroy partially succeeded) --
             // treat NoSuchBucket as a no-op so the overall delete still
             // converges.
             if (mayEmpty) {
@@ -2282,7 +2282,7 @@ export const BucketProvider = () =>
                 }),
                 Effect.retry({
                   // BucketHasAccessPointsAttached: S3's access-point
-                  // attachment view is eventually consistent — deleting a
+                  // attachment view is eventually consistent -- deleting a
                   // bucket immediately after its access points were deleted
                   // can transiently report attachments. Retry until the view
                   // converges (bounded).
@@ -2294,7 +2294,7 @@ export const BucketProvider = () =>
           });
 
           // The bucket may live in a different region than the ambient client
-          // (list enumerates buckets from every region) — target the bucket's
+          // (list enumerates buckets from every region) -- target the bucket's
           // own region to avoid PermanentRedirect. If we still get redirected
           // (e.g. a stale/missing region attribute), retry once in the region
           // the redirect reports.

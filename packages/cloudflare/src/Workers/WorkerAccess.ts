@@ -7,32 +7,32 @@ import type { Application, ApplicationProps } from "../Access/Application.ts";
 /**
  * Protect this Worker with Cloudflare Access (`access` prop). Two forms:
  *
- * - a `Cloudflare.Access.Application` — enroll into a **shared**
+ * - a `Cloudflare.Access.Application` -- enroll into a **shared**
  *   application (one policy set across several Workers). Note Access
  *   policies are application-wide: every Worker enrolled in the
  *   application is gated by the same policies.
- * - `{ policies, ... }` — a **dedicated** application owned by this
+ * - `{ policies, ... }` -- a **dedicated** application owned by this
  *   Worker, created/updated/deleted with it. Access configuration
  *   (policies, session duration, IdPs) lives on applications, so
- *   per-Worker configuration means a per-Worker application — this form
+ *   per-Worker configuration means a per-Worker application -- this form
  *   declares one for you, namespaced under the Worker (`<Worker>/Access`).
  *
  * Either way, enrolling pushes this Worker's `worker` destination (and a
  * `preview_worker` destination unless `previews: false`) onto the
  * application through its binding contract, so the application deploys
- * with — and converges on — the destinations of every enrolled Worker.
+ * with -- and converges on -- the destinations of every enrolled Worker.
  * Removing the prop (or the Worker) un-enrolls it on the application's
  * next reconcile.
  */
 export type WorkerAccessConfig = Application | WorkerAccessApplication;
 
 /**
- * A dedicated Access application owned by this Worker — per-Worker
+ * A dedicated Access application owned by this Worker -- per-Worker
  * policies without declaring the application yourself.
  */
 export interface WorkerAccessApplication {
   /**
-   * Policies gating access to this Worker — inline bodies, reusable
+   * Policies gating access to this Worker -- inline bodies, reusable
    * `Cloudflare.Access.Policy` resources, or policy ids (see
    * `ApplicationProps["policies"]`).
    */
@@ -109,7 +109,7 @@ export interface WorkerExecutionContextAccess {
   /** The Access application audience (AUD) tag that admitted this request. */
   readonly aud: string;
   /**
-   * Resolve the authenticated identity — email, name, groups, device
+   * Resolve the authenticated identity -- email, name, groups, device
    * posture, etc. Resolves `undefined` when Access has no identity for the
    * request (e.g. some service-token flows).
    */
@@ -121,7 +121,7 @@ export interface WorkerExecutionContextAccess {
 }
 
 /**
- * The shape workerd exposes on `ctx.access` (typed locally — this package's
+ * The shape workerd exposes on `ctx.access` (typed locally -- this package's
  * workers-types predates it) and that the local dev simulation mirrors.
  */
 interface RawAccessContext {

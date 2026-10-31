@@ -36,7 +36,7 @@ export interface PipelineEndpointProps {
    */
   pipelineArn: string;
   /**
-   * VPC placement for the endpoint. All fields are create-only — any change
+   * VPC placement for the endpoint. All fields are create-only -- any change
    * replaces the endpoint.
    */
   vpcOptions: PipelineEndpointVpcOptions;
@@ -72,12 +72,12 @@ export interface PipelineEndpoint extends Resource<
 > {}
 
 /**
- * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline — lets
+ * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline -- lets
  * clients inside a VPC ingest data into a pipeline privately, without
  * traversing the public ingest endpoint.
  *
  * The target pipeline must itself be a VPC pipeline (`vpcOptions` set), and
- * the endpoint must live in a different VPC than the pipeline — within the
+ * the endpoint must live in a different VPC than the pipeline -- within the
  * pipeline's own VPC, use its ingest URL instead. Every VPC involved needs
  * `enableDnsSupport` and `enableDnsHostnames`. Cross-account endpoints also
  * need an {@link ResourcePolicy} granting `osis:CreatePipelineEndpoint`.
@@ -94,7 +94,7 @@ export interface PipelineEndpoint extends Resource<
  *     securityGroupIds: [securityGroup.securityGroupId],
  *   },
  * });
- * // endpoint.ingestEndpointUrl — the VPC-private ingest URL
+ * // endpoint.ingestEndpointUrl -- the VPC-private ingest URL
  * ```
  *
  * @resource
@@ -117,7 +117,7 @@ export const PipelineEndpointProvider = () =>
     PipelineEndpoint,
     Effect.gen(function* () {
       /**
-       * There is no `getPipelineEndpoint` — observe by enumerating the
+       * There is no `getPipelineEndpoint` -- observe by enumerating the
        * account's endpoints and matching the id.
        */
       const findEndpoint = Effect.fn(function* (endpointId: string) {
@@ -149,7 +149,7 @@ export const PipelineEndpointProvider = () =>
       /**
        * Endpoint creation provisions VPC network interfaces and typically
        * takes a few minutes. Bounded: 15s x 40 (~10 minutes). The explicit
-       * return annotation is load-bearing — see `waitForPipelineSettled` in
+       * return annotation is load-bearing -- see `waitForPipelineSettled` in
        * `internal.ts`.
        */
       const waitForSettled = <E, R>(
@@ -180,7 +180,7 @@ export const PipelineEndpointProvider = () =>
           if (output?.endpointId === undefined) return undefined;
           const endpoint = yield* findEndpoint(output.endpointId);
           if (endpoint === undefined) return undefined;
-          // Endpoints are not taggable — ownership is implied by the
+          // Endpoints are not taggable -- ownership is implied by the
           // persisted create-assigned id.
           return yield* toAttrs(endpoint);
         }),
@@ -188,11 +188,11 @@ export const PipelineEndpointProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const props = news!;
 
-          // 1. Observe — the persisted id is a cache, not a guarantee.
+          // 1. Observe -- the persisted id is a cache, not a guarantee.
           let observed =
             output?.endpointId !== undefined ? yield* findEndpoint(output.endpointId) : undefined;
 
-          // 2. Ensure — create if missing (ids are server-assigned, so
+          // 2. Ensure -- create if missing (ids are server-assigned, so
           // there is no AlreadyExists race to tolerate).
           if (observed === undefined) {
             const created = yield* osis.createPipelineEndpoint({
@@ -211,7 +211,7 @@ export const PipelineEndpointProvider = () =>
           }
 
           // Wait (bounded) for the asynchronous create to settle; there is
-          // no mutable aspect to sync — every property is create-only.
+          // no mutable aspect to sync -- every property is create-only.
           if (observed?.Status === "CREATING" && observed.EndpointId) {
             observed = yield* waitForSettled(findEndpoint(observed.EndpointId));
           }
@@ -232,7 +232,7 @@ export const PipelineEndpointProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Observe first for idempotency — the delete error union carries
+          // Observe first for idempotency -- the delete error union carries
           // no typed not-found tag.
           const observed = yield* findEndpoint(output.endpointId);
           if (observed === undefined || observed.Status === "DELETING") {

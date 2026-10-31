@@ -21,7 +21,7 @@ const TypeId = "Cloudflare.Gateway.List" as const;
 type TypeId = typeof TypeId;
 
 /**
- * The kind of values a Gateway list holds. Immutable — changing the type
+ * The kind of values a Gateway list holds. Immutable -- changing the type
  * triggers a replacement.
  */
 export type ListType =
@@ -40,7 +40,7 @@ export type ListType =
  */
 export interface ListItem {
   /**
-   * The item's value — a domain, URL, IP, email, serial number, etc.
+   * The item's value -- a domain, URL, IP, email, serial number, etc.
    * depending on the list's `type`.
    */
   value: string;
@@ -61,7 +61,7 @@ export interface ListProps {
   name?: string;
   /**
    * The kind of values the list holds (DOMAIN, IP, URL, EMAIL, SERIAL,
-   * CATEGORY, LOCATION, DEVICE, AAGUID). Immutable — changing the type
+   * CATEGORY, LOCATION, DEVICE, AAGUID). Immutable -- changing the type
    * triggers a replacement.
    */
   type: ListType;
@@ -72,7 +72,7 @@ export interface ListProps {
    */
   description?: string;
   /**
-   * Entries in the list. Reconciled as a full set via PUT — items present
+   * Entries in the list. Reconciled as a full set via PUT -- items present
    * here and missing in the cloud are added; extra cloud items are removed.
    *
    * @default []
@@ -104,13 +104,13 @@ export interface ListAttributes {
 export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust Gateway list — a named set of domains, IPs,
+ * A Cloudflare Zero Trust Gateway list -- a named set of domains, IPs,
  * URLs, emails, serial numbers, or device IDs referenced from Gateway
  * rule wirefilter expressions by UUID (`$<listId>`).
  *
  * The list's `type` is immutable (changing it replaces the list); name,
  * description, and items all converge in place. Items are managed as a
- * full set — the provider PUTs the complete desired item set and removes
+ * full set -- the provider PUTs the complete desired item set and removes
  * anything not declared.
  * ### Creating a List
  * **Example:** Domain list
@@ -188,13 +188,13 @@ export const ListProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached list id.
+      // Owned path -- refresh by the cached list id.
       if (output?.listId) {
         const observed = yield* getList(acct, output.listId);
         if (observed) return toAttributes(observed, acct);
       }
 
-      // Cold read — locate by deterministic name. Gateway lists carry no
+      // Cold read -- locate by deterministic name. Gateway lists carry no
       // ownership markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
       const match = yield* findByName(acct, name);
@@ -210,7 +210,7 @@ export const ListProvider = () =>
       const name = yield* resolveName(id, news.name);
       const desiredItems = news.items ?? [];
 
-      // 1. Observe — the cached id is a hint, not a guarantee; fall back
+      // 1. Observe -- the cached id is a hint, not a guarantee; fall back
       //    to a name scan so out-of-band deletes / lost state converge.
       let observed = output?.listId ? yield* getList(accountId, output.listId) : undefined;
       if (!observed) {
@@ -218,7 +218,7 @@ export const ListProvider = () =>
         if (match?.id) observed = yield* getList(accountId, match.id);
       }
 
-      // 2. Ensure — create with the full desired body when missing. Names
+      // 2. Ensure -- create with the full desired body when missing. Names
       //    are not unique on Cloudflare's side, so there is no
       //    AlreadyExists race to tolerate.
       if (!observed) {
@@ -234,12 +234,12 @@ export const ListProvider = () =>
             message: "Cloudflare did not return an id for the Gateway list",
           });
         }
-        // Create echoes items without count — re-read for a full shape.
+        // Create echoes items without count -- re-read for a full shape.
         const fresh = yield* getList(accountId, created.id);
         return toAttributes(fresh ?? { ...created, count: desiredItems.length }, accountId);
       }
 
-      // 3. Sync — diff observed name/description/items against desired;
+      // 3. Sync -- diff observed name/description/items against desired;
       //    the update API is a PUT of the full mutable state, so skip the
       //    call entirely on a no-op. Items compare as an unordered set of
       //    values (the API may reorder).
@@ -259,7 +259,7 @@ export const ListProvider = () =>
           description: news.description ?? observed.description ?? undefined,
           items: desiredItems,
         });
-        // PUT echoes count but not items — re-read for the full shape.
+        // PUT echoes count but not items -- re-read for the full shape.
         const fresh = yield* getList(accountId, observed.id!);
         if (fresh) return toAttributes(fresh, accountId);
       }
@@ -268,7 +268,7 @@ export const ListProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Lists still referenced by Gateway rules can fail deletion — rules
+      // Lists still referenced by Gateway rules can fail deletion -- rules
       // that reference the list id as an Input get correct destroy
       // ordering. A missing list (GatewayListNotFound, code 2218) means
       // we're done.

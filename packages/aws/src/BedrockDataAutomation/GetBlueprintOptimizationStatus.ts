@@ -4,8 +4,8 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `GetBlueprintOptimizationStatus` operation (IAM
- * action `bedrock:GetBlueprintOptimizationStatus` on `*` — optimization
- * invocation ARNs are minted at runtime) — poll the status of a blueprint
+ * action `bedrock:GetBlueprintOptimizationStatus` on `*` -- optimization
+ * invocation ARNs are minted at runtime) -- poll the status of a blueprint
  * optimization job started by `InvokeBlueprintOptimizationAsync`.
  *
  * Provide the implementation with
@@ -13,11 +13,11 @@ import type * as Effect from "effect/Effect";
  * ### Blueprint Optimization
  * **Example:** Poll An Optimization Job
  * ```typescript
- * // deploy time — account-level binding
+ * // deploy time -- account-level binding
  * const getStatus =
  *   yield* AWS.BedrockDataAutomation.GetBlueprintOptimizationStatus();
  *
- * // runtime — poll the invocation returned by InvokeBlueprintOptimizationAsync
+ * // runtime -- poll the invocation returned by InvokeBlueprintOptimizationAsync
  * const { status, outputConfiguration } = yield* getStatus({ invocationArn });
  * if (status === "Success") {
  *   yield* Effect.log(

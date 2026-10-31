@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ResolverEndpoint } from "./ResolverEndpoint.ts";
 
 /**
- * Runtime binding for `route53resolver:GetResolverEndpoint` — read the bound
+ * Runtime binding for `route53resolver:GetResolverEndpoint` -- read the bound
  * {@link ResolverEndpoint}'s live state (status, IP address count, host VPC,
  * protocols); the endpoint ID is injected automatically.
  *
@@ -13,7 +13,7 @@ import type { ResolverEndpoint } from "./ResolverEndpoint.ts";
  * ### Reading Endpoint State
  * **Example:** Read the Endpoint Status
  * ```typescript
- * // init — grants route53resolver:GetResolverEndpoint on the endpoint
+ * // init -- grants route53resolver:GetResolverEndpoint on the endpoint
  * const getEndpoint = yield* AWS.Route53Resolver.GetResolverEndpoint(endpoint);
  *
  * // runtime

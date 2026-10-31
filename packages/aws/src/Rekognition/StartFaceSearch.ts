@@ -3,9 +3,9 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StartFaceSearch` — start an asynchronous search of a stored video for faces matching a face collection.
+ * Runtime binding for `rekognition:StartFaceSearch` -- start an asynchronous search of a stored video for faces matching a face collection.
  *
- * Rekognition Video jobs read the video from S3 and run asynchronously —
+ * Rekognition Video jobs read the video from S3 and run asynchronously --
  * poll the paired `Get*` binding with the returned `JobId`, or pass a
  * `NotificationChannel` (SNS topic + IAM role the caller must be allowed
  * to pass) to be notified on completion.

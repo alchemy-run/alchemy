@@ -6,7 +6,7 @@ import type { Schema } from "./Schema.ts";
 /**
  * Runtime binding for `schemas:ExportSchema`.
  *
- * Exports the bound {@link Schema} as a JSONSchema Draft 4 document —
+ * Exports the bound {@link Schema} as a JSONSchema Draft 4 document --
  * useful when a function needs a portable validation schema for an event
  * contract that is registered as OpenAPI 3. The registry and schema names
  * are injected from the binding. Provide the implementation with
@@ -19,7 +19,7 @@ import type { Schema } from "./Schema.ts";
  * ### Reading Schemas
  * **Example:** Export As JSONSchema Draft 4
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const exportSchema = yield* AWS.Schemas.ExportSchema(schema);
  *
  * // runtime

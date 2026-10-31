@@ -9,7 +9,7 @@ export interface PutPermissionPolicyRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `wafv2:PutPermissionPolicy` — attach an IAM policy
+ * Runtime binding for `wafv2:PutPermissionPolicy` -- attach an IAM policy
  * that shares the bound {@link RuleGroup} with other accounts (e.g. a SaaS
  * granting tenant accounts the right to reference the group from their web
  * ACLs); the rule group ARN is injected automatically. A malformed policy
@@ -20,7 +20,7 @@ export interface PutPermissionPolicyRequest extends Omit<
  * ### Sharing Rule Groups
  * **Example:** Share the Rule Group with Another Account
  * ```typescript
- * // init — grants wafv2:PutPermissionPolicy on the rule group
+ * // init -- grants wafv2:PutPermissionPolicy on the rule group
  * const putPermissionPolicy = yield* AWS.WAFv2.PutPermissionPolicy(group);
  *
  * // runtime

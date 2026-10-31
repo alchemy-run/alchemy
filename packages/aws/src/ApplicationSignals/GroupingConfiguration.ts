@@ -35,7 +35,7 @@ export interface GroupingConfiguration extends Resource<
 
 /**
  * The CloudWatch Application Signals grouping configuration for this
- * account — an account-level singleton that defines custom grouping
+ * account -- an account-level singleton that defines custom grouping
  * attributes (sourced from telemetry attributes or AWS tags) used to
  * organize and filter discovered services in the Application Signals
  * console and APIs.
@@ -108,7 +108,7 @@ export const GroupingConfigurationProvider = () =>
     Effect.gen(function* () {
       /**
        * Observe the account's grouping configuration. The API has no
-       * dedicated "get" — an account without a configuration returns an
+       * dedicated "get" -- an account without a configuration returns an
        * empty definition list and no `UpdatedAt`.
        */
       const observe = appsignals.listGroupingAttributeDefinitions({}).pipe(
@@ -137,10 +137,10 @@ export const GroupingConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const desired = news.groupingAttributeDefinitions;
 
-          // 1. Observe — the live configuration is authoritative.
+          // 1. Observe -- the live configuration is authoritative.
           const observed = yield* observe;
 
-          // 2/3. Ensure + sync — PutGroupingConfiguration is a full-replace
+          // 2/3. Ensure + sync -- PutGroupingConfiguration is a full-replace
           // upsert; skip the call when the observed definitions already
           // match the desired ones.
           const fresh =
@@ -165,7 +165,7 @@ export const GroupingConfigurationProvider = () =>
         }),
 
         delete: Effect.fn(function* () {
-          // DeleteGroupingConfiguration is idempotent — deleting an absent
+          // DeleteGroupingConfiguration is idempotent -- deleting an absent
           // configuration succeeds.
           yield* appsignals.deleteGroupingConfiguration({});
         }),

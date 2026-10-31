@@ -45,18 +45,18 @@ export type OrganizationSavedQueryProps = {
    * Saved query id (the last segment of the resource name). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens,
-   * periods; first character must be alphanumeric. Immutable — changing
+   * periods; first character must be alphanumeric. Immutable -- changing
    * it replaces the query.
    */
   savedQueryId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the query.
    */
   organization?: string;
   /**
-   * Location of the saved query. Immutable after create — changing it
+   * Location of the saved query. Immutable after create -- changing it
    * replaces the query.
    * @default "global"
    */
@@ -81,7 +81,7 @@ export type OrganizationSavedQueryProps = {
   sqlQueryText?: string;
   /**
    * Human-readable description. Saved queries have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -127,7 +127,7 @@ export type OrganizationSavedQuery = Resource<
  *
  * Saved queries have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. `savedQueryId`, organization, and
- * location are identity — changing any replaces the query.
+ * location are identity -- changing any replaces the query.
  *
  * ### Creating an Organization Saved Query
  * **Example:** Generated name

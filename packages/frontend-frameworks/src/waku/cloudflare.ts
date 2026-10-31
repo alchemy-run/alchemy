@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
- * The Cloudflare Workers deploy target for `@alchemy.run/frontend-frameworks/waku` — the ONLY
+ * The Cloudflare Workers deploy target for `@alchemy.run/frontend-frameworks/waku` -- the ONLY
  * module in this package (besides the bundled `./adapter` fork it selects)
  * that imports Cloudflare-specific code. The framework half (`./Waku.ts`)
  * receives this target as a value and stays platform-neutral.
@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
  * Default export: a `(config) => WakuTarget` factory, the shape
  * `resolveDeployTarget` expects from a target module specifier. The config is
  * the cloudflare vite plugin's options (worker name/bindings/assets,
- * compatibility date/flags) — exactly what the e2e harness carries at
+ * compatibility date/flags) -- exactly what the e2e harness carries at
  * `target.cloudflare.worker`.
  */
 import cloudflareVitePlugin, {
@@ -57,7 +57,7 @@ const withNodejsAls = (flags: Array<string> | undefined): Array<string> => {
  *
  * An explicit `main` is mandatory either way: waku's rsc environment declares
  * two rolldown inputs (`index` + `build`) while the dev plugin asserts exactly
- * one entry. A USER `main` (the deploy target's user-entry seam — a worker
+ * one entry. A USER `main` (the deploy target's user-entry seam -- a worker
  * entry that wraps `virtual:waku/server-entry` and re-exports Durable Object
  * classes) takes precedence over waku's own entry and is resolved against the
  * project root; without one, waku's rsc server entry is pinned as before.
@@ -82,20 +82,20 @@ export const makeWakuPluginOptions = (
 /**
  * Build the Cloudflare deploy target for waku:
  *
- * - `adapter` — this package's wrangler-free fork of waku's cloudflare
+ * - `adapter` -- this package's wrangler-free fork of waku's cloudflare
  *   adapter (`@alchemy.run/frontend-frameworks/waku/adapter`): behavior-identical to upstream
  *   except `buildEnhancers: []`, dropping the sole wrangler-file writer.
- * - `vitePlugins` — `@alchemy.run/cloudflare-runtime/vite` with `main`
+ * - `vitePlugins` -- `@alchemy.run/cloudflare-runtime/vite` with `main`
  *   set to the user's own worker entry when the config carries one (the
  *   user-entry seam), or pinned to waku's rsc worker entry otherwise, plus
  *   the `{ entry: "rsc", children: ["ssr"] }` environment topology. Injected
  *   inside waku's `vite.plugins` (before waku's own plugins), so in dev the
  *   rsc environment runs in workerd and the workerd proxy middleware
  *   registers ahead of waku's Node request bridge.
- * - `entry` — surfaces the config's `main` as the generic user-entry
+ * - `entry` -- surfaces the config's `main` as the generic user-entry
  *   carriage, so the platform-neutral framework half can pin the built
  *   user-entry chunk as `serverModules[0]`.
- * - `bundle` — the workerd resolve conditions and `cloudflare:` externals for
+ * - `bundle` -- the workerd resolve conditions and `cloudflare:` externals for
  *   any pass that bundles server code for this target.
  */
 export const makeWakuCloudflareTarget = (

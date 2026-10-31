@@ -28,14 +28,14 @@ export type RepositoriesPackagesTagProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the tag.
    */
   repository: string;
   /**
    * Package that owns the tag. Full name
    * `.../repositories/{repository}/packages/{package}` or the package
-   * id. Immutable — changing it replaces the tag.
+   * id. Immutable -- changing it replaces the tag.
    */
   packageId: string;
   /**
@@ -46,7 +46,7 @@ export type RepositoriesPackagesTagProps = {
   /**
    * Tag id (the `{tag}` segment of `.../packages/{package}/tags/{tag}`).
    * If omitted, a unique name is generated. Allowed characters:
-   * `[a-zA-Z0-9-._~:@]`. Immutable — changing it replaces the tag.
+   * `[a-zA-Z0-9-._~:@]`. Immutable -- changing it replaces the tag.
    */
   tagId?: string;
   /**
@@ -82,7 +82,7 @@ export type RepositoriesPackagesTag = Resource<
 >;
 
 /**
- * An Artifact Registry package tag — an alternate name for a version.
+ * An Artifact Registry package tag -- an alternate name for a version.
  *
  * Tags have no labels field. `list` / nuke find tags whose parent
  * repository carries Alchemy labels. Changing `repository`, `packageId`,

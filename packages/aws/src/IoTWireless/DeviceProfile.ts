@@ -22,12 +22,12 @@ export interface DeviceProfileProps {
   /**
    * Name of the device profile. If omitted, a deterministic physical name
    * is generated from the app, stage, and logical ID. Device profiles are
-   * immutable — changing the name replaces the profile.
+   * immutable -- changing the name replaces the profile.
    */
   name?: string;
   /**
    * LoRaWAN device profile configuration (MAC version, regional parameters,
-   * RX windows, class B/C support). Immutable — changing any field replaces
+   * RX windows, class B/C support). Immutable -- changing any field replaces
    * the profile.
    */
   loRaWAN?: iotw.LoRaWANDeviceProfile;
@@ -59,7 +59,7 @@ export interface DeviceProfile extends Resource<
 > {}
 
 /**
- * An AWS IoT Core for LoRaWAN device profile — the hardware-level LoRaWAN
+ * An AWS IoT Core for LoRaWAN device profile -- the hardware-level LoRaWAN
  * parameters (MAC version, regional band, RX windows, device classes) shared
  * by devices of the same model.
  *
@@ -105,7 +105,7 @@ export const DeviceProfileProvider = () =>
           .getDeviceProfile({ Id: deviceProfileId })
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-      // Device profiles have no name-keyed Get — enumerate and match. The
+      // Device profiles have no name-keyed Get -- enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
       // lost state write.
       const findByName = (name: string) =>
@@ -176,7 +176,7 @@ export const DeviceProfileProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // There is no UpdateDeviceProfile API — name and radio config are
+        // There is no UpdateDeviceProfile API -- name and radio config are
         // create-only, so any change to either replaces the profile. Tags
         // stay update-in-place.
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -197,10 +197,10 @@ export const DeviceProfileProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let profile = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing. CreateDeviceProfile always mints
+          // 2. ENSURE -- create if missing. CreateDeviceProfile always mints
           //    a new profile (names are not unique keys), so re-observing by
           //    name after a Conflict race keeps this idempotent.
           if (profile === undefined) {
@@ -224,7 +224,7 @@ export const DeviceProfileProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable; diff against OBSERVED tags.
+          // 3. SYNC -- only tags are mutable; diff against OBSERVED tags.
           const attrs = yield* toAttrs(profile, name);
           yield* syncIotWirelessTags(attrs.deviceProfileArn, desiredTags);
 

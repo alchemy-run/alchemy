@@ -16,19 +16,19 @@ import { waitZoneOperation } from "./operations.ts";
 export type NamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
   name: string;
-  /** TCP port number (`1`–`65535`). */
+  /** TCP port number (`1`-`65535`). */
   port: number;
 };
 
 export type InstanceGroupProps = {
   /**
-   * Name of the instance group. Must be 1–63 characters and comply with
+   * Name of the instance group. Must be 1-63 characters and comply with
    * RFC1035. If omitted, a unique name is generated from the stack, stage,
    * and logical id. Changing this replaces the group.
    */
   instanceGroupName?: string;
   /**
-   * Zone of the instance group (e.g. `"us-central1-a"`). Immutable —
+   * Zone of the instance group (e.g. `"us-central1-a"`). Immutable --
    * changing it replaces the group.
    * @default "us-central1-a"
    */
@@ -42,7 +42,7 @@ export type InstanceGroupProps = {
   description?: string;
   /**
    * VPC network URL or name (`default`, `global/networks/default`, or
-   * `projects/{project}/global/networks/{name}`). Immutable — changing it
+   * `projects/{project}/global/networks/{name}`). Immutable -- changing it
    * replaces the group.
    */
   network?: string;
@@ -92,7 +92,7 @@ export type InstanceGroup = Resource<
  * A zonal unmanaged Compute Engine instance group.
  *
  * Unmanaged groups hold an explicit list of VMs and optional named ports
- * for load balancing. They have no labels API — Alchemy records ownership
+ * for load balancing. They have no labels API -- Alchemy records ownership
  * in the description so `list` / `pnpm nuke:gcp` can find them.
  *
  * ### Creating an Instance Group

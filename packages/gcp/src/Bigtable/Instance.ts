@@ -43,7 +43,7 @@ export type ClusterAutoscalingLimits = {
 };
 
 export type ClusterAutoscalingTargets = {
-  /** Target CPU utilization percent (`10`–`80`). */
+  /** Target CPU utilization percent (`10`-`80`). */
   cpuUtilizationPercent?: number;
   /** Target storage utilization in GiB per node. */
   storageUtilizationGibPerNode?: number;
@@ -88,7 +88,7 @@ export type InstanceProps = {
    * `projects/{project}/instances/{instance}`). If omitted, a unique name
    * is generated from the stack, stage, and logical id. Must be 6-33
    * characters, start with a letter, and contain only lowercase letters,
-   * numbers, and hyphens. Immutable — changing it replaces the instance.
+   * numbers, and hyphens. Immutable -- changing it replaces the instance.
    */
   instanceId?: string;
   /**
@@ -137,7 +137,7 @@ export type Instance = Resource<
     edition: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -147,7 +147,7 @@ export type Instance = Resource<
 >;
 
 /**
- * A Cloud Bigtable instance — a container for clusters, tables, and app
+ * A Cloud Bigtable instance -- a container for clusters, tables, and app
  * profiles.
  *
  * Create requires at least one cluster. The default is a single 1-node

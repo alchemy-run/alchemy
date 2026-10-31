@@ -130,7 +130,7 @@ export const SecretProviderLive = () =>
       const accountId = news.store.accountId;
       const storeId = news.store.storeId;
 
-      // Observe — re-fetch the cached secret; fall back to a lookup
+      // Observe -- re-fetch the cached secret; fall back to a lookup
       // by name so we recover from out-of-band deletes or partial
       // state-persistence failures.
       let observed:
@@ -162,7 +162,7 @@ export const SecretProviderLive = () =>
         );
       }
 
-      // Ensure — create if missing. Cloudflare reports a concurrent
+      // Ensure -- create if missing. Cloudflare reports a concurrent
       // create as `SecretNameAlreadyExists`; tolerate by re-listing
       // the store and adopting the secret with the same name. The
       // value can't be read back from the API; we trust an
@@ -280,7 +280,7 @@ export const SecretProviderLive = () =>
       // An interrupted first deploy can persist `creating` props whose
       // parent Outputs were stripped to holes (see stripUnresolved), so
       // `olds.store` can survive as `{}`. Treat an unresolved parent
-      // reference like a missing one — the plan falls through to the
+      // reference like a missing one -- the plan falls through to the
       // create path instead of handing `undefined` to the API (#995).
       if (!olds?.store?.storeId || !olds.store.accountId) return undefined;
       const name = resolveName(id, olds.name);
@@ -309,7 +309,7 @@ export const SecretProviderLive = () =>
     // Enumerate every Secrets Store in the account, then list the
     // secrets inside each store with bounded concurrency, paginating
     // both levels exhaustively. The secret value is write-only and is
-    // never returned by the API — matching `read`, it is omitted.
+    // never returned by the API -- matching `read`, it is omitted.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const stores = yield* secretsStore.listStores.pages({ accountId }).pipe(
@@ -335,7 +335,7 @@ export const SecretProviderLive = () =>
               ),
             ),
             // A store deleted out-of-band between enumeration and
-            // listing its secrets surfaces as StoreNotFound — skip it.
+            // listing its secrets surfaces as StoreNotFound -- skip it.
             Effect.catchTag("StoreNotFound", () =>
               Effect.succeed([] as ReadonlyArray<Secret["Attributes"]>),
             ),
@@ -347,7 +347,7 @@ export const SecretProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the secret's identity is virtual (a `dev:` id) but
+ * Local (dev) provider -- the secret's identity is virtual (a `dev:` id) but
  * its VALUE is real: reconcile seeds it into the local workerd Secrets
  * Store simulator (through the `SecretsStore.admin` gateway, see
  * `LocalSecretsStoreGateway.ts`) so a dev worker's `env.SECRET.get()`
@@ -356,9 +356,9 @@ export const SecretProviderLive = () =>
  * `secrets_store_secret` binding reads.
  *
  * RPC-backed: under `alchemy dev` (an `RpcProviderProxy` in context) the
- * whole lifecycle runs in the Cloudflare sidecar process — where
+ * whole lifecycle runs in the Cloudflare sidecar process -- where
  * `localRuntimeServices()` is real and shared with the Worker/Queue/D1
- * local providers — instead of in the user's process where that layer is
+ * local providers -- instead of in the user's process where that layer is
  * gated empty (the class of bug behind #1007). In-process runs (no proxy:
  * `sidecar: false` tests, a plain deploy deleting a local-mode row) build
  * the provider directly with the un-gated runtime from the `dual`
@@ -370,7 +370,7 @@ export const SecretProviderLocal = () =>
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       // The local runtime services (workerd `Runtime`, binding plugins) and
-      // the HTTP client are resolved once at layer build and closed over —
+      // the HTTP client are resolved once at layer build and closed over --
       // lifecycle effects run with the engine's call-time context, which
       // doesn't include them.
       const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
@@ -396,7 +396,7 @@ export const SecretProviderLocal = () =>
           // changes update in place).
         }),
         read: Effect.fn(function* ({ output }) {
-          // Virtual identity — the persisted state row is the source of
+          // Virtual identity -- the persisted state row is the source of
           // truth (the seeded value converges on every reconcile).
           return output ?? undefined;
         }),
@@ -404,7 +404,7 @@ export const SecretProviderLocal = () =>
           const name = resolveName(id, news.name);
           const storeId = news.store.storeId;
 
-          // Seed — write the value into the local simulator so the dev
+          // Seed -- write the value into the local simulator so the dev
           // worker's `env.<binding>.get()` returns it. An overwrite is
           // idempotent, so re-running after a crash converges.
           yield* seedLocalSecret(storeId, name, Redacted.value(news.value)).pipe(
@@ -422,7 +422,7 @@ export const SecretProviderLocal = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Remove the seeded value (idempotent — deleting a missing key is
+          // Remove the seeded value (idempotent -- deleting a missing key is
           // a no-op). A create-first replacement's old generation deletes a
           // different key than its successor seeded, so this never races.
           yield* deleteLocalSecret(output.storeId, output.secretName).pipe(
@@ -448,7 +448,7 @@ export const StoreSecretProvider = () =>
 /**
  * Poll a secret until Cloudflare reports it "active" (bounded at
  * ~10s). Returns the last observed status rather than failing on
- * timeout — consumers that bind the secret retry the
+ * timeout -- consumers that bind the secret retry the
  * `SecretsStoreBindingNotFound` deploy rejection themselves, so a
  * slow activation degrades to a retried deploy instead of a hard
  * error here.

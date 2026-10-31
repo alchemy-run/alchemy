@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeStorageVirtualMachines` operation (IAM
  * action `fsx:DescribeStorageVirtualMachines` on `*`).
  *
- * Lists FSx for ONTAP storage virtual machines (SVMs) — optionally filtered
- * by `file-system-id` — from inside a function runtime, e.g. to resolve an
+ * Lists FSx for ONTAP storage virtual machines (SVMs) -- optionally filtered
+ * by `file-system-id` -- from inside a function runtime, e.g. to resolve an
  * SVM's endpoints before opening an iSCSI/NFS session. Provide the
  * implementation with
  * `Effect.provide(AWS.FSx.DescribeStorageVirtualMachinesHttp)`.

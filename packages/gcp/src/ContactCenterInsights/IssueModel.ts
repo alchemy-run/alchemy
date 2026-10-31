@@ -35,18 +35,18 @@ export type IssueModelInputDataConfig = {
 
 export type IssueModelProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the model.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the model.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Representative name. Issue models have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
   /**
-   * Model language (`en-US`, …).
+   * Model language (`en-US`, ...).
    */
   languageCode?: string;
   /**
@@ -95,7 +95,7 @@ export type IssueModel = Resource<
 /**
  * A Contact Center Insights issue model for topic modeling.
  *
- * Issue models have no labels field — Alchemy stamps ownership into the
+ * Issue models have no labels field -- Alchemy stamps ownership into the
  * display name. Location is immutable. Display name, language, model type,
  * and input data config update in place. Create and delete are
  * long-running; a deployed model is undeployed before delete.

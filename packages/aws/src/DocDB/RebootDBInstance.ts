@@ -7,17 +7,17 @@ import type { DBInstance } from "./DBInstance.ts";
  * Runtime binding for the `RebootDBInstance` operation (IAM action
  * `rds:RebootDBInstance`).
  *
- * Reboots the bound {@link DBInstance} — e.g. an ops function applying a
+ * Reboots the bound {@link DBInstance} -- e.g. an ops function applying a
  * parameter-group change that requires a restart. The instance identifier
  * is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.DocDB.RebootDBInstanceHttp)`.
  * ### Operating an Instance
  * **Example:** Reboot an Instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const rebootDBInstance = yield* AWS.DocDB.RebootDBInstance(instance);
  *
- * // runtime — optionally force a failover during the reboot
+ * // runtime -- optionally force a failover during the reboot
  * yield* rebootDBInstance({ ForceFailover: false });
  * ```
  *

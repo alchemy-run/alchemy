@@ -27,9 +27,9 @@ export interface DedicatedIpPoolProps {
    */
   poolName?: string;
   /**
-   * The pool's scaling mode. Switching `STANDARD` → `MANAGED` is applied in
+   * The pool's scaling mode. Switching `STANDARD` -> `MANAGED` is applied in
    * place via `putDedicatedIpPoolScalingAttributes`; AWS does not support
-   * `MANAGED` → `STANDARD`, so that direction replaces the pool.
+   * `MANAGED` -> `STANDARD`, so that direction replaces the pool.
    * @default "STANDARD"
    */
   scalingMode?: DedicatedIpPoolScalingMode;
@@ -53,18 +53,18 @@ export interface DedicatedIpPool extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 dedicated IP pool — a named group of dedicated IP addresses
+ * An Amazon SES v2 dedicated IP pool -- a named group of dedicated IP addresses
  * used to send email, so you can isolate the sending reputation of different
  * kinds of mail (e.g. marketing vs. transactional).
  *
  * :::caution
  * Creating a dedicated IP pool provisions dedicated IP capacity and **starts
- * billing immediately** — `MANAGED` pools bill for managed dedicated IP usage
+ * billing immediately** -- `MANAGED` pools bill for managed dedicated IP usage
  * as soon as they exist, and `STANDARD` pools bill per dedicated IP you add.
  * Only create pools you intend to pay for.
  * :::
  *
- * `STANDARD` → `MANAGED` is an in-place scaling change. `MANAGED` → `STANDARD`
+ * `STANDARD` -> `MANAGED` is an in-place scaling change. `MANAGED` -> `STANDARD`
  * is not supported by AWS and replaces the pool.
  * ### Creating Pools
  * **Example:** Standard Pool
@@ -95,7 +95,7 @@ export interface DedicatedIpPool extends Resource<
  * ### Changing the Scaling Mode
  * **Example:** Migrate a Standard Pool to Managed
  * ```typescript
- * // STANDARD -> MANAGED is applied in place — the pool keeps its name and
+ * // STANDARD -> MANAGED is applied in place -- the pool keeps its name and
  * // its dedicated IPs.
  * const pool = yield* SES.DedicatedIpPool("Marketing", {
  *   scalingMode: "MANAGED", // was "STANDARD"
@@ -128,8 +128,8 @@ const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
 ): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
-// Dedicated IP pools are taggable but their API never returns an ARN — not
-// from getDedicatedIpPool, not from listDedicatedIpPools — so the ARN that
+// Dedicated IP pools are taggable but their API never returns an ARN -- not
+// from getDedicatedIpPool, not from listDedicatedIpPools -- so the ARN that
 // listTagsForResource requires has to be derived.
 const dedicatedIpPoolArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
@@ -155,7 +155,7 @@ export const DedicatedIpPoolProvider = () =>
       });
 
       // getDedicatedIpPool does not return tags, so ownership costs a second
-      // API call. Only `read` pays it — `list` deletes by name and does not
+      // API call. Only `read` pays it -- `list` deletes by name and does not
       // need to know who owns a pool.
       const getPoolTags = Effect.fn(function* (name: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
@@ -179,7 +179,7 @@ export const DedicatedIpPoolProvider = () =>
         // are cleaned by nuke.
         //
         // listDedicatedIpPools returns names only, so the real ScalingMode
-        // needs a read per pool — `list` must produce the same Attributes
+        // needs a read per pool -- `list` must produce the same Attributes
         // shape as `read`, and reporting every pool as STANDARD would
         // misdescribe a MANAGED one. Pools that vanish mid-walk drop out.
         list: Effect.fn(function* () {
@@ -203,7 +203,7 @@ export const DedicatedIpPoolProvider = () =>
           const attrs = { poolName: name, scalingMode: found.ScalingMode };
           // A pool provisions billable dedicated IP capacity, and reconcile
           // brands the ones it creates with internal tags. So existence at our
-          // deterministic name is NOT proof of ownership — a pre-existing pool
+          // deterministic name is NOT proof of ownership -- a pre-existing pool
           // someone else pays for must be adopted deliberately (`--adopt` /
           // `adopt(true)`) rather than silently taken over.
           const tags = yield* getPoolTags(name);
@@ -216,8 +216,8 @@ export const DedicatedIpPoolProvider = () =>
           const newName = yield* createName(id, news ?? {});
           const oldMode = olds?.scalingMode ?? DEFAULT_SCALING_MODE;
           const newMode = news?.scalingMode ?? DEFAULT_SCALING_MODE;
-          // A rename replaces the pool. So does a MANAGED → STANDARD switch,
-          // which AWS has no API to perform in place (STANDARD → MANAGED is a
+          // A rename replaces the pool. So does a MANAGED -> STANDARD switch,
+          // which AWS has no API to perform in place (STANDARD -> MANAGED is a
           // supported in-place scaling change, handled in reconcile).
           if (oldName !== newName || (oldMode === "MANAGED" && newMode === "STANDARD")) {
             return { action: "replace" } as const;
@@ -230,11 +230,11 @@ export const DedicatedIpPoolProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getPool(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create with the desired scaling mode, branding the
+            // 2. ENSURE -- create with the desired scaling mode, branding the
             //    pool with internal tags. AlreadyExists is a race, not a
             //    failure.
             yield* sesv2
@@ -255,8 +255,8 @@ export const DedicatedIpPoolProvider = () =>
             );
           }
 
-          // 3. SYNC — the only in-place scaling change AWS supports is
-          //    STANDARD → MANAGED (MANAGED → STANDARD is a replacement, gated
+          // 3. SYNC -- the only in-place scaling change AWS supports is
+          //    STANDARD -> MANAGED (MANAGED -> STANDARD is a replacement, gated
           //    in diff above).
           if (observed?.ScalingMode !== desiredMode) {
             yield* sesv2.putDedicatedIpPoolScalingAttributes({
@@ -265,7 +265,7 @@ export const DedicatedIpPoolProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — brand the pool if it is not already ours. An
+          // 3b. SYNC TAGS -- brand the pool if it is not already ours. An
           //     adopted pool reaches this point without ever passing through
           //     the create above, so without this it would stay unbranded and
           //     `read` would keep reporting it Unowned on every later deploy.

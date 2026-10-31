@@ -17,9 +17,9 @@ export interface InitiateJobRequest extends Omit<
  * `glacier:InitiateJob` on the vault ARN).
  *
  * Initiates an archive-retrieval, inventory-retrieval, or select job
- * against the bound {@link Vault}. Retrieval is asynchronous — poll the
+ * against the bound {@link Vault}. Retrieval is asynchronous -- poll the
  * returned `jobId` with {@link DescribeJob} and fetch the result with
- * {@link GetJobOutput} once it completes (typically 3–5 hours for standard
+ * {@link GetJobOutput} once it completes (typically 3-5 hours for standard
  * tier, minutes for expedited).
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.InitiateJobHttp)`.

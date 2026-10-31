@@ -9,7 +9,7 @@ export interface WriteRecordsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `timestream-write:WriteRecords` — ingest time-series
+ * Runtime binding for `timestream-write:WriteRecords` -- ingest time-series
  * records into a Timestream {@link Table}.
  *
  * Bind the operation to a table inside a function runtime to get a callable
@@ -23,10 +23,10 @@ export interface WriteRecordsRequest extends Omit<
  * ### Writing Records
  * **Example:** Write a measurement
  * ```typescript
- * // init — bind the operation to the table
+ * // init -- bind the operation to the table
  * const writeRecords = yield* Timestream.WriteRecords(table);
  *
- * // runtime — ingest a record
+ * // runtime -- ingest a record
  * const result = yield* writeRecords({
  *   Records: [
  *     {

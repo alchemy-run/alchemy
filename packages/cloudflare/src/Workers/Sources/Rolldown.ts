@@ -175,9 +175,9 @@ const TEXT_EXTENSIONS =
  *
  * A separately installed or bundled `@alchemy.run/cloudflare-runtime/rolldown`
  * can resolve a physically different copy of rolldown than the one Alchemy
- * invokes. Builtin plugins — here `builtin:esm-external-require`, which
+ * invokes. Builtin plugins -- here `builtin:esm-external-require`, which
  * rewrites CJS `require`s of Node builtins into ESM imports under
- * `nodejs_compat` — are `BuiltinPlugin` class instances that rolldown
+ * `nodejs_compat` -- are `BuiltinPlugin` class instances that rolldown
  * recognizes with an `instanceof` check. An instance constructed by the
  * foreign rolldown copy fails that check and is silently treated as a
  * hookless JS plugin, so CJS requires keep rolldown's throwing `require`
@@ -249,7 +249,7 @@ export const WorkerBundle = Effect.gen(function* () {
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
     // command tree reaches this module) never loads rolldown's native
-    // binding — only actually bundling a Worker does (#562).
+    // binding -- only actually bundling a Worker does (#562).
     const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] = yield* Effect.promise(
       () =>
         Promise.all([
@@ -333,7 +333,7 @@ export const WorkerBundle = Effect.gen(function* () {
       // Rolldown's default chunking can split top-level initializer modules
       // (e.g. Drizzle `pgTable` schemas) away from the classes they read,
       // and workerd then evaluates a reader before its imported binding is
-      // initialized — the script fails Cloudflare startup validation with
+      // initialized -- the script fails Cloudflare startup validation with
       // `ScriptStartupError: Cannot access '<minified>' before
       // initialization` (#749). `strictExecutionOrder` wraps cross-chunk
       // modules so evaluation follows ESM semantics regardless of how the
@@ -435,7 +435,7 @@ ${[
 /**
  * The default source provider: bundle `props.main` with rolldown.
  *
- * `hash()` deliberately builds — recomputing "without building" is
+ * `hash()` deliberately builds -- recomputing "without building" is
  * impossible for rolldown without a source-tree memo hash, and today's
  * semantics accept that. The build routes through `Artifacts.cached`
  * under the same key as `build()`, so a diff that had to build shares

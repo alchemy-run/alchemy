@@ -189,7 +189,7 @@ export const DBProxyTargetGroupProvider = () =>
         stables: ["dbProxyName", "targetGroupArn", "targetGroupName"],
         // Target groups are proxy-scoped: `describeDBProxyTargetGroups`
         // requires a `DBProxyName`, so there is no account-wide enumeration.
-        // Fan out — enumerate every proxy via the paginated `describeDBProxies`,
+        // Fan out -- enumerate every proxy via the paginated `describeDBProxies`,
         // then list each proxy's target groups and hydrate registered targets
         // (cluster/instance identifiers) via `describeDBProxyTargets` so each
         // element matches `read`'s `Attributes` shape exactly. A proxy/target
@@ -279,7 +279,7 @@ export const DBProxyTargetGroupProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const targetGroupName = toTargetGroupName(news);
 
-          // Observe — the "default" target group is created automatically
+          // Observe -- the "default" target group is created automatically
           // by RDS when the parent DBProxy is created, so we don't `Ensure`
           // a target group ourselves. We just describe it to confirm the
           // proxy is ready and to read connection-pool config.
@@ -288,7 +288,7 @@ export const DBProxyTargetGroupProvider = () =>
             targetGroupName,
           });
 
-          // Sync connection pool config — push desired shape if provided.
+          // Sync connection pool config -- push desired shape if provided.
           // `modifyDBProxyTargetGroup` is idempotent for unchanged config.
           if (news.connectionPoolConfig) {
             yield* rds.modifyDBProxyTargetGroup({
@@ -298,7 +298,7 @@ export const DBProxyTargetGroupProvider = () =>
             });
           }
 
-          // Sync registered targets — diff observed live targets against
+          // Sync registered targets -- diff observed live targets against
           // desired and apply only the delta. We trust live cloud state
           // over `output`/`olds` so adoption and drift converge.
           const { observedClusters, observedInstances } = yield* readTargets({

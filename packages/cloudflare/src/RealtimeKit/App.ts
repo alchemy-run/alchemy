@@ -18,7 +18,7 @@ export type AppProps = {
    * ID.
    *
    * RealtimeKit currently ships no update API, so the name cannot be changed
-   * after creation — and no delete API either, so a name change cannot be
+   * after creation -- and no delete API either, so a name change cannot be
    * modeled as a replacement (the old app could never be removed). Changing
    * this property fails the deploy.
    * @default ${app}-${stage}-${id}
@@ -49,13 +49,13 @@ export type AppAttributes = {
 export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
 
 /**
- * A Cloudflare RealtimeKit app — the organizational container for RealtimeKit
+ * A Cloudflare RealtimeKit app -- the organizational container for RealtimeKit
  * meetings, presets, and webhooks.
  *
  * RealtimeKit (the acquired Dyte platform) is in beta and must be enabled on
  * the account. The API is create-only today: there is no update and no delete
  * endpoint. Destroying the resource therefore only forgets the app from state
- * (with a warning) — the app itself remains on the account until Cloudflare
+ * (with a warning) -- the app itself remains on the account until Cloudflare
  * ships a delete API. Because of this, an existing app with the same name is
  * adopted rather than duplicated.
  * ### Creating an App
@@ -99,7 +99,7 @@ export const AppProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // No update API and no delete API — a name change can neither be
+      // No update API and no delete API -- a name change can neither be
       // applied in place nor modeled as a replacement (the old app could
       // never be removed). Reconcile fails loudly on a drifted name; diff
       // lets the default update flow surface that error.
@@ -115,7 +115,7 @@ export const AppProvider = () =>
         const observed = yield* findById(acct, output.appId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. App names are not unique; an exact match on our
       // generated/explicit name is the best identity we have, and adoption
       // is preferable to orphan-spam since apps cannot be deleted.
@@ -127,7 +127,7 @@ export const AppProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
-      // Observe — the appId cached on `output` is a hint, not a guarantee.
+      // Observe -- the appId cached on `output` is a hint, not a guarantee.
       // Fall back to a name scan so an existing same-named app is adopted
       // instead of duplicated (apps can never be deleted).
       const observed = output?.appId
@@ -135,7 +135,7 @@ export const AppProvider = () =>
         : yield* findByName(accountId, name);
 
       if (!observed) {
-        // Ensure — greenfield: create. Names are not unique so there is no
+        // Ensure -- greenfield: create. Names are not unique so there is no
         // AlreadyExists race to tolerate.
         const created = yield* realtimeKit.postApp({ accountId, name });
         const app = created.data?.app;
@@ -147,7 +147,7 @@ export const AppProvider = () =>
         };
       }
 
-      // Sync — RealtimeKit has no update API. The only mutable-looking prop
+      // Sync -- RealtimeKit has no update API. The only mutable-looking prop
       // is the name; fail loudly instead of silently ignoring drift.
       if ((observed.name ?? "") !== name) {
         return yield* new AppRenameNotSupported({
@@ -159,21 +159,21 @@ export const AppProvider = () =>
       }
       return toAttributes(observed, observed.accountId);
     }),
-    // No delete API exists, so `delete` cannot actually remove the app — it
+    // No delete API exists, so `delete` cannot actually remove the app -- it
     // would re-appear on every `nuke` scan. Skip it in account-wide teardown
     // instead of falsely reporting it deleted.
     nuke: { skip: true },
     delete: Effect.fn(function* ({ output }) {
-      // RealtimeKit ships no delete API. Forget the app from state and warn —
+      // RealtimeKit ships no delete API. Forget the app from state and warn --
       // the app remains on the account until Cloudflare adds deletion.
       yield* Effect.logWarning(
-        `Cloudflare RealtimeKit has no delete API — app "${output.name}" (${output.appId}) was removed from state but still exists on account ${output.accountId}.`,
+        `Cloudflare RealtimeKit has no delete API \u2014 app "${output.name}" (${output.appId}) was removed from state but still exists on account ${output.accountId}.`,
       );
     }),
     // Account-scoped collection: enumerate every RealtimeKit app on the
     // account, exhaustively paginated, and hydrate each into the exact `read`
     // Attributes shape. Unentitled accounts reject the list with the typed
-    // `Forbidden` (403) which propagates — the suite gates the live assertion
+    // `Forbidden` (403) which propagates -- the suite gates the live assertion
     // behind an entitlement probe.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

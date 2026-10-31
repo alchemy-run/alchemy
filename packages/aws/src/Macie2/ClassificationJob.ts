@@ -46,7 +46,7 @@ export interface ClassificationJobProps {
 
   /**
    * The S3 buckets to analyze, grouped by owning account. Changing this
-   * replaces the job — classification jobs are immutable once created.
+   * replaces the job -- classification jobs are immutable once created.
    */
   bucketDefinitions: BucketDefinition[];
 
@@ -97,7 +97,7 @@ export interface ClassificationJob extends Resource<
 > {}
 
 /**
- * An Amazon Macie classification job — scans one or more S3 buckets for
+ * An Amazon Macie classification job -- scans one or more S3 buckets for
  * sensitive data. Requires Macie to be enabled for the account (see
  * `Macie2.Session`). Jobs are immutable once created; changing the job type,
  * name, or bucket set replaces the job. Destroy cancels the job.
@@ -128,7 +128,7 @@ export { ClassificationJobResource as ClassificationJob };
 const createName = (id: string, props: Partial<ClassificationJobProps>) =>
   props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 200 });
 
-// A stable fingerprint of the immutable definition — any change replaces.
+// A stable fingerprint of the immutable definition -- any change replaces.
 const fingerprint = (props: Partial<ClassificationJobProps>) =>
   JSON.stringify({
     jobType: props.jobType ?? "ONE_TIME",
@@ -186,11 +186,11 @@ export const ClassificationJobProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const name = output?.name ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let jobId = output?.jobId;
           let live = jobId ? yield* describe(jobId) : undefined;
 
-          // 2. ENSURE — create the job if it does not exist.
+          // 2. ENSURE -- create the job if it does not exist.
           if (jobId === undefined || live === undefined) {
             const created = yield* retryThroughEnablement(
               macie2.createClassificationJob({
@@ -212,7 +212,7 @@ export const ClassificationJobProvider = () =>
             jobId = created.jobId!;
             live = yield* macie2.describeClassificationJob({ jobId });
           } else {
-            // 3. SYNC tags — the definition is immutable; only tags mutate.
+            // 3. SYNC tags -- the definition is immutable; only tags mutate.
             const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
@@ -235,7 +235,7 @@ export const ClassificationJobProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Classification jobs cannot be deleted — only cancelled. Cancelling
+          // Classification jobs cannot be deleted -- only cancelled. Cancelling
           // an already-terminal job raises ConflictException; treat as done.
           yield* macie2
             .updateClassificationJob({

@@ -18,14 +18,14 @@ import { hasNodejsAls, hasNodejsCompat } from "@alchemy.run/cloudflare-runtime/r
  * skip the preview-server indirection entirely: the built output under
  * `dist/server/.prerender/` is loaded from disk into workerd via
  * `cloudflare-runtime`'s `Runtime.start`, with the same bindings, assets
- * directory, and compatibility settings as the entry worker — so prerendered
+ * directory, and compatibility settings as the entry worker -- so prerendered
  * pages render in the same runtime that serves them in production
  * (top-level `cloudflare:*` imports included).
  *
  * Protocol (served by the vendored runtime handler when
  * `virtual:astro-cloudflare:config`'s `isPrerender` is true):
- * - `POST /__astro_static_paths` → all paths to prerender (serialized routes)
- * - `POST /__astro_prerender` → renders one page, framed with its render
+ * - `POST /__astro_static_paths` -> all paths to prerender (serialized routes)
+ * - `POST /__astro_prerender` -> renders one page, framed with its render
  *   metadata (`runtime/utils/prerender-response.ts`); a failure is signalled
  *   via the `x-astro-prerender-error` response header
  *
@@ -55,11 +55,11 @@ const PRERENDER_OUTPUT_SUBDIR = "./.prerender/";
 const PRERENDER_ENTRY_PATTERN = /^prerender-entry\..*\.mjs$/;
 
 export interface WorkerdPrerendererOptions {
-  /** `config.build.server` — the prerender build lives in `.prerender/` inside it. */
+  /** `config.build.server` -- the prerender build lives in `.prerender/` inside it. */
   readonly serverDir: URL;
-  /** `config.build.client` — served as the worker's assets directory. */
+  /** `config.build.client` -- served as the worker's assets directory. */
   readonly clientDir: URL;
-  /** `config.trailingSlash` — needed to serialize route data for the protocol. */
+  /** `config.trailingSlash` -- needed to serialize route data for the protocol. */
   readonly trailingSlash: AstroConfig["trailingSlash"];
   /**
    * The integration's `@alchemy.run/cloudflare-runtime/vite` options: the
@@ -82,7 +82,7 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
     if (serverUrl === undefined) {
       throw new Error(
         "The workerd prerender server is not running. " +
-          "This is a bug in @alchemy.run/frontend-frameworks/astro — `setup()` must run before the prerender protocol is driven.",
+          "This is a bug in @alchemy.run/frontend-frameworks/astro \u2014 `setup()` must run before the prerender protocol is driven.",
       );
     }
     return serverUrl;
@@ -231,7 +231,7 @@ export const collectOutputModules = async (outputDir: string): Promise<Array<Mod
   if (entryIndex === -1) {
     throw new Error(
       `No prerender entry chunk (prerender-entry.*.mjs) found in "${outputDir}". ` +
-        "This is a bug in @alchemy.run/frontend-frameworks/astro — the prerender environment should have built the worker server entrypoint.",
+        "This is a bug in @alchemy.run/frontend-frameworks/astro \u2014 the prerender environment should have built the worker server entrypoint.",
     );
   }
   const [entryModule] = modules.splice(entryIndex, 1);

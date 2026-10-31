@@ -19,7 +19,7 @@ export interface FunctionProps {
    */
   apiId: string;
   /**
-   * Name of the function (`[_A-Za-z][_0-9A-Za-z]*` — no dashes). If
+   * Name of the function (`[_A-Za-z][_0-9A-Za-z]*` -- no dashes). If
    * omitted, a deterministic name is generated (dashes sanitized to
    * underscores). Names are mutable.
    */
@@ -38,11 +38,11 @@ export interface FunctionProps {
   /** VTL response mapping template (legacy alternative to `code`). */
   responseMappingTemplate?: string;
   /**
-   * The VTL function version — only used with mapping templates.
+   * The VTL function version -- only used with mapping templates.
    * @default "2018-05-29" (when templates are used)
    */
   functionVersion?: string;
-  /** Maximum batch size for batched Lambda invocations (0–2000). */
+  /** Maximum batch size for batched Lambda invocations (0-2000). */
   maxBatchSize?: number;
 }
 
@@ -66,7 +66,7 @@ export interface AppSyncFunction extends Resource<
 > {}
 
 /**
- * An AppSync pipeline function — a reusable step composed by `PIPELINE`
+ * An AppSync pipeline function -- a reusable step composed by `PIPELINE`
  * resolvers.
  * ### Creating Pipeline Functions
  * **Example:** JavaScript pipeline function over a Lambda data source
@@ -213,7 +213,7 @@ export const FunctionProvider = () =>
         stables: ["apiId", "functionId", "functionArn"],
 
         // Sub-resource keyed entirely by its GraphQL API (apiId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -242,7 +242,7 @@ export const FunctionProvider = () =>
           const name = news.name ?? (yield* createName(id, news));
           const desired = desiredWire(news, name);
 
-          // 1. OBSERVE — functionId cache first, then name scan.
+          // 1. OBSERVE -- functionId cache first, then name scan.
           let observed =
             output?.functionId !== undefined
               ? yield* getFunctionSafe(apiId, output.functionId)

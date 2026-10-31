@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBClusterSnapshots` operation (IAM action
  * `rds:DescribeDBClusterSnapshots`).
  *
- * Lists the account's Neptune cluster snapshots (manual and automated) —
+ * Lists the account's Neptune cluster snapshots (manual and automated) --
  * for backup verification and restore tooling. Provide the implementation
  * with `Effect.provide(AWS.Neptune.DescribeDBClusterSnapshotsHttp)`.
  * ### Managing Snapshots

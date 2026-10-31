@@ -8,14 +8,14 @@ import * as Schedule from "effect/Schedule";
 
 /**
  * The connector configuration for a data source. Passed through to the
- * Bedrock API unchanged — see the AWS SDK `DataSourceConfiguration` shape.
+ * Bedrock API unchanged -- see the AWS SDK `DataSourceConfiguration` shape.
  * The common case is a `S3` type with `s3Configuration.bucketArn` set.
  */
 export type DataSourceConfiguration = bedrock.DataSourceConfiguration;
 
 /**
  * Controls document chunking, parsing, and custom transformation before
- * embedding. Passed through unchanged — see the AWS SDK
+ * embedding. Passed through unchanged -- see the AWS SDK
  * `VectorIngestionConfiguration` shape.
  */
 export type VectorIngestionConfiguration = bedrock.VectorIngestionConfiguration;
@@ -78,13 +78,13 @@ export interface DataSource extends Resource<
 > {}
 
 /**
- * A data source attached to an Amazon Bedrock {@link KnowledgeBase} — the
+ * A data source attached to an Amazon Bedrock {@link KnowledgeBase} -- the
  * origin of the documents the knowledge base embeds and indexes.
  *
  * The most common source is an S3 bucket. After the data source is created,
  * start an ingestion job (`bedrock-agent:StartIngestionJob`) to crawl the
  * source, chunk + embed the documents, and write them to the vector store.
- * Ingestion is not part of the desired-state lifecycle — trigger it whenever
+ * Ingestion is not part of the desired-state lifecycle -- trigger it whenever
  * the underlying documents change.
  *
  * ### Creating Data Sources
@@ -153,7 +153,7 @@ export const DataSourceProvider = () =>
       return DataSource.Provider.of({
         stables: ["knowledgeBaseId", "dataSourceId", "name"],
 
-        // Data sources are scoped to a parent knowledge base — enumeration
+        // Data sources are scoped to a parent knowledge base -- enumeration
         // requires the KB id, so this returns empty (the engine keys off state).
         list: () => Effect.succeed([]),
 

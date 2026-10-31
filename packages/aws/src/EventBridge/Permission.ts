@@ -90,7 +90,7 @@ export const PermissionProvider = () =>
             // EventBridge has no list-permissions API. A Permission is a
             // single statement inside an event bus resource policy, so we
             // enumerate every bus in the ambient account/region (manual
-            // NextToken pagination — listEventBuses is not a paginated
+            // NextToken pagination -- listEventBuses is not a paginated
             // distilled op), describe each bus to read its Policy JSON, and
             // emit one Attributes per statement Sid.
             const busNames: string[] = [];
@@ -139,7 +139,7 @@ export const PermissionProvider = () =>
                       eventBusName: busName,
                     }));
                 }).pipe(
-                  // Bus removed out of band between list and describe — skip.
+                  // Bus removed out of band between list and describe -- skip.
                   Effect.catchTag("ResourceNotFoundException", () =>
                     Effect.succeed([] as PermissionAttrs[]),
                   ),
@@ -170,7 +170,7 @@ export const PermissionProvider = () =>
           // server-side `describePermission` for a single statement, so we
           // remove-then-put unconditionally. `removePermission` tolerates
           // missing statements; `putPermission` is idempotent on identical
-          // params and overwrites on different ones — this is the official
+          // params and overwrites on different ones -- this is the official
           // recommended update path.
           yield* eventbridge
             .removePermission({

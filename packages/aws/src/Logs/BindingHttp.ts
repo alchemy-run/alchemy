@@ -6,8 +6,8 @@ import type { LogGroup } from "./LogGroup.ts";
 /**
  * Shared scaffolding for CloudWatch Logs HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, makeLogGroupHttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, makeLogGroupHttpBinding({ ... }))` over
  * this builder. Everything except the operation, the IAM action(s), and the
  * IAM resource shape is boilerplate:
  *
@@ -15,7 +15,7 @@ import type { LogGroup } from "./LogGroup.ts";
  *   requested actions on the bound group's ARN (and/or its `:*` log-stream
  *   wildcard, per `iamResources`);
  * - the runtime callable injects the resolved `logGroupName` into the request
- *   (unless `injectLogGroupName: false` — for query-id / record-pointer
+ *   (unless `injectLogGroupName: false` -- for query-id / record-pointer
  *   scoped operations like `GetQueryResults`, `StopQuery`, `GetLogRecord`).
  *
  * Genuinely-different bindings stay bespoke: `LogEventSink` (a batching sink
@@ -28,7 +28,7 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
    * The distilled operation the runtime callable invokes.
    *
    * Typed as distilled's `OperationMethod` intersection (yieldable Effect +
-   * direct call signature) so `I` is inferred from the call signature — the
+   * direct call signature) so `I` is inferred from the call signature -- the
    * Effect half alone defeats inference for requests without `logGroupName`
    * (e.g. `GetLogRecord`, `GetQueryResults`, `StopQuery`).
    */
@@ -39,9 +39,9 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
   /**
    * Which ARNs the actions are granted on:
    * - `"group-and-streams"` (default): the log-group ARN plus `${arn}:*`;
-   * - `"streams"`: only `${arn}:*` — for actions that authorize against the
+   * - `"streams"`: only `${arn}:*` -- for actions that authorize against the
    *   log-stream resource (`PutLogEvents`, `DeleteLogStream`);
-   * - `"all"`: `*` — for actions that do not support resource-level
+   * - `"all"`: `*` -- for actions that do not support resource-level
    *   permissions (`StopQuery`).
    */
   iamResources?: "group-and-streams" | "streams" | "all";

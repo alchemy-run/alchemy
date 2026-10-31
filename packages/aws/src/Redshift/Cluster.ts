@@ -292,7 +292,7 @@ const DEFAULT_DB_NAME = "dev";
  * Expressed as an explicitly-typed module-scope helper: inlining
  * `Effect.retry` in a lifecycle operation leaves `Retry.Return`'s
  * conditional type unresolved in the provider's inferred layer type, which
- * declaration emit widens to an `unknown` R — poisoning `AWS.providers()`
+ * declaration emit widens to an `unknown` R -- poisoning `AWS.providers()`
  * for every downstream consumer.
  */
 const retryWhileClusterTransitioning = <A, E extends { _tag: string }, R>(
@@ -454,10 +454,10 @@ export const ClusterProvider = () =>
           const desiredNodeType = news.nodeType ?? DEFAULT_NODE_TYPE;
           const clusterType = desiredNodes > 1 ? "multi-node" : "single-node";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCluster(identifier);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             if (!news.masterUserPassword && !news.manageMasterPassword) {
               return yield* new RedshiftMasterPasswordRequired({
@@ -502,7 +502,7 @@ export const ClusterProvider = () =>
           // InvalidClusterStateFault.
           observed = yield* waitForAvailable(identifier);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: redshift.ModifyClusterMessage = {
             ClusterIdentifier: identifier,
           };
@@ -582,7 +582,7 @@ export const ClusterProvider = () =>
             update.EnhancedVpcRouting = news.enhancedVpcRouting;
             mutated = true;
           }
-          // The live password is unobservable — apply it only when the
+          // The live password is unobservable -- apply it only when the
           // declared value actually changed (olds is a hint, never truth).
           if (
             olds !== undefined &&
@@ -607,7 +607,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForAvailable(identifier);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags (describe
+          // 3b. Sync tags -- diff against OBSERVED cloud tags (describe
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "cluster", identifier);
@@ -622,7 +622,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const identifier = output.clusterIdentifier;
           // A cluster mid-create/modify rejects deletion with
-          // InvalidClusterStateFault — wait (bounded) for it to settle
+          // InvalidClusterStateFault -- wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
           yield* waitUntilSettled(identifier).pipe(Effect.orElseSucceed(() => undefined));
           yield* retryWhileClusterTransitioning(

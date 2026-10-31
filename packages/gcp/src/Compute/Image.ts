@@ -55,43 +55,43 @@ export type ImageProps = {
   labels?: Record<string, string>;
   /**
    * Source disk URL (`projects/{project}/zones/{zone}/disks/{disk}`).
-   * Immutable — changing it replaces the image. Provide one of
+   * Immutable -- changing it replaces the image. Provide one of
    * `sourceDisk`, `sourceImage`, `sourceSnapshot`, or `rawDisk`.
    */
   sourceDisk?: string;
   /**
    * Source image URL (`projects/{project}/global/images/{image}` or
-   * `.../images/family/{family}`). Immutable — changing it replaces
+   * `.../images/family/{family}`). Immutable -- changing it replaces
    * the image.
    */
   sourceImage?: string;
   /**
    * Source snapshot URL (`projects/{project}/global/snapshots/{snapshot}`).
-   * Immutable — changing it replaces the image.
+   * Immutable -- changing it replaces the image.
    */
   sourceSnapshot?: string;
   /**
-   * Raw disk image stored in Cloud Storage. Immutable — changing it
+   * Raw disk image stored in Cloud Storage. Immutable -- changing it
    * replaces the image.
    */
   rawDisk?: ImageRawDisk;
   /**
    * Size of the image when restored onto a persistent disk, in GB.
-   * Immutable — changing it replaces the image.
+   * Immutable -- changing it replaces the image.
    */
   diskSizeGb?: number;
   /**
-   * Cloud Storage locations for the image (`us-central1`, `us`, …).
-   * Immutable — changing it replaces the image.
+   * Cloud Storage locations for the image (`us-central1`, `us`, ...).
+   * Immutable -- changing it replaces the image.
    */
   storageLocations?: string[];
   /**
-   * CPU architecture (`ARM64` or `X86_64`). Immutable — changing it
+   * CPU architecture (`ARM64` or `X86_64`). Immutable -- changing it
    * replaces the image.
    */
   architecture?: compute.ImageArchitectureEnum | (string & {});
   /**
-   * License URIs attached to the image. Immutable — changing it replaces
+   * License URIs attached to the image. Immutable -- changing it replaces
    * the image.
    */
   licenses?: string[];
@@ -107,7 +107,7 @@ export type Image = Resource<
     imageId: string | undefined;
     /** Project id. */
     project: string;
-    /** Server-reported status (`PENDING`, `READY`, `FAILED`, …). */
+    /** Server-reported status (`PENDING`, `READY`, `FAILED`, ...). */
     status: string | undefined;
     /** Image family, if set. */
     family: string | undefined;

@@ -38,7 +38,7 @@ export type AgentInfo = {
 export type AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProps = {
   /**
    * Parent conversation under an AuthorizedView
-   * (`{authorizedView}/conversations/{conversation}`). Immutable —
+   * (`{authorizedView}/conversations/{conversation}`). Immutable --
    * changing it replaces the assessment.
    */
   parent: string;
@@ -81,7 +81,7 @@ export type AuthorizedViewSetsAuthorizedViewsConversationsAssessment = Resource<
  * A Contact Center AI Insights quality assessment of a conversation,
  * created through an AuthorizedView.
  *
- * Assessments have no labels field and no patch API — Alchemy stamps
+ * Assessments have no labels field and no patch API -- Alchemy stamps
  * ownership into `agentInfo.displayName`. Parent conversation is
  * immutable. Reconcile is observe-then-ensure.
  *

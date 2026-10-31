@@ -85,12 +85,12 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
     }).pipe(
       // The "Handler does not export a fetch()" window is a property of
       // invoking a freshly-deployed Cloudflare binding, so it is ridden out
-      // HERE — the one adapter every binding flows through — rather than in any
+      // HERE -- the one adapter every binding flows through -- rather than in any
       // single higher-level wrapper (`toHttpClient`, the client/server
       // overloads, the RPC DO transport all go through this). `Effect.promise`
       // surfaces the rejection as a defect; lift it to a typed retryable error
       // and back off until the new version propagates. The request never
-      // reached a handler, so nothing committed — safe to retry. This wraps
+      // reached a handler, so nothing committed -- safe to retry. This wraps
       // only the promise, leaving the response (and its streaming body)
       // untouched, so RPC/stream decoding is unaffected. After the budget is
       // exhausted, re-raise the original defect unchanged.
@@ -145,7 +145,7 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
         : pipe(
             HttpServerRequest.toWeb(request),
             // `toWeb` hands back the raw native request untouched whenever
-            // there is one (always, on workerd) — the fast path we WANT:
+            // there is one (always, on workerd) -- the fast path we WANT:
             // it forwards the platform's own edge request instead of
             // cloning it. The catch is that it also ignores header
             // overrides from `request.modify({ headers })`, so a caller
@@ -224,7 +224,7 @@ export const toHttpClient = (fetcher: {
       // The handler-not-ready window is already ridden out at the lowest level
       // (the `fromCloudflareFetcher` promise retries `HandlerNotReady` before
       // it ever reaches here). A `HandlerNotReady` still surfacing means the
-      // budget was exhausted — it arrives as a defect (re-raised rejected
+      // budget was exhausted -- it arrives as a defect (re-raised rejected
       // promise), so convert it (and any other failure cause) into a typed
       // transport error rather than retrying again.
       Effect.catchCause((cause) => {
@@ -245,7 +245,7 @@ export const toHttpClient = (fetcher: {
 export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
   // `fromTransformStream` snapshots fiber context, then waits to acquire
   // the streams until a consumer opens the reader. `runSync` is only that
-  // snapshot — connection still happens on first `socket.reader`.
+  // snapshot -- connection still happens on first `socket.reader`.
   Effect.tryPromise({
     try: () =>
       Promise.resolve(cfSocket.opened).then(

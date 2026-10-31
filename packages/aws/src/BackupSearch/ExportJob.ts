@@ -23,18 +23,18 @@ export interface ExportSpecification {
 
 export interface ExportJobProps {
   /**
-   * Identifier of the search job whose results are exported. Immutable —
+   * Identifier of the search job whose results are exported. Immutable --
    * changing it replaces the export job.
    */
   searchJobIdentifier: string;
   /**
-   * Where the results are exported to. Immutable — changing it replaces the
+   * Where the results are exported to. Immutable -- changing it replaces the
    * export job.
    */
   exportSpecification: ExportSpecification;
   /**
    * ARN of the IAM role BackupSearch assumes to write the export to the
-   * destination bucket. Immutable — changing it replaces the export job.
+   * destination bucket. Immutable -- changing it replaces the export job.
    */
   roleArn?: string;
   /**
@@ -69,7 +69,7 @@ export interface ExportJob extends Resource<
 > {}
 
 /**
- * An AWS Backup Search export job — transmits the results of a completed
+ * An AWS Backup Search export job -- transmits the results of a completed
  * search job to a designated S3 bucket as a `.csv` file, retaining them
  * beyond the search job's seven-day retention. An export job is immutable
  * once started and cannot be stopped or deleted; its record ages out
@@ -144,13 +144,13 @@ export const ExportJobProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // OBSERVE — output is only an identifier cache; the job may be gone.
+          // OBSERVE -- output is only an identifier cache; the job may be gone.
           let job =
             output?.exportJobIdentifier !== undefined
               ? yield* get(output.exportJobIdentifier)
               : undefined;
 
-          // ENSURE — an export job is immutable once started; start it if
+          // ENSURE -- an export job is immutable once started; start it if
           // missing. Any change to its inputs is a replacement (diff).
           if (job === undefined) {
             const started = yield* backupsearch.startSearchResultExportJob({
@@ -170,7 +170,7 @@ export const ExportJobProvider = () =>
               ExportJobIdentifier: started.ExportJobIdentifier,
             });
           } else if (job.ExportJobArn !== undefined) {
-            // SYNC — tags are the only mutable aspect; diff against OBSERVED.
+            // SYNC -- tags are the only mutable aspect; diff against OBSERVED.
             yield* syncBackupSearchTags(job.ExportJobArn, desiredTags);
           }
 
@@ -178,7 +178,7 @@ export const ExportJobProvider = () =>
           return toAttrs(job);
         }),
 
-        // An export job cannot be stopped or deleted — its record ages out
+        // An export job cannot be stopped or deleted -- its record ages out
         // server-side and the exported .csv lives in the destination bucket.
         delete: () => Effect.void,
 

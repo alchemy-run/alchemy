@@ -37,7 +37,7 @@ export interface ClusterSchedulerConfigProps {
   /**
    * ARN of the EKS-orchestrated HyperPod cluster the policy applies to.
    * Changing the cluster replaces the policy. AWS allows ONE cluster
-   * policy per cluster — creating a second fails with the typed
+   * policy per cluster -- creating a second fails with the typed
    * `ClusterSchedulerConfigAlreadyExists` error.
    */
   clusterArn: string;
@@ -87,7 +87,7 @@ export interface ClusterSchedulerConfig extends Resource<
 > {}
 
 /**
- * A SageMaker HyperPod cluster policy (task governance) — configures how an
+ * A SageMaker HyperPod cluster policy (task governance) -- configures how an
  * EKS-orchestrated HyperPod cluster prioritizes tasks and allocates idle
  * compute across teams via priority classes and fair-share weights.
  * ### Creating Cluster Policies
@@ -123,7 +123,7 @@ const describeConfigOrUndefined = (configId: string) =>
     .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 /**
- * Look a cluster policy up by exact name — used when state was lost (read
+ * Look a cluster policy up by exact name -- used when state was lost (read
  * without output) or a create raced.
  */
 const findConfigByName = Effect.fn(function* (name: string) {
@@ -158,7 +158,7 @@ const toAttrs = (
 });
 
 /**
- * The cluster policy is still transitioning toward the awaited state —
+ * The cluster policy is still transitioning toward the awaited state --
  * retried by the bounded wait schedule.
  */
 class SchedulerConfigNotReady extends Data.TaggedError("SchedulerConfigNotReady")<{
@@ -184,7 +184,7 @@ const FAILED_STATUSES: string[] = [
   "DeleteRollbackFailed",
 ];
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -287,7 +287,7 @@ export const ClusterSchedulerConfigProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — by cached id first, then by name (lost state or race).
+          // Observe -- by cached id first, then by name (lost state or race).
           let configId = output?.clusterSchedulerConfigId;
           let described =
             configId !== undefined ? yield* describeConfigOrUndefined(configId) : undefined;
@@ -299,7 +299,7 @@ export const ClusterSchedulerConfigProvider = () =>
                 : undefined;
           }
 
-          // Ensure — create if missing; a Conflict means a concurrent
+          // Ensure -- create if missing; a Conflict means a concurrent
           // create won the race, so re-observe by name.
           if (described === undefined) {
             const created = yield* sagemaker
@@ -329,7 +329,7 @@ export const ClusterSchedulerConfigProvider = () =>
             // Wait out any in-flight transition before diffing.
             yield* waitForConfig(configId, "Ready");
             described = yield* describeConfigOrUndefined(configId);
-            // Sync — diff observed policy against desired.
+            // Sync -- diff observed policy against desired.
             if (
               described !== undefined &&
               (JSON.stringify(described.SchedulerConfig) !== JSON.stringify(news.schedulerConfig) ||
@@ -354,7 +354,7 @@ export const ClusterSchedulerConfigProvider = () =>
           }
           const attrs = toAttrs(described);
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchConfigTags(attrs.clusterSchedulerConfigArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

@@ -23,7 +23,7 @@ const MAX_ID_LENGTH = 32;
 export type EndpointAttachmentProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the
+   * current GCP project id. Immutable -- changing it replaces the
    * attachment.
    */
   organization?: string;
@@ -33,12 +33,12 @@ export type EndpointAttachmentProps = {
    * Must start with a lowercase letter, be 2-32 characters of lowercase
    * letters, numbers, or hyphens, and must not end with a hyphen. If
    * omitted, a unique `alc-` prefixed name is generated so `list` / nuke
-   * can find it (the API has no labels or description). Immutable —
+   * can find it (the API has no labels or description). Immutable --
    * changing it replaces the attachment.
    */
   endpointAttachmentId?: string;
   /**
-   * Location of the endpoint attachment. Immutable — changing it replaces
+   * Location of the endpoint attachment. Immutable -- changing it replaces
    * the attachment. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -47,7 +47,7 @@ export type EndpointAttachmentProps = {
   /**
    * Service attachment in
    * `projects/{project}/regions/{region}/serviceAttachments/{attachment}`.
-   * Immutable — changing it replaces the attachment.
+   * Immutable -- changing it replaces the attachment.
    */
   serviceAttachment: string;
 };
@@ -68,7 +68,7 @@ export type EndpointAttachment = Resource<
     serviceAttachment: string | undefined;
     /** Host that can be used as an HTTP target. */
     host: string | undefined;
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** Connection state to the service attachment. */
     connectionState: string | undefined;
@@ -81,7 +81,7 @@ export type EndpointAttachment = Resource<
  * An Apigee endpoint attachment for southbound Private Service Connect.
  *
  * The API has no labels or description, so Alchemy prefixes generated ids
- * with `alc-` so `list` / nuke can find them. All properties are identity —
+ * with `alc-` so `list` / nuke can find them. All properties are identity --
  * changing any of them replaces the attachment.
  *
  * ### Creating an Endpoint Attachment

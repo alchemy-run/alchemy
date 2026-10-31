@@ -26,7 +26,7 @@ export type SuppressionListReason = "BOUNCE" | "COMPLAINT";
 
 export interface ConfigurationSetTrackingSettings {
   /**
-   * A custom domain — a verified subdomain you own, with a valid certificate —
+   * A custom domain -- a verified subdomain you own, with a valid certificate --
    * that SES uses to host open- and click-tracking links for email sent
    * through this configuration set.
    *
@@ -105,7 +105,7 @@ export interface ConfigurationSetProps {
   tracking?: ConfigurationSetTrackingSettings;
   /**
    * Virtual Deliverability Manager configuration for this configuration set.
-   * Requires account-level VDM to be enabled — see `SES.AccountSettings`.
+   * Requires account-level VDM to be enabled -- see `SES.AccountSettings`.
    *
    * Members cannot be unset once set: dropping this prop keeps the current
    * state rather than clearing it. A member you do omit while managing its
@@ -138,7 +138,7 @@ export interface ConfigurationSet extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 configuration set — a named group of sending options
+ * An Amazon SES v2 configuration set -- a named group of sending options
  * (TLS policy, reputation metrics, suppression overrides) that you apply to
  * outbound email, either per-message or as an identity's default.
  *
@@ -184,7 +184,7 @@ export interface ConfigurationSet extends Resource<
  * ### Virtual Deliverability Manager
  * **Example:** Collect Engagement Metrics for This Configuration Set
  * ```typescript
- * // Requires account-level VDM — see SES.AccountSettings.
+ * // Requires account-level VDM -- see SES.AccountSettings.
  * const configSet = yield* SES.ConfigurationSet("Measured", {
  *   vdm: {
  *     dashboardEngagementMetrics: "ENABLED",
@@ -323,10 +323,10 @@ export const ConfigurationSetProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredMaxDelivery = toWireSeconds(news.maxDelivery);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getConfigurationSet(name);
 
-          // 2. ENSURE — create with the full desired option set in one call;
+          // 2. ENSURE -- create with the full desired option set in one call;
           //    AlreadyExists is a race, not a failure.
           if (observed === undefined) {
             yield* sesv2
@@ -361,7 +361,7 @@ export const ConfigurationSetProvider = () =>
             });
           }
 
-          // 3. SYNC — per mutable aspect: diff observed against desired and
+          // 3. SYNC -- per mutable aspect: diff observed against desired and
           //    apply only the delta.
           const desiredSending = news.sendingEnabled ?? true;
           if ((observed.SendingOptions?.SendingEnabled ?? true) !== desiredSending) {
@@ -411,7 +411,7 @@ export const ConfigurationSetProvider = () =>
 
           // Tracking is only synced when the caller manages it; leaving the
           // prop undefined keeps whatever SES currently has. `httpsPolicy`
-          // cannot drift on its own — the type requires a custom domain
+          // cannot drift on its own -- the type requires a custom domain
           // alongside it, because SES has no way to set an HTTPS policy for
           // the default tracking domain.
           if (
@@ -462,7 +462,7 @@ export const ConfigurationSetProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

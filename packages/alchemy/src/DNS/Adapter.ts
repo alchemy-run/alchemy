@@ -2,8 +2,8 @@
  * Pluggable DNS for custom domains.
  *
  * A custom domain has two independent halves: the platform that SERVES the
- * hostname (CloudFront, an ALB, API Gateway, a Worker, a Fly App, …) and the
- * DNS host that PUBLISHES its records (Route 53, Cloudflare, Hetzner DNS, …).
+ * hostname (CloudFront, an ALB, API Gateway, a Worker, a Fly App, ...) and the
+ * DNS host that PUBLISHES its records (Route 53, Cloudflare, Hetzner DNS, ...).
  * `domain.dns` names the DNS host.
  *
  * The prop value is a {@link DnsConfig}: plain, serializable data
@@ -13,7 +13,7 @@
  *
  * - a data constructor (`Cloudflare.DNS.Adapter()`,
  *   `AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`), and
- * - a {@link DnsAdapter} — functions that declare its record resources —
+ * - a {@link DnsAdapter} -- functions that declare its record resources --
  *   registered with {@link adapterLayer} from its own `providers()` layer.
  *
  * A composite (or a Platform's `transformProps` hook) resolves the adapter
@@ -58,8 +58,8 @@ export interface DnsConfig<Type extends string = string> {
 export type DnsRecordType = "A" | "AAAA" | "CNAME" | "TXT";
 
 /**
- * One record to publish — typically computed from another resource's
- * outputs (ACM validation CNAMEs, a platform's ownership TXT, …).
+ * One record to publish -- typically computed from another resource's
+ * outputs (ACM validation CNAMEs, a platform's ownership TXT, ...).
  */
 export interface DnsRecord {
   /** Fully qualified record name (a trailing dot is ignored). */
@@ -75,7 +75,7 @@ export interface DnsRecord {
 }
 
 /**
- * A hostname target: a CNAME to `hostname`, or — on Route 53 — an alias
+ * A hostname target: a CNAME to `hostname`, or -- on Route 53 -- an alias
  * record when `route53Alias` is set.
  */
 export interface DnsHostnameTarget {
@@ -167,7 +167,7 @@ export interface DnsZone {
 
 /**
  * A DNS adapter: functions that declare a DNS host's record resources. They
- * perform no I/O — composites call them while the stack program is built —
+ * perform no I/O -- composites call them while the stack program is built --
  * so they behave the same under `alchemy deploy`, `alchemy dev`, and tests.
  *
  * `R` is the host's provider requirement (e.g. `Cloudflare.Providers`):
@@ -196,7 +196,7 @@ export interface DnsAdapter<R = never> {
    * Publish explicit records whose values come from another resource
    * (certificate validation, ownership verification). Records are always
    * DNS-only (never proxied). `retain` keeps them when the resource is
-   * destroyed — used for ACM validation CNAMEs, which ACM reuses across
+   * destroyed -- used for ACM validation CNAMEs, which ACM reuses across
    * every certificate for a name.
    */
   records(

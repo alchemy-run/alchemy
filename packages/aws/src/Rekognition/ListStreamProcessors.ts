@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:ListStreamProcessors` — list the stream processors in the account.
+ * Runtime binding for `rekognition:ListStreamProcessors` -- list the stream processors in the account.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:ListStreamProcessors` on `*` (Rekognition data-plane resources such

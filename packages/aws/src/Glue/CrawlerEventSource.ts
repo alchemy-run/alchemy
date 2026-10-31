@@ -51,7 +51,7 @@ export interface CrawlerEventSourceProps extends EventRouteProps {
  * events so it can kick off downstream processing once the Data Catalog is
  * refreshed.
  *
- * Glue publishes to EventBridge automatically — no additional resource is
+ * Glue publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

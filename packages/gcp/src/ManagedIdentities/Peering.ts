@@ -31,7 +31,7 @@ export type PeeringProps = {
    * Peering id (the `{peering}` segment of
    * `projects/{project}/locations/global/peerings/{peering}`). If omitted,
    * a unique RFC1035 name is generated from the stack, stage, and logical
-   * id. Must match `^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`. Immutable —
+   * id. Must match `^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`. Immutable --
    * changing it replaces the peering.
    */
   peeringId?: string;
@@ -39,13 +39,13 @@ export type PeeringProps = {
    * Managed Microsoft AD domain to peer with. Must live in a different
    * project than `authorizedNetwork`. Full name
    * `projects/{project}/locations/global/domains/{domain}` or the domain
-   * FQDN. Immutable — changing it replaces the peering.
+   * FQDN. Immutable -- changing it replaces the peering.
    */
   domainResource: string;
   /**
    * VPC network the domain is peered into, as an id (`default`) or full
    * name (`projects/{project}/global/networks/{network}`). Caller must
-   * ensure CIDR subnets do not overlap the domain. Immutable — changing
+   * ensure CIDR subnets do not overlap the domain. Immutable -- changing
    * it replaces the peering.
    */
   authorizedNetwork: string;
@@ -74,7 +74,7 @@ export type Peering = Resource<
     authorizedNetwork: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`CONNECTED`, `CREATING`, …). */
+    /** Server-reported state (`CONNECTED`, `CREATING`, ...). */
     state: string | undefined;
     /** Additional status information, if available. */
     statusMessage: string | undefined;
@@ -88,7 +88,7 @@ export type Peering = Resource<
 >;
 
 /**
- * A Managed Microsoft AD domain peering — attaches a VPC in this
+ * A Managed Microsoft AD domain peering -- attaches a VPC in this
  * project to a Managed AD domain that lives in a **different** project
  * so VMs on that network can join the domain. Same-project access uses
  * `Domain.authorizedNetworks` instead; creating a peering when domain

@@ -88,10 +88,10 @@ export interface SageMakerEventSourceProps extends EventRouteProps {
  * compute. SageMaker publishes endpoint, feature-group, model-package, and
  * job lifecycle transitions to the account's default EventBridge bus
  * (source `aws.sagemaker`); this subscribes the host Function to those
- * events so it can react — e.g. alert when an endpoint drops out of
+ * events so it can react -- e.g. alert when an endpoint drops out of
  * `InService` or kick off downstream work when a training job completes.
  *
- * SageMaker publishes to EventBridge automatically — no additional resource
+ * SageMaker publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

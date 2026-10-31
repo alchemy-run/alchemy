@@ -54,7 +54,7 @@ export interface Schedule extends Resource<
 > {}
 
 /**
- * An AWS Glue DataBrew schedule — a cron expression that starts one or more
+ * An AWS Glue DataBrew schedule -- a cron expression that starts one or more
  * DataBrew jobs at recurring times. The schedule definition is free; only
  * the job runs it triggers are billed.
  * ### Creating Schedules
@@ -139,7 +139,7 @@ export const ScheduleProvider = () =>
           // 1. OBSERVE
           const schedule = yield* observe(name);
 
-          // 2. ENSURE / 3. SYNC — UpdateSchedule is a full PUT
+          // 2. ENSURE / 3. SYNC -- UpdateSchedule is a full PUT
           if (schedule === undefined) {
             yield* databrew
               .createSchedule({

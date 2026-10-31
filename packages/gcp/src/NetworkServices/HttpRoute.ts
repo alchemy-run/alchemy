@@ -113,7 +113,7 @@ export type HttpRouteRedirect = {
   pathRedirect?: string;
   /** Replace the matched prefix with this value. */
   prefixRewrite?: string;
-  /** HTTP status (`MOVED_PERMANENTLY_DEFAULT`, `FOUND`, …). */
+  /** HTTP status (`MOVED_PERMANENTLY_DEFAULT`, `FOUND`, ...). */
   responseCode?: string;
   /** Redirect to HTTPS. */
   httpsRedirect?: boolean;
@@ -222,11 +222,11 @@ export type HttpRouteProps = {
    * `projects/{project}/locations/{location}/httpRoutes/{httpRoute}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the route.
+   * Immutable -- changing it replaces the route.
    */
   httpRouteId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the route. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -270,7 +270,7 @@ export type HttpRoute = Resource<
     httpRouteId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Server-defined resource URL. */
     selfLink: string | undefined;
@@ -296,7 +296,7 @@ export type HttpRoute = Resource<
 >;
 
 /**
- * A Network Services HttpRoute — how a Mesh or Gateway routes HTTP
+ * A Network Services HttpRoute -- how a Mesh or Gateway routes HTTP
  * traffic for a set of hostnames.
  *
  * Changing `httpRouteId` or `location` replaces the route. Hostnames,

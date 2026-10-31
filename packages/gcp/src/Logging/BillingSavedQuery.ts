@@ -64,19 +64,19 @@ export type BillingSavedQueryProps = {
    * `billingAccounts/{billingAccount}/locations/{location}/savedQueries/{query}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Limited to 100 characters: letters, digits, underscores,
-   * hyphens, periods; first character must be alphanumeric. Immutable —
+   * hyphens, periods; first character must be alphanumeric. Immutable --
    * changing it replaces the query.
    */
   savedQueryId?: string;
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the query.
    */
   billingAccountId?: string;
   /**
-   * Location of the saved query. Immutable after create — changing it
+   * Location of the saved query. Immutable after create -- changing it
    * replaces the query.
    * @default "global"
    */
@@ -87,7 +87,7 @@ export type BillingSavedQueryProps = {
   displayName: string;
   /**
    * Human-readable description. Saved queries have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -144,7 +144,7 @@ export type BillingSavedQuery = Resource<
  *
  * Saved queries have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. `savedQueryId`, `location`, and
- * `billingAccountId` are identity — changing any replaces the query.
+ * `billingAccountId` are identity -- changing any replaces the query.
  * Display name, description, visibility, and query text update in place.
  *
  * ### Creating a Billing Saved Query

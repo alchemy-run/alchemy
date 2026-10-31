@@ -173,12 +173,12 @@ export interface TaskDefinition extends Resource<
      */
     revision: number;
     /**
-     * Name of the primary (first) container — for `AWS.ECS.Service` wiring.
+     * Name of the primary (first) container -- for `AWS.ECS.Service` wiring.
      */
     containerName: string;
     /**
      * First `containerPort` of the primary container (0 when the container
-     * declares no port mappings) — for `AWS.ECS.Service` wiring.
+     * declares no port mappings) -- for `AWS.ECS.Service` wiring.
      */
     port: number;
     /**
@@ -207,8 +207,8 @@ export interface TaskDefinition extends Resource<
  *
  * Unlike the Effect-native `AWS.ECS.Task` (which bundles an inline program and
  * builds/pushes a Docker image), `TaskDefinition` registers user-supplied
- * `containerDefinitions` — any image URI from ECR, `public.ecr.aws`, or an
- * external registry — with full control over Fargate/EC2 compatibility,
+ * `containerDefinitions` -- any image URI from ECR, `public.ecr.aws`, or an
+ * external registry -- with full control over Fargate/EC2 compatibility,
  * volumes, runtime platform, and IAM roles.
  *
  * Task definitions are immutable revisions under a family:
@@ -221,14 +221,14 @@ export interface TaskDefinition extends Resource<
  *   may retain referenced revisions in `DELETE_IN_PROGRESS` until their tasks
  *   and services terminate; that is a successful terminal state.
  *
- * **Layering — why `TaskDefinition` is deliberately *not* a Platform.** ECS
+ * **Layering -- why `TaskDefinition` is deliberately *not* a Platform.** ECS
  * splits "what runs" from "how it runs": a task definition is the immutable
  * container spec, while `Task` (runs to completion) and `Service`
  * (long-running) are
  * the execution vehicles. The effectful Platform abstraction requires
  * Alchemy to own the container image and entrypoint so it can bundle the
- * inline Effect program — that is exactly what `AWS.ECS.Task` does (bundle →
- * Docker build/push → register definition → serve the program). Making
+ * inline Effect program -- that is exactly what `AWS.ECS.Task` does (bundle ->
+ * Docker build/push -> register definition -> serve the program). Making
  * `TaskDefinition` *also* a Platform would duplicate `Task` while
  * contradicting this resource's purpose: user-supplied images whose
  * entrypoint Alchemy must not rewrite. So the effectful path is
@@ -325,7 +325,7 @@ const canonicalize = (value: unknown): unknown => {
 
 // Compare the desired request against the observed task definition, treating
 // the desired shape as a projection: keys the desired request does not set are
-// ignored (AWS default-fills many fields — container `cpu: 0`, `essential`,
+// ignored (AWS default-fills many fields -- container `cpu: 0`, `essential`,
 // empty collections, `requiresAttributes`, timestamps, ...). Removed props are
 // caught separately by diffing the old desired request against the new one.
 const projectionEquals = (desired: unknown, observed: unknown): boolean => {
@@ -483,7 +483,7 @@ export const TaskDefinitionProvider = () =>
           Effect.map((described) =>
             described.taskDefinition?.status === "ACTIVE" ? described.taskDefinition : undefined,
           ),
-          // "Unable to describe task definition" — no ACTIVE revision exists.
+          // "Unable to describe task definition" -- no ACTIVE revision exists.
           Effect.catchTag("ClientException", () => Effect.undefined),
         );
 
@@ -531,7 +531,7 @@ export const TaskDefinitionProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.taskDefinitionArns ?? [])),
         );
-        // familyPrefix is a prefix match — filter to the exact family.
+        // familyPrefix is a prefix match -- filter to the exact family.
         return arns.filter((arn) => arn.split("/").pop()?.split(":")[0] === family);
       });
 
@@ -644,7 +644,7 @@ export const TaskDefinitionProvider = () =>
             };
           }
 
-          // Observe — the latest ACTIVE revision of the family is the
+          // Observe -- the latest ACTIVE revision of the family is the
           // authoritative current state (output is only an identity cache).
           const observed = yield* describeLatestActive(family);
 
@@ -659,7 +659,7 @@ export const TaskDefinitionProvider = () =>
             observed !== undefined && !removedProps && matchesObserved(desired, observed);
 
           if (upToDate) {
-            // No-op redeploy — reuse the observed revision; converge tags.
+            // No-op redeploy -- reuse the observed revision; converge tags.
             const revisionArn = observed.taskDefinitionArn!;
             const observedTags = yield* observedTagsOf(revisionArn);
             const { removed, upsert } = diffTags(observedTags, desiredTags);

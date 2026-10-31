@@ -21,9 +21,9 @@ import crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Oids
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A 40-hex sha1 object id. Kept as a plain string alias in the codec layer;
@@ -45,7 +45,7 @@ export const OID_REGEX = /^[0-9a-f]{40}$/;
 /**
  * Returns `true` when the string is a well-formed 40-hex sha1 oid.
  */
-// NOTE: deliberately NOT a type guard — `Oid` is an unbranded `string`
+// NOTE: deliberately NOT a type guard -- `Oid` is an unbranded `string`
 // alias, so `s is Oid` would narrow the else-branch to `never`.
 export const isOid = (s: string): boolean => OID_REGEX.test(s);
 
@@ -57,9 +57,9 @@ export class ObjectParseError extends Schema.TaggedError<ObjectParseError>()("Ob
   reason: Schema.String,
 }) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Object types
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Numeric git object types as used in pack entry headers and the object
@@ -135,9 +135,9 @@ export const objectTypeOf = (name: string): ObjectType | undefined => {
  */
 export const isDeltaType = (type: PackEntryType): type is 6 | 7 => type === 6 || type === 7;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Bytes / hex helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const HEX = "0123456789abcdef";
 
@@ -202,14 +202,14 @@ const decoder = new TextDecoder("utf-8");
 export const utf8Encode = (s: string): Uint8Array => encoder.encode(s);
 
 /**
- * UTF-8 decodes bytes (lossy for non-UTF-8 content — the codec never
+ * UTF-8 decodes bytes (lossy for non-UTF-8 content -- the codec never
  * re-serializes from decoded text, so round-tripping is unaffected).
  */
 export const utf8Decode = (bytes: Uint8Array): string => decoder.decode(bytes);
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Hashing
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Minimal incremental sha1 hasher used for pack trailers and object ids.
@@ -276,9 +276,9 @@ export const hashObject = (type: ObjectType, content: Uint8Array): Effect.Effect
     return sha.digestHex();
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Commit / tag parsing
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A parsed author/committer/tagger identity line:
@@ -357,7 +357,7 @@ export const parseIdentity = (value: string): Effect.Effect<Identity, ObjectPars
 /**
  * Splits an object body into its header block and message, honoring
  * continuation lines (lines starting with a single space extend the previous
- * header's value, joined with `\n` — this is how `gpgsig` spans lines).
+ * header's value, joined with `\n` -- this is how `gpgsig` spans lines).
  */
 const parseHeaderBlock = (
   content: Uint8Array,
@@ -471,7 +471,7 @@ export interface CommitFields {
   readonly parents: ReadonlyArray<Oid>;
   readonly author: Identity;
   readonly committer: Identity;
-  /** Message, verbatim — callers include the trailing `\n`. */
+  /** Message, verbatim -- callers include the trailing `\n`. */
   readonly message: string;
 }
 
@@ -498,7 +498,7 @@ const validateIdentity = (role: string, id: Identity): ObjectParseError | undefi
 
 /**
  * Encodes commit content (without the loose header):
- * `tree <oid>\n` + `parent <oid>\n`* + `author …\n` + `committer …\n` +
+ * `tree <oid>\n` + `parent <oid>\n`* + `author ...\n` + `committer ...\n` +
  * `\n` + message. Byte-exact round trip through {@link parseCommit}.
  */
 export const encodeCommit = (fields: CommitFields): Effect.Effect<Uint8Array, ObjectParseError> =>
@@ -594,9 +594,9 @@ export const parseTag = Effect.fn(function* (content: Uint8Array) {
   return parsed;
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Trees
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * One entry of a tree object.
@@ -622,8 +622,8 @@ export const GITLINK_MODE = "160000";
 export type TreeEntryKind = "blob" | "tree" | "commit";
 
 /**
- * Classifies a tree entry mode: `40000` → `tree`, `160000` → `commit`
- * (gitlink), anything else → `blob`.
+ * Classifies a tree entry mode: `40000` -> `tree`, `160000` -> `commit`
+ * (gitlink), anything else -> `blob`.
  */
 export const treeEntryKind = (mode: string): TreeEntryKind =>
   mode === TREE_MODE ? "tree" : mode === GITLINK_MODE ? "commit" : "blob";
@@ -737,9 +737,9 @@ export const encodeTree = (
     }
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Varint codecs (pack format)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Result of decoding a pack entry type+size header.
@@ -817,7 +817,7 @@ export interface Varint {
 }
 
 /**
- * Decodes a plain little-endian 7-bit varint (MSB = continue) — the encoding
+ * Decodes a plain little-endian 7-bit varint (MSB = continue) -- the encoding
  * used by delta payload base/result size headers. Throws
  * {@link ObjectParseError} on truncation or overflow past 2^53.
  */

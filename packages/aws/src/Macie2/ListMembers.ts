@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListMembers`.
  *
  * Retrieves information about the accounts that are associated with an Amazon Macie administrator account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListMembersHttp)`.
  * ### Organization & Members
  * **Example:** List Member Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listMembers = yield* AWS.Macie2.ListMembers();
  *
  * // runtime

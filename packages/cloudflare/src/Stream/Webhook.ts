@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 export type WebhookProps = {
   /**
    * The URL where Stream webhook notifications (e.g. video ready,
-   * live input connected/disconnected) are sent. Mutable — updated in
+   * live input connected/disconnected) are sent. Mutable -- updated in
    * place via Cloudflare's PUT upsert.
    */
   notificationUrl: string;
@@ -43,7 +43,7 @@ export type WebhookAttributes = {
 export type Webhook = Resource<TypeId, WebhookProps, WebhookAttributes, never, Providers>;
 
 /**
- * The Cloudflare Stream webhook — an **account-level singleton** that
+ * The Cloudflare Stream webhook -- an **account-level singleton** that
  * receives notifications when videos finish processing or live inputs
  * connect/disconnect.
  *
@@ -84,7 +84,7 @@ export const WebhookProvider = () =>
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // The webhook is a singleton per account — moving accounts is a
+      // The webhook is a singleton per account -- moving accounts is a
       // replacement.
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -100,7 +100,7 @@ export const WebhookProvider = () =>
       const attrs = toAttributes(observed, acct);
       // The webhook is an account singleton with no ownership markers.
       // On a cold read (no prior output) an existing webhook was
-      // configured outside Alchemy — brand it `Unowned` so the engine
+      // configured outside Alchemy -- brand it `Unowned` so the engine
       // refuses to take over unless `--adopt` is set.
       if (output === undefined) return Unowned(attrs);
       return attrs;
@@ -109,7 +109,7 @@ export const WebhookProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Account-level singleton: the account has at most one Stream
-      // webhook, so enumerate by reading that single slot — return a
+      // webhook, so enumerate by reading that single slot -- return a
       // one-element array when configured, [] when unset. Exactly
       // mirrors `read`.
       const observed = yield* getWebhook(accountId);
@@ -121,11 +121,11 @@ export const WebhookProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Observe — read the live webhook config (`WebhookNotFound` means
+      // Observe -- read the live webhook config (`WebhookNotFound` means
       // the account has no webhook yet).
       const observed = yield* getWebhook(acct);
 
-      // Sync — PUT is a true upsert, so create and update are the same
+      // Sync -- PUT is a true upsert, so create and update are the same
       // call. Skip the API entirely when the observed URL already
       // matches the desired one.
       if (observed !== undefined && observed.notificationUrl === news.notificationUrl) {

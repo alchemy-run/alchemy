@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListVersions` operation (IAM action
  * `es:ListVersions`).
  *
- * Lists every OpenSearch and Elasticsearch version the service supports — e.g. to validate an upgrade target before calling the upgrade API. Provide the implementation with
+ * Lists every OpenSearch and Elasticsearch version the service supports -- e.g. to validate an upgrade target before calling the upgrade API. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.ListVersionsHttp)`.
  * ### Engine Catalog
  * **Example:** List Supported Engine Versions
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const listVersions = yield* OpenSearch.ListVersions();
  *
  * const result = yield* listVersions();
- * // result.Versions → ["OpenSearch_2.19", …]
+ * // result.Versions -> ["OpenSearch_2.19", ...]
  * ```
  *
  * @binding

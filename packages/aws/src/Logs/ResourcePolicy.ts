@@ -36,7 +36,7 @@ export interface ResourcePolicy extends Resource<
 > {}
 
 /**
- * An account-scoped CloudWatch Logs resource policy — grants AWS service
+ * An account-scoped CloudWatch Logs resource policy -- grants AWS service
  * principals (Route 53 query logging, API Gateway execution logs, OpenSearch
  * slow logs, ...) permission to deliver logs into your account.
  *
@@ -81,7 +81,7 @@ export const ResourcePolicyProvider = () =>
         typeof document === "string" ? document : JSON.stringify(document);
 
       // The account quota is 10 policies per region, so a single describe
-      // call (limit 50) is always exhaustive — no pagination needed.
+      // call (limit 50) is always exhaustive -- no pagination needed.
       const describeAll = logs
         .describeResourcePolicies({ limit: 50 })
         .pipe(Effect.map((response) => response.resourcePolicies ?? []));
@@ -126,7 +126,7 @@ export const ResourcePolicyProvider = () =>
           const policyName = output?.policyName ?? (yield* toPolicyName(id, news));
           const desiredDocument = toDocumentString(news.policyDocument);
 
-          // Observe — putResourcePolicy upserts by name; skip the put when the
+          // Observe -- putResourcePolicy upserts by name; skip the put when the
           // live document already matches the desired one.
           const observed = yield* observe(policyName);
           if (observed?.policyDocument !== desiredDocument) {

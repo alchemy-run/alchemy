@@ -35,7 +35,7 @@ export type DatasetsConsentStoresConsentArtifactProps = {
   /**
    * Parent consent store. Full name
    * `.../consentStores/{consentStore}` or the store id (combined with
-   * `dataset` and `location`). Immutable — changing it replaces the
+   * `dataset` and `location`). Immutable -- changing it replaces the
    * artifact.
    */
   consentStore: string;
@@ -103,7 +103,7 @@ export type DatasetsConsentStoresConsentArtifact = Resource<
 /**
  * Documentation of a user's consent (artifact) in a consent store.
  *
- * Artifact ids are server-assigned. There is no patch API — changing
+ * Artifact ids are server-assigned. There is no patch API -- changing
  * `userId`, version, metadata, or parent replaces the artifact.
  * Ownership is stamped into `metadata`.
  *

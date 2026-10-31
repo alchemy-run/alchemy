@@ -6,13 +6,13 @@ import * as NodePath from "node:path";
  * Functional changes from upstream:
  *
  * - The Lambda handler wrapper is this package's own streaming adapter
- *   (`../aws-lambda/index.ts` — `awslambda.streamifyResponse` +
+ *   (`../aws-lambda/index.ts` -- `awslambda.streamifyResponse` +
  *   `HttpResponseStream` for a Function URL with `invokeMode:
  *   RESPONSE_STREAM`; `toBufferedLambdaHandler` when `streaming: false`)
  *   instead of `hono/aws-lambda`'s `streamHandle`/`handle`. The wrapper is
  *   published on `globalThis.__ALCHEMY_WAKU_AWS_LAMBDA_HANDLE__` at
  *   server-entry module scope, mirroring upstream's
- *   `__WAKU_AWS_LAMBDA_HANDLE__` global trick — the serve entry that reads
+ *   `__WAKU_AWS_LAMBDA_HANDLE__` global trick -- the serve entry that reads
  *   it stays free of bare imports, so the shipped `dist/server` directory
  *   needs no `node_modules`.
  * - `buildEnhancers` is empty: upstream's enhancer writes the
@@ -76,7 +76,7 @@ const MIME_TYPES: Record<string, string> = {
  * Minimal static-file middleware over `node:fs`, replacing upstream's
  * `@hono/node-server/serve-static` (a waku dependency this package cannot
  * rely on resolving from the built server bundle). Only ever active during
- * the SSG pass (`isBuild`), which runs in Node — the dynamic `node:fs`
+ * the SSG pass (`isBuild`), which runs in Node -- the dynamic `node:fs`
  * import keeps the module loadable on any runtime.
  */
 const makeBuildStaticMiddleware =
@@ -154,7 +154,7 @@ const awsLambdaAdapter: ReturnType<
     if (isBuild) {
       // SSG pass only (runs in Node during `waku build`): serve the already
       // emitted static files so prerender requests resolve assets. Never on
-      // Lambda — there the CDN serves `dist/public`.
+      // Lambda -- there the CDN serves `dist/public`.
       app.use(makeBuildStaticMiddleware(NodePath.join(config.distDir, DIST_PUBLIC)));
     }
     if (bodyLimitOptions !== false) {
@@ -167,7 +167,7 @@ const awsLambdaAdapter: ReturnType<
     app.use(rscMiddleware({ processRequest }));
 
     // The serve entry (written by the AWS target's finishing pass) passes its
-    // own `{ streaming }` choice — the target config's knob — with the
+    // own `{ streaming }` choice -- the target config's knob -- with the
     // adapter option as fallback.
     (globalThis as Record<string, unknown>)[AWS_LAMBDA_HANDLE_GLOBAL] = (
       fetchHandler: FetchHandler,

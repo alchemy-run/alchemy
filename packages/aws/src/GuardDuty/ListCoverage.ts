@@ -6,7 +6,7 @@ import type { Detector } from "./Detector.ts";
 /**
  * Runtime binding for `guardduty:ListCoverage`.
  *
- * Enumerates per-resource coverage details — which EKS clusters, EC2 instances, and ECS clusters report runtime telemetry and why any are unhealthy.
+ * Enumerates per-resource coverage details -- which EKS clusters, EC2 instances, and ECS clusters report runtime telemetry and why any are unhealthy.
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.ListCoverageHttp)`.

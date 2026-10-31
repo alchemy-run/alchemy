@@ -70,7 +70,7 @@ export interface Database extends Resource<
 > {}
 
 /**
- * An Amazon Timestream for LiveAnalytics database — the top-level container for
+ * An Amazon Timestream for LiveAnalytics database -- the top-level container for
  * time-series {@link Table}s.
  *
  * `Database` owns the database's lifecycle and its mutable configuration: the
@@ -188,10 +188,10 @@ export const DatabaseProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative; output is only a name cache.
+          // Observe -- cloud state is authoritative; output is only a name cache.
           let state = yield* readDatabase(databaseName);
 
-          // Ensure — create if missing. Tolerate a ConflictException as a race
+          // Ensure -- create if missing. Tolerate a ConflictException as a race
           // with a peer reconciler and fall through to sync.
           if (state === undefined) {
             yield* withWriteEndpoint(
@@ -213,7 +213,7 @@ export const DatabaseProvider = () =>
             }
           }
 
-          // Sync KMS key — only when the user pinned one and it drifted.
+          // Sync KMS key -- only when the user pinned one and it drifted.
           if (news.kmsKeyId !== undefined && state.kmsKeyId !== news.kmsKeyId) {
             yield* withWriteEndpoint(
               TSW.updateDatabase({
@@ -224,7 +224,7 @@ export const DatabaseProvider = () =>
             yield* session.note(`Updated KMS key for ${databaseName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* withWriteEndpoint(

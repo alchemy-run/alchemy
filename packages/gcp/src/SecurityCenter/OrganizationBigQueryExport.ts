@@ -31,14 +31,14 @@ export type OrganizationBigQueryExportProps = {
    * Export id (the `{export}` segment of
    * `organizations/{organization}/bigQueryExports/{export}`). If omitted,
    * a unique id is generated from the stack, stage, and logical id.
-   * Letters, digits, and hyphens; max 63 characters. Immutable — changing
+   * Letters, digits, and hyphens; max 63 characters. Immutable -- changing
    * it replaces the export.
    */
   exportId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the export.
+   * Manager ancestor. Immutable -- changing it replaces the export.
    */
   organization?: string;
   /**
@@ -53,7 +53,7 @@ export type OrganizationBigQueryExportProps = {
   filter?: string;
   /**
    * Human-readable description. BigQuery exports have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -95,7 +95,7 @@ export type OrganizationBigQueryExport = Resource<
 /**
  * An organization-scoped Security Command Center BigQuery export.
  *
- * Exports have no labels field — Alchemy stamps ownership into the
+ * Exports have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Export id and organization
  * are identity. Dataset, filter, and description update in place.
  *

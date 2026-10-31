@@ -12,14 +12,14 @@ export interface GetTemporaryGlueTableCredentialsRequest
  * Runtime binding for `lakeformation:GetDataAccess` (table scope).
  *
  * Vends temporary S3 credentials scoped down to the storage of one Glue
- * table, enforcing the caller's Lake Formation grants — the credential
+ * table, enforcing the caller's Lake Formation grants -- the credential
  * vending API used by query engines. The returned `SecretAccessKey` and
  * `SessionToken` are `Redacted`. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.GetTemporaryGlueTableCredentialsHttp)`.
  * ### Vending Data Access Credentials
  * **Example:** Vend Table-Scoped S3 Credentials
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getTableCredentials =
  *   yield* AWS.LakeFormation.GetTemporaryGlueTableCredentials();
  *

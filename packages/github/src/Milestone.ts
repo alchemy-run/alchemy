@@ -20,7 +20,7 @@ export interface MilestoneProps {
   repository: string;
 
   /**
-   * Milestone title. The title is the milestone's identity — changing it
+   * Milestone title. The title is the milestone's identity -- changing it
    * replaces the milestone.
    */
   title: string;
@@ -46,7 +46,7 @@ export interface MilestoneProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -236,7 +236,7 @@ export const MilestoneProvider = () =>
   Provider.succeed(Milestone, {
     stables: ["milestoneNumber", "nodeId"],
 
-    // A milestone belongs to (host, owner, repository, title) — changing any
+    // A milestone belongs to (host, owner, repository, title) -- changing any
     // of these replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -261,7 +261,7 @@ export const MilestoneProvider = () =>
             ? null
             : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
 
-        // Observe — probe for an existing milestone by title. GitHub's list
+        // Observe -- probe for an existing milestone by title. GitHub's list
         // endpoint supports filtering by state, but we need to check both open
         // and closed to find any existing milestone with this title.
         const existingMilestones = yield* Stream.runCollect(
@@ -275,7 +275,7 @@ export const MilestoneProvider = () =>
 
         let observed = existingMilestones.find((m) => m.title === news.title);
 
-        // Ensure — when no milestone exists, create one
+        // Ensure -- when no milestone exists, create one
         if (observed === undefined) {
           observed = yield* Issues.createMilestone({
             owner: news.owner,
@@ -311,7 +311,7 @@ export const MilestoneProvider = () =>
       (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
     ),
 
-    // Enumerate every milestone across the repositories the token can see —
+    // Enumerate every milestone across the repositories the token can see --
     // milestones are keyed by {owner, repository, title} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
@@ -330,7 +330,7 @@ export const MilestoneProvider = () =>
             }),
           ).pipe(
             Effect.map((milestones) => milestones.map(attrsOf)),
-            // Repos where the token lacks milestone access reject with 403/404 —
+            // Repos where the token lacks milestone access reject with 403/404 --
             // skip them rather than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

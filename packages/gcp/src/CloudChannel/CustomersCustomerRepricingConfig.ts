@@ -21,18 +21,18 @@ import {
 export type CustomersCustomerRepricingConfigProps = {
   /**
    * Customer that receives this repricing config. Full name
-   * `accounts/{account}/customers/{customer}`. Immutable — changing it
+   * `accounts/{account}/customers/{customer}`. Immutable -- changing it
    * replaces the config.
    */
   parent: string;
   /**
    * Config id (last segment of the resource name). Server-assigned on
-   * create. Immutable — changing it replaces the config.
+   * create. Immutable -- changing it replaces the config.
    */
   configId?: string;
   /**
    * Year/month when the adjustment activates. Day must be `0`. You can
-   * only create or update configs for a future month. Immutable —
+   * only create or update configs for a future month. Immutable --
    * changing it replaces the config.
    */
   effectiveInvoiceMonth?: cloudchannel.GoogleTypeDate;
@@ -93,7 +93,7 @@ export type CustomersCustomerRepricingConfig = Resource<
  *
  * Repricing configs have no labels field: `read` reports a config it
  * finds without prior state as unowned (adopt it with `--adopt`). Parent
- * customer and effective invoice month are identity — changing either
+ * customer and effective invoice month are identity -- changing either
  * replaces the config. Adjustment, rebilling basis, entitlement, and
  * overrides update in place for a future month.
  *

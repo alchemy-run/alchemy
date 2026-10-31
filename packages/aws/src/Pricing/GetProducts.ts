@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetProductsRequest extends pricing.GetProductsRequest {}
 
 /**
- * Runtime binding for `pricing:GetProducts` — query the AWS Price List API
+ * Runtime binding for `pricing:GetProducts` -- query the AWS Price List API
  * for all products that match the filter criteria.
  *
  * The Price List Query API is a global, data-only service with no resource

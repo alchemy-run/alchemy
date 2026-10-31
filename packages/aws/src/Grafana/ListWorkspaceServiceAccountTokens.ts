@@ -8,7 +8,7 @@ import type { Workspace } from "./Workspace.ts";
  * (IAM action `grafana:ListWorkspaceServiceAccountTokens`), scoped to one
  * {@link Workspace}.
  *
- * Lists the API tokens of a Grafana service account (metadata only — the
+ * Lists the API tokens of a Grafana service account (metadata only -- the
  * secret key is only returned at mint time). Provide the implementation with
  * `Effect.provide(AWS.Grafana.ListWorkspaceServiceAccountTokensHttp)`.
  * ### Managing Service Accounts

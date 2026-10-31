@@ -46,7 +46,7 @@ export interface IndicatorFeedProps {
    * Inline STIX 2.x content for the feed's snapshot. When provided, the
    * content is uploaded via the snapshot endpoint whenever it changes
    * (tracked by content hash). Cloudflare processes uploads asynchronously
-   * — see the `latestUploadStatus` attribute.
+   * -- see the `latestUploadStatus` attribute.
    */
   snapshot?: string;
 }
@@ -96,7 +96,7 @@ export type IndicatorFeed = Resource<
  * Indicator feeds let approved accounts publish their own threat-intel
  * indicators (domains, IPs, URLs) that consumer accounts can subscribe to
  * via Gateway or download directly. Creating feeds requires the account to
- * be approved as a feed provider (a Cloudforce One entitlement) — without
+ * be approved as a feed provider (a Cloudforce One entitlement) -- without
  * it, creation fails with the typed `IndicatorFeedsNotEntitled` error.
  *
  * :::warning
@@ -165,11 +165,11 @@ export const IndicatorFeedProvider = () =>
   Provider.succeed(IndicatorFeed, {
     stables: ["feedId", "accountId", "createdOn"],
 
-    // Account collection — enumerate every indicator feed owned by the
+    // Account collection -- enumerate every indicator feed owned by the
     // ambient account. The list endpoint returns a thin row (no
     // `latestUploadStatus`), so hydrate each id via `getFeed` to produce the
     // exact `read` Attributes shape. Accounts without the Cloudforce One feed
-    // entitlement are rejected with the typed `Forbidden` tag — treat that as
+    // entitlement are rejected with the typed `Forbidden` tag -- treat that as
     // an empty collection rather than failing the enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -190,7 +190,7 @@ export const IndicatorFeedProvider = () =>
               observed ? toAttributes(observed, accountId, undefined) : undefined,
             ),
             // A feed may vanish between list and get, or the account may
-            // lack access to an individual feed — skip either case.
+            // lack access to an individual feed -- skip either case.
             Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
@@ -202,7 +202,7 @@ export const IndicatorFeedProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       // Feeds cannot move between accounts (and cannot be deleted, so a
-      // replacement would orphan the old feed) — but a different target
+      // replacement would orphan the old feed) -- but a different target
       // account still means a different physical resource.
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -218,7 +218,7 @@ export const IndicatorFeedProvider = () =>
         const observed = yield* getFeed(acct, output.feedId);
         return observed ? toAttributes(observed, acct, output.snapshotHash) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createFeedName(id, olds?.name);
@@ -234,7 +234,7 @@ export const IndicatorFeedProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createFeedName(id, news.name);
 
-      // Observe — the feedId cached on `output` is a hint, not a
+      // Observe -- the feedId cached on `output` is a hint, not a
       // guarantee. Because feeds can never be deleted, a missing cache
       // falls back to a lookup by name so reruns adopt the existing feed
       // instead of leaking a duplicate.
@@ -249,7 +249,7 @@ export const IndicatorFeedProvider = () =>
         }
       }
 
-      // Ensure — greenfield: create the feed with name + description; the
+      // Ensure -- greenfield: create the feed with name + description; the
       // visibility flags are only settable via update, so fall through to
       // the sync step with the freshly observed state.
       if (!observed) {
@@ -275,7 +275,7 @@ export const IndicatorFeedProvider = () =>
       }
       const feedId = observed.id;
 
-      // Sync — diff observed cloud state against desired settings and
+      // Sync -- diff observed cloud state against desired settings and
       // apply only when dirty.
       const desired = {
         name,
@@ -299,7 +299,7 @@ export const IndicatorFeedProvider = () =>
         });
       }
 
-      // Sync snapshot — upload inline STIX content whenever its hash
+      // Sync snapshot -- upload inline STIX content whenever its hash
       // differs from what we last uploaded. Uploads are processed
       // asynchronously by Cloudflare (see `latestUploadStatus`).
       let snapshotHash = output?.snapshotHash;
@@ -326,11 +326,11 @@ export const IndicatorFeedProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Cloudflare's API has no delete endpoint for indicator feeds — the
+      // Cloudflare's API has no delete endpoint for indicator feeds -- the
       // feed is orphaned on the account. Reconcile adopts same-named feeds,
       // so re-creating this resource later reuses the orphan.
       yield* Effect.logWarning(
-        `Cloudflare indicator feeds cannot be deleted via the API — ` +
+        `Cloudflare indicator feeds cannot be deleted via the API \u2014 ` +
           `feed ${output.feedId} ("${output.name}") on account ` +
           `${output.accountId} is left in place.`,
       );
@@ -340,9 +340,9 @@ export const IndicatorFeedProvider = () =>
 type ObservedFeed = intel.GetIndicatorFeedResponse;
 
 /**
- * Read a feed by id, mapping "gone" — Cloudflare answers HTTP 403 with
+ * Read a feed by id, mapping "gone" -- Cloudflare answers HTTP 403 with
  * "Feed N does not exist or this account does not have access", surfaced
- * as the typed `IndicatorFeedNotFound` — to `undefined`.
+ * as the typed `IndicatorFeedNotFound` -- to `undefined`.
  */
 const getFeed = (accountId: string, feedId: number) =>
   intel.getIndicatorFeed({ accountId, feedId }).pipe(

@@ -46,7 +46,7 @@ export interface DBClusterProps {
   engineVersion?: string;
   /**
    * Subnet group the cluster is placed into. Neptune is VPC-only, so this
-   * is effectively required. Immutable — forces replacement.
+   * is effectively required. Immutable -- forces replacement.
    */
   dbSubnetGroupName?: string;
   /**
@@ -63,7 +63,7 @@ export interface DBClusterProps {
    */
   port?: number;
   /**
-   * Availability zones for cluster placement. Immutable — forces replacement.
+   * Availability zones for cluster placement. Immutable -- forces replacement.
    */
   availabilityZones?: string[];
   /**
@@ -100,11 +100,11 @@ export interface DBClusterProps {
    */
   deletionProtection?: boolean;
   /**
-   * Whether the storage is encrypted. Immutable — forces replacement.
+   * Whether the storage is encrypted. Immutable -- forces replacement.
    */
   storageEncrypted?: boolean;
   /**
-   * Optional KMS key used for storage encryption. Immutable — forces replace.
+   * Optional KMS key used for storage encryption. Immutable -- forces replace.
    */
   kmsKeyId?: string;
   /**
@@ -124,7 +124,7 @@ export interface DBClusterProps {
    */
   allowMajorVersionUpgrade?: boolean;
   /**
-   * IAM roles to associate with the cluster — e.g. an S3 read role for the
+   * IAM roles to associate with the cluster -- e.g. an S3 read role for the
    * Neptune bulk loader, or a SageMaker role for Neptune ML (set
    * `featureName` where the feature requires it). Reconciled in place by
    * diffing the observed cloud associations against this list via
@@ -409,7 +409,7 @@ export const DBClusterProvider = () =>
         stables: ["dbClusterArn", "dbClusterIdentifier"],
         // AWS account/region collection: the RDS-family control plane serves
         // clusters for every engine (RDS, DocumentDB, Neptune), so filter to
-        // `engine = neptune`. Tags are not surfaced inline — mirror
+        // `engine = neptune`. Tags are not surfaced inline -- mirror
         // `DBSubnetGroup.list` and emit an empty tag map rather than a
         // per-item `listTagsForResource` fan-out.
         list: () =>
@@ -431,7 +431,7 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh cluster.
+          // Immutable props -- any change forces a fresh cluster.
           if (
             olds !== undefined &&
             ((olds.engine ?? "neptune") !== (news.engine ?? "neptune") ||
@@ -463,10 +463,10 @@ export const DBClusterProvider = () =>
           // The wire field is whole days.
           const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
 
-          // Observe — fetch live cluster state.
+          // Observe -- fetch live cluster state.
           let observed = yield* readCluster(identifier);
 
-          // Ensure — create the cluster if it's missing. Tolerate
+          // Ensure -- create the cluster if it's missing. Tolerate
           // `DBClusterAlreadyExistsFault` as a race with a peer reconciler.
           if (!observed?.DBClusterArn) {
             yield* neptune
@@ -509,7 +509,7 @@ export const DBClusterProvider = () =>
             // doesn't hit `InvalidDBClusterStateFault`.
             observed = yield* waitForCluster(identifier);
 
-            // syncCoreSettings — single `modifyDBCluster` carrying scalar
+            // syncCoreSettings -- single `modifyDBCluster` carrying scalar
             // in-place fields, only emitting a field when the desired value
             // differs from the observed cloud state.
             const core: neptune.ModifyDBClusterMessage = {
@@ -571,7 +571,7 @@ export const DBClusterProvider = () =>
               observed = yield* waitForCluster(identifier);
             }
 
-            // syncCloudwatchLogsExports — delta-shaped; separate call.
+            // syncCloudwatchLogsExports -- delta-shaped; separate call.
             const logDelta = logExportDelta(
               observed.EnabledCloudwatchLogsExports,
               news.enableCloudwatchLogsExports,
@@ -586,7 +586,7 @@ export const DBClusterProvider = () =>
             }
           }
 
-          // Sync associated IAM roles — diff observed cloud associations
+          // Sync associated IAM roles -- diff observed cloud associations
           // against desired. Only runs when the prop is set, so clusters
           // that don't manage roles through Alchemy are left untouched.
           if (news.associatedRoles !== undefined) {
@@ -631,7 +631,7 @@ export const DBClusterProvider = () =>
 
           const dbClusterArn = observed.DBClusterArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(dbClusterArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbClusterArn) {

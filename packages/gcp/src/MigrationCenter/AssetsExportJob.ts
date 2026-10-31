@@ -31,12 +31,12 @@ export type AssetsExportJobProps = {
   /**
    * Assets export job id (the `{assetsExportJob}` segment of
    * `projects/{project}/locations/{location}/assetsExportJobs/{assetsExportJob}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the job.
    */
   assetsExportJobId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the job.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -118,7 +118,7 @@ export type AssetsExportJob = Resource<
  * A Migration Center assets export job that writes inventory (and
  * optional performance / network-dependency) data to signed-URI files.
  *
- * The API has no patch method — changing format, filter, inventory flags,
+ * The API has no patch method -- changing format, filter, inventory flags,
  * or labels replaces the job. Id and location are also immutable.
  *
  * ### Creating an Assets Export Job

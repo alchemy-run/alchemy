@@ -33,7 +33,7 @@ export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extend
   /**
    * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
    * over the options of the user's own call (these win). JSON-serializable
-   * only — no `preprocess`/`vitePlugin`/functions; construction-time options
+   * only -- no `preprocess`/`vitePlugin`/functions; construction-time options
    * (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`) can only
    * apply when no user `vite.config.*` exists. The `adapter` field is
    * always owned by alchemy.
@@ -59,14 +59,14 @@ type SvelteKitInput<Bindings extends WorkerBindingProps> = InputProps<
  * `SvelteKit` builds the app with SvelteKit's own Vite pipeline and a
  * wrangler-free in-memory Cloudflare adapter, then re-bundles the
  * Node-flavored server output for workerd. A project-owned
- * `vite.config.*` loads natively (its `sveltekit(...)` options apply) —
+ * `vite.config.*` loads natively (its `sveltekit(...)` options apply) --
  * no `svelte.config.js` (kit v3 dropped it), no
  * `@sveltejs/adapter-cloudflare`, no Wrangler configuration required.
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
  * The `@alchemy.run/frontend-frameworks` package must be installed in your
- * project — its `/sveltekit` export is loaded dynamically at deploy time.
+ * project -- its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
@@ -83,7 +83,7 @@ type SvelteKitInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  *
  * ### Deploying a SvelteKit App
- * A single call builds and deploys the app — server-rendered routes,
+ * A single call builds and deploys the app -- server-rendered routes,
  * prerendered pages, and client assets included.
  *
  * **Example:** Basic SvelteKit site
@@ -112,7 +112,7 @@ type SvelteKitInput<Bindings extends WorkerBindingProps> = InputProps<
  * ### Kit Options and 404 Handling
  * Kit options live in the `sveltekit(...)` call in your
  * `vite.config.ts`, which loads natively. Fallback-page behavior is
- * driven by the platform-native `assets.notFoundHandling` knob — the
+ * driven by the platform-native `assets.notFoundHandling` knob -- the
  * build generates the matching fallback page (rendering the app shell,
  * so kit's own error page shows).
  *
@@ -126,7 +126,7 @@ type SvelteKitInput<Bindings extends WorkerBindingProps> = InputProps<
  * ```
  *
  * The `kit` prop is a deploy-time override bag merged over your own
- * `sveltekit(...)` options (the prop wins) — useful for per-stage values
+ * `sveltekit(...)` options (the prop wins) -- useful for per-stage values
  * the config file can't compute. JSON-serializable values only.
  *
  * **Example:** Deploy-time kit overrides
@@ -156,7 +156,7 @@ type SvelteKitInput<Bindings extends WorkerBindingProps> = InputProps<
  * Calling `SvelteKit` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -212,7 +212,7 @@ export const SvelteKit: {
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
           // SvelteKit's server graph is built for Node and needs
-          // `nodejs_compat` — `getCompatibility` already adds it to every
+          // `nodejs_compat` -- `getCompatibility` already adds it to every
           // non-python Worker.
           assets: props?.assets,
           source: {
@@ -226,7 +226,7 @@ export const SvelteKit: {
               // The adapter's build-time page GENERATION (404.html /
               // app-shell index.html) is derived from the one
               // platform-native knob, `assets.notFoundHandling`, so a
-              // single prop configures generation AND serving — the two
+              // single prop configures generation AND serving -- the two
               // halves can never disagree. The generated 404-page
               // renders the app shell so kit's own error page shows.
               ...(props?.assets?.notFoundHandling !== undefined &&

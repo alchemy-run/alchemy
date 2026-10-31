@@ -25,13 +25,13 @@ export type BackupProps = {
   /**
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the backup.
    */
   instance: string;
   /**
-   * Storage location of the backup (`us`, `us-central1`, …). If omitted,
-   * Cloud SQL picks the closest multi-region. Immutable — changing it
+   * Storage location of the backup (`us`, `us-central1`, ...). If omitted,
+   * Cloud SQL picks the closest multi-region. Immutable -- changing it
    * replaces the backup.
    */
   location?: string;
@@ -43,7 +43,7 @@ export type BackupProps = {
    */
   description?: string;
   /**
-   * Time-to-live in days (1–365). Input-only on create. Ignored on
+   * Time-to-live in days (1-365). Input-only on create. Ignored on
    * subsequent reconciles of on-demand backups.
    */
   ttlDays?: number | string;
@@ -55,7 +55,7 @@ export type BackupProps = {
   /**
    * Existing backup id (the `{backup}` segment of
    * `projects/{project}/backups/{backup}`) used to observe a backup when
-   * state is missing. The create API assigns ids — this is not sent on
+   * state is missing. The create API assigns ids -- this is not sent on
    * insert.
    */
   backupId?: string;
@@ -79,7 +79,7 @@ export type Backup = Resource<
     description: string | undefined;
     /** Backup type (`ON_DEMAND`, `AUTOMATED`, `FINAL`). */
     type: string | undefined;
-    /** Server-reported state (`ENQUEUED`, `RUNNING`, `SUCCESSFUL`, …). */
+    /** Server-reported state (`ENQUEUED`, `RUNNING`, `SUCCESSFUL`, ...). */
     state: string | undefined;
     /** Kind of backup (`SNAPSHOT`, `PHYSICAL`). */
     backupKind: string | undefined;

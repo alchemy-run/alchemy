@@ -34,19 +34,19 @@ export type NetworkMonitoringProviderProps = {
   /**
    * Provider id (the `{network_monitoring_provider}` segment of
    * `projects/{project}/locations/{location}/networkMonitoringProviders/{network_monitoring_provider}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the provider.
    */
   networkMonitoringProviderId?: string;
   /**
    * Location. Network monitoring providers are only served from `global`
-   * (regional names are rejected as malformed). Immutable — changing it
+   * (regional names are rejected as malformed). Immutable -- changing it
    * replaces the provider.
    * @default "global"
    */
   location?: string;
   /**
-   * Provider type. The API currently supports `EXTERNAL`. Immutable —
+   * Provider type. The API currently supports `EXTERNAL`. Immutable --
    * changing it replaces the provider.
    * @default "EXTERNAL"
    */
@@ -69,7 +69,7 @@ export type NetworkMonitoringProvider = Resource<
     providerType: string | undefined;
     /** Link to the provider UI. */
     providerUri: string | undefined;
-    /** Provider state (`ACTIVATING`, `ACTIVE`, …). */
+    /** Provider state (`ACTIVATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** Server-reported error messages. */
     errors: string[];

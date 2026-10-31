@@ -8,7 +8,7 @@ export const ListAuditFindingsHttp = Layer.effect(
   makeApplicationSignalsAccountHttpBinding({
     tag: "AWS.ApplicationSignals.ListAuditFindings",
     operation: appsignals.listAuditFindings,
-    // The auditors run with the CALLER's credentials — verified live: a
+    // The auditors run with the CALLER's credentials -- verified live: a
     // service-target audit fails with AccessDeniedException (empty message)
     // unless the caller can also enumerate SLOs and read metric data.
     // Deeper detail levels (trace/log auditors) may need further read

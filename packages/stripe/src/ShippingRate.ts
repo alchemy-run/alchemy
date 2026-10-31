@@ -55,12 +55,12 @@ export interface ShippingRateDeliveryEstimateBound {
 export interface ShippingRateDeliveryEstimate {
   /**
    * Lower bound of the estimated range. Omit for no lower bound.
-   * Create-only — changing it replaces the shipping rate.
+   * Create-only -- changing it replaces the shipping rate.
    */
   minimum?: ShippingRateDeliveryEstimateBound;
   /**
    * Upper bound of the estimated range. Omit for no upper bound.
-   * Create-only — changing it replaces the shipping rate.
+   * Create-only -- changing it replaces the shipping rate.
    */
   maximum?: ShippingRateDeliveryEstimateBound;
 }
@@ -80,7 +80,7 @@ export interface ShippingRateProps {
   /**
    * Customer-facing name shown on Checkout sessions. If omitted, a unique
    * name is generated from the stack, stage, and logical id. Create-only
-   * — changing it replaces the shipping rate.
+   * -- changing it replaces the shipping rate.
    */
   displayName?: string;
   /**
@@ -89,13 +89,13 @@ export interface ShippingRateProps {
    */
   type?: ShippingRateType;
   /**
-   * Amount in the currency's minor units (e.g. cents). Create-only —
+   * Amount in the currency's minor units (e.g. cents). Create-only --
    * changing it replaces the shipping rate.
    */
   amount: number;
   /**
    * Three-letter ISO currency code, lowercase (e.g. `"usd"`). Create-only
-   * — changing it replaces the shipping rate.
+   * -- changing it replaces the shipping rate.
    */
   currency: string;
   /**
@@ -104,7 +104,7 @@ export interface ShippingRateProps {
    */
   currencyOptions?: Record<string, ShippingRateCurrencyOption>;
   /**
-   * Estimated delivery range shown on Checkout sessions. Create-only —
+   * Estimated delivery range shown on Checkout sessions. Create-only --
    * changing it replaces the shipping rate.
    */
   deliveryEstimate?: ShippingRateDeliveryEstimate;
@@ -113,7 +113,7 @@ export interface ShippingRateProps {
    */
   taxBehavior?: ShippingRateTaxBehavior;
   /**
-   * Tax code id (the shipping tax code is `txcd_92010001`). Create-only —
+   * Tax code id (the shipping tax code is `txcd_92010001`). Create-only --
    * changing it replaces the shipping rate.
    */
   taxCode?: string;
@@ -134,7 +134,7 @@ export type ShippingRate = Resource<
   "Stripe.ShippingRate",
   ShippingRateProps,
   {
-    /** Stripe shipping rate id (`shr_…`). */
+    /** Stripe shipping rate id (`shr_...`). */
     id: string;
     /** Customer-facing name shown on Checkout sessions. */
     displayName: string;
@@ -166,7 +166,7 @@ export type ShippingRate = Resource<
 >;
 
 /**
- * A Stripe Shipping Rate — the price of shipping presented to customers
+ * A Stripe Shipping Rate -- the price of shipping presented to customers
  * and applied to a purchase. Amount, currency, display name, delivery
  * estimate, and tax code are immutable (changing them replaces the
  * rate). `active`, metadata, `taxBehavior`, and per-currency
@@ -469,7 +469,7 @@ export const ShippingRateProvider = () =>
         logicalId: id,
       });
       // A previous generation (same logical id, different immutable
-      // fields) must not be reused — Stripe shipping rates cannot change
+      // fields) must not be reused -- Stripe shipping rates cannot change
       // amount, currency, display name, delivery estimate, or tax code.
       if (current !== undefined && shouldReplace(news, toAttrs(current))) {
         current = undefined;

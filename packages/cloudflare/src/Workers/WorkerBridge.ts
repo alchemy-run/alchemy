@@ -46,7 +46,7 @@ import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
  * service Context, the resolved export for this entrypoint, the user's
- * RPC shape (a thunk — the shape is only populated once `serve` has run),
+ * RPC shape (a thunk -- the shape is only populated once `serve` has run),
  * and the telemetry Layer override registered during init (a thunk for the
  * same reason).
  */
@@ -97,7 +97,7 @@ export const makeWorkerBridge = (
                 // attaches their batching fibers and flush finalizers to
                 // the request `scope` (not this build's transient scope),
                 // so buffered telemetry flushes when the scope closes into
-                // `ctx.waitUntil` below — never on workerd's ephemeral
+                // `ctx.waitUntil` below -- never on workerd's ephemeral
                 // isolate scope.
                 Layer.effectContext(buildEventTelemetry(built.context, scope, built.telemetry())),
               ).pipe(
@@ -174,7 +174,7 @@ export const makeWorkerBridge = (
                 const result = dispatcher(...args);
                 // Effects (including nested-RPC values built by
                 // `asEffectOrStream`, which are Effects *branded* as Streams)
-                // must be run as effects — their resolved value may itself be
+                // must be run as effects -- their resolved value may itself be
                 // a `Stream`, which `handleRpcExit` then encodes. Only a
                 // *genuine* `Stream` (not an Effect) is lifted into the
                 // success channel so `handleRpcExit` encodes it directly.
@@ -265,7 +265,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
     Logger.layer([Logger.consolePretty()]),
   );
 
-  // Private scope for the isolate-lifetime layer build. Never closed —
+  // Private scope for the isolate-lifetime layer build. Never closed --
   // workerd has no isolate-teardown hook, so finalizers attached here can
   // never run. It exists only because `Layer.buildWithMemoMap` requires a
   // scope argument (`Layer.scoped`-style layers attach their finalizers to
@@ -336,7 +336,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
    * kept alive until the build settles or concurrent cold-start requests
    * would hang.
    *
-   * Only success is memoized — a transient init failure (e.g. a flaky
+   * Only success is memoized -- a transient init failure (e.g. a flaky
    * `Config` read in user init) resets the memo and heals on the next event.
    */
   shared = (pin) => {
@@ -445,7 +445,7 @@ export const makeRpcProxy = (
               const result = dispatcher(...args);
               // Effects (including nested-RPC values built by
               // `asEffectOrStream`, which are Effects *branded* as Streams)
-              // must be run as effects — their resolved value may itself be a
+              // must be run as effects -- their resolved value may itself be a
               // `Stream`, which `handleRpcExit` then encodes. Only a *genuine*
               // `Stream` (not an Effect) is lifted into the success channel so
               // `handleRpcExit` encodes it directly.
@@ -470,7 +470,7 @@ export const handleRpcExit = async (exit: Exit.Exit<any, any>, scope?: Scope.Clo
         // The RPC transport drains the encoded ReadableStream *after* this
         // function returns, so the request scope must outlive the handler:
         // eject it from the bridge's close-on-return path and close it when
-        // the stream settles instead — mirroring `scopeTransferToStream` on
+        // the stream settles instead -- mirroring `scopeTransferToStream` on
         // the fetch path.
         EffectHttp.scopeDisableClose(scope);
         stream = stream.pipe(Stream.onExit((streamExit) => Scope.close(scope, streamExit)));

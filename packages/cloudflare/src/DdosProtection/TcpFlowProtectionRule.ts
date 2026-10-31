@@ -33,7 +33,7 @@ export interface TcpFlowProtectionRuleProps {
   /**
    * The scope of the rule: `global`, `region`, or `datacenter`.
    *
-   * Immutable — the API only patches mode/sensitivities, so changing the
+   * Immutable -- the API only patches mode/sensitivities, so changing the
    * scope triggers a replacement.
    */
   scope: TcpFlowProtectionRuleScope;
@@ -42,20 +42,20 @@ export interface TcpFlowProtectionRuleProps {
    * is `global`; for `region`/`datacenter` scope it is the region or data
    * center name (e.g. `WEUR`, `SJC`).
    *
-   * Immutable — changing the name triggers a replacement.
+   * Immutable -- changing the name triggers a replacement.
    * @default "global"
    */
   name?: string;
   /**
-   * Operating mode of the rule. Mutable — patched in place.
+   * Operating mode of the rule. Mutable -- patched in place.
    */
   mode: TcpFlowProtectionRuleMode;
   /**
-   * The burst sensitivity. Mutable — patched in place.
+   * The burst sensitivity. Mutable -- patched in place.
    */
   burstSensitivity: TcpFlowProtectionRuleSensitivity;
   /**
-   * The rate sensitivity. Mutable — patched in place.
+   * The rate sensitivity. Mutable -- patched in place.
    */
   rateSensitivity: TcpFlowProtectionRuleSensitivity;
 }
@@ -93,8 +93,8 @@ export type TcpFlowProtectionRule = Resource<
  * An Advanced TCP Protection out-of-state TCP flow rule (Magic Transit).
  *
  * Rules tune how Cloudflare mitigates out-of-state TCP packet floods (ACK,
- * RST, …) on Magic Transit prefixes, per scope (`global`, a region, or a
- * data center). The rule's identity is its `scope` + `name` pair — only
+ * RST, ...) on Magic Transit prefixes, per scope (`global`, a region, or a
+ * data center). The rule's identity is its `scope` + `name` pair -- only
  * `mode` and the sensitivities are mutable in place.
  *
  * Requires the **Magic Transit / Advanced TCP Protection** entitlement; on
@@ -148,9 +148,9 @@ export const TcpFlowProtectionRuleProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       if (olds === undefined) return undefined;
       // `news` runs at plan time and may still carry unresolved
-      // expressions — bail out and let the engine apply default logic.
+      // expressions -- bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
-      // The API only patches mode/sensitivities — the scope + name pair is
+      // The API only patches mode/sensitivities -- the scope + name pair is
       // the rule's identity and cannot change.
       if (olds.scope !== news.scope || ruleName(olds) !== ruleName(news)) {
         return { action: "replace" } as const;
@@ -168,7 +168,7 @@ export const TcpFlowProtectionRuleProvider = () =>
           ),
         ),
         // Accounts lacking the Advanced TCP Protection entitlement (or a
-        // token without access) can't enumerate rules — there is nothing
+        // token without access) can't enumerate rules -- there is nothing
         // to nuke, so report an empty set rather than failing.
         Effect.catchTags({
           AdvancedTcpProtectionNotEntitled: () =>
@@ -189,7 +189,7 @@ export const TcpFlowProtectionRuleProvider = () =>
       }
 
       // Adoption path: a rule for this scope + name may already exist.
-      // Rules carry no ownership markers, so brand the match `Unowned` —
+      // Rules carry no ownership markers, so brand the match `Unowned` --
       // the engine refuses to take over unless `adopt` is set.
       const identity = output ?? olds;
       if (identity?.scope) {
@@ -203,7 +203,7 @@ export const TcpFlowProtectionRuleProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = ruleName(news);
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the scope + name
       //    scan and then to create.
       let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
@@ -214,7 +214,7 @@ export const TcpFlowProtectionRuleProvider = () =>
         observed = yield* findByScopeAndName(accountId, news.scope, name);
       }
 
-      // 3. Ensure — create when missing.
+      // 3. Ensure -- create when missing.
       if (!observed) {
         observed = yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionRule({
           accountId,
@@ -226,7 +226,7 @@ export const TcpFlowProtectionRuleProvider = () =>
         });
       }
 
-      // 4. Sync — diff observed mutable aspects against desired; skip the
+      // 4. Sync -- diff observed mutable aspects against desired; skip the
       //    patch entirely on a no-op.
       const dirty =
         observed.mode !== news.mode ||

@@ -34,12 +34,12 @@ const MAX_NAME_LENGTH = 63;
 export type GlobalForwardingRuleProps = {
   /**
    * Name of the forwarding rule. If omitted, a unique RFC1035 name is
-   * generated from the stack, stage, and logical id. Immutable —
+   * generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the rule.
    */
   forwardingRuleName?: string;
   /**
-   * Optional description. Immutable — changing it replaces the rule.
+   * Optional description. Immutable -- changing it replaces the rule.
    * Alchemy stamps ownership into the stored description so `list` /
    * nuke can find a rule even if `setLabels` never ran (labels cannot
    * be set on insert).
@@ -75,7 +75,7 @@ export type GlobalForwardingRuleProps = {
   /**
    * Forwarding-rule type. `EXTERNAL` is classic HTTP(S) LB;
    * `EXTERNAL_MANAGED` is the global external Application Load
-   * Balancer. Immutable — changing it replaces the rule.
+   * Balancer. Immutable -- changing it replaces the rule.
    * @default "EXTERNAL"
    */
   loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | (string & {});
@@ -126,7 +126,7 @@ export type GlobalForwardingRuleProps = {
     | (string & {});
   /**
    * Percent of backend-bucket traffic on the new scheme when the
-   * migration state is `TEST_BY_PERCENTAGE` (`0`–`100`).
+   * migration state is `TEST_BY_PERCENTAGE` (`0`-`100`).
    */
   externalManagedBackendBucketMigrationTestingPercentage?: number;
 };
@@ -183,11 +183,11 @@ export type GlobalForwardingRule = Resource<
 >;
 
 /**
- * A global Compute Engine forwarding rule — the frontend of a global
+ * A global Compute Engine forwarding rule -- the frontend of a global
  * load balancer. It binds an IP and port range to a target HTTP/HTTPS
  * proxy (or SSL/TCP/gRPC proxy, or a Private Service Connect bundle).
  *
- * Labels cannot be set on insert — Alchemy applies them with
+ * Labels cannot be set on insert -- Alchemy applies them with
  * `setLabels` after the rule exists and also stamps ownership into the
  * description so `list` / `pnpm nuke:gcp` can find a rule if labeling
  * is interrupted. `list` also includes unlabeled rules whose `target`
@@ -307,7 +307,7 @@ const isOwnedForwardingRule = (rule: compute.ForwardingRule, ownedTargets: Reado
   const target = resourceTail(rule.target);
   if (target.length > 0 && ownedTargets.has(target)) return true;
   // Insert cannot set labels; a crash before setLabels leaves an unlabeled
-  // rule whose name is still the engine physical name (`gcp-…` in tests).
+  // rule whose name is still the engine physical name (`gcp-...` in tests).
   const name = (rule.name ?? "").toLowerCase();
   return (
     name.startsWith("gcp-") && (rule.description === undefined || rule.description.length === 0)

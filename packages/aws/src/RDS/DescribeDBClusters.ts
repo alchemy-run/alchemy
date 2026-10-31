@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBClusters` operation (IAM action
  * `rds:DescribeDBClusters`).
  *
- * Lists the account's RDS/Aurora clusters (or one cluster by identifier) —
- * status, endpoints, members, engine versions — for health checks and
+ * Lists the account's RDS/Aurora clusters (or one cluster by identifier) --
+ * status, endpoints, members, engine versions -- for health checks and
  * cluster discovery. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeDBClustersHttp)`.
  * ### Monitoring Databases

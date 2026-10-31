@@ -30,7 +30,7 @@ export interface BatchPutAssetPropertyValueRequest {
 }
 
 /**
- * Runtime binding for `iotsitewise:BatchPutAssetPropertyValue` — ingest
+ * Runtime binding for `iotsitewise:BatchPutAssetPropertyValue` -- ingest
  * timestamped property values (measurements) into the bound asset's data
  * streams from a deployed Lambda or Task.
  *

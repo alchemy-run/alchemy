@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface GetGrantRequest extends licensemanager.GetGrantRequest {}
 
 /**
- * Runtime binding for `license-manager:GetGrant` — read a license grant's
+ * Runtime binding for `license-manager:GetGrant` -- read a license grant's
  * details (grantee, allowed operations, status) by ARN.
  *
  * Provide the implementation with

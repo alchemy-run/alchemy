@@ -28,56 +28,56 @@ const MAX_NAME_LENGTH = 63;
 export type GlobalAddressProps = {
   /**
    * Name of the address. If omitted, a unique RFC1035 name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the address.
    */
   addressName?: string;
   /**
-   * Optional description. Immutable — changing it replaces the address.
+   * Optional description. Immutable -- changing it replaces the address.
    */
   description?: string;
   /**
-   * Specific IP to reserve. If omitted, GCP assigns one. Immutable —
+   * Specific IP to reserve. If omitted, GCP assigns one. Immutable --
    * changing it replaces the address.
    */
   address?: string;
   /**
    * `EXTERNAL` (global anycast) or `INTERNAL` (VPC peering / PSC).
-   * Immutable — changing it replaces the address.
+   * Immutable -- changing it replaces the address.
    * @default "EXTERNAL"
    */
   addressType?: compute.AddressAddressTypeEnum | (string & {});
   /**
-   * `IPV4` or `IPV6`. Immutable — changing it replaces the address.
+   * `IPV4` or `IPV6`. Immutable -- changing it replaces the address.
    * @default "IPV4"
    */
   ipVersion?: compute.AddressIpVersionEnum | (string & {});
   /**
    * Prefix length when the resource is an IP range (VPC peering /
-   * PSC). Immutable — changing it replaces the address.
+   * PSC). Immutable -- changing it replaces the address.
    */
   prefixLength?: number;
   /**
    * Purpose of an internal address (`VPC_PEERING`,
-   * `PRIVATE_SERVICE_CONNECT`, …). Immutable — changing it replaces
+   * `PRIVATE_SERVICE_CONNECT`, ...). Immutable -- changing it replaces
    * the address.
    */
   purpose?: compute.AddressPurposeEnum | (string & {});
   /**
    * Network URL for internal addresses (`VPC_PEERING` /
-   * `PRIVATE_SERVICE_CONNECT`). Immutable — changing it replaces the
+   * `PRIVATE_SERVICE_CONNECT`). Immutable -- changing it replaces the
    * address.
    */
   network?: string;
   /**
    * Networking tier. Global external addresses are always `PREMIUM`.
-   * Immutable — changing it replaces the address.
+   * Immutable -- changing it replaces the address.
    * @default "PREMIUM"
    */
   networkTier?: compute.AddressNetworkTierEnum | (string & {});
   /**
    * Endpoint type for reserved IPv6 addresses (`VM` or `NETLB`).
-   * Immutable — changing it replaces the address.
+   * Immutable -- changing it replaces the address.
    */
   ipv6EndpointType?: compute.AddressIpv6EndpointTypeEnum | (string & {});
   /**
@@ -131,7 +131,7 @@ export type GlobalAddress = Resource<
 >;
 
 /**
- * A global Compute Engine address — a reserved anycast IP for global
+ * A global Compute Engine address -- a reserved anycast IP for global
  * forwarding rules, or an internal range for VPC peering / Private
  * Service Connect.
  *

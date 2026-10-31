@@ -37,12 +37,12 @@ export type ObservationSourceProps = {
    * Observation source id (the `{source}` segment of
    * `projects/{project}/locations/{location}/observationSources/{source}`).
    * Must be 4-63 lowercase letters, digits, or hyphens. If omitted, a
-   * unique `alch-` prefixed name is generated. Immutable — changing it
+   * unique `alch-` prefixed name is generated. Immutable -- changing it
    * replaces the source.
    */
   observationSourceId?: string;
   /**
-   * Region of the source (`us-central1`, …). Immutable — changing it
+   * Region of the source (`us-central1`, ...). Immutable -- changing it
    * replaces the source. The API currently allows one source per region.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -50,7 +50,7 @@ export type ObservationSourceProps = {
   /**
    * GCLB observation source. Required. `pscNetworkConfigs` names the
    * VPC and subnet used to attach PSC NEGs to Cloud Load Balancers.
-   * Immutable — changing it replaces the source.
+   * Immutable -- changing it replaces the source.
    */
   gclbObservationSource: GclbObservationSource;
 };
@@ -81,7 +81,7 @@ export type ObservationSource = Resource<
 >;
 
 /**
- * An API Observation source — configuration for collecting traffic from
+ * An API Observation source -- configuration for collecting traffic from
  * Cloud Load Balancers in a VPC. Sources have no labels, description,
  * or update API; Alchemy stamps ownership into generated ids (`alch-`)
  * so `list` / nuke can find them. Identity, location, and GCLB network

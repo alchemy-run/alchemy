@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:SearchProducts`.
  *
- * Searches the products to which the caller has access — the end-user view of the catalog (products published to a portfolio the caller's principal is associated with).
+ * Searches the products to which the caller has access -- the end-user view of the catalog (products published to a portfolio the caller's principal is associated with).
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.SearchProductsHttp)`.
  * ### Browsing the Catalog
  * **Example:** List the Products the Caller Can Launch
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const searchProducts = yield* AWS.ServiceCatalog.SearchProducts();
  *
  * // runtime

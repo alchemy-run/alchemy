@@ -32,12 +32,12 @@ export type SchemaProps = {
   /**
    * Schema id (the `{schema}` segment of
    * `projects/{project}/locations/{location}/schemas/{schema}`). Assigned
-   * by the API on create. Immutable — changing it replaces the schema.
+   * by the API on create. Immutable -- changing it replaces the schema.
    * Supply it to adopt an existing schema.
    */
   schemaId?: string;
   /**
-   * Multi-region location (`us` or `eu`). Immutable — changing it
+   * Multi-region location (`us` or `eu`). Immutable -- changing it
    * replaces the schema.
    * @default "us"
    */
@@ -78,7 +78,7 @@ export type Schema = Resource<
 >;
 
 /**
- * A Document AI schema — a collection of schema versions describing
+ * A Document AI schema -- a collection of schema versions describing
  * extraction output.
  *
  * Schemas are location-scoped. The API assigns the schema id. Location is

@@ -8,14 +8,14 @@ import { WriteQueue } from "./WriteQueue.ts";
 import { makeWriteQueueHttpClient } from "./WriteQueueHttp.ts";
 
 /**
- * Local implementation of the {@link WriteQueue} binding — pushes messages
+ * Local implementation of the {@link WriteQueue} binding -- pushes messages
  * to a Cloudflare Queue over the bulk-push HTTP API using the **current
  * credentials** instead of a native Worker binding
  * ({@link WriteQueueBinding}) or a scoped API token ({@link WriteQueueHttp}).
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) so you can send
  * messages to a queue with the same `send`/`sendBatch` client you'd use inside
- * a Worker — no Worker host and no minted token.
+ * a Worker -- no Worker host and no minted token.
  *
  * @example Seeding a queue from an Action
  * ```typescript
@@ -46,7 +46,7 @@ export const WriteQueueLocal = Layer.effect(
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (queue: Queue) {
-      // Deferred accessor — resolves the queueId against the tracker at apply
+      // Deferred accessor -- resolves the queueId against the tracker at apply
       // time. No `host.bind`: the local variant registers no binding.
       const queueId = yield* queue.queueId;
 

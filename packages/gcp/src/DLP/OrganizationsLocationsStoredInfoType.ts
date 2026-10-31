@@ -39,18 +39,18 @@ export type OrganizationsLocationsStoredInfoTypeProps = {
    * Stored infoType id (the `{storedInfoType}` segment of
    * `organizations/{organization}/locations/{location}/storedInfoTypes/{storedInfoType}`).
    * If omitted, a unique id is generated. Letters, digits, hyphens, and
-   * underscores; max 100 characters. Immutable — changing it replaces
+   * underscores; max 100 characters. Immutable -- changing it replaces
    * the infoType.
    */
   storedInfoTypeId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the infoType.
+   * Manager ancestor. Immutable -- changing it replaces the infoType.
    */
   organization?: string;
   /**
-   * Processing location (`us-central1`, `global`, `us`, …). Immutable —
+   * Processing location (`us-central1`, `global`, `us`, ...). Immutable --
    * changing it replaces the infoType.
    * @default "global"
    */
@@ -58,7 +58,7 @@ export type OrganizationsLocationsStoredInfoTypeProps = {
   /**
    * Dictionary, regex, or large-custom-dictionary configuration. Stored
    * infoTypes have no labels field, so Alchemy ownership is stored in
-   * `config.description` as a `[alchemy …]` prefix and stripped from
+   * `config.description` as a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   config: StoredInfoTypeConfig;
@@ -86,7 +86,7 @@ export type OrganizationsLocationsStoredInfoType = Resource<
     description: string | undefined;
     /** Current version configuration with ownership stripped from description. */
     config: StoredInfoTypeConfig | undefined;
-    /** Current version state (`PENDING`, `READY`, `FAILED`, …). */
+    /** Current version state (`PENDING`, `READY`, `FAILED`, ...). */
     state: string | undefined;
     /** Current version. */
     currentVersion: StoredInfoTypeVersion | undefined;
@@ -101,7 +101,7 @@ export type OrganizationsLocationsStoredInfoType = Resource<
  * An organization-scoped Sensitive Data Protection stored infoType
  * (custom dictionary or regex detector).
  *
- * Stored infoTypes have no labels field — Alchemy stamps ownership into
+ * Stored infoTypes have no labels field -- Alchemy stamps ownership into
  * `config.description` so `list` / nuke can find them. Id, organization,
  * and location are identity. Config updates create a new version.
  *

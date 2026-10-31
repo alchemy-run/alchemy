@@ -68,13 +68,13 @@ export type InternalRangeProps = {
    * `projects/{project}/locations/{location}/internalRanges/{internal_range}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * range.
    */
   internalRangeId?: string;
   /**
-   * Location of the range. Internal ranges are global — always `"global"`.
-   * Immutable — changing it replaces the range. `GLOBAL` is accepted and
+   * Location of the range. Internal ranges are global -- always `"global"`.
+   * Immutable -- changing it replaces the range. `GLOBAL` is accepted and
    * normalized to `global`.
    * @default "global"
    */
@@ -82,21 +82,21 @@ export type InternalRangeProps = {
   /**
    * VPC network to reserve the range in. Accepts a name (`app-vpc`), a
    * resource path (`projects/{project}/global/networks/{network}`), or a
-   * Compute self-link. Immutable — changing it replaces the range.
+   * Compute self-link. Immutable -- changing it replaces the range.
    */
   network: string;
   /**
    * How the range may be used. `FOR_VPC` can be associated with VPC
    * resources; `EXTERNAL_TO_VPC` blocks space (on-prem, advertised
    * routes); `FOR_MIGRATION` locks a subnet during peer-VPC migration.
-   * Immutable — changing it replaces the range.
+   * Immutable -- changing it replaces the range.
    * @default "FOR_VPC"
    */
   usage?: InternalRangeUsage;
   /**
    * Peering behavior. `FOR_SELF` (default) is used in this VPC and
    * visible to peers; `FOR_PEER` donates the range to peers;
-   * `NOT_SHARED` keeps it local. Immutable — changing it replaces the
+   * `NOT_SHARED` keeps it local. Immutable -- changing it replaces the
    * range.
    * @default "FOR_SELF"
    */
@@ -136,7 +136,7 @@ export type InternalRangeProps = {
   labels?: Record<string, string>;
   /**
    * When true, only `labels` and `description` can change after create.
-   * Immutable — changing it replaces the range.
+   * Immutable -- changing it replaces the range.
    * @default false
    */
   immutable?: boolean;
@@ -146,7 +146,7 @@ export type InternalRangeProps = {
   allocationOptions?: InternalRangeAllocationOptions;
   /**
    * Source and target subnet URIs. Required (and only valid) when
-   * `usage` is `FOR_MIGRATION`. Immutable — changing it replaces the
+   * `usage` is `FOR_MIGRATION`. Immutable -- changing it replaces the
    * range.
    */
   migration?: InternalRangeMigration;
@@ -162,7 +162,7 @@ export type InternalRange = Resource<
     internalRangeId: string;
     /** Project id. */
     project: string;
-    /** Location id. Internal ranges are global — always `"global"`. */
+    /** Location id. Internal ranges are global -- always `"global"`. */
     location: string;
     /** Network URI as reported by the API. */
     network: string | undefined;
@@ -204,7 +204,7 @@ export type InternalRange = Resource<
 >;
 
 /**
- * A Network Connectivity internal range — an IPAM reservation inside a
+ * A Network Connectivity internal range -- an IPAM reservation inside a
  * VPC, with usage and peering behavior.
  *
  * Ranges live at `locations/global`. `internalRangeId`, `location`,

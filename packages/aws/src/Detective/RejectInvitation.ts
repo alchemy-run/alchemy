@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `detective:RejectInvitation`.
  *
  * Rejects an open invitation into an administrator account's behavior
- * graph — the decline path of the member-account invitation flow.
+ * graph -- the decline path of the member-account invitation flow.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.RejectInvitationHttp)`.
  * ### Responding to Invitations
  * **Example:** Decline An Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const rejectInvitation = yield* AWS.Detective.RejectInvitation();
  *
  * // runtime

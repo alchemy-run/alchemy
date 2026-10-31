@@ -51,14 +51,14 @@ export type ValidatorConfig = {
   mevRelayUrls?: string[];
   /**
    * Deploy a GCP-managed validator client next to the beacon client.
-   * Immutable — changing it replaces the node.
+   * Immutable -- changing it replaces the node.
    */
   managedValidatorClient?: boolean;
 };
 
 export type GethDetails = {
   /**
-   * Geth garbage collection mode (`FULL` or `ARCHIVE`). Immutable —
+   * Geth garbage collection mode (`FULL` or `ARCHIVE`). Immutable --
    * changing it replaces the node.
    */
   garbageCollectionMode?: bne.GethDetailsGarbageCollectionModeEnum | (string & {});
@@ -66,20 +66,20 @@ export type GethDetails = {
 
 export type EthereumDetails = {
   /**
-   * Ethereum node type (`LIGHT`, `FULL`, `ARCHIVE`). Immutable —
+   * Ethereum node type (`LIGHT`, `FULL`, `ARCHIVE`). Immutable --
    * changing it replaces the node.
    * @default "FULL"
    */
   nodeType?: bne.EthereumDetailsNodeTypeEnum | (string & {});
   /**
-   * Enable JSON-RPC `debug` namespace methods. Immutable — changing it
+   * Enable JSON-RPC `debug` namespace methods. Immutable -- changing it
    * replaces the node.
    * @default false
    */
   apiEnableDebug?: boolean;
   /**
    * Ethereum network (`MAINNET`, `TESTNET_SEPOLIA`, `TESTNET_HOLESKY`,
-   * `TESTNET_GOERLI_PRATER`). Immutable — changing it replaces the node.
+   * `TESTNET_GOERLI_PRATER`). Immutable -- changing it replaces the node.
    * @default "TESTNET_SEPOLIA"
    */
   network?: bne.EthereumDetailsNetworkEnum | (string & {});
@@ -94,19 +94,19 @@ export type EthereumDetails = {
    */
   gethDetails?: GethDetails;
   /**
-   * Execution client (`GETH` or `ERIGON`). Immutable — changing it
+   * Execution client (`GETH` or `ERIGON`). Immutable -- changing it
    * replaces the node.
    * @default "GETH"
    */
   executionClient?: bne.EthereumDetailsExecutionClientEnum | (string & {});
   /**
    * Consensus client (`LIGHTHOUSE` or `ERIGON_EMBEDDED_CONSENSUS_LAYER`).
-   * Immutable — changing it replaces the node.
+   * Immutable -- changing it replaces the node.
    * @default "LIGHTHOUSE"
    */
   consensusClient?: bne.EthereumDetailsConsensusClientEnum | (string & {});
   /**
-   * Enable JSON-RPC `admin` namespace methods. Immutable — changing it
+   * Enable JSON-RPC `admin` namespace methods. Immutable -- changing it
    * replaces the node.
    * @default false
    */
@@ -145,11 +145,11 @@ export type BlockchainNodeProps = {
    * `projects/{project}/locations/{location}/blockchainNodes/{blockchainNode}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters, start with a letter, and end
-   * with a letter or digit. Immutable — changing it replaces the node.
+   * with a letter or digit. Immutable -- changing it replaces the node.
    */
   blockchainNodeId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the node. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -157,14 +157,14 @@ export type BlockchainNodeProps = {
    */
   location?: string;
   /**
-   * Blockchain type. Ethereum is the only supported value. Immutable —
+   * Blockchain type. Ethereum is the only supported value. Immutable --
    * changing it replaces the node.
    * @default "ETHEREUM"
    */
   blockchainType?: bne.BlockchainNodeBlockchainTypeEnum | (string & {});
   /**
    * Restrict access to Private Service Connect (no public endpoints).
-   * Deprecated by the API in favor of public endpoints. Immutable —
+   * Deprecated by the API in favor of public endpoints. Immutable --
    * changing it replaces the node.
    * @default false
    */
@@ -192,7 +192,7 @@ export type BlockchainNode = Resource<
     blockchainNodeId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Blockchain type (`ETHEREUM`). */
     blockchainType: string | undefined;
@@ -206,7 +206,7 @@ export type BlockchainNode = Resource<
     additionalEndpoints: EthereumEndpoints | undefined;
     /** Connection information (JSON-RPC / WebSocket / PSC). */
     connectionInfo: ConnectionInfo | undefined;
-    /** Server-reported state (`CREATING`, `RUNNING`, `SYNCING`, …). */
+    /** Server-reported state (`CREATING`, `RUNNING`, `SYNCING`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -218,7 +218,7 @@ export type BlockchainNode = Resource<
 >;
 
 /**
- * A Blockchain Node Engine node — a fully managed Ethereum execution
+ * A Blockchain Node Engine node -- a fully managed Ethereum execution
  * and consensus client.
  *
  * Changing `blockchainNodeId`, `location`, `blockchainType`,

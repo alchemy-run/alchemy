@@ -16,7 +16,7 @@ const TypeId = "Cloudflare.Pipelines.LegacyPipeline" as const;
 type TypeId = typeof TypeId;
 
 /**
- * HTTP ingest source — events are POSTed as JSON to the pipeline's
+ * HTTP ingest source -- events are POSTed as JSON to the pipeline's
  * `endpoint` URL.
  */
 export interface LegacyPipelineHttpSource {
@@ -37,7 +37,7 @@ export interface LegacyPipelineHttpSource {
 }
 
 /**
- * Worker binding ingest source — events are sent from a Worker via a
+ * Worker binding ingest source -- events are sent from a Worker via a
  * `pipelines` binding.
  */
 export interface LegacyPipelineBindingSource {
@@ -60,7 +60,7 @@ export interface LegacyPipelineDestination {
   bucket: string;
   /**
    * R2 S3-compatible credentials the pipeline uses to write objects.
-   * Write-only — Cloudflare never echoes them back.
+   * Write-only -- Cloudflare never echoes them back.
    */
   credentials: {
     /** R2 access key id (the API token id). */
@@ -149,12 +149,12 @@ export type LegacyPipeline = Resource<
 >;
 
 /**
- * A **legacy** Cloudflare Pipeline — the original HTTP-ingest → R2 batch
+ * A **legacy** Cloudflare Pipeline -- the original HTTP-ingest -> R2 batch
  * product (`/accounts/{account}/pipelines`).
  *
  * :::caution
  * This is the **deprecated, legacy** Pipelines API. Cloudflare has
- * superseded it with the SQL-based product — prefer
+ * superseded it with the SQL-based product -- prefer
  * {@link Stream}, {@link Sink}, and {@link Pipeline}
  * for new infrastructure. This resource exists only to manage
  * pre-existing legacy pipelines.
@@ -225,7 +225,7 @@ export const LegacyPipelineProvider = () =>
       }
       const o = olds as LegacyPipelineProps | undefined;
       if (o === undefined) return undefined;
-      // The legacy API addresses pipelines by name — a name change is a
+      // The legacy API addresses pipelines by name -- a name change is a
       // replacement. Everything else updates in place via PUT.
       const newName = yield* legacyPipelineName(id, news.name);
       const oldName = output?.name ?? (yield* legacyPipelineName(id, o.name));
@@ -260,7 +260,7 @@ export const LegacyPipelineProvider = () =>
         const observed = yield* getLegacyPipeline(acct, output.name);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — names are unique per account; a generated-name match
+      // Cold read -- names are unique per account; a generated-name match
       // is proof of ownership, an explicit name is not.
       const name = yield* legacyPipelineName(id, olds?.name);
       const observed = yield* getLegacyPipeline(acct, name);
@@ -275,11 +275,11 @@ export const LegacyPipelineProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* legacyPipelineName(id, news.name);
 
-      // 1. Observe — the name is the API identifier, so a single get
+      // 1. Observe -- the name is the API identifier, so a single get
       //    covers both the cached-output and cold-recovery cases.
       let observed = yield* getLegacyPipeline(output?.accountId ?? accountId, output?.name ?? name);
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         observed = yield* pipelines.createPipeline({
           accountId,
@@ -290,7 +290,7 @@ export const LegacyPipelineProvider = () =>
         return toAttributes(observed, accountId);
       }
 
-      // 3. Sync — diff observed config against desired and PUT the full
+      // 3. Sync -- diff observed config against desired and PUT the full
       //    desired state only when something changed. Credentials are
       //    write-only, so `olds` is the only (best-effort) baseline for
       //    them: on adoption (`olds` undefined) or a credential change we
@@ -470,7 +470,7 @@ const drifted = (observed: ObservedLegacyPipeline, news: LegacyPipelineProps): b
   if (d.batch?.maxRows !== undefined && d.batch.maxRows !== batch.maxRows) {
     return true;
   }
-  // Sources — compare the declared set of source types and the declared
+  // Sources -- compare the declared set of source types and the declared
   // http options against what Cloudflare echoes.
   const desired = news.source ?? defaultSources;
   const observedTypes = observed.source.map((s) => s.type).sort();

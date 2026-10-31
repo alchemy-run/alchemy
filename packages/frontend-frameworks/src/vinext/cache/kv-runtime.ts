@@ -5,7 +5,7 @@
  *
  * Reads `env[binding]` (default `VINEXT_KV_CACHE`). Same codec as Redis
  * and S3 via {@link makeDataCacheHandler}. Prerender pairs are uploaded
- * at `alchemy deploy` — this runtime does not walk the filesystem.
+ * at `alchemy deploy` -- this runtime does not walk the filesystem.
  */
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
 

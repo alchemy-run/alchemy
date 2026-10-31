@@ -11,7 +11,7 @@ export interface StartTransformerJobRequest extends Omit<
 /**
  * Runtime binding for `b2bi:StartTransformerJob`.
  *
- * Runs an asynchronous transformer job against an EDI document in S3 — the
+ * Runs an asynchronous transformer job against an EDI document in S3 -- the
  * bound {@link Transformer} (which must be `active`) parses and maps the
  * `inputFile` and writes the result to `outputLocation`. Poll the returned
  * `transformerJobId` with {@link GetTransformerJob}. B2BI accesses the S3
@@ -21,7 +21,7 @@ export interface StartTransformerJobRequest extends Omit<
  * ### Running Transformer Jobs
  * **Example:** Transform an EDI Document in S3
  * ```typescript
- * // init — grants b2bi:StartTransformerJob on the transformer
+ * // init -- grants b2bi:StartTransformerJob on the transformer
  * const startTransformerJob = yield* AWS.B2BI.StartTransformerJob(transformer);
  *
  * // runtime

@@ -33,12 +33,12 @@ export type SessionProps = {
   /**
    * Session id (the `{session}` segment of
    * `projects/{project}/locations/{location}/sessions/{session}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the session.
    */
   sessionId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * session. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -88,7 +88,7 @@ export type Session = Resource<
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Extra status text, if any. */
     stateMessage: string | undefined;

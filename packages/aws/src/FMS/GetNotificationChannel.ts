@@ -15,7 +15,7 @@ export interface GetNotificationChannelRequest extends fms.GetNotificationChanne
  * ### Notification Channel
  * **Example:** Read the Notification Channel
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getNotificationChannel = yield* AWS.FMS.GetNotificationChannel();
  *
  * // runtime

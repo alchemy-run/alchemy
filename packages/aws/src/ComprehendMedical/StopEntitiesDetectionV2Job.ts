@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:StopEntitiesDetectionV2Job` — stop an in-progress asynchronous medical entity detection job.
+ * Runtime binding for `comprehendmedical:StopEntitiesDetectionV2Job` -- stop an in-progress asynchronous medical entity detection job.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:StopEntitiesDetectionV2Job` on `*`. Provide the

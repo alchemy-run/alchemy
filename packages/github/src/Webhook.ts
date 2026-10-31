@@ -66,7 +66,7 @@ export interface WebhookProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -117,7 +117,7 @@ export interface Webhook extends Resource<
  * by `GitHub.providers()` (env, stored PAT, or `gh` CLI). The token needs
  * `repo` scope (admin access to the repository) to manage webhooks.
  *
- * Most users don't construct `Webhook` directly — prefer
+ * Most users don't construct `Webhook` directly -- prefer
  * {@link import("./RepositoryEventSource.ts").events | events(repository, handler)}
  * inside a Cloudflare Worker, which provisions the webhook, wires the
  * delivery URL to the Worker, and forwards verified events to your handler.
@@ -154,12 +154,12 @@ export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId"],
 
-    // A webhook belongs to (host, owner, repository) — its server-assigned
+    // A webhook belongs to (host, owner, repository) -- its server-assigned
     // id is meaningless in any other repo, so moving it replaces the
     // resource: the engine creates the new webhook first, then `delete`
     // removes the old one from the old repo. Everything else (url, events,
     // secret, active) is mutated in place by `reconcile`. Replacement is
-    // safe here — a webhook is declarative config that is fully
+    // safe here -- a webhook is declarative config that is fully
     // re-creatable from props.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
@@ -187,7 +187,7 @@ export const WebhookProvider = () =>
         const events = news.events ?? ["push"];
         const active = news.active ?? true;
 
-        // Observe — GitHub assigns the hook id server-side. Probe for live
+        // Observe -- GitHub assigns the hook id server-side. Probe for live
         // state via the cached id; a 404 (deleted out-of-band, or never
         // created) collapses to "no observed webhook" so we converge by
         // creating a fresh one.
@@ -197,14 +197,14 @@ export const WebhookProvider = () =>
             )
           : undefined;
 
-        // Ensure — POST creates the webhook.
+        // Ensure -- POST creates the webhook.
         if (observed === undefined) {
           return toAttrs(
             yield* Repos.createWebhook({ ...scope, name: "web", active, events, config }),
           );
         }
 
-        // Sync — PATCH the existing webhook with the desired config. The
+        // Sync -- PATCH the existing webhook with the desired config. The
         // secret can never be read back, so we always send the full config
         // to converge rather than diffing.
         return toAttrs(
@@ -214,7 +214,7 @@ export const WebhookProvider = () =>
       (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
     ),
 
-    // GitHub has no global webhook list — hooks are repo-scoped. Enumerate every
+    // GitHub has no global webhook list -- hooks are repo-scoped. Enumerate every
     // repository the authenticated token can see, then list each repo's webhooks.
     list: Effect.fn(function* () {
       const repos = yield* Stream.runCollect(
@@ -232,7 +232,7 @@ export const WebhookProvider = () =>
           ).pipe(
             Effect.map((hooks) => hooks.map(toAttrs)),
             // Repos where the token lacks admin access reject the webhooks
-            // endpoint with 403/404 — skip them per the per-item not-found
+            // endpoint with 403/404 -- skip them per the per-item not-found
             // rule rather than failing the whole enumeration.
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),

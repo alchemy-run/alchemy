@@ -16,8 +16,8 @@ import type { Domain } from "./Domain.ts";
 /** Runtime client for read-only access to a domain's REST data plane. */
 export interface ReadDomainClient {
   /**
-   * Run a Query-DSL search (`GET …/_search`). The body travels in the
-   * `source` query parameter so the request stays on `es:ESHttpGet` — no
+   * Run a Query-DSL search (`GET .../_search`). The body travels in the
+   * `source` query parameter so the request stays on `es:ESHttpGet` -- no
    * write-method IAM action is required to search.
    */
   search<TDoc = unknown>(
@@ -26,7 +26,7 @@ export interface ReadDomainClient {
     SearchResponse<TDoc>,
     OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
-  /** Count documents matching a Query-DSL body (`GET …/_count`). */
+  /** Count documents matching a Query-DSL body (`GET .../_count`). */
   count(
     request?: CountRequest,
   ): Effect.Effect<
@@ -35,7 +35,7 @@ export interface ReadDomainClient {
   >;
   /**
    * Fetch one document by id (`GET /{index}/_doc/{id}`). A missing document
-   * is not an error — the response carries `found: false`.
+   * is not an error -- the response carries `found: false`.
    */
   getDocument<TDoc = unknown>(
     index: string,
@@ -53,7 +53,7 @@ export interface ReadDomainClient {
     OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
   /**
-   * Raw read-only escape hatch — a SigV4-signed `GET` against any data-plane
+   * Raw read-only escape hatch -- a SigV4-signed `GET` against any data-plane
    * path (e.g. `_cluster/health`, `_cat/indices?format=json`).
    */
   get(
@@ -71,13 +71,13 @@ export interface ReadDomainClient {
  * domain and its paths).
  *
  * Every request is a SigV4-signed HTTP call (service `es`) against the
- * domain's endpoint, made with the host Function's own credentials — the
+ * domain's endpoint, made with the host Function's own credentials -- the
  * domain's access policy must allow the function's role. Provide the
  * implementation with `Effect.provide(AWS.OpenSearch.DomainReadHttp)`.
  * ### Searching a Domain
  * **Example:** Search Documents
  * ```typescript
- * // init — grants es:ESHttpGet/es:ESHttpHead on the domain
+ * // init -- grants es:ESHttpGet/es:ESHttpHead on the domain
  * const search = yield* AWS.OpenSearch.DomainRead(domain);
  *
  * // runtime

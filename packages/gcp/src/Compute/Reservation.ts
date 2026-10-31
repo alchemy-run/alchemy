@@ -40,13 +40,13 @@ export type ReservationSpecificSku = {
    */
   count: number | string;
   /**
-   * Machine shape of each reserved VM. Immutable — changing it replaces
+   * Machine shape of each reserved VM. Immutable -- changing it replaces
    * the reservation. Mutually exclusive with `sourceInstanceTemplate`.
    */
   instanceProperties?: ReservationInstanceProperties;
   /**
    * Instance template URL used instead of `instanceProperties`. Immutable
-   * — changing it replaces the reservation.
+   * -- changing it replaces the reservation.
    */
   sourceInstanceTemplate?: string;
 };
@@ -59,7 +59,7 @@ export type ReservationProps = {
    */
   reservationName?: string;
   /**
-   * Zone the reservation lives in (e.g. `us-central1-a`). Immutable —
+   * Zone the reservation lives in (e.g. `us-central1-a`). Immutable --
    * changing it replaces the reservation.
    * @default "us-central1-a"
    */
@@ -67,7 +67,7 @@ export type ReservationProps = {
   /**
    * Optional description. Compute reservations have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke. Changing it
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke. Changing it
    * replaces the reservation.
    */
   description?: string;
@@ -78,7 +78,7 @@ export type ReservationProps = {
   specificReservation?: ReservationSpecificSku;
   /**
    * When true, only VMs that target this reservation by name can consume
-   * it. Immutable — changing it replaces the reservation.
+   * it. Immutable -- changing it replaces the reservation.
    * @default false
    */
   specificReservationRequired?: boolean;
@@ -113,7 +113,7 @@ export type ReservationProps = {
    */
   protectionTier?: ReservationProtectionTier;
   /**
-   * Deployment strategy. Immutable — changing it replaces the reservation.
+   * Deployment strategy. Immutable -- changing it replaces the reservation.
    */
   deploymentType?: ReservationDeploymentType;
   /**
@@ -125,7 +125,7 @@ export type ReservationProps = {
    */
   confidentialComputeType?: ReservationConfidentialComputeType;
   /**
-   * Aggregate (accelerator) reservation. Immutable — switching between
+   * Aggregate (accelerator) reservation. Immutable -- switching between
    * specific and aggregate replaces the reservation.
    */
   aggregateReservation?: ReservationAggregate;
@@ -149,7 +149,7 @@ export type Reservation = Resource<
     zone: string;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported status (`READY`, `CREATING`, `DELETING`, …). */
+    /** Server-reported status (`READY`, `CREATING`, `DELETING`, ...). */
     status: string | undefined;
     /** Specific-SKU reservation, if any. */
     specificReservation: compute.AllocationSpecificSKUReservation | undefined;
@@ -175,12 +175,12 @@ export type Reservation = Resource<
  *
  * Reservations hold VM capacity in a zone even when the reserved VMs are
  * not running. Compute Engine has no labels on this resource, so Alchemy
- * stamps ownership into the description (`[alchemy alchemy-stack=…
- * alchemy-stage=… alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find
+ * stamps ownership into the description (`[alchemy alchemy-stack=...
+ * alchemy-stage=... alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find
  * them.
  *
  * Name, zone, machine shape, `specificReservationRequired`, and
- * `deploymentType` are immutable — changing them replaces the reservation.
+ * `deploymentType` are immutable -- changing them replaces the reservation.
  * `specificReservation.count` resizes in place. Description and share
  * settings update in place via `reservations.patch`.
  *

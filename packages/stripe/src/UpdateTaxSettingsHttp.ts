@@ -9,7 +9,7 @@ import { UpdateTaxSettings, type UpdateTaxSettingsRequest } from "./UpdateTaxSet
 
 /**
  * HTTP implementation of {@link UpdateTaxSettings}. Provide it on the
- * Function or Worker Effect. Tax Settings has no Stripe id — only the API
+ * Function or Worker Effect. Tax Settings has no Stripe id -- only the API
  * key is bound.
  *
  * @layer

@@ -16,7 +16,7 @@ export interface SchemaProps {
   name?: string;
   /**
    * The Avro schema definition, as a JSON string, describing the fields of the
-   * dataset this schema applies to. Immutable — changing it replaces the
+   * dataset this schema applies to. Immutable -- changing it replaces the
    * schema.
    *
    * @example
@@ -38,7 +38,7 @@ export interface SchemaProps {
   /**
    * The domain of a domain-specific dataset group this schema belongs to
    * (`ECOMMERCE` or `VIDEO_ON_DEMAND`). Omit for a custom (non-domain) schema.
-   * Immutable — changing it replaces the schema.
+   * Immutable -- changing it replaces the schema.
    */
   domain?: string;
 }
@@ -70,8 +70,8 @@ export interface Schema extends Resource<
 > {}
 
 /**
- * An Amazon Personalize schema — an Avro definition that describes the fields
- * of a dataset (Interactions, Items, Users, …). Schemas are immutable once
+ * An Amazon Personalize schema -- an Avro definition that describes the fields
+ * of a dataset (Interactions, Items, Users, ...). Schemas are immutable once
  * created; changing any property replaces the schema.
  *
  * ### Creating a Schema
@@ -104,7 +104,7 @@ export const SchemaProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 63 }));
       });
 
-      /** Describe a schema by ARN; typed not-found → undefined. */
+      /** Describe a schema by ARN; typed not-found -> undefined. */
       const describe = Effect.fn(function* (schemaArn: string) {
         const response = yield* personalize
           .describeSchema({ schemaArn })
@@ -127,7 +127,7 @@ export const SchemaProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          // Schemas are entirely immutable — any change replaces.
+          // Schemas are entirely immutable -- any change replaces.
           if (
             oldName !== newName ||
             (olds.schema ?? undefined) !== (news.schema ?? undefined) ||
@@ -152,13 +152,13 @@ export const SchemaProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // 1. Observe — cloud state is authoritative; output is an ARN cache.
+          // 1. Observe -- cloud state is authoritative; output is an ARN cache.
           let schema =
             output?.schemaArn !== undefined ? yield* describe(output.schemaArn) : undefined;
 
-          // 2. Ensure — schemas are immutable, so only create when missing.
+          // 2. Ensure -- schemas are immutable, so only create when missing.
           //    A crashed prior run may have left a same-named schema behind
-          //    with no persisted state — adopt it by name.
+          //    with no persisted state -- adopt it by name.
           if (schema === undefined) {
             const arn = yield* personalize
               .createSchema({
@@ -194,7 +194,7 @@ export const SchemaProvider = () =>
             // A schema still referenced by a dataset rejects deletion. The
             // engine deletes dependent datasets first, but dataset deletion is
             // asynchronous (DELETE PENDING) and may be draining concurrently
-            // (e.g. via a dataset group's child cascade) — retry bounded while
+            // (e.g. via a dataset group's child cascade) -- retry bounded while
             // the referencing datasets finish deleting.
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",

@@ -31,11 +31,11 @@ export type GroupsMembershipRole = {
 export type GroupsMembershipProps = {
   /**
    * Parent group resource name (`groups/{group}`) or group id.
-   * Immutable — changing it replaces the membership.
+   * Immutable -- changing it replaces the membership.
    */
   parent: string;
   /**
-   * Member entity key id (user or group email). Immutable —
+   * Member entity key id (user or group email). Immutable --
    * changing it replaces the membership.
    */
   memberKeyId: string;
@@ -66,7 +66,7 @@ export type GroupsMembership = Resource<
     memberKeyNamespace: string | undefined;
     /** Membership roles. */
     roles: GroupsMembershipRole[];
-    /** Member type (`USER`, `GROUP`, …). */
+    /** Member type (`USER`, `GROUP`, ...). */
     type: string | undefined;
     /** Delivery setting. */
     deliverySetting: string | undefined;

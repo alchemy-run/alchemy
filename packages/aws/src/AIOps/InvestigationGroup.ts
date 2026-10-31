@@ -15,7 +15,7 @@ import type { Providers } from "../Providers.ts";
 
 export interface InvestigationGroupEncryptionConfiguration {
   /**
-   * How investigation data is encrypted — `"AWS_OWNED_KEY"` (the default,
+   * How investigation data is encrypted -- `"AWS_OWNED_KEY"` (the default,
    * an AWS owned key) or `"CUSTOMER_MANAGED_KMS_KEY"`.
    * @default "AWS_OWNED_KEY"
    */
@@ -55,7 +55,7 @@ export interface InvestigationGroupProps {
    * How long investigations and their data are retained (e.g. `"7 days"`
    * or `Duration.days(7)`). Rounded to whole days on the wire
    * (`retentionInDays`).
-   * The retention period cannot be updated in place — changing it replaces
+   * The retention period cannot be updated in place -- changing it replaces
    * the investigation group.
    * @default 90 days
    */
@@ -126,7 +126,7 @@ export interface InvestigationGroup extends Resource<
 > {}
 
 /**
- * A CloudWatch investigations *investigation group* — the one-time,
+ * A CloudWatch investigations *investigation group* -- the one-time,
  * per-Region container that configures who can run AI-assisted operational
  * investigations, which IAM role is used to access telemetry, how long
  * investigation data is retained, and how it is encrypted.
@@ -190,7 +190,7 @@ export const InvestigationGroup = Resource<InvestigationGroup>("AWS.AIOps.Invest
 
 /**
  * Bounded retry for `createInvestigationGroup` while the freshly created IAM
- * role propagates — AIOps validates that it can assume the role at create
+ * role propagates -- AIOps validates that it can assume the role at create
  * time, which surfaces as a ValidationException/AccessDeniedException that
  * mentions the role for the first seconds of the role's life.
  *
@@ -303,7 +303,7 @@ export const InvestigationGroupProvider = () =>
           if (oldName !== newName) {
             return { action: "replace", deleteFirst: true } as const;
           }
-          // The retention period has no update API — replace to change it.
+          // The retention period has no update API -- replace to change it.
           if (toWireDays(olds?.retention) !== toWireDays(news?.retention)) {
             return { action: "replace", deleteFirst: true } as const;
           }
@@ -314,11 +314,11 @@ export const InvestigationGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output.arn is only a
+          // 1. OBSERVE -- cloud state is authoritative; output.arn is only a
           //    cache of the identifier.
           let live = yield* observe(name, output?.arn);
 
-          // 2. ENSURE — create when missing. A ConflictException here means
+          // 2. ENSURE -- create when missing. A ConflictException here means
           //    a concurrent create raced us (one group per Region): if a
           //    group with OUR name now exists we converge on it, otherwise
           //    the conflict is a real error (a foreign group occupies the
@@ -353,7 +353,7 @@ export const InvestigationGroupProvider = () =>
 
           const arn = live?.arn ?? output?.arn;
 
-          // 3. SYNC — diff each OBSERVED mutable aspect against the desired
+          // 3. SYNC -- diff each OBSERVED mutable aspect against the desired
           //    state and PATCH only on drift. Aspects the user leaves
           //    undefined are unmanaged (left as observed).
           if (live !== undefined && arn !== undefined) {
@@ -404,7 +404,7 @@ export const InvestigationGroupProvider = () =>
             }
           }
 
-          // 3b. SYNC POLICY — diff the OBSERVED resource policy against the
+          // 3b. SYNC POLICY -- diff the OBSERVED resource policy against the
           //     desired policy document and put/delete only on drift.
           //     `policy: undefined` leaves any existing policy unmanaged;
           //     `policy: []` deletes it.
@@ -443,7 +443,7 @@ export const InvestigationGroupProvider = () =>
             }
           }
 
-          // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3c. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time tags only apply on first create).
           if (arn !== undefined) {
             const currentTags = yield* observedTags(arn);

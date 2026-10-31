@@ -172,13 +172,13 @@ export const TrustStoreProvider = () =>
             ...news.tags,
           };
 
-          // Observe — look up by deterministic name.
+          // Observe -- look up by deterministic name.
           const described = yield* elbv2
             .describeTrustStores({ Names: [name] })
             .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
           let trustStore = described?.TrustStores?.[0];
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!trustStore?.TrustStoreArn) {
             const created = yield* elbv2.createTrustStore({
               Name: name,
@@ -217,7 +217,7 @@ export const TrustStoreProvider = () =>
             }),
           );
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observed = yield* observedTags(trustStoreArn);
           const { removed, upsert } = diffTags(observed, desiredTags);
           if (upsert.length > 0) {

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:StartChannel` — start a channel-assembly
+ * Runtime binding for `mediatailor:StartChannel` -- start a channel-assembly
  * channel so it begins producing its linear stream.
  *
  * Channel names are runtime parameters, so the binding is account-level and

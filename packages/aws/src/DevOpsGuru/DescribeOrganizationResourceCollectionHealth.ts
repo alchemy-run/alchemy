@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Visibility
  * **Example:** Read Per-Stack Health Across Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeOrganizationResourceCollectionHealth = yield* AWS.DevOpsGuru.DescribeOrganizationResourceCollectionHealth();
  *
  * // runtime

@@ -69,19 +69,19 @@ export type AdminSubscriptionProps = {
    * `projects/{project}/locations/{location}/subscriptions/{subscription}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Pub/Sub Lite has no labels field, so Alchemy stamps
-   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable —
+   * ownership into a `+alc.{stack}.{stage}.{id}` suffix. Immutable --
    * changing it replaces the subscription.
    */
   subscriptionId?: string;
   /**
    * Zone or region. Must match the topic. If omitted, inferred from
    * `topic` when it is a full resource name, otherwise `us-central1-a`.
-   * Immutable — changing it replaces the subscription.
+   * Immutable -- changing it replaces the subscription.
    */
   location?: string;
   /**
    * Topic this subscription reads from. Accepts a full resource name or
-   * a topic id. Immutable — changing it replaces the subscription.
+   * a topic id. Immutable -- changing it replaces the subscription.
    */
   topic: string;
   /**
@@ -125,7 +125,7 @@ export type AdminSubscription = Resource<
 >;
 
 /**
- * A Pub/Sub Lite subscription — a named consumer of a Lite topic.
+ * A Pub/Sub Lite subscription -- a named consumer of a Lite topic.
  *
  * Pub/Sub Lite subscriptions have no labels. Alchemy stamps
  * `alchemy-stack` / `alchemy-stage` / `alchemy-id` into the

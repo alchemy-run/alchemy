@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:RecognizeCelebrities` — recognize up to 64 celebrities in an image.
+ * Runtime binding for `rekognition:RecognizeCelebrities` -- recognize up to 64 celebrities in an image.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:RecognizeCelebrities` on `*` (Rekognition data-plane resources such

@@ -1,7 +1,7 @@
 /**
  * Bootstrap for `AWS.Lambda.Function` (zip, Node runtime). The generated
  * entry imports this module and the user's `main`, and re-exports the
- * handler this returns — see `alchemy/Runtime/Bootstrap` for why the entry is a
+ * handler this returns -- see `alchemy/Runtime/Bootstrap` for why the entry is a
  * shim.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -26,7 +26,7 @@ import { registerLambdaExtension } from "../Lambda/RuntimeExtension.ts";
  *
  * The layer build lives under an instance scope (not a transient
  * `Effect.provide`/`Effect.scoped` region) so services and init-level
- * finalizers live for the sandbox and are released at Shutdown — Lambda's
+ * finalizers live for the sandbox and are released at Shutdown -- Lambda's
  * SIGTERM phase, which the internal extension registered here buys us
  * (without any registered extension the sandbox is killed with no signal at
  * all). Each invocation still gets its own request scope from the handler
@@ -49,7 +49,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     Layer.provideMerge(Credentials.fromEnv()),
     Layer.provideMerge(Region.fromEnv()),
     // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
-    // emulators (floci) into the Lambda container — without it, runtime
+    // emulators (floci) into the Lambda container -- without it, runtime
     // bindings in `alchemy dev` would call REAL AWS with dummy credentials.
     // Resolves undefined when unset, so live deploys are unaffected.
     Layer.provideMerge(Endpoint.fromEnv()),
@@ -86,7 +86,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
   // finalizers run, then exit inside the 500 ms budget. SIGKILL follows if
   // we overstay, so finalizers must be fast and best-effort.
   process.on("SIGTERM", () => {
-    console.log("[alchemy] SIGTERM — closing instance scope");
+    console.log("[alchemy] SIGTERM \u2014 closing instance scope");
     Effect.runPromise(Scope.close(instanceScope, Exit.void))
       .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
       .finally(() => process.exit(0));

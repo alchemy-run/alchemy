@@ -43,11 +43,11 @@ export type LbRouteExtensionProps = {
    * `projects/{project}/locations/{location}/lbRouteExtensions/{lbRouteExtension}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the extension.
+   * Immutable -- changing it replaces the extension.
    */
   lbRouteExtensionId?: string;
   /**
-   * Location (`us-central1`, `global`, …). Immutable — changing it
+   * Location (`us-central1`, `global`, ...). Immutable -- changing it
    * replaces the extension. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -66,7 +66,7 @@ export type LbRouteExtensionProps = {
   extensionChains: ExtensionChain[];
   /**
    * Load balancing scheme shared by referenced backend services and
-   * forwarding rules. Immutable — changing it replaces the extension.
+   * forwarding rules. Immutable -- changing it replaces the extension.
    * @default "INTERNAL_MANAGED"
    */
   loadBalancingScheme?: LbRouteExtensionLoadBalancingScheme;
@@ -96,7 +96,7 @@ export type LbRouteExtension = Resource<
     lbRouteExtensionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `global`, …). */
+    /** Location id (`us-central1`, `global`, ...). */
     location: string;
     /** Attached forwarding rule resource names. */
     forwardingRules: string[];
@@ -120,7 +120,7 @@ export type LbRouteExtension = Resource<
 >;
 
 /**
- * A Network Services LbRouteExtension — a Service Extension that
+ * A Network Services LbRouteExtension -- a Service Extension that
  * controls where an Application Load Balancer routes a given request.
  *
  * Changing `lbRouteExtensionId`, `location`, or `loadBalancingScheme`

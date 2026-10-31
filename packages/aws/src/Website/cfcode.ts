@@ -8,12 +8,12 @@
 /**
  * Host-based 301 handling injected at the very top of a generated
  * viewer-request handler (before route matching). Redirects requests whose
- * `Host` is one of the configured redirect hostnames — and, when
+ * `Host` is one of the configured redirect hostnames -- and, when
  * `cloudfrontUrl: false`, requests arriving via the distribution's default
  * `*.cloudfront.net` domain (the default domain is not knowable inside its
  * own function config before the distribution exists, but only requests
  * served via the default domain ever carry a `.cloudfront.net` Host;
- * alternate domain names never do) — to the canonical hostname with path
+ * alternate domain names never do) -- to the canonical hostname with path
  * and query preserved.
  *
  * Relies on `buildHostRedirectResponse` declared by

@@ -7,14 +7,14 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * Runtime binding for `mediapackagev2:CancelHarvestJob`.
  *
  * Cancels a queued or in-progress harvest job on the bound
- * {@link OriginEndpoint} — e.g. aborting a clip export the operator
+ * {@link OriginEndpoint} -- e.g. aborting a clip export the operator
  * withdrew. The endpoint's group, channel, and name are injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.MediaPackageV2.CancelHarvestJobHttp)`.
  * ### Harvesting Live-to-VOD Clips
  * **Example:** Cancel an In-Progress Harvest Job
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const cancelHarvestJob = yield* AWS.MediaPackageV2.CancelHarvestJob(endpoint);
  *
  * // runtime

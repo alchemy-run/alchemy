@@ -12,7 +12,7 @@ export interface RetrieveTaxSettingsRequest extends GetTaxSettingsRequest {}
 
 /**
  * Retrieve bound Stripe Tax Settings over HTTP. Tax Settings is an
- * account singleton — the retrieve op has no id field; the bound resource
+ * account singleton -- the retrieve op has no id field; the bound resource
  * associates the API key with the host.
  *
  * ### Reading Tax Settings

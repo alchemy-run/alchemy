@@ -17,7 +17,7 @@ export interface SearchListingsRequest extends Omit<
  * ### Searching the Catalog
  * **Example:** Find Subscribable Listings
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const searchListings = yield* AWS.DataZone.SearchListings(domain);
  *
  * // runtime

@@ -13,14 +13,14 @@ import type { Providers } from "../Providers.ts";
 
 export interface EmailContactProps {
   /**
-   * Display name of the contact (1–64 characters). If omitted, a unique
+   * Display name of the contact (1-64 characters). If omitted, a unique
    * name is generated from the app, stage and logical ID. Contacts have no
    * update API, so changing the name replaces the contact.
    */
   name?: string;
 
   /**
-   * The email address that receives notifications. Unique per account —
+   * The email address that receives notifications. Unique per account --
    * AWS rejects a second contact with the same address. Changing the
    * address replaces the contact.
    *
@@ -57,14 +57,14 @@ export interface EmailContact extends Resource<
 > {}
 
 /**
- * An AWS User Notifications Contacts **email contact** — an email address
+ * An AWS User Notifications Contacts **email contact** -- an email address
  * that can be attached to a notification configuration as a delivery
  * channel.
  *
  * Contacts are created in the unverified `inactive` state; activation is a
  * human email-confirmation loop (AWS emails the address a confirmation
  * link), so Alchemy provisions the contact and leaves activation to the
- * address owner. Contacts are immutable (no update API) — changing the
+ * address owner. Contacts are immutable (no update API) -- changing the
  * name or address replaces the contact; tags update in place.
  *
  * ### Creating an Email Contact
@@ -182,7 +182,7 @@ export const EmailContactProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          // No update API — any change to the contact itself replaces it.
+          // No update API -- any change to the contact itself replaces it.
           if (oldName !== newName || news.emailAddress !== olds.emailAddress) {
             return { action: "replace" } as const;
           }
@@ -192,14 +192,14 @@ export const EmailContactProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // OBSERVE — cloud state is authoritative; the cached ARN falls
+          // OBSERVE -- cloud state is authoritative; the cached ARN falls
           // through to an address scan when it no longer resolves.
           let live = output?.emailContactArn
             ? yield* getByArn(output.emailContactArn)
             : yield* findByAddress(news.emailAddress);
 
-          // ENSURE — create when missing; ConflictException means a
-          // same-address contact already exists (race) → re-observe.
+          // ENSURE -- create when missing; ConflictException means a
+          // same-address contact already exists (race) -> re-observe.
           if (live === undefined) {
             const created = yield* contacts
               .createEmailContact({
@@ -212,7 +212,7 @@ export const EmailContactProvider = () =>
           }
           const arn = live!.arn;
 
-          // SYNC tags — the contact itself is immutable; tags are the only
+          // SYNC tags -- the contact itself is immutable; tags are the only
           // mutable aspect (diffed against observed cloud tags).
           yield* syncContactTags(arn, id, news.tags);
 

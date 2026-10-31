@@ -9,7 +9,7 @@ export interface CreateChannelRequest extends Omit<repostspace.CreateChannelInpu
  * Runtime binding for the `CreateChannel` operation (IAM action
  * `repostspace:CreateChannel` on the space ARN).
  *
- * Creates a channel — a topic-scoped area for questions and articles —
+ * Creates a channel -- a topic-scoped area for questions and articles --
  * inside the bound {@link Space}. Channels are content organization and
  * cannot be deleted (the re:Post Private API has no `DeleteChannel`), so
  * they are modeled as a runtime capability rather than a Resource.

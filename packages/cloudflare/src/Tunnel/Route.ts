@@ -143,7 +143,7 @@ export const RouteProvider = () =>
       // (every account has a "default" virtual network that absorbs
       // routes without an explicit assignment). If the caller didn't
       // ask for a specific vnet (`news.virtualNetworkId === undefined`),
-      // they're delegating to CF — don't force a replace just because
+      // they're delegating to CF -- don't force a replace just because
       // CF auto-assigned one. Only mark replace when the caller has
       // EXPLICITLY chosen a vnet and it differs from what's deployed.
       if (
@@ -161,12 +161,12 @@ export const RouteProvider = () =>
       const network = news.network;
       const virtualNetworkId = news.virtualNetworkId;
 
-      // Observe — cached id first, then an account-wide list scan by
+      // Observe -- cached id first, then an account-wide list scan by
       // network so we recover from out-of-band deletes, partial state
       // writes, or a route left attached to another tunnel.
       let observed = yield* observe(acct, network, virtualNetworkId, output?.routeId);
 
-      // Ensure — create when missing. Cloudflare returns a generic
+      // Ensure -- create when missing. Cloudflare returns a generic
       // conflict on duplicate (network, tunnel, vnet) tuples; on any
       // such race re-observe and either adopt or rethrow.
       if (!observed) {
@@ -206,12 +206,12 @@ export const RouteProvider = () =>
         );
       }
 
-      // Sync — `comment` is mutable, and an adopted route may be
+      // Sync -- `comment` is mutable, and an adopted route may be
       // attached to a different tunnel (the account-wide network
       // uniqueness means we adopt whatever route owns the CIDR) so we
       // repoint `tunnelId` too. Skip the PATCH entirely on no-op so we
       // avoid churn on every reconcile. Clearing a comment must send
-      // `""` explicitly — omitting every body field produces an empty
+      // `""` explicitly -- omitting every body field produces an empty
       // PATCH body which Cloudflare rejects with a JSON parse error.
       const desiredComment = news.comment ?? "";
       const needsComment = (observed.comment ?? "") !== desiredComment;
@@ -306,7 +306,7 @@ export const RouteProvider = () =>
 // Route networks are unique per virtual network across the WHOLE
 // account (Cloudflare rejects a duplicate CIDR with a Conflict no
 // matter which tunnel it's attached to), so the scan must NOT be
-// scoped to a tunnel — otherwise a route left on another tunnel is
+// scoped to a tunnel -- otherwise a route left on another tunnel is
 // invisible to observation and the create Conflict is unrecoverable.
 const findRouteByNetwork = (
   accountId: string,

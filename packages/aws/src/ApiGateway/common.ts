@@ -14,7 +14,7 @@ import * as Semaphore from "effect/Semaphore";
  * - `You cannot deploy a RestApi while the apiStatus is UPDATING or FAILED.`
  * - `There is already an update in progress.`
  *
- * These are fundamentally transient — the retry window is short (seconds)
+ * These are fundamentally transient -- the retry window is short (seconds)
  * and the only correct response is to wait and try again. Because the
  * exception is a 4xx, the generic `Retry.transient` policy applied to the
  * AWS SDK will not retry it, so we apply a targeted retry here for
@@ -92,7 +92,7 @@ const restApiGoneSchedule = Schedule.max([Schedule.spaced("1 second"), Schedule.
 
 // DeleteRestApi's ~1-per-30s quota is ACCOUNT-wide, so concurrent destroys
 // (parallel test files, parallel stacks in one process) all contend for the
-// same token — each one's individual retry wall can expire while the others
+// same token -- each one's individual retry wall can expire while the others
 // keep winning the race. Serialize deletes process-wide so each waiter only
 // contends with the quota window itself, never with its siblings.
 const restApiDeleteMutex = Semaphore.makeUnsafe(1);

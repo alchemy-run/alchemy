@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeInsight`.
  *
- * Reads one insight's full detail — category, status, recommendation, and the resources it flags.
+ * Reads one insight's full detail -- category, status, recommendation, and the resources it flags.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeInsight` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeInsightHttp)`.

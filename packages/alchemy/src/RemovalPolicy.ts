@@ -3,18 +3,18 @@ import * as Effect from "effect/Effect";
 
 /**
  * What the engine does with a resource's **physical** cloud object when the
- * resource is deleted — orphaned (its declaration was removed or renamed
+ * resource is deleted -- orphaned (its declaration was removed or renamed
  * away), destroyed (`alchemy destroy`), or superseded by a replacement's old
  * generation.
  *
- * - `"destroy"` (the default for most resource types) — call the provider's
+ * - `"destroy"` (the default for most resource types) -- call the provider's
  *   `delete`.
- * - `"retain"` — skip `provider.delete` entirely. The state row is still
+ * - `"retain"` -- skip `provider.delete` entirely. The state row is still
  *   dropped: alchemy forgets the resource, the cloud object lives on.
  *
  * The policy is a *decoration* on the declaration, applied with
  * {@link retain} / {@link destroy}, and it is persisted on the resource's
- * state row. Because it isn't a prop, changing it produces no diff — the
+ * state row. Because it isn't a prop, changing it produces no diff -- the
  * resource plans as a `noop` and the deploy re-commits the row's policy in
  * place (see the noop branch of `Apply.ts`). So a policy change does take
  * effect from the very next deploy, even though the plan shows no changes.
@@ -70,7 +70,7 @@ export const retain: {
     )) as any;
 
 /**
- * Destroy the physical cloud resource when the resource is deleted — the
+ * Destroy the physical cloud resource when the resource is deleted -- the
  * default for most resource types, and the way to opt out for the ones that
  * default to `retain` (e.g. `GitHub.Repository`, `Cloudflare.Zone`).
  *

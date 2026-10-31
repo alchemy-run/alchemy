@@ -46,7 +46,7 @@ export interface ExceptionSubscription extends Resource<
 > {}
 
 /**
- * The Amazon Security Lake exception notification subscription — an
+ * The Amazon Security Lake exception notification subscription -- an
  * account-Region singleton that delivers notifications (via SNS protocols
  * like email, SQS, or HTTPS) whenever Security Lake hits an exception it
  * cannot resolve automatically.
@@ -99,7 +99,7 @@ export const ExceptionSubscriptionProvider = () =>
     Effect.gen(function* () {
       return {
         // The subscription carries no tags and is an account-Region
-        // singleton — read reports observed state directly.
+        // singleton -- read reports observed state directly.
         read: Effect.fn(function* () {
           return yield* observeSubscription;
         }),
@@ -117,10 +117,10 @@ export const ExceptionSubscriptionProvider = () =>
             exceptionTimeToLive: toWireDays(news.exceptionTimeToLive),
           };
 
-          // 1. OBSERVE — the singleton's current state.
+          // 1. OBSERVE -- the singleton's current state.
           const observed = yield* observeSubscription;
 
-          // 2. ENSURE — create when missing; a ConflictException means a
+          // 2. ENSURE -- create when missing; a ConflictException means a
           // concurrent create won the race, so converge via update below.
           if (observed === undefined) {
             yield* securitylake
@@ -137,7 +137,7 @@ export const ExceptionSubscriptionProvider = () =>
             observed.notificationEndpoint !== desired.notificationEndpoint ||
             observed.exceptionTimeToLive !== desired.exceptionTimeToLive
           ) {
-            // 3. SYNC — apply only when observed differs from desired.
+            // 3. SYNC -- apply only when observed differs from desired.
             yield* securitylake
               .updateDataLakeExceptionSubscription(desired)
               .pipe(retryWhileConflict);

@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * action `fsx:CopySnapshotAndUpdateVolume` on `*`).
  *
  * Updates an existing FSx for OpenZFS volume from a snapshot on another FSx
- * for OpenZFS file system (on-demand data replication) — the cross-file-system
+ * for OpenZFS file system (on-demand data replication) -- the cross-file-system
  * counterpart of {@link RestoreVolumeFromSnapshot}. Provide the
  * implementation with `Effect.provide(AWS.FSx.CopySnapshotAndUpdateVolumeHttp)`.
  * ### Managing Snapshots at Runtime

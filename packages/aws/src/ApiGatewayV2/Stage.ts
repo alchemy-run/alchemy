@@ -30,7 +30,7 @@ export interface StageProps {
   stageName?: string;
   /**
    * Automatically deploy every route/integration change to this stage.
-   * The canonical happy path — a `Deployment` resource is only needed
+   * The canonical happy path -- a `Deployment` resource is only needed
    * when this is off.
    * @default false
    */
@@ -77,7 +77,7 @@ export interface ApiGatewayV2Stage extends Resource<
     invokeUrl: string;
     /**
      * The WebSocket callback endpoint
-     * (`https://{apiId}.execute-api.{region}.amazonaws.com/{stageName}`) —
+     * (`https://{apiId}.execute-api.{region}.amazonaws.com/{stageName}`) --
      * the endpoint the `ManageConnections` binding posts to.
      */
     callbackUrl: string;
@@ -101,11 +101,11 @@ export interface ApiGatewayV2Stage extends Resource<
 > {}
 
 /**
- * An API Gateway v2 Stage — the deployed, callable endpoint of an HTTP or
+ * An API Gateway v2 Stage -- the deployed, callable endpoint of an HTTP or
  * WebSocket API.
  * ### The $default auto-deploy stage
  * The canonical modern setup is a single `$default` stage with
- * `autoDeploy: true` — every route/integration change goes live
+ * `autoDeploy: true` -- every route/integration change goes live
  * automatically at the API root endpoint, with no `Deployment` juggling.
  *
  * **Example:** $default stage with auto-deploy
@@ -317,7 +317,7 @@ export const StageProvider = () =>
           // 1. OBSERVE
           let observed = yield* getStageSafe(apiId, stageName);
 
-          // 2. ENSURE — tolerate a ConflictException as a concurrent-create
+          // 2. ENSURE -- tolerate a ConflictException as a concurrent-create
           //    race and fall through to observation.
           if (!observed?.StageName) {
             observed = yield* retryOnTooManyRequests(
@@ -347,7 +347,7 @@ export const StageProvider = () =>
           });
           const snapshot = snapshotFromStage(apiId, observed, urls);
 
-          // 3. SYNC — update mutable settings on drift.
+          // 3. SYNC -- update mutable settings on drift.
           const drift =
             (news.autoDeploy !== undefined && (snapshot.autoDeploy ?? false) !== news.autoDeploy) ||
             (news.deploymentId !== undefined && snapshot.deploymentId !== news.deploymentId) ||
@@ -379,7 +379,7 @@ export const StageProvider = () =>
             yield* session.note(`Updated stage ${stageName}`);
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (!deepEqual(snapshot.tags, desiredTags)) {
             yield* syncTags({
               resourceArn: stageArn(region, apiId, stageName),

@@ -29,12 +29,12 @@ export type AuthConfigProps = {
   /**
    * Auth config id (the `{authConfig}` segment of
    * `projects/{project}/locations/{location}/authConfigs/{authConfig}`).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * config.
    */
   authConfigId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -46,7 +46,7 @@ export type AuthConfigProps = {
   displayName?: string;
   /**
    * Human-readable description. Auth configs have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -56,7 +56,7 @@ export type AuthConfigProps = {
    */
   credentialType?: CredentialType;
   /**
-   * Decrypted credential payload. Write-only — never returned on
+   * Decrypted credential payload. Write-only -- never returned on
    * attributes.
    */
   decryptedCredential?: DecryptedCredential;
@@ -106,9 +106,9 @@ export type AuthConfig = Resource<
 
 /**
  * An Application Integration auth config (username/password, token, JWT,
- * service account, …).
+ * service account, ...).
  *
- * Auth configs have no labels field — Alchemy stamps ownership into the
+ * Auth configs have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Location and id are
  * immutable. Display name, description, visibility, and credentials
  * update in place.

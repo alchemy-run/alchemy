@@ -143,7 +143,7 @@ export const AddressProvider = () =>
       const acct = output?.accountId ?? accountId;
       const email = news.email;
 
-      // Observe — by addressId if known, else by email lookup.
+      // Observe -- by addressId if known, else by email lookup.
       let observed: ReturnType<typeof toAttrs> | undefined = output?.addressId
         ? yield* emailRouting
             .getAddress({
@@ -168,7 +168,7 @@ export const AddressProvider = () =>
           );
       }
 
-      // Ensure — register the address if it doesn't already exist.
+      // Ensure -- register the address if it doesn't already exist.
       if (!observed) {
         observed = yield* emailRouting.createAddress({ accountId: acct, email }).pipe(
           Effect.map((created) => toAttrs(acct, created)),
@@ -190,10 +190,10 @@ export const AddressProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output?.addressId) return;
       // Idempotent on the typed not-found; transient failures are retried
-      // bounded and a persistent failure surfaces — a swallowed failure
+      // bounded and a persistent failure surfaces -- a swallowed failure
       // silently leaks the destination address. Cloudflare refuses to
       // delete an address for ~15 minutes after creation
-      // (`EmailAddressCreatedTooRecently`, code 2032) — retrying is
+      // (`EmailAddressCreatedTooRecently`, code 2032) -- retrying is
       // pointless within a deploy's lifetime, so that error fails fast:
       // either destroy later or retain the address (`RemovalPolicy.retain`).
       yield* emailRouting

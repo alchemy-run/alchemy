@@ -17,7 +17,7 @@ type CatchAllTypeId = typeof CatchAllTypeId;
 export type CatchAllProps = {
   /**
    * Zone whose catch-all rule to manage. Accepts a zone id, a zone name
-   * (`example.com`), or a `{ zoneId, name? }` object. Stable — the
+   * (`example.com`), or a `{ zoneId, name? }` object. Stable -- the
    * catch-all rule is a per-zone singleton, so changing the zone triggers
    * a replacement (the old zone's catch-all is restored to the state it
    * had before Alchemy managed it).
@@ -82,7 +82,7 @@ export type CatchAll = Resource<
  * The Cloudflare Email Routing catch-all rule for a zone.
  *
  * The catch-all rule handles every inbound email that no other routing
- * rule matched. It is a per-zone singleton — once Email Routing is enabled
+ * rule matched. It is a per-zone singleton -- once Email Routing is enabled
  * the rule always exists (disabled, dropping mail, by default), so this
  * resource never creates or deletes anything physical. Reconcile `PUT`s the
  * desired configuration; destroy restores the configuration the rule had
@@ -144,7 +144,7 @@ export const CatchAllProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The catch-all rule is a per-zone singleton with no account-wide
-      // enumeration API — enumerate every zone and read its rule. The
+      // enumeration API -- enumerate every zone and read its rule. The
       // observed state at read time is the initial* baseline.
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -175,17 +175,17 @@ export const CatchAllProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
-        // before upstream Outputs resolved — report "not found" then.
+        // before upstream Outputs resolved -- report "not found" then.
         output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* emailRouting.getRuleCatchAll({ zoneId }).pipe(
-        // Zone deleted out-of-band (or the token can no longer see it) —
+        // Zone deleted out-of-band (or the token can no longer see it) --
         // the catch-all rule is gone with it.
         Effect.catchTag("Forbidden", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The catch-all rule is a singleton that always exists once Email
-      // Routing is enabled — there is nothing to "own", so a cold read
+      // Routing is enabled -- there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed state at adoption
       // time becomes the initial* baseline restored on destroy.
       const initial = output ?? observedInitial(observed);
@@ -193,18 +193,18 @@ export const CatchAllProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      // 1. Observe — the catch-all rule always exists once Email Routing
+      // 1. Observe -- the catch-all rule always exists once Email Routing
       //    is enabled on the zone; read its live state.
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
       const observed = yield* emailRouting.getRuleCatchAll({ zoneId });
 
-      // 2. Capture — the pre-management state, restored on destroy.
+      // 2. Capture -- the pre-management state, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed state is
       //    the zone's original.
       const initial = output ?? observedInitial(observed);
 
-      // 3. Sync — PUT only when the observed state differs from desired.
+      // 3. Sync -- PUT only when the observed state differs from desired.
       const desiredEnabled = news.enabled ?? true;
       const desiredName = news.name ?? observed.name ?? "";
       if (
@@ -230,7 +230,7 @@ export const CatchAllProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialName, initialEnabled, initialActions } = output;
-      // Observe — if the zone itself is gone, so is the catch-all rule.
+      // Observe -- if the zone itself is gone, so is the catch-all rule.
       const observed = yield* emailRouting
         .getRuleCatchAll({ zoneId })
         .pipe(Effect.catchTag("Forbidden", () => Effect.undefined));
@@ -257,8 +257,8 @@ export const CatchAllProvider = () =>
         .pipe(
           Effect.catchTag("Forbidden", () => Effect.void),
           // The captured action may name something that no longer exists:
-          // an unverified/removed destination address, or — after the
-          // Worker it pointed at was replaced or deleted — a missing
+          // an unverified/removed destination address, or -- after the
+          // Worker it pointed at was replaced or deleted -- a missing
           // script. Neither is retryable and neither should strand the
           // destroy, so fall back to the Cloudflare default (disabled,
           // drop) instead of failing.

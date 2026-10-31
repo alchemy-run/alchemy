@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:BatchDisableStandards`.
  *
  * Disables (unsubscribes the account from) one or more security standards.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.BatchDisableStandardsHttp)`.
  * ### Standards & Controls
  * **Example:** Disable a Standard
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchDisableStandards = yield* AWS.SecurityHub.BatchDisableStandards();
  *
  * // runtime

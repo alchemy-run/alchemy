@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CreateGrantRequest extends licensemanager.CreateGrantRequest {}
 
 /**
- * Runtime binding for `license-manager:CreateGrant` — share a seller-issued
+ * Runtime binding for `license-manager:CreateGrant` -- share a seller-issued
  * license's entitlements with an Amazon Web Services account, organization,
  * or organizational unit. The distribution half of an ISV fulfillment
  * backend: after minting a license with `CreateLicense`, grant it to the

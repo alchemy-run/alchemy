@@ -1,7 +1,7 @@
 /**
  * The vitest-compatible registration API: `describe`, `it`/`test`, hooks and
  * `layer`. Registration builds the {@link Model} tree; execution is the
- * runner's job. Everything is Effect-first — plain-function tests are wrapped
+ * runner's job. Everything is Effect-first -- plain-function tests are wrapped
  * into Effects at registration time.
  */
 import * as Effect from "effect/Effect";
@@ -30,7 +30,7 @@ export type TestOptions =
       readonly retry?: number;
       readonly repeats?: number;
       /**
-       * `true` runs this test with the whole-process write lock — no other
+       * `true` runs this test with the whole-process write lock -- no other
        * test in the run executes concurrently with it. Use for tests that
        * mutate process-global state (e.g. `process.env.PATH`): the runner
        * executes everything in ONE bun process, so such mutations are
@@ -158,7 +158,7 @@ const makeDescribe = (config: DescribeConfig): DescribeFn => {
     skipIf: (condition: unknown) => makeDescribe(condition ? { ...config, mode: "skip" } : config),
     runIf: (condition: unknown) => makeDescribe(condition ? config : { ...config, mode: "skip" }),
   });
-  // Lazy getters — Object.assign would evaluate them eagerly and recurse
+  // Lazy getters -- Object.assign would evaluate them eagerly and recurse
   // forever (each modifier constructs another DescribeFn).
   Object.defineProperties(withMethods, {
     sequential: { get: () => makeDescribe({ ...config, sequential: true }) },
@@ -192,7 +192,7 @@ export interface RegisterTestOptions {
   readonly body: TestBody | undefined;
 }
 
-/** Low-level test registration — used by adapters (e.g. alchemy Test.make). */
+/** Low-level test registration -- used by adapters (e.g. alchemy Test.make). */
 export const registerTest = (options: RegisterTestOptions): void => {
   const parent = currentSuite();
   parent.children.push({
@@ -424,7 +424,7 @@ export const registerFileCleanup = (hook: Hook): void => {
   currentFileSuite().cleanups.push(hook);
 };
 
-/** Low-level hook registration with an Effect body — used by adapters. */
+/** Low-level hook registration with an Effect body -- used by adapters. */
 export const registerHook = (kind: HookKind, hook: Hook): void => {
   currentSuite()[kind].push(hook);
 };
@@ -446,7 +446,7 @@ export const afterEach = (fn: () => unknown, timeout?: number): void =>
   registerHook("afterEach", { body: hookFromFn(fn), timeout });
 
 // ---------------------------------------------------------------------------
-// layer — share a Layer across the tests of a block (@effect/vitest parity)
+// layer -- share a Layer across the tests of a block (@effect/vitest parity)
 // ---------------------------------------------------------------------------
 
 export interface LayerMethods<R> {

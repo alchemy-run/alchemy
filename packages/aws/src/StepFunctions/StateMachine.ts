@@ -58,7 +58,7 @@ export interface StateMachineProps {
   stateMachineName?: string;
   /**
    * The Amazon States Language (ASL) definition of the workflow. Accepts a
-   * plain object (recommended — `Output` values such as function ARNs are
+   * plain object (recommended -- `Output` values such as function ARNs are
    * resolved before serialization) or a pre-serialized JSON string.
    */
   definition: Record<string, unknown> | string;
@@ -116,7 +116,7 @@ export interface StateMachine extends Resource<
      */
     stateMachineName: string;
     /**
-     * ARN of the state machine — pass it to `StartExecution` or reference it
+     * ARN of the state machine -- pass it to `StartExecution` or reference it
      * from other workflows.
      */
     stateMachineArn: string;
@@ -179,7 +179,7 @@ export class InvalidStateMachineDefinition extends Data.TaggedError(
 const StateMachineResource = Resource<StateMachine>("AWS.StepFunctions.StateMachine");
 
 /**
- * Props for {@link StateMachine.fromProgram} — everything a raw
+ * Props for {@link StateMachine.fromProgram} -- everything a raw
  * `StateMachine` accepts except the `definition` (which is compiled from
  * the program). User `policyStatements` are merged with the statements the
  * compiler collects from `Sfn.invoke`/`Sfn.integrate` task states.
@@ -196,7 +196,7 @@ export interface FromProgramProps extends Omit<
  * Sugar over the raw `StateMachine` resource: compile a typed `Sfn` program
  * to a plain ASL definition object plus collected IAM policy statements,
  * then register the same `StateMachine` resource the raw path uses. Nothing
- * engine-level — the raw `definition` escape hatch stays first-class.
+ * engine-level -- the raw `definition` escape hatch stays first-class.
  */
 const fromProgram = (id: string, props: FromProgramProps) =>
   Effect.gen(function* () {
@@ -217,9 +217,9 @@ const fromProgram = (id: string, props: FromProgramProps) =>
  * An AWS Step Functions state machine (workflow).
  *
  * `StateMachine` owns the lifecycle of a `STANDARD` or `EXPRESS` workflow.
- * The Amazon States Language definition may be provided as a plain object —
+ * The Amazon States Language definition may be provided as a plain object --
  * `Output` values (like Lambda function ARNs) inside it are resolved before
- * serialization — and an execution role is created automatically unless an
+ * serialization -- and an execution role is created automatically unless an
  * explicit `roleArn` is given. Lambda functions referenced in the definition
  * are granted `lambda:InvokeFunction` on the auto-created role.
  * ### Creating State Machines
@@ -251,7 +251,7 @@ const fromProgram = (id: string, props: FromProgramProps) =>
  * ```
  *
  * ### Orchestrating Lambda Functions
- * Reference a function ARN in a Task state — `lambda:InvokeFunction` is
+ * Reference a function ARN in a Task state -- `lambda:InvokeFunction` is
  * granted on the auto-created execution role automatically.
  *
  * **Example:** Invoke a Lambda Function
@@ -331,7 +331,7 @@ const fromProgram = (id: string, props: FromProgramProps) =>
  * ```
  *
  * ### Typed Programs
- * Author the workflow as a typed `Sfn` program (mirroring Effect's names —
+ * Author the workflow as a typed `Sfn` program (mirroring Effect's names --
  * `Sfn.gen`, `Sfn.invoke`, `Sfn.when`, `Sfn.forEach`, `Sfn.catchTag`, ...)
  * and compile it with `StateMachine.fromProgram`. The compiler emits a plain
  * ASL definition plus the IAM policy statements its task states need; the
@@ -815,7 +815,7 @@ export const StateMachineProvider = () =>
           // the machine when the definition is definitively invalid.
           yield* preflightValidateDefinition(definition, type);
 
-          // Ensure the execution role first — the machine cannot exist
+          // Ensure the execution role first -- the machine cannot exist
           // without one. Managed unless an explicit roleArn is provided.
           let roleArn = news.roleArn;
           let roleName: string | undefined;
@@ -830,7 +830,7 @@ export const StateMachineProvider = () =>
             });
           }
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only a
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only a
           //    name cache. A machine still DELETING from a prior destroy
           //    must finish deleting before we can recreate it.
           const observed = yield* describeOrUndefined(stateMachineArn).pipe(
@@ -838,7 +838,7 @@ export const StateMachineProvider = () =>
           );
 
           if (observed === undefined) {
-            // 2. ENSURE — create; tolerate the concurrent-create race and
+            // 2. ENSURE -- create; tolerate the concurrent-create race and
             //    wait out a same-name deletion or IAM propagation delay.
             yield* sfn
               .createStateMachine({
@@ -856,7 +856,7 @@ export const StateMachineProvider = () =>
                 retryWhileRolePropagates,
               );
           } else {
-            // 3. SYNC — diff OBSERVED cloud state against desired and issue
+            // 3. SYNC -- diff OBSERVED cloud state against desired and issue
             //    a single update only when something actually drifted.
             const drifted =
               normalizeDefinition(plain(observed.definition)) !== normalizeDefinition(definition) ||
@@ -889,7 +889,7 @@ export const StateMachineProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- against OBSERVED cloud tags so adoption
           //     converges (create-time tags only apply on first create).
           const observedTags = yield* fetchObservedTags(stateMachineArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -923,7 +923,7 @@ export const StateMachineProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // deleteStateMachine is idempotent (no error when already gone)
-          // and asynchronous — the machine transitions through DELETING.
+          // and asynchronous -- the machine transitions through DELETING.
           yield* sfn.deleteStateMachine({
             stateMachineArn: output.stateMachineArn,
           });

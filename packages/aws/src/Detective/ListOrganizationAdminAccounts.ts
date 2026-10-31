@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Administration
  * **Example:** Find The Delegated Administrator
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listOrganizationAdminAccounts =
  *   yield* AWS.Detective.ListOrganizationAdminAccounts();
  *

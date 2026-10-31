@@ -17,17 +17,17 @@ export interface RegisterTargetsRequest extends Omit<
  * `elasticloadbalancing:RegisterTargets` scoped to the target-group ARN).
  *
  * Registers targets (instances, IPs, Lambda functions, or an ALB) with the
- * bound target group at runtime — e.g. custom blue/green orchestration, or
+ * bound target group at runtime -- e.g. custom blue/green orchestration, or
  * compute that registers itself into a target group at boot.
  * Provide the implementation with
  * `Effect.provide(AWS.ELBv2.RegisterTargetsHttp)`.
  * ### Dynamic Target Management
  * **Example:** Register an IP target
  * ```typescript
- * // init — bind the operation to the target group
+ * // init -- bind the operation to the target group
  * const registerTargets = yield* AWS.ELBv2.RegisterTargets(targetGroup);
  *
- * // runtime — register a target by IP and port
+ * // runtime -- register a target by IP and port
  * yield* registerTargets({
  *   Targets: [{ Id: "10.0.1.15", Port: 8080 }],
  * });

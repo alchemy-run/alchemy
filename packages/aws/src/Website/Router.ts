@@ -90,7 +90,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     }
     if (props.cloudfrontUrl === false && !domain) {
       return yield* Effect.die(
-        `"cloudfrontUrl: false" requires a "domain" — without one the Router would be unreachable (the CloudFront default domain is its only URL).`,
+        `"cloudfrontUrl: false" requires a "domain" \u2014 without one the Router would be unreachable (the CloudFront default domain is its only URL).`,
       );
     }
     if (domain?.redirects?.length && domain.name.includes("*")) {
@@ -100,7 +100,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     }
 
     // The managed certificate (when the Router owns one) doubles as a bind
-    // target for attached-site hostnames — keep the resource handle distinct
+    // target for attached-site hostnames -- keep the resource handle distinct
     // from the viewer-certificate value, which may be a user-provided ARN.
     const managed =
       domain && !domain.cert
@@ -242,8 +242,8 @@ export const Router = Effect.fn("AWS.Website.Router")(
       });
     }
 
-    // One behavior serves every attached site — static AND server-rendered
-    // — so the cache policy must not cache responses that carry no
+    // One behavior serves every attached site -- static AND server-rendered
+    // -- so the cache policy must not cache responses that carry no
     // Cache-Control (SSR pages), while still honoring the immutable
     // Cache-Control the asset uploader sets. Managed CachingOptimized
     // would cache header-less SSR responses for a day. The
@@ -302,7 +302,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     });
 
     // Inline bucket routes are served through the router's distribution with
-    // OAC-signed requests (see `setS3Origin` in cfcode.ts) — each bucket must
+    // OAC-signed requests (see `setS3Origin` in cfcode.ts) -- each bucket must
     // allow this distribution or every request 403s.
     yield* Effect.forEach(routeBuckets, (routeBucket) => {
       const bucketPolicy: PolicyStatement = {
@@ -401,7 +401,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
        * `domain: { name, router }` binds its concrete hostnames onto the
        * distribution (alias), the managed certificate (SAN), and the
        * Route 53 record set. Only populated when the Router owns a
-       * `domain` — without one there is no viewer certificate to cover
+       * `domain` -- without one there is no viewer certificate to cover
        * bound aliases.
        */
       bindTargets: domain
@@ -412,14 +412,14 @@ export const Router = Effect.fn("AWS.Website.Router")(
           }
         : undefined,
       /**
-       * The most significant URL the Router serves at — always `urls[0]`.
+       * The most significant URL the Router serves at -- always `urls[0]`.
        */
       url: urls[0],
       /**
-       * Every URL the Router serves at, most significant first —
+       * Every URL the Router serves at, most significant first --
        * `[https://<domain.name>?, ...aliases, <CloudFront default
        * domain>?]` (the default domain only while `cloudfrontUrl` is
-       * enabled). Redirect hostnames never appear — they serve no content.
+       * enabled). Redirect hostnames never appear -- they serve no content.
        */
       urls,
     };

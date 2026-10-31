@@ -35,27 +35,27 @@ export type PublicAdvertisedPrefixProps = {
   prefixName?: string;
   /**
    * The address range in CIDR format represented by this public advertised
-   * prefix. Immutable — changing it replaces the prefix.
+   * prefix. Immutable -- changing it replaces the prefix.
    */
   ipCidrRange: string;
   /**
-   * Address used for reverse DNS verification. Immutable — changing it
+   * Address used for reverse DNS verification. Immutable -- changing it
    * replaces the prefix.
    */
   dnsVerificationIp?: string;
   /**
    * How child public delegated prefixes are scoped (`REGIONAL` or
-   * `GLOBAL`). Immutable — changing it replaces the prefix.
+   * `GLOBAL`). Immutable -- changing it replaces the prefix.
    */
   pdpScope?: PublicAdvertisedPrefixPdpScope;
   /**
    * Internet access type for IPv6 prefixes (`EXTERNAL` or `INTERNAL`).
-   * Immutable — changing it replaces the prefix.
+   * Immutable -- changing it replaces the prefix.
    */
   ipv6AccessType?: PublicAdvertisedPrefixIpv6AccessType;
   /**
    * Optional description. Public advertised prefixes have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix for
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix for
    * `list` / nuke.
    */
   description?: string;

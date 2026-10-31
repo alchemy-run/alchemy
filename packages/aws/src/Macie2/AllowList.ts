@@ -24,7 +24,7 @@ export interface AllowListProps {
   description?: string;
 
   /**
-   * The criteria that specify the text to ignore — either a `regex` (a regular
+   * The criteria that specify the text to ignore -- either a `regex` (a regular
    * expression that defines the text pattern) or an `s3WordsList` (an S3
    * object listing predefined words, one per line). Updatable in place.
    */
@@ -56,7 +56,7 @@ export interface AllowList extends Resource<
 > {}
 
 /**
- * An Amazon Macie allow list — text patterns or predefined words that Macie
+ * An Amazon Macie allow list -- text patterns or predefined words that Macie
  * ignores when it inspects S3 objects for sensitive data. Requires Macie to be
  * enabled for the account (see `Macie2.Session`). Name, description, and
  * criteria are all updatable in place; destroy deletes the list even if
@@ -102,7 +102,7 @@ export const AllowListProvider = () =>
         macie2.getAllowList({ id }).pipe(
           Effect.catchTags({
             ResourceNotFoundException: () => Effect.undefined,
-            // Macie disabled ⇒ the list is unreachable (and disabling deletes
+            // Macie disabled => the list is unreachable (and disabling deletes
             // all Macie configuration), so report it as gone.
             AccessDeniedException: () => Effect.undefined,
           }),
@@ -140,12 +140,12 @@ export const AllowListProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const name = news.name ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the id.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the id.
           let allowListId = output?.id;
           let live = allowListId ? yield* getAllowList(allowListId) : undefined;
 
           if (!live || allowListId === undefined) {
-            // 2. ENSURE — create the allow list (retry through enablement lag).
+            // 2. ENSURE -- create the allow list (retry through enablement lag).
             const created = yield* retryThroughEnablement(
               macie2.createAllowList({
                 name,
@@ -156,7 +156,7 @@ export const AllowListProvider = () =>
             );
             allowListId = created.id!;
           } else {
-            // 3. SYNC settings — observed ↔ desired (name is required by the
+            // 3. SYNC settings -- observed <-> desired (name is required by the
             // update API, so it is always sent when anything drifts).
             const drift =
               live.name !== name ||
@@ -171,7 +171,7 @@ export const AllowListProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
@@ -194,7 +194,7 @@ export const AllowListProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the list may already be gone, or Macie may already be
+          // Idempotent -- the list may already be gone, or Macie may already be
           // disabled for the account (which removes all Macie configuration).
           yield* macie2.deleteAllowList({ id: output.id, ignoreJobChecks: "true" }).pipe(
             Effect.catchTags({

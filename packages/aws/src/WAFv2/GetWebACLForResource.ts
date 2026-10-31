@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `wafv2:GetWebACLForResource` — look up which web ACL
+ * Runtime binding for `wafv2:GetWebACLForResource` -- look up which web ACL
  * (if any) protects an arbitrary regional resource (ALB, API Gateway
  * stage, AppSync API, Cognito user pool, ...). A resource with no web ACL
  * association fails with the typed `WAFNonexistentItemException`.
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Inspecting Associations
  * **Example:** Look Up the Web ACL Protecting a Load Balancer
  * ```typescript
- * // init — grants wafv2:GetWebACLForResource + wafv2:GetWebACL
+ * // init -- grants wafv2:GetWebACLForResource + wafv2:GetWebACL
  * const getWebACLForResource = yield* AWS.WAFv2.GetWebACLForResource();
  *
  * // runtime

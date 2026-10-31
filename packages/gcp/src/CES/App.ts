@@ -35,11 +35,11 @@ export type AppProps = {
   /**
    * App id (the `{app}` segment of
    * `projects/{project}/locations/{location}/apps/{app}`). If omitted, a
-   * unique name is generated. Immutable — changing it replaces the app.
+   * unique name is generated. Immutable -- changing it replaces the app.
    */
   appId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * app. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -167,7 +167,7 @@ export type App = Resource<
 >;
 
 /**
- * A Customer Engagement Suite (CES) app — the top-level container for
+ * A Customer Engagement Suite (CES) app -- the top-level container for
  * agents, tools, toolsets, guardrails, examples, versions, and
  * deployments.
  *

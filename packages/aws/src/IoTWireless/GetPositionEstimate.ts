@@ -3,16 +3,16 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iotwireless:GetPositionEstimate` — resolve an
+ * Runtime binding for `iotwireless:GetPositionEstimate` -- resolve an
  * estimated position (as a GeoJSON payload stream) from raw measurement
- * data — WiFi access points, cell towers, GNSS scans, or an IP address —
+ * data -- WiFi access points, cell towers, GNSS scans, or an IP address --
  * using third-party solvers, from a deployed Lambda or Task. Account-level:
  * it is not tied to any registered device.
  *
  * ### Estimating a Position
  * Provide the `GetPositionEstimateHttp` implementation layer on the
  * Function effect, bind the capability in the init phase, then call the
- * returned client at runtime. The `GeoJsonPayload` is a byte `Stream` —
+ * returned client at runtime. The `GeoJsonPayload` is a byte `Stream` --
  * decode it with `Stream.mkString(Stream.decodeText(...))`.
  *
  * **Example:** Solve a Position from WiFi Scans

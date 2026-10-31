@@ -7,7 +7,7 @@ import type { DBCluster } from "./DBCluster.ts";
  * Runtime binding for the `CreateDBClusterSnapshot` operation (IAM action
  * `rds:CreateDBClusterSnapshot`).
  *
- * Takes an on-demand snapshot of the bound {@link DBCluster} — e.g. a backup
+ * Takes an on-demand snapshot of the bound {@link DBCluster} -- e.g. a backup
  * function that snapshots before a risky migration. The cluster identifier
  * is injected from the binding; the grant covers both the cluster ARN and
  * the account's `cluster-snapshot` ARN space (both resources must be allowed
@@ -16,7 +16,7 @@ import type { DBCluster } from "./DBCluster.ts";
  * ### Operating a Cluster
  * **Example:** Snapshot Before a Migration
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const createDBClusterSnapshot =
  *   yield* AWS.DocDB.CreateDBClusterSnapshot(cluster);
  *

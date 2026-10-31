@@ -14,7 +14,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Sessions
  * **Example:** List A Job's Session Actions
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const listSessionActions = yield* AWS.Deadline.ListSessionActions(queue);
  *
  * // runtime

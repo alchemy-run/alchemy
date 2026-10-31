@@ -6,14 +6,14 @@ import type { EmailContact } from "./EmailContact.ts";
 /**
  * Runtime binding for `notifications-contacts:GetEmailContact`.
  *
- * Read the bound email contact — most usefully its activation `status`,
+ * Read the bound email contact -- most usefully its activation `status`,
  * which flips from `inactive` to `active` once the address owner confirms
  * the activation email. Provide the implementation with
  * `Effect.provide(AWS.NotificationsContacts.GetEmailContactHttp)`.
  * ### Checking Activation Status
  * **Example:** Read the Contact's Status
  * ```typescript
- * // init — bind the operation to the contact
+ * // init -- bind the operation to the contact
  * const getContact = yield* AWS.NotificationsContacts.GetEmailContact(contact);
  *
  * // runtime

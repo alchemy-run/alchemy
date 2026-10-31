@@ -23,7 +23,7 @@ export interface UpdateQuerySuggestionsConfigRequest extends Omit<
  * Runtime binding for the `UpdateQuerySuggestionsConfig` operation (IAM action
  * `kendra:UpdateQuerySuggestionsConfig`), scoped to one {@link Index}.
  *
- * Tunes the index's query-suggestions settings — switch between
+ * Tunes the index's query-suggestions settings -- switch between
  * `ENABLED` and `LEARN_ONLY`, adjust the query-log look-back window, or
  * change minimum query thresholds.
  * Provide the implementation with

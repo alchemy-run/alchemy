@@ -146,7 +146,7 @@ export interface NetworkInterface extends Resource<
   Providers
 > {}
 /**
- * An Elastic Network Interface (ENI) — a virtual network card in a VPC subnet
+ * An Elastic Network Interface (ENI) -- a virtual network card in a VPC subnet
  * with its own private IPs, MAC address, and security groups. Attach one to an
  * instance via a {@link NetworkInterfaceAttachment} for stable-IP and
  * multi-homing patterns.
@@ -165,7 +165,7 @@ export interface NetworkInterface extends Resource<
  * ```
  *
  * The interface gets a private IP from the subnet's range. Its IP survives
- * instance replacement — detach it from a failed instance and attach it to a
+ * instance replacement -- detach it from a failed instance and attach it to a
  * new one to keep the same address.
  *
  * ### Fixed Private IP
@@ -178,7 +178,7 @@ export interface NetworkInterface extends Resource<
  * });
  * ```
  *
- * Pinning `privateIpAddress` gives the interface a predictable address —
+ * Pinning `privateIpAddress` gives the interface a predictable address --
  * useful for appliances and services other resources reference by IP.
  *
  * ### Forwarding Appliances
@@ -224,7 +224,7 @@ export const NetworkInterfaceProvider = () =>
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = { ...alchemyTags, ...news.tags };
 
-          // 1. OBSERVE — output is only an id cache.
+          // 1. OBSERVE -- output is only an id cache.
           let eni: ec2.NetworkInterface | undefined;
           if (output?.networkInterfaceId) {
             const lookup = yield* ec2
@@ -239,7 +239,7 @@ export const NetworkInterfaceProvider = () =>
             eni = lookup.NetworkInterfaces?.[0];
           }
 
-          // 2. ENSURE — create the interface when missing.
+          // 2. ENSURE -- create the interface when missing.
           if (eni === undefined) {
             const secondary = (news.privateIpAddresses ?? []).map((ip) => ({
               Primary: false,
@@ -267,7 +267,7 @@ export const NetworkInterfaceProvider = () =>
 
           const eniId = eni.NetworkInterfaceId! as NetworkInterfaceId;
 
-          // 3. SYNC — description, security groups, source/dest check.
+          // 3. SYNC -- description, security groups, source/dest check.
           if (news.description !== undefined && news.description !== (eni.Description ?? "")) {
             yield* ec2.modifyNetworkInterfaceAttribute({
               NetworkInterfaceId: eniId,
@@ -300,7 +300,7 @@ export const NetworkInterfaceProvider = () =>
             yield* session.note(`Updated source/dest check: ${desiredSourceDestCheck}`);
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const currentTags = Object.fromEntries(
             (eni.TagSet ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -351,7 +351,7 @@ export const NetworkInterfaceProvider = () =>
             .pipe(
               Effect.tapError(Effect.logDebug),
               Effect.catchTag("InvalidNetworkInterfaceID.NotFound", () => Effect.void),
-              // A just-detached interface can briefly report InUse — retry
+              // A just-detached interface can briefly report InUse -- retry
               // until the attachment fully clears.
               Effect.retry({
                 while: (e) => e._tag === "InvalidNetworkInterface.InUse",

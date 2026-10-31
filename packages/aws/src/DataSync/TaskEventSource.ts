@@ -41,7 +41,7 @@ export interface TaskEventSourceProps extends EventRouteProps {
   /**
    * Which notifications to subscribe to: task state changes (e.g. a task
    * becoming `UNAVAILABLE`) and/or task-execution state changes (a run
-   * progressing through `LAUNCHING` → … → `SUCCESS`/`ERROR`).
+   * progressing through `LAUNCHING` -> ... -> `SUCCESS`/`ERROR`).
    * @default ["task-execution-state-change"]
    */
   kinds?: readonly TaskEventKind[];
@@ -60,7 +60,7 @@ export interface TaskEventSourceProps extends EventRouteProps {
  * this subscribes the host Function to those events so it can react when a
  * transfer finishes, fails, or a task drops offline.
  *
- * DataSync publishes to EventBridge automatically — no additional resource
+ * DataSync publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

@@ -11,7 +11,7 @@ export interface CreatePartitionRequest extends Omit<
 /**
  * Runtime binding for `glue:CreatePartition`.
  *
- * Registers a new partition on the bound {@link Table} — the write half of
+ * Registers a new partition on the bound {@link Table} -- the write half of
  * the classic "data landed in S3, register the partition so Athena sees it"
  * pipeline. Fails with the typed `AlreadyExistsException` if the partition
  * is already registered. The database/table names and catalog id are
@@ -23,7 +23,7 @@ export interface CreatePartitionRequest extends Omit<
  * // init
  * const createPartition = yield* AWS.Glue.CreatePartition(table);
  *
- * // runtime — idempotent registration
+ * // runtime -- idempotent registration
  * yield* createPartition({
  *   PartitionInput: {
  *     Values: ["2026-01-01"],

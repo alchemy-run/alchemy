@@ -7,7 +7,7 @@ export interface ListPhoneNumbersOptedOutRequest extends sns.ListPhoneNumbersOpt
 /**
  * Runtime binding for `sns:ListPhoneNumbersOptedOut`.
  *
- * An account-scoped operation — pages through the phone numbers whose
+ * An account-scoped operation -- pages through the phone numbers whose
  * owners opted out of receiving SMS from this account.
  * Provide the `ListPhoneNumbersOptedOutHttp` layer on the Function to implement the binding.
  * ### SMS Opt-Out Management

@@ -23,7 +23,7 @@ const MAX_DISPLAY_NAME_LENGTH = 512;
 export type NotificationChannelProps = {
   /**
    * Channel type. Must match a `NotificationChannelDescriptor.type`
-   * (`email`, `webhook_tokenauth`, `pubsub`, `slack`, …). Immutable —
+   * (`email`, `webhook_tokenauth`, `pubsub`, `slack`, ...). Immutable --
    * changing it replaces the channel.
    */
   type: string;
@@ -39,7 +39,7 @@ export type NotificationChannelProps = {
   description?: string;
   /**
    * Type-specific configuration (for example `email_address` for `email`,
-   * `url` for `webhook_tokenauth`). Not used for Alchemy ownership —
+   * `url` for `webhook_tokenauth`). Not used for Alchemy ownership --
    * see `userLabels`.
    */
   labels?: Record<string, string>;
@@ -64,7 +64,7 @@ export type NotificationChannel = Resource<
     notificationChannelId: string;
     /** Project id. */
     project: string;
-    /** Channel type (`email`, `webhook_tokenauth`, …). */
+    /** Channel type (`email`, `webhook_tokenauth`, ...). */
     type: string;
     /** Human-readable display name. */
     displayName: string | undefined;
@@ -84,7 +84,7 @@ export type NotificationChannel = Resource<
 >;
 
 /**
- * A Cloud Monitoring notification channel — email, webhook, Pub/Sub, or
+ * A Cloud Monitoring notification channel -- email, webhook, Pub/Sub, or
  * another supported delivery type.
  *
  * Channel ids are assigned by the API. Alchemy stamps ownership into

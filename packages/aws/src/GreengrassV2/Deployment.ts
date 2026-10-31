@@ -143,7 +143,7 @@ export class GreengrassDeploymentMissingId extends Data.TaggedError(
   "GreengrassDeploymentMissingId",
 )<{ message: string }> {}
 
-// Explicitly-typed pipeable retry helper (see EC2/VolumeAttachment.ts) —
+// Explicitly-typed pipeable retry helper (see EC2/VolumeAttachment.ts) --
 // deleting a deployment right after cancellation can race the state change.
 const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -250,7 +250,7 @@ export const DeploymentProvider = () =>
         Effect.gen(function* () {
           yield* greengrassv2.cancelDeployment({ deploymentId }).pipe(
             // Already completed/canceled/inactive revisions reject the
-            // cancellation — that is exactly the state we want.
+            // cancellation -- that is exactly the state we want.
             Effect.catchTag(
               ["ResourceNotFoundException", "ConflictException", "ValidationException"],
               () => Effect.undefined,
@@ -317,11 +317,11 @@ export const DeploymentProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredComponents = canonicalComponents(news.components);
 
-          // 1. OBSERVE — the latest revision for the target is authoritative;
+          // 1. OBSERVE -- the latest revision for the target is authoritative;
           //    output.deploymentId is only a cache of the revision we made.
           let live = yield* observeLatestForTarget(news.targetArn);
 
-          // 2. ENSURE/SYNC — a deployment revision is immutable: when the
+          // 2. ENSURE/SYNC -- a deployment revision is immutable: when the
           //    observed latest revision drifts from the desired spec (or none
           //    exists), create a new revision that supersedes it.
           const inSync =
@@ -357,7 +357,7 @@ export const DeploymentProvider = () =>
 
           // Post-ensure narrowing: `inSync` implies `live` was observed and
           // the !inSync branch re-observed after create, but TS cannot track
-          // that through the reassignment — guard with a typed error.
+          // that through the reassignment -- guard with a typed error.
           if (live === undefined) {
             return yield* new GreengrassDeploymentMissingId({
               message: `no deployment observed for target ${news.targetArn} after reconcile`,
@@ -366,7 +366,7 @@ export const DeploymentProvider = () =>
 
           const attrs = yield* attributesOf(live, news.targetArn);
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption and
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so adoption and
           //    no-op updates converge (create-time tags only apply on create).
           const observedTags = normalizeTags(live.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

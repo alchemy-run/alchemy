@@ -33,7 +33,7 @@ export type DnsZonePeeringConfig = {
 export type DnsZoneProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the zone.
+   * current GCP project id. Immutable -- changing it replaces the zone.
    */
   organization?: string;
   /**
@@ -41,21 +41,21 @@ export type DnsZoneProps = {
    * `organizations/{org}/dnsZones/{dns_zone}`). Must be 1-63 characters,
    * begin with a letter, end with a letter or digit, and contain only
    * lowercase letters, digits, or dashes. If omitted, a unique name is
-   * generated. Immutable — changing it replaces the zone.
+   * generated. Immutable -- changing it replaces the zone.
    */
   dnsZoneId?: string;
   /**
    * Domain name for hosts in this private zone (for example
-   * `example.com.`). Immutable — changing it replaces the zone.
+   * `example.com.`). Immutable -- changing it replaces the zone.
    */
   domain: string;
   /**
-   * DNS peering configuration. Immutable — changing it replaces the zone.
+   * DNS peering configuration. Immutable -- changing it replaces the zone.
    */
   peeringConfig: DnsZonePeeringConfig;
   /**
    * Human-readable description (required by Apigee, max 1024 characters).
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -77,7 +77,7 @@ export type DnsZone = Resource<
     peeringConfig: DnsZonePeeringConfig | undefined;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported state (`CREATING`, `ACTIVE`, …). */
+    /** Server-reported state (`CREATING`, `ACTIVE`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -94,7 +94,7 @@ export type DnsZone = Resource<
  *
  * Apigee DNS zones have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. Name, domain, and peering config are
- * identity — changing them replaces the zone. Description updates in place
+ * identity -- changing them replaces the zone. Description updates in place
  * only if the API later exposes a patch; today the resource is
  * existence-only besides identity.
  *

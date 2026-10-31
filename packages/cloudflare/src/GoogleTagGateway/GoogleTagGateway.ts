@@ -13,7 +13,7 @@ const TypeId = "Cloudflare.GoogleTagGateway.GoogleTagGateway" as const;
 type TypeId = typeof TypeId;
 
 /**
- * The plain Google Tag Gateway configuration shape — the value PUT to and
+ * The plain Google Tag Gateway configuration shape -- the value PUT to and
  * read back from `/zones/{zone_id}/settings/google-tag-gateway/config`.
  */
 export type Config = {
@@ -34,7 +34,7 @@ export type Props = {
    * Zone whose Google Tag Gateway config should be managed. Accepts a zone
    * id, a zone name (`example.com`), or a `{ zoneId, name? }` object.
    *
-   * Stable — the config belongs to the zone, so changing the zone triggers
+   * Stable -- the config belongs to the zone, so changing the zone triggers
    * a replacement (the old zone's config is restored to the value it had
    * before Alchemy managed it).
    */
@@ -87,7 +87,7 @@ export type GoogleTagGateway = Resource<TypeId, Props, Attributes, never, Provid
  * (`/zones/{zone_id}/settings/google-tag-gateway/config`).
  *
  * Google Tag Gateway serves Google Tag Manager / gtag.js first-party through
- * the zone — requests to the configured endpoint path are proxied to Google
+ * the zone -- requests to the configured endpoint path are proxied to Google
  * by Cloudflare's edge. The config is a zone-level singleton: there is one
  * per zone and the PUT API is a full replace, so reconcile is a single
  * idempotent upsert. Destroy restores the configuration the zone had before
@@ -140,7 +140,7 @@ export const GoogleTagGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this per-zone singleton — enumerate every
+      // No account-wide API for this per-zone singleton -- enumerate every
       // zone in the account and read its config. Unlike a true singleton,
       // the config is `null` for zones that never configured the feature,
       // so those zones contribute no row.
@@ -150,7 +150,7 @@ export const GoogleTagGatewayProvider = () =>
         (zoneId) =>
           googleTagGateway.getConfig({ zoneId }).pipe(
             Effect.map((observed) => {
-              // `null` — the zone has never configured Google Tag Gateway.
+              // `null` -- the zone has never configured Google Tag Gateway.
               if (observed === null) return undefined;
               const config = toConfig(observed);
               return {
@@ -160,7 +160,7 @@ export const GoogleTagGatewayProvider = () =>
               } satisfies Attributes;
             }),
             // Zone deleted out-of-band, or the scoped token can't see this
-            // zone — skip it rather than failing the whole enumeration.
+            // zone -- skip it rather than failing the whole enumeration.
             Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.undefined),
           ),
         { concurrency: 10 },
@@ -171,7 +171,7 @@ export const GoogleTagGatewayProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      // The config belongs to the zone — moving zones is a replacement.
+      // The config belongs to the zone -- moving zones is a replacement.
       const zoneId = yield* resolve(news.zone);
       if (zoneId !== output.zoneId) {
         return { action: "replace" } as const;
@@ -182,14 +182,14 @@ export const GoogleTagGatewayProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
-        // before upstream Outputs resolved — report "not found" then.
+        // before upstream Outputs resolved -- report "not found" then.
         output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* googleTagGateway.getConfig({ zoneId }).pipe(
-        // Zone deleted out-of-band — the config is gone with it.
+        // Zone deleted out-of-band -- the config is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.succeed(null)),
       );
-      // `null` result — the zone has never configured Google Tag Gateway.
+      // `null` result -- the zone has never configured Google Tag Gateway.
       if (observed === null) return undefined;
       // The config is a zone singleton with no ownership tags possible, so
       // a cold read adopts freely (never `Unowned`). The observed config at
@@ -201,17 +201,17 @@ export const GoogleTagGatewayProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
 
-      // 1. Observe — `null` means the zone never configured the feature.
+      // 1. Observe -- `null` means the zone never configured the feature.
       const response = yield* googleTagGateway.getConfig({ zoneId });
       const observed = response === null ? undefined : toConfig(response);
 
-      // 2. Capture — the pre-management config, restored on destroy.
+      // 2. Capture -- the pre-management config, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed config is
       //    the zone's original.
       const initialConfig = output !== undefined ? output.initialConfig : observed;
 
-      // 3. Sync — PUT is a full replace; skip the call on no-op.
+      // 3. Sync -- PUT is a full replace; skip the call on no-op.
       const desired: Config = {
         enabled: news.enabled,
         endpoint: news.endpoint,
@@ -236,7 +236,7 @@ export const GoogleTagGatewayProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialConfig } = output;
-      // Observe — if the zone itself is gone, so is the config.
+      // Observe -- if the zone itself is gone, so is the config.
       const observed = yield* googleTagGateway
         .getConfig({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(null)));

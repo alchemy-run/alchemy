@@ -109,7 +109,7 @@ export interface PullRequestProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -169,7 +169,7 @@ export interface PullRequest extends Resource<
  * `PullRequest` manages the lifecycle of a pull request in a repository. PRs
  * are created on the first deploy and updated in place on subsequent deploys
  * when properties change. By default, pull requests are retained on
- * destruction to preserve history — set `destroy()` to opt in to closure.
+ * destruction to preserve history -- set `destroy()` to opt in to closure.
  *
  * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
@@ -271,7 +271,7 @@ export const PullRequestProvider = () =>
   Provider.succeed(PullRequest, {
     stables: ["prNumber", "nodeId"],
 
-    // A PR belongs to (host, owner, repository, head, base) — changing any
+    // A PR belongs to (host, owner, repository, head, base) -- changing any
     // of these replaces the resource: a fresh PR is created with the new
     // configuration, and the old one is retained by default.
     diff: Effect.fn(function* ({ news, olds }) {

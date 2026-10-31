@@ -16,11 +16,11 @@ export interface GetRecordsRequest extends Omit<Kinesis.GetRecordsInput, "Stream
  * ### Reading Records
  * **Example:** Read Records from a Shard
  * ```typescript
- * // init — bind the operations to the stream
+ * // init -- bind the operations to the stream
  * const getShardIterator = yield* AWS.Kinesis.GetShardIterator(stream);
  * const getRecords = yield* AWS.Kinesis.GetRecords(stream);
  *
- * // runtime — obtain an iterator, then read
+ * // runtime -- obtain an iterator, then read
  * const iterator = yield* getShardIterator({
  *   ShardId: shardId,
  *   ShardIteratorType: "TRIM_HORIZON",

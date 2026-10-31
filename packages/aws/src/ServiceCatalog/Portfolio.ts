@@ -54,7 +54,7 @@ export interface Portfolio extends Resource<
 > {}
 
 /**
- * An AWS Service Catalog portfolio — a container that organizes products
+ * An AWS Service Catalog portfolio -- a container that organizes products
  * and grants access to them for a set of principals.
  *
  * ### Creating a Portfolio
@@ -165,7 +165,7 @@ export const PortfolioProvider = () =>
           return (yield* hasAlchemyTags(id, tagRecord(described?.Tags))) ? attrs : Unowned(attrs);
         }),
         // Display name, provider name, description, and tags are all
-        // updatable in place — no diff needed (identity is the generated ID).
+        // updatable in place -- no diff needed (identity is the generated ID).
         reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const displayName = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -174,14 +174,14 @@ export const PortfolioProvider = () =>
             ...internalTags,
           };
 
-          // 1. OBSERVE — cloud is authoritative; output caches the ID only.
+          // 1. OBSERVE -- cloud is authoritative; output caches the ID only.
           let described = output?.portfolioId ? yield* observe(output.portfolioId) : undefined;
           if (!described?.PortfolioDetail?.Id) {
             const found = yield* findByDisplayName(displayName);
             described = found?.Id ? yield* observe(found.Id) : undefined;
           }
 
-          // 2. ENSURE — create when missing. The idempotency token (derived
+          // 2. ENSURE -- create when missing. The idempotency token (derived
           // from the instance ID) makes a retried create converge on the
           // same portfolio instead of duplicating it.
           if (!described?.PortfolioDetail?.Id) {
@@ -198,7 +198,7 @@ export const PortfolioProvider = () =>
           const detail = described!.PortfolioDetail!;
           const portfolioId = detail.Id!;
 
-          // 3. SYNC — diff observed details + tags against desired and apply
+          // 3. SYNC -- diff observed details + tags against desired and apply
           // only the delta in a single updatePortfolio call.
           const observedTags = tagRecord(described!.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

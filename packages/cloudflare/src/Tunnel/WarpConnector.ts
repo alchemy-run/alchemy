@@ -42,7 +42,7 @@ export interface WarpConnectorAttributes {
   createdAt: string | undefined;
   /**
    * Connector token used to run the WARP Connector on a host
-   * (`warp-cli connector new <token>`). Sensitive — stored redacted.
+   * (`warp-cli connector new <token>`). Sensitive -- stored redacted.
    */
   token: Redacted.Redacted<string>;
 }
@@ -56,7 +56,7 @@ export type WarpConnector = Resource<
 >;
 
 /**
- * A Cloudflare WARP Connector tunnel — a software site-to-site connector
+ * A Cloudflare WARP Connector tunnel -- a software site-to-site connector
  * that extends a private network into Cloudflare Zero Trust without
  * running `cloudflared`.
  *
@@ -123,13 +123,13 @@ export const WarpConnectorProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached id.
+      // Owned path -- refresh by the cached id.
       if (output?.tunnelId) {
         const observed = yield* getConnector(acct, output.tunnelId);
         if (observed) return yield* toAttributes(observed, acct);
       }
 
-      // Cold read — tunnel names are unique per account, so an exact name
+      // Cold read -- tunnel names are unique per account, so an exact name
       // match is the resource's identity. WARP Connector tunnels carry no
       // ownership markers, so gate adoption behind Unowned.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
@@ -143,7 +143,7 @@ export const WarpConnectorProvider = () =>
     // exhaustively, drop soft-deleted tunnels (match `read`), then hydrate
     // each live tunnel into the exact `read` Attributes shape (token
     // included). A tunnel deleted out from under us between the list and the
-    // token fetch surfaces as a typed TunnelNotFound — skip it.
+    // token fetch surfaces as a typed TunnelNotFound -- skip it.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const observed = yield* zeroTrust.listTunnelWarpConnectors
@@ -177,13 +177,13 @@ export const WarpConnectorProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
-      // 1. Observe — the cached id is a hint, not a guarantee.
+      // 1. Observe -- the cached id is a hint, not a guarantee.
       let observed = output?.tunnelId ? yield* getConnector(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Tunnel names are unique per
+      // 2. Ensure -- create when missing. Tunnel names are unique per
       //    account, so a racing create surfaces as DuplicateTunnelName
       //    (code 1013): converge by re-reading the tunnel that won.
       if (!observed) {
@@ -200,7 +200,7 @@ export const WarpConnectorProvider = () =>
           );
       }
 
-      // 3. Sync — rename via PATCH only when the observed name differs.
+      // 3. Sync -- rename via PATCH only when the observed name differs.
       if ((observed.name ?? undefined) !== name) {
         observed = yield* zeroTrust.patchTunnelWarpConnector({
           accountId,
@@ -213,7 +213,7 @@ export const WarpConnectorProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Deleting requires all connector sessions to be down — true for
+      // Deleting requires all connector sessions to be down -- true for
       // tunnels never joined by a host. A missing tunnel (TunnelNotFound,
       // code 1002) means we're done.
       yield* zeroTrust

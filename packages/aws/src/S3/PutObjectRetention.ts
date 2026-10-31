@@ -9,7 +9,7 @@ export interface PutObjectRetentionRequest extends Omit<S3.PutObjectRetentionReq
  * Runtime binding for `s3:PutObjectRetention`.
  *
  * Bind this operation to a bucket to get a callable that places an Object
- * Lock retention configuration on an object — the bucket name is injected
+ * Lock retention configuration on an object -- the bucket name is injected
  * automatically and `s3:PutObjectRetention` is granted on the bucket's
  * objects. Requires a bucket created with `objectLockEnabled: true`;
  * bypassing a GOVERNANCE retention additionally requires

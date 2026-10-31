@@ -38,20 +38,20 @@ export type Props = {
   /**
    * Indicates whether the certificate is a CA certificate (`true`) used to
    * validate client certificates, or a leaf certificate (`false`) presented
-   * by Cloudflare to your origin. Cannot be changed after upload — updating
+   * by Cloudflare to your origin. Cannot be changed after upload -- updating
    * this property triggers a replacement.
    */
   ca: boolean;
   /**
    * The certificate in PEM format. A root CA certificate when `ca: true`,
    * or a leaf certificate (chain) when `ca: false`. Cannot be changed after
-   * upload — updating this property triggers a replacement.
+   * upload -- updating this property triggers a replacement.
    */
   certificates: string;
   /**
    * The private key for the certificate in PEM format. Required when
    * uploading a leaf certificate (`ca: false`) that Cloudflare must present
-   * to your origin. Cannot be changed after upload — updating this property
+   * to your origin. Cannot be changed after upload -- updating this property
    * triggers a replacement.
    */
   privateKey?: Redacted.Redacted<string>;
@@ -220,7 +220,7 @@ export const MtlsCertificateProvider = () =>
         (news.certificates ?? undefined) !== (olds.certificates ?? undefined) ||
         unwrap(news.privateKey) !== unwrap(olds.privateKey)
       ) {
-        // There is no update API for mTLS certificates — every change is a
+        // There is no update API for mTLS certificates -- every change is a
         // replacement. Cloudflare rejects a duplicate name, so a replacement
         // that keeps an explicit name must delete the old certificate first.
         // Generated names include the instance id and replace create-first.
@@ -245,7 +245,7 @@ export const MtlsCertificateProvider = () =>
             Effect.catchTag("CertificateNotFound", () => Effect.undefined),
           );
       }
-      // Cold read — recover by listing and matching on the deterministic
+      // Cold read -- recover by listing and matching on the deterministic
       // physical name (the only brand available; certificates have no tags).
       const name = yield* createCertificateName(id, olds?.name);
       const match = yield* findByName(acct, name);
@@ -253,7 +253,7 @@ export const MtlsCertificateProvider = () =>
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Account-scoped collection — exhaustively paginate the mTLS
+      // Account-scoped collection -- exhaustively paginate the mTLS
       // certificate store and hydrate each item into the read Attributes
       // shape (the private key is write-only and never returned).
       return yield* mtls.listMtlsCertificates.pages({ accountId }).pipe(
@@ -274,7 +274,7 @@ export const MtlsCertificateProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = output?.name ?? (yield* createCertificateName(id, news.name));
 
-      // Observe — the certificate id is the stable identifier; fall through
+      // Observe -- the certificate id is the stable identifier; fall through
       // a CertificateNotFound to the list+name match so we recover from
       // out-of-band deletes and partial state persistence. Without an id,
       // only adopt a certificate that has the same name AND the desired PEM:
@@ -289,7 +289,7 @@ export const MtlsCertificateProvider = () =>
             .pipe(Effect.catchTag("CertificateNotFound", () => Effect.undefined))
         : yield* findByName(accountId, name, news.certificates);
 
-      // Ensure — upload if missing. Cloudflare rejects uploading a
+      // Ensure -- upload if missing. Cloudflare rejects uploading a
       // certificate with identical content twice (code 1471); tolerate the
       // race (or an orphaned prior upload) by re-listing and adopting the
       // certificate with identical PEM content.

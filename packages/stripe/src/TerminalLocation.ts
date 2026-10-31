@@ -41,7 +41,7 @@ export interface TerminalLocationAddress {
    */
   city?: string;
   /**
-   * Two-letter ISO 3166-1 alpha-2 country code. Create-only — changing
+   * Two-letter ISO 3166-1 alpha-2 country code. Create-only -- changing
    * it replaces the location.
    */
   country: string;
@@ -103,7 +103,7 @@ export interface TerminalLocationProps {
    */
   displayName?: string;
   /**
-   * Full address of the location. `country` is required and create-only —
+   * Full address of the location. `country` is required and create-only --
    * changing it replaces the location. Other fields update in place;
    * required fields vary by country.
    */
@@ -145,7 +145,7 @@ export type TerminalLocation = Resource<
   "Stripe.TerminalLocation",
   TerminalLocationProps,
   {
-    /** Stripe Terminal Location id (`tml_…`). */
+    /** Stripe Terminal Location id (`tml_...`). */
     id: string;
     /** Display name of the location. */
     displayName: string;
@@ -173,7 +173,7 @@ export type TerminalLocation = Resource<
 >;
 
 /**
- * A Stripe Terminal Location — a grouping of Terminal readers at a
+ * A Stripe Terminal Location -- a grouping of Terminal readers at a
  * physical site. Display name, phone, metadata, configuration overrides,
  * and address fields other than `country` update in place. Changing
  * `address.country` replaces the location; re-register readers on the

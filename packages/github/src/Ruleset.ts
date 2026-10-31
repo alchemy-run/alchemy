@@ -10,7 +10,7 @@ import type * as GitHub from "./Providers.ts";
 
 export interface RulesetProps {
   /**
-   * Repository owner — a user or organization login.
+   * Repository owner -- a user or organization login.
    */
   owner: string;
 
@@ -229,7 +229,7 @@ export interface RulesetProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -302,7 +302,7 @@ export interface Ruleset extends Resource<
  * Rulesets replace the legacy branch protection API with a more flexible
  * system that can target multiple branches or tags with a single ruleset.
  *
- * Rulesets default to **retain** on removal — destroying the stack does NOT
+ * Rulesets default to **retain** on removal -- destroying the stack does NOT
  * delete the ruleset on GitHub, protecting production branches from
  * accidental removal. Opt in to actual deletion by wrapping the resource in
  * {@link destroy}() from `alchemy/RemovalPolicy`.

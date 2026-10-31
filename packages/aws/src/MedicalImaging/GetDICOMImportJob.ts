@@ -17,7 +17,7 @@ export interface GetDICOMImportJobRequest extends Omit<
  * `medical-imaging:GetDICOMImportJob`), scoped to one {@link Datastore}.
  *
  * Reads the properties of a DICOM import job started with
- * {@link StartDICOMImportJob} — poll `jobProperties.jobStatus` until
+ * {@link StartDICOMImportJob} -- poll `jobProperties.jobStatus` until
  * `COMPLETED` (or `FAILED`), then review the output manifests at
  * `outputS3Uri` for per-object results. Provide the implementation with
  * `Effect.provide(AWS.MedicalImaging.GetDICOMImportJobHttp)`.

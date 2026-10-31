@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface GetLicenseRequest extends licensemanager.GetLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:GetLicense` — read a seller-issued
+ * Runtime binding for `license-manager:GetLicense` -- read a seller-issued
  * license's details (issuer, entitlements, validity, consumption
  * configuration) by ARN.
  *

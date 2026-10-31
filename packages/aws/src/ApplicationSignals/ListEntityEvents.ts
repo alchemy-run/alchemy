@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Tracking Changes
  * **Example:** List an Entity's Change Events
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listEntityEvents = yield* AWS.ApplicationSignals.ListEntityEvents();
  *
  * // runtime

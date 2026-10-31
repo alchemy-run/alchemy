@@ -70,12 +70,12 @@ export type InstanceProps = {
   /**
    * Parent cluster id or full resource name
    * (`projects/{project}/locations/{location}/clusters/{cluster}`).
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    */
   cluster: string;
   /**
-   * Region of the parent cluster (`us-central1`, …). Ignored when
-   * `cluster` is a full resource name. Immutable — changing it replaces
+   * Region of the parent cluster (`us-central1`, ...). Ignored when
+   * `cluster` is a full resource name. Immutable -- changing it replaces
    * the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -85,13 +85,13 @@ export type InstanceProps = {
    * Instance id (the `{instance}` segment of
    * `.../clusters/{cluster}/instances/{instance}`). If omitted, a unique
    * RFC1035 name is generated. Must match
-   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable — changing it replaces
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable -- changing it replaces
    * the instance.
    */
   instanceId?: string;
   /**
    * Instance type. `SECONDARY` uses `instances.createsecondary`.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    * @default "PRIMARY"
    */
   instanceType?: alloydb.InstanceInstanceTypeEnum | (string & {});
@@ -180,7 +180,7 @@ export type InstanceProps = {
    */
   migrationsDatabase?: string;
   /**
-   * Built-in database user that `migrations` log in as — e.g. the
+   * Built-in database user that `migrations` log in as -- e.g. the
    * cluster's `initialUser`. It owns the tables the migrations create.
    */
   migrationsUser?: string;
@@ -204,7 +204,7 @@ export type Instance = Resource<
     clusterName: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Instance type (`PRIMARY`, `READ_POOL`, `SECONDARY`). */
     instanceType: string;
@@ -214,7 +214,7 @@ export type Instance = Resource<
     labels: Record<string, string>;
     /** Client annotations. */
     annotations: Record<string, string>;
-    /** Serving state (`READY`, `CREATING`, `STOPPED`, …). */
+    /** Serving state (`READY`, `CREATING`, `STOPPED`, ...). */
     state: string | undefined;
     /** Private IP address. */
     ipAddress: string | undefined;
@@ -966,7 +966,7 @@ export const InstanceProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      // Sync migrations — the shared pipeline skips already-applied ones.
+      // Sync migrations -- the shared pipeline skips already-applied ones.
       const migrationsInput = migrationsInputOf(news);
       if (migrationsInput && normalizeInstanceType(current.instanceType) !== "PRIMARY") {
         return yield* new MigrationError({

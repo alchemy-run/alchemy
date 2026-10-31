@@ -373,7 +373,7 @@ const readStream = Effect.fn(function* ({
 
   const summary = response.StreamDescriptionSummary;
   // The stream can vanish between the describe above and these follow-up
-  // calls (e.g. another test tears its stream down while `list` hydrates) —
+  // calls (e.g. another test tears its stream down while `list` hydrates) --
   // a `ResourceNotFoundException` here just means it's gone, so report it as
   // missing rather than failing the whole enumeration.
   const tagsResponse = yield* kinesis
@@ -484,14 +484,14 @@ export const StreamProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live cloud state. `output` is treated as a cache
+          // Observe -- fetch live cloud state. `output` is treated as a cache
           // for the physical name only; the stream's actual existence and
           // configuration are fetched fresh so the reconciler converges
           // regardless of drift, adoption, or a partially-completed prior
           // run.
           let state = yield* readStream({ streamName, streamArn });
 
-          // Ensure — create the stream if it's missing. Tolerate
+          // Ensure -- create the stream if it's missing. Tolerate
           // `ResourceInUseException` as a race with a peer reconciler:
           // re-read and continue with the sync path. Retry transient
           // `LimitExceededException`.
@@ -524,7 +524,7 @@ export const StreamProvider = () =>
             }
           }
 
-          // Sync stream mode — observed ↔ desired.
+          // Sync stream mode -- observed <-> desired.
           const desiredMode = news.streamMode ?? defaultStreamMode;
           if (state.streamMode !== desiredMode) {
             yield* kinesis.updateStreamMode({
@@ -543,7 +543,7 @@ export const StreamProvider = () =>
             }
           }
 
-          // Sync shard count — only meaningful in PROVISIONED mode.
+          // Sync shard count -- only meaningful in PROVISIONED mode.
           if (
             desiredMode === "PROVISIONED" &&
             news.shardCount !== undefined &&
@@ -558,7 +558,7 @@ export const StreamProvider = () =>
             yield* session.note(`Updated shard count to ${news.shardCount}`);
           }
 
-          // Sync retention period — observed ↔ desired.
+          // Sync retention period -- observed <-> desired.
           const desiredRetention = toWireHours(news.retentionPeriod) ?? defaultRetentionPeriodHours;
           if (state.retentionPeriodHours !== desiredRetention) {
             if (desiredRetention > state.retentionPeriodHours) {
@@ -576,7 +576,7 @@ export const StreamProvider = () =>
             yield* session.note(`Updated retention period to ${desiredRetention} hours`);
           }
 
-          // Sync encryption — observed ↔ desired.
+          // Sync encryption -- observed <-> desired.
           const desiredEncryption = news.encryption ?? false;
           const desiredKmsKey = news.kmsKeyId ?? "alias/aws/kinesis";
           const observedEncryption = state.encryptionType === "KMS";
@@ -611,7 +611,7 @@ export const StreamProvider = () =>
             yield* session.note("Updated KMS key");
           }
 
-          // Sync shard-level metrics — observed ↔ desired.
+          // Sync shard-level metrics -- observed <-> desired.
           const observedMetrics = new Set(state.shardLevelMetrics);
           const desiredMetrics = new Set(news.shardLevelMetrics ?? []);
           const metricsToEnable = (news.shardLevelMetrics ?? []).filter(
@@ -639,7 +639,7 @@ export const StreamProvider = () =>
             yield* session.note(`Enabled metrics: ${metricsToEnable.join(", ")}`);
           }
 
-          // Sync warm throughput — only meaningful in ON_DEMAND mode.
+          // Sync warm throughput -- only meaningful in ON_DEMAND mode.
           if (
             desiredMode === "ON_DEMAND" &&
             news.warmThroughputMiBps !== undefined &&
@@ -653,7 +653,7 @@ export const StreamProvider = () =>
             yield* session.note(`Updated warm throughput to ${news.warmThroughputMiBps} MiBps`);
           }
 
-          // Sync max record size — observed ↔ desired.
+          // Sync max record size -- observed <-> desired.
           if (
             news.maxRecordSizeInKiB !== undefined &&
             state.maxRecordSizeInKiB !== news.maxRecordSizeInKiB
@@ -666,7 +666,7 @@ export const StreamProvider = () =>
             yield* session.note(`Updated max record size to ${news.maxRecordSizeInKiB} KiB`);
           }
 
-          // Sync tags — diff observed cloud tags against desired. Adoption
+          // Sync tags -- diff observed cloud tags against desired. Adoption
           // may bring us a stream that already has its own tag set; diffing
           // against `state.tags` (fetched fresh) lets the reconciler
           // converge ownership without fighting whatever was there before.
@@ -690,7 +690,7 @@ export const StreamProvider = () =>
             });
           }
 
-          // Sync resource policy — observed ↔ desired. Tolerate the
+          // Sync resource policy -- observed <-> desired. Tolerate the
           // race where the cloud's policy was already removed (delete
           // fails with `ResourceNotFoundException`) or where another
           // reconcile already wrote the same policy.

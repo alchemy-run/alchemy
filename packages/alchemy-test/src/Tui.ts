@@ -1,11 +1,11 @@
 /**
- * Interactive opentui reporter — a k9s-style live view of the run.
+ * Interactive opentui reporter -- a k9s-style live view of the run.
  *
  * Layout:
- *   header  — run stats (pass/fail/running/queued, elapsed, import progress)
- *   list    — files with their tests nested inside (expand with enter / l)
- *   detail  — Enter on a test opens its error + captured output
- *   footer  — key hints / filter input / status toggles
+ *   header  -- run stats (pass/fail/running/queued, elapsed, import progress)
+ *   list    -- files with their tests nested inside (expand with enter / l)
+ *   detail  -- Enter on a test opens its error + captured output
+ *   footer  -- key hints / filter input / status toggles
  *
  * Keys (vim-style):
  *   j/k or arrows  move one line       space / ^d ^u / ^f ^b   page / half page
@@ -20,7 +20,7 @@
  * Mouse: the wheel scrolls the viewable content without moving the selected
  * line; clicking a row selects it. Drag-to-select text works in the detail
  * pane (enter) and copies to the clipboard on release (OSC52 + pbcopy);
- * list rows are not text-selectable — they're a recycled pool, and an
+ * list rows are not text-selectable -- they're a recycled pool, and an
  * anchored selection highlight would leave residue as rows repaint (use `y`
  * to copy a row's details instead).
  *
@@ -29,7 +29,7 @@
  * theme-aware background for the selected row (neovim-style).
  *
  * Performance: the list is a fixed pool of Text rows (one per terminal
- * line) painted from the visible window only — updates are O(window), never
+ * line) painted from the visible window only -- updates are O(window), never
  * O(total tests).
  */
 import {
@@ -87,14 +87,14 @@ const groupOf = (status: Status): StatusGroup => {
 
 const GLYPH: Record<Status, string> = {
   queued: "·",
-  running: "◐",
-  pass: "✓",
-  fail: "✗",
-  skip: "↓",
-  todo: "○",
+  running: "\u25d0",
+  pass: "\u2713",
+  fail: "\u2717",
+  skip: "\u2193",
+  todo: "\u25cb",
 };
 
-/** ANSI palette chunk for a status glyph — follows the terminal theme. */
+/** ANSI palette chunk for a status glyph -- follows the terminal theme. */
 const statusChunk = (status: Status, text: string): TextChunk => {
   switch (status) {
     case "pass":
@@ -131,7 +131,7 @@ interface Entry {
   startedAt?: number;
   /** LIVE captured-output buffer while running (runner appends in place). */
   liveLogs?: ReadonlyArray<LogEntry>;
-  /** Cached plain-text row label — recomputed only on status/result change. */
+  /** Cached plain-text row label -- recomputed only on status/result change. */
   label: string;
 }
 
@@ -141,9 +141,9 @@ interface FileNode {
   readonly counts: Record<Status, number>;
   /** Manual expand/collapse state; collapsed until deliberately expanded. */
   expanded: boolean | undefined;
-  /** FileStart seen — the file's fiber is executing. */
+  /** FileStart seen -- the file's fiber is executing. */
   started: boolean;
-  /** Currently-running file hook ("deploying…" feedback), if any. */
+  /** Currently-running file hook ("deploying..." feedback), if any. */
   hook: "beforeAll" | "afterAll" | undefined;
   hookStartedAt: number;
 }
@@ -199,13 +199,13 @@ const visibleFileStatus = (node: FileNode, tests: ReadonlyArray<Entry>): Status 
   return "skip";
 };
 
-/** Why a file's tests are still gray — surfaced on the file row. */
+/** Why a file's tests are still gray -- surfaced on the file row. */
 const filePhase = (node: FileNode): string | undefined => {
   if (node.hook !== undefined) {
-    return `${node.hook} running (${formatDuration(Date.now() - node.hookStartedAt)})…`;
+    return `${node.hook} running (${formatDuration(Date.now() - node.hookStartedAt)})\u2026`;
   }
   if (!node.started && node.counts.queued > 0) {
-    return "waiting for a worker slot…";
+    return "waiting for a worker slot\u2026";
   }
   return undefined;
 };
@@ -275,7 +275,7 @@ class TuiState {
     entry.file.counts[status]++;
     entry.status = status;
     if (status === "running") {
-      // (Re)started — retries included: drop the stale result so the row
+      // (Re)started -- retries included: drop the stale result so the row
       // shows a fresh live timer instead of the previous run's duration.
       entry.result = undefined;
       entry.startedAt = Date.now();
@@ -291,7 +291,7 @@ class TuiState {
 
   /**
    * Toggle a status group on/off, independently of the others (pressing `p`
-   * hides passing tests and NOTHING else). Hiding every group is allowed —
+   * hides passing tests and NOTHING else). Hiding every group is allowed --
    * the list is simply empty and the footer's struck-through toggle bar
    * shows why.
    */
@@ -313,7 +313,7 @@ class TuiState {
   }
 
   isExpanded(node: FileNode): boolean {
-    // Expansion is ALWAYS a deliberate choice (enter / l) — failures don't
+    // Expansion is ALWAYS a deliberate choice (enter / l) -- failures don't
     // auto-expand their file (the red glyph + count already flag it), and
     // filtering narrows WHICH files are listed without expanding them.
     return node.expanded === true;
@@ -371,7 +371,7 @@ const copyToClipboard = (renderer: CliRenderer, text: string): boolean => {
     proc.stdin.end();
     copied = true;
   } catch {
-    // no system clipboard tool — OSC52 result stands
+    // no system clipboard tool -- OSC52 result stands
   }
   return copied;
 };
@@ -393,17 +393,17 @@ const detailContent = (state: TuiState, entry: Entry): string => {
     "",
   ];
   if (!running && result?.error !== undefined) {
-    lines.push("── error ──", result.error, "");
+    lines.push("\u2500\u2500 error \u2500\u2500", result.error, "");
   }
   // Finished tests show their result logs; running tests tail the LIVE
   // buffer the runner appends to.
   const logs = running ? entry.liveLogs : result?.logs;
   if (logs !== undefined && logs.length > 0) {
-    lines.push("── captured output ──", formatLogs(logs), "");
+    lines.push("\u2500\u2500 captured output \u2500\u2500", formatLogs(logs), "");
   }
   const hookLogs = state.fileLogs.get(meta.file);
   if (hookLogs !== undefined && hookLogs.length > 0) {
-    lines.push("── file hooks (deploy/destroy) ──", formatLogs(hookLogs));
+    lines.push("\u2500\u2500 file hooks (deploy/destroy) \u2500\u2500", formatLogs(hookLogs));
   }
   return lines.join("\n");
 };
@@ -425,7 +425,7 @@ const FOOTER_HINTS =
 
 const makeTui = async (logFile: string): Promise<Tui> => {
   const state = new TuiState();
-  /** True once the renderer is torn down — no further writes are allowed. */
+  /** True once the renderer is torn down -- no further writes are allowed. */
   let disposed = false;
 
   // Ctrl+C is handled by US (exitOnCtrlC: false): opentui's built-in handler
@@ -435,7 +435,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
     // Console capture is owned by StrayOutput's global patch (diverted into
-    // the run log) — don't let opentui's overlay re-patch it afterwards.
+    // the run log) -- don't let opentui's overlay re-patch it afterwards.
     consoleMode: "disabled",
   });
   // opentui's CliRenderer constructor does `global.window = {}` to hang
@@ -452,15 +452,15 @@ const makeTui = async (logFile: string): Promise<Tui> => {
   // TUI owns the screen: anything that bypasses the per-test Effect Console
   // (third-party bridges writing to the streams directly, e.g. miniflare
   // forwarding workerd's console) would corrupt the alternate screen.
-  // Installed AFTER the renderer is created — opentui captures the real
+  // Installed AFTER the renderer is created -- opentui captures the real
   // stream methods at construction and renders through its native library,
   // so the diversion cannot affect the TUI itself.
   const restoreStreams = captureStrayOutput(logFile);
 
-  // No explicit colors on chrome — match the terminal's own theme.
+  // No explicit colors on chrome -- match the terminal's own theme.
   const header = new TextRenderable(renderer, {
     id: "header",
-    content: "alchemy-test — collecting…",
+    content: "alchemy-test \u2014 collecting\u2026",
     height: 1,
     width: "100%",
   });
@@ -491,7 +491,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
         height: 1,
         content: "",
         // NOT selectable: rows are a recycled pool, and opentui anchors
-        // text-selection highlights on the renderable — a drag would leave
+        // text-selection highlights on the renderable -- a drag would leave
         // highlight residue behind as row content repaints under it. Copy
         // from the list with `y`; free-form text selection lives in the
         // detail pane (enter), whose content is stable.
@@ -572,13 +572,13 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     if (disposed || selection == null) return;
     if (selection.isDragging) return;
     const text = selection.getSelectedText();
-    // A plain click anchors a zero-width selection — nothing to copy.
+    // A plain click anchors a zero-width selection -- nothing to copy.
     if (text.trim().length > 1 && copyToClipboard(renderer, text)) {
-      flash("selection copied ✓");
+      flash("selection copied \u2713");
     }
     // Clear either way: the copy already happened, and a selection left
     // behind turns into ghost highlighting as the row pool repaints under
-    // it. Deferred — this event is emitted from inside finishSelection,
+    // it. Deferred -- this event is emitted from inside finishSelection,
     // which still touches the selection after the emit.
     setTimeout(clearTextSelection, 0);
   });
@@ -601,12 +601,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     if (Date.now() < flashUntil) return;
     if (state.filterInput) {
       footer.content = stringToStyledText(
-        ` /${state.filter}█   ${state.visibleTestCount()} matches   (enter close · esc clear)${padLine()}`,
+        ` /${state.filter}\u2588   ${state.visibleTestCount()} matches   (enter close · esc clear)${padLine()}`,
       );
       return;
     }
     // Always-visible toggle bar: each group shows its hotkey and current
-    // state — bright when shown, dim + struck-through when hidden.
+    // state -- bright when shown, dim + struck-through when hidden.
     const toggles = (
       [
         ["pass", "p:pass"],
@@ -619,12 +619,12 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       state.show[group] ? stringToStyledText(label).chunks[0]! : strikethrough(dim(label)),
     ]);
     // Toggle states lead (before the hints) so they're never clipped on
-    // narrow terminals — the footer truncates at the terminal width.
-    const filter = state.filter !== "" ? ` │ filter: ${state.filter}` : "";
+    // narrow terminals -- the footer truncates at the terminal width.
+    const filter = state.filter !== "" ? ` \u2502 filter: ${state.filter}` : "";
     footer.content = new StyledText([
       dim(" show: "),
       ...toggles,
-      dim(`${filter} │ ${FOOTER_HINTS}${padLine()}`),
+      dim(`${filter} \u2502 ${FOOTER_HINTS}${padLine()}`),
     ]);
   };
 
@@ -634,7 +634,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     const done = state.summary !== undefined;
     const collecting =
       !done && state.collectDone < state.collectTotal
-        ? `  │ importing ${state.collectDone}/${state.collectTotal} files`
+        ? `  \u2502 importing ${state.collectDone}/${state.collectTotal} files`
         : "";
     header.content = new StyledText([
       dim(" alchemy-test  "),
@@ -645,15 +645,15 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       yellow(`${GLYPH.running} ${counts.running}`),
       dim(`  ${GLYPH.queued} ${counts.queued}`),
       ...(counts.skip > 0 ? [dim(`  ${GLYPH.skip} ${counts.skip}`)] : []),
-      dim(`  │ ${elapsed}${collecting}`),
+      dim(`  \u2502 ${elapsed}${collecting}`),
       ...(state.summary?.plan
         ? [
             dim(
-              `  │ ${state.summary.plan.found} found, ${state.summary.plan.excluded} excluded by plan`,
+              `  \u2502 ${state.summary.plan.found} found, ${state.summary.plan.excluded} excluded by plan`,
             ),
           ]
         : []),
-      ...(done ? [dim("  │ DONE — press q to quit")] : []),
+      ...(done ? [dim("  \u2502 DONE \u2014 press q to quit")] : []),
       dim(padLine()),
     ]);
   };
@@ -699,21 +699,21 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       if (node.kind === "file") {
         const expanded = state.isExpanded(node.node);
         status = node.status;
-        head = ` ${expanded ? "▾" : "▸"} ${GLYPH[status]} `;
+        head = ` ${expanded ? "\u25be" : "\u25b8"} ${GLYPH[status]} `;
         const phase = filePhase(node.node);
         rest =
           `${node.node.file}  ${fileSummary(node.node)}` +
-          (phase !== undefined ? `  — ${phase}` : "");
+          (phase !== undefined ? `  \u2014 ${phase}` : "");
       } else {
         status = node.entry.status;
         head = `     ${GLYPH[status]} `;
         rest = node.entry.label;
         // Live elapsed timer while running (resets on retry).
         if (status === "running" && node.entry.startedAt !== undefined) {
-          rest += ` (${formatDuration(Date.now() - node.entry.startedAt)}…)`;
+          rest += ` (${formatDuration(Date.now() - node.entry.startedAt)}\u2026)`;
         }
       }
-      // Clip to the terminal width AND pad to it — with transparent
+      // Clip to the terminal width AND pad to it -- with transparent
       // backgrounds a shorter repaint would otherwise leave the previous
       // content's tail cells on screen.
       const restWidth = Math.max(width - head.length, 0);
@@ -832,8 +832,8 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     list.visible = false;
     detail.visible = true;
     detail.focus();
-    // Running test → tail the output (sticky keeps it pinned as it grows);
-    // finished test → start at the top where the error is.
+    // Running test -> tail the output (sticky keeps it pinned as it grows);
+    // finished test -> start at the top where the error is.
     detail.scrollTo(entry.status === "running" ? 1_000_000_000 : 0);
   };
 
@@ -866,7 +866,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       }
     }
     if (text === undefined || text === "") return;
-    flash(copyToClipboard(renderer, text) ? "copied to clipboard ✓" : "copy failed");
+    flash(copyToClipboard(renderer, text) ? "copied to clipboard \u2713" : "copy failed");
   };
 
   const retrySelection = (): void => {
@@ -876,7 +876,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     if (node === undefined) return;
     if (node.kind === "test") {
       if (node.entry.status === "running" || node.entry.status === "queued") {
-        flash("still running — x to kill");
+        flash("still running \u2014 x to kill");
         return;
       }
       controller.retryTest(node.entry.meta.id);
@@ -906,7 +906,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     if (node === undefined) return;
     if (node.kind === "test") {
       if (node.entry.status !== "running") {
-        flash("not running — nothing to kill");
+        flash("not running \u2014 nothing to kill");
         return;
       }
       controller.killTest(node.entry.meta.id);
@@ -1001,7 +1001,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
     }
     if (state.detailOpen) return; // ScrollBox handles its own keys
 
-    // gg — jump to top (vim)
+    // gg -- jump to top (vim)
     if (key.name === "g" && !key.shift && !key.ctrl) {
       if (pendingG) {
         pendingG = false;
@@ -1031,7 +1031,7 @@ const makeTui = async (logFile: string): Promise<Tui> => {
       }
       return;
     }
-    // G — jump to bottom (vim)
+    // G -- jump to bottom (vim)
     if (key.name === "g" && key.shift) {
       moveSelection(Number.MAX_SAFE_INTEGER);
       return;
@@ -1187,7 +1187,7 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       break;
     case "FileStart":
       state.fileNode(event.file).started = true;
-      // Live hook-log buffer — grows in place as deploy/destroy run.
+      // Live hook-log buffer -- grows in place as deploy/destroy run.
       if (event.logs !== undefined) {
         state.fileLogs.set(event.file, event.logs);
       }

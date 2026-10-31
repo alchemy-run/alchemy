@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `RestoreVolumeFromSnapshot` operation (IAM action
  * `fsx:RestoreVolumeFromSnapshot` on `*`).
  *
- * Rolls an FSx for OpenZFS volume back to the state saved by a snapshot —
+ * Rolls an FSx for OpenZFS volume back to the state saved by a snapshot --
  * the undo half of the runtime snapshot pattern built with
  * {@link CreateSnapshot}. Pass `Options: ["DELETE_INTERMEDIATE_SNAPSHOTS"]`
  * to roll back past newer snapshots. Provide the implementation with

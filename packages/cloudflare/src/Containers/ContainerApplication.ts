@@ -298,7 +298,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
-   * Environment image for the generated Dockerfile — a plain registry
+   * Environment image for the generated Dockerfile -- a plain registry
    * reference, e.g. `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line
    * and appends the statements that copy the bundled program and set the
    * entrypoint. The image must be able to run the {@link runtime}.
@@ -309,10 +309,10 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
   image?: string;
   /**
    * Inline environment Dockerfile content (typically `Dockerfile.inline`).
-   * Replaces the generated `FROM` line — carry your own `FROM` plus any
+   * Replaces the generated `FROM` line -- carry your own `FROM` plus any
    * extra build steps (system packages, config); the bundled program is
    * layered on top. Exclusive with {@link image}. Never interpolate secrets
-   * into inline content — it is baked into image layers.
+   * into inline content -- it is baked into image layers.
    */
   dockerfile?: InlineDockerfile;
   /**
@@ -363,7 +363,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
 }
 
 /**
- * Build the container image from your own Dockerfile — no Effect program is
+ * Build the container image from your own Dockerfile -- no Effect program is
  * bundled. The image is shipped as-is.
  */
 export interface ExternalContainerProps
@@ -386,7 +386,7 @@ export interface ExternalContainerProps
 }
 
 /**
- * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
+ * Deploy a pre-built remote image -- Alchemy pulls it and re-pushes it to
  * Cloudflare's managed registry without building anything.
  */
 export interface RemoteContainerProps extends ContainerApplicationPropsBase {
@@ -397,8 +397,8 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
-   * `registry.cloudflare.com` by default) — e.g. a digest reference pushed
-   * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
+   * `registry.cloudflare.com` by default) -- e.g. a digest reference pushed
+   * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` -- it is
    * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
@@ -487,7 +487,7 @@ export type ContainerApplicationProps =
   | DurableObjectContainerProps;
 
 /**
- * INTERNAL — the loose provider-side view across the variants: every
+ * INTERNAL -- the loose provider-side view across the variants: every
  * variant-specific field optional at its widest type. Each union member is
  * assignable to this shape, so provider/bundle code annotates helper params
  * with it instead of narrowing the union at every property access.
@@ -517,7 +517,7 @@ export type ContainerServices = ContainerApplication | PlatformServices | Proces
 export type ContainerShape = Main<ContainerServices>;
 
 /**
- * A Cloudflare Container Application — the deployed, scalable unit that runs a
+ * A Cloudflare Container Application -- the deployed, scalable unit that runs a
  * containerized program on Cloudflare's compute platform. Alchemy bundles the
  * `main` entrypoint, builds a Docker image, pushes it to the Cloudflare
  * registry, and reconciles the application's scaling and runtime configuration.
@@ -622,8 +622,8 @@ export type ContainerShape = Main<ContainerServices>;
  * }) {}
  * ```
  *
- * Alchemy generates the Dockerfile — `FROM` your `image`, then the
- * program-copy and entrypoint steps — so you control the starting image;
+ * Alchemy generates the Dockerfile -- `FROM` your `image`, then the
+ * program-copy and entrypoint steps -- so you control the starting image;
  * `autoInstallExternals: false` skips the redundant install step when the
  * environment already ships your `external` packages.
  *
@@ -833,7 +833,7 @@ export type ContainerShape = Main<ContainerServices>;
  * as new instances become healthy; each replaced instance receives `SIGTERM`
  * and has 15 minutes to shut down cleanly before `SIGKILL`.
  *
- * Rollouts replace instances — they do not split requests between two image
+ * Rollouts replace instances -- they do not split requests between two image
  * versions (request-level traffic splitting exists one layer up, on the
  * Worker, via `version.traffic`). The fronting Worker and Durable Object cut
  * over immediately while instances roll, so keep the Worker-to-container
@@ -975,7 +975,7 @@ export declare namespace DevContainerImage {
 }
 
 export const ContainerProvider = () =>
-  // `{ Type }` instead of `ContainerPlatform` — importing the platform here
+  // `{ Type }` instead of `ContainerPlatform` -- importing the platform here
   // would create a module cycle (ContainerPlatform.ts imports this file).
   ProviderLayer.dual(
     { Type: ContainerTypeId },

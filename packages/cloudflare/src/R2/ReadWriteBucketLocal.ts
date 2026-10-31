@@ -6,7 +6,7 @@ import { makeReadWrite } from "./ReadWriteBucketBinding.ts";
 import { makeReadWriteR2HttpClient } from "./ReadWriteBucketHttp.ts";
 
 /**
- * Local implementation of the {@link ReadWriteBucket} binding — reads and
+ * Local implementation of the {@link ReadWriteBucket} binding -- reads and
  * writes R2 objects over the Cloudflare HTTP API using the **current
  * credentials** instead of a native Worker binding (`ReadWriteBucketBinding`)
  * or a scoped API token (`ReadWriteBucketHttp`).

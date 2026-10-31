@@ -27,7 +27,7 @@ class Span extends Tracer.NativeSpan {
     readonly cloudflareSpan?: CloudflareSpan,
   ) {
     // Cascade Cloudflare's decision: an untraced invocation (`isTraced`
-    // false — e.g. traces disabled; head sampling is applied later, at
+    // false -- e.g. traces disabled; head sampling is applied later, at
     // ingestion) or a runtime without the API marks the Effect span
     // unsampled, so descendants skip `startActiveSpan` entirely.
     super({

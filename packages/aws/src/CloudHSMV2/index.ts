@@ -1,4 +1,4 @@
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./CopyBackupToRegion.ts";
 export * from "./CopyBackupToRegionHttp.ts";
 export * from "./Cluster.ts";

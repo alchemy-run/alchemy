@@ -64,7 +64,7 @@ export interface KeyEventSourceProps extends EventRouteProps {
  * (source `aws.kms`); this subscribes the host Function to those events so
  * it can audit rotations or react before/when a key becomes unusable.
  *
- * KMS publishes to EventBridge automatically — no additional resource is
+ * KMS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

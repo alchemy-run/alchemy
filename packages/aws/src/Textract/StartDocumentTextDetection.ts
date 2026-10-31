@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:StartDocumentTextDetection` — start an
+ * Runtime binding for `textract:StartDocumentTextDetection` -- start an
  * asynchronous OCR job for a (possibly multi-page) document stored in S3.
  * Poll the returned `JobId` with `GetDocumentTextDetection`. The caller
  * needs `s3:GetObject` on the input bucket.

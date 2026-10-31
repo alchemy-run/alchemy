@@ -24,19 +24,19 @@ export type DatasetProps = {
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/locations/{location}/datasets/{dataset}`). If
    * omitted, a unique name is generated. Must match letters, numbers,
-   * underscores, hyphens, and periods; 1-256 characters. Immutable —
+   * underscores, hyphens, and periods; 1-256 characters. Immutable --
    * changing it replaces the dataset.
    */
   datasetId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * dataset. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Default IANA time zone used when parsing times with no zone
-   * (HL7 messages, …). Empty defaults to UTC. Datasets have no labels
+   * (HL7 messages, ...). Empty defaults to UTC. Datasets have no labels
    * field; ownership is the generated physical id.
    */
   timeZone?: string;
@@ -66,7 +66,7 @@ export type Dataset = Resource<
 >;
 
 /**
- * A Cloud Healthcare dataset — a container for DICOM, FHIR, HL7v2, and
+ * A Cloud Healthcare dataset -- a container for DICOM, FHIR, HL7v2, and
  * consent stores.
  *
  * Dataset create and delete are long-running operations. Location and

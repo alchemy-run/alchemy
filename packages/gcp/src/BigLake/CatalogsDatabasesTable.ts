@@ -64,13 +64,13 @@ export type StorageDescriptor = {
 
 export type HiveTableOptions = {
   /**
-   * Hive table type (`MANAGED_TABLE`, `EXTERNAL_TABLE`, …).
+   * Hive table type (`MANAGED_TABLE`, `EXTERNAL_TABLE`, ...).
    */
   tableType?: string;
   /**
    * User-supplied Hive table parameters. Alchemy ownership keys
    * (`alchemy-stack`, `alchemy-stage`, `alchemy-id`) are merged in
-   * automatically — BigLake tables have no labels field.
+   * automatically -- BigLake tables have no labels field.
    */
   parameters?: Record<string, string>;
   /**
@@ -84,7 +84,7 @@ export type CatalogsDatabasesTableProps = {
    * Parent database. Full name
    * `projects/{project}/locations/{location}/catalogs/{catalog}/databases/{database}`
    * or the database id (combined with `catalog` and `location`).
-   * Immutable — changing it replaces the table.
+   * Immutable -- changing it replaces the table.
    */
   database: string;
   /**
@@ -93,7 +93,7 @@ export type CatalogsDatabasesTableProps = {
   catalog?: string;
   /**
    * Table id (the `{table}` segment). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the table.
+   * generated. Immutable -- changing it replaces the table.
    */
   tableId?: string;
   /**
@@ -130,7 +130,7 @@ export type CatalogsDatabasesTable = Resource<
     location: string;
     /** Table type. */
     type: string | undefined;
-    /** Hive table type (`MANAGED_TABLE`, `EXTERNAL_TABLE`, …). */
+    /** Hive table type (`MANAGED_TABLE`, `EXTERNAL_TABLE`, ...). */
     tableType: string | undefined;
     /** User Hive parameters (Alchemy ownership keys stripped). */
     parameters: Record<string, string>;
@@ -154,7 +154,7 @@ export type CatalogsDatabasesTable = Resource<
 /**
  * A Hive table inside a BigLake Metastore database.
  *
- * Tables have no labels field — Alchemy stamps ownership into
+ * Tables have no labels field -- Alchemy stamps ownership into
  * `hiveOptions.parameters` so `list` / nuke can find them. Database,
  * table id, and type are immutable. Hive options update in place.
  *

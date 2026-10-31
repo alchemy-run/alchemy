@@ -39,7 +39,7 @@ export interface CacheClient {
  * the Worker's props) and returns a client whose `purge` drives the runtime
  * `ctx.cache` API from your handlers.
  *
- * What gets cached is controlled by standard response headers —
+ * What gets cached is controlled by standard response headers --
  * `Cache-Control` (including `stale-while-revalidate`), `Cache-Tag` for
  * tag-based purging, and `Vary` for content negotiation.
  *

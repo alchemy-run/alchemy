@@ -9,7 +9,7 @@ export interface GetInsightRuleReportRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:GetInsightRuleReport` — fetch the
+ * Runtime binding for `cloudwatch:GetInsightRuleReport` -- fetch the
  * top-contributor report for the bound {@link InsightRule}; the rule name
  * is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface GetInsightRuleReportRequest extends Omit<
  * ### Reading Insight Rules
  * **Example:** Fetch the Top Contributors for a Rule
  * ```typescript
- * // init — grants cloudwatch:GetInsightRuleReport on the rule
+ * // init -- grants cloudwatch:GetInsightRuleReport on the rule
  * const getInsightRuleReport = yield* AWS.CloudWatch.GetInsightRuleReport(rule);
  *
  * // runtime

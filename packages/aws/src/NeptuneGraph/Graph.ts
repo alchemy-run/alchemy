@@ -38,17 +38,17 @@ export interface GraphProps {
   publicConnectivity?: boolean;
   /**
    * Number of replicas in other AZs. Replicas incur additional cost.
-   * Immutable — forces replacement.
+   * Immutable -- forces replacement.
    * @default 1
    */
   replicaCount?: number;
   /**
-   * KMS key used to encrypt data in the graph. Immutable — forces
+   * KMS key used to encrypt data in the graph. Immutable -- forces
    * replacement.
    */
   kmsKeyIdentifier?: string;
   /**
-   * Vector-search configuration (dimension of vectors, 1-65535). Immutable —
+   * Vector-search configuration (dimension of vectors, 1-65535). Immutable --
    * forces replacement.
    */
   vectorSearchConfiguration?: {
@@ -104,7 +104,7 @@ export interface Graph extends Resource<
 > {}
 
 /**
- * An Amazon Neptune Analytics graph — a serverless, memory-optimized graph
+ * An Amazon Neptune Analytics graph -- a serverless, memory-optimized graph
  * that serves openCypher queries over an IAM-authenticated HTTPS endpoint.
  * Unlike classic Neptune, a graph with `publicConnectivity: true` needs no
  * VPC plumbing at all. Provisioning takes several minutes and the graph
@@ -210,7 +210,7 @@ export const GraphProvider = () =>
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
-      // Graph names are unique per account/region — resolve a graph by name
+      // Graph names are unique per account/region -- resolve a graph by name
       // when no id is cached (state-persistence failure recovery).
       const findGraphByName = Effect.fn(function* (name: string) {
         const summary = yield* neptunegraph.listGraphs.items({}).pipe(
@@ -279,7 +279,7 @@ export const GraphProvider = () =>
         stables: ["graphId", "graphArn", "graphName"],
         // AWS account/region collection: enumerate every Neptune Analytics
         // graph via the paginated `listGraphs`. Summaries omit create time,
-        // vector-search config, and tags — emit undefined/empty for those
+        // vector-search config, and tags -- emit undefined/empty for those
         // rather than a per-item `getGraph`/`listTagsForResource` fan-out.
         list: () =>
           neptunegraph.listGraphs.items({}).pipe(
@@ -307,7 +307,7 @@ export const GraphProvider = () =>
           if ((yield* toName(id, olds ?? { provisionedMemory: 0 })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh graph.
+          // Immutable props -- any change forces a fresh graph.
           if (
             olds !== undefined &&
             (olds.replicaCount !== news.replicaCount ||
@@ -334,11 +334,11 @@ export const GraphProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live graph state (by cached id, else by name).
+          // Observe -- fetch live graph state (by cached id, else by name).
           let observed = yield* observeGraph(output?.graphId, name);
 
-          // Ensure — create if missing. A ConflictException here means a
-          // peer reconciler won the create race — re-resolve by name.
+          // Ensure -- create if missing. A ConflictException here means a
+          // peer reconciler won the create race -- re-resolve by name.
           if (observed === undefined) {
             const created = yield* neptunegraph
               .createGraph({
@@ -364,7 +364,7 @@ export const GraphProvider = () =>
             // doesn't hit ConflictException(CONCURRENT_MODIFICATION).
             observed = yield* waitForGraph(observed.id);
 
-            // Sync — single `updateGraph` carrying only the in-place fields
+            // Sync -- single `updateGraph` carrying only the in-place fields
             // whose desired value differs from the observed cloud state.
             const update: Omit<neptunegraph.UpdateGraphInput, "graphIdentifier"> = {};
             let dirty = false;
@@ -398,7 +398,7 @@ export const GraphProvider = () =>
             }
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(observed.arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -418,7 +418,7 @@ export const GraphProvider = () =>
           return toAttrs({ graph: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Deletion is blocked while delete-protection is on — disable it
+          // Deletion is blocked while delete-protection is on -- disable it
           // first if the live graph still has it enabled.
           const observed = yield* getGraph(output.graphId);
           if (observed === undefined) return;
@@ -436,7 +436,7 @@ export const GraphProvider = () =>
               skipSnapshot: true,
             })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-          // Block until the graph is fully gone — deletion is async and the
+          // Block until the graph is fully gone -- deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(
             neptunegraph.getGraph({ graphIdentifier: output.graphId }).pipe(

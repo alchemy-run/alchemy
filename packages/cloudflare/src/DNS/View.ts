@@ -17,7 +17,7 @@ export interface ViewProps {
    * Name of the view. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -25,7 +25,7 @@ export interface ViewProps {
    * Zones (by id) linked to this view. Internal DNS queries resolved
    * through the view consult these zones.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   zones: string[];
 }
@@ -48,7 +48,7 @@ export interface ViewAttributes {
 export type View = Resource<DnsViewTypeId, ViewProps, ViewAttributes, never, Providers>;
 
 /**
- * An Internal DNS view (`/accounts/{account_id}/dns_settings/views`) —
+ * An Internal DNS view (`/accounts/{account_id}/dns_settings/views`) --
  * a named set of internal zones that DNS queries can be resolved
  * against, for split-horizon / internal DNS setups.
  *
@@ -91,7 +91,7 @@ export const ViewProvider = () =>
   Provider.succeed(View, {
     stables: ["viewId", "accountId", "createdTime"],
 
-    // Account collection — internal DNS views are enumerated per account
+    // Account collection -- internal DNS views are enumerated per account
     // via the paginated list endpoint. Each item already carries the full
     // observed shape, so map straight into the `read` Attributes.
     list: Effect.fn(function* () {
@@ -122,7 +122,7 @@ export const ViewProvider = () =>
         const observed = yield* getView(acct, output.viewId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic physical name. Views carry no ownership markers,
       // so gate takeover behind adoption.
       const name = yield* createViewName(id, olds?.name);
@@ -136,13 +136,13 @@ export const ViewProvider = () =>
       // Inputs are resolved to concrete values by Plan.
       const zones = news.zones as string[];
 
-      // Observe — the id cached on `output` is a hint, not a guarantee.
+      // Observe -- the id cached on `output` is a hint, not a guarantee.
       const observed = output?.viewId
         ? yield* getView(output.accountId ?? accountId, output.viewId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). Names are not
+        // Ensure -- greenfield (or out-of-band delete). Names are not
         // unique, so there is no AlreadyExists race to tolerate.
         const created = yield* dns.createSettingAccountView({
           accountId,
@@ -152,7 +152,7 @@ export const ViewProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — patch only when the observed view differs.
+      // Sync -- patch only when the observed view differs.
       if (observed.name === name && sameZones(observed.zones, zones)) {
         return toAttributes(observed, output?.accountId ?? accountId);
       }

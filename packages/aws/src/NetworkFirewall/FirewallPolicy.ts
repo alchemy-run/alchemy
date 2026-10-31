@@ -56,7 +56,7 @@ export interface FirewallPolicy extends Resource<
 > {}
 
 /**
- * An AWS Network Firewall policy — defines a firewall's traffic inspection
+ * An AWS Network Firewall policy -- defines a firewall's traffic inspection
  * behavior as a collection of stateless and stateful
  * {@link RuleGroup | rule group} references plus default actions. One policy
  * can be shared by multiple {@link Firewall | firewalls}.
@@ -157,12 +157,12 @@ export const FirewallPolicyProvider = () =>
             ...internalTags,
           };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             yield* nfw.createFirewallPolicy({
               FirewallPolicyName: name,
@@ -175,7 +175,7 @@ export const FirewallPolicyProvider = () =>
               .pipe(retryWhileNfwNotFound);
           }
 
-          // 3. Sync definition — compare desired against OBSERVED state.
+          // 3. Sync definition -- compare desired against OBSERVED state.
           const observedDescription = observed.FirewallPolicyResponse.Description;
           const definitionDiffers =
             !deepEqual(news.firewallPolicy, observed.FirewallPolicy) ||
@@ -189,7 +189,7 @@ export const FirewallPolicyProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = nfwTagsToRecord(observed.FirewallPolicyResponse.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           const arn = observed.FirewallPolicyResponse.FirewallPolicyArn;
@@ -206,7 +206,7 @@ export const FirewallPolicyProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A policy still associated to a firewall (deleted moments ago by
-          // the engine) rejects deletion with InvalidOperationException —
+          // the engine) rejects deletion with InvalidOperationException --
           // retry through the release window.
           yield* nfw
             .deleteFirewallPolicy({

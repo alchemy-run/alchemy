@@ -42,23 +42,23 @@ export type AliasSubject = {
 export type EnvironmentsKeystoresAliasProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the alias.
+   * current GCP project id. Immutable -- changing it replaces the alias.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the alias.
    */
   environment: string;
   /**
    * Parent keystore id or
    * `organizations/{org}/environments/{env}/keystores/{keystore}`.
-   * Immutable — changing it replaces the alias.
+   * Immutable -- changing it replaces the alias.
    */
   keystore: string;
   /**
    * Alias id. If omitted, a unique name is generated from the stack,
-   * stage, and logical id. Must match `[\w\s-.]{1,255}`. Immutable —
+   * stage, and logical id. Must match `[\w\s-.]{1,255}`. Immutable --
    * changing it replaces the alias.
    */
   aliasId?: string;
@@ -140,7 +140,7 @@ export type EnvironmentsKeystoresAlias = Resource<
 >;
 
 /**
- * An alias in an Apigee environment keystore — a certificate or
+ * An alias in an Apigee environment keystore -- a certificate or
  * key/certificate pair used for TLS.
  *
  * Aliases have no labels or description, so `list` enumerates every alias

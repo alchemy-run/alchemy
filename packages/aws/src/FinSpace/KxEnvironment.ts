@@ -107,7 +107,7 @@ export interface KxEnvironment extends Resource<
 > {}
 
 /**
- * An Amazon FinSpace Managed kdb environment — the account-level container
+ * An Amazon FinSpace Managed kdb environment -- the account-level container
  * that kdb databases, clusters, users, volumes and scaling groups live in.
  *
  * :::caution
@@ -217,7 +217,7 @@ const findKxEnvironmentByName = Effect.fn(function* (name: string) {
 });
 
 /**
- * A kdb environment still transitioning toward the awaited status — retried
+ * A kdb environment still transitioning toward the awaited status -- retried
  * by the bounded schedule in {@link waitForKxEnvironmentStatus}.
  */
 class KxEnvironmentNotReady extends Data.TaggedError("KxEnvironmentNotReady")<{
@@ -236,7 +236,7 @@ export class KxEnvironmentProvisioningFailed extends Data.TaggedError(
   readonly status: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -250,7 +250,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   });
 
 // Deleting an environment that is still creating/updating surfaces as a
-// Conflict — bounded retry through it. Explicitly typed for the same
+// Conflict -- bounded retry through it. Explicitly typed for the same
 // declaration-emit reason as retryWhileNotReady.
 const retryThroughConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -335,13 +335,13 @@ export const KxEnvironmentProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let env: KxEnvironmentView | undefined = output?.environmentId
             ? yield* readKxEnvironmentById(output.environmentId)
             : yield* findKxEnvironmentByName(name);
 
-          // Ensure — create if missing, then wait for CREATED.
+          // Ensure -- create if missing, then wait for CREATED.
           if (env === undefined) {
             const created = yield* finspace.createKxEnvironment({
               name,
@@ -370,9 +370,9 @@ export const KxEnvironmentProvider = () =>
             });
           }
 
-          // Sync network — UpdateKxEnvironmentNetwork is attach-once: apply
+          // Sync network -- UpdateKxEnvironmentNetwork is attach-once: apply
           // only when a network is desired and none is observed. (Changing
-          // an attached network is a replacement — see diff.)
+          // an attached network is a replacement -- see diff.)
           const wantsNetwork =
             news.transitGatewayConfiguration !== undefined ||
             news.customDNSConfiguration !== undefined;
@@ -390,7 +390,7 @@ export const KxEnvironmentProvider = () =>
             env = (yield* readKxEnvironmentById(environmentId)) ?? env;
           }
 
-          // Sync mutable settings — only call UpdateKxEnvironment on drift.
+          // Sync mutable settings -- only call UpdateKxEnvironment on drift.
           const needsUpdate =
             name !== env.name ||
             (news.description !== undefined && news.description !== env.description);
@@ -403,7 +403,7 @@ export const KxEnvironmentProvider = () =>
             yield* session.note(`Updated kdb environment ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const attrs = yield* toKxAttributes(env, environmentId);
           if (attrs.environmentArn) {
             const { removed, upsert } = diffTags(attrs.tags, desiredTags);

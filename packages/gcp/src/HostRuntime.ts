@@ -165,7 +165,7 @@ export const releaseHostIdentity = (output: {
 
 /**
  * Env every Effect-native container needs to rebuild its `Stack` at boot
- * (`stackFromEnv` in the bootstrap) — the GCP counterpart of the
+ * (`stackFromEnv` in the bootstrap) -- the GCP counterpart of the
  * `alchemyEnv` block on `AWS.ECS.Task` / `AWS.Lambda.Function`.
  */
 export const alchemyRuntimeEnv = Effect.gen(function* () {

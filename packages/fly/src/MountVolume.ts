@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 /**
- * Spec for a per-replica Fly disk. Fly Volumes cannot be shared —
+ * Spec for a per-replica Fly disk. Fly Volumes cannot be shared --
  * `count` Machines get `count` Volumes in one name-group.
  */
 export interface DiskSpec {
@@ -23,7 +23,7 @@ export interface DiskSpec {
    */
   encrypted?: boolean;
   /**
-   * Filesystem type (`ext4`, …). Create-only.
+   * Filesystem type (`ext4`, ...). Create-only.
    */
   fstype?: string;
   /**
@@ -195,7 +195,7 @@ export interface BoundTarget {
  * :::
  *
  * ### Filesystem
- * `fstype` is the filesystem (`ext4`, …).
+ * `fstype` is the filesystem (`ext4`, ...).
  *
  * **Example:** ext4
  * ```typescript

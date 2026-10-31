@@ -161,7 +161,7 @@ export const remote = (binding: string, appId: string) =>
 
 // -----------------------------------------------------------------------------
 // Node-side store: flag definitions are plain JSON files, so deploy-time
-// tooling reads and writes them directly — no workerd instance needed — and
+// tooling reads and writes them directly -- no workerd instance needed -- and
 // running local bindings see every change on their next evaluation.
 // -----------------------------------------------------------------------------
 

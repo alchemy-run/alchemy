@@ -32,7 +32,7 @@ import type { WorkerExport } from "./WorkerRuntimeContext.ts";
  * The hash slots a Worker source contributes to
  * `Worker["Attributes"]["hash"]`. Slots a source doesn't use are
  * `undefined`. The `metadata` hash (#745) is deliberately NOT a source
- * slot — it covers the deploy-time metadata surface and stays owned by
+ * slot -- it covers the deploy-time metadata surface and stays owned by
  * the WorkerProvider.
  */
 export interface SourceHash {
@@ -42,7 +42,7 @@ export interface SourceHash {
   /**
    * Auxiliary metadata for the `input` hash (vite's auto-detected
    * workspace directories, relative to the source root). Never compared
-   * as a change signal — only carried so the next `hash()` call can
+   * as a change signal -- only carried so the next `hash()` call can
    * recompute `input` over the same workspace set.
    */
   readonly additionalWorkspaces: string[] | undefined;
@@ -56,7 +56,7 @@ export interface SourceBuildOutput {
   readonly bundle: Bundle.BundleOutput | undefined;
   /**
    * Static assets, already read and manifest-hashed. `undefined` when the
-   * source doesn't own assets — the WorkerProvider merges in the
+   * source doesn't own assets -- the WorkerProvider merges in the
    * props-level `assets` for those sources (see
    * {@link SourceProvider.ownsAssets}).
    */
@@ -69,7 +69,7 @@ export interface SourceBuildOutput {
  * Everything a source may need, derived once by the WorkerProvider from
  * `(id, props, stack)`. Source-specific inputs (entry module path, vite
  * options, inline script, ...) are closed over by the provider instance
- * itself — providers are resolved per Worker from props, not injected
+ * itself -- providers are resolved per Worker from props, not injected
  * once per stack.
  */
 export interface SourceContext {
@@ -77,7 +77,7 @@ export interface SourceContext {
   readonly dotAlchemy?: string;
   /** Logical id of the Worker resource. */
   readonly id: string;
-  /** Namespace-qualified id (`ns/Worker`) — the display prefix for log lines. */
+  /** Namespace-qualified id (`ns/Worker`) -- the display prefix for log lines. */
   readonly fqn: string;
   /** Physical script name. */
   readonly workerName: string;
@@ -96,14 +96,14 @@ export interface SourceContext {
   /**
    * Raw `props.env`. Deliberately unresolved: env entries may be Effects
    * whose evaluation requires plan-phase context that is not available
-   * inside lifecycle operations — a source that needs literal values
+   * inside lifecycle operations -- a source that needs literal values
    * (e.g. vite's `import.meta.env` defines) resolves them itself, exactly
    * as the vite arm always has.
    */
   readonly env: Record<string, unknown> | undefined;
   /**
    * This Worker's own URL, when it has one and an env entry refers to
-   * it (`Worker.URL`). Only the WorkerProvider knows it — a source that
+   * it (`Worker.URL`). Only the WorkerProvider knows it -- a source that
    * resolves `env` substitutes it for that entry.
    */
   readonly selfUrl: string | undefined;
@@ -166,9 +166,9 @@ export interface DevContext extends SourceContext {
 /**
  * How a source serves local dev. Two irreducible modes:
  *
- * - `bundle` — the host runs workerd; the source supplies rebuild events
+ * - `bundle` -- the host runs workerd; the source supplies rebuild events
  *   and the host restarts workerd with each successful bundle.
- * - `server` — the source runs its own dev server (vite dev); the host
+ * - `server` -- the source runs its own dev server (vite dev); the host
  *   points the WorkerProxy at `url`.
  */
 export type SourceDevHandle =
@@ -186,7 +186,7 @@ export type SourceDevHandle =
 /**
  * The closed requirements channel of a source. Anything else a source
  * needs (vite module loading, framework CLIs, workerd runtime services
- * for dev) it constructs internally — external providers must NOT demand
+ * for dev) it constructs internally -- external providers must NOT demand
  * bespoke services from the WorkerProvider.
  */
 export type SourceServices =
@@ -232,8 +232,8 @@ export interface SourceProvider {
   /**
    * Whether this source produces its own static assets from its build
    * (vite, framework builds). When `false`, the WorkerProvider reads and
-   * diffs the props-level `assets` directory centrally — including the
-   * AssetsWithHash fast path — and the source only supplies the bundle.
+   * diffs the props-level `assets` directory centrally -- including the
+   * AssetsWithHash fast path -- and the source only supplies the bundle.
    */
   readonly ownsAssets: boolean;
 
@@ -265,16 +265,16 @@ export interface SourceProvider {
    * possible and WITHOUT a full build when the source supports it.
    * `previous` is `output.hash` from state. Returns only the slots this
    * source uses; the WorkerProvider compares slot-wise against
-   * `previous` — any defined slot that differs ⇒ update.
+   * `previous` -- any defined slot that differs => update.
    *
    * Invariants:
    * - MUST be deterministic for an unchanged source tree and
    *   machine-independent for identical bytes (never hash absolute paths).
    * - If it cannot avoid building, it MUST route the build through the
-   *   same `Artifacts.cached` key as `build()` so diff→reconcile builds
+   *   same `Artifacts.cached` key as `build()` so diff->reconcile builds
    *   once.
    * - `previous` is a hint, never truth: a source must not skip
-   *   recomputation because `previous` looks fresh — it may only use it
+   *   recomputation because `previous` looks fresh -- it may only use it
    *   for auxiliary inputs (`additionalWorkspaces`).
    */
   readonly hash: (
@@ -304,7 +304,7 @@ export interface WorkerSourceModule {
 
 /**
  * Validated provider modules memoized per specifier for the process
- * lifetime — a Worker resolves its source at least twice per deploy
+ * lifetime -- a Worker resolves its source at least twice per deploy
  * (diff, then reconcile). `make(options)` still runs per resolution: a
  * stack can host several Workers of the same provider with different
  * options.
@@ -361,8 +361,8 @@ export const loadSource = (
   );
 
 /**
- * Whether a Worker has no code at all — no `main`, `script`, `vite` or
- * `source` — and only serves its `assets`. Every other Worker resolves a
+ * Whether a Worker has no code at all -- no `main`, `script`, `vite` or
+ * `source` -- and only serves its `assets`. Every other Worker resolves a
  * {@link SourceProvider} with {@link resolveSource}.
  */
 export const isAssetsOnly = (props: WorkerProps) =>
@@ -372,9 +372,9 @@ export const isAssetsOnly = (props: WorkerProps) =>
  * Resolve the {@link SourceProvider} for a Worker from its props. The
  * `source` descriptor (external providers) wins; legacy props map to the
  * built-in providers, preserving the historical precedence exactly:
- * `script` → `vite` → `.py` main → `bundle: false` → rolldown (default).
+ * `script` -> `vite` -> `.py` main -> `bundle: false` -> rolldown (default).
  *
- * `source` is mutually exclusive with `script`/`vite`/`main` — a source
+ * `source` is mutually exclusive with `script`/`vite`/`main` -- a source
  * is self-contained, and a provider that needs a custom entry takes it
  * in its own `options`.
  */
@@ -396,7 +396,7 @@ export const resolveSource = (
           provider: props.source.provider,
           message:
             `Worker prop "source" is mutually exclusive with "${conflict}": ` +
-            `a source provider is self-contained — pass a custom entry via the provider's own options instead.`,
+            `a source provider is self-contained \u2014 pass a custom entry via the provider's own options instead.`,
         }),
       );
     }
@@ -408,7 +408,7 @@ export const resolveSource = (
   if (props.vite) {
     // Loaded lazily: `./Sources/Vite.ts` pulls in
     // `@alchemy.run/cloudflare-runtime/vite` (~0.5s), which is only
-    // needed for vite-based workers — not for every Worker resolution.
+    // needed for vite-based workers -- not for every Worker resolution.
     const vite = props.vite;
     return Effect.promise(() => import("./Sources/Vite.ts")).pipe(
       Effect.map((Vite) => Vite.makeViteSource(vite)),
@@ -424,7 +424,7 @@ export const resolveSource = (
 };
 
 /**
- * Derive the shared {@link SourceContext} from a Worker's props. Pure —
+ * Derive the shared {@link SourceContext} from a Worker's props. Pure --
  * the physical `workerName` is computed by the caller (it may come from
  * persisted output state rather than the name generator).
  */

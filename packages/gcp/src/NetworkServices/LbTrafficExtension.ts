@@ -54,12 +54,12 @@ export type LbTrafficExtensionProps = {
    * Extension id (the `{lbTrafficExtension}` segment of
    * `projects/{project}/locations/{location}/lbTrafficExtensions/{lbTrafficExtension}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the extension.
+   * logical id. Immutable -- changing it replaces the extension.
    */
   lbTrafficExtensionId?: string;
   /**
    * Location matching the forwarding rules (`global` or a region).
-   * Immutable — changing it replaces the extension. `US-CENTRAL1` is
+   * Immutable -- changing it replaces the extension. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -82,7 +82,7 @@ export type LbTrafficExtensionProps = {
   /**
    * Load balancing scheme shared by every referenced backend and
    * forwarding rule (`INTERNAL_MANAGED` or `EXTERNAL_MANAGED`).
-   * Immutable — changing it replaces the extension.
+   * Immutable -- changing it replaces the extension.
    */
   loadBalancingScheme: LbTrafficExtensionLoadBalancingScheme;
   /**
@@ -106,7 +106,7 @@ export type LbTrafficExtension = Resource<
     lbTrafficExtensionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;

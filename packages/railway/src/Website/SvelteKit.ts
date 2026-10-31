@@ -10,7 +10,7 @@ export const SVELTEKIT_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks
 export interface SvelteKitProps extends FrameworkSiteProps {
   /**
    * SvelteKit configuration passed to the `sveltekit(config)` Vite plugin
-   * (kit v3 takes its config in memory — a `svelte.config.js` on disk is an
+   * (kit v3 takes its config in memory -- a `svelte.config.js` on disk is an
    * upstream error). The `adapter` field is injected by the Node deploy
    * target and may not be set here. Must be JSON-serializable (it persists
    * in state).

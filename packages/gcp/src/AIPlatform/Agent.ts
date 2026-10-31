@@ -53,12 +53,12 @@ export type AgentProps = {
    * Agent id (the `{agent}` segment of
    * `projects/{project}/locations/{location}/agents/{agent}`). If omitted,
    * a unique name is generated. Must match
-   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable — changing it replaces
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable -- changing it replaces
    * the agent.
    */
   agentId?: string;
   /**
-   * Location. AgentService serves agents only in `global`. Immutable —
+   * Location. AgentService serves agents only in `global`. Immutable --
    * changing it replaces the agent.
    * @default "global"
    */
@@ -127,7 +127,7 @@ export type Agent = Resource<
 >;
 
 /**
- * A Vertex AI Agent — instructions and tool configuration for an LLM
+ * A Vertex AI Agent -- instructions and tool configuration for an LLM
  * task.
  *
  * Agent id, location, and base agent are immutable. Description, system

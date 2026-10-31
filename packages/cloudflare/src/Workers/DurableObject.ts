@@ -39,8 +39,8 @@ export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
 export type DurableObjectGetDurableObjectOptions = cf.DurableObjectNamespaceGetDurableObjectOptions;
 /**
- * The regions a Durable Object can be *hinted* toward at creation —
- * `"wnam"`, `"enam"`, `"sam"`, `"weur"`, `"eeur"`, `"apac"`, `"oc"`, … See
+ * The regions a Durable Object can be *hinted* toward at creation --
+ * `"wnam"`, `"enam"`, `"sam"`, `"weur"`, `"eeur"`, `"apac"`, `"oc"`, ... See
  * the "Placing a Durable Object in a Region" section on {@link DurableObject}.
  */
 export type DurableObjectLocationHint = cf.DurableObjectLocationHint;
@@ -137,7 +137,7 @@ export type DurableObjectServices =
  *   name** (cross-stack) as a string
  * - the Worker **resource** (`const b = yield* Cloudflare.Worker(...)`)
  * - the Worker **class** (`transferredFrom: WorkerA`)
- * - a **thunk** of any of the above (`() => WorkerA`) — use this for
+ * - a **thunk** of any of the above (`() => WorkerA`) -- use this for
  *   forward references and import cycles; it is evaluated lazily at plan
  *   time, after all modules have loaded
  * - a string `Output` (e.g. a cross-stack `stackRef`'s worker name)
@@ -146,7 +146,7 @@ export type DurableObjectServices =
  * reference contributes its logical id, and a same-stack `workerName`
  * Output contributes its source resource's logical id rather than the
  * Output itself. Keeping the former host's *value* out of the binding data
- * matters — consuming its Output would add a dependency edge from the new
+ * matters -- consuming its Output would add a dependency edge from the new
  * host onto the former host, inverting the deploy order the transfer
  * requires (the new host must upload first).
  */
@@ -163,11 +163,11 @@ const resolveTransferSourceRef = (
   if (typeof source === "string") {
     return source;
   }
-  // A Worker resource — contribute its logical id.
+  // A Worker resource -- contribute its logical id.
   if (isWorker(source)) {
     return source.LogicalId;
   }
-  // A Worker platform class — carries its logical id statically. (On an
+  // A Worker platform class -- carries its logical id statically. (On an
   // Output proxy this property access yields another Output, never a
   // string, so the check cannot misfire there.)
   const logicalId = (source as { LogicalId?: unknown }).LogicalId;
@@ -187,7 +187,7 @@ const resolveTransferSourceRef = (
   }
   if (Output.isOutput(source)) {
     // No local resource to take identity from (e.g. a cross-stack
-    // `stackRef`) — the engine resolves the string at deploy time.
+    // `stackRef`) -- the engine resolves the string at deploy time.
     return source as Input<string>;
   }
   if (typeof source === "function" && depth < 8) {
@@ -253,23 +253,23 @@ export interface DurableObjectProps {
   scriptName?: Input<string> | undefined;
   /**
    * The Worker(s) that previously hosted this Durable Object class. When one
-   * of them still holds the namespace, the deploy transfers it — including
-   * all stored objects — from that script to this Worker: this Worker
+   * of them still holds the namespace, the deploy transfers it -- including
+   * all stored objects -- from that script to this Worker: this Worker
    * declares the class `expecting-transfer` in its `exports`, and the former
    * host commits the move with a `transferred` tombstone.
    *
-   * Each entry names a former host — see
+   * Each entry names a former host -- see
    * {@link DurableObjectTransferSource} for the accepted forms: a string
    * (Worker logical id in this stack + stage, or physical script name for
    * cross-stack moves), the Worker class or resource itself, or a thunk
    * (`() => WorkerA`) for forward references. Moving a class is always
-   * declared this way — there is no inference. A list is a host *history*:
+   * declared this way -- there is no inference. A list is a host *history*:
    * as the class moves again, append the previous host so stages that lag
    * behind (or skipped an intermediate release) still transfer from
    * wherever their namespace currently lives.
    *
-   * When no listed host holds the namespace — a fresh stage, or every
-   * transfer already completed — the property is inert and the class is
+   * When no listed host holds the namespace -- a fresh stage, or every
+   * transfer already completed -- the property is inert and the class is
    * created fresh (or left as-is), so it is safe to leave in place
    * indefinitely.
    */
@@ -287,10 +287,10 @@ export interface DurableObjectProps {
   /**
    * Tagged-error classes this Durable Object's RPC methods can fail with.
    *
-   * Effect failures crossing the Worker↔DO RPC boundary are serialized to
+   * Effect failures crossing the Worker<->DO RPC boundary are serialized to
    * plain `{ _tag, ...fields }` objects; declaring the classes here lets
    * the calling side reconstruct real instances (both sides import this
-   * same class declaration, so the schema is shared by construction) —
+   * same class declaration, so the schema is shared by construction) --
    * `Effect.catchTag`, `instanceof`, and schema encoders (e.g. HttpApi
    * error responses) then all see the class the DO actually failed with.
    *
@@ -353,7 +353,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
         >,
         // `Exclude` (rather than `DurableObjectServices | Req` inference)
         // so ambient DO services resolved in the outer init effect never
-        // leak into the host Worker's requirements — mirrors Worker.make's
+        // leak into the host Worker's requirements -- mirrors Worker.make's
         // `Exclude<InitReq, Self | WorkerServices>`.
       ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
@@ -396,9 +396,9 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * blocks. The outer Effect resolves shared dependencies (other DOs,
  * containers, etc.) and the instance state *reference*
  * (`Cloudflare.DurableObjectState`). The inner Effect returns the
- * object's public methods and WebSocket handlers — and is the only
+ * object's public methods and WebSocket handlers -- and is the only
  * place the state's `RuntimeContext`-colored methods (`storage.get`,
- * `storage.put`, …) can actually run.
+ * `storage.put`, ...) can actually run.
  *
  * ```typescript
  * Effect.gen(function* () {
@@ -408,7 +408,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  *   return Effect.gen(function* () {
  *     // Phase 2: per-instance setup and public API. `state`'s methods
- *     // (storage.get/put, …) are RuntimeContext-colored, so the actual
+ *     // (storage.get/put, ...) are RuntimeContext-colored, so the actual
  *     // I/O happens here, in the runtime closure.
  *     return {
  *       save: (data: string) => db.exec("INSERT ..."),
@@ -423,13 +423,13 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * [Runtime](/infrastructure-as-effects/runtime) page
  * for the full explanation.
  *
- * - **Inline** — Effect implementation passed directly, single file.
- * - **Modular** — class and implementation in separate files for tree-shaking.
+ * - **Inline** -- Effect implementation passed directly, single file.
+ * - **Modular** -- class and implementation in separate files for tree-shaking.
  *
  *
  * ### Inline Durable Objects
  * Pass the Effect implementation as the second argument. This is the
- * simplest approach — everything lives in one file. Convenient when
+ * simplest approach -- everything lives in one file. Convenient when
  * the DO doesn't need to be referenced by other Workers or DOs that
  * would pull in its runtime dependencies.
  *
@@ -535,7 +535,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * **Example:** Host Worker declares the DO in its contract
  * ```typescript
- * // workerA.ts — hosts Counter
+ * // workerA.ts -- hosts Counter
  * import { Counter, CounterLive } from "./object.ts";
  *
  * //                                       ^^^^^^^ declared as part of WorkerA's public contract
@@ -555,7 +555,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * **Example:** Consumer Worker binds the DO via `Counter.from(WorkerA)`
  * ```typescript
- * // workerB.ts — binds to the same Counter, hosted by WorkerA
+ * // workerB.ts -- binds to the same Counter, hosted by WorkerA
  * import { Counter } from "./object.ts";
  * import { WorkerA } from "./workerA.ts";
  *
@@ -583,7 +583,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * `Counter` as part of its public contract.
  * :::
  *
- * Only the host Worker's Stack provides `CounterLive` — the
+ * Only the host Worker's Stack provides `CounterLive` -- the
  * consumer Worker just imports the `Counter` class as a typed
  * identifier. Rolldown tree-shakes `CounterLive` (and its
  * dependencies) out of WorkerB's bundle.
@@ -591,14 +591,14 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ### Using `.from(Self)` Inside the Host
  * Inside the host Worker, `yield* Counter` and
  * `yield* Counter.from(Self)` resolve to the same local namespace.
- * The `.from(Self)` form is preferred — especially in code that
- * may be extracted into a reusable Layer — because it makes the
+ * The `.from(Self)` form is preferred -- especially in code that
+ * may be extracted into a reusable Layer -- because it makes the
  * scriptName explicit and lets the same Layer shape work whether
  * the consumer is the host or another script.
  *
  * **Example:** `Counter.from(WorkerA)` inside WorkerA itself
  * ```typescript
- * // workerA.ts — host uses `.from(Self)` instead of bare `yield* Counter`
+ * // workerA.ts -- host uses `.from(Self)` instead of bare `yield* Counter`
  * export default WorkerA.make(
  *   Effect.gen(function* () {
  *     const counter = yield* Counter.from(WorkerA); // same as `yield* Counter`
@@ -610,11 +610,11 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * A Worker can also host its **own isolated** namespace this way.
  * If a second host Worker declares `Counter` in its contract and
  * provides `CounterLive`, the DO instances under that script are
- * separate from the original host's — same class, two namespaces.
+ * separate from the original host's -- same class, two namespaces.
  *
  * **Example:** Two hosts, two isolated namespaces
  * ```typescript
- * // workerC.ts — another host of Counter, isolated from WorkerA
+ * // workerC.ts -- another host of Counter, isolated from WorkerA
  * export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
  *   "WorkerC",
  *   { main: import.meta.url },
@@ -622,7 +622,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * export default WorkerC.make(
  *   Effect.gen(function* () {
- *     // .from(WorkerC) binds to WorkerC's own Counter namespace —
+ *     // .from(WorkerC) binds to WorkerC's own Counter namespace --
  *     // writes here are NOT visible from WorkerA's Counter.
  *     const counter = yield* Counter.from(WorkerC);
  *     return { fetch: Effect.gen(function* () { ... }) };
@@ -633,7 +633,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ### RPC Methods
  * Any function you return from the inner Effect becomes an RPC method
  * that Workers can call through a stub. Methods must return an `Effect`.
- * The caller gets a fully typed stub — if your DO returns `increment`
+ * The caller gets a fully typed stub -- if your DO returns `increment`
  * and `get`, the stub exposes `counter.increment()` and `counter.get()`.
  *
  * **Example:** Defining RPC methods
@@ -703,10 +703,10 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * });
  * ```
  *
- * ### Worker → DO HTTP forwarding
+ * ### Worker -> DO HTTP forwarding
  * In addition to RPC methods, the typed stub exposes a `fetch`
  * method that forwards an `HttpServerRequest` straight to the DO.
- * The DO's own `fetch` Effect produces the response — useful for
+ * The DO's own `fetch` Effect produces the response -- useful for
  * WebSocket upgrades and other request-shaped interactions.
  *
  * **Example:** Forwarding an HTTP request to a DO
@@ -720,7 +720,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * came from, and it stays there for life. That default is right for
  * an instance whose traffic all comes from the user who created it,
  * and wrong for one whose name is derived from something other than
- * geography (a shard index, a hash, a fixed roster) — a Sydney user
+ * geography (a shard index, a hash, a fixed roster) -- a Sydney user
  * routed onto an instance that some Frankfurt request happened to
  * create first pays a cross-planet round trip on every call.
  *
@@ -732,7 +732,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```typescript
  * // Both the name and the hint derive from the caller's region, so
  * // each shard is created in the region whose users address it.
- * const region = hintFor(request.cf?.continent); // "apac", "weur", …
+ * const region = hintFor(request.cf?.continent); // "apac", "weur", ...
  * const shard = shards.getByName(`pool:${region}:${index}`, {
  *   locationHint: region,
  * });
@@ -742,21 +742,21 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * A hint is a hint: Cloudflare places the instance in the nearest
  * location it *can*, which may not be the hinted one, and only the
  * first request to a given name has any say. Derive the name from
- * the same region you hint with — otherwise two regions race to
+ * the same region you hint with -- otherwise two regions race to
  * create one shared instance and the loser is stuck with it.
  * :::
  *
  * ### Accessing Instance State
  * Each Durable Object instance has its own transactional key-value
  * storage via `Cloudflare.DurableObjectState`. Resolve the `state`
- * *reference* in the outer (init) Effect, but call its methods —
- * `storage.get`, `storage.put`, … — only from the inner (runtime)
+ * *reference* in the outer (init) Effect, but call its methods --
+ * `storage.get`, `storage.put`, ... -- only from the inner (runtime)
  * Effect: those methods are `RuntimeContext`-colored, so the type
  * system only allows them inside the runtime closure.
  *
  * **Example:** Reading and writing durable storage
  * ```typescript
- * // inner (runtime) Effect — `state` was resolved in the outer Effect
+ * // inner (runtime) Effect -- `state` was resolved in the outer Effect
  * yield* state.storage.put("counter", 42);
  * const value = yield* state.storage.get("counter");
  * ```
@@ -764,7 +764,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ### Background Work & Scopes
  * Every RPC call and fetch into a Durable Object gets its own Effect
  * `Scope`. When the method finishes, the bridge closes that scope and
- * registers the close promise with workerd's `state.waitUntil` — so
+ * registers the close promise with workerd's `state.waitUntil` -- so
  * finalizers added with `Effect.addFinalizer` inside a method run *after*
  * the result is returned to the caller, without blocking it, and the
  * object stays alive until they settle.
@@ -773,7 +773,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * with the caller's full context and keeps the object alive until it
  * settles.
  *
- * Attach cleanup to method scopes, not the constructor (init) closure —
+ * Attach cleanup to method scopes, not the constructor (init) closure --
  * the constructor runs once per in-memory instance under
  * `blockConcurrencyWhile`, and its scope is not tied to any call.
  *
@@ -797,7 +797,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```
  *
  * ### WebSocket Hibernation
- * Durable Objects support WebSocket hibernation — the runtime can
+ * Durable Objects support WebSocket hibernation -- the runtime can
  * evict the object from memory while keeping connections open. Use
  * `Cloudflare.upgrade()` to accept a connection, and return
  * `webSocketMessage` / `webSocketClose` / `webSocketError` handlers to
@@ -992,7 +992,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ### Aborting a Durable Object
  * `state.abort(reason?, options?)` forcibly resets the isolate. By
  * default an in-progress alarm retries after the reset. Pass
- * `{ retryAlarm: false }` when the alarm should stop instead — for
+ * `{ retryAlarm: false }` when the alarm should stop instead -- for
  * example an alarm that deletes storage so the constructor does not
  * recreate it.
  *
@@ -1151,7 +1151,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * ### Container-Backed Durable Objects in an Async Worker
  * A container-backed class is declared by binding a `Cloudflare.Container`
- * directly in the async Worker's `env` — the Container *is* the Durable
+ * directly in the async Worker's `env` -- the Container *is* the Durable
  * Object binding plus its ContainerApplication. See the Async Workers
  * section on {@link Container} for the full walkthrough.
  *
@@ -1222,21 +1222,21 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * ### Moving a Class Between Workers
  * A Durable Object class can move from one Worker to another with its
- * data intact. The move is always **declared** — a class that disappears
+ * data intact. The move is always **declared** -- a class that disappears
  * from one worker and appears on another is otherwise ambiguous between
  * "transfer the data" and "delete it, start fresh", so Alchemy never
  * guesses (removing a DO deletes it; that is the default). Declare
  * `transferredFrom` on the Durable Object at its **new host**, naming the
  * former host, and the new host's deploy moves the namespace with its
  * data (Cloudflare's `expecting-transfer` / `transferred` exports
- * entries). The former host's deploy converges on its own — nothing is
+ * entries). The former host's deploy converges on its own -- nothing is
  * deleted for a class that moved away.
  *
  * Each `transferredFrom` entry is either the former host's Worker
  * **logical id** (same stack + stage, resolved via alchemy's ownership
  * tags) or its **physical script name** (required for cross-stack moves).
- * When no listed host holds the namespace — a fresh stage, or the
- * transfer already completed — the declaration is inert, so it is safe to
+ * When no listed host holds the namespace -- a fresh stage, or the
+ * transfer already completed -- the declaration is inert, so it is safe to
  * leave in place indefinitely.
  *
  * **Example:** Move a class from WorkerB to WorkerA
@@ -1274,11 +1274,11 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * Forgetting the declaration is safe: when the former host still
  * references the class cross-script, its deploy fails before any upload
  * with `DurableObjectTransferRequired`, telling you exactly what to
- * declare — data is never silently destroyed or forked.
+ * declare -- data is never silently destroyed or forked.
  *
  * **Example:** Chained moves keep the host history
  * ```typescript
- * // The class moved WorkerB → WorkerA last release and WorkerA →
+ * // The class moved WorkerB -> WorkerA last release and WorkerA ->
  * // WorkerC this release. Keep the full history so a stage that lagged
  * // behind (or skipped the intermediate release) still transfers from
  * // wherever its namespace currently lives.
@@ -1300,8 +1300,8 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *   after and converges.
  *
  * ### Adopting an Existing Durable Object
- * When you adopt a Worker that already exists on Cloudflare — created
- * outside Alchemy via Wrangler, the dashboard, or the raw API — its
+ * When you adopt a Worker that already exists on Cloudflare -- created
+ * outside Alchemy via Wrangler, the dashboard, or the raw API -- its
  * Durable Object classes are adopted along with it. You opt in to the
  * takeover the same way you adopt any foreign resource: with
  * `adopt(true)` (or the `--adopt` CLI flag), since `Worker.read` reports
@@ -1312,7 +1312,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * binding's logical id to its class name). A
  * foreign worker has no such tag, so on the **adopting deploy** Alchemy
  * falls back to matching your binding to the live class **by binding
- * name**. The class is then reused in place — not recreated — so
+ * name**. The class is then reused in place -- not recreated -- so
  * Cloudflare's migration engine doesn't reject the upload for creating a
  * class that already exists.
  *
@@ -1336,7 +1336,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * }).pipe(adopt(true));
  * ```
  *
- * **Example:** Renaming the class — only after adoption
+ * **Example:** Renaming the class -- only after adoption
  * ```typescript
  * // A SECOND deploy, after the one above. Alchemy now owns the worker
  * // and maps the binding by logical id, so the class can be renamed.
@@ -1529,7 +1529,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     } else {
       // Tagged Effect DO. Yielding the class resolves the `tag`, which
       // forces the `CounterLive` Layer (built by `Counter.make(impl)`) to
-      // run so `worker.export(namespace, …)` is invoked — without this,
+      // run so `worker.export(namespace, ...)` is invoked -- without this,
       // the class would never be registered with the Worker's exports
       // map and the deployed bundle would have no DO class for
       // Cloudflare to instantiate.
@@ -1543,10 +1543,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           // instance (or a plain string scriptName).
           //
           // A class produced by `Cloudflare.Worker<T>()(...)` exposes
-          // `asEffect()` returning the Self tag — yielding that tag
+          // `asEffect()` returning the Self tag -- yielding that tag
           // resolves to the live Worker instance whose `workerName`
           // is a `PropExpr`, which is what we need so the engine can:
-          //   1) Track WorkerB → WorkerA as a binding-level upstream
+          //   1) Track WorkerB -> WorkerA as a binding-level upstream
           //      dependency (so WorkerA reconciles first).
           //   2) Persist `scriptName` as a real value (not `undefined`)
           //      on the cross-script binding so the migration code in

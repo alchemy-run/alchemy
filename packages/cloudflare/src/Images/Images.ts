@@ -16,12 +16,12 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
 }> {}
 
 /**
- * A Cloudflare Images binding for image transformation inside Workers — a
+ * A Cloudflare Images binding for image transformation inside Workers -- a
  * Worker-only binding with no backing cloud resource.
  *
  * `Images` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces an {@link ImagesBinding}, and the type. Declare it on a
- * Worker's `env` (it flows through `InferEnv` → `cf.ImagesBinding`) or `yield*`
+ * Worker's `env` (it flows through `InferEnv` -> `cf.ImagesBinding`) or `yield*`
  * it inside an Effect-native Worker to attach the binding and obtain the
  * {@link ImagesClient}.
  *
@@ -61,7 +61,7 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * ```typescript
  * // Default: transforms run locally via Sharp under `alchemy dev` and
  * // hosted images are stored on disk. Alchemy.remote() opts the binding
- * // into the real Images service instead — in an Effect-native Worker:
+ * // into the real Images service instead -- in an Effect-native Worker:
  * const images = yield* Cloudflare.Images.Images("IMAGES").pipe(Alchemy.remote());
  *
  * // or declared on an async Worker's env:
@@ -76,7 +76,7 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  */
 export interface Images extends Binding.Service<Images, TypeId, ImagesClient> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @default "IMAGES"
    */
   (name?: string): ImagesBinding;

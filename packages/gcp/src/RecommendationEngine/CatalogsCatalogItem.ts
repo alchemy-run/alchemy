@@ -47,7 +47,7 @@ export type CatalogsCatalogItemProps = {
   /**
    * Parent catalog resource name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the catalog item.
    * @default "default_catalog"
    */
@@ -60,7 +60,7 @@ export type CatalogsCatalogItemProps = {
   location?: string;
   /**
    * Catalog item id (max 128 bytes). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the item.
+   * generated. Immutable -- changing it replaces the item.
    */
   catalogItemId?: string;
   /**

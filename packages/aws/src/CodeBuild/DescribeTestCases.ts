@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:DescribeTestCases` — reads the individual
+ * Runtime binding for `codebuild:DescribeTestCases` -- reads the individual
  * test cases of a test report in the bound report group.
  * ### Reading Reports
  * **Example:** Read Failed Test Cases

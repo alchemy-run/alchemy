@@ -40,7 +40,7 @@ export const RepositoryEventSourceLive = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
     const ctx = yield* WebhookHost;
-    // Loosely-typed constructor — yielding the resource class erases its
+    // Loosely-typed constructor -- yielding the resource class erases its
     // `GitHub.Providers` requirement. The requirement is satisfied by the
     // stack at plan time.
     const createWebhook = yield* Webhook;
@@ -127,7 +127,7 @@ const handleDelivery = <Req>(
 
     // The wire shape matches `WebhookEvent`, but the runtime can't
     // statically prove `name`/`payload` line up with a specific member of
-    // the discriminated union — GitHub's headers are the source of truth, so
+    // the discriminated union -- GitHub's headers are the source of truth, so
     // cast across the boundary.
     const delivery = { id, name, payload } as unknown as WebhookEvent;
 

@@ -31,12 +31,12 @@ export type ConnectionsGitRepositoryLinkProps = {
   /**
    * Parent Developer Connect connection. Full name
    * `projects/{project}/locations/{location}/connections/{connection}`
-   * or the connection id (combined with `location`). Immutable —
+   * or the connection id (combined with `location`). Immutable --
    * changing it replaces the link.
    */
   connection: string;
   /**
-   * Region used when `connection` is a bare id. Immutable — changing
+   * Region used when `connection` is a bare id. Immutable -- changing
    * it replaces the link. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -47,21 +47,21 @@ export type ConnectionsGitRepositoryLinkProps = {
    * Git repository link id (the `{gitRepositoryLink}` segment of
    * `{connection}/gitRepositoryLinks/{gitRepositoryLink}`). If omitted,
    * a unique RFC1035 name is generated. Unique within the connection.
-   * Immutable — changing it replaces the link.
+   * Immutable -- changing it replaces the link.
    */
   gitRepositoryLinkId?: string;
   /**
    * Git clone HTTPS URI (e.g. `https://github.com/{owner}/{repo}.git`).
-   * Immutable — changing it replaces the link.
+   * Immutable -- changing it replaces the link.
    */
   cloneUri: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * The API has no patch method — changing labels replaces the link.
+   * The API has no patch method -- changing labels replaces the link.
    */
   labels?: Record<string, string>;
   /**
-   * User annotations (AIP-148). The API has no patch method — changing
+   * User annotations (AIP-148). The API has no patch method -- changing
    * annotations replaces the link.
    */
   annotations?: Record<string, string>;
@@ -109,7 +109,7 @@ export type ConnectionsGitRepositoryLink = Resource<
 >;
 
 /**
- * A Developer Connect git repository link — associates a remote Git
+ * A Developer Connect git repository link -- associates a remote Git
  * repository with a {@link Connection} so webhooks and clone tokens
  * can be issued.
  *

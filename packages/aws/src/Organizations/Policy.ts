@@ -45,8 +45,8 @@ export interface PolicyProps {
   /**
    * Policy content. For `SERVICE_CONTROL_POLICY` / `RESOURCE_CONTROL_POLICY`
    * pass a typed {@link ServiceControlPolicyDocument} (the SCP-legal IAM
-   * dialect — no `Principal`/`NotPrincipal`). Other policy types (tag,
-   * backup, AI-services opt-out, ...) use their own JSON grammars — pass
+   * dialect -- no `Principal`/`NotPrincipal`). Other policy types (tag,
+   * backup, AI-services opt-out, ...) use their own JSON grammars -- pass
    * them as a raw JSON `string`. The string form also serves as the
    * escape hatch for adopted or hand-authored documents.
    */
@@ -205,7 +205,7 @@ export const PolicyProvider = () =>
                     (page) => page.Policies,
                   ),
                 ).pipe(
-                  // Not an org management/delegated account → nothing to list.
+                  // Not an org management/delegated account -> nothing to list.
                   Effect.catchTag(
                     ["AWSOrganizationsNotInUseException", "AccessDeniedException"],
                     () => Effect.succeed([] as organizations.PolicySummary[]),
@@ -235,7 +235,7 @@ export const PolicyProvider = () =>
               ? news.document
               : stringifyPolicyDocument(news.document);
 
-          // Observe — locate the policy by ID if known, else by type+name.
+          // Observe -- locate the policy by ID if known, else by type+name.
           // Both `name` (after generation) and `type` are stable, so `diff`
           // handles renames as a replacement; here we just look up.
           let state = output?.policyId
@@ -245,7 +245,7 @@ export const PolicyProvider = () =>
                 name,
               });
 
-          // Ensure — create the policy if missing. Tolerate
+          // Ensure -- create the policy if missing. Tolerate
           // `DuplicatePolicyException` as adoption (a peer reconciler beat
           // us, or our observation lost a race).
           if (!state) {
@@ -270,11 +270,11 @@ export const PolicyProvider = () =>
             }
           }
 
-          // Sync description + content — diff observed cloud state against
+          // Sync description + content -- diff observed cloud state against
           // desired. Documents are compared in canonical form
           // (`normalizePolicyDocument`: sorted keys, no whitespace) so an
-          // unchanged re-deploy — regardless of key order or string-vs-typed
-          // authoring — skips the `updatePolicy` call entirely.
+          // unchanged re-deploy -- regardless of key order or string-vs-typed
+          // authoring -- skips the `updatePolicy` call entirely.
           // `updatePolicy` requires `Name`; we keep the existing policy name
           // (rename triggers replacement at the diff level).
           const observedDescription = state.description ?? "";
@@ -292,7 +292,7 @@ export const PolicyProvider = () =>
             );
           }
 
-          // Sync tags — diff observed cloud tags against desired. Using
+          // Sync tags -- diff observed cloud tags against desired. Using
           // `state.tags` (fetched fresh) keeps the reconciler convergent on
           // adoption and drift.
           const tags = yield* updateResourceTags({
@@ -319,7 +319,7 @@ export const PolicyProvider = () =>
           yield* retryOrganizations(
             organizations.deletePolicy({ PolicyId: output.policyId }).pipe(
               // Detaching a policy (the attachment's delete) propagates
-              // asynchronously — deletePolicy issued right after the detach
+              // asynchronously -- deletePolicy issued right after the detach
               // can still observe the policy as attached. Retry through the
               // typed dependency-violation tag, bounded.
               Effect.retry({

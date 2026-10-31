@@ -11,13 +11,13 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  *
  * At runtime the Worker reaches the database through its native D1 binding
  * (the layer bakes in `QueryDatabaseBinding`). At deploy time, schema
- * migrations run over the D1 HTTP query API — which also transparently
+ * migrations run over the D1 HTTP query API -- which also transparently
  * targets the local D1 simulator under `alchemy dev`.
  *
  *
  * ### Using D1 as the auth database
  * Provide the layer on the Worker impl effect that yields `BetterAuth`.
- * The database resource can be referenced from module scope — the layer
+ * The database resource can be referenced from module scope -- the layer
  * accepts the resource or its Effect.
  * **Example:** Worker with a D1-backed BetterAuth
  * ```typescript
@@ -51,7 +51,7 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  *
  * ### Migrations
  * The schema migration Action connects over the D1 HTTP API at deploy
- * time — the Worker's native binding is never used outside the deployed
+ * time -- the Worker's native binding is never used outside the deployed
  * runtime, and no migration code ships in the Worker bundle.
  * **Example:** Opting out of automatic migrations
  * ```typescript
@@ -80,7 +80,7 @@ export const CloudflareD1 = (
         runtime: client.raw,
       };
       // Migration support references the deploy-time HTTP/local D1 client
-      // (`QueryDatabaseLocal`), which must never reach a Worker bundle —
+      // (`QueryDatabaseLocal`), which must never reach a Worker bundle --
       // this branch is dead-code-eliminated from deployed runtimes, which
       // also tree-shakes the local-runtime machinery out of the bundle.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -89,12 +89,12 @@ export const CloudflareD1 = (
           migrate: {
             identity: { databaseId: db.databaseId } as Record<string, unknown>,
             connect: Effect.gen(function* () {
-              // Init half — runs under the migration Action's capture
+              // Init half -- runs under the migration Action's capture
               // context: `QueryDatabase(database)` yields the databaseId
               // Output, recording the dependency; the client's `raw` is a
               // deferred accessor that resolves at apply.
               const local = yield* Cloudflare.D1.QueryDatabase(db);
-              // Apply half — materialize the HTTP D1 facade.
+              // Apply half -- materialize the HTTP D1 facade.
               return Effect.map(local.raw, (database) => database as DirectDatabase);
             }).pipe(
               Effect.provide(Cloudflare.D1.QueryDatabaseLocal),

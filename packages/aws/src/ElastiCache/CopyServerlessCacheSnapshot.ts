@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  * `elasticache:AddTagsToResource`).
  *
  * Copies an existing serverless cache snapshot, optionally re-encrypting it
- * under a different KMS key — e.g. duplicating a nightly backup before a
+ * under a different KMS key -- e.g. duplicating a nightly backup before a
  * risky migration. Available for valkey, redis, and serverless memcached.
  * Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.CopyServerlessCacheSnapshotHttp)`.

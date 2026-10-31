@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetTraceGraphRequest extends xray.GetTraceGraphRequest {}
 
 /**
- * Retrieve a service graph scoped to specific trace IDs — the services
+ * Retrieve a service graph scoped to specific trace IDs -- the services
  * and edges the given traces traversed.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -17,7 +17,7 @@ export interface GetTraceGraphRequest extends xray.GetTraceGraphRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetTraceGraph
+ * // init -- grants xray:GetTraceGraph
  * const getTraceGraph = yield* XRay.GetTraceGraph();
  *
  * // runtime

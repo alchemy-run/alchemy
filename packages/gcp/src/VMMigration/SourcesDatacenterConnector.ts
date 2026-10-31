@@ -32,7 +32,7 @@ export type SourcesDatacenterConnectorProps = {
   /**
    * Parent source. Full name
    * `projects/{project}/locations/{location}/sources/{source}` or the
-   * source id (combined with `location`). Immutable — changing it
+   * source id (combined with `location`). Immutable -- changing it
    * replaces the connector.
    */
   source: string;
@@ -43,17 +43,17 @@ export type SourcesDatacenterConnectorProps = {
   location?: string;
   /**
    * Datacenter connector id. If omitted, a unique RFC1035 name is
-   * generated. Immutable — changing it replaces the connector.
+   * generated. Immutable -- changing it replaces the connector.
    */
   datacenterConnectorId?: string;
   /**
-   * Unique registration key supplied by the OVA connector. Immutable —
+   * Unique registration key supplied by the OVA connector. Immutable --
    * changing it replaces the connector. Defaults to the connector id.
    */
   registrationId?: string;
   /**
    * Appliance version. Connectors have no labels or description field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   version?: string;
@@ -101,7 +101,7 @@ export type SourcesDatacenterConnector = Resource<
  * source. The on-prem OVA appliance uses the registration id to bind to
  * this resource.
  *
- * Connectors have no labels or description — Alchemy stamps ownership
+ * Connectors have no labels or description -- Alchemy stamps ownership
  * into `version` so `list` / nuke can find them. The API has no patch
  * method; changing identity or registration replaces the connector.
  *

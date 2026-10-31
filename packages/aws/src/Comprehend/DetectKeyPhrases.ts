@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectKeyPhrases` — extract the key noun
+ * Runtime binding for `comprehend:DetectKeyPhrases` -- extract the key noun
  * phrases of the input text with confidence scores and offsets.
  *
  * The binding takes no arguments and grants the action on `*` (the action
@@ -20,7 +20,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "The quarterly earnings report exceeded analyst expectations.",
  *   LanguageCode: "en",
  * });
- * // result.KeyPhrases: [{ Text: "The quarterly earnings report" }, …]
+ * // result.KeyPhrases: [{ Text: "The quarterly earnings report" }, ...]
  * ```
  *
  * @binding

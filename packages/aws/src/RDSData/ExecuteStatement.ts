@@ -17,7 +17,7 @@ export interface ExecuteStatementRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `rds-data:ExecuteStatement` — run a SQL statement
+ * Runtime binding for `rds-data:ExecuteStatement` -- run a SQL statement
  * against an Aurora cluster over the HTTP Data API (no VPC attachment or
  * database socket required).
  *
@@ -38,7 +38,7 @@ export interface ExecuteStatementRequest extends Omit<
  *       subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *       securityGroupIds: [dbSecurityGroup.groupId],
  *     });
- *     // init — bind the operation to the cluster + admin secret
+ *     // init -- bind the operation to the cluster + admin secret
  *     const executeStatement = yield* AWS.RDSData.ExecuteStatement(db.cluster, {
  *       secret: db.secret,
  *       database: "app",
@@ -46,7 +46,7 @@ export interface ExecuteStatementRequest extends Omit<
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — parameterized SQL over the Data API
+ *         // runtime -- parameterized SQL over the Data API
  *         const result = yield* executeStatement({
  *           sql: "SELECT id, title FROM todos WHERE id = :id",
  *           parameters: [{ name: "id", value: { longValue: 1 } }],

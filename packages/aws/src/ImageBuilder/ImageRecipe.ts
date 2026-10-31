@@ -26,7 +26,7 @@ export class ImageRecipeUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * Image Builder image recipe versions are immutable — the deployed recipe
+ * Image Builder image recipe versions are immutable -- the deployed recipe
  * differs from the desired one but the semantic version was not bumped, so
  * the cloud state cannot be converged.
  */
@@ -61,7 +61,7 @@ export interface ImageRecipeProps {
   imageRecipeName?: string;
   /**
    * Semantic version of the recipe (`major.minor.patch`). Recipes are
-   * immutable — bump the version when changing any property. Changing the
+   * immutable -- bump the version when changing any property. Changing the
    * version replaces the recipe.
    * @default "1.0.0"
    */
@@ -131,7 +131,7 @@ export interface ImageRecipe extends Resource<
 > {}
 
 /**
- * An EC2 Image Builder image recipe — the blueprint that combines a parent
+ * An EC2 Image Builder image recipe -- the blueprint that combines a parent
  * image with an ordered list of components to produce a new AMI.
  *
  * Recipes are immutable versions: every property except `tags` replaces the
@@ -199,7 +199,7 @@ export const ImageRecipeProvider = () =>
       return {
         stables: ["imageRecipeName", "semanticVersion"],
 
-        // Recipes are immutable — any changed property except tags
+        // Recipes are immutable -- any changed property except tags
         // replaces. Individual keys may still hold unresolved Outputs at
         // plan time (e.g. the ARN of a component being replaced in the
         // same deploy); compare per key so a resolved change (like a
@@ -234,7 +234,7 @@ export const ImageRecipeProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // One idempotency token per reconcile — retries within this run
+          // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
           const name = output?.imageRecipeName ?? (yield* toName(id, news));
@@ -242,11 +242,11 @@ export const ImageRecipeProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the recipe ARN is deterministic from name+version.
+          // 1. Observe -- the recipe ARN is deterministic from name+version.
           const arn = output?.imageRecipeArn ?? (yield* toArn(name, version));
           let observed = yield* getRecipe(arn);
 
-          // Immutability guard — the version already exists in the cloud
+          // Immutability guard -- the version already exists in the cloud
           // with a different definition (e.g. a component was replaced
           // without bumping the recipe version). It cannot be converged in
           // place; the user must bump `semanticVersion`.
@@ -260,12 +260,12 @@ export const ImageRecipeProvider = () =>
               observed.parentImage !== news.parentImage
             ) {
               return yield* new ImageRecipeVersionImmutable({
-                message: `Image Builder recipe '${name}' version '${version}' already exists with a different definition — bump semanticVersion to publish the change`,
+                message: `Image Builder recipe '${name}' version '${version}' already exists with a different definition \u2014 bump semanticVersion to publish the change`,
               });
             }
           }
 
-          // 2. Ensure — recipes are immutable; missing is the only create
+          // 2. Ensure -- recipes are immutable; missing is the only create
           //    path.
           if (observed === undefined) {
             const created = yield* imagebuilder.createImageRecipe({
@@ -294,7 +294,7 @@ export const ImageRecipeProvider = () =>
             }
           }
 
-          // 3. Sync — tags are the only mutable aspect.
+          // 3. Sync -- tags are the only mutable aspect.
           if (observed.arn) {
             yield* syncImageBuilderTags(observed.arn, desiredTags);
           }

@@ -55,17 +55,17 @@ export type AgentsToolProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}`.
-   * Immutable — changing it replaces the tool.
+   * Immutable -- changing it replaces the tool.
    */
   agent: string;
   /**
    * Tool id (the `{tool}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the tool.
+   * Immutable -- changing it replaces the tool.
    */
   toolId?: string;
   /**
    * Location used when `agent` is an id rather than a resource name.
-   * Immutable — changing it replaces the tool.
+   * Immutable -- changing it replaces the tool.
    * @default "global"
    */
   location?: string;
@@ -124,7 +124,7 @@ export type AgentsTool = Resource<
 /**
  * A Dialogflow CX tool (function, OpenAPI, or data-store).
  *
- * Tools have no labels field — Alchemy stamps ownership into
+ * Tools have no labels field -- Alchemy stamps ownership into
  * `displayName` and `description` so `list` / nuke can find them. Parent
  * agent, id, and spec kind are immutable. Display name, description, and
  * spec payload update in place.

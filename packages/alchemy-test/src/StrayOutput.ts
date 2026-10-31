@@ -9,9 +9,9 @@
  *
  * Diverted globally (prefixed in the log; all verified under bun):
  *   1. `process.stdout.write` / `process.stderr.write`  [stray stdout|stderr]
- *   2. global `console.*` — bun's console does NOT go through
+ *   2. global `console.*` -- bun's console does NOT go through
  *      `process.stdout.write`, it writes natively             [stray console]
- *   3. `Bun.spawn` with `stdout/stderr: "inherit"` — downgraded to "pipe"
+ *   3. `Bun.spawn` with `stdout/stderr: "inherit"` -- downgraded to "pipe"
  *      and pumped into the log                                  [stray child]
  *   4. best-effort only: `node:child_process.spawn` inherit and
  *      `fs.writeSync/write` to fds 1/2. Under bun, ESM namespace imports
@@ -21,12 +21,12 @@
  *      LanguageModel.test.ts's fs.writeSync(2) was).
  *
  * NOT interceptable from JS at all: native code writing to the fd directly
- * (e.g. rolldown's Rust progress spinner — held off via CI=true / logLevel).
+ * (e.g. rolldown's Rust progress spinner -- held off via CI=true / logLevel).
  *
  * The reporter itself writes through {@link writeDirect}, which always uses
  * the REAL stream saved before patching.
  */
-// The sinks run inside synchronous patches — they cannot be effectful, so
+// The sinks run inside synchronous patches -- they cannot be effectful, so
 // this module uses node:fs append directly (append mode interleaves safely
 // with the Effect-based FileLog appends).
 import * as childProcess from "node:child_process";
@@ -106,7 +106,7 @@ export const captureStrayOutput = (logFile: string): (() => void) => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. global console — bun's console writes natively, NOT via stdout.write
+  // 2. global console -- bun's console writes natively, NOT via stdout.write
   // -------------------------------------------------------------------------
   try {
     const methods = [
@@ -175,12 +175,12 @@ export const captureStrayOutput = (logFile: string): (() => void) => {
       fsModule.write = realWrite;
     });
   } catch {
-    // best-effort — the module namespace may not be writable
+    // best-effort -- the module namespace may not be writable
   }
 
   // -------------------------------------------------------------------------
   // 4. child processes spawned with stdio: "inherit" (fd-level, otherwise
-  //    unintersectable) — downgrade stdout/stderr to "pipe" and pump.
+  //    unintersectable) -- downgrade stdout/stderr to "pipe" and pump.
   // -------------------------------------------------------------------------
   try {
     const realSpawn = childProcess.spawn;

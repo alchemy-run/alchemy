@@ -53,11 +53,11 @@ export interface PlatformProps {
  * **At runtime** (`__ALCHEMY_RUNTIME__`, folded to `true` in every bundled
  * artifact) the layer builds against the AMBIENT scope. `Effect.provide` is
  * implemented with `scopedWith`, so its transient region scope would tear
- * the layer down — firing init-level finalizers and releasing
- * `Layer.scoped` services — the moment init completes. The runtime bridges
+ * the layer down -- firing init-level finalizers and releasing
+ * `Layer.scoped` services -- the moment init completes. The runtime bridges
  * evaluate the entrypoint under the instance-lifetime build scope (closed
- * at instance shutdown where the platform offers one — Lambda's SIGTERM
- * window — and never on workerd), so building against it keeps instance
+ * at instance shutdown where the platform offers one -- Lambda's SIGTERM
+ * window -- and never on workerd), so building against it keeps instance
  * services alive for the instance.
  *
  * **At plan/deploy** it stays `Effect.provide`: the transient region evicts
@@ -105,7 +105,7 @@ export interface MainRpc<Req = never> {
 // `BaseShape`. This matters when `Shape` fails its `extends MainShape`
 // constraint (e.g. a `fetch` handler that leaks an error): TS clamps `Shape`
 // to the constraint union `void | { fetch: ... }`, and a *distributive*
-// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` — a
+// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` -- a
 // union. Feeding a union into the `new (_: never): ...` construct signature
 // makes the base class a union type, which surfaces as the cryptic
 // ts(2509) "Base constructor return type ... is not an object type" instead of
@@ -120,7 +120,7 @@ export type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] ext
 // NOT include `Scope`: init runs once per instance under a build scope that
 // closes at instance shutdown at best (Lambda's SIGTERM window; never on
 // workerd), so init code that needs a scope must not typecheck. Handlers get
-// a fresh per-event `Scope` from the bridge — note the explicit `| Scope` on
+// a fresh per-event `Scope` from the bridge -- note the explicit `| Scope` on
 // the handler positions in `Main` / `MainRpc` above.
 export type PlatformServices =
   | NodeServices
@@ -262,13 +262,13 @@ export const Platform = <
     createRuntimeContext: (id: string) => BaseRuntimeContext;
     /**
      * Legacy type names this platform's resource was previously registered
-     * under (see `ResourceOptions.aliases`) — threaded to the underlying
+     * under (see `ResourceOptions.aliases`) -- threaded to the underlying
      * `Resource` so state persisted under a pre-rename type keeps
      * resolving.
      */
     aliases?: string[];
     // `onCreate` runs inside the resource-construction context, which already
-    // carries the Stack's providers — so the hook may yield child resources
+    // carries the Stack's providers -- so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
     // Workflow). Allow an ambient requirement (`any`) rather than forcing
     // `never`; it is discharged by the surrounding provider context.
@@ -279,7 +279,7 @@ export const Platform = <
      * and providers are available), so the hook may compose REAL child
      * resources (the `StaticSite` pattern) and return derived props that
      * reference their Outputs. Implementations MUST be a no-op at runtime
-     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
+     * (guard on `globalThis.__ALCHEMY_RUNTIME__`) -- the hook is evaluated
      * wherever the props effect is, including inside deployed bundles.
      */
     transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
@@ -293,7 +293,7 @@ export const Platform = <
   // legitimate construction (a `.make(props, impl)` Layer build, a tag
   // declared with props, a plain call) produces them, so props still
   // `undefined` at plan can only be a bare-tag forward reference whose
-  // `.make` Layer was never provided — `Plan.make` fails fast naming the
+  // `.make` Layer was never provided -- `Plan.make` fails fast naming the
   // class and its Layer (#1054).
   const resource = Resource(type, {
     aliases: hooks.aliases,
@@ -360,13 +360,13 @@ export const Platform = <
                 // A tagged class WITH props and no impl is the class form of
                 // the external resource above (e.g.
                 // `class Site extends Worker<Site>()("Site", { assets }) {}`)
-                // — same isExternal marking; without props, this is a bare
+                // -- same isExternal marking; without props, this is a bare
                 // tag whose props/impl arrive later via `.make`.
                 onNone: () =>
                   // Without props this is a bare-tag FORWARD REFERENCE: its
                   // `.make(props, impl)` Layer may build before or after
                   // this yield (e.g. a worker tag bound in another worker's
-                  // `env` — the #874 circular-binding pattern — resolves
+                  // `env` -- the #874 circular-binding pattern -- resolves
                   // during that worker's async-binding pass, outside the
                   // Layer's own context). Register with `undefined` props;
                   // the Layer's build repairs them, and `Plan.make` fails
@@ -405,7 +405,7 @@ export const Platform = <
                     // `props` may itself be an Effect (e.g. when wrapped by
                     // `Cloudflare.Website.Vite` via `Effect.map`); resolve it
                     // before handing it to the hook so `onCreate` always sees
-                    // the plain props object — the second call site (in
+                    // the plain props object -- the second call site (in
                     // `cls.make`) already does this.
                     Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
                     (resolved) => hooks.onCreate!(resource as R, resolved),
@@ -450,7 +450,7 @@ export const Platform = <
     class Platform {
       /**
        * Logical id of the resource this class declares. Statically readable
-       * — e.g. `DurableObjectProps.transferredFrom` accepts a Worker class
+       * -- e.g. `DurableObjectProps.transferredFrom` accepts a Worker class
        * and takes its identity from here without yielding it (yielding
        * would add a dependency edge on the referenced resource).
        */
@@ -482,7 +482,7 @@ export const Platform = <
               // Pin init's ambient scope to this layer's build scope
               // instead: under the runtime bridges that scope belongs to
               // the instance-lifetime build, so init-level finalizers run
-              // at instance shutdown or not at all — never per event
+              // at instance shutdown or not at all -- never per event
               // (workerd never closes it; the Lambda entry closes it in the
               // SIGTERM window). Request-coupled cleanup belongs in
               // handlers, where the bridge provides a per-event scope.
@@ -504,7 +504,7 @@ export const Platform = <
                   const shape = impl as Record<string, unknown>;
                   // Serve when there's a `fetch` handler OR any RPC shape
                   // methods. A pure-RPC impl (methods, no `fetch`) still needs
-                  // the server to boot — hand `serveRpc` a default 404 fallback
+                  // the server to boot -- hand `serveRpc` a default 404 fallback
                   // so `/__rpc__/*` is dispatched to the shape methods and
                   // everything else 404s.
                   // May be an `HttpEffect` or an Effect resolving to one (the
@@ -548,7 +548,7 @@ export const Platform = <
                             // retrieve from the RuntimeContext if running in runtime phase
                             const value = yield* ctx.get<unknown>(key);
                             if (value) {
-                              // `get` JSON-decodes unbound env values (`"true"` →
+                              // `get` JSON-decodes unbound env values (`"true"` ->
                               // `true`), but a `Value` node holds the raw string the
                               // `Config` schema parses.
                               return ConfigProvider.makeValue(
@@ -578,7 +578,7 @@ export const Platform = <
                             // closes the moment init returns; the build scope
                             // lives for the instance under the runtime bridges,
                             // so init-level finalizers run at instance shutdown
-                            // (Lambda's SIGTERM window) or never (workerd) —
+                            // (Lambda's SIGTERM window) or never (workerd) --
                             // request-coupled cleanup belongs in handlers, where
                             // the bridge provides a per-event scope. It also
                             // wins over any `Scope` captured in `outerServices`

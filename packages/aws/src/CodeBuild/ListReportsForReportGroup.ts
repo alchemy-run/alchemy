@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:ListReportsForReportGroup` — lists the
+ * Runtime binding for `codebuild:ListReportsForReportGroup` -- lists the
  * bound report group's report ARNs, newest first.
  * ### Reading Reports
  * **Example:** List Reports in the Group

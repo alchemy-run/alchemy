@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDataRepositoryTasks` operation (IAM
  * action `fsx:DescribeDataRepositoryTasks` on `*`).
  *
- * Lists Lustre data repository tasks — optionally filtered by
- * `file-system-id` or `task-lifecycle`, or by explicit `TaskIds` — from
+ * Lists Lustre data repository tasks -- optionally filtered by
+ * `file-system-id` or `task-lifecycle`, or by explicit `TaskIds` -- from
  * inside a function runtime. Pairs with {@link CreateDataRepositoryTask} to
  * poll an export/import task until it reaches `SUCCEEDED`. Provide the
  * implementation with

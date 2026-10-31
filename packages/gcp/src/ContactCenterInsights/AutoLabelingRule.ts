@@ -39,13 +39,13 @@ export type AutoLabelingRuleProps = {
   /**
    * Auto-labeling rule id (the `{auto_labeling_rule}` segment of
    * `projects/{project}/locations/{location}/autoLabelingRules/{auto_labeling_rule}`).
-   * If omitted, a unique id is generated. Immutable — changing it replaces
+   * If omitted, a unique id is generated. Immutable -- changing it replaces
    * the rule. Also used as `labelKey` when `labelKeyType` is
    * `LABEL_KEY_TYPE_CUSTOM`.
    */
   autoLabelingRuleId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the rule.
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the rule.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -56,7 +56,7 @@ export type AutoLabelingRuleProps = {
   displayName?: string;
   /**
    * Human-readable description. Auto-labeling rules have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -120,7 +120,7 @@ export type AutoLabelingRule = Resource<
  * A Contact Center AI Insights auto-labeling rule that writes a custom
  * label onto matching conversations.
  *
- * Auto-labeling rules have no labels field — Alchemy stamps ownership into
+ * Auto-labeling rules have no labels field -- Alchemy stamps ownership into
  * the description. Location and id are immutable. Display name,
  * description, active flag, and conditions update in place.
  *

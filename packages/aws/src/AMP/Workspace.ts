@@ -21,7 +21,7 @@ export class AMPWorkspaceNotReady extends Data.TaggedError("AMPWorkspaceNotReady
 export interface WorkspaceLabelSetLimit {
   /**
    * The label set the limit applies to, as exact label name/value pairs. An
-   * empty record (`{}`) is the default bucket — it applies to all time
+   * empty record (`{}`) is the default bucket -- it applies to all time
    * series that match no other label set entry.
    */
   labelSet: Record<string, string>;
@@ -34,7 +34,7 @@ export interface WorkspaceLabelSetLimit {
 
 export interface WorkspaceProps {
   /**
-   * A human-readable alias for the workspace. Aliases are not unique — many
+   * A human-readable alias for the workspace. Aliases are not unique -- many
    * workspaces can share one. Updating the alias is an in-place update.
    */
   alias?: string;
@@ -79,7 +79,7 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Amazon Managed Service for Prometheus (AMP) workspace — a logical,
+ * An Amazon Managed Service for Prometheus (AMP) workspace -- a logical,
  * fully-managed Prometheus-compatible metrics store. Metrics are ingested
  * via remote-write and queried through the workspace's Prometheus-compatible
  * endpoint.
@@ -149,7 +149,7 @@ export const WorkspaceProvider = () =>
         status: workspace.status.statusCode,
       });
 
-      /** Describe a workspace by id; typed not-found → undefined. */
+      /** Describe a workspace by id; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeWorkspace({ workspaceId })
@@ -203,7 +203,7 @@ export const WorkspaceProvider = () =>
 
       /**
        * Sync the workspace configuration (retention period + label-set
-       * limits) — diff OBSERVED configuration against desired and apply
+       * limits) -- diff OBSERVED configuration against desired and apply
        * only the delta. Skipped entirely when neither prop is set, so
        * out-of-band configuration is never clobbered.
        */
@@ -244,7 +244,7 @@ export const WorkspaceProvider = () =>
         if (!retentionDrifts && !limitsDrift) return;
 
         // A previous configuration update may still be applying
-        // (`UPDATING` rejects new updates with a conflict) — retry briefly.
+        // (`UPDATING` rejects new updates with a conflict) -- retry briefly.
         yield* amp
           .updateWorkspaceConfiguration({
             workspaceId,
@@ -297,7 +297,7 @@ export const WorkspaceProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // Encryption configuration is immutable — a change replaces.
+          // Encryption configuration is immutable -- a change replaces.
           if ((olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
@@ -323,7 +323,7 @@ export const WorkspaceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           // With no cached id (greenfield OR lost state after a crash), fall
           // back to searching by ownership tags: the id is server-assigned,
           // so tags are the only recoverable identity.
@@ -332,7 +332,7 @@ export const WorkspaceProvider = () =>
               ? yield* describe(output.workspaceId)
               : yield* findByInternalTags(internalTags);
 
-          // 2. Ensure — create if missing, then wait for ACTIVE.
+          // 2. Ensure -- create if missing, then wait for ACTIVE.
           if (workspace === undefined) {
             const created = yield* amp.createWorkspace({
               alias: news.alias,
@@ -344,7 +344,7 @@ export const WorkspaceProvider = () =>
 
           const workspaceId = workspace.workspaceId;
 
-          // 3. Sync alias — in-place update when it drifts.
+          // 3. Sync alias -- in-place update when it drifts.
           if ((news.alias ?? undefined) !== (workspace.alias ?? undefined)) {
             yield* amp.updateWorkspaceAlias({
               workspaceId,
@@ -352,7 +352,7 @@ export const WorkspaceProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAmpTags(workspace.arn, desiredTags);
 
           // 3c. Sync workspace configuration (retention + label-set limits).

@@ -90,7 +90,7 @@ export interface Gateway extends Resource<
 > {}
 
 /**
- * An AWS IoT SiteWise gateway — the ingestion point that connects
+ * An AWS IoT SiteWise gateway -- the ingestion point that connects
  * on-premises industrial data sources (e.g. OPC UA servers) to IoT
  * SiteWise, hosted on an IoT Greengrass V2 core device or a Siemens
  * Industrial Edge device.
@@ -205,12 +205,12 @@ export const GatewayProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup.
+          // Observe -- prefer the cached id; fall back to a name lookup.
           let state = output?.gatewayId
             ? yield* readGatewayById(output.gatewayId)
             : yield* findGatewayByName(name);
 
-          // Ensure — create if missing (gateway creation is synchronous).
+          // Ensure -- create if missing (gateway creation is synchronous).
           if (state === undefined) {
             const created = yield* sitewise
               .createGateway({
@@ -220,7 +220,7 @@ export const GatewayProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                // A concurrent create of the same name is a race — adopt it.
+                // A concurrent create of the same name is a race -- adopt it.
                 Effect.catchTag("ResourceAlreadyExistsException", () =>
                   Effect.gen(function* () {
                     const existing = yield* findGatewayByName(name);
@@ -245,7 +245,7 @@ export const GatewayProvider = () =>
             }
           }
 
-          // Sync — only the name is mutable.
+          // Sync -- only the name is mutable.
           if (name !== state.described.gatewayName) {
             yield* sitewise.updateGateway({
               gatewayId: state.attrs.gatewayId,
@@ -254,7 +254,7 @@ export const GatewayProvider = () =>
             yield* session.note(`Renamed gateway to ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncSiteWiseTags(state.attrs.gatewayArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.gatewayArn);

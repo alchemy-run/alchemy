@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:GetPlace` — fetch the full details of a
- * place (address, contacts, opening hours, time zone, …) by its `PlaceId`,
+ * Runtime binding for `geo-places:GetPlace` -- fetch the full details of a
+ * place (address, contacts, opening hours, time zone, ...) by its `PlaceId`,
  * as returned by Geocode, SearchText, SearchNearby, Suggest, or
  * Autocomplete.
  *

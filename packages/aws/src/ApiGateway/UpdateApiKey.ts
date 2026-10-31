@@ -6,7 +6,7 @@ export interface UpdateApiKeyRequest extends ag.UpdateApiKeyRequest {}
 
 /**
  * Runtime binding for patching an API Gateway API key
- * (`apigateway:PATCH` on `/apikeys/{id}`). Account-scoped — takes no
+ * (`apigateway:PATCH` on `/apikeys/{id}`). Account-scoped -- takes no
  * resource.
  *
  * Provide `ApiGateway.UpdateApiKeyHttp` on the Function effect to

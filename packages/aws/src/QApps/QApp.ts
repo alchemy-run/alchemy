@@ -25,7 +25,7 @@ export type AppRequiredCapability = qapps.AppRequiredCapability;
 export type CardInput = qapps.CardInput;
 
 /**
- * Definition of an Amazon Q App — the ordered cards that make up the app's
+ * Definition of an Amazon Q App -- the ordered cards that make up the app's
  * flow plus an optional initial prompt.
  */
 export interface QAppDefinition {
@@ -57,7 +57,7 @@ export interface QAppProps {
    */
   description?: string;
   /**
-   * The definition of the Q App — its cards and flow.
+   * The definition of the Q App -- its cards and flow.
    */
   appDefinition: QAppDefinition;
   /**
@@ -112,7 +112,7 @@ export interface QApp extends Resource<
 > {}
 
 /**
- * An Amazon Q App — a lightweight, purpose-built AI app defined as a flow of
+ * An Amazon Q App -- a lightweight, purpose-built AI app defined as a flow of
  * cards (text inputs, file uploads, LLM query cards, plugin cards) running
  * inside an Amazon Q Business application environment.
  *
@@ -236,8 +236,8 @@ const findQAppByTitle = Effect.fn(function* (instanceId: string, title: string) 
 /**
  * Structural subset comparison: every defined field of `desired` must be
  * present (deep-equal) in `observed`. Observed cards carry service-computed
- * fields (`dependencies`, resolved `outputSource` defaults, …) that the
- * desired card input never specifies — those must not register as drift.
+ * fields (`dependencies`, resolved `outputSource` defaults, ...) that the
+ * desired card input never specifies -- those must not register as drift.
  */
 const isSubsetOf = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
@@ -269,7 +269,7 @@ export const QAppProvider = () =>
       return {
         stables: ["appId", "appArn", "instanceId"],
         // Q Apps are keyed by their parent Q Business application environment
-        // instance — enumeration across all instances is not meaningful here.
+        // instance -- enumeration across all instances is not meaningful here.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
           const instanceId = output?.instanceId ?? olds?.instanceId;
@@ -299,13 +299,13 @@ export const QAppProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a title lookup so a
+          // Observe -- prefer the cached id; fall back to a title lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.appId
             ? yield* readQAppById(news.instanceId, output.appId)
             : yield* findQAppByTitle(news.instanceId, title);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (state === undefined) {
             const created = yield* qapps.createQApp({
               instanceId: news.instanceId,
@@ -326,7 +326,7 @@ export const QAppProvider = () =>
             }
           }
 
-          // Sync title/description/definition via UpdateQApp — only on drift.
+          // Sync title/description/definition via UpdateQApp -- only on drift.
           const observed = state.observed;
           const needsUpdate =
             title !== observed.title ||
@@ -346,7 +346,7 @@ export const QAppProvider = () =>
             yield* session.note(`Updated Q App ${title}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* qapps.untagResource({

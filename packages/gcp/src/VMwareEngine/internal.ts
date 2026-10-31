@@ -188,7 +188,7 @@ export const replaceOnIdentity = (input: {
 };
 
 /**
- * Wait on a VMware Engine long-running operation. Private clouds take 1–2 hours; networks and policies minutes.
+ * Wait on a VMware Engine long-running operation. Private clouds take 1-2 hours; networks and policies minutes.
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
@@ -305,7 +305,7 @@ export const waitUntilReady = <A extends object, E, R>(
     ),
     Effect.retry({
       while: (error) => error instanceof VmwareengineNotResolved,
-      // Private clouds and clusters take 1–2 hours to provision.
+      // Private clouds and clusters take 1-2 hours to provision.
       times: 360,
       schedule: Schedule.spaced("30 seconds"),
     }),

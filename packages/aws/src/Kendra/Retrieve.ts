@@ -13,7 +13,7 @@ export interface RetrieveRequest extends Omit<kendra.RetrieveRequest, "IndexId">
  * `kendra:Retrieve`), scoped to one {@link Index}.
  *
  * Retrieves up to 100 semantically-relevant passages (200-token excerpts)
- * from the index — the building block for retrieval-augmented generation
+ * from the index -- the building block for retrieval-augmented generation
  * (RAG) over documents synced into Kendra.
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.RetrieveHttp)`.

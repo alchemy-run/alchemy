@@ -59,7 +59,7 @@ export interface TableBucket extends Resource<
 > {}
 
 /**
- * An Amazon S3 Tables table bucket — a purpose-built bucket for storing
+ * An Amazon S3 Tables table bucket -- a purpose-built bucket for storing
  * fully-managed Apache Iceberg tables.
  *
  * A table bucket is regional and holds {@link Namespace}s, which in turn hold
@@ -113,7 +113,7 @@ const createBucketName = (id: string, props: { name?: string | undefined }) =>
 export const TableBucketProvider = () =>
   Provider.succeed(TableBucket, {
     stables: ["tableBucketArn", "name", "ownerAccountId"],
-    // Top-level resource — enumerate every table bucket in the ambient
+    // Top-level resource -- enumerate every table bucket in the ambient
     // account/region so the engine can detect drift/adoption.
     list: Effect.fn(function* () {
       const buckets = yield* s3tables.listTableBuckets.pages({}).pipe(
@@ -168,14 +168,14 @@ export const TableBucketProvider = () =>
         output?.tableBucketArn ??
         (`arn:aws:s3tables:${region}:${accountId}:bucket/${name}` as TableBucketArn);
 
-      // Observe — cloud state is authoritative. `output` is only a cache for
+      // Observe -- cloud state is authoritative. `output` is only a cache for
       // the deterministic ARN; the bucket may have been deleted out-of-band.
       let bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b) => b),
         Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
-      // Ensure — create if missing. Tolerate a concurrent create
+      // Ensure -- create if missing. Tolerate a concurrent create
       // (`ConflictException`) as a race and fall through to re-read.
       if (bucket === undefined) {
         yield* s3tables

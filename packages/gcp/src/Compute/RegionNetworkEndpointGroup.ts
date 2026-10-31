@@ -69,12 +69,12 @@ export type RegionNetworkEndpointGroupPscData = {
 export type RegionNetworkEndpointGroupProps = {
   /**
    * NEG name. If omitted, a unique RFC1035 name is generated from the
-   * stack, stage, and logical id. Immutable — changing it replaces the
+   * stack, stage, and logical id. Immutable -- changing it replaces the
    * group.
    */
   networkEndpointGroupName?: string;
   /**
-   * Region the NEG lives in. Immutable — changing it replaces the group.
+   * Region the NEG lives in. Immutable -- changing it replaces the group.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -82,8 +82,8 @@ export type RegionNetworkEndpointGroupProps = {
   /**
    * Optional description. Compute region NEGs have no labels field and no
    * update API, so Alchemy ownership (`alchemy-stack` / `alchemy-stage` /
-   * `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke.
-   * Immutable — changing the user-facing description replaces the group.
+   * `alchemy-id`) is stored in a `[alchemy ...]` prefix for `list` / nuke.
+   * Immutable -- changing the user-facing description replaces the group.
    */
   description?: string;
   /**
@@ -108,7 +108,7 @@ export type RegionNetworkEndpointGroupProps = {
    */
   subnetwork?: string;
   /**
-   * User annotations. Immutable — changing them replaces the group.
+   * User annotations. Immutable -- changing them replaces the group.
    */
   annotations?: Record<string, string>;
   /**
@@ -190,7 +190,7 @@ export type RegionNetworkEndpointGroup = Resource<
  * Regional NEGs back serverless (Cloud Run, App Engine, Cloud Functions),
  * internet (`INTERNET_IP_PORT` / `INTERNET_FQDN_PORT`), and Private Service
  * Connect load-balancing backends. The regional collection has no labels
- * field and no update API — Alchemy stamps ownership into the description
+ * field and no update API -- Alchemy stamps ownership into the description
  * so `list` / nuke can find leaked groups. Name, region, type, network,
  * serverless config, PSC target, port, annotations, and description are
  * all immutable (changing any of them replaces the group).

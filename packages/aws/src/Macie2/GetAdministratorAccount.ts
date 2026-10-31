@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetAdministratorAccount`.
  *
  * Retrieves information about the Amazon Macie administrator account for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetAdministratorAccountHttp)`.
  * ### Administrator & Invitations
  * **Example:** Read This Account's Administrator
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAdministratorAccount = yield* AWS.Macie2.GetAdministratorAccount();
  *
  * // runtime

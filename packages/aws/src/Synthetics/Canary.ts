@@ -184,7 +184,7 @@ export interface Canary extends Resource<
 > {}
 
 /**
- * A CloudWatch Synthetics canary — a scripted probe that monitors your
+ * A CloudWatch Synthetics canary -- a scripted probe that monitors your
  * endpoints and APIs on a schedule from the outside in.
  *
  * The canary script is provided inline and packaged automatically for the
@@ -438,7 +438,7 @@ export const CanaryProvider = () =>
               ),
             );
         }
-        // wait out any transitional state (STOPPING, UPDATING, ...) — a
+        // wait out any transitional state (STOPPING, UPDATING, ...) -- a
         // canary can only be deleted from READY/STOPPED/ERROR.
         yield* waitForSettled(canaryName);
         yield* synthetics.deleteCanary({ Name: canaryName, DeleteLambda: true }).pipe(
@@ -592,7 +592,7 @@ export const CanaryProvider = () =>
       }) {
         const { accountId, region } = yield* AWSEnvironment.current;
         const internalTags = yield* createInternalTags(id);
-        // Track whether we actually created the role on this pass — a fresh
+        // Track whether we actually created the role on this pass -- a fresh
         // role needs a propagation grace period before Synthetics can build
         // the backing Lambda with it.
         let created = true;
@@ -669,7 +669,7 @@ export const CanaryProvider = () =>
           });
         }
         if (created) {
-          // IAM is eventually consistent — a canary created immediately after
+          // IAM is eventually consistent -- a canary created immediately after
           // the role lands in CREATE_FAILED with "The role defined for the
           // function cannot be assumed by Lambda". Give the role time to
           // propagate; the CREATE_FAILED recreate loop below covers stragglers.
@@ -868,7 +868,7 @@ export const CanaryProvider = () =>
             runtimeVersion,
           );
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getCanaryOrUndefined(canaryName);
 
           // Self-heal a canary stuck in CREATE_FAILED (e.g. a crashed prior
@@ -884,15 +884,15 @@ export const CanaryProvider = () =>
             observed = undefined;
           }
 
-          // 2. ENSURE — create if missing; wait for the async create to
-          // settle (CREATING → READY, typically 30-90s).
+          // 2. ENSURE -- create if missing; wait for the async create to
+          // settle (CREATING -> READY, typically 30-90s).
           if (observed === undefined) {
             const code = yield* buildCode(news.script, handler, runtimeVersion);
             // Canary creation is asynchronous and validated in the backend:
             // an execution role that hasn't finished propagating surfaces as
             // CREATE_FAILED ("role ... cannot be assumed by Lambda") only
             // AFTER the create settles. A CREATE_FAILED canary can't be
-            // updated — delete it and recreate, bounded to 3 attempts.
+            // updated -- delete it and recreate, bounded to 3 attempts.
             for (let attempt = 0; ; attempt++) {
               yield* synthetics.createCanary({
                 Name: canaryName,
@@ -915,7 +915,7 @@ export const CanaryProvider = () =>
                 observed.Status?.StateReasonCode === "CREATE_FAILED"
               ) {
                 // A failed create is not persisted by the engine, so leaving
-                // the CREATE_FAILED canary behind would leak it — delete it
+                // the CREATE_FAILED canary behind would leak it -- delete it
                 // whether we retry or give up.
                 yield* session.note(
                   `canary create failed (${observed.Status?.StateReason}); deleting`,
@@ -925,7 +925,7 @@ export const CanaryProvider = () =>
                   yield* Effect.sleep("10 seconds");
                   continue;
                 }
-                // Giving up — the engine does not persist a failed create, so
+                // Giving up -- the engine does not persist a failed create, so
                 // also remove the execution role we auto-created this pass.
                 if (roleName !== undefined) {
                   yield* deleteExecutionRole(roleName);
@@ -935,7 +935,7 @@ export const CanaryProvider = () =>
               break;
             }
           } else {
-            // 3. SYNC config — the script content is not observable from the
+            // 3. SYNC config -- the script content is not observable from the
             // API (only a source-location ARN), so we use the persisted
             // configHash as a skip-hint; on adoption (no hash) or any prop
             // change we push the full desired configuration, which is
@@ -965,7 +965,7 @@ export const CanaryProvider = () =>
             }
           }
 
-          // 4. SYNC run state — start/stop to match the `start` prop.
+          // 4. SYNC run state -- start/stop to match the `start` prop.
           const desiredRunning = news.start ?? false;
           const state = observed?.Status?.State;
           if (desiredRunning && state !== "RUNNING") {
@@ -980,7 +980,7 @@ export const CanaryProvider = () =>
             observed = yield* waitForSettled(canaryName);
           }
 
-          // 5. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 5. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges (create already applied them; update cannot).
           const currentTags = filterTags(observed?.Tags);
           const { upsert, removed } = diffTags(currentTags, desiredTags);

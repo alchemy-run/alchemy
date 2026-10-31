@@ -30,14 +30,14 @@ export type ManagedZoneProps = {
    * unique RFC1035 name is generated from the stack, stage, and logical
    * id. Must be 1-63 characters, begin with a letter, end with a letter
    * or digit, and contain only lowercase letters, digits, or dashes.
-   * Immutable — changing it replaces the zone.
+   * Immutable -- changing it replaces the zone.
    */
   zoneName?: string;
   /**
    * DNS name of the zone, for instance `"example.com."`. A trailing dot
    * is added if omitted. If the prop is omitted entirely, a unique name
    * is derived from `zoneName` (`{zoneName}.alchemy-gcp-test.`).
-   * Immutable — changing it replaces the zone.
+   * Immutable -- changing it replaces the zone.
    */
   dnsName?: string;
   /**
@@ -47,7 +47,7 @@ export type ManagedZoneProps = {
   /**
    * Zone visibility. Public zones are exposed to the Internet; private
    * zones are visible only to VPC resources listed in `networks`.
-   * Immutable — changing it replaces the zone.
+   * Immutable -- changing it replaces the zone.
    * @default "public"
    */
   visibility?: ManagedZoneVisibility;
@@ -107,7 +107,7 @@ export type ManagedZone = Resource<
 /**
  * A Cloud DNS managed zone.
  *
- * Name, DNS name, and visibility are identity — changing them replaces
+ * Name, DNS name, and visibility are identity -- changing them replaces
  * the zone. Description, labels, query logging, and the private-zone
  * network list update in place.
  *

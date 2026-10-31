@@ -9,7 +9,7 @@ import type { Bucket } from "../S3/Bucket.ts";
 import { AthenaQueryFailed, Query, type QueryResult, type RunQueryRequest } from "./Query.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
-// The workgroup ARN is `arn:aws:athena:{region}:{account}:workgroup/{name}` —
+// The workgroup ARN is `arn:aws:athena:{region}:{account}:workgroup/{name}` --
 // the Glue Data Catalog ARNs share that partition/region/account.
 const glueBase = (workGroupArn: OutputType<string>) =>
   workGroupArn.pipe(
@@ -60,7 +60,7 @@ export const QueryHttp = Layer.effect(
             },
             {
               // Athena resolves table metadata through the Glue Data
-              // Catalog on the caller's behalf — reads are required for any
+              // Catalog on the caller's behalf -- reads are required for any
               // query over a Glue-backed table. Scoped to the workgroup's
               // account/region catalog (derived from its ARN).
               Effect: "Allow",
@@ -91,7 +91,7 @@ export const QueryHttp = Layer.effect(
         });
         const queryExecutionId = started.QueryExecutionId!;
 
-        // Poll GetQueryExecution until terminal — bounded to ~90s so a hung
+        // Poll GetQueryExecution until terminal -- bounded to ~90s so a hung
         // query fails fast instead of hitting the caller's timeout.
         const exec = yield* getQueryExecution({
           QueryExecutionId: queryExecutionId,

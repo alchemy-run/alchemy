@@ -41,13 +41,13 @@ export type PostureDeploymentProps = {
    * `organizations/{organization}/locations/global/postureDeployments/{postureDeployment}`).
    * If omitted, a unique id is generated from the stack, stage, and
    * logical id. Letters, digits, hyphens, and underscores; max 63
-   * characters. Immutable — changing it replaces the deployment.
+   * characters. Immutable -- changing it replaces the deployment.
    */
   postureDeploymentId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the deployment.
+   * Manager ancestor. Immutable -- changing it replaces the deployment.
    */
   organization?: string;
   /**
@@ -59,7 +59,7 @@ export type PostureDeploymentProps = {
    * Organization, folder, or project the posture is applied to
    * (`organizations/{number}`, `folders/{number}`, or
    * `projects/{number}`). Defaults to the stack project. At most one
-   * posture can be deployed to each target. Immutable — changing it
+   * posture can be deployed to each target. Immutable -- changing it
    * replaces the deployment.
    */
   targetResource?: string;
@@ -77,7 +77,7 @@ export type PostureDeploymentProps = {
    */
   description?: string;
   /**
-   * User annotations. Deployments have no labels field — Alchemy
+   * User annotations. Deployments have no labels field -- Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is
    * stored here so `list` / `pnpm nuke:gcp` can find owned deployments.
    * Annotations are set at create time.
@@ -111,7 +111,7 @@ export type PostureDeployment = Resource<
     description: string | undefined;
     /** User annotations (Alchemy ownership keys stripped). */
     annotations: Record<string, string>;
-    /** Deployment state (`CREATING`, `ACTIVE`, `CREATE_FAILED`, …). */
+    /** Deployment state (`CREATING`, `ACTIVE`, `CREATE_FAILED`, ...). */
     state: string | undefined;
     /** Failure message when the deployment is in a failed state. */
     failureMessage: string | undefined;
@@ -136,7 +136,7 @@ export type PostureDeployment = Resource<
  * Deployments apply a posture revision to one organization, folder, or
  * project. The parent is always the organization, even when the target
  * is a folder or project. At most one posture can be deployed to each
- * target. Deployments have no labels field — Alchemy stamps ownership
+ * target. Deployments have no labels field -- Alchemy stamps ownership
  * into `annotations`. `postureDeploymentId`, `organization`, and
  * `targetResource` are identity. `postureId` and `postureRevisionId`
  * update in place.

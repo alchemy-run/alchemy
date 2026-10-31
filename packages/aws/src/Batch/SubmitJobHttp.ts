@@ -13,7 +13,7 @@ export const SubmitJobHttp = Layer.effect(
     const submitJob = yield* AWSBindings.withCredentials(batch.submitJob);
 
     return Effect.fn(function* (queue: JobQueue, jobDefinition: JobDefinition) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const JobQueueArn = yield* queue.jobQueueArn;
       const JobDefinitionArn = yield* jobDefinition.jobDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {

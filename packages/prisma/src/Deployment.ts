@@ -108,7 +108,7 @@ export interface DeploymentProps {
   /**
    * Opaque key/value map; when any resolved value changes, a replacement
    * deployment is planned (create-before-delete) even if the artifact is
-   * unchanged — the same contract as `AWS.ApiGateway.Deployment.triggers`.
+   * unchanged -- the same contract as `AWS.ApiGateway.Deployment.triggers`.
    * Because values here may be secrets, they are folded into the deployment
    * fingerprint as a salted hash and persisted `Redacted` rather than
    * compared as plaintext; plaintext never lands in state.
@@ -121,9 +121,9 @@ export interface DeploymentProps {
    * Members may be wrapped in `Redacted.make(secret)`; they are unwrapped only
    * to compute the fingerprint.
    *
-   * If the value cannot be resolved while the deploy is being planned —
+   * If the value cannot be resolved while the deploy is being planned --
    * because it reads an attribute of another resource that the same deploy is
-   * changing — the diff cannot prove the fingerprint is unchanged, and the
+   * changing -- the diff cannot prove the fingerprint is unchanged, and the
    * engine offers no later opportunity to plan a replacement. The deployment
    * is then replaced conservatively, but only once a fingerprint has already
    * been recorded: adding `triggers` to an existing deployment records its
@@ -429,7 +429,7 @@ const persistedTriggersHash = (value: Redacted.Redacted<string> | string | undef
  * Whether the declared `triggers` inputs differ from the fingerprint the
  * running deployment was created for.
  *
- * Only `diff` can plan a replacement — `reconcile` has no way to ask for one —
+ * Only `diff` can plan a replacement -- `reconcile` has no way to ask for one --
  * so an input that is still unresolved while planning is treated as changed.
  * That is only reached when another resource in the same deploy owns the
  * value and is itself changing, in which case the value most likely changed

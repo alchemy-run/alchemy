@@ -101,7 +101,7 @@ export interface AutoScalingGroupProps {
    */
   terminationPolicies?: string[];
   /**
-   * Instance attributes (vCPUs, memory, burstable, generations, …) to launch
+   * Instance attributes (vCPUs, memory, burstable, generations, ...) to launch
    * by instead of the launch template's instance type. Auto Scaling picks
    * every instance type that matches.
    *
@@ -261,7 +261,7 @@ export interface AutoScalingGroup extends Resource<
  * ```
  *
  * ### Choosing Instance Types by Attributes
- * **Example:** Launch any burstable type with 2 vCPUs and 4–8 GiB
+ * **Example:** Launch any burstable type with 2 vCPUs and 4-8 GiB
  * ```typescript
  * const group = yield* AutoScalingGroup("Fleet", {
  *   launchTemplate: template,
@@ -330,8 +330,8 @@ export const AutoScalingGroupProvider = () =>
 
       const toLaunchTemplateSpec = (input: AutoScalingGroupProps["launchTemplate"]) => {
         // A whole-resource `launchTemplate: template` resolves to the
-        // LaunchTemplate's bare Attributes before reaching the provider —
-        // the resource `Type` marker does not survive resolution — so narrow
+        // LaunchTemplate's bare Attributes before reaching the provider --
+        // the resource `Type` marker does not survive resolution -- so narrow
         // on the attributes shape (`launchTemplateArn` exists only on
         // attributes, never on a LaunchTemplateReference). Attributes carry
         // BOTH id and name, and the API rejects a spec with both, so send
@@ -532,12 +532,12 @@ export const AutoScalingGroupProvider = () =>
           const healthCheckType =
             news.healthCheckType ?? (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
-          // Observe — fetch live state. `describeAutoScalingGroups` returns
+          // Observe -- fetch live state. `describeAutoScalingGroups` returns
           // an empty list when the ASG is missing; we never trust `output`
           // alone since the ASG may have been deleted out of band.
           let existing = yield* describeGroup(autoScalingGroupName);
 
-          // Ensure — create the ASG if missing. `createAutoScalingGroup`
+          // Ensure -- create the ASG if missing. `createAutoScalingGroup`
           // raises `AlreadyExistsFault` on a race; we fall through to the
           // sync path on that case.
           if (!existing) {
@@ -579,7 +579,7 @@ export const AutoScalingGroupProvider = () =>
             );
           }
 
-          // Sync core ASG configuration — `updateAutoScalingGroup`
+          // Sync core ASG configuration -- `updateAutoScalingGroup`
           // overwrites min/max/desired/template/subnets/health-check
           // settings in one call, so we issue it unconditionally
           // (idempotent for matching values). The zone distribution is
@@ -607,7 +607,7 @@ export const AutoScalingGroupProvider = () =>
             } as any)
             .pipe(retryInstanceProfilePropagation);
 
-          // Sync target groups — observed cloud attachments vs desired.
+          // Sync target groups -- observed cloud attachments vs desired.
           const observedAttrs = toAttributes(existing);
           yield* syncTargetGroups({
             autoScalingGroupName,
@@ -615,7 +615,7 @@ export const AutoScalingGroupProvider = () =>
             newTargetGroupArns: targetGroupArns,
           });
 
-          // Sync tags — observed cloud tags vs desired. Adoption brings
+          // Sync tags -- observed cloud tags vs desired. Adoption brings
           // tags through `existing.Tags`; we converge regardless of what
           // was there before.
           yield* syncTags({

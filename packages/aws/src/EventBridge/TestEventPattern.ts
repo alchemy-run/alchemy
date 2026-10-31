@@ -8,16 +8,16 @@ export interface TestEventPatternRequest extends eventbridge.TestEventPatternReq
  * Tests whether an event matches an event pattern
  * (`events:TestEventPattern`).
  *
- * An account-level operation — bind it with no resource argument. Useful for
+ * An account-level operation -- bind it with no resource argument. Useful for
  * validating patterns before creating a `Rule`. Provide the
  * `TestEventPatternHttp` layer on the Function to satisfy the binding.
  * ### Testing Patterns
  * **Example:** Test an Event Against a Pattern
  * ```typescript
- * // init — no resource argument (provide AWS.EventBridge.TestEventPatternHttp on the Function)
+ * // init -- no resource argument (provide AWS.EventBridge.TestEventPatternHttp on the Function)
  * const testEventPattern = yield* AWS.EventBridge.TestEventPattern();
  *
- * // runtime — check whether the event would match
+ * // runtime -- check whether the event would match
  * const { Result } = yield* testEventPattern({
  *   EventPattern: JSON.stringify({ source: ["my.app"] }),
  *   Event: JSON.stringify({

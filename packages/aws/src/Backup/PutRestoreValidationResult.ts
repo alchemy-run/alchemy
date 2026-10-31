@@ -10,7 +10,7 @@ import type * as Effect from "effect/Effect";
  * runtime use of AWS Backup: restore testing invokes a validation Lambda
  * after a restore-test job completes; the Lambda checks the restored
  * resource (fetch its metadata with `GetRestoreJobMetadata`, query the
- * restored table/volume, …) and posts `SUCCESSFUL` or `FAILED` back to the
+ * restored table/volume, ...) and posts `SUCCESSFUL` or `FAILED` back to the
  * restore job. Provide the implementation with
  * `Effect.provide(AWS.Backup.PutRestoreValidationResultHttp)`.
  * ### Restore Testing Validation

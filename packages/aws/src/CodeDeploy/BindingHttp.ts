@@ -7,8 +7,8 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 /**
  * Shared scaffolding for AWS CodeDeploy HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for
  * name-injecting operations) the injected `applicationName` /
  * `deploymentGroupName` is boilerplate.
@@ -16,7 +16,7 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
  * CodeDeploy authorizes deployment-addressed operations (get/stop/continue a
  * deployment, lifecycle-hook results, deployment targets) against the
  * *deployment group* the deployment belongs to, and revision operations
- * against the *application* ARN — so every builder grants on the bound
+ * against the *application* ARN -- so every builder grants on the bound
  * resource's ARN.
  */
 
@@ -47,7 +47,7 @@ export const makeCodeDeployGroupNameHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {

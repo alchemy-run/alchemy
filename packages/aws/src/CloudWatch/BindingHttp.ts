@@ -7,23 +7,23 @@ import { sortByLogicalId } from "./common.ts";
 /**
  * Shared scaffolding for CloudWatch HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in
- * this service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in
+ * this service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over
  * one of the three builders below. Everything except the operation, the IAM
  * action, and the injected identifier(s) is boilerplate:
  *
- * - {@link makeCloudWatchAccountHttpBinding} — account-level operations
+ * - {@link makeCloudWatchAccountHttpBinding} -- account-level operations
  *   (`PutMetricData`, `GetMetricData`, `List*`, account-wide `Describe*`).
  *   CloudWatch metric-data and account-wide describe/list actions do not
  *   support resource-level permissions, so the deploy-time half grants
  *   `actions` on `*`.
- * - {@link makeCloudWatchResourceHttpBinding} — operations scoped to one
- *   bound resource (`GetDashboard`, `SetAlarmState`, `GetMetricStream`, …).
+ * - {@link makeCloudWatchResourceHttpBinding} -- operations scoped to one
+ *   bound resource (`GetDashboard`, `SetAlarmState`, `GetMetricStream`, ...).
  *   The runtime callable injects the resource's identifier under
  *   `requestKey`; the deploy-time half grants `actions` on the resource ARN.
- * - {@link makeCloudWatchResourceSetHttpBinding} — batch toggles over a
+ * - {@link makeCloudWatchResourceSetHttpBinding} -- batch toggles over a
  *   variadic set of bound resources (`EnableAlarmActions`,
- *   `DisableInsightRules`, `StartMetricStreams`, …). The runtime callable
+ *   `DisableInsightRules`, `StartMetricStreams`, ...). The runtime callable
  *   takes no request and injects the sorted resource names under `namesKey`;
  *   the deploy-time half grants `action` on every resource ARN.
  *

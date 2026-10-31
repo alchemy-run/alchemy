@@ -223,26 +223,26 @@ export type LoadBalancerTarget =
 
 export interface LoadBalancerProps {
   /**
-   * Name of the Load Balancer. Must be unique per project, 1–64 characters.
+   * Name of the Load Balancer. Must be unique per project, 1-64 characters.
    * If omitted, a unique name is generated from the stack, stage and
    * logical ID.
    */
   name?: string;
   /**
-   * Load Balancer type (`lb11`, `lb21`, `lb31`, …). Changing to a larger
+   * Load Balancer type (`lb11`, `lb21`, `lb31`, ...). Changing to a larger
    * type updates in place; Hetzner cannot downgrade a type.
    * @default "lb11"
    */
   loadBalancerType?: string;
   /**
-   * Location to create the Load Balancer in (`nbg1`, `fsn1`, `hel1`, …).
+   * Location to create the Load Balancer in (`nbg1`, `fsn1`, `hel1`, ...).
    * Mutually exclusive with `networkZone`. Cannot be changed after
-   * creation — changing it replaces the Load Balancer.
+   * creation -- changing it replaces the Load Balancer.
    * @default "nbg1"
    */
   location?: string;
   /**
-   * Network zone (`eu-central`, `us-east`, …). Mutually exclusive with
+   * Network zone (`eu-central`, `us-east`, ...). Mutually exclusive with
    * `location`. Cannot be changed after creation.
    */
   networkZone?: string;
@@ -339,15 +339,15 @@ export type LoadBalancer = Resource<
     id: number;
     /** Load Balancer name (unique per project). */
     name: string;
-    /** Load Balancer type name (`lb11`, …). */
+    /** Load Balancer type name (`lb11`, ...). */
     loadBalancerType: string;
     /** Numeric Load Balancer type ID. */
     loadBalancerTypeId: number;
-    /** Location name (`nbg1`, `fsn1`, …). */
+    /** Location name (`nbg1`, `fsn1`, ...). */
     location: string;
     /** Numeric location ID. */
     locationId: number;
-    /** Network zone (`eu-central`, …). */
+    /** Network zone (`eu-central`, ...). */
     networkZone: string;
     /** Balancing algorithm. */
     algorithm: LoadBalancerAlgorithm;
@@ -1370,7 +1370,7 @@ export const LoadBalancerProvider = () =>
       const networks = desiredNetworkIds(news.networks);
 
       // Observe by id then desired name only. Do not fall back to
-      // ownership labels — a create-first replacement still has the old
+      // ownership labels -- a create-first replacement still has the old
       // generation live under the same logical id.
       let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {

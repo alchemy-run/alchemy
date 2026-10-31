@@ -29,7 +29,7 @@ export type AppsToolsetProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * toolset.
    */
   app: string;
@@ -39,7 +39,7 @@ export type AppsToolsetProps = {
    */
   location?: string;
   /**
-   * Toolset id. If omitted, a unique name is generated. Immutable —
+   * Toolset id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the toolset.
    */
   toolsetId?: string;
@@ -110,7 +110,7 @@ export type AppsToolset = Resource<
 >;
 
 /**
- * A Customer Engagement Suite toolset — a dynamically managed group of
+ * A Customer Engagement Suite toolset -- a dynamically managed group of
  * tools defined by OpenAPI, MCP, or Integration Connectors.
  *
  * Toolsets have no labels field, and the description reaches the model,

@@ -8,15 +8,15 @@ import { type Task } from "./Task.ts";
 /**
  * Shared scaffolding for AWS ECS HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation, the IAM action list, and
  * the IAM resource scope is boilerplate.
  *
  * ECS scopes cluster-addressed actions against sub-resource ARNs derived
- * from the cluster ARN — `arn:…:task/{clusterName}/*`,
- * `arn:…:service/{clusterName}/*`, `arn:…:container-instance/{clusterName}/*`
- * — or, for list actions with no usable resource type on Fargate, against
+ * from the cluster ARN -- `arn:...:task/{clusterName}/*`,
+ * `arn:...:service/{clusterName}/*`, `arn:...:container-instance/{clusterName}/*`
+ * -- or, for list actions with no usable resource type on Fargate, against
  * `*` conditioned on the bound cluster.
  */
 
@@ -50,7 +50,7 @@ const clusterIamResources = (cluster: Cluster, resources: readonly EcsClusterIam
  * carries a `cluster` field: the runtime callable injects the bound
  * {@link Cluster}'s ARN and the deploy-time half grants `actions` on the
  * requested `resources` scopes (or on `*` conditioned on the bound cluster
- * when `resources` is `"cluster-condition"` — for list actions that have no
+ * when `resources` is `"cluster-condition"` -- for list actions that have no
  * usable resource type on Fargate).
  */
 export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, R>(options: {
@@ -103,7 +103,7 @@ export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, 
 /**
  * Strip the revision suffix from a task-definition ARN. The bound
  * `taskDefinitionArn` attribute pins whatever revision existed when the
- * HOST was reconciled — for a circularly-bound task that is the pre-create
+ * HOST was reconciled -- for a circularly-bound task that is the pre-create
  * STUB revision, not the real one registered afterwards. Launching by
  * family makes ECS resolve the latest ACTIVE revision, which is the
  * binding's intended semantics (like invoking a Lambda by name).

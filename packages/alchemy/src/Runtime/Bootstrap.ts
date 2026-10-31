@@ -2,7 +2,7 @@
  * Shared core of the generated process bootstraps (ECS, App Runner, Batch,
  * EC2, Cloudflare Containers, MicroVM, Docker, Fly, Hetzner, Prisma).
  *
- * Each bundler used to emit its bootstrap as an inline TypeScript string —
+ * Each bundler used to emit its bootstrap as an inline TypeScript string --
  * a virtual module with no location on disk, whose imports mixed alchemy's
  * own dependencies (`@distilled.cloud/*`, `@effect/platform-*`) with the
  * consumer's (`alchemy`, `effect`). No directory can resolve both under an
@@ -11,7 +11,7 @@
  *
  * Now the generated entry is a three-line shim that imports ONLY
  * the provider's `Bootstrap` module (e.g. `@alchemy.run/aws/Bootstrap/Ecs`,
- * resolvable from any consumer — the provider is its direct dependency) plus
+ * resolvable from any consumer -- the provider is its direct dependency) plus
  * the user's `main`. Everything
  * alchemy needs lives in these real modules, whose imports resolve by the
  * ordinary rule: from the file that wrote them.

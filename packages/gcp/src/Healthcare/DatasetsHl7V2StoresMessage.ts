@@ -39,17 +39,17 @@ export type DatasetsHl7V2StoresMessageProps = {
   /**
    * Parent HL7v2 store resource name
    * `projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{store}`.
-   * Immutable — changing it replaces the message.
+   * Immutable -- changing it replaces the message.
    */
   parent: string;
   /**
    * Raw HL7v2 message text. Segment terminator is CR. Alchemy
-   * base64-encodes this for the Healthcare API. Immutable — changing it
+   * base64-encodes this for the Healthcare API. Immutable -- changing it
    * replaces the message.
    */
   data: string;
   /**
-   * Server-assigned message id. Set on create. Immutable — changing it
+   * Server-assigned message id. Set on create. Immutable -- changing it
    * replaces the message.
    */
   messageId?: string;
@@ -99,7 +99,7 @@ export type DatasetsHl7V2StoresMessage = Resource<
  * An HL7v2 message stored in a Cloud Healthcare HL7v2 store.
  *
  * Message ids are server-assigned. Parent store and raw `data` are
- * identity — changing either replaces the message. Labels update in
+ * identity -- changing either replaces the message. Labels update in
  * place (`updateMask=labels`).
  *
  * ### Creating a Message

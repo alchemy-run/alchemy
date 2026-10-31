@@ -17,14 +17,14 @@ export interface UserSchemaProps {
   /**
    * Zone the schema is uploaded to.
    *
-   * Immutable — moving a schema between zones triggers a replacement.
+   * Immutable -- moving a schema between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * Name of the schema. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
    *
-   * Immutable — there is no rename API, so changing the name triggers a
+   * Immutable -- there is no rename API, so changing the name triggers a
    * replacement.
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -32,7 +32,7 @@ export interface UserSchemaProps {
   /**
    * The OpenAPI v3 schema source (JSON or YAML) to upload.
    *
-   * Immutable — Cloudflare offers no API to update an uploaded schema's
+   * Immutable -- Cloudflare offers no API to update an uploaded schema's
    * contents, so changing the source triggers a replacement.
    */
   schema: string;
@@ -66,7 +66,7 @@ export interface UserSchemaAttributes {
 export type UserSchema = Resource<TypeId, UserSchemaProps, UserSchemaAttributes, never, Providers>;
 
 /**
- * A Cloudflare API Shield user schema — an OpenAPI v3 document uploaded to
+ * A Cloudflare API Shield user schema -- an OpenAPI v3 document uploaded to
  * a zone for (legacy "classic") schema validation of API traffic.
  *
  * An uploaded schema's contents cannot be modified, so changing the
@@ -121,7 +121,7 @@ export const UserSchemaProvider = () =>
       const o = olds as UserSchemaProps | undefined;
       const n = news as UserSchemaProps;
       if (o === undefined) return undefined;
-      // The name is part of the schema's identity — compare the resolved
+      // The name is part of the schema's identity -- compare the resolved
       // physical names (an omitted name resolves deterministically).
       const oldName = output?.name ?? (yield* createSchemaName(id, o.name));
       // Auto-generated names are engine-owned: the deployed name stays
@@ -170,12 +170,12 @@ export const UserSchemaProvider = () =>
       const name = output?.name ?? (yield* createSchemaName(id, news.name));
       const desiredEnabled = news.validationEnabled ?? false;
 
-      // 1. Observe — the schema id cached on `output` is a hint, not a
+      // 1. Observe -- the schema id cached on `output` is a hint, not a
       //    guarantee: a missing schema falls through to ensure.
       let observed = output?.schemaId ? yield* getSchema(zoneId, output.schemaId) : undefined;
 
       // An adopted (or drifted) schema whose stored source no longer
-      // matches the desired one cannot be updated in place — converge by
+      // matches the desired one cannot be updated in place -- converge by
       // recreating it.
       if (observed && (observed.source ?? "") !== news.schema) {
         yield* apiGateway
@@ -184,7 +184,7 @@ export const UserSchemaProvider = () =>
         observed = undefined;
       }
 
-      // 2. Ensure — upload when missing. Names are not unique, so there is
+      // 2. Ensure -- upload when missing. Names are not unique, so there is
       //    no AlreadyExists race to tolerate.
       if (!observed) {
         const file = yield* Effect.sync(() => new File([news.schema], `${name}.json`));
@@ -198,7 +198,7 @@ export const UserSchemaProvider = () =>
         observed = created.schema;
       }
 
-      // 3. Sync — enabling validation is the only in-place update (the
+      // 3. Sync -- enabling validation is the only in-place update (the
       //    disable direction is a replacement, handled by diff). Skip the
       //    patch entirely on a no-op.
       if (desiredEnabled && !(observed.validationEnabled ?? false)) {
@@ -207,7 +207,7 @@ export const UserSchemaProvider = () =>
           schemaId: observed.schemaId,
           validationEnabled: true,
         });
-        // The patch response omits the source — keep the observed one.
+        // The patch response omits the source -- keep the observed one.
         observed = { ...patched, source: observed.source };
       }
 
@@ -243,7 +243,7 @@ export const UserSchemaProvider = () =>
             // route; skip them rather than failing the whole enumeration.
             Effect.catchTags({
               Forbidden: () => Effect.succeed([] as UserSchemaAttributes[]),
-              // A zone purged (deleted) out-of-band mid-enumeration — it was in
+              // A zone purged (deleted) out-of-band mid-enumeration -- it was in
               // the zone list but no longer exists; drop it.
               ZonePurged: () => Effect.succeed([] as UserSchemaAttributes[]),
             }),
@@ -271,7 +271,7 @@ const getSchema = (zoneId: string, schemaId: string) =>
 
 /**
  * Find a schema by name. Cloudflare does not enforce name uniqueness, so
- * the first match wins — cold recovery only ever races with itself here
+ * the first match wins -- cold recovery only ever races with itself here
  * because generated names are deterministic per logical ID.
  */
 const findByName = (zoneId: string, name: string) =>

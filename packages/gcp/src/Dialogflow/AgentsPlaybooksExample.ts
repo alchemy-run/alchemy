@@ -62,12 +62,12 @@ export type AgentsPlaybooksExampleProps = {
   /**
    * Parent playbook resource name
    * `projects/{project}/locations/{location}/agents/{agent}/playbooks/{playbook}`.
-   * Immutable — changing it replaces the example.
+   * Immutable -- changing it replaces the example.
    */
   playbook: string;
   /**
    * Example id (the `{example}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the example.
+   * Immutable -- changing it replaces the example.
    */
   exampleId?: string;
   /**
@@ -87,7 +87,7 @@ export type AgentsPlaybooksExampleProps = {
   actions?: ExampleAction[];
   /** Human-readable description. */
   description?: string;
-  /** Language code (`en`, `en-US`, …). */
+  /** Language code (`en`, `en-US`, ...). */
   languageCode?: string;
   /** Preceding conversation summary used as playbook input. */
   playbookInput?: { precedingConversationSummary?: string };
@@ -133,7 +133,7 @@ export type AgentsPlaybooksExample = Resource<
 /**
  * A Dialogflow CX playbook example (few-shot conversation).
  *
- * Examples have no labels field — Alchemy stamps ownership into
+ * Examples have no labels field -- Alchemy stamps ownership into
  * `displayName` and `description` so `list` / nuke can find them. Parent
  * playbook and id are immutable. Display name, conversation state,
  * actions, and description update in place.

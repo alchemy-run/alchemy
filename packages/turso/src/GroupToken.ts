@@ -79,7 +79,7 @@ export const GroupTokenProvider = () =>
         reconcile: Effect.fn(function* ({ news, olds, output }) {
           const org = output?.organization ?? (yield* organization);
 
-          // Observe — the token is bound to the group's UUID, so a group
+          // Observe -- the token is bound to the group's UUID, so a group
           // replaced under the same name invalidates it.
           const { group } = yield* turso.getGroup({
             organizationSlug: org,
@@ -95,7 +95,7 @@ export const GroupTokenProvider = () =>
             return output;
           }
 
-          // Ensure — mint.
+          // Ensure -- mint.
           const authorization = news.authorization ?? "full-access";
           const { jwt } = yield* turso.createGroupToken({
             organizationSlug: org,

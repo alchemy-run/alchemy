@@ -7,7 +7,7 @@ import type { Revision } from "./Revision.ts";
  * Runtime binding for `dataexchange:RevokeRevision`.
  *
  * Revokes the bound revision from subscribers with a required
- * revocation comment — the remediation path when bad or sensitive data
+ * revocation comment -- the remediation path when bad or sensitive data
  * was published. The data set and revision ids are injected from the
  * binding.
  * Provide the implementation with

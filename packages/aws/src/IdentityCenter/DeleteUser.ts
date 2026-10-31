@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `DeleteUser` operation (IAM action
  * `identitystore:DeleteUser`), scoped to one {@link Instance}.
  *
- * Deletes a user from the bound instance's identity store — the deprovisioning half of a user-sync Lambda. The instance's
+ * Deletes a user from the bound instance's identity store -- the deprovisioning half of a user-sync Lambda. The instance's
  * `IdentityStoreId` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.DeleteUserHttp)`.
  * ### Managing Users
  * **Example:** Deprovision a User
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const deleteUser = yield* AWS.IdentityCenter.DeleteUser(instance);
  *
  * // runtime

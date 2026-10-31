@@ -7,7 +7,7 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
 /**
  * Shared HTTP scaffolding for the DMS runtime bindings.
  *
- * Every capability follows the same shape — resolve the distilled operation,
+ * Every capability follows the same shape -- resolve the distilled operation,
  * register an IAM policy statement on the binding host, and return a runtime
  * callable. The only variation is the operation, the IAM action(s), and the
  * identifier(s) injected from the bound resource: an {@link Endpoint}'s ARN,
@@ -127,7 +127,7 @@ export const makeDmsInstanceScopedHttpBinding = <
 
 /**
  * Build the impl Effect for a connection-shaped operation that targets a
- * (replication instance, endpoint) pair — `TestConnection` and
+ * (replication instance, endpoint) pair -- `TestConnection` and
  * `RefreshSchemas`. Both ARNs are injected from the bound resources and the
  * deploy-time half grants `actions` on both ARNs (these actions support
  * resource-level IAM on both resource types).

@@ -25,9 +25,9 @@ export type TargetTcpProxyProps = {
    */
   targetTcpProxyName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute TargetTcpProxy has
-   * no labels field). The API cannot update this field — changing it
+   * no labels field). The API cannot update this field -- changing it
    * replaces the resource.
    */
   description?: string;
@@ -95,7 +95,7 @@ export type TargetTcpProxy = Resource<
  * at a backend service. They are a component of Proxy Network Load
  * Balancers (classic and global external). This resource maps to the
  * global `targetTcpProxies` collection (`regionTargetTcpProxies` is a
- * separate resource). Compute TargetTcpProxy has no labels field —
+ * separate resource). Compute TargetTcpProxy has no labels field --
  * Alchemy ownership is stored in the description so nuke can find leaked
  * proxies.
  *

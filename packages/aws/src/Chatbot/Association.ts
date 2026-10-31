@@ -28,7 +28,7 @@ export interface AssociationProps {
    */
   chatConfiguration: string;
   /**
-   * ARN of the resource to associate with the channel configuration — a
+   * ARN of the resource to associate with the channel configuration -- a
    * Chatbot custom action ARN (e.g.
    * `arn:aws:chatbot::123456789012:custom-action/describe-alarm`).
    *
@@ -56,7 +56,7 @@ export interface Association extends Resource<
 
 /**
  * An AWS Chatbot (Amazon Q Developer in chat applications) association that
- * links a resource — a {@link CustomAction} — to a Slack or Microsoft Teams
+ * links a resource -- a {@link CustomAction} -- to a Slack or Microsoft Teams
  * channel configuration so the action is available in that channel.
  *
  * ### Associating Custom Actions
@@ -90,7 +90,7 @@ export const AssociationProvider = () =>
     Effect.gen(function* () {
       // listAssociations is a filter over a single configuration; an unknown
       // configuration ARN yields an empty list (verified live), while a
-      // malformed ARN surfaces the typed InvalidRequestException — both are
+      // malformed ARN surfaces the typed InvalidRequestException -- both are
       // treated as "no association".
       const observeAssociation = Effect.fn(function* (chatConfiguration: string, resource: string) {
         return yield* chatbot.listAssociations.items({ ChatConfiguration: chatConfiguration }).pipe(
@@ -110,7 +110,7 @@ export const AssociationProvider = () =>
 
       return Association.Provider.of({
         stables: ["chatConfigurationArn", "resourceArn"],
-        // The configuration/resource ARN pair IS the association's identity —
+        // The configuration/resource ARN pair IS the association's identity --
         // changing either side replaces it. There is nothing to update.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -133,13 +133,13 @@ export const AssociationProvider = () =>
           // configuration/resource pair is the ownership signal.
           return toAttributes(chatConfiguration, resource);
         }),
-        // Existence-only resource: observe → if missing, associate. There is
+        // Existence-only resource: observe -> if missing, associate. There is
         // no mutable aspect to sync.
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeAssociation(news.chatConfiguration, news.resource);
 
-          // 2. ENSURE — associate when missing. The API is an idempotent
+          // 2. ENSURE -- associate when missing. The API is an idempotent
           //    upsert, so a concurrent associate converges naturally.
           if (observed === undefined) {
             yield* chatbot
@@ -149,7 +149,7 @@ export const AssociationProvider = () =>
               })
               .pipe(inChatbotRegion);
 
-            // 3. RETURN — bounded wait until the association is visible.
+            // 3. RETURN -- bounded wait until the association is visible.
             yield* observeAssociation(news.chatConfiguration, news.resource).pipe(
               Effect.flatMap((listing) =>
                 listing !== undefined
@@ -172,7 +172,7 @@ export const AssociationProvider = () =>
           return toAttributes(news.chatConfiguration, news.resource);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Observe before delete — disassociating a pair that is already
+          // Observe before delete -- disassociating a pair that is already
           // gone (or whose configuration was deleted) is not an error.
           const observed = yield* observeAssociation(
             output.chatConfigurationArn,
@@ -186,7 +186,7 @@ export const AssociationProvider = () =>
             })
             .pipe(
               inChatbotRegion,
-              // Idempotent delete — a concurrently removed association or
+              // Idempotent delete -- a concurrently removed association or
               // configuration is not an error. A configuration deleted out
               // from under the association surfaces the typed
               // ResourceNotFoundException ("Channel Arn ... does not

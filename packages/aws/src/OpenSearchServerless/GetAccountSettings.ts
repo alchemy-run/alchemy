@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `aoss:GetAccountSettings`; the action does not support resource-level
  * scoping, so the grant is on `*`).
  *
- * Reads the account-level OpenSearch Serverless settings — the OCU capacity
+ * Reads the account-level OpenSearch Serverless settings -- the OCU capacity
  * limits that cap the account's spend. Provide the implementation with
  * `Effect.provide(AWS.OpenSearchServerless.GetAccountSettingsHttp)`.
  * ### Account Settings

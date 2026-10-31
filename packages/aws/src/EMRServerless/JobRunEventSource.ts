@@ -68,7 +68,7 @@ export interface JobRunEventSourceProps extends EventRouteProps {
  * this subscribes the host Function to those events so it can alert on
  * failed jobs or chain follow-up work when a job succeeds.
  *
- * EMR Serverless publishes to EventBridge automatically — no additional
+ * EMR Serverless publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

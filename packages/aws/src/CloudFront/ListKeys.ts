@@ -14,7 +14,7 @@ export interface ListKeysRequest extends Omit<kvs.ListKeysRequest, "KvsARN"> {}
  * ### Reading KeyValueStore Data
  * **Example:** List Keys
  * ```typescript
- * // init — bind the operation to the store
+ * // init -- bind the operation to the store
  * const listKeys = yield* CloudFront.ListKeys(store);
  *
  * // runtime

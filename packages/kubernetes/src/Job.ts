@@ -116,7 +116,7 @@ export interface JobPropsBase extends PlatformProps {
   architecture?: "amd64" | "arm64";
   /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
-   * template (objects merge recursively; arrays and primitives replace) —
+   * template (objects merge recursively; arrays and primitives replace) --
    * a literal object in the shape of `PodTemplateSpec`, e.g.
    * `{ spec: { tolerations: [...], nodeSelector: {...} } }`.
    */
@@ -248,8 +248,8 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * or an Effect program.
  *
  * `Job` provisions a Kubernetes `Job` (or `CronJob` when `schedule` is
- * set) via server-side apply and a ServiceAccount, plus — through the
- * target cluster's platform adapter — workload identity and a container
+ * set) via server-side apply and a ServiceAccount, plus -- through the
+ * target cluster's platform adapter -- workload identity and a container
  * image from exactly one of three sources flat on props: `main` (bundle an
  * inline Effect program whose impl returns `{ run }`), `context` (build
  * your own Dockerfile), or `image` (a pre-built registry reference).
@@ -259,9 +259,9 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * targets, bindings attach IAM policy statements to a generated
  * pod-identity role; on `GCP.Container.Cluster` targets, GCP bindings grant
  * their IAM roles to the Kubernetes ServiceAccount's Workload Identity
- * Federation principal — exactly like `Kubernetes.Deployment`.
+ * Federation principal -- exactly like `Kubernetes.Deployment`.
  * ### Creating a Job
- * **Example:** Remote image (external — no Effect runtime in the container)
+ * **Example:** Remote image (external -- no Effect runtime in the container)
  * ```typescript
  * const migrate = yield* Kubernetes.Job("DbMigrate", {
  *   cluster,
@@ -443,7 +443,7 @@ export const JobProvider = () =>
       return {
         stables: ["connection", "namespace", "serviceAccountName", "identity", "registry"],
         // A Job's identity spans in-cluster Kubernetes objects plus
-        // adapter-owned cloud resources — no single enumeration
+        // adapter-owned cloud resources -- no single enumeration
         // reconstructs the composite, so enumeration is empty; `read`
         // refreshes known instances.
         list: () => Effect.succeed([] as Job["Attributes"][]),
@@ -623,7 +623,7 @@ export const JobProvider = () =>
           // CronJobs are mutable and keep the stable base name.
           // Kubernetes rejects Job names over 63 characters (the API
           // stamps the name into the batch.kubernetes.io/job-name pod
-          // label, and label values cap at 63) — truncate the base so the
+          // label, and label values cap at 63) -- truncate the base so the
           // content-address suffix always fits.
           const jobName = news.schedule
             ? baseName.slice(0, 52).replace(/-+$/, "")

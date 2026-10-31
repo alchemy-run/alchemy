@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:DeleteInvitations`.
  *
  * Deletes Security Hub membership invitations from the specified accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.DeleteInvitationsHttp)`.
  * ### Members & Organization
  * **Example:** Delete Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteInvitations = yield* AWS.SecurityHub.DeleteInvitations();
  *
  * // runtime

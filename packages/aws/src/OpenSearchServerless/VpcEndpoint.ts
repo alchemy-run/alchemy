@@ -57,7 +57,7 @@ export interface VpcEndpoint extends Resource<
  * An Amazon OpenSearch Serverless-managed interface VPC endpoint. Creating one
  * lets resources in a VPC reach a collection privately (without traversing the
  * public internet), and lets a network {@link SecurityPolicy} restrict a
- * collection's access to only that endpoint. Creation is asynchronous — the
+ * collection's access to only that endpoint. Creation is asynchronous -- the
  * provider polls (bounded) until the endpoint reaches `ACTIVE`.
  *
  * ### Creating VPC Endpoints
@@ -137,7 +137,7 @@ export const VpcEndpointProvider = () =>
           if (detail?.id === undefined) {
             return undefined;
           }
-          // VPC endpoints carry no tags — an existing same-name endpoint is
+          // VPC endpoints carry no tags -- an existing same-name endpoint is
           // adopted.
           return {
             vpcEndpointId: detail.id,
@@ -165,7 +165,7 @@ export const VpcEndpointProvider = () =>
           // 1. OBSERVE
           let detail = yield* observe(name, output?.vpcEndpointId);
 
-          // 2. ENSURE — create if missing; wait for ACTIVE (async provisioning)
+          // 2. ENSURE -- create if missing; wait for ACTIVE (async provisioning)
           if (detail === undefined) {
             const created = yield* aoss
               .createVpcEndpoint({
@@ -190,7 +190,7 @@ export const VpcEndpointProvider = () =>
             detail = yield* awaitVpcEndpointActive(detail.id!);
           }
 
-          // 3. SYNC — subnet/security-group membership deltas
+          // 3. SYNC -- subnet/security-group membership deltas
           const observedSubnets = new Set(detail.subnetIds ?? []);
           const desiredSubnets = new Set(news.subnetIds);
           const addSubnetIds = news.subnetIds.filter((s) => !observedSubnets.has(s));

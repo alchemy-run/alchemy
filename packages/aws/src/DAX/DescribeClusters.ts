@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `dax:DescribeClusters`).
  *
  * Lists the account's DAX clusters (optionally filtered by name) with node
- * status, endpoints and configuration embedded — the building block of
+ * status, endpoints and configuration embedded -- the building block of
  * cluster-health monitoring and node-reboot automation. Provide the
  * implementation with `Effect.provide(AWS.DAX.DescribeClustersHttp)`.
  * ### Monitoring Clusters

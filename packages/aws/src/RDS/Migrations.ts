@@ -22,12 +22,12 @@ import type { MigrationRunnerRequest, MigrationRunnerResponse } from "./Migratio
 /**
  * How migrations reach an RDS database:
  *
- * - `"data-api"` — the RDS Data API over HTTPS. Aurora clusters with the
+ * - `"data-api"` -- the RDS Data API over HTTPS. Aurora clusters with the
  *   Data API enabled only; no network route needed.
- * - `"direct"` — a `pg`/`mysql2` connection from the deploying machine to
+ * - `"direct"` -- a `pg`/`mysql2` connection from the deploying machine to
  *   the database endpoint. Needs a network route (public endpoint, VPN,
  *   bastion).
- * - an `AWS.RDS.MigrationRunner` (or any `{ functionArn }`) — a Lambda in
+ * - an `AWS.RDS.MigrationRunner` (or any `{ functionArn }`) -- a Lambda in
  *   the database's VPC opens the connection; the deploying machine only
  *   invokes it.
  */
@@ -260,7 +260,7 @@ const readSecretCredentials = Effect.fn(function* (secretArn: string) {
 });
 
 /**
- * Apply migrations to the database an RDS instance serves — its own, or its
+ * Apply migrations to the database an RDS instance serves -- its own, or its
  * Aurora cluster's when it is a cluster member. Call once the instance is
  * available. Credentials, in order: `secretArn`, then `credentials`
  * (direct and Lambda transports only), then the RDS-managed master secret.

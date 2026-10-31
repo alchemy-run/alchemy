@@ -87,7 +87,7 @@ export interface Firewall extends Resource<
 > {}
 
 /**
- * An AWS Network Firewall firewall — provisions managed firewall endpoints
+ * An AWS Network Firewall firewall -- provisions managed firewall endpoints
  * into your VPC subnets and inspects traffic according to an associated
  * {@link FirewallPolicy}.
  *
@@ -254,10 +254,10 @@ export const FirewallProvider = () =>
             ...internalTags,
           };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* describe(name);
 
-          // 2. Ensure — create if missing, then wait for READY so mutation
+          // 2. Ensure -- create if missing, then wait for READY so mutation
           // calls below don't race endpoint provisioning.
           if (observed?.Firewall === undefined) {
             yield* session.note(`creating firewall ${name} (5-10 minutes)`);
@@ -276,7 +276,7 @@ export const FirewallProvider = () =>
           observed = yield* waitForReady(name);
           let firewall = observed.Firewall!;
 
-          // 3. Sync — each mutable aspect re-reads for a fresh UpdateToken,
+          // 3. Sync -- each mutable aspect re-reads for a fresh UpdateToken,
           // diffs OBSERVED against desired, and applies only the delta.
           const refresh = Effect.fn(function* () {
             observed = yield* waitForReady(name);
@@ -358,7 +358,7 @@ export const FirewallProvider = () =>
             yield* refresh();
           }
 
-          // 3e. Tags — diff against OBSERVED cloud tags.
+          // 3e. Tags -- diff against OBSERVED cloud tags.
           const observedTags = nfwTagsToRecord(firewall.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           const arn = firewall.FirewallArn!;
@@ -380,7 +380,7 @@ export const FirewallProvider = () =>
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (observed === undefined) return;
 
-          // Clear delete protection first — DeleteFirewall requires it off.
+          // Clear delete protection first -- DeleteFirewall requires it off.
           if (observed.Firewall?.DeleteProtection) {
             yield* nfw
               .updateFirewallDeleteProtection({

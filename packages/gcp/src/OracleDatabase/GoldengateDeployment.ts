@@ -38,7 +38,7 @@ export type GoldengateOggData = {
    */
   adminUsername: string;
   /**
-   * Name of the GoldenGate service deployment (1–32 alphanumeric
+   * Name of the GoldenGate service deployment (1-32 alphanumeric
    * characters, starting with a letter). Distinct from the GCP resource
    * id.
    */
@@ -61,7 +61,7 @@ export type GoldengateOggData = {
 export type GoldengateMaintenanceWindow = {
   /** UTC start hour for the maintenance window. */
   startHour?: number;
-  /** Day of week (`MONDAY` … `SUNDAY`). */
+  /** Day of week (`MONDAY` ... `SUNDAY`). */
   day?: oracle.GoldengateMaintenanceWindowDayEnum | (string & {});
 };
 
@@ -82,12 +82,12 @@ export type GoldengateDeploymentProps = {
   /**
    * Deployment id (the `{goldengate_deployment}` segment of
    * `projects/{project}/locations/{location}/goldengateDeployments/{goldengate_deployment}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the deployment.
    */
   goldengateDeploymentId?: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east4`, ...). Immutable -- changing it
    * replaces the deployment.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -97,25 +97,25 @@ export type GoldengateDeploymentProps = {
    */
   displayName?: string;
   /**
-   * Parent ODB Network. Full name or id. Immutable — changing it
+   * Parent ODB Network. Full name or id. Immutable -- changing it
    * replaces the deployment.
    */
   odbNetwork?: string;
   /**
    * ODB Subnet used for IP allocation. Full name
    * `projects/{project}/locations/{location}/odbNetworks/{odb_network}/odbSubnets/{odb_subnet}`
-   * or a bare subnet id (requires `odbNetwork`). Immutable — changing
+   * or a bare subnet id (requires `odbNetwork`). Immutable -- changing
    * it replaces the deployment.
    */
   odbSubnet: string;
   /**
-   * GCP Oracle zone (e.g. `us-east4-b-r2`). Immutable — changing it
+   * GCP Oracle zone (e.g. `us-east4-b-r2`). Immutable -- changing it
    * replaces the deployment.
    */
   gcpOracleZone?: string;
   /**
    * Oracle GoldenGate deployment type (`DATABASE_ORACLE`, `BIGDATA`,
-   * `DATABASE_POSTGRESQL`, …). Immutable — changing it replaces the
+   * `DATABASE_POSTGRESQL`, ...). Immutable -- changing it replaces the
    * deployment.
    * @default "DATABASE_ORACLE"
    */

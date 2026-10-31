@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportDefinition } from "./ReportDefinition.ts";
 
 /**
- * Runtime binding for `cur:ListTagsForResource` — read the tags on the bound
+ * Runtime binding for `cur:ListTagsForResource` -- read the tags on the bound
  * {@link ReportDefinition}. The report's name is injected automatically, so
  * the runtime callable takes no arguments.
  *
@@ -13,7 +13,7 @@ import type { ReportDefinition } from "./ReportDefinition.ts";
  * ### Reading Report Tags
  * **Example:** List the tags on a report definition
  * ```typescript
- * // init — grants cur:ListTagsForResource on the report's ARN
+ * // init -- grants cur:ListTagsForResource on the report's ARN
  * const listReportTags =
  *   yield* AWS.CostAndUsageReport.ListTagsForResource(report);
  *

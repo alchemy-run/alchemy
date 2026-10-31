@@ -80,7 +80,7 @@ export interface Filter extends Resource<
 > {}
 
 /**
- * A GuardDuty findings filter — matches findings against criteria and either
+ * A GuardDuty findings filter -- matches findings against criteria and either
  * keeps (`NOOP`) or auto-archives (`ARCHIVE`) them. Identity is the
  * `(detectorId, name)` pair; description, action, rank, and criteria are
  * updatable in place.
@@ -188,11 +188,11 @@ export const FilterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const live = yield* getFilter(detectorId, name);
 
           if (!live) {
-            // 2. ENSURE — create with tags applied inline.
+            // 2. ENSURE -- create with tags applied inline.
             yield* guardduty.createFilter({
               DetectorId: detectorId,
               Name: name,
@@ -203,7 +203,7 @@ export const FilterProvider = () =>
               Tags: desiredTags,
             });
           } else {
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const desiredAction = news.action ?? "NOOP";
             const drift =
               live.Action !== desiredAction ||
@@ -221,7 +221,7 @@ export const FilterProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { accountId, region } = yield* AWSEnvironment.current;
             const arn = filterArn(region, accountId, detectorId, name);
             const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
@@ -248,7 +248,7 @@ export const FilterProvider = () =>
           return yield* buildAttrs(detectorId, name, final);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the filter (or its whole detector) may already be
+          // Idempotent -- the filter (or its whole detector) may already be
           // gone; both surface as BadRequestException.
           yield* guardduty
             .deleteFilter({

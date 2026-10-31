@@ -86,7 +86,7 @@ export const waitForPipelineSettled = <E extends { readonly _tag: string }, R>(
   );
 
 /**
- * Retry an effect while OSIS reports `ConflictException` — raised when a
+ * Retry an effect while OSIS reports `ConflictException` -- raised when a
  * delete/update races an in-flight state transition. Bounded: 15s x 20.
  */
 export const retryWhilePipelineConflict = <A, E extends { readonly _tag: string }, R>(

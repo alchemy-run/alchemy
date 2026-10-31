@@ -6,7 +6,7 @@ import type { ImagePipeline } from "./ImagePipeline.ts";
 /**
  * Runtime binding for `imagebuilder:GetImagePipeline`.
  *
- * Reads the bound {@link ImagePipeline}'s current configuration and state —
+ * Reads the bound {@link ImagePipeline}'s current configuration and state --
  * schedule, status, recipe/infrastructure wiring, and the timestamps of the
  * latest and next scheduled runs. The pipeline's ARN is injected from the
  * binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { ImagePipeline } from "./ImagePipeline.ts";
  * ### Observing Pipelines
  * **Example:** Read the Bound Pipeline's State
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const getPipeline = yield* AWS.ImageBuilder.GetImagePipeline(pipeline);
  *
  * // runtime

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `greengrass:BatchDisassociateClientDeviceFromCoreDevice`.
  *
- * Removes up to 100 client-device associations from a core device — the
+ * Removes up to 100 client-device associations from a core device -- the
  * cleanup half of client-device fleet management. The caller supplies the
  * core device thing name and the client device entries at runtime. Provide
  * the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Client Devices
  * **Example:** Disassociate Client Devices
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disassociateClientDevices =
  *   yield* AWS.GreengrassV2.BatchDisassociateClientDeviceFromCoreDevice();
  *

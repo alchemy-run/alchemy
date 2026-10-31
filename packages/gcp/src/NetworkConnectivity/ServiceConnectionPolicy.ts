@@ -83,12 +83,12 @@ export type AutoCreatedSubnetworkInfo = {
 export type ServiceConnectionPolicyProps = {
   /**
    * Policy id (the `{service_connection_policy}` segment). If omitted, a
-   * unique name is generated. Immutable — changing it replaces the
+   * unique name is generated. Immutable -- changing it replaces the
    * policy.
    */
   serviceConnectionPolicyId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -97,7 +97,7 @@ export type ServiceConnectionPolicyProps = {
   /**
    * Consumer VPC
    * (`projects/{project}/global/networks/{network}` or a Compute
-   * self-link). Immutable — changing it replaces the policy.
+   * self-link). Immutable -- changing it replaces the policy.
    */
   network: string;
   /**
@@ -106,7 +106,7 @@ export type ServiceConnectionPolicyProps = {
    */
   serviceClass: string;
   /**
-   * PSC connection configuration (subnets, connection limit, …).
+   * PSC connection configuration (subnets, connection limit, ...).
    */
   pscConfig?: PscConfig;
   /**
@@ -148,7 +148,7 @@ export type ServiceConnectionPolicy = Resource<
     serviceClass: string | undefined;
     /** PSC configuration. */
     pscConfig: PscConfig | undefined;
-    /** Infrastructure used for connections (`PSC`, …). */
+    /** Infrastructure used for connections (`PSC`, ...). */
     infrastructure: string | undefined;
     /** Auto-created subnet info, if any. */
     autoCreatedSubnetInfo: AutoCreatedSubnetworkInfo | undefined;
@@ -169,7 +169,7 @@ export type ServiceConnectionPolicy = Resource<
 
 /**
  * A PSC Service Connection Policy that allows a consumer VPC to connect
- * to a producer service class (Cloud SQL, Memorystore, …).
+ * to a producer service class (Cloud SQL, Memorystore, ...).
  *
  * Changing `serviceConnectionPolicyId`, `location`, or `network`
  * replaces the policy. Description, labels, `serviceClass`, and

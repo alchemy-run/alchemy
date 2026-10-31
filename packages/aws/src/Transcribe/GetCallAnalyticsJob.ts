@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:GetCallAnalyticsJob` — read a Call Analytics job's status and, once complete, the transcript location.
+ * Runtime binding for `transcribe:GetCallAnalyticsJob` -- read a Call Analytics job's status and, once complete, the transcript location.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:GetCallAnalyticsJob` on `*`.

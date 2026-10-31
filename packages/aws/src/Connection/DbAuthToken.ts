@@ -18,7 +18,7 @@ export interface GenerateDbAuthTokenOptions {
    * signer scopes tokens to `host:port`); DSQL tokens are host-only.
    */
   port?: number;
-  /** Database user (`rds-db` only — signed as the `DBUser` parameter). */
+  /** Database user (`rds-db` only -- signed as the `DBUser` parameter). */
   username?: string;
   /**
    * DSQL connect action (`dsql` only).
@@ -37,7 +37,7 @@ export interface GenerateDbAuthTokenOptions {
 /**
  * Generate a short-lived IAM database authentication token.
  *
- * This is a pure client-side SigV4 *presign* — no AWS API call is made
+ * This is a pure client-side SigV4 *presign* -- no AWS API call is made
  * (there is no distilled operation for it). The token is the presigned URL
  * with the `https://` scheme stripped, exactly what the `rds-db` and `dsql`
  * data planes expect as the connection password. It inherits the IAM

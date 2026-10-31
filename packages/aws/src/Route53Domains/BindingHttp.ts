@@ -5,8 +5,8 @@ import { withRoute53DomainsRegion } from "./internal.ts";
 /**
  * Shared HTTP scaffolding for the Route 53 Domains runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeRoute53DomainsHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeRoute53DomainsHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action is
  * boilerplate.
  *
@@ -29,7 +29,7 @@ export const makeRoute53DomainsHttpBinding = <I extends object, A, E, R>(options
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
-    // Capture the client with the region pinned to us-east-1 — the Route 53
+    // Capture the client with the region pinned to us-east-1 -- the Route 53
     // Domains API is not served from any other region.
     const op = yield* options.operation.pipe(withRoute53DomainsRegion, AWSBindings.withCredentials);
 
@@ -48,7 +48,7 @@ export const makeRoute53DomainsHttpBinding = <I extends object, A, E, R>(options
       }
       return Effect.fn(`AWS.Route53Domains.${options.capability}`)(function* (request: I) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* withRoute53DomainsRegion(op(request));
       });

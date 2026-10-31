@@ -8,20 +8,20 @@ import type { WebACL } from "./WebACL.ts";
 /**
  * Shared scaffolding for AWS WAFv2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifiers is boilerplate:
  *
- * - {@link makeWafv2WebAclHttpBinding} — operations scoped to one bound
+ * - {@link makeWafv2WebAclHttpBinding} -- operations scoped to one bound
  *   {@link WebACL}; `inject` picks which resolved identifiers (ARN, name,
  *   id, scope) the request needs. CLOUDFRONT-scoped web ACLs are pinned to
  *   `us-east-1` automatically.
- * - {@link makeWafv2IPSetHttpBinding} — operations scoped to one bound
+ * - {@link makeWafv2IPSetHttpBinding} -- operations scoped to one bound
  *   {@link IPSet}; injects `Name`/`Scope`/`Id`.
- * - {@link makeWafv2RuleGroupHttpBinding} — operations keyed by a rule
+ * - {@link makeWafv2RuleGroupHttpBinding} -- operations keyed by a rule
  *   group ARN (the permission-policy interface); injects `ResourceArn`.
- * - {@link makeWafv2AccountHttpBinding} — account-level operations (API
+ * - {@link makeWafv2AccountHttpBinding} -- account-level operations (API
  *   keys, capacity checks, managed rule group catalog); the caller's
  *   request passes through and the grant is on `*`. A `Scope: "CLOUDFRONT"`
  *   request is pinned to `us-east-1`.

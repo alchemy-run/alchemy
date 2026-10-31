@@ -2,7 +2,7 @@
  * The hash event a {@link HasherFunction} answers (DESIGN §22.11): one pack
  * chunk, base64 in a JSON invoke payload (Lambda invokes are JSON; a 4 MiB
  * chunk encodes to ~5.6 MB, under the 6 MB payload limit), answered with
- * the encoded scan — bounded to the same limit by demoting the largest
+ * the encoded scan -- bounded to the same limit by demoting the largest
  * delta-resolved entries back to `unresolved` (the receiver resolves those
  * itself from its retained bytes) and by omitting non-blob content (the
  * receiver inflates it).
@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import { scanPart, type ScanResult, type UnresolvedDelta } from "../Protocol/PartialScan.ts";
 import { decodeScanResult, encodeScanResult, HashError, type HashPartOptions } from "./Hasher.ts";
 
-/** Chunk size the Lambda hasher asks the pump for (4 MiB → ~5.6 MB base64). */
+/** Chunk size the Lambda hasher asks the pump for (4 MiB -> ~5.6 MB base64). */
 export const LAMBDA_CHUNK_BYTES = 4 * 1024 * 1024;
 /** Raw bytes the encoded scan may carry before demotion (base64 adds a third). */
 export const RESPONSE_BUDGET_BYTES = 4 * 1024 * 1024;
@@ -57,7 +57,7 @@ export const fromBase64 = (text: string): Uint8Array =>
 
 /**
  * Bounds a scan to `budget` raw bytes: strips non-blob content, then
- * demotes delta-resolved entries — largest first — to `unresolved` until
+ * demotes delta-resolved entries -- largest first -- to `unresolved` until
  * the fresh zdata fits. Every demoted entry keeps its base reference.
  */
 export const boundScan = (scan: ScanResult, budget: number): ScanResult => {
@@ -96,7 +96,7 @@ export const boundScan = (scan: ScanResult, budget: number): ScanResult => {
   };
 };
 
-/** Answers one hash event: scan, bound, encode. Pure — the Lambda's body. */
+/** Answers one hash event: scan, bound, encode. Pure -- the Lambda's body. */
 export const handleHashEvent = (event: HashEvent): Effect.Effect<HashResponse> =>
   Effect.gen(function* () {
     const payload = fromBase64(event.payload);

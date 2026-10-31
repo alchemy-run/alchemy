@@ -7,15 +7,15 @@ import type { Directory } from "./Directory.ts";
  * Runtime binding for the `DescribeDomainControllers` operation (IAM action
  * `ds:DescribeDomainControllers`), scoped to one {@link Directory}.
  *
- * Lists the bound directory's domain controllers — id, DNS address,
- * Availability Zone, and status (`Active`, `Impaired`, …) — so a monitoring
+ * Lists the bound directory's domain controllers -- id, DNS address,
+ * Availability Zone, and status (`Active`, `Impaired`, ...) -- so a monitoring
  * function can alert on an impaired controller. The directory id is
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.DirectoryService.DescribeDomainControllersHttp)`.
  * ### Monitoring the Directory
  * **Example:** Alert on Impaired Domain Controllers
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const describeDomainControllers =
  *   yield* AWS.DirectoryService.DescribeDomainControllers(directory);
  *

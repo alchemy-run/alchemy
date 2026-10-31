@@ -72,7 +72,7 @@ export interface Endpoint extends Resource<
 > {}
 
 /**
- * An Amazon SageMaker Endpoint — the live, invocable deployment of an
+ * An Amazon SageMaker Endpoint -- the live, invocable deployment of an
  * `EndpointConfig`. Provisioning takes minutes and **bills while the
  * endpoint exists** (serverless variants bill per request; instance variants
  * bill per instance-hour). Destroy endpoints promptly.
@@ -130,7 +130,7 @@ const describeEndpointOrUndefined = (name: string) =>
     .pipe(Effect.catchTag("EndpointNotFound", () => Effect.undefined));
 
 /**
- * The endpoint is still transitioning toward the awaited state — retried by
+ * The endpoint is still transitioning toward the awaited state -- retried by
  * the bounded wait schedule.
  */
 class EndpointNotReady extends Data.TaggedError("EndpointNotReady")<{
@@ -148,7 +148,7 @@ export class EndpointProvisioningFailed extends Data.TaggedError("EndpointProvis
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -247,11 +247,11 @@ export const EndpointProvider = () =>
           // Observe.
           let described = yield* describeEndpointOrUndefined(name);
 
-          // A terminally-failed endpoint cannot be updated — delete it and
+          // A terminally-failed endpoint cannot be updated -- delete it and
           // fall through to a fresh create so the reconciler converges.
           if (described?.EndpointStatus === "Failed") {
             yield* session.note(
-              `Endpoint ${name} is Failed (${described.FailureReason ?? "unknown"}) — recreating`,
+              `Endpoint ${name} is Failed (${described.FailureReason ?? "unknown"}) \u2014 recreating`,
             );
             yield* sagemaker
               .deleteEndpoint({ EndpointName: name })
@@ -260,7 +260,7 @@ export const EndpointProvider = () =>
             described = undefined;
           }
 
-          // Ensure — create if missing; tolerate the already-exists race.
+          // Ensure -- create if missing; tolerate the already-exists race.
           if (described === undefined) {
             yield* sagemaker
               .createEndpoint({
@@ -278,7 +278,7 @@ export const EndpointProvider = () =>
             described.EndpointConfigName !== news.endpointConfigName &&
             described.EndpointStatus === "InService"
           ) {
-            // Sync — roll the live endpoint onto the desired configuration.
+            // Sync -- roll the live endpoint onto the desired configuration.
             yield* sagemaker.updateEndpoint({
               EndpointName: name,
               EndpointConfigName: news.endpointConfigName,
@@ -299,7 +299,7 @@ export const EndpointProvider = () =>
             });
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchEndpointTags(final.EndpointArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

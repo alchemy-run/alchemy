@@ -90,7 +90,7 @@ export interface DatabaseProps {
   /**
    * Maximum size of the database, in bytes or with a unit (e.g. `"256mb"`,
    * `"1gb"`). When omitted, the current limit is left unchanged. Only
-   * legacy databases support it — Turso rejects it for databases created on
+   * legacy databases support it -- Turso rejects it for databases created on
    * the current platform ("size_limit is not supported for db-api
    * controlled databases").
    */
@@ -371,7 +371,7 @@ export const DatabaseProvider = () =>
             importHashes: output?.importHashes ?? {},
           });
           // Turso has no tags: a database found under an explicit,
-          // user-chosen name without prior state may belong to someone else — unless it
+          // user-chosen name without prior state may belong to someone else -- unless it
           // is the generation a delete-first replacement is about to free.
           const ours =
             output !== undefined ||
@@ -412,7 +412,7 @@ export const DatabaseProvider = () =>
             }
           }
 
-          // Sync configuration — diff observed settings against desired
+          // Sync configuration -- diff observed settings against desired
           // and PATCH only the fields that differ.
           let config = yield* getConfig(org, name);
           const patch: Omit<turso.UpdateDatabaseConfigurationRequest, "organizationSlug"> = {
@@ -448,7 +448,7 @@ export const DatabaseProvider = () =>
             config = yield* turso.updateDatabaseConfiguration({ organizationSlug: org, ...patch });
           }
 
-          // Sync schema — migrations, then SQL imports.
+          // Sync schema -- migrations, then SQL imports.
           const target = { name, hostname: db.Hostname! };
           const migrationsInput = migrationsInputOf(news);
           const migrations = migrationsInput

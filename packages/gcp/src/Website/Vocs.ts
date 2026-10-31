@@ -18,7 +18,7 @@ export interface VocsProps extends FrameworkSiteProps {
 /**
  * Deploy a [Vocs](https://vocs.dev) documentation site to Cloud Run. The node
  * target serves static assets first, then Vocs' Waku RSC handler
- * (`/about` → `about/index.html`, otherwise SSR).
+ * (`/about` -> `about/index.html`, otherwise SSR).
  *
  *
  * ### Creating Vocs Sites

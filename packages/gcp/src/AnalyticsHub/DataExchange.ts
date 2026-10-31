@@ -40,12 +40,12 @@ export type DataExchangeProps = {
    * Data exchange id (the `{dataExchange}` segment of
    * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`).
    * If omitted, a unique id is generated. Must contain only letters,
-   * numbers, and underscores; max 100 bytes. Immutable — changing it
+   * numbers, and underscores; max 100 bytes. Immutable -- changing it
    * replaces the exchange.
    */
   dataExchangeId?: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Immutable --
    * changing it replaces the exchange.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -58,7 +58,7 @@ export type DataExchangeProps = {
   /**
    * Human-readable description (max 2000 bytes). Analytics Hub data
    * exchanges have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -129,7 +129,7 @@ export type DataExchange = Resource<
 >;
 
 /**
- * A BigQuery Analytics Hub data exchange — a container for listings
+ * A BigQuery Analytics Hub data exchange -- a container for listings
  * that share datasets or Pub/Sub topics with subscribers.
  *
  * Location and id are immutable. Display name, description,

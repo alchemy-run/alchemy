@@ -12,7 +12,7 @@ export interface ListRunTasksRequest extends omics.ListRunTasksRequest {}
  * ### Runs
  * **Example:** Call ListRunTasks
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listRunTasks = yield* AWS.Omics.ListRunTasks();
  * // runtime
  * const result = yield* listRunTasks({ id: runId });

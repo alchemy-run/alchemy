@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetSensitiveDataOccurrences`.
  *
  * Retrieves occurrences of sensitive data reported by a finding.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetSensitiveDataOccurrencesHttp)`.
  * ### Retrieving Sensitive Data Samples
  * **Example:** Retrieve Samples for a Finding
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSensitiveDataOccurrences = yield* AWS.Macie2.GetSensitiveDataOccurrences();
  *
  * // runtime

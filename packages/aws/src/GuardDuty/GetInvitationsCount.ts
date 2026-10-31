@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:GetInvitationsCount`.
  *
  * Counts the membership invitations received by this account, excluding deleted ones.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.GetInvitationsCountHttp)`.
  * ### Administrator & Invitations
  * **Example:** Count Invitations
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getInvitationsCount = yield* AWS.GuardDuty.GetInvitationsCount();
  *
  * // runtime

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `GetRestoreJobMetadata` operation (IAM action
  * `backup:GetRestoreJobMetadata`).
  *
- * Returns the metadata of a restore job — the key/value set describing the
+ * Returns the metadata of a restore job -- the key/value set describing the
  * restored resource. Together with `PutRestoreValidationResult` this is the
  * restore-testing validation flow: AWS Backup invokes a validation Lambda
  * after a restore-test job completes, the Lambda inspects the restored

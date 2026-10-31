@@ -52,7 +52,7 @@ export interface Deployment extends Resource<
 > {}
 
 /**
- * An AWS AppConfig deployment — releases a configuration version to an
+ * An AWS AppConfig deployment -- releases a configuration version to an
  * environment following a deployment strategy. Deployments are immutable and
  * asynchronous: the provider starts the deployment and waits (bounded) for it
  * to reach a terminal state. Any change to the deployed version, strategy, or
@@ -128,7 +128,7 @@ export const DeploymentProvider = () =>
       return {
         stables: ["applicationId", "environmentId", "deploymentNumber"],
 
-        // Deployments are immutable — any change starts a new deployment.
+        // Deployments are immutable -- any change starts a new deployment.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
@@ -163,7 +163,7 @@ export const DeploymentProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // Observe — an interrupted create may already have started the
+          // Observe -- an interrupted create may already have started the
           // deployment.
           let observed =
             output?.deploymentNumber !== undefined
@@ -174,7 +174,7 @@ export const DeploymentProvider = () =>
                 )
               : undefined;
 
-          // Ensure — start the deployment if it does not exist yet. A
+          // Ensure -- start the deployment if it does not exist yet. A
           // concurrent deployment on the same environment rejects with
           // ConflictException; retry (bounded) until it clears.
           if (observed?.DeploymentNumber === undefined) {

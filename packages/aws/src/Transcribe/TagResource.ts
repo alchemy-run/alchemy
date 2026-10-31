@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:TagResource` — add tags to a Transcribe resource (jobs, vocabularies, filters, categories, or models) by ARN.
+ * Runtime binding for `transcribe:TagResource` -- add tags to a Transcribe resource (jobs, vocabularies, filters, categories, or models) by ARN.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:TagResource` on `*`.

@@ -62,7 +62,7 @@ export interface Fleet extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise fleet — a group of vehicles that campaigns can
+ * An AWS IoT FleetWise fleet -- a group of vehicles that campaigns can
  * target collectively.
  *
  * Fleets are free, provisioned near-instantly, and only carry a
@@ -129,10 +129,10 @@ export const FleetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readFleet(fleetId);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createFleet({
@@ -159,7 +159,7 @@ export const FleetProvider = () =>
             );
           }
 
-          // 3. Sync description — the only mutable aspect.
+          // 3. Sync description -- the only mutable aspect.
           if (news.description !== undefined && news.description !== observed.description) {
             yield* iotfleetwise
               .updateFleet({ fleetId, description: news.description })

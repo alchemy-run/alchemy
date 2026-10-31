@@ -23,13 +23,13 @@ export type View = Resource<
 >;
 
 /**
- * An Axiom saved view — a named, shareable APL query. Useful for building
+ * An Axiom saved view -- a named, shareable APL query. Useful for building
  * starter dashboards, providing canned "open in Axiom" links from your app,
  * or pinning common investigations the team revisits.
  *
  * The path identifier is `name`. Renaming a view triggers a replacement
  * (the old one is deleted, a new one is created).
- * @see https://axiom.co/docs/query-data/datasets — APL query reference
+ * @see https://axiom.co/docs/query-data/datasets -- APL query reference
  *
  * ### Creating a View
  * **Example:** Recent errors across one dataset
@@ -81,7 +81,7 @@ export const ViewProvider = () =>
         // `GET /v2/views` collection op (no pagination) that already returns
         // the full view objects, so we fetch it once and hydrate each row into
         // the exact `read` Attributes shape (`id` is derived from `name`, the
-        // path identifier) — directly usable by `delete` with no follow-up get.
+        // path identifier) -- directly usable by `delete` with no follow-up get.
         list: () =>
           Effect.gen(function* () {
             const views = yield* listViews({});
@@ -95,7 +95,7 @@ export const ViewProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — `name` is the path identifier for views. Renames are
+          // Observe -- `name` is the path identifier for views. Renames are
           // forced to a replacement by `diff` above, so the cached
           // `output.id` (set to `news.name` on first create) and the
           // current `news.name` always agree by the time we land here.
@@ -104,13 +104,13 @@ export const ViewProvider = () =>
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
-          // Ensure — POST creates the view under `news.name`.
+          // Ensure -- POST creates the view under `news.name`.
           if (observed === undefined) {
             const result = yield* create(news);
             return { ...result, id: news.name };
           }
 
-          // Sync — the view exists; PUT against its id with the desired
+          // Sync -- the view exists; PUT against its id with the desired
           // props.
           const result = yield* update({ ...news, id: viewId });
           return { ...result, id: viewId };

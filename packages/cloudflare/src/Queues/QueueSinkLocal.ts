@@ -5,7 +5,7 @@ import { WriteQueueLocal } from "./WriteQueueLocal.ts";
 /**
  * Implementation of the {@link QueueSink} service that pushes over the
  * Queues bulk-push HTTP API with the **current credentials**
- * ({@link WriteQueueLocal}) — for draining a Stream into a queue from an
+ * ({@link WriteQueueLocal}) -- for draining a Stream into a queue from an
  * Action or other deploy-time Effect, with no Worker host.
  * ### Providing the Layer
  * **Example:** Seed a queue from an Action

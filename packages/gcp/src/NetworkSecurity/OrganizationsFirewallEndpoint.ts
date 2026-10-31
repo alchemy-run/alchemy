@@ -30,7 +30,7 @@ export type OrganizationsFirewallEndpointState =
 
 export type OrganizationsFirewallEndpointSettings = {
   /**
-   * Whether jumbo frames are enabled. Immutable — changing it replaces
+   * Whether jumbo frames are enabled. Immutable -- changing it replaces
    * the endpoint.
    * @default false
    */
@@ -47,18 +47,18 @@ export type OrganizationsFirewallEndpointAssociation = {
 export type OrganizationsFirewallEndpointProps = {
   /**
    * Firewall endpoint id. If omitted, a unique RFC1035 name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the endpoint.
    */
   firewallEndpointId?: string;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager parent. Immutable — changing it replaces the endpoint.
+   * Manager parent. Immutable -- changing it replaces the endpoint.
    */
   organization?: string;
   /**
-   * Zone (`us-central1-a`, …). Firewall endpoints are zonal. Immutable —
+   * Zone (`us-central1-a`, ...). Firewall endpoints are zonal. Immutable --
    * changing it replaces the endpoint.
    * @default "us-central1-a"
    */
@@ -125,7 +125,7 @@ export type OrganizationsFirewallEndpoint = Resource<
  * Endpoints are zonal and bill to `billingProjectId`. Changing
  * `firewallEndpointId`, `organization`, `location`, `billingProjectId`,
  * or jumbo-frame settings replaces the endpoint. Description and labels
- * update in place. Provisioning is slow — tests skip when `FAST` is set.
+ * update in place. Provisioning is slow -- tests skip when `FAST` is set.
  *
  * ### Creating a Firewall Endpoint
  * **Example:** Generated name

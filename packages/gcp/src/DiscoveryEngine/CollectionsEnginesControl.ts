@@ -19,12 +19,12 @@ export type CollectionsEnginesControlProps = {
   /**
    * Parent Engine resource name
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}`.
-   * Immutable — changing it replaces the control.
+   * Immutable -- changing it replaces the control.
    */
   engine: string;
   /**
    * Control id (1-63 characters, `a-z`, `_`, `-`). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the control.
+   * id is generated. Immutable -- changing it replaces the control.
    */
   controlId?: string;
   /**
@@ -97,7 +97,7 @@ export type CollectionsEnginesControl = Resource<
 >;
 
 /**
- * A Discovery Engine Control on a collection Engine — redirects,
+ * A Discovery Engine Control on a collection Engine -- redirects,
  * filters, synonyms, boosts, or promotions applied at serving time.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

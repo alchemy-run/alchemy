@@ -12,7 +12,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Tasks
  * **Example:** List A Step's Tasks
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const listTasks = yield* AWS.Deadline.ListTasks(queue);
  *
  * // runtime

@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { Database } from "@alchemy.run/cloudflare/D1";
 import type { QueryDatabaseClient } from "@alchemy.run/cloudflare/D1";
 /**
- * `Git.RegistryD1` — the repo index on a D1 database.
+ * `Git.RegistryD1` -- the repo index on a D1 database.
  *
  * An interchangeable implementation of {@link RegistryStore}: same
  * contract as {@link RegistryDurableObject}, different scaling shape.
@@ -12,7 +12,7 @@ import type { QueryDatabaseClient } from "@alchemy.run/cloudflare/D1";
  * for. Writes (create, delete, summary refresh) are rare by comparison.
  *
  * Uniqueness moves with it. The DO gets a compare-and-swap from its own
- * single-threaded `transactionSync`; here it comes from the schema —
+ * single-threaded `transactionSync`; here it comes from the schema --
  * `PRIMARY KEY (owner, name)` plus an insert guarded by `WHERE NOT
  * EXISTS`, which SQLite evaluates atomically within the statement. A
  * losing racer sees `changes === 0` and reports `RepoAlreadyExists`,
@@ -84,7 +84,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
     Effect.gen(function* () {
       const db: QueryDatabaseClient = yield* Cloudflare.D1.QueryDatabase(database);
 
-      // The DDL is shared with the DO (Store/Sql.ts) — one definition, so
+      // The DDL is shared with the DO (Store/Sql.ts) -- one definition, so
       // the backends can never drift apart.
       const ready = Effect.suspend(() =>
         Effect.forEach(REGISTRY_DDL, (statement) => d1("schema", db.prepare(statement).run())),
@@ -295,7 +295,7 @@ export const RegistryD1 = (database: Database): Layer.Layer<RegistryStore> =>
               .first<RegistryRepoRow>(),
           );
           if (row === null) {
-            return; // idempotent — purge re-runs are expected
+            return; // idempotent -- purge re-runs are expected
           }
           // One batch: the row goes and the fork parent is decremented
           // together, or neither happens.

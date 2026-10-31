@@ -15,7 +15,7 @@ export interface DispatchNamespaceProps {
   /**
    * Name of the dispatch namespace. Must be lowercase, alphanumeric, and
    * contain no spaces or special characters except dashes. The name is the
-   * namespace's identity — there is no rename API, so changing it triggers
+   * namespace's identity -- there is no rename API, so changing it triggers
    * a replacement. If omitted, a unique name is generated from the app,
    * stage, and logical ID.
    * @default ${app}-${id}-${stage}-${suffix}
@@ -64,7 +64,7 @@ export type DispatchNamespace = Resource<
 >;
 
 /**
- * A Workers for Platforms dispatch namespace — a container for customer
+ * A Workers for Platforms dispatch namespace -- a container for customer
  * ("user") Workers that a platform Worker dispatches to at runtime via a
  * dynamic-dispatch binding.
  *
@@ -161,7 +161,7 @@ export const DispatchNamespaceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The name is the namespace's identity — no rename API. When `name`
+      // The name is the namespace's identity -- no rename API. When `name`
       // is omitted on both sides, the generated physical name is identical
       // (same logical ID + instance ID), so an omitted name never diffs.
       const oldName = output?.name ?? olds?.name;
@@ -185,7 +185,7 @@ export const DispatchNamespaceProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      // The name is the identity — a cold read (lost state) lands on the
+      // The name is the identity -- a cold read (lost state) lands on the
       // same deterministic name as reconcile would.
       const name =
         output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, lowercase: true }));
@@ -196,16 +196,16 @@ export const DispatchNamespaceProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
-      // Observe — namespaces are looked up by name; `output` is only a
+      // Observe -- namespaces are looked up by name; `output` is only a
       // cache of the same identity. A missing namespace falls through to
       // the ensure step.
       const observed = yield* getNamespace(output?.accountId ?? accountId, name);
       if (observed) {
-        // Existence-only resource — nothing mutable to sync.
+        // Existence-only resource -- nothing mutable to sync.
         return toAttributes(observed, output?.accountId ?? accountId, name);
       }
 
-      // Ensure — create, tolerating the already-exists race by re-reading.
+      // Ensure -- create, tolerating the already-exists race by re-reading.
       const created = yield* wfp
         .createDispatchNamespace({ accountId, name })
         .pipe(

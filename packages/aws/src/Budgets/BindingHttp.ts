@@ -7,13 +7,13 @@ import type { BudgetAction } from "./BudgetAction.ts";
 /**
  * Shared scaffolding for the AWS Budgets HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * the injected identifiers (`AccountId` + `BudgetName`, plus `ActionId` for
  * action-scoped operations) is boilerplate.
  *
- * Budgets is a global service — its ARNs have no region component and the
+ * Budgets is a global service -- its ARNs have no region component and the
  * endpoint resolver routes every standard-partition region to the global
  * endpoint.
  */

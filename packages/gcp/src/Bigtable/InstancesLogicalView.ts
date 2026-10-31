@@ -24,7 +24,7 @@ import {
 export type InstancesLogicalViewProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the view.
+   * or the instance id. Immutable -- changing it replaces the view.
    */
   instance: string;
   /**
@@ -32,7 +32,7 @@ export type InstancesLogicalViewProps = {
    * `.../instances/{instance}/logicalViews/{logical_view}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    * Must be unique among table ids and view ids in the instance.
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   logicalViewId?: string;
   /**
@@ -74,7 +74,7 @@ export type InstancesLogicalView = Resource<
 >;
 
 /**
- * A Cloud Bigtable logical view — a SQL SELECT over a table that can
+ * A Cloud Bigtable logical view -- a SQL SELECT over a table that can
  * be queried as a virtual table.
  *
  * The parent instance must already exist and the query cannot use

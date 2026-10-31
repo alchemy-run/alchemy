@@ -165,7 +165,7 @@ export const PartnershipProvider = () =>
               partnershipId: created.partnershipId,
             });
           } else {
-            // 3. Sync — converge name, capabilities, and capability options
+            // 3. Sync -- converge name, capabilities, and capability options
             // (email/phone/profile are set only at create time).
             const nameDrift = live.name !== news.name;
             const capsDrift =

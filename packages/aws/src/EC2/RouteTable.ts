@@ -186,7 +186,7 @@ export interface RouteTable extends Resource<
 /**
  * A VPC route table holds a set of routes that determine where network
  * traffic from associated subnets (or gateways) is directed. Create one
- * route table per routing domain — typically a "public" table whose default
+ * route table per routing domain -- typically a "public" table whose default
  * route points at an {@link InternetGateway}, and one or more "private" tables
  * whose default route points at a NAT gateway.
  *
@@ -250,7 +250,7 @@ export interface RouteTable extends Resource<
  * ```
  * Any subnet associated with this table now reaches the public internet via
  * the `0.0.0.0/0` route. Multiple subnets can share the same route table by
- * declaring additional associations — a common way to give every public
+ * declaring additional associations -- a common way to give every public
  * subnet in a VPC identical routing.
  *
  * @resource
@@ -362,7 +362,7 @@ export const RouteTableProvider = () =>
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = { ...alchemyTags, ...news.tags };
 
-          // Observe — find the route table via cached id, else fall through
+          // Observe -- find the route table via cached id, else fall through
           // to create.
           let routeTable: ec2.RouteTable | undefined;
           if (output?.routeTableId) {
@@ -376,7 +376,7 @@ export const RouteTableProvider = () =>
             routeTable = lookup.RouteTables?.[0];
           }
 
-          // Ensure — create the route table when missing.
+          // Ensure -- create the route table when missing.
           if (routeTable === undefined) {
             const createResult = yield* ec2
               .createRouteTable({
@@ -402,7 +402,7 @@ export const RouteTableProvider = () =>
 
           const routeTableId = routeTable.RouteTableId! as RouteTableId;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (routeTable.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;

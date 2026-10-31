@@ -15,7 +15,7 @@ import type { Farm } from "./Farm.ts";
  * ### Usage Statistics
  * **Example:** Poll An Aggregation Until It Completes
  * ```typescript
- * // init — bind the operation to the farm
+ * // init -- bind the operation to the farm
  * const getAggregation =
  *   yield* AWS.Deadline.GetSessionsStatisticsAggregation(farm);
  *

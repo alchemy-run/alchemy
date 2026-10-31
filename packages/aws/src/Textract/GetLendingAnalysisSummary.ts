@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:GetLendingAnalysisSummary` — read the
+ * Runtime binding for `textract:GetLendingAnalysisSummary` -- read the
  * document-group summary of an asynchronous lending-analysis job started
  * with `StartLendingAnalysis`.
  *

@@ -27,7 +27,7 @@ export type ServiceNetworkAuthType = "NONE" | "AWS_IAM";
 export interface ServiceNetworkProps {
   /**
    * Name of the service network. If omitted, a unique name is generated.
-   * Immutable — changing it replaces the resource.
+   * Immutable -- changing it replaces the resource.
    */
   name?: string;
   /**
@@ -71,7 +71,7 @@ export interface ServiceNetwork extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice service network — the logical boundary that connects
+ * An Amazon VPC Lattice service network -- the logical boundary that connects
  * services and VPCs into one application network. Cheap control-plane resource
  * with no per-hour charge until VPCs or services are associated.
  *
@@ -102,7 +102,7 @@ export const ServiceNetworkProvider = () =>
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 63, lowercase: true });
 
-      // getServiceNetwork only accepts an id or ARN — never a name. Look up by
+      // getServiceNetwork only accepts an id or ARN -- never a name. Look up by
       // id when we have one, and fall back to enumerating for name-based
       // discovery (adoption / lost-state recovery / create-conflict recovery).
       const observe = (serviceNetworkIdentifier: string) =>
@@ -298,12 +298,12 @@ export const ServiceNetworkProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredAuthType = news.authType ?? "NONE";
 
-          // Observe — prefer the stable id cache, fall back to name lookup.
+          // Observe -- prefer the stable id cache, fall back to name lookup.
           let network = output?.serviceNetworkId
             ? yield* observe(output.serviceNetworkId)
             : yield* findByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!network?.arn || !network.id) {
             network = yield* vpclattice
               .createServiceNetwork({ name, authType: desiredAuthType })
@@ -314,7 +314,7 @@ export const ServiceNetworkProvider = () =>
               });
             }
           } else if ((network.authType ?? "NONE") !== desiredAuthType) {
-            // Sync auth type — the only mutable setting.
+            // Sync auth type -- the only mutable setting.
             yield* vpclattice.updateServiceNetwork({
               serviceNetworkIdentifier: network.id,
               authType: desiredAuthType,

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:CreateKxVolume` — provisions a NAS_1 storage volume in the bound environment that clusters mount for tickerplant logs and shared savedown space.
+ * Runtime binding for `finspace:CreateKxVolume` -- provisions a NAS_1 storage volume in the bound environment that clusters mount for tickerplant logs and shared savedown space.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxVolumeHttp)`.
  * ### Managing Volumes

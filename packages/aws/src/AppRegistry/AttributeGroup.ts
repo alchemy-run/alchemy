@@ -49,7 +49,7 @@ export interface AttributeGroup extends Resource<
 > {}
 
 /**
- * An AWS Service Catalog AppRegistry attribute group — a named container of
+ * An AWS Service Catalog AppRegistry attribute group -- a named container of
  * user-defined JSON metadata that can be associated with applications to
  * enrich them (owner, cost center, compliance posture, etc.).
  *
@@ -140,7 +140,7 @@ export const AttributeGroupProvider = () =>
           };
           return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
-        // The attribute group name is its user-facing identity — changing it
+        // The attribute group name is its user-facing identity -- changing it
         // replaces the group.
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -157,7 +157,7 @@ export const AttributeGroupProvider = () =>
           };
           const desiredAttributes = JSON.stringify(news.attributes);
 
-          // 1. OBSERVE — cloud is authoritative; output caches the ID only.
+          // 1. OBSERVE -- cloud is authoritative; output caches the ID only.
           let found = output?.attributeGroupId
             ? yield* observe(output.attributeGroupId)
             : undefined;
@@ -165,7 +165,7 @@ export const AttributeGroupProvider = () =>
             found = yield* observe(attributeGroupName);
           }
 
-          // 2. ENSURE — create when missing; tolerate a concurrent-create
+          // 2. ENSURE -- create when missing; tolerate a concurrent-create
           // race (ConflictException) by re-reading.
           if (!found?.id) {
             yield* appregistry
@@ -183,7 +183,7 @@ export const AttributeGroupProvider = () =>
           const attributeGroupId = found!.id!;
           const attributeGroupArn = found!.arn!;
 
-          // 3a. SYNC description + attributes — apply only the delta.
+          // 3a. SYNC description + attributes -- apply only the delta.
           const descriptionChanged =
             news.description !== undefined && found!.description !== news.description;
           const attrsChanged = !attributesEqual(found!.attributes, news.attributes);
@@ -195,7 +195,7 @@ export const AttributeGroupProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges.
           const observedTags = stripAwsSystemTags(tagRecord(found!.tags));
           const { upsert, removed } = diffTags(observedTags, desiredTags);

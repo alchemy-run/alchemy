@@ -6,7 +6,7 @@ import type { Firewall } from "./Firewall.ts";
 export interface StartFlowFlushRequest extends Omit<NFW.StartFlowFlushRequest, "FirewallArn"> {}
 
 /**
- * Runtime binding for `network-firewall:StartFlowFlush` — flush matching
+ * Runtime binding for `network-firewall:StartFlowFlush` -- flush matching
  * flows from the bound {@link Firewall}'s flow table (impacted flows are
  * re-evaluated as midstream traffic); the firewall ARN is injected
  * automatically.
@@ -16,7 +16,7 @@ export interface StartFlowFlushRequest extends Omit<NFW.StartFlowFlushRequest, "
  * ### Flow Operations
  * **Example:** Flush Flows to a Host
  * ```typescript
- * // init — grants network-firewall:StartFlowFlush on the firewall
+ * // init -- grants network-firewall:StartFlowFlush on the firewall
  * const startFlowFlush = yield* AWS.NetworkFirewall.StartFlowFlush(firewall);
  *
  * // runtime

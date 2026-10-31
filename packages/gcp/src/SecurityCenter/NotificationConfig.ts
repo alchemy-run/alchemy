@@ -34,7 +34,7 @@ export type NotificationConfigProps = {
    * Config id (the `{config}` segment of
    * `projects/{project}/notificationConfigs/{config}`). If omitted, a unique
    * id is generated. Letters, digits, and hyphens; must start with a letter;
-   * max 63 characters. Immutable — changing it replaces the config.
+   * max 63 characters. Immutable -- changing it replaces the config.
    */
   configId?: string;
   /**
@@ -45,7 +45,7 @@ export type NotificationConfigProps = {
   /**
    * Human-readable description (max 1024 characters). Notification configs
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -81,7 +81,7 @@ export type NotificationConfig = Resource<
  * A project-scoped Security Command Center notification config that
  * publishes findings to a Pub/Sub topic.
  *
- * Notification configs have no labels field — Alchemy stamps ownership
+ * Notification configs have no labels field -- Alchemy stamps ownership
  * into the description so `list` / nuke can find them. Config id is
  * identity. Description, Pub/Sub topic, and streaming filter update in
  * place.

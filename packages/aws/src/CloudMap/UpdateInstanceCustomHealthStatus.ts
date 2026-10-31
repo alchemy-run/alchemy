@@ -13,7 +13,7 @@ export interface UpdateInstanceCustomHealthStatusRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `servicediscovery:UpdateInstanceCustomHealthStatus` —
+ * Runtime binding for `servicediscovery:UpdateInstanceCustomHealthStatus` --
  * pushes an instance's health status (`HEALTHY` / `UNHEALTHY`) for a
  * service configured with `healthCheckCustomConfig`. This is the push-based
  * health mechanism: the workload reports its own health instead of being

@@ -20,14 +20,14 @@ export type RegionUrlMapProps = {
    */
   urlMapName?: string;
   /**
-   * Region the URL map lives in (e.g. `us-central1`). Immutable —
+   * Region the URL map lives in (e.g. `us-central1`). Immutable --
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute RegionUrlMap has
    * no labels field).
    */
@@ -116,7 +116,7 @@ export type RegionUrlMap = Resource<
  * and regional external / internal Application Load Balancers. This
  * resource maps to the `regionUrlMaps` collection (the global `urlMaps`
  * collection is `GCP.Compute.UrlMap`). Compute RegionUrlMap has no labels
- * field — Alchemy ownership is stored in the description so nuke can find
+ * field -- Alchemy ownership is stored in the description so nuke can find
  * leaked maps.
  *
  * One of `defaultService`, `defaultUrlRedirect`, or

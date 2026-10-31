@@ -47,7 +47,7 @@ export type RouterBgp = {
    */
   advertisedIpRanges?: RouterAdvertisedIpRange[];
   /**
-   * Seconds between BGP keepalives (20–60). Hold time is 3× this value.
+   * Seconds between BGP keepalives (20-60). Hold time is 3× this value.
    * @default 20
    */
   keepaliveInterval?: number;
@@ -146,12 +146,12 @@ export type RouterNat = {
 export type RouterProps = {
   /**
    * Router name (RFC1035, 1-63 chars). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the router.
    */
   routerName?: string;
   /**
-   * Region the router lives in. Immutable — changing it replaces the
+   * Region the router lives in. Immutable -- changing it replaces the
    * router. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -159,7 +159,7 @@ export type RouterProps = {
   /**
    * VPC network this router belongs to. Accepts a name (`default`), a
    * partial URL (`global/networks/default`), or a full resource URL.
-   * Immutable — changing it replaces the router.
+   * Immutable -- changing it replaces the router.
    */
   network: string;
   /**
@@ -178,13 +178,13 @@ export type RouterProps = {
    */
   nats?: RouterNat[];
   /**
-   * Dedicated for encrypted VLAN attachments. Immutable — changing it
+   * Dedicated for encrypted VLAN attachments. Immutable -- changing it
    * replaces the router.
    * @default false
    */
   encryptedInterconnectRouter?: boolean;
   /**
-   * NCC Gateway spoke URI. Immutable — changing it replaces the router.
+   * NCC Gateway spoke URI. Immutable -- changing it replaces the router.
    * Mutually exclusive with `network` at the API.
    */
   nccGateway?: string;
@@ -228,7 +228,7 @@ export type Router = Resource<
  *
  * Cloud Routers advertise VPC routes over BGP to VPN tunnels and
  * interconnects, and they host Cloud NAT. Compute Router has no `labels`
- * field — Alchemy stamps `alchemy-stack` / `alchemy-stage` / `alchemy-id`
+ * field -- Alchemy stamps `alchemy-stack` / `alchemy-stage` / `alchemy-id`
  * into the description so `list` and `pnpm nuke:gcp` can find owned
  * routers.
  *

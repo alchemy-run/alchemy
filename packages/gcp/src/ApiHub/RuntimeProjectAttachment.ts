@@ -20,18 +20,18 @@ import {
 export type RuntimeProjectAttachmentProps = {
   /**
    * Runtime project to attach, as `projects/{project}` or a bare project
-   * id. Immutable — changing it replaces the attachment. The attachment
+   * id. Immutable -- changing it replaces the attachment. The attachment
    * id must equal this project's id. Defaults to the stack project.
    */
   runtimeProject?: string;
   /**
    * Attachment id. Must equal the project id of `runtimeProject`. If
-   * omitted, that project id is used. Immutable — changing it replaces
+   * omitted, that project id is used. Immutable -- changing it replaces
    * the attachment.
    */
   runtimeProjectAttachmentId?: string;
   /**
-   * Location of the API Hub host (`us-central1`, …). Immutable —
+   * Location of the API Hub host (`us-central1`, ...). Immutable --
    * changing it replaces the attachment.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -179,7 +179,7 @@ export const RuntimeProjectAttachmentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        // No labels or description — return nothing so nuke does not
+        // No labels or description -- return nothing so nuke does not
         // delete foreign attachments.
         return yield* apihub.listProjectsLocationsRuntimeProjectAttachments
           .pages({

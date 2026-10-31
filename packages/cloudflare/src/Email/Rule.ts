@@ -46,7 +46,7 @@ export type RuleProps = {
    * Matchers that define which inbound emails trigger this rule.
    *
    * A sole `{ type: "all" }` matcher is the zone catch-all, which is a
-   * per-zone singleton owned by `Cloudflare.Email.CatchAll` — declaring
+   * per-zone singleton owned by `Cloudflare.Email.CatchAll` -- declaring
    * it here fails with `CatchAllRuleNotSupported`.
    */
   matchers: Matcher[];
@@ -93,7 +93,7 @@ export class CatchAllRuleNotSupported extends Data.TaggedError("CatchAllRuleNotS
  * prior state, `read` scans the zone for an existing non-catch-all rule
  * with the same matchers and reports it as `Unowned`, so the engine
  * refuses to take it over unless `--adopt` (or `adopt(true)`) is set.
- * The zone catch-all is excluded from that scan — it is owned by
+ * The zone catch-all is excluded from that scan -- it is owned by
  * `Email.CatchAll`.
  * ### Forwarding Mail
  * **Example:** Forward `info@` to a verified destination
@@ -109,7 +109,7 @@ export class CatchAllRuleNotSupported extends Data.TaggedError("CatchAllRuleNotS
  * The zone catch-all is a per-zone singleton managed by
  * `Cloudflare.Email.CatchAll` (PUT `/rules/catch_all`). Declaring
  * `matchers: [{ type: "all" }]` on a Rule fails with
- * `CatchAllRuleNotSupported` — Cloudflare rejects creating a second
+ * `CatchAllRuleNotSupported` -- Cloudflare rejects creating a second
  * catch-all through the ordinary rule endpoint.
  *
  * **Example:** Use CatchAll for unmatched mail
@@ -134,7 +134,7 @@ export const RuleProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Email routing rules are zone-scoped (`/zones/{id}/email/routing/rules`)
-      // with no account-wide enumeration API — fan out over every zone and
+      // with no account-wide enumeration API -- fan out over every zone and
       // exhaustively paginate each zone's rules.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -177,7 +177,7 @@ export const RuleProvider = () =>
       if (!zoneId) return undefined;
 
       // Owned path: refresh by our persisted rule id. A catch-all id is
-      // treated as missing — that singleton is owned by `CatchAll`.
+      // treated as missing -- that singleton is owned by `CatchAll`.
       if (output?.ruleId) {
         const observed = yield* observeById(zoneId, output.ruleId);
         if (observed) return observed;
@@ -199,7 +199,7 @@ export const RuleProvider = () =>
 
       // The zone catch-all is a singleton behind `/rules/catch_all`.
       // Creating it as an ordinary rule 409s ("Invalid rule operation")
-      // and deleting it through the rule endpoint does the same — refuse
+      // and deleting it through the rule endpoint does the same -- refuse
       // before any write and point at `Email.CatchAll`.
       if (isCatchAllMatchers(desired.matchers)) {
         return yield* new CatchAllRuleNotSupported({
@@ -210,13 +210,13 @@ export const RuleProvider = () =>
         });
       }
 
-      // 1. Observe — cached id is a hint, not a guarantee the rule still
+      // 1. Observe -- cached id is a hint, not a guarantee the rule still
       //    exists. A missing id falls through to the matcher scan.
       let observed = output?.ruleId ? yield* observeById(zoneId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning the zone for the same matchers.
       //    `read` brands an existing match `Unowned` so the engine can
-      //    gate takeover behind adopt — but plan skips that probe when
+      //    gate takeover behind adopt -- but plan skips that probe when
       //    props are still unresolved (e.g. `zone: routing.zoneId` from
       //    a sibling created in the same deploy). In that case this scan
       //    is the AlreadyExists race: Cloudflare rejects a second rule
@@ -226,7 +226,7 @@ export const RuleProvider = () =>
         observed = yield* findByMatchers(zoneId, desired.matchers);
       }
 
-      // 3. Ensure — create when missing. The rejected call creates
+      // 3. Ensure -- create when missing. The rejected call creates
       //    nothing, so a Worker-script retry cannot duplicate the rule.
       if (!observed) {
         const created = yield* emailRouting
@@ -242,7 +242,7 @@ export const RuleProvider = () =>
         observed = normalize(created, zoneId);
       }
 
-      // 4. Sync — PUT the full desired body when observed state drifts.
+      // 4. Sync -- PUT the full desired body when observed state drifts.
       if (!sameRule(observed, desired)) {
         const updated = yield* emailRouting
           .updateRule({
@@ -263,7 +263,7 @@ export const RuleProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output?.ruleId) return;
       // Never attempt to delete the zone catch-all through this endpoint
-      // — Cloudflare rejects it with "Invalid rule operation".
+      // -- Cloudflare rejects it with "Invalid rule operation".
       if (isCatchAllMatchers(output.matchers)) return;
       // Idempotent: a rule that's already gone is success. Any other error
       // (e.g. a 409 because email routing is disabled) must surface so the
@@ -279,7 +279,7 @@ export const RuleProvider = () =>
 
 /**
  * The zone catch-all rule is surfaced by `listRules` but is a managed
- * singleton — its sole matcher is `{ type: "all" }`. It can only be mutated
+ * singleton -- its sole matcher is `{ type: "all" }`. It can only be mutated
  * via `/rules/catch_all` (the `CatchAll` resource), so it must be
  * excluded from the deletable `Rule` enumeration.
  */

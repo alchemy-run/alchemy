@@ -61,12 +61,12 @@ export type UnitProps = {
   /**
    * Unit id (the `{unit}` segment of
    * `projects/{project}/locations/{location}/units/{unit}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it
+   * a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the unit.
    */
   unitId?: string;
   /**
-   * Region of the unit (`us-central1`, …). Immutable — changing it
+   * Region of the unit (`us-central1`, ...). Immutable -- changing it
    * replaces the unit. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -74,16 +74,16 @@ export type UnitProps = {
   location?: string;
   /**
    * UnitKind this unit belongs to. Accepts a unit kind id or a full
-   * resource name. Immutable — changing it replaces the unit.
+   * resource name. Immutable -- changing it replaces the unit.
    */
   unitKind?: string;
   /**
    * Tenant this unit belongs to. Accepts a tenant id or a full resource
-   * name. Immutable — changing it replaces the unit.
+   * name. Immutable -- changing it replaces the unit.
    */
   tenant?: string;
   /**
-   * Whether the unit lifecycle is user- or system-managed. Immutable —
+   * Whether the unit lifecycle is user- or system-managed. Immutable --
    * changing it replaces the unit.
    */
   managementMode?: UnitManagementMode;
@@ -165,9 +165,9 @@ export type Unit = Resource<
 >;
 
 /**
- * An App Lifecycle Manager unit — one deployable instance of a UnitKind.
+ * An App Lifecycle Manager unit -- one deployable instance of a UnitKind.
  *
- * A unit is actuated by a blueprint engine (Terraform, Helm, …) under
+ * A unit is actuated by a blueprint engine (Terraform, Helm, ...) under
  * the hood. `unitId`, `location`, `unitKind`, `tenant`, and
  * `managementMode` replace the unit. Maintenance pins, labels, and
  * annotations update in place.

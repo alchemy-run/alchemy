@@ -121,7 +121,7 @@ export const PolicyAttachmentProvider = () =>
           const targetId = output?.targetId ?? olds?.targetId;
           if (policyId === undefined || targetId === undefined) {
             // A `creating` row persisted before upstream Outputs resolved
-            // can't round-trip Output-valued ids — they deserialize as
+            // can't round-trip Output-valued ids -- they deserialize as
             // `undefined`. Report "not found" so the engine re-drives the
             // create (reconcile observes before attaching).
             return undefined;
@@ -131,7 +131,7 @@ export const PolicyAttachmentProvider = () =>
         // Enumerate every (policy, target) attachment. There is no direct
         // "list attachments" API, so we fan out: for each policy type, list the
         // policies of that type, then list each policy's targets, emitting one
-        // Attributes per (policy, target) pair — the exact shape `read` returns.
+        // Attributes per (policy, target) pair -- the exact shape `read` returns.
         // listPolicies/listTargetsForPolicy may only be called from the org
         // management account or a delegated administrator; a member account or a
         // standalone account that isn't part of an org rejects with the typed
@@ -170,12 +170,12 @@ export const PolicyAttachmentProvider = () =>
             }),
           ),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — list current attachments to see whether ours is present.
+          // Observe -- list current attachments to see whether ours is present.
           // The attachment is identity-only; both `policyId` and `targetId`
           // are stable, so `diff` handles any change as a replacement.
           let state = yield* readAttachment(news);
 
-          // Ensure — attach if missing. `DuplicatePolicyAttachmentException`
+          // Ensure -- attach if missing. `DuplicatePolicyAttachmentException`
           // is treated as success (e.g. a peer reconciler attached
           // concurrently, or our observation lost a race).
           if (!state) {
@@ -264,7 +264,7 @@ const listAttachmentsForPolicy = (policyId: string) =>
             }) satisfies PolicyAttachment["Attributes"],
         ),
     ),
-    // The policy was deleted between enumeration and target read — skip it.
+    // The policy was deleted between enumeration and target read -- skip it.
     Effect.catchTag("PolicyNotFoundException", () =>
       Effect.succeed([] as PolicyAttachment["Attributes"][]),
     ),

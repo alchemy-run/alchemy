@@ -5,7 +5,7 @@ import * as Redacted from "effect/Redacted";
 import type { Db, MongoClient, MongoClientOptions } from "mongodb";
 import type { MongoConnectionInfo } from "./Connect.ts";
 
-// `mongodb` is an optional peer dependency — loaded lazily so importing the
+// `mongodb` is an optional peer dependency -- loaded lazily so importing the
 // AWS provider barrel never requires the driver unless a client is built.
 const importMongodb = () =>
   import("mongodb").catch((cause) => {
@@ -27,18 +27,18 @@ export class MongoError extends Data.TaggedError("AWS.DocDB.MongoError")<{
 /**
  * A connected, Effect-typed MongoDB client over a DocumentDB cluster. Built
  * at most once per execution (Lambda invoke, Worker event) and closed when
- * the execution settles — see {@link mongo}.
+ * the execution settles -- see {@link mongo}.
  */
 export interface MongoClusterClient {
   /** The connected native `mongodb` driver client. */
   readonly client: MongoClient;
   /**
-   * The default database — from {@link MongoOptions.database}, the
+   * The default database -- from {@link MongoOptions.database}, the
    * connection info's `database`, or the cluster's default.
    */
   readonly db: Db;
   /**
-   * Run a promise-returning function against the client as a typed Effect —
+   * Run a promise-returning function against the client as a typed Effect --
    * driver rejections surface as {@link MongoError}.
    */
   readonly use: <T>(
@@ -67,23 +67,23 @@ export interface MongoOptions {
  *
  * The connect work is deferred until first use and memoized on the current
  * execution's `Scope` (via `makeExecutionMemo`), so the driver connection is
- * built at most once per execution — a Lambda invocation or Worker event —
+ * built at most once per execution -- a Lambda invocation or Worker event --
  * and its `close` finalizer fires when the execution settles, never held
  * across events. This is the one legal pooling shape on workerd (sockets are
  * IoContext-pinned) and the correct one on Lambda.
  *
  * DocumentDB authenticates over the MongoDB wire protocol: database users
  * and their built-in roles (`read`, `readWrite`, `dbAdmin`,
- * `clusterAdmin`, …) are managed *inside* the database with
- * `db.createUser(...)` — IAM only governs the management plane.
+ * `clusterAdmin`, ...) are managed *inside* the database with
+ * `db.createUser(...)` -- IAM only governs the management plane.
  * ### Connecting to a Cluster
  * **Example:** Query a Collection inside a Function
  * ```typescript
- * // init — bind the cluster, then build the client
+ * // init -- bind the cluster, then build the client
  * const connect = yield* AWS.DocDB.Connect(cluster, { database: "app" });
  * const db = yield* AWS.DocDB.mongo(connect);
  *
- * // runtime — one driver connection per execution, closed on settle
+ * // runtime -- one driver connection per execution, closed on settle
  * const { use } = yield* db;
  * const open = yield* use((db) =>
  *   db.collection("orders").find({ open: true }).toArray(),

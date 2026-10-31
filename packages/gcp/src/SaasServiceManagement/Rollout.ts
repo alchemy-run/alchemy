@@ -47,12 +47,12 @@ export type RolloutProps = {
   /**
    * Rollout id (the `{rollout_id}` segment of
    * `projects/{project}/locations/{location}/rollouts/{rollout_id}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the rollout.
    */
   rolloutId?: string;
   /**
-   * Region of the rollout (`us-central1`, …). Immutable — changing it
+   * Region of the rollout (`us-central1`, ...). Immutable -- changing it
    * replaces the rollout. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -60,17 +60,17 @@ export type RolloutProps = {
   location?: string;
   /**
    * RolloutKind this rollout follows. Accepts a rollout kind id or a
-   * full resource name. Immutable — changing it replaces the rollout.
+   * full resource name. Immutable -- changing it replaces the rollout.
    */
   rolloutKind?: string;
   /**
    * Release rolled out to target units. Mutually exclusive with
-   * `flagRelease`. Immutable — changing it replaces the rollout.
+   * `flagRelease`. Immutable -- changing it replaces the rollout.
    */
   release?: string;
   /**
    * Flag release rolled out to target units. Mutually exclusive with
-   * `release`. Immutable — changing it replaces the rollout.
+   * `release`. Immutable -- changing it replaces the rollout.
    */
   flagRelease?: string;
   /**
@@ -159,7 +159,7 @@ export type Rollout = Resource<
 >;
 
 /**
- * An App Lifecycle Manager rollout — one execution of a RolloutKind
+ * An App Lifecycle Manager rollout -- one execution of a RolloutKind
  * against a Release (or FlagRelease).
  *
  * `rolloutId`, `location`, `rolloutKind`, `release`, and `flagRelease`

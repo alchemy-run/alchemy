@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:GetAccount`.
  *
- * Retrieves the SES account's sending status in the current region — the
+ * Retrieves the SES account's sending status in the current region -- the
  * send quota, whether sending is enabled, and whether the account has
  * production access (or is still in the sandbox). Useful to check remaining
- * quota before a large send. Account-level operation — invoked with no
+ * quota before a large send. Account-level operation -- invoked with no
  * arguments. Provide the implementation with
  * `Effect.provide(AWS.SES.GetAccountHttp)`.
  * ### Account Status
  * **Example:** Check Quota and Sandbox Status
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAccount = yield* SES.GetAccount();
  *
  * // runtime

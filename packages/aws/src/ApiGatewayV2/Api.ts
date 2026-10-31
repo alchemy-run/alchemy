@@ -95,7 +95,7 @@ export interface Api extends Resource<
 > {}
 
 /**
- * An Amazon API Gateway v2 API — the root of an HTTP API or WebSocket API.
+ * An Amazon API Gateway v2 API -- the root of an HTTP API or WebSocket API.
  *
  * HTTP APIs are the modern, cheaper, faster front door for Lambda functions
  * (compared to REST v1). WebSocket APIs provide two-way real-time messaging
@@ -210,11 +210,11 @@ export const ApiProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const routeSelectionExpression = defaultRouteSelectionExpression(news);
 
-          // 1. OBSERVE — output is only a cache for the stable id; the
+          // 1. OBSERVE -- output is only a cache for the stable id; the
           //    cloud is authoritative.
           let observed = output?.apiId ? yield* getApiSafe(output.apiId) : undefined;
 
-          // 2. ENSURE — create if missing (greenfield or deleted
+          // 2. ENSURE -- create if missing (greenfield or deleted
           //    out-of-band).
           if (!observed?.ApiId) {
             observed = yield* retryOnTooManyRequests(
@@ -237,7 +237,7 @@ export const ApiProvider = () =>
           const apiId = observed.ApiId!;
           const snapshot = snapshotFromApi(observed);
 
-          // 3. SYNC — diff observed against desired per mutable aspect and
+          // 3. SYNC -- diff observed against desired per mutable aspect and
           //    apply only the delta.
           const drift =
             snapshot.name !== name ||
@@ -270,7 +270,7 @@ export const ApiProvider = () =>
             );
           }
 
-          // CORS removal is a separate API call — `updateApi` cannot clear
+          // CORS removal is a separate API call -- `updateApi` cannot clear
           // an existing configuration.
           if (news.corsConfiguration === undefined && snapshot.corsConfiguration !== undefined) {
             yield* agw2
@@ -278,7 +278,7 @@ export const ApiProvider = () =>
               .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (!deepEqual(snapshot.tags, desiredTags)) {
             yield* syncTags({
               resourceArn: apiArn(region, apiId),
@@ -287,7 +287,7 @@ export const ApiProvider = () =>
             });
           }
 
-          // 4. RETURN — re-read so attributes reflect actual cloud state.
+          // 4. RETURN -- re-read so attributes reflect actual cloud state.
           const final = yield* agw2.getApi({ ApiId: apiId });
           yield* session.note(`Reconciled API ${apiId}`);
           return snapshotFromApi(final);

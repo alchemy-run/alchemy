@@ -50,7 +50,7 @@ export interface PointInTimeRecoverySpecification {
   pointInTimeRecoveryEnabled: boolean;
   /**
    * How far back the table can be restored, e.g. `"7 days"` or
-   * `Duration.days(7)`. Rounded to whole days on the wire (1–35 days).
+   * `Duration.days(7)`. Rounded to whole days on the wire (1-35 days).
    * @default 35 days
    */
   recoveryPeriod?: Duration.Input;
@@ -66,7 +66,7 @@ export interface KinesisStreamingDestination {
   /**
    * Precision of the approximate creation timestamp stamped on records
    * delivered to the Kinesis stream. Changing this on an ACTIVE destination
-   * updates it in place, but the UPDATING→ACTIVE transition can take several
+   * updates it in place, but the UPDATING->ACTIVE transition can take several
    * minutes.
    * @default "MILLISECOND"
    */
@@ -76,7 +76,7 @@ export interface KinesisStreamingDestination {
 /**
  * One or more attribute names forming an index key. DynamoDB's wire format
  * flattens both key segments into a single ordered `KeySchema` list, but
- * semantically a key is two ordered segments — this type captures one of
+ * semantically a key is two ordered segments -- this type captures one of
  * them. Order is significant: partition attributes are hashed together in
  * declaration order, and sort attributes are queried left-to-right.
  */
@@ -141,7 +141,7 @@ export type TableProps = {
    * Partition key attribute name for the table.
    *
    * Base-table primary keys are always a single partition attribute plus an
-   * optional single sort attribute — DynamoDB supports multi-attribute keys
+   * optional single sort attribute -- DynamoDB supports multi-attribute keys
    * only on global secondary indexes (see `globalSecondaryIndexes`).
    */
   partitionKey: string;
@@ -163,7 +163,7 @@ export type TableProps = {
    * Global secondary indexes. GSIs support multi-attribute keys: up to four
    * partition attributes (hashed together as the composite partition key)
    * and up to four sort attributes (sorted and queried left-to-right).
-   * Attribute order is significant — reordering defines a different index
+   * Attribute order is significant -- reordering defines a different index
    * and replaces the table. Every key attribute must appear in `attributes`.
    */
   globalSecondaryIndexes?: GlobalSecondaryIndexProps[];
@@ -815,9 +815,9 @@ export const TableProvider = () =>
         destination.DestinationStatus === "DISABLING" ||
         destination.DestinationStatus === "UPDATING";
 
-      // Kinesis streaming destinations transition ENABLING→ACTIVE and
-      // DISABLING→DISABLED within seconds, but a precision change
-      // (UPDATING→ACTIVE) takes multiple minutes; poll bounded to 8 minutes.
+      // Kinesis streaming destinations transition ENABLING->ACTIVE and
+      // DISABLING->DISABLED within seconds, but a precision change
+      // (UPDATING->ACTIVE) takes multiple minutes; poll bounded to 8 minutes.
       const waitForKinesisDestinationsConvergence = Schedule.max([
         Schedule.fixed("5 seconds"),
         Schedule.recurs(96),
@@ -911,9 +911,9 @@ export const TableProvider = () =>
             }),
           );
 
-      // Contributor Insights transitions ENABLING→ENABLED / DISABLING→DISABLED
+      // Contributor Insights transitions ENABLING->ENABLED / DISABLING->DISABLED
       // within seconds, but UpdateContributorInsights rejects a DISABLE while
-      // the status is still ENABLING — wait for a settled status before
+      // the status is still ENABLING -- wait for a settled status before
       // diffing observed against desired.
       const waitForContributorInsightsSettled = (
         session: {
@@ -948,7 +948,7 @@ export const TableProvider = () =>
       // named `DynamoDBContributorInsights-{PKC|PKT}-<tableName>-<timestamp>`
       // in the customer's account. Those rules can ONLY be removed by
       // DynamoDB's own asynchronous cleanup, which runs when an
-      // UpdateContributorInsights DISABLE completes — CloudWatch's
+      // UpdateContributorInsights DISABLE completes -- CloudWatch's
       // DeleteInsightRules/PutInsightRule reject them with AccessDenied even
       // for account admins, and deleting the table aborts the cleanup and
       // strands the rules forever (recoverable only via AWS support). The
@@ -997,7 +997,7 @@ export const TableProvider = () =>
           }),
           // Rules from a PREVIOUS enable session whose cleanup was already
           // aborted (e.g. by an out-of-band table deletion) can never be
-          // removed by anyone but AWS support — don't wedge the delete on
+          // removed by anyone but AWS support -- don't wedge the delete on
           // them; surface a note and move on.
           Effect.catchTag("ContributorInsightsNotSettled", () =>
             session.note(
@@ -1236,7 +1236,7 @@ export const TableProvider = () =>
         });
 
       // For read, we want `ResourceNotFoundException` to propagate immediately
-      // (the table doesn't exist — this is the cold-start adoption "no
+      // (the table doesn't exist -- this is the cold-start adoption "no
       // resource" signal). Only retry on transient control-plane errors.
       const isRetryableReadError = (error: { _tag?: string }) =>
         error._tag === "InternalServerError" ||
@@ -1353,7 +1353,7 @@ export const TableProvider = () =>
       });
 
       // DynamoDB omits `BillingModeSummary` for tables that have always been
-      // PROVISIONED — fall back to the observed throughput (on-demand tables
+      // PROVISIONED -- fall back to the observed throughput (on-demand tables
       // report 0 read capacity).
       const observedBillingModeOf = (table: DynamoDB.TableDescription): DynamoDB.BillingMode =>
         table.BillingModeSummary?.BillingMode ??
@@ -1455,7 +1455,7 @@ export const TableProvider = () =>
       // attributes are queried left-to-right. Only the HASH/RANGE grouping is
       // normalized (DescribeTable reports all HASH elements before all RANGE
       // elements regardless of how the request interleaved them); the relative
-      // order within each group must be preserved — reordering attributes
+      // order within each group must be preserved -- reordering attributes
       // defines a different index.
       const normalizeKeySchema = (keySchema: readonly DynamoDB.KeySchemaElement[] | undefined) => {
         const elements = (keySchema ?? []).map((element) => ({
@@ -1624,7 +1624,7 @@ export const TableProvider = () =>
                   // Across a busy account this trips DynamoDB's read throttle,
                   // and a table that isn't ACTIVE yet (a peer mid-create)
                   // transiently rejects the continuous-backups/TTL describes
-                  // with ValidationException. Both are transient — retry to
+                  // with ValidationException. Both are transient -- retry to
                   // converge so a table that *is* ours still hydrates fully.
                   Effect.retry({
                     while: (e) =>
@@ -1688,7 +1688,7 @@ export const TableProvider = () =>
           // same. Engine-generated names embed the instance id, which is
           // re-minted on replacement, so the successor gets a fresh name and
           // create-before-delete works. A hard-coded `tableName` cannot
-          // change — DynamoDB table names are unique per account/region, so
+          // change -- DynamoDB table names are unique per account/region, so
           // the successor's createTable would collide with the still-live
           // predecessor and mis-adopt it. Delete the old generation first in
           // that case; `delete` waits until the name is fully released.
@@ -1728,7 +1728,7 @@ export const TableProvider = () =>
           if (requiresReplacement) {
             return replace;
           }
-          // ImportSourceSpecification (importTable) is out of scope — see
+          // ImportSourceSpecification (importTable) is out of scope -- see
           // processes/AWS/catalog/serverless-data.md (import/export are
           // long-running jobs, deferred as effectful functions).
         }),
@@ -1797,10 +1797,10 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync stream specification — observed ↔ desired.
+          // Sync stream specification -- observed <-> desired.
           //
           // SQL of stream changes: changing the StreamViewType requires a
-          // disable→enable sequence; AWS rejects an in-place view-type change.
+          // disable->enable sequence; AWS rejects an in-place view-type change.
           const currentStreamSpecification = normalizeStreamSpecification(
             state.table.StreamSpecification,
           );
@@ -1833,7 +1833,7 @@ export const TableProvider = () =>
             yield* waitForTableActive(session, tableName);
           }
 
-          // Sync GSIs — diff observed cloud state against desired and apply
+          // Sync GSIs -- diff observed cloud state against desired and apply
           // each delta serially. AWS only accepts one GSI change per
           // updateTable call. The diff function only reads fields shared
           // between `GlobalSecondaryIndex` and `GlobalSecondaryIndexDescription`
@@ -1870,7 +1870,7 @@ export const TableProvider = () =>
             yield* session.note(`Table ${tableName}: GSIs stabilized`);
           }
 
-          // Sync base attributes — observed ↔ desired.
+          // Sync base attributes -- observed <-> desired.
           const desiredBillingMode = news.billingMode ?? "PAY_PER_REQUEST";
           // An unchanged PROVISIONED table must not trigger a spurious
           // `updateTable` (which DynamoDB rejects with "provisioned throughput
@@ -1970,7 +1970,7 @@ export const TableProvider = () =>
             yield* waitForTableActive(session, tableName);
           }
 
-          // Sync TTL — observed ↔ desired.
+          // Sync TTL -- observed <-> desired.
           //
           // updateTimeToLive rejects calls that would not change anything
           // (e.g. enabling TTL on the same attribute name), so we have to
@@ -2009,7 +2009,7 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync PITR — observed ↔ desired.
+          // Sync PITR -- observed <-> desired.
           const currentPitrEnabled =
             state.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus === "ENABLED";
           const desiredPitrEnabled =
@@ -2028,7 +2028,7 @@ export const TableProvider = () =>
             });
           }
 
-          // Sync resource policy — observed ↔ desired. The observed policy is
+          // Sync resource policy -- observed <-> desired. The observed policy is
           // read fresh from the cloud (never olds/output) so adoption and
           // out-of-band drift converge.
           const observedPolicy = yield* readTableResourcePolicy(state.table.TableArn!);
@@ -2044,7 +2044,7 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync Kinesis streaming destination — observe the table's actual
+          // Sync Kinesis streaming destination -- observe the table's actual
           // destinations, wait out any in-flight transition (enable/disable
           // reject while another change is in progress), disable whatever is
           // ACTIVE but not desired, then enable/update the desired
@@ -2098,7 +2098,7 @@ export const TableProvider = () =>
             }
           }
 
-          // Sync Contributor Insights — observed ↔ desired.
+          // Sync Contributor Insights -- observed <-> desired.
           const desiredInsightsEnabled = news.contributorInsightsEnabled ?? false;
           const observedInsightsStatus = yield* waitForContributorInsightsSettled(
             session,
@@ -2112,14 +2112,14 @@ export const TableProvider = () =>
             yield* updateTableContributorInsights(tableName, desiredInsightsEnabled);
             if (!desiredInsightsEnabled) {
               // Wait for the DISABLE to settle so DynamoDB's rule cleanup
-              // (which fires on the DISABLING→DISABLED transition) runs
-              // while the table still exists — a deleteTable racing this
+              // (which fires on the DISABLING->DISABLED transition) runs
+              // while the table still exists -- a deleteTable racing this
               // window strands the CloudWatch rules forever.
               yield* waitForContributorInsightsSettled(session, tableName);
             }
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           //
           // Adoption may bring us a table that already has its own tag set;
           // diffing against `state.tags` (fetched fresh) lets the reconciler
@@ -2161,7 +2161,7 @@ export const TableProvider = () =>
           // deleted: DynamoDB removes its CloudWatch insight rules only when
           // a DISABLE completes while the table exists. Deleting the table
           // while insights are ENABLED (or mid-transition) aborts that
-          // cleanup and strands the rules — CloudWatch rejects direct
+          // cleanup and strands the rules -- CloudWatch rejects direct
           // deletion of DynamoDB-managed rules with AccessDenied, so only
           // AWS support can remove them afterwards.
           //
@@ -2189,7 +2189,7 @@ export const TableProvider = () =>
               }
               yield* waitForContributorInsightsRulesDeleted(session, output.tableName);
             }).pipe(
-              // Table vanished mid-teardown — nothing left to tear down.
+              // Table vanished mid-teardown -- nothing left to tear down.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
           }

@@ -6,7 +6,7 @@ import type { Revision } from "./Revision.ts";
 /**
  * Runtime binding for `dataexchange:GetRevision`.
  *
- * Reads the bound revision's detail — comment, finalized state, and
+ * Reads the bound revision's detail -- comment, finalized state, and
  * revocation status. The data set and revision ids are injected from
  * the binding.
  * Provide the implementation with

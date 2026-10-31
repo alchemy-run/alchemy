@@ -62,7 +62,7 @@ const requireImageId = (options: FindImageOptions) =>
  * Returns an `Output<string>` resolved at plan/deploy time via the
  * {@link getAmi} data source (and dies with a descriptive error when
  * nothing matches), so it is safe to use both in resource props and in
- * composition code that is re-executed inside a deployed runtime — the
+ * composition code that is re-executed inside a deployed runtime -- the
  * lookup never runs on the deployed machine. Use the preset helpers
  * ({@link amazonLinux2023}, {@link ubuntu2404}, ...) for common distros.
  *

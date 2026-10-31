@@ -12,7 +12,7 @@ export interface CancelRunRequest extends omics.CancelRunRequest {}
  * ### Runs
  * **Example:** Call CancelRun
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const cancelRun = yield* AWS.Omics.CancelRun();
  * // runtime
  * const result = yield* cancelRun({ id: runId });

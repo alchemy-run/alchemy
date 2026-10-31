@@ -45,7 +45,7 @@ export const ConnectHttp = Layer.effect(
           ],
           env: {
             [`${prefix}_HOST`]: workgroup.endpointAddress,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${workgroup.endpointPort}`,
           },
         });

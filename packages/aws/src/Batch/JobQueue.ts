@@ -40,7 +40,7 @@ export interface JobQueueProps {
    */
   computeEnvironments: string[];
   /**
-   * Queue priority — queues with a higher value are evaluated first when
+   * Queue priority -- queues with a higher value are evaluated first when
    * they share compute environments.
    * @default 1
    */
@@ -131,7 +131,7 @@ export const JobQueueProvider = () =>
 
       // A deleted queue lingers as a DELETED record for a while and the name
       // is immediately reusable, so a describe-by-name can briefly return
-      // both the tombstone and the live queue — prefer the live one.
+      // both the tombstone and the live queue -- prefer the live one.
       const describeOne = (name: string) =>
         batch
           .describeJobQueues({ jobQueues: [name] })
@@ -197,13 +197,13 @@ export const JobQueueProvider = () =>
           const desiredPriority = news.priority ?? 1;
           const desiredOrder = toOrder(news.computeEnvironments);
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let queue = yield* describeOne(name);
           if (queue?.status === "DELETED") queue = undefined;
 
-          // Ensure — create if missing. The referenced compute environment may
+          // Ensure -- create if missing. The referenced compute environment may
           // still be settling to VALID (its own reconcile waits, but adoption
-          // or manual drift can race) — retry through that window, and treat
+          // or manual drift can race) -- retry through that window, and treat
           // a concurrent create as a race to observe.
           const create = retryBatch(
             batch.createJobQueue({
@@ -217,7 +217,7 @@ export const JobQueueProvider = () =>
           ).pipe(Effect.catchTag("JobQueueAlreadyExists", () => Effect.void));
 
           if (queue?.jobQueueArn && queue.status === "DELETING") {
-            // An interrupted destroy left the queue mid-deletion — let it
+            // An interrupted destroy left the queue mid-deletion -- let it
             // finish, then fall through to a fresh create below.
             queue = yield* awaitSettled(name);
             if (queue?.status === "DELETED") queue = undefined;
@@ -230,7 +230,7 @@ export const JobQueueProvider = () =>
           }
           if (queue?.status === "DELETED") {
             // The settle above can still land on a tombstone (deletion that
-            // completed between observe and settle) — one more create pass.
+            // completed between observe and settle) -- one more create pass.
             yield* create;
             queue = yield* awaitSettled(name);
           }
@@ -239,7 +239,7 @@ export const JobQueueProvider = () =>
             return yield* Effect.die(new Error(`JobQueue ${name} did not settle`));
           }
 
-          // Sync — diff observed against desired, apply only the delta.
+          // Sync -- diff observed against desired, apply only the delta.
           const observedOrder = [...(queue.computeEnvironmentOrder ?? [])]
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((o) => o.computeEnvironment)
@@ -266,7 +266,7 @@ export const JobQueueProvider = () =>
             queue = (yield* awaitSettled(name)) ?? queue;
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const { upsert, removed } = diffTags(observedTagsOf(queue), desiredTags);
           if (upsert.length > 0) {
             yield* batch.tagResource({
@@ -309,7 +309,7 @@ export const JobQueueProvider = () =>
           // Wait until fully gone so downstream compute-environment deletion
           // doesn't trip over the lingering association (queue deletion is
           // asynchronous and takes up to ~1-2 minutes). An expired poll MUST
-          // NOT report success — the engine would then delete the queue's
+          // NOT report success -- the engine would then delete the queue's
           // compute environments mid-teardown and wedge the chain.
           const final = yield* pollBatch(
             describeOne(name),

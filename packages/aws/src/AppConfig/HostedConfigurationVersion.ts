@@ -16,7 +16,7 @@ export interface HostedConfigurationVersionProps {
    */
   configurationProfileId: string;
   /**
-   * The configuration content itself — the YAML/JSON/text document served to
+   * The configuration content itself -- the YAML/JSON/text document served to
    * clients. Hosted configuration versions are immutable; changing the
    * content creates a new version (a replacement).
    */
@@ -52,7 +52,7 @@ export interface HostedConfigurationVersion extends Resource<
 > {}
 
 /**
- * An AWS AppConfig hosted configuration version — the actual configuration
+ * An AWS AppConfig hosted configuration version -- the actual configuration
  * content stored in the AppConfig hosted store. Versions are immutable: each
  * change to the content produces a new version (a replacement), and its
  * `versionNumber` is what you deploy through a {@link Deployment}.
@@ -96,7 +96,7 @@ export const HostedConfigurationVersionProvider = () =>
       return {
         stables: ["applicationId", "configurationProfileId", "versionNumber"],
 
-        // Hosted configuration versions are immutable and content-addressed —
+        // Hosted configuration versions are immutable and content-addressed --
         // any change produces a fresh version.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -131,7 +131,7 @@ export const HostedConfigurationVersionProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // Observe — the version may already exist (crash-resumed create).
+          // Observe -- the version may already exist (crash-resumed create).
           const existing =
             output?.versionNumber !== undefined
               ? yield* readVersion(

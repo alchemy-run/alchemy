@@ -79,7 +79,7 @@ export const StoreProviderLive = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Observe — Cloudflare permits exactly one Secrets Store per
+      // Observe -- Cloudflare permits exactly one Secrets Store per
       // account. Reuse the cached store if it still exists, otherwise
       // reuse the first one listed.
       const cached = output?.storeId ? yield* findStoreById(acct, output.storeId) : undefined;
@@ -93,7 +93,7 @@ export const StoreProviderLive = () =>
         };
       }
 
-      // Ensure — no store yet. Create the default. Cloudflare reports
+      // Ensure -- no store yet. Create the default. Cloudflare reports
       // a concurrent create as `MaximumStoresExceeded`; tolerate by
       // re-listing and adopting the now-existing store.
       const response = yield* secretsStore
@@ -157,7 +157,7 @@ export const StoreProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the store is purely virtual: a `dev:` id keyed
+ * Local (dev) provider -- the store is purely virtual: a `dev:` id keyed
  * into the local workerd Secrets Store simulator. The local `Secret`
  * provider seeds values into it and `toRuntimeBinding` lowers a
  * `secrets_store_secret` binding whose store id is `dev:`-prefixed onto the
@@ -176,7 +176,7 @@ export const StoreProviderLocal = () =>
       // Fall through to the engine's default prop diff.
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ output }) {
@@ -190,7 +190,7 @@ export const StoreProviderLocal = () =>
     }),
     delete: Effect.fn(function* () {
       // The simulator's on-disk data is keyed by the dev id; dropping the
-      // state row is enough — orphaned data is reclaimed with `.alchemy`.
+      // state row is enough -- orphaned data is reclaimed with `.alchemy`.
     }),
   });
 

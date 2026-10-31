@@ -21,7 +21,7 @@ export interface DetectorProps {
    */
   description?: string;
   /**
-   * Name of the event type this detector evaluates. Immutable — changing it
+   * Name of the event type this detector evaluates. Immutable -- changing it
    * replaces the detector.
    */
   eventTypeName: string;
@@ -47,7 +47,7 @@ export interface Detector extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector detector — the container that binds an event type
+ * An Amazon Fraud Detector detector -- the container that binds an event type
  * to versioned rule sets and models used to evaluate fraud. Creating the
  * detector is cheap; the rules, models, and detector versions that produce
  * predictions are provisioned separately.
@@ -155,7 +155,7 @@ export const DetectorProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // putDetector is an idempotent upsert — call it to converge whether
+          // putDetector is an idempotent upsert -- call it to converge whether
           // creating or updating the description.
           yield* frauddetector.putDetector({
             detectorId,

@@ -7,7 +7,7 @@ import type * as vite from "vite";
  * `Framework` implementation driving Vocs on Cloudflare Workers.
  *
  * Vocs 2.x is built on waku (its `vocs()` vite plugin composes waku's own
- * `waku/vite-plugins` — environments, adapter-alias, static-build, ... — with
+ * `waku/vite-plugins` -- environments, adapter-alias, static-build, ... -- with
  * vocs's mdx/config/patch plugins), but it does NOT use waku's
  * `unstable_combinedPlugins`, so `@alchemy.run/frontend-frameworks/waku`'s Framework layer
  * cannot drive it directly. This layer mirrors that package's orchestration
@@ -15,7 +15,7 @@ import type * as vite from "vite";
  *
  * - the deploy-target halves (wrangler-free adapter fork + cloudflare vite
  *   plugin pinned to waku's rsc entry) come from
- *   `@alchemy.run/frontend-frameworks/waku/cloudflare` — vocs uses waku's environments
+ *   `@alchemy.run/frontend-frameworks/waku/cloudflare` -- vocs uses waku's environments
  *   plugin, so the same rsc/ssr topology applies;
  * - the plugin stack is the one vocs's own CLI assembles
  *   (`[react(), vocs()]`), with the target's plugins injected ahead of
@@ -104,8 +104,8 @@ const RESOLVED_VIRTUAL_USER_CONFIG = `\0${VIRTUAL_USER_CONFIG}`;
  *
  * Vocs's server code calls `Config.resolve({ server: true })` at request time
  * (middleware, api routes, the ssr entry). In production that branch assumes
- * the Node server layout — `import.meta.dirname` + an on-disk
- * `dist/server/vocs.config.js` — neither of which exists inside workerd
+ * the Node server layout -- `import.meta.dirname` + an on-disk
+ * `dist/server/vocs.config.js` -- neither of which exists inside workerd
  * (upstream vocs has node/vercel/netlify adapters only; there is no workers
  * deploy path to mirror). This plugin:
  *
@@ -148,7 +148,7 @@ const workerdConfigBridge = (configPath: string | undefined): vite.Plugin => ({
       if (!pattern.test(source)) {
         throw new Error(
           `@alchemy.run/frontend-frameworks/vocs: ${normalized} no longer matches the workerd config bridge ` +
-            `pattern ${pattern} — update the transform in packages/frontend-frameworks/src/vocs/Vocs.ts ` +
+            `pattern ${pattern} \u2014 update the transform in packages/frontend-frameworks/src/vocs/Vocs.ts ` +
             "for the installed vocs version",
         );
       }

@@ -15,7 +15,7 @@ export interface WakuProps extends FrameworkSiteProps {
 }
 
 /**
- * Waku RSC and static pages on Prisma Compute. The Node target selects Waku’s node adapter; do not set unstable_adapter.
+ * Waku RSC and static pages on Prisma Compute. The Node target selects Waku's node adapter; do not set unstable_adapter.
  *
  * Native framework development and HMR run without Prisma cloud resources.
  * Apply `Alchemy.remote()` to use the live Compute deployment during dev.

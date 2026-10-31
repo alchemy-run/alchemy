@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetSegmentDetection` — get the results of an asynchronous technical cues and shot segments detection job started by StartSegmentDetection.
+ * Runtime binding for `rekognition:GetSegmentDetection` -- get the results of an asynchronous technical cues and shot segments detection job started by StartSegmentDetection.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetSegmentDetection` on `*` (Rekognition data-plane resources such

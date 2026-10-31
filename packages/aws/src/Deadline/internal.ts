@@ -63,7 +63,7 @@ export const syncDeadlineTags = Effect.fn(function* (arn: string, desired: Recor
  * Deadline auto-creates CloudWatch log groups under
  * `/aws/deadline/{farmId}/{queueId}` (queue job/session logs) and
  * `/aws/deadline/{farmId}/{fleetId}/...` (fleet worker logs), and neither
- * `deleteQueue` nor `deleteFarm` removes them — without this reap every
+ * `deleteQueue` nor `deleteFarm` removes them -- without this reap every
  * deleted farm strands orphaned log groups. Idempotent: a group already
  * gone (or never created) is not an error.
  */
@@ -89,7 +89,7 @@ export const reapDeadlineLogGroups = Effect.fn(function* (prefix: string) {
 
 /**
  * Reap every child resource of a farm so `deleteFarm` can succeed. A normal
- * stack destroy deletes children before the farm, so this observes nothing —
+ * stack destroy deletes children before the farm, so this observes nothing --
  * but an orphan sweep (nuke) or a mid-run crash can leave a farm whose
  * children were never enumerated, and `deleteFarm` then rejects with
  * `ConflictException` ("This farm still contains some storage profiles /
@@ -98,13 +98,13 @@ export const reapDeadlineLogGroups = Effect.fn(function* (prefix: string) {
  * Order matters: queue-fleet/queue-limit associations must be stopped and
  * deleted before their queues/fleets/limits; storage profiles may be
  * referenced by queues (`allowedStorageProfileIds`) so they go after the
- * queues. Every step is idempotent — a child already gone is not an error.
+ * queues. Every step is idempotent -- a child already gone is not an error.
  */
 export const reapFarmChildren = Effect.fn(function* (farmId: string) {
-  // Every list catches ResourceNotFoundException → [] because the farm
+  // Every list catches ResourceNotFoundException -> [] because the farm
   // itself may already be gone.
 
-  // 1. Queue-fleet associations — stop scheduling, then delete (the delete
+  // 1. Queue-fleet associations -- stop scheduling, then delete (the delete
   // rejects with ConflictException until the stop settles to STOPPED).
   const queueFleetAssociations = yield* deadline.listQueueFleetAssociations.items({ farmId }).pipe(
     EffectStream.runCollect,
@@ -141,7 +141,7 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
     { concurrency: 4, discard: true },
   );
 
-  // 2. Queue-limit associations — same stop-then-delete dance.
+  // 2. Queue-limit associations -- same stop-then-delete dance.
   const queueLimitAssociations = yield* deadline.listQueueLimitAssociations.items({ farmId }).pipe(
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
@@ -240,12 +240,12 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
   yield* Effect.forEach(
     limits,
     // deleteLimit is idempotent server-side: neither ResourceNotFound nor
-    // Conflict is in its error union — deleting a missing limit succeeds.
+    // Conflict is in its error union -- deleting a missing limit succeeds.
     (limit) => deadline.deleteLimit({ farmId, limitId: limit.limitId }),
     { concurrency: 4, discard: true },
   );
 
-  // 7. Storage profiles (after queues — a queue's allowedStorageProfileIds
+  // 7. Storage profiles (after queues -- a queue's allowedStorageProfileIds
   // reference blocks profile deletion with ConflictException).
   const storageProfiles = yield* deadline.listStorageProfiles.items({ farmId }).pipe(
     EffectStream.runCollect,
@@ -267,7 +267,7 @@ export const reapFarmChildren = Effect.fn(function* (farmId: string) {
   );
 });
 
-// Explicitly-typed retry wrappers — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrappers -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -306,7 +306,7 @@ export const retryWhileFarmSettling = <A, E extends { readonly _tag: string }, R
 
 /**
  * A freshly-created IAM role may not have propagated when Deadline validates
- * it — createMonitor surfaces this as AccessDeniedException, createFleet /
+ * it -- createMonitor surfaces this as AccessDeniedException, createFleet /
  * updateFleet as the typed `DeadlineRoleNotAssumable` ("Could not
  * sts:AssumeRole ... check its trust policy"). Bounded retry through the
  * propagation window (~60s).

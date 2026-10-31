@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `greengrass:DeleteCoreDevice`.
  *
  * Deregisters a core device from IoT Greengrass (the backing IoT thing is
- * untouched) — the fleet-decommissioning primitive for automation that
+ * untouched) -- the fleet-decommissioning primitive for automation that
  * retires devices. The caller supplies the core device thing name at
  * runtime. Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.DeleteCoreDeviceHttp)`.
  * ### Managing Core Devices
  * **Example:** Decommission A Core Device
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteCoreDevice = yield* AWS.GreengrassV2.DeleteCoreDevice();
  *
  * // runtime

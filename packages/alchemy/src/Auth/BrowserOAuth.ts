@@ -14,7 +14,7 @@ import * as Interaction from "../Interaction.ts";
 import { CallbackServerStartError, type DeviceAuthorization } from "./OAuthFlow.ts";
 
 export interface BrowserOAuthOptions<A, E1, R1, E2, R2> {
-  /** Display name, e.g. "Cloudflare" — used in the prompt title. */
+  /** Display name, e.g. "Cloudflare" -- used in the prompt title. */
   provider: string;
   /** The authorization URL the browser was pointed at. */
   url: string;
@@ -22,7 +22,7 @@ export interface BrowserOAuthOptions<A, E1, R1, E2, R2> {
   callback: Effect.Effect<A, E1, R1>;
   /** Exchanges a manually pasted code / callback URL for credentials. */
   exchange: (input: string) => Effect.Effect<A, E2, R2>;
-  /** Spinner label. @default "waiting for browser authorization (up to 5 minutes)…" */
+  /** Spinner label. @default "waiting for browser authorization (up to 5 minutes)..." */
   waitingLabel?: string;
 }
 
@@ -30,7 +30,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
   options: BrowserOAuthOptions<A, E1, R1, E2, R2>,
 ) {
   // A callback server that cannot start (e.g. the port is taken) must not
-  // fail the race when the user can paste the code instead — warn and hang
+  // fail the race when the user can paste the code instead -- warn and hang
   // so manual entry stays available. Without terminal input there is no
   // manual entry, so the startup error fails the login. Genuine OAuth
   // failures delivered via the callback always fail fast.
@@ -44,7 +44,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
           Effect.catchIf(
             (e): e is E1 & CallbackServerStartError => e instanceof CallbackServerStartError,
             (e) =>
-              Interaction.warning(`${e.message} — paste the authorization code instead.`).pipe(
+              Interaction.warning(`${e.message} \u2014 paste the authorization code instead.`).pipe(
                 Effect.andThen(Effect.never),
               ),
           ),
@@ -59,7 +59,7 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
 });
 
 export interface DeviceOAuthOptions<A, E, R> {
-  /** Display name, e.g. "Cloudflare" — used in the prompt title. */
+  /** Display name, e.g. "Cloudflare" -- used in the prompt title. */
   provider: string;
   /** The pending device authorization to show the user. */
   authorization: DeviceAuthorization;

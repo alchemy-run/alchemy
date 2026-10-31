@@ -10,7 +10,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
 export interface TestWirelessDeviceRequest extends Omit<iotw.TestWirelessDeviceRequest, "Id"> {}
 
 /**
- * Runtime binding for `iotwireless:TestWirelessDevice` — simulate a
+ * Runtime binding for `iotwireless:TestWirelessDevice` -- simulate a
  * provisioned device by sending an uplink data payload of `Hello` on behalf
  * of the bound wireless device, from a deployed Lambda or Task. Useful for
  * verifying a destination's routing without radio hardware.

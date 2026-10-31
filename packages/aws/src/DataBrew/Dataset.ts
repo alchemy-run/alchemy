@@ -138,7 +138,7 @@ export interface DatasetProps {
    */
   formatOptions?: DatasetFormatOptions;
   /**
-   * Where the data lives — S3, a Glue Data Catalog table, or a JDBC
+   * Where the data lives -- S3, a Glue Data Catalog table, or a JDBC
    * database.
    */
   input: DatasetInput;
@@ -166,7 +166,7 @@ export interface Dataset extends Resource<
 > {}
 
 /**
- * An AWS Glue DataBrew dataset — a pointer to source data (S3 file/prefix,
+ * An AWS Glue DataBrew dataset -- a pointer to source data (S3 file/prefix,
  * Glue Data Catalog table, or JDBC query) plus parsing options. The dataset
  * definition itself stores no data and is free; it is consumed by DataBrew
  * projects and jobs.
@@ -373,7 +373,7 @@ export const DatasetProvider = () =>
           // 1. OBSERVE
           const dataset = yield* observe(name);
 
-          // 2. ENSURE / 3. SYNC — UpdateDataset is a full PUT of the definition
+          // 2. ENSURE / 3. SYNC -- UpdateDataset is a full PUT of the definition
           if (dataset === undefined) {
             yield* databrew
               .createDataset({
@@ -382,7 +382,7 @@ export const DatasetProvider = () =>
                 Tags: desiredTags,
               })
               .pipe(
-                // creation race — another reconcile won; fall through to sync
+                // creation race -- another reconcile won; fall through to sync
                 Effect.catchTag("ConflictException", () => Effect.void),
               );
           } else {
@@ -404,7 +404,7 @@ export const DatasetProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A ConflictException surfaces briefly after an associated project
-          // or job is deleted (eventual consistency) — retry bounded.
+          // or job is deleted (eventual consistency) -- retry bounded.
           yield* retryWhileConflict(databrew.deleteDataset({ Name: output.datasetName })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );

@@ -41,7 +41,7 @@ export type InterceptDeploymentGroupNestedDeployment = {
 };
 
 export type InterceptLocation = {
-  /** Cloud location (`us-central1-a`, `asia-south1`, …). */
+  /** Cloud location (`us-central1-a`, `asia-south1`, ...). */
   location: string | undefined;
   /** Association state in this location. */
   state: string | undefined;
@@ -57,18 +57,18 @@ export type InterceptDeploymentGroupProps = {
    * Deployment group id (the `{interceptDeploymentGroup}` segment of
    * `projects/{project}/locations/global/interceptDeploymentGroups/{interceptDeploymentGroup}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the group.
+   * logical id. Immutable -- changing it replaces the group.
    */
   interceptDeploymentGroupId?: string;
   /**
-   * Location. Intercept deployment groups are global. Immutable —
+   * Location. Intercept deployment groups are global. Immutable --
    * changing it replaces the group.
    * @default "global"
    */
   location?: string;
   /**
    * VPC network used by every child deployment, e.g.
-   * `projects/{project}/global/networks/{network}`. Immutable — changing
+   * `projects/{project}/global/networks/{network}`. Immutable -- changing
    * it replaces the group.
    */
   network: string;
@@ -92,7 +92,7 @@ export type InterceptDeploymentGroup = Resource<
     interceptDeploymentGroupId: string;
     /** Project id. */
     project: string;
-    /** Location id — always `"global"`. */
+    /** Location id -- always `"global"`. */
     location: string;
     /** VPC network resource name. */
     network: string | undefined;
@@ -100,7 +100,7 @@ export type InterceptDeploymentGroup = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether reconciling is in progress. */
     reconciling: boolean;
@@ -120,7 +120,7 @@ export type InterceptDeploymentGroup = Resource<
 >;
 
 /**
- * A global intercept deployment group — aggregates zonal intercept
+ * A global intercept deployment group -- aggregates zonal intercept
  * backends into a single intercept service that consumers attach via
  * an endpoint group.
  *

@@ -197,7 +197,7 @@ export const TableProvider = () =>
       const namespace = news.namespace as string;
       const name = output?.name ?? (yield* createTableName(id, news));
 
-      // Observe — read live state; the table may have been deleted
+      // Observe -- read live state; the table may have been deleted
       // out-of-band even if `output` cached its ARN.
       let table = yield* s3tables
         .getTable({ tableBucketARN: tableBucketArn, namespace, name })
@@ -206,7 +206,7 @@ export const TableProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
-      // Ensure — create if missing, tolerating a concurrent create.
+      // Ensure -- create if missing, tolerating a concurrent create.
       if (table === undefined) {
         yield* s3tables
           .createTable({

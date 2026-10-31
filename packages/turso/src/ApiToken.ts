@@ -147,7 +147,7 @@ export const ApiTokenProvider = () =>
           // The generation a delete-first replacement is about to revoke.
           if (previous !== undefined && previous.id === observed.id) return previous;
           // The secret is only revealed at creation, so a token we have no
-          // state for can't be adopted with its value — reconcile re-mints.
+          // state for can't be adopted with its value -- reconcile re-mints.
           return Unowned({
             id: observed.id ?? "",
             name,
@@ -172,7 +172,7 @@ export const ApiTokenProvider = () =>
             return output;
           }
 
-          // Ensure — a token we hold no secret for (a lost create, or an
+          // Ensure -- a token we hold no secret for (a lost create, or an
           // adoption) is revoked and re-minted.
           if (observed) {
             yield* session.note(`Re-minting API token ${name}...`);

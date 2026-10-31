@@ -37,12 +37,12 @@ export type MulticastConsumerAssociationProps = {
    * Association id (the `{multicastConsumerAssociation}` segment of
    * `projects/{project}/locations/{location}/multicastConsumerAssociations/{multicastConsumerAssociation}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Must be at most 48 characters. Immutable — changing it
+   * logical id. Must be at most 48 characters. Immutable -- changing it
    * replaces the association.
    */
   multicastConsumerAssociationId?: string;
   /**
-   * Zone of the association (`us-central1-a`, …). Immutable — changing
+   * Zone of the association (`us-central1-a`, ...). Immutable -- changing
    * it replaces the association. `US-CENTRAL1-A` is accepted and
    * normalized to `us-central1-a`.
    * @default "us-central1-a"
@@ -51,13 +51,13 @@ export type MulticastConsumerAssociationProps = {
   /**
    * Consumer VPC network
    * `projects/{project}/locations/global/networks/{network}`. Immutable
-   * — changing it replaces the association.
+   * -- changing it replaces the association.
    */
   network: string;
   /**
    * Multicast domain activation in the same zone
    * (`projects/{project}/locations/{location}/multicastDomainActivations/{activation}`).
-   * The live API currently requires this field. Immutable — changing it
+   * The live API currently requires this field. Immutable -- changing it
    * replaces the association.
    */
   multicastDomainActivation?: string;
@@ -81,7 +81,7 @@ export type MulticastConsumerAssociation = Resource<
     multicastConsumerAssociationId: string;
     /** Project id. */
     project: string;
-    /** Zone id (`us-central1-a`, …). */
+    /** Zone id (`us-central1-a`, ...). */
     location: string;
     /** Consumer VPC network resource name. */
     network: string | undefined;

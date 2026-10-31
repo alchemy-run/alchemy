@@ -40,7 +40,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
-        // straight from `WorkerEnvironment` — see `unpackEnvValue` for why
+        // straight from `WorkerEnvironment` -- see `unpackEnvValue` for why
         // this must never resolve through `Config.String`.
         Effect.map((env) => unpackEnvValue(env?.[key])),
       ) as any,
@@ -60,7 +60,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
     ) => {
       // Capture the user's full default-export shape so `exports` can
       // expose any non-handler methods on it as RPC methods on the
-      // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
+      // deployed `WorkerEntrypoint` subclass -- see `__rpc__` below.
       if (options?.shape) userShape = options.shape;
       return ctx.listen(makeRequestHandler(handler));
     },
@@ -122,7 +122,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
           ];
         };
 
-      // RPC method dispatchers — one per non-handler method on the user's
+      // RPC method dispatchers -- one per non-handler method on the user's
       // shape. Each dispatcher is invoked by the WorkerEntrypoint bridge
       // as `dispatcher(args, ctx)`: `args` are the user-facing call args,
       // `ctx` is the `this.ctx` that Cloudflare hands the bridge per RPC

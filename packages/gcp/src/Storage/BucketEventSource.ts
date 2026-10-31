@@ -26,7 +26,7 @@ export interface BucketEvent {
   eventTime: string;
   /**
    * Object metadata at the time of the event (the `JSON_API_V1` payload):
-   * `size`, `contentType`, `md5Hash`, `metadata`, …
+   * `size`, `contentType`, `md5Hash`, `metadata`, ...
    */
   metadata: storage.Storage_Object;
 }
@@ -101,7 +101,7 @@ export type BucketEventSourceService = <Req = never>(
  *   { eventTypes: ["OBJECT_DELETE", "OBJECT_ARCHIVE"] },
  *   (events) => events.pipe(Stream.runForEach(handle)),
  * );
- * // …provided with GCP.Storage.BucketEventSourceLive
+ * // ...provided with GCP.Storage.BucketEventSourceLive
  * // and GCP.Run.TopicPullEventSource
  * ```
  *

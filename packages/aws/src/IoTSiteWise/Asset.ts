@@ -79,10 +79,10 @@ export interface Asset extends Resource<
 > {}
 
 /**
- * An AWS IoT SiteWise asset — an instance of an asset model representing
+ * An AWS IoT SiteWise asset -- an instance of an asset model representing
  * a physical piece of industrial equipment or a logical grouping.
  *
- * Asset creation and updates are asynchronous (`CREATING`/`UPDATING` →
+ * Asset creation and updates are asynchronous (`CREATING`/`UPDATING` ->
  * `ACTIVE`); the provider waits for the asset to converge to `ACTIVE`
  * before returning.
  *
@@ -151,7 +151,7 @@ const findAssetByName = Effect.fn(function* (name: string, assetModelId: string)
 });
 
 /**
- * An asset still transitioning toward the awaited state — retried by
+ * An asset still transitioning toward the awaited state -- retried by
  * {@link waitForAssetState}'s bounded schedule.
  */
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
@@ -168,7 +168,7 @@ export class AssetProvisioningFailed extends Data.TaggedError("AssetProvisioning
   readonly message: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrapper — see AssetModel.ts for why inline
+// Explicitly-typed retry wrapper -- see AssetModel.ts for why inline
 // Effect.retry is forbidden in provider lifecycle code.
 const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -215,7 +215,7 @@ export const AssetProvider = () =>
         stables: ["assetId", "assetArn"],
         list: () =>
           Effect.gen(function* () {
-            // ListAssets requires an assetModelId filter — enumerate models
+            // ListAssets requires an assetModelId filter -- enumerate models
             // first, then each model's assets.
             const models = yield* sitewise.listAssetModels.pages({}).pipe(
               EffectStream.runCollect,
@@ -265,13 +265,13 @@ export const AssetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so
+          // Observe -- prefer the cached id; fall back to a name lookup so
           // a create whose state failed to persist is adopted.
           let state = output?.assetId
             ? yield* readAssetById(output.assetId)
             : yield* findAssetByName(name, news.assetModelId);
 
-          // Ensure — create if missing, then wait for ACTIVE. A model that
+          // Ensure -- create if missing, then wait for ACTIVE. A model that
           // just reached ACTIVE can still briefly reject creates with
           // ConflictingOperationException.
           if (state === undefined) {
@@ -293,7 +293,7 @@ export const AssetProvider = () =>
             }
           }
 
-          // Sync — name/description drift via UpdateAsset.
+          // Sync -- name/description drift via UpdateAsset.
           const described = state.described;
           if (
             name !== described.assetName ||
@@ -310,7 +310,7 @@ export const AssetProvider = () =>
             yield* session.note(`Updated asset ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncSiteWiseTags(state.attrs.assetArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.assetArn);
@@ -325,7 +325,7 @@ export const AssetProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // Deleting an asset that is still associated to a parent (or mid
-          // transition) raises ConflictingOperationException — retry
+          // transition) raises ConflictingOperationException -- retry
           // through the window, then wait until fully gone so the asset
           // model can be deleted after it.
           yield* retryThroughConflictingOperation(

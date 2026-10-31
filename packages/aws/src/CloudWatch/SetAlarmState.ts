@@ -6,7 +6,7 @@ import type { AlarmResource } from "./binding-common.ts";
 export interface SetAlarmStateRequest extends Omit<cloudwatch.SetAlarmStateInput, "AlarmName"> {}
 
 /**
- * Runtime binding for `cloudwatch:SetAlarmState` — force the bound alarm
+ * Runtime binding for `cloudwatch:SetAlarmState` -- force the bound alarm
  * into a specific state (useful for testing alarm actions or resetting a
  * stuck alarm). Bind it to an {@link Alarm} / {@link CompositeAlarm}; the
  * alarm name is injected automatically.
@@ -16,7 +16,7 @@ export interface SetAlarmStateRequest extends Omit<cloudwatch.SetAlarmStateInput
  * ### Managing Alarm Actions
  * **Example:** Force an Alarm into ALARM to Test Its Actions
  * ```typescript
- * // init — grants cloudwatch:SetAlarmState on the alarm
+ * // init -- grants cloudwatch:SetAlarmState on the alarm
  * const setAlarmState = yield* AWS.CloudWatch.SetAlarmState(alarm);
  *
  * // runtime

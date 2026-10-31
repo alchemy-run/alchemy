@@ -20,7 +20,7 @@ import type { Workspace } from "./Workspace.ts";
  *   licenseType: "ENTERPRISE",
  *   grafanaToken: token,
  * });
- * // ws.licenseType → "ENTERPRISE"
+ * // ws.licenseType -> "ENTERPRISE"
  * ```
  *
  * @binding

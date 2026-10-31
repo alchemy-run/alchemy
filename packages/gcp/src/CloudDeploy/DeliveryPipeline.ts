@@ -69,11 +69,11 @@ export type DeliveryPipelineProps = {
    * Delivery pipeline id (the `{deliveryPipeline}` segment of
    * `projects/{project}/locations/{location}/deliveryPipelines/{deliveryPipeline}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the pipeline.
+   * and logical id. Immutable -- changing it replaces the pipeline.
    */
   deliveryPipelineId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the pipeline. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -141,7 +141,7 @@ export type DeliveryPipeline = Resource<
 >;
 
 /**
- * A Cloud Deploy delivery pipeline — the ordered stages a Skaffold
+ * A Cloud Deploy delivery pipeline -- the ordered stages a Skaffold
  * configuration progresses through.
  *
  * Changing `deliveryPipelineId` or `location` replaces the pipeline.

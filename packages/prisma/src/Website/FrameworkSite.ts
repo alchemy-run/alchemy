@@ -49,7 +49,7 @@ export type WebsiteDomain =
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
        * switchboard (`switchboard.{region}.prisma.build`) before the domain
-       * is registered — Prisma verifies it on registration (see
+       * is registered -- Prisma verifies it on registration (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
        * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
        */
@@ -62,7 +62,7 @@ export const websiteDomainName = (domain: WebsiteDomain | undefined): string | u
 
 /**
  * The regional switchboard a custom hostname CNAMEs to, derived from the
- * app endpoint (`https://{app}.{region}.prisma.build` →
+ * app endpoint (`https://{app}.{region}.prisma.build` ->
  * `switchboard.{region}.prisma.build`).
  */
 const switchboardTarget = (endpoint: string | undefined) => {

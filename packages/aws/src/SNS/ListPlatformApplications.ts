@@ -7,7 +7,7 @@ export interface ListPlatformApplicationsRequest extends sns.ListPlatformApplica
 /**
  * Runtime binding for `sns:ListPlatformApplications`.
  *
- * An account-scoped operation — pages through the mobile-push platform
+ * An account-scoped operation -- pages through the mobile-push platform
  * applications in the account/region.
  * Provide the `ListPlatformApplicationsHttp` layer on the Function to implement the binding.
  * ### Mobile Push

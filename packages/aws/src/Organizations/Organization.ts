@@ -113,12 +113,12 @@ export const OrganizationProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const desiredFeatureSet = news.featureSet ?? "ALL";
 
-          // Observe — fetch the live singleton organization. There's at most
+          // Observe -- fetch the live singleton organization. There's at most
           // one organization per management account, and `read` may have
           // surfaced an existing one for adoption.
           let org = yield* readOrganization();
 
-          // Ensure — create the organization if it's missing. Tolerate
+          // Ensure -- create the organization if it's missing. Tolerate
           // `AlreadyInOrganizationException` as a race with a concurrent
           // creator (e.g. another tool, or a peer reconciler).
           if (!org) {
@@ -140,7 +140,7 @@ export const OrganizationProvider = () =>
 
           const orgArn = org.Arn;
 
-          // Sync feature set — observed ↔ desired. `ensureFeatureSet`
+          // Sync feature set -- observed <-> desired. `ensureFeatureSet`
           // handles the only legal transition (CONSOLIDATED_BILLING -> ALL)
           // and rejects anything else.
           org = yield* ensureFeatureSet({

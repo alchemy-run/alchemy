@@ -15,7 +15,7 @@ export interface DeleteAppsListRequest extends fms.DeleteAppsListRequest {}
  * ### Applications Lists
  * **Example:** Delete an Applications List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deleteAppsList = yield* AWS.FMS.DeleteAppsList();
  *
  * // runtime

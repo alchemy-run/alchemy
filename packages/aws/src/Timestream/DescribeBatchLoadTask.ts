@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface DescribeBatchLoadTaskRequest extends TSW.DescribeBatchLoadTaskRequest {}
 
 /**
- * Runtime binding for `timestream-write:DescribeBatchLoadTask` — poll a bulk
+ * Runtime binding for `timestream-write:DescribeBatchLoadTask` -- poll a bulk
  * import started by {@link CreateBatchLoadTask} for its status and progress
  * report.
  *
@@ -18,7 +18,7 @@ export interface DescribeBatchLoadTaskRequest extends TSW.DescribeBatchLoadTaskR
  * ### Batch Loading
  * **Example:** Poll an import until it finishes
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeBatchLoadTask = yield* Timestream.DescribeBatchLoadTask();
  *
  * // runtime

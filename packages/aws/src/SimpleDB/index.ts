@@ -15,4 +15,4 @@ export * from "./PutAttributes.ts";
 export * from "./PutAttributesHttp.ts";
 export * from "./Select.ts";
 export * from "./SelectHttp.ts";
-// NOTE: Binding.ts is shared internal scaffolding — deliberately NOT exported.
+// NOTE: Binding.ts is shared internal scaffolding -- deliberately NOT exported.

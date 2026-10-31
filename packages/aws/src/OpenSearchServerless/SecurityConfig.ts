@@ -13,9 +13,9 @@ import { retryWhileConflict } from "./internal.ts";
 
 /**
  * The kind of security configuration:
- * - `saml` — SAML federation with an external identity provider.
- * - `iamidentitycenter` — AWS IAM Identity Center integration.
- * - `iamfederation` — IAM federation via session attributes.
+ * - `saml` -- SAML federation with an external identity provider.
+ * - `iamidentitycenter` -- AWS IAM Identity Center integration.
+ * - `iamfederation` -- IAM federation via session attributes.
  */
 export type SecurityConfigType = "saml" | "iamidentitycenter" | "iamfederation";
 
@@ -88,16 +88,16 @@ export interface SecurityConfigProps {
    */
   description?: string;
   /**
-   * SAML options — required when `type` is `saml`.
+   * SAML options -- required when `type` is `saml`.
    */
   samlOptions?: SamlOptions;
   /**
-   * IAM Identity Center options — required when `type` is
+   * IAM Identity Center options -- required when `type` is
    * `iamidentitycenter`. `instanceArn` is create-only.
    */
   iamIdentityCenterOptions?: IamIdentityCenterOptions;
   /**
-   * IAM federation options — required when `type` is `iamfederation`.
+   * IAM federation options -- required when `type` is `iamfederation`.
    */
   iamFederationOptions?: IamFederationOptions;
 }
@@ -294,7 +294,7 @@ export const SecurityConfigProvider = () =>
           // 1. OBSERVE
           let detail = yield* observe(configId);
 
-          // 2. ENSURE — create if missing; tolerate a concurrent create race
+          // 2. ENSURE -- create if missing; tolerate a concurrent create race
           if (detail?.id === undefined) {
             detail = yield* aoss
               .createSecurityConfig({
@@ -310,7 +310,7 @@ export const SecurityConfigProvider = () =>
                 Effect.catchTag("ConflictException", () => observe(configId)),
               );
           } else {
-            // 3. SYNC — update when observed drifts from desired
+            // 3. SYNC -- update when observed drifts from desired
             const samlDrift =
               desiredSaml !== undefined &&
               (desiredSaml.metadata !== detail.samlOptions?.metadata ||

@@ -162,12 +162,12 @@ export const ServerCertificateProvider = () =>
             ...news.tags,
           };
 
-          // Observe — `getServerCertificate` returns the live cert (or
+          // Observe -- `getServerCertificate` returns the live cert (or
           // absence). The cert body / chain are immutable (`diff`
           // triggers replacement), so we never re-upload during sync.
           let cert = yield* readCertificate(name);
 
-          // Ensure — upload when missing. On race, verify alchemy
+          // Ensure -- upload when missing. On race, verify alchemy
           // ownership tags; bail out otherwise.
           if (!cert?.ServerCertificateMetadata?.Arn) {
             const created = yield* iam
@@ -264,7 +264,7 @@ export const ServerCertificateProvider = () =>
               (meta) =>
                 Effect.gen(function* () {
                   const cert = yield* readCertificate(meta.ServerCertificateName);
-                  // Raced delete between list and hydrate — skip it.
+                  // Raced delete between list and hydrate -- skip it.
                   if (!cert?.ServerCertificateMetadata?.Arn) {
                     return undefined;
                   }

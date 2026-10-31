@@ -49,7 +49,7 @@ export const IdentityPoolAdminHttp = Layer.effect(
             },
             {
               Effect: "Allow",
-              // These act on identity IDs, which have no ARN form —
+              // These act on identity IDs, which have no ARN form --
               // Cognito Identity does not support resource-level
               // scoping for them.
               Action: ["cognito-identity:DeleteIdentities", "cognito-identity:DescribeIdentity"],

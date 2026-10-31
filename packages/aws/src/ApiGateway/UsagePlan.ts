@@ -298,7 +298,7 @@ export const UsagePlanProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — fetch live usage plan if we have a cached id. We
+          // Observe -- fetch live usage plan if we have a cached id. We
           // never trust `output.apiStages`/`output.throttle`/etc. for
           // diffing; we re-read every reconcile so adoption converges.
           let observed = output?.id
@@ -307,7 +307,7 @@ export const UsagePlanProvider = () =>
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
-          // Ensure — create the usage plan if missing.
+          // Ensure -- create the usage plan if missing.
           if (!observed?.id) {
             const created = yield* ag.createUsagePlan({
               name,
@@ -324,7 +324,7 @@ export const UsagePlanProvider = () =>
 
           const planId = observed.id!;
 
-          // Sync mutable plan fields — diff observed cloud state against
+          // Sync mutable plan fields -- diff observed cloud state against
           // desired and emit only the delta as PATCH operations.
           const patches: ag.PatchOperation[] = [];
           if (news.description !== observed.description) {
@@ -344,7 +344,7 @@ export const UsagePlanProvider = () =>
             });
           }
 
-          // Sync tags — observed ↔ desired.
+          // Sync tags -- observed <-> desired.
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({

@@ -6,7 +6,7 @@ import type { Pipeline } from "./Pipeline.ts";
 /**
  * Runtime binding for `osis:RevokePipelineEndpointConnections`.
  *
- * Revokes VPC endpoint connections attached to the bound {@link Pipeline} —
+ * Revokes VPC endpoint connections attached to the bound {@link Pipeline} --
  * a security control that cuts off ingest access from specific endpoints
  * (e.g. after an account is offboarded). The pipeline ARN is injected from
  * the binding; pass the endpoint IDs to revoke. Provide the implementation
@@ -14,7 +14,7 @@ import type { Pipeline } from "./Pipeline.ts";
  * ### Managing Endpoint Connections
  * **Example:** Revoke an Endpoint's Access
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const revokeConnections =
  *   yield* AWS.OSIS.RevokePipelineEndpointConnections(pipeline);
  *

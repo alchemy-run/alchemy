@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-routes:CalculateRoutes` — compute one or more
+ * Runtime binding for `geo-routes:CalculateRoutes` -- compute one or more
  * routes between an origin and a destination, with optional waypoints, travel
  * mode, and traffic options.
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const calculateRoutes = yield* AWS.GeoRoutes.CalculateRoutes();
  *
- * // runtime — coordinates are [longitude, latitude]
+ * // runtime -- coordinates are [longitude, latitude]
  * const result = yield* calculateRoutes({
  *   Origin: [-122.339, 47.61],
  *   Destination: [-122.201, 47.61],

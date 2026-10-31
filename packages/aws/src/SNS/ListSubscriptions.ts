@@ -7,7 +7,7 @@ export interface ListSubscriptionsRequest extends sns.ListSubscriptionsInput {}
 /**
  * Runtime binding for `sns:ListSubscriptions`.
  *
- * An account-scoped operation — bind it with no arguments to page through
+ * An account-scoped operation -- bind it with no arguments to page through
  * all subscriptions in the account/region. The binding grants the host
  * function `sns:ListSubscriptions`. Provide the `ListSubscriptionsHttp`
  * layer on the Function to implement the binding.

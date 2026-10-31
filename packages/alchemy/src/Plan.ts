@@ -115,7 +115,7 @@ export interface BaseNode<R extends ResourceLike<string> = ResourceLike<string>>
   /**
    * The {@link ProviderMode} this node's `provider` was resolved for.
    * `undefined` for mode-agnostic providers (a single implementation
-   * serves both dev and deploy) — such resources never persist a mode and
+   * serves both dev and deploy) -- such resources never persist a mode and
    * never replace on a mode switch. Apply stamps this onto every state
    * commit as `providerMode`.
    */
@@ -125,7 +125,7 @@ export interface BaseNode<R extends ResourceLike<string> = ResourceLike<string>>
 }
 
 /**
- * Base for the apply-side nodes (create/update/replace/noop) — the nodes a
+ * Base for the apply-side nodes (create/update/replace/noop) -- the nodes a
  * DECLARED resource plans to. Only these can carry a rename: a `Delete`
  * node is an orphaned row with no declaration, so nothing can claim to
  * have renamed it (migrating rows are excluded from the orphan pass
@@ -142,7 +142,7 @@ export interface ApplyNodeBase<
   };
   /**
    * Set when this resource's persisted row was found under former FQNs
-   * (`renamedFrom(...)`) — the migration source (no row at the current FQN
+   * (`renamedFrom(...)`) -- the migration source (no row at the current FQN
    * yet) and/or stale leftovers from interrupted migrations (same
    * `instanceId` as the resource's row; a rename chain with repeated
    * partial failures can leave several). Apply persists the move up-front,
@@ -203,7 +203,7 @@ export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNod
     | ReplacedResourceState;
 }
 
-// ── Tasks ──────────────────────────────────────────────────────────────────
+// -- Tasks ------------------------------------------------------------------
 //
 // Tasks live in the same FQN namespace as resources and participate in the
 // same DAG (downstream/upstream edges, cycle detection). Their plan nodes
@@ -219,7 +219,7 @@ export interface ActionNodeBase<T extends ActionLike = ActionLike> {
 
 export interface ActionRun<T extends ActionLike = ActionLike> extends ActionNodeBase<T> {
   action: "run";
-  /** Input expression — resolved against tracker outputs during apply. */
+  /** Input expression -- resolved against tracker outputs during apply. */
   input: T["Input"];
   /** Previous state, if any. `undefined` on the first run. */
   state: ActionState | undefined;
@@ -245,7 +245,7 @@ export type Plan<Output = any> = {
   };
   /**
    * Tasks scheduled for this apply. Keyed by FQN, same namespace as
-   * `resources` — Apply's scheduler merges both into a single DAG.
+   * `resources` -- Apply's scheduler merges both into a single DAG.
    */
   actions: {
     [id in string]: ActionApply;
@@ -268,16 +268,16 @@ export type Plan<Output = any> = {
   cycleMembers: ReadonlySet<string>;
   /**
    * The run-level default {@link ProviderMode} this plan was built with
-   * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
-   * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
+   * (`alchemy dev` -> `"local"`, `alchemy deploy` -> `"live"`). Renderers use
+   * it to tag only the EXCEPTIONS -- rows whose resolved mode differs from
    * the run default. `undefined` (plans built by older/auxiliary builders)
    * is treated as `"live"`.
    */
   defaultMode?: ProviderMode;
   /**
    * Marks a plan built by {@link destroy}. `apply` finishes a destroy plan
-   * by deleting the stage's remaining persisted state — notably the stack
-   * output record written by the last deploy — instead of persisting a new
+   * by deleting the stage's remaining persisted state -- notably the stack
+   * output record written by the last deploy -- instead of persisting a new
    * (empty) output.
    */
   destroy?: boolean;
@@ -314,7 +314,7 @@ export const describeAction = (node: ActionApply | ActionDelete): PlannedAction 
 });
 
 /**
- * Serializable per-row views of a plan — everything a renderer or remote
+ * Serializable per-row views of a plan -- everything a renderer or remote
  * consumer needs without holding the native plan: resource rows with their
  * bindings and provider modes, orphan deletions, and stack actions.
  */
@@ -404,10 +404,10 @@ const makePlan = <A>(
 
     // A bare platform tag yields a forward reference registered with
     // `undefined` props (and `RequiresImplementation`); its `.make(props,
-    // impl)` Layer repairs the props when it builds (in either order — the
+    // impl)` Layer repairs the props when it builds (in either order -- the
     // #874 circular env-tag pattern). Props still `undefined` after the
     // whole program evaluated means the tag was yielded but its Layer was
-    // never provided — fail fast naming the class and its Layer instead of
+    // never provided -- fail fast naming the class and its Layer instead of
     // letting a provider read `undefined` props (#1054). Plain resources
     // may legitimately be yielded without props (a reference to
     // already-deployed state), so the check is scoped to platform tags.
@@ -435,8 +435,8 @@ const makePlan = <A>(
       });
     });
 
-    // The run-level default provider mode (`alchemy dev` → "local",
-    // `alchemy deploy` → "live"). A resource-scoped `remote()` (captured on
+    // The run-level default provider mode (`alchemy dev` -> "local",
+    // `alchemy deploy` -> "live"). A resource-scoped `remote()` (captured on
     // the resource at registration as `Mode`) opts out of local emulation.
     const runDefaultMode = yield* defaultProviderMode;
 
@@ -446,7 +446,7 @@ const makePlan = <A>(
      *
      * The mode only "sticks" when the provider actually distinguishes
      * modes (registered via `ProviderLayer.dual`). Mode-agnostic providers
-     * satisfy any requested mode with their single implementation — in a
+     * satisfy any requested mode with their single implementation -- in a
      * dev run, a construct that mixes emulatable resources with live-only
      * ones (e.g. R2 buckets) just works.
      */
@@ -471,7 +471,7 @@ const makePlan = <A>(
      * Has this resource switched provider modes since it was last
      * reconciled? Rows without a persisted mode were written by a
      * pre-provider-mode engine (or a provider that only became dual-mode
-     * later) — their physical resource is LIVE unless its attrs carry a
+     * later) -- their physical resource is LIVE unless its attrs carry a
      * `dev:` identity marker proving it was reconciled locally (see
      * {@link stampedMode}). A dev run replaces unstamped live rows exactly
      * like stamped live rows; live runs replace unstamped marker rows.
@@ -492,7 +492,7 @@ const makePlan = <A>(
     );
 
     // Snapshot of every persisted row, keyed by FQN. The rename resolution
-    // below reads from this map instead of issuing per-FQN `state.get`s —
+    // below reads from this map instead of issuing per-FQN `state.get`s --
     // every renamedFrom-decorated resource (each StaticSite carries one
     // forever) would otherwise add two round-trips per resource to every
     // plan against a remote state store. Plan is read-only, so the
@@ -541,7 +541,7 @@ const makePlan = <A>(
     }
 
     // Credential-free dev: the adoption probe below runs each new row's
-    // `read` — for `Alchemy.remote()` rows that is a real cloud call, and
+    // `read` -- for `Alchemy.remote()` rows that is a real cloud call, and
     // it happens before apply's demand gate. Demand those credentials up
     // front so a dev plan with nothing configured fails with the typed
     // CredentialsRequired rather than the first read's raw auth error.
@@ -556,10 +556,10 @@ const makePlan = <A>(
 
     yield* emit({ type: "plan.phase", phase: "computing-plan" });
 
-    // ── FQN renames ──────────────────────────────────────────────────────
+    // -- FQN renames ------------------------------------------------------
     // Map every former FQN claimed via `renamedFrom(...)` to its claimant's
     // current FQN. Two resources claiming the same former FQN is ambiguous
-    // and fatal. A former FQN MAY still be actively declared — that is the
+    // and fatal. A former FQN MAY still be actively declared -- that is the
     // "old id reused by a new resource" case: the rename claim wins the
     // row (it is an explicit user statement that the row was theirs), and
     // the reusing resource plans a fresh create.
@@ -573,7 +573,7 @@ const makePlan = <A>(
             new Error(
               `Resources '${claimant}' and '${resource.FQN}' both claim ` +
                 `former FQN '${formerFqn}' via renamedFrom(...). A former ` +
-                "FQN can migrate to exactly one resource — remove the " +
+                "FQN can migrate to exactly one resource \u2014 remove the " +
                 "decoration from one of them.",
             ),
           );
@@ -583,7 +583,7 @@ const makePlan = <A>(
     }
 
     // Resolve every rename migration up-front against the state snapshot,
-    // BEFORE any node is built — other resources' planning depends on the
+    // BEFORE any node is built -- other resources' planning depends on the
     // outcome (a resource declared at a former FQN whose row is migrating
     // away must start from scratch).
     //
@@ -592,10 +592,10 @@ const makePlan = <A>(
     //
     // - `source` is the row that defines the resource's physical identity:
     //   the row at its own FQN when present AND type-matching, otherwise
-    //   the first type-matching former row (→ `moved`).
+    //   the first type-matching former row (-> `moved`).
     // - every OTHER type-matching former row sharing `source.instanceId`
     //   is a leftover from an interrupted migration (only migration copies
-    //   instanceIds) — collected for state-only cleanup.
+    //   instanceIds) -- collected for state-only cleanup.
     // - former rows with a different instanceId belong to someone else and
     //   are left to normal orphan handling; former rows with a different
     //   resourceType (modulo registered type-aliases) can never be this
@@ -619,7 +619,7 @@ const makePlan = <A>(
         ? undefined
         : (persisted as ResourceState | undefined);
       // A row at this resource's own FQN that a PREVIOUSLY RESOLVED
-      // renamer claimed (a same-deploy shift: A→B while B→C — C took the
+      // renamer claimed (a same-deploy shift: A->B while B->C -- C took the
       // row at B) is moving away: it is not ours to keep and it does not
       // block the migration landing here.
       const rowTaken = migratedRowFqns.has(resource.FQN);
@@ -677,11 +677,11 @@ const makePlan = <A>(
 
     // Resolve renamers in claim-dependency order: when resource R's OWN
     // FQN is claimed as a former id by resource S (a same-deploy shift:
-    // A→B while B→C), S must resolve first — whether S takes R's row
+    // A->B while B->C), S must resolve first -- whether S takes R's row
     // decides whether R still owns it, or falls back to ITS former rows.
-    // Iterate to fixpoint; anything left is a claim CYCLE (a swap: A⇄B),
-    // which cannot be persisted safely — the migrations would overwrite
-    // and delete each other's rows — and dies loudly.
+    // Iterate to fixpoint; anything left is a claim CYCLE (a swap: A<->B),
+    // which cannot be persisted safely -- the migrations would overwrite
+    // and delete each other's rows -- and dies loudly.
     let pendingRenamers = resources.filter((r) => r.FormerFqns?.length);
     const resolvedRenamers = new Set<string>();
     while (pendingRenamers.length > 0) {
@@ -695,7 +695,7 @@ const makePlan = <A>(
             `Rename cycle detected among [${pendingRenamers
               .map((r) => `'${r.FQN}'`)
               .join(", ")}]: their renamedFrom(...) declarations claim each other's ` +
-              "FQNs. Swapping ids in one deploy is not supported — rename " +
+              "FQNs. Swapping ids in one deploy is not supported \u2014 rename " +
               "through a temporary id across two deploys instead.",
           ),
         );
@@ -714,7 +714,7 @@ const makePlan = <A>(
      * - a renamer plans from its migrated row (`renamedFrom` rides onto
      *   the plan node; apply persists the move before any lifecycle op)
      * - a resource declared at a former FQN whose row is migrating away
-     *   starts from scratch — the row is NOT its state, whatever the FQN
+     *   starts from scratch -- the row is NOT its state, whatever the FQN
      *   says
      */
     const getPersistedRow = Effect.fn(function* (resource: Pick<ResourceLike, "FQN">) {
@@ -775,7 +775,7 @@ const makePlan = <A>(
               return resourceExpr;
             }
 
-            // The resource is switching provider modes (local ⇄ live):
+            // The resource is switching provider modes (local <-> live):
             // it will be replaced, so nothing about the persisted attrs
             // is stable for downstream consumers.
             if (hasModeSwitched(mode, oldState)) {
@@ -785,7 +785,7 @@ const makePlan = <A>(
             const oldProps = oldState.status === "updating" ? oldState.old.props : oldState.props;
 
             // Normalize both sides through `dedupeBindings` so the binding
-            // sets handed to `diff` are deduped AND sid-sorted — provider
+            // sets handed to `diff` are deduped AND sid-sorted -- provider
             // diffs that hash/compare the arrays never churn on
             // registration-order flips (or on legacy unsorted state).
             const oldBindings = dedupeBindings(oldState.bindings ?? []);
@@ -843,7 +843,7 @@ const makePlan = <A>(
             }
             // `--force` upgrades this resource's noop to an update (see the
             // diff mapping in the resource-graph pass below), so its
-            // `reconcile` WILL re-run and may produce fresh attributes —
+            // `reconcile` WILL re-run and may produce fresh attributes --
             // that is the point of --force. Returning the persisted attr
             // snapshot here would bake potentially-stale values into every
             // consumer's plan props and binding data, so consumers would
@@ -878,7 +878,7 @@ const makePlan = <A>(
      * else evaluable. A whole-resource reference to an updating upstream
      * stays a `ResourceExpr` (its stable attributes riding along): the
      * non-stable attributes are unknown at plan time and MUST be
-     * re-evaluated — Apply runs `Output.evaluate(node.props, outputs)`
+     * re-evaluated -- Apply runs `Output.evaluate(node.props, outputs)`
      * against the upstream's fresh post-reconcile attributes right before
      * `reconcile`. This is the value plan nodes carry; the diff-facing view
      * is derived from it by {@link materializeStableRefs}.
@@ -914,7 +914,7 @@ const makePlan = <A>(
           const resolved = yield* resolveOutput(resourceExpr);
           if (Output.isResourceExpr(resolved)) {
             // Still-unresolved reference (creating, replacing, or updating
-            // upstream) — keep it evaluable for Apply.
+            // upstream) -- keep it evaluable for Apply.
             return resolved;
           }
           return yield* resolveInput(resolved, ancestors);
@@ -941,9 +941,9 @@ const makePlan = <A>(
         // Redacted, Date, and effect runtime values (a Worker's `exports`
         // carries each DO's `constructor` Effect and captured `services`
         // Context). Rebuilding a class instance entry-by-entry would strip
-        // its prototype, and effect ≥4.0.0-beta.103's Context is cyclic
+        // its prototype, and effect >=4.0.0-beta.103's Context is cyclic
         // (#1082). Redacted additionally stays wrapped to preserve the
-        // secrecy boundary. This sits after `Config.isConfig` on purpose —
+        // secrecy boundary. This sits after `Config.isConfig` on purpose --
         // Configs are Effects but must still resolve.
         return input;
       });
@@ -951,21 +951,21 @@ const makePlan = <A>(
     /**
      * Project a {@link resolveInput} resolution into the DIFF-facing view:
      * replace each whole-resource `ResourceExpr` that carries stable
-     * attributes (an upstream being *updated* in place — see `withStables` in
+     * attributes (an upstream being *updated* in place -- see `withStables` in
      * `resolveResource`) with a plain object of those stables, so the known
      * values flow into the consumer's `diff` and `havePropsChanged` instead
      * of the whole reference looking unresolved and `isResolved`
-     * short-circuiting (#670 — this forced the Neon `Branch` to hand-extract
+     * short-circuiting (#670 -- this forced the Neon `Branch` to hand-extract
      * `project.projectId`).
      *
-     * The projection is deliberately lossy — diffs compare VALUES. Plan nodes
+     * The projection is deliberately lossy -- diffs compare VALUES. Plan nodes
      * never carry it: they keep the evaluable resolution so `reconcile` sees
      * the upstream's fresh non-stable attributes (e.g. a Lambda Version's
-     * `version` number — #993's alias promotion bug).
+     * `version` number -- #993's alias promotion bug).
      */
     const materializeStableRefs = (
       input: any,
-      // Ancestor-path cycle guard — see resolveInput (#1082). Sync DFS, so
+      // Ancestor-path cycle guard -- see resolveInput (#1082). Sync DFS, so
       // add/delete around the recursion is race-free.
       ancestors: WeakSet<object> = new WeakSet(),
     ): any => {
@@ -974,11 +974,11 @@ const makePlan = <A>(
       if (Output.isResourceExpr(input) && input.stables) {
         return materializeStableRefs(input.stables, ancestors);
       } else if (Output.isExpr(input)) {
-        // Genuinely unknown (e.g. a creating upstream) — nothing to show diff.
+        // Genuinely unknown (e.g. a creating upstream) -- nothing to show diff.
         return input;
       } else if (!input || !isPlainData(input)) {
         // Primitives and non-plain instances (Duration, Redacted, Date,
-        // Effect/Layer/Context) are leaves — see isPlainData (#1082).
+        // Effect/Layer/Context) are leaves -- see isPlainData (#1082).
         return input;
       }
       return mapPlainData(input, ancestors, (child) => materializeStableRefs(child, ancestors));
@@ -1115,7 +1115,7 @@ const makePlan = <A>(
         const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
         return [fqn, [...new Set([...propDeps, ...bindDeps])]];
       }),
-      // Actions have no bindings — their upstream is input + init captures,
+      // Actions have no bindings -- their upstream is input + init captures,
       // both already folded into newUpstreamDependencies above.
       ...actions.map((action): [string, string[]] => {
         const fqn = action.FQN;
@@ -1157,7 +1157,7 @@ const makePlan = <A>(
     // Map FQN -> list of downstream FQNs (resources/actions that depend on
     // this one).
     //
-    // Prop edges always become downstream edges — they can't form cycles
+    // Prop edges always become downstream edges -- they can't form cycles
     // (the resource graph is a DAG by construction once props are fully
     // resolved). Binding edges become downstream edges too, except when
     // they participate in a cycle in the combined graph: mutual bindings
@@ -1167,7 +1167,7 @@ const makePlan = <A>(
     // in `plan.test.ts`).
     //
     // Including acyclic binding edges is required for cloud APIs that
-    // enforce the binding at the provider level — e.g. a Cloudflare
+    // enforce the binding at the provider level -- e.g. a Cloudflare
     // Worker with a `service` binding to another Worker cannot delete
     // the upstream worker until the downstream worker's binding has been
     // removed. Without the binding edge in `downstream`, the two delete
@@ -1178,14 +1178,14 @@ const makePlan = <A>(
     // prop edges (which collapse to `newUpstreamDependencies` lookups).
     //
     // The edges are inverted in one pass (in `rawUpstreamDependencies` order,
-    // so each downstream list keeps that order) — scanning every node's
+    // so each downstream list keeps that order) -- scanning every node's
     // upstream list per node was quadratic in resource count (#2400).
     const directDownstream = new Map<string, string[]>();
     for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
       const propDeps = new Set(newUpstreamDependencies[downFqn]);
       for (const upFqn of upstreams) {
         if (downFqn === upFqn) continue;
-        // Binding-only edge — exclude when both endpoints sit inside
+        // Binding-only edge -- exclude when both endpoints sit inside
         // the same SCC of the combined graph.
         if (
           !propDeps.has(upFqn) &&
@@ -1282,7 +1282,7 @@ const makePlan = <A>(
       const fqn = resource.FQN;
       // Paired with the resource-planned completion below so renderers can
       // show what is actually in flight (diffs may read the cloud and run
-      // concurrently — completions alone hide the slow tail).
+      // concurrently -- completions alone hide the slow tail).
       yield* emit({
         type: "plan.resource.started",
         fqn,
@@ -1316,7 +1316,7 @@ const makePlan = <A>(
       // Diff-facing view of the same rows: stable attributes
       // materialized so `diffBindings` / `provider.diff` compare known
       // values. Terminal commits still persist the payload the provider
-      // actually reconciled with (#874) — Apply commits the evaluated
+      // actually reconciled with (#874) -- Apply commits the evaluated
       // `bindingOutputs`, not these plan-time shapes.
       const newBindings: ResourceBinding[] = materializeStableRefs(applyBindings);
       // The row is looked up at the resource's FQN with a fallback to
@@ -1324,29 +1324,29 @@ const makePlan = <A>(
       // FQN arrives here already remapped to the new identity, and
       // `renamedFrom` rides onto the plan node so apply persists the
       // move. (A Task previously holding this FQN is treated as no
-      // prior state — its row is reaped by `actionDeletions` below.)
+      // prior state -- its row is reaped by `actionDeletions` below.)
       const { row: persistedRow, renamedFrom, renameMoved } = yield* getPersistedRow(resource);
       let oldState: ResourceState | undefined = persistedRow;
 
       // Engine-level adoption. When there is no prior state, always
-      // consult `provider.read` (if implemented) so the engine — not
-      // each lifecycle method — owns the existence/ownership decision.
+      // consult `provider.read` (if implemented) so the engine -- not
+      // each lifecycle method -- owns the existence/ownership decision.
       //
       // The provider returns one of:
-      //   - `undefined`        → resource doesn't exist; create it
-      //   - plain attrs        → exists and is owned by us; silent adopt
-      //   - `Unowned(attrs)`   → exists but is *not* ours
+      //   - `undefined`        -> resource doesn't exist; create it
+      //   - plain attrs        -> exists and is owned by us; silent adopt
+      //   - `Unowned(attrs)`   -> exists but is *not* ours
       //
       // Routing:
-      //   - owned                          → adopt the `created` state
+      //   - owned                          -> adopt the `created` state
       //                                      from attrs and continue
       //                                      through the normal diff
       //                                      path (so subsequent props
       //                                      drift produces an update).
-      //   - unowned + adopt enabled        → take over: adopt the
+      //   - unowned + adopt enabled        -> take over: adopt the
       //                                      `created` state and let the
       //                                      next update overwrite tags.
-      //   - unowned + adopt disabled       → fail with
+      //   - unowned + adopt disabled       -> fail with
       //                                      `OwnedBySomeoneElse`.
       //
       // Plan construction is side-effect-free: the adopted `created`
@@ -1364,7 +1364,7 @@ const makePlan = <A>(
       // normal `update` path so the provider can re-sync ownership
       // tags, configuration, etc. against the desired props.
       // Adoption carries state with `props: news`, so the default
-      // diff sees no drift and would noop — which would leave any
+      // diff sees no drift and would noop -- which would leave any
       // foreign-owned tags / divergent config in place. Forcing
       // update keeps the deploy idempotent: if cloud state already
       // matches news, the provider's update is a no-op write.
@@ -1377,7 +1377,7 @@ const makePlan = <A>(
       // (e.g. a cloned branch's Auth integration), so Apply must perform the
       // deferred ownership probe once those identities resolve.
       // A resource declared at a former FQN whose row just migrated
-      // away is genuinely NEW by declaration — skip the probe. Its
+      // away is genuinely NEW by declaration -- skip the probe. Its
       // predecessor's physical resource still carries tags branded
       // with THIS logical id (the migrated row's reconcile hasn't
       // re-branded them yet), so a tag-based `read` would find it
@@ -1432,11 +1432,11 @@ const makePlan = <A>(
             removalPolicy: resource.RemovalPolicy,
             providerMode: mode,
           } satisfies CreatedResourceState;
-          // In-memory only — do NOT persist here. Plan.make runs for
+          // In-memory only -- do NOT persist here. Plan.make runs for
           // `alchemy plan` / `deploy --dry-run` too, so a `state.set`
           // would mutate persistent state during a read-only preview.
           // The adopted state rides onto the plan node via `oldState`
-          // (→ `node.state`) and is persisted at APPLY time by the
+          // (-> `node.state`) and is persisted at APPLY time by the
           // update lifecycle's `updating` / `updated` commits. See
           // https://github.com/alchemy-run/alchemy/issues/793.
           oldState = adoptedState;
@@ -1448,7 +1448,7 @@ const makePlan = <A>(
       const oldBindings = dedupeBindings(oldState?.bindings ?? []);
       // Actions come from the materialized comparison (`newBindings`);
       // the payloads the node carries into Apply come from the
-      // apply-faithful rows, joined by sid — both are views of the same
+      // apply-faithful rows, joined by sid -- both are views of the same
       // deduped `stack.bindings[fqn]` rows, so action and payload can
       // never drift. `delete` rows keep the persisted old data.
       const applyBindingData = new Map(applyBindings.map((b) => [b.sid, b.data]));
@@ -1458,10 +1458,10 @@ const makePlan = <A>(
           : { ...b, data: applyBindingData.get(b.sid) },
       );
 
-      // Local ⇄ live switch: the persisted row was reconciled by a
+      // Local <-> live switch: the persisted row was reconciled by a
       // different provider mode than the one resolved for this run.
       // The two runtimes host distinct physical instances, so this is
-      // always a replacement — the new instance is created with the
+      // always a replacement -- the new instance is created with the
       // new mode's provider, and Apply deletes the old generation
       // with the provider of the mode that created it (see
       // `deleteOldGenerations` / `collectGarbage`).
@@ -1491,7 +1491,7 @@ const makePlan = <A>(
             (provider.read || provider.observe) &&
             !reusesMigratedFqn &&
             // A replacement targets a new physical identity, which may belong
-            // to someone else — admit it like a fresh create.
+            // to someone else -- admit it like a fresh create.
             (node.action === "replace" ||
               (node.action === "create" &&
                 // Plan reads resolved props itself; without `read`, Apply
@@ -1521,8 +1521,8 @@ const makePlan = <A>(
         // referencing an upstream created in the same failed deploy).
         // `read` implementations derive identity from `olds` when
         // `output` is undefined (as it is here), so handing them
-        // unresolved exprs crashes. Skip the probe — same behavior as
-        // a read that found nothing — and re-drive the create.
+        // unresolved exprs crashes. Skip the probe -- same behavior as
+        // a read that found nothing -- and re-drive the create.
         //
         // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
         // can't identify the attempt at all: a lookup could match a different
@@ -1545,7 +1545,7 @@ const makePlan = <A>(
               providePlanScope(resource, oldState.instanceId),
               // `creating` props pass `isResolved` yet can still carry
               // holes where unresolved Outputs were stripped at commit
-              // time (see stripUnresolved) — e.g. a parent reference
+              // time (see stripUnresolved) -- e.g. a parent reference
               // persisted as `{}`. A provider that dereferences one
               // crashes deep inside its SDK client (a SchemaError
               // defect), which would brick every subsequent plan on
@@ -1564,7 +1564,7 @@ const makePlan = <A>(
             // The recovered resource may be foreign: our interrupted
             // create could have lost a name race, or died before
             // stamping ownership. Route `Unowned` through the same
-            // adoption table as the cold-start probe above — never
+            // adoption table as the cold-start probe above -- never
             // silently take over (and later mutate/delete) a resource
             // we cannot prove we created.
             if (Unowned.is(attr)) {
@@ -1652,8 +1652,8 @@ const makePlan = <A>(
             // least an update so the provider re-syncs ownership tags /
             // config against the desired props (otherwise the engine
             // would noop and any drift between the existing cloud
-            // resource and `news` — including foreign-owned tags after a
-            // takeover — would persist).
+            // resource and `news` -- including foreign-owned tags after a
+            // takeover -- would persist).
             //
             // A row that just migrated from a former FQN (`renameMoved`)
             // gets the same treatment: its cloud resource is still
@@ -1825,7 +1825,7 @@ const makePlan = <A>(
 
     // Every diff runs to completion and every failure is reported. With
     // fail-fast `Effect.all`, the first exit to arrive wins the aggregate
-    // cause — and when a diff is cancelled by a sibling's failure (or ends
+    // cause -- and when a diff is cancelled by a sibling's failure (or ends
     // interrupt-only for any other reason) that can be a bare interruption,
     // hiding the InvalidReferenceError or provider error that actually
     // broke the plan.
@@ -1968,7 +1968,7 @@ const makePlan = <A>(
       }
     }
 
-    // ── Action plan nodes ────────────────────────────────────────────────
+    // -- Action plan nodes ------------------------------------------------
     // Per-action plan progress, mirroring the resource pass.
     const actionCount = yield* Ref.make(0);
     const actionPlanned = (entry: readonly [string, ActionApply]) =>
@@ -2057,8 +2057,8 @@ const makePlan = <A>(
     // before precreate. Apply resolves the props that upstreams outside the
     // cycle determine first, so only props derived from a cycle peer are
     // still unresolved then, and only the provider's `observe` can check
-    // ownership before that delete. Without it, refuse here — before apply
-    // touches anything — unless adoption is allowed.
+    // ownership before that delete. Without it, refuse here -- before apply
+    // touches anything -- unless adoption is allowed.
     for (const [fqn, node] of Object.entries(resourceGraph)) {
       if (
         node.action === "replace" &&
@@ -2090,7 +2090,7 @@ const makePlan = <A>(
 
     // Orphan progress mirrors the diff passes: every persisted row is
     // examined, but only rows that actually become deletion nodes are
-    // reported — `completed` tracks examination so progress stays monotonic.
+    // reported -- `completed` tracks examination so progress stays monotonic.
     const actionExaminedCount = yield* Ref.make(0);
     const actionDeletionPlanned = (entry: readonly [string, ActionDelete] | undefined) =>
       Ref.updateAndGet(actionExaminedCount, (count) => count + 1).pipe(
@@ -2107,7 +2107,7 @@ const makePlan = <A>(
       );
 
     // Task deletions: state rows previously written by tasks that no
-    // longer appear in the stack. The body is NOT invoked — we just drop
+    // longer appear in the stack. The body is NOT invoked -- we just drop
     // the row.
     const diffActionDeletion = Effect.fn("plan.diff.actionDeletion")(function* (fqn: string) {
       if (newActionFqns.has(fqn) || newResourceFqns.has(fqn)) return;
@@ -2153,7 +2153,7 @@ const makePlan = <A>(
 
     // Deletion progress mirrors the resource pass: every persisted row is
     // examined, but only rows that actually become deletion nodes are
-    // reported — `completed` tracks examination so progress stays monotonic.
+    // reported -- `completed` tracks examination so progress stays monotonic.
     const deletionCandidates = persistedFqns;
     const examinedCount = yield* Ref.make(0);
     const deletionPlanned = (entry: readonly [string, Delete] | undefined) =>
@@ -2184,7 +2184,7 @@ const makePlan = <A>(
       const oldState = persisted as ResourceState | undefined;
       if (oldState) {
         // A row being migrated by a rename (`renameMigrations`) is
-        // moving, not orphaned — apply drops it state-only after
+        // moving, not orphaned -- apply drops it state-only after
         // committing the migrated row at its new FQN. Rows at former
         // FQNs that did NOT migrate (foreign type, different
         // instanceId, unclaimed) are absent from this set and fall
@@ -2205,7 +2205,7 @@ const makePlan = <A>(
         // that created the row (`providerMode`, or the `dev:` marker
         // inference for legacy unstamped rows), so e.g. a local dev
         // worker's row is deleted by the local provider even during a
-        // live deploy — and vice versa. Unstamped rows are physically
+        // live deploy -- and vice versa. Unstamped rows are physically
         // live unless their attrs carry the marker (see stampedMode),
         // never the run default.
         const rowMode = stampedMode(oldState);
@@ -2222,7 +2222,7 @@ const makePlan = <A>(
         }
         // NOTE: an attr-less row (interrupted create) is NOT recovered
         // here. Apply's `deleteResource` performs the authoritative
-        // read-then-delete recovery — it also covers replaced-chain
+        // read-then-delete recovery -- it also covers replaced-chain
         // old generations that never pass through plan, and routes
         // `Unowned` results away from `provider.delete`.
         return [
@@ -2439,71 +2439,89 @@ export const printPlan = (plan: Plan): string => {
   };
 
   // Print header
-  lines.push("╔════════════════════════════════════════════════════════════════╗");
-  lines.push("║                           PLAN                                 ║");
-  lines.push("╠════════════════════════════════════════════════════════════════╣");
-  lines.push("║ Legend: + create, ~ update, - delete, ± replace, = noop,       ║");
-  lines.push("║         λ run task, · skip task                                ║");
-  lines.push("╚════════════════════════════════════════════════════════════════╝");
+  lines.push(
+    "\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557",
+  );
+  lines.push("\u2551                           PLAN                                 \u2551");
+  lines.push(
+    "\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563",
+  );
+  lines.push("\u2551 Legend: + create, ~ update, - delete, ± replace, = noop,       \u2551");
+  lines.push("\u2551         \u03bb run task, · skip task                                \u2551");
+  lines.push(
+    "\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d",
+  );
   lines.push("");
 
   // Print resources section
-  lines.push("┌─ Resources ────────────────────────────────────────────────────┐");
+  lines.push(
+    "\u250c\u2500 Resources \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+  );
   const resourceIds = Object.keys(plan.resources).sort();
   for (const id of resourceIds) {
     const node = plan.resources[id];
     const symbol = actionSymbol(node.action);
     const type = node.resource?.type ?? "unknown";
     const downstream = node.state?.downstream?.length
-      ? ` → [${node.state?.downstream.join(", ")}]`
+      ? ` \u2192 [${node.state?.downstream.join(", ")}]`
       : "";
     const renamed = node.renamedFrom?.length
       ? ` (renamed from ${node.renamedFrom.join(", ")})`
       : "";
-    lines.push(`│ [${symbol}] ${id} (${type})${downstream}${renamed}`);
+    lines.push(`\u2502 [${symbol}] ${id} (${type})${downstream}${renamed}`);
   }
   if (resourceIds.length === 0) {
-    lines.push("│ (none)");
+    lines.push("\u2502 (none)");
   }
-  lines.push("└────────────────────────────────────────────────────────────────┘");
+  lines.push(
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+  );
   lines.push("");
 
   // Print tasks section
-  lines.push("┌─ Tasks ────────────────────────────────────────────────────────┐");
+  lines.push(
+    "\u250c\u2500 Tasks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+  );
   const taskIds = Object.keys(plan.actions ?? {}).sort();
   for (const id of taskIds) {
     const node = plan.actions[id];
-    const symbol = node.action === "run" ? "λ" : "·";
+    const symbol = node.action === "run" ? "\u03bb" : "·";
     const type = node.def.Type;
-    const downstream = node.downstream.length ? ` → [${node.downstream.join(", ")}]` : "";
-    lines.push(`│ [${symbol}] ${id} (${type})${downstream}`);
+    const downstream = node.downstream.length ? ` \u2192 [${node.downstream.join(", ")}]` : "";
+    lines.push(`\u2502 [${symbol}] ${id} (${type})${downstream}`);
   }
   if (taskIds.length === 0) {
-    lines.push("│ (none)");
+    lines.push("\u2502 (none)");
   }
-  lines.push("└────────────────────────────────────────────────────────────────┘");
+  lines.push(
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+  );
   lines.push("");
 
   // Print deletions section
-  lines.push("┌─ Deletions ────────────────────────────────────────────────────┐");
+  lines.push(
+    "\u250c\u2500 Deletions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510",
+  );
   const deletionIds = Object.keys(plan.deletions).sort();
   for (const id of deletionIds) {
     const node = plan.deletions[id]!;
     const type = node.resource?.Type ?? "unknown";
     const downstream = node.state.downstream?.length
-      ? ` → [${node.state.downstream.join(", ")}]`
+      ? ` \u2192 [${node.state.downstream.join(", ")}]`
       : "";
-    lines.push(`│ [-] ${id} (${type})${downstream}`);
+    lines.push(`\u2502 [-] ${id} (${type})${downstream}`);
   }
   const taskDeletionIds = Object.keys(plan.actionDeletions ?? {}).sort();
   for (const id of taskDeletionIds) {
     const node = plan.actionDeletions[id]!;
-    lines.push(`│ [-] ${id} (${node.def.Type}) [action]`);
+    lines.push(`\u2502 [-] ${id} (${node.def.Type}) [action]`);
   }
   if (deletionIds.length === 0 && taskDeletionIds.length === 0) {
-    lines.push("│ (none)");
+    lines.push("\u2502 (none)");
   }
-  lines.push("└────────────────────────────────────────────────────────────────┘");
+  lines.push(
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+  );
   lines.push("");
 
   return lines.join("\n");

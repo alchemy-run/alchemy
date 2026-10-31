@@ -28,12 +28,12 @@ export type SigningKeyAttributes = {
   created: string | undefined;
   /**
    * The signing key in PEM format. Only returned by Cloudflare at
-   * creation time — preserved in state thereafter.
+   * creation time -- preserved in state thereafter.
    */
   pem: Redacted.Redacted<string>;
   /**
    * The signing key in JWK format. Only returned by Cloudflare at
-   * creation time — preserved in state thereafter.
+   * creation time -- preserved in state thereafter.
    */
   jwk: Redacted.Redacted<string>;
 };
@@ -41,13 +41,13 @@ export type SigningKeyAttributes = {
 export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes, never, Providers>;
 
 /**
- * A Cloudflare Stream signing key — an RSA key pair used to sign viewer
+ * A Cloudflare Stream signing key -- an RSA key pair used to sign viewer
  * playback tokens for videos that require signed URLs.
  *
  * The key material (`pem`/`jwk`) is returned by Cloudflare **only at
  * creation time**; it is persisted as redacted attributes in state and
  * can never be re-read from the API. If the key is deleted out-of-band,
- * reconcile creates a brand-new key with new material — anything derived
+ * reconcile creates a brand-new key with new material -- anything derived
  * from the old key (signed tokens) must be re-derived from the new
  * attributes.
  *
@@ -57,7 +57,7 @@ export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes,
  * ```typescript
  * const key = yield* Cloudflare.Stream.SigningKey("PlaybackKey", {});
  *
- * // key.pem / key.jwk are Redacted<string> — use them server-side to
+ * // key.pem / key.jwk are Redacted<string> -- use them server-side to
  * // sign playback tokens for videos with requireSignedURLs enabled.
  * const pem = key.pem;
  * ```
@@ -84,8 +84,8 @@ export const SigningKeyProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Account-scoped collection: the keys list endpoint only returns
       // `id` + `created`. The key material (pem/jwk) is create-only and
-      // can never be re-read, so — matching `read` for a key with no
-      // cached state — we surface it as empty redacted values.
+      // can never be re-read, so -- matching `read` for a key with no
+      // cached state -- we surface it as empty redacted values.
       return yield* stream.getKey.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
@@ -108,7 +108,7 @@ export const SigningKeyProvider = () =>
           ),
         ),
         // Accounts without the Stream subscription are forbidden from the
-        // keys endpoint — treat as an empty collection.
+        // keys endpoint -- treat as an empty collection.
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       );
     }),
@@ -123,7 +123,7 @@ export const SigningKeyProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output }) {
-      // The list endpoint only returns `id` + `created` — the key
+      // The list endpoint only returns `id` + `created` -- the key
       // material is create-only, so without cached state there is
       // nothing to recover.
       if (output?.keyId === undefined) return undefined;
@@ -135,18 +135,18 @@ export const SigningKeyProvider = () =>
     reconcile: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Observe — existence-only resource: check the key is still listed.
+      // Observe -- existence-only resource: check the key is still listed.
       const exists = output?.keyId
         ? yield* findKey(output.accountId ?? accountId, output.keyId)
         : false;
 
       if (exists && output !== undefined) {
-        // Nothing mutable to sync — keep the cached attributes (they
+        // Nothing mutable to sync -- keep the cached attributes (they
         // carry the create-only key material).
         return output;
       }
 
-      // Ensure — create a new key (`createKey` takes an empty body).
+      // Ensure -- create a new key (`createKey` takes an empty body).
       const created = yield* stream.createKey({ accountId });
       return {
         keyId: created.id ?? "",
@@ -158,7 +158,7 @@ export const SigningKeyProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — a key already deleted out-of-band surfaces as
+      // Idempotent -- a key already deleted out-of-band surfaces as
       // `SigningKeyNotFound` (Cloudflare error code 10003).
       yield* stream
         .deleteKey({ accountId: output.accountId, identifier: output.keyId })

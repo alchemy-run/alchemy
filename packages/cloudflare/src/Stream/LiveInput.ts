@@ -113,7 +113,7 @@ export type LiveInputAttributes = {
 export type LiveInput = Resource<TypeId, LiveInputProps, LiveInputAttributes, never, Providers>;
 
 /**
- * A Cloudflare Stream live input — an ingest endpoint (RTMPS/SRT/WebRTC)
+ * A Cloudflare Stream live input -- an ingest endpoint (RTMPS/SRT/WebRTC)
  * that accepts live video and optionally records it as a Stream video.
  *
  * Live inputs are identified by an auto-assigned `uid`; every prop is
@@ -178,7 +178,7 @@ export const LiveInputProvider = () =>
     read: Effect.fn(function* ({ output }) {
       // Live inputs have no deterministic name or tags, so a cold read
       // (state lost before the uid was persisted) cannot recover the
-      // resource — rely on the cached uid.
+      // resource -- rely on the cached uid.
       if (output?.liveInputId === undefined) return undefined;
       const accountId = output.accountId;
       const observed = yield* getLiveInput(accountId, output.liveInputId);
@@ -203,14 +203,14 @@ export const LiveInputProvider = () =>
         name: yield* createPhysicalName({ id, lowercase: true }),
       };
 
-      // Observe — the uid cached on `output` is a hint, not a guarantee:
+      // Observe -- the uid cached on `output` is a hint, not a guarantee:
       // a not-found falls through to "missing" and we recreate.
       const observed = output?.liveInputId
         ? yield* getLiveInput(output.accountId ?? accountId, output.liveInputId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. uids are auto-assigned so there is no
         // AlreadyExists race to tolerate.
         const created = yield* stream.createLiveInput({
@@ -224,7 +224,7 @@ export const LiveInputProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired. The update API
+      // Sync -- diff observed cloud state against desired. The update API
       // is a PUT, so send the full desired body, but skip the call
       // entirely on a no-op. `defaultCreator` and `recording` are not
       // echoed by the API, so `olds` is the best available baseline for
@@ -255,7 +255,7 @@ export const LiveInputProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — a live input already deleted out-of-band surfaces
+      // Idempotent -- a live input already deleted out-of-band surfaces
       // as `LiveInputNotFound` (Cloudflare error code 10003).
       yield* stream
         .deleteLiveInput({
@@ -292,7 +292,7 @@ const toAttributes = (
 });
 
 /**
- * Structural equality for plain-JSON values (`meta`, `recording`) —
+ * Structural equality for plain-JSON values (`meta`, `recording`) --
  * primitives, arrays, and plain objects, `null`-tolerant and key-order
  * insensitive.
  */

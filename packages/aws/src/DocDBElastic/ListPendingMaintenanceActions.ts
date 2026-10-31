@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * action `docdb-elastic:ListPendingMaintenanceActions`).
  *
  * Lists pending maintenance (e.g. engine updates) across every elastic
- * cluster in the account — feed it into an ops dashboard or a maintenance
+ * cluster in the account -- feed it into an ops dashboard or a maintenance
  * scheduler. Provide the implementation with
  * `Effect.provide(AWS.DocDBElastic.ListPendingMaintenanceActionsHttp)`.
  * ### Scheduling Maintenance

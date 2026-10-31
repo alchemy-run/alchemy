@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:StartMedicalTranscriptionJob` — start an asynchronous medical transcription job over an audio file in S3 (output goes to your bucket).
+ * Runtime binding for `transcribe:StartMedicalTranscriptionJob` -- start an asynchronous medical transcription job over an audio file in S3 (output goes to your bucket).
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:StartMedicalTranscriptionJob` on `*`.

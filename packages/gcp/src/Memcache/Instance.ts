@@ -26,18 +26,18 @@ const DEFAULT_MEMORY_SIZE_MB = 1024;
 const MAX_NAME_LENGTH = 40;
 
 export type TimeOfDay = {
-  /** Hours of day in 24-hour format (`0`–`23`). */
+  /** Hours of day in 24-hour format (`0`-`23`). */
   hours?: number;
-  /** Minutes of hour (`0`–`59`). */
+  /** Minutes of hour (`0`-`59`). */
   minutes?: number;
-  /** Seconds of minute (`0`–`59`). */
+  /** Seconds of minute (`0`-`59`). */
   seconds?: number;
   /** Fractional seconds, in nanoseconds. */
   nanos?: number;
 };
 
 export type WeeklyMaintenanceWindow = {
-  /** Day of week that maintenance occurs (`MONDAY` … `SUNDAY`). */
+  /** Day of week that maintenance occurs (`MONDAY` ... `SUNDAY`). */
   day?: memcache.WeeklyMaintenanceWindowDayEnum | (string & {});
   /** Start time of the window in UTC. */
   startTime?: TimeOfDay;
@@ -71,11 +71,11 @@ export type InstanceProps = {
    * `projects/{project}/locations/{location}/instances/{instance}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `^[a-z][a-z0-9-]{0,38}[a-z0-9]$` (1-40
-   * characters). Immutable — changing it replaces the instance.
+   * characters). Immutable -- changing it replaces the instance.
    */
   instanceId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -106,7 +106,7 @@ export type InstanceProps = {
    */
   nodeCount?: number;
   /**
-   * Per-node CPU and memory. Immutable — changing it replaces the
+   * Per-node CPU and memory. Immutable -- changing it replaces the
    * instance.
    */
   nodeConfig?: NodeConfig;
@@ -116,7 +116,7 @@ export type InstanceProps = {
    */
   memcacheVersion?: memcache.InstanceMemcacheVersionEnum | (string & {});
   /**
-   * User-defined memcached process parameters (`max_item_size`, …).
+   * User-defined memcached process parameters (`max_item_size`, ...).
    * Staged with `updateParameters` and applied with `applyParameters`.
    */
   parameters?: Record<string, string>;
@@ -146,7 +146,7 @@ export type Instance = Resource<
     instanceId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** User-facing display name. */
     displayName: string | undefined;
@@ -170,7 +170,7 @@ export type Instance = Resource<
     parameterId: string | undefined;
     /** Per-node info. */
     memcacheNodes: memcache.Node[];
-    /** Server-reported state (`READY`, `CREATING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, ...). */
     state: string | undefined;
     /** Discovery API endpoint. */
     discoveryEndpoint: string | undefined;
@@ -416,7 +416,7 @@ const getByName = (name: string) =>
 
 /**
  * Wait for a Memorystore for Memcached operation; instance create,
- * resize, and upgrade take 10–20 minutes. With `notFoundOk`, NOT_FOUND
+ * resize, and upgrade take 10-20 minutes. With `notFoundOk`, NOT_FOUND
  * (code 5) and an operation that is already gone count as success
  * (delete race).
  */

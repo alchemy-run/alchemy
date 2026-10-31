@@ -77,12 +77,12 @@ export type ServerTlsPolicyProps = {
    * `projects/{project}/locations/{location}/serverTlsPolicies/{serverTlsPolicy}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters, letters, numbers, hyphens,
-   * and underscores, and must not start with a number. Immutable —
+   * and underscores, and must not start with a number. Immutable --
    * changing it replaces the policy.
    */
   serverTlsPolicyId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -126,7 +126,7 @@ export type ServerTlsPolicy = Resource<
     serverTlsPolicyId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -148,13 +148,13 @@ export type ServerTlsPolicy = Resource<
 >;
 
 /**
- * A Network Security ServerTlsPolicy — how a server authenticates
+ * A Network Security ServerTlsPolicy -- how a server authenticates
  * incoming requests. Attach it to a TargetHttpsProxy or EndpointPolicy;
  * the policy itself does not serve traffic.
  *
  * Changing `serverTlsPolicyId` or `location` replaces the policy.
  * Application Load Balancer policies (`mtlsPolicy.clientValidationMode`
- * set) cannot be updated in place — any other change replaces them.
+ * set) cannot be updated in place -- any other change replaces them.
  * Traffic Director policies update description, labels, `allowOpen`,
  * `serverCertificate`, and `mtlsPolicy` in place.
  *

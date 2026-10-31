@@ -1,5 +1,5 @@
 /**
- * Local interpreter for Step Functions programs — the payoff of the AST.
+ * Local interpreter for Step Functions programs -- the payoff of the AST.
  *
  * `simulate` runs the *same* `SfnEffect` a `StateMachine.fromProgram`
  * deploys, in-process, as a real `Effect`: Task states dispatch to
@@ -16,7 +16,7 @@ import type { AslNode } from "./Node.ts";
 import { isSfnEffect, type SfnEffect } from "./Program.ts";
 
 /**
- * The simulation itself went wrong — a missing handler, an unsupported raw
+ * The simulation itself went wrong -- a missing handler, an unsupported raw
  * JSONata expression, or a structurally invalid program. Distinct from the
  * program's own typed failures, which flow through the `E` channel.
  */
@@ -43,7 +43,7 @@ export interface SimulateOptions {
 
 interface Env {
   readonly input: unknown;
-  /** Variable scope — prototype chain mirrors ASL variable scoping. */
+  /** Variable scope -- prototype chain mirrors ASL variable scoping. */
   vars: Record<string, unknown>;
   readonly taskToken: string;
   readonly handlers: SimulateHandlers;
@@ -234,7 +234,7 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
       );
 
     case "sleep":
-      // simulations are instantaneous — Wait states are skipped
+      // simulations are instantaneous -- Wait states are skipped
       return Effect.succeed(null);
 
     case "when":
@@ -339,7 +339,7 @@ const runNode = (node: AslNode, env: Env): Effect.Effect<unknown, any> => {
 };
 
 /**
- * Run a Step Functions program in-process as an `Effect` — same AST the
+ * Run a Step Functions program in-process as an `Effect` -- same AST the
  * cloud executes, interpreted locally for unit tests.
  *
  * ```typescript

@@ -38,7 +38,7 @@ export interface ConnectorProfileProps {
   connectionMode?: "Public" | "Private";
   /**
    * The connector-specific properties and credentials. Credentials
-   * (OAuth tokens, API keys, secrets) are supplied here — these typically
+   * (OAuth tokens, API keys, secrets) are supplied here -- these typically
    * require a human-in-the-loop authorization step with the vendor.
    */
   connectorProfileConfig: appflow.ConnectorProfileConfig;
@@ -146,7 +146,7 @@ export const ConnectorProfileProvider = () =>
           // 1. Observe.
           let live = yield* observe(name);
 
-          // 2/3. Ensure + sync — create if missing, else push the new config
+          // 2/3. Ensure + sync -- create if missing, else push the new config
           // (credentials cannot be read back, so an update is always sent).
           if (live === undefined) {
             yield* appflow.createConnectorProfile({

@@ -11,7 +11,7 @@ export interface UpdatePartitionRequest extends Omit<
 /**
  * Runtime binding for `glue:UpdatePartition`.
  *
- * Replaces the definition of one partition of the bound {@link Table} —
+ * Replaces the definition of one partition of the bound {@link Table} --
  * `PartitionValueList` addresses the existing partition and
  * `PartitionInput` is its new definition (location, parameters, schema).
  * The database/table names and catalog id are injected from the binding.

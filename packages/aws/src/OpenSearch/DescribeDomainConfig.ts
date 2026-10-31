@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomainConfig` operation (IAM action
  * `es:DescribeDomainConfig`).
  *
- * Reads a domain's full configuration, with per-option status metadata (update date, state, pending values) — the authoritative view of what a blue/green change is converging toward. Provide the implementation with
+ * Reads a domain's full configuration, with per-option status metadata (update date, state, pending values) -- the authoritative view of what a blue/green change is converging toward. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainConfigHttp)`.
  * ### Monitoring Domains
  * **Example:** Read a Domain's Configuration
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomainConfig = yield* OpenSearch.DescribeDomainConfig();
  *
  * const result = yield* describeDomainConfig({ DomainName: name });
- * // result.DomainConfig.ClusterConfig?.Status.State → "Active"
+ * // result.DomainConfig.ClusterConfig?.Status.State -> "Active"
  * ```
  *
  * @binding

@@ -354,7 +354,7 @@ function MultiSelectPrompt<Value>({ options, submit, cancel }: MultiSelectPrompt
         }
     > = [];
     // Each contiguous run of a group gets its own header owning exactly the
-    // run's rows — a group split by ungrouped entries must not produce two
+    // run's rows -- a group split by ungrouped entries must not produce two
     // headers that both toggle the whole group.
     let currentGroup: string | undefined;
     let currentHeader: { indices: number[] } | undefined;

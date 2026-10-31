@@ -43,7 +43,7 @@ export type WorkloadIdentityProviderProps = {
   displayName?: string;
   /**
    * Description. Providers have no labels, so Alchemy stamps ownership into a
-   * `[alchemy …]` prefix and strips it from the `description` attribute.
+   * `[alchemy ...]` prefix and strips it from the `description` attribute.
    */
   description?: string;
   /**
@@ -291,7 +291,7 @@ export const WorkloadIdentityProviderProvider = () =>
       // Observe
       let current = yield* getProvider(name);
 
-      // Ensure — the id stays reserved for 30 days after delete, so a
+      // Ensure -- the id stays reserved for 30 days after delete, so a
       // soft-deleted provider is restored rather than re-created.
       if (current === undefined) {
         const operation = yield* iam.createProjectsLocationsWorkloadIdentityPoolsProviders({

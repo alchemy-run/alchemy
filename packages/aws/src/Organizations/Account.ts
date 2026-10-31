@@ -113,7 +113,7 @@ export interface Account extends Resource<
 /**
  * A member account created and managed by AWS Organizations.
  *
- * Account creation is asynchronous — the provider polls the vending request
+ * Account creation is asynchronous -- the provider polls the vending request
  * until the account ID is assigned. Must be deployed from the organization's
  * management account. Changing `email` replaces the account; changing `name`
  * updates it in place.
@@ -177,7 +177,7 @@ export const AccountProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // Observe — locate the account by ID if known, else by
+          // Observe -- locate the account by ID if known, else by
           // name/email. We always fetch fresh: state persistence may have
           // failed after a prior `createAccount`, leaving an account on AWS
           // we have no record of.
@@ -188,7 +188,7 @@ export const AccountProvider = () =>
                 email: news.email,
               });
 
-          // Ensure — create the account if it doesn't exist. Account
+          // Ensure -- create the account if it doesn't exist. Account
           // creation is asynchronous: `createAccount` returns a
           // `CreateAccountStatus` which we poll until the account ID is
           // assigned (or the request fails).
@@ -225,7 +225,7 @@ export const AccountProvider = () =>
             }
           }
 
-          // Sync name — observed ↔ desired. Account name lives on the
+          // Sync name -- observed <-> desired. Account name lives on the
           // account-management service, not Organizations. The diff has
           // already short-circuited any email change as a replacement.
           if (state.name !== news.name) {
@@ -237,7 +237,7 @@ export const AccountProvider = () =>
             );
           }
 
-          // Sync parent — move the account if its observed parent differs
+          // Sync parent -- move the account if its observed parent differs
           // from desired. We only move when we know the source parent (the
           // API requires it).
           if (state.parentId && state.parentId !== news.parentId) {
@@ -250,7 +250,7 @@ export const AccountProvider = () =>
             );
           }
 
-          // Sync tags — diff observed cloud tags against desired so
+          // Sync tags -- diff observed cloud tags against desired so
           // adoption and drift converge. We baseline against `state.tags`
           // (fetched fresh) instead of stale `olds`.
           const tags = yield* updateResourceTags({

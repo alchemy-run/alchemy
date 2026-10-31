@@ -10,7 +10,7 @@ import type { User } from "./User.ts";
 
 /**
  * Connection descriptor for a MemoryDB cluster. Alchemy does not bundle a
- * valkey/redis client — pass these settings to the cluster-mode client of
+ * valkey/redis client -- pass these settings to the cluster-mode client of
  * your choice (`iovalkey`, `ioredis`, ...).
  */
 export interface ClusterConnectionInfo {
@@ -39,14 +39,14 @@ export interface ConnectOptions {
   /**
    * MemoryDB {@link User}s the host authenticates as via IAM authentication
    * (`authenticationMode: { type: "iam" }`). Each listed user's ARN is added
-   * to the `memorydb:Connect` grant — IAM auth authorizes against both the
+   * to the `memorydb:Connect` grant -- IAM auth authorizes against both the
    * cluster and the user. Password-authenticated users need no IAM grant;
    * omit this option and supply the password to your client instead.
    */
   users?: User[];
   /**
    * Subnets the host Function should be attached to so it can open a socket
-   * to the cluster — MemoryDB is VPC-only. Wired through the host's `vpc`
+   * to the cluster -- MemoryDB is VPC-only. Wired through the host's `vpc`
    * binding channel, equivalent to setting the Function's `vpc` prop.
    */
   subnetIds?: Input<SubnetId[]>;
@@ -67,7 +67,7 @@ export interface ConnectOptions {
  * Function and grants `memorydb:Connect` on the cluster (plus any IAM-auth
  * {@link User}s passed via `options.users`); at runtime it resolves the same
  * values into a typed {@link ClusterConnectionInfo}. Network access is
- * governed by VPC security groups — the host Function must:
+ * governed by VPC security groups -- the host Function must:
  *
  * 1. be attached to the cluster's VPC (`vpc: { subnetIds, securityGroupIds }`
  *    or the binding's `subnetIds`/`securityGroupIds` options), and
@@ -78,7 +78,7 @@ export interface ConnectOptions {
  * ### Connecting to a Cluster
  * **Example:** Resolve Connection Info inside a Function
  * ```typescript
- * // init — publishes env vars, grants memorydb:Connect, attaches the VPC
+ * // init -- publishes env vars, grants memorydb:Connect, attaches the VPC
  * const connect = yield* AWS.MemoryDB.Connect(cluster, {
  *   users: [appUser],
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],

@@ -110,8 +110,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // closed after `destroy(...)` runs.
   const sharedScope = Scope.makeUnsafe("sequential");
   // In dev mode, run local providers behind one file-scoped RPC sidecar
-  // (the `alchemy dev` topology). Lives in its own scope — NOT sharedScope,
-  // which `destroy(Stack)` closes mid-file in self-contained tests — and is
+  // (the `alchemy dev` topology). Lives in its own scope -- NOT sharedScope,
+  // which `destroy(Stack)` closes mid-file in self-contained tests -- and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
   const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options, sharedScope, sidecar);
@@ -149,7 +149,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     // otherwise leak every cloud resource it deployed: the scratch's in-memory
     // state is discarded with the process, so no later run can reclaim the
     // orphan (only an account-wide `nuke` can). `scratch.destroy()` is
-    // idempotent (empty-plan apply against the shared scratch state) — a no-op
+    // idempotent (empty-plan apply against the shared scratch state) -- a no-op
     // when the body already destroyed, and it reclaims the orphans otherwise.
     // `Effect.ensuring` runs the finalizer on success, failure, AND interruption.
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(

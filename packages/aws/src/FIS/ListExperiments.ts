@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `fis:ListExperiments`.
  *
  * Enumerates the account's experiments, optionally filtered to those started
- * from a specific template — the building block of a chaos-run dashboard or
+ * from a specific template -- the building block of a chaos-run dashboard or
  * a guard that refuses to start a new experiment while one is already
  * running. Provide the implementation with
  * `Effect.provide(AWS.FIS.ListExperimentsHttp)`.
  * ### Running Experiments
  * **Example:** Find Running Experiments for a Template
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listExperiments = yield* AWS.FIS.ListExperiments();
  *
  * // runtime

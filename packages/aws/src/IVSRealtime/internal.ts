@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 /**
- * IVS Real-Time wire tags allow `undefined` values in the record type —
+ * IVS Real-Time wire tags allow `undefined` values in the record type --
  * flatten to a plain string record, dropping malformed entries.
  */
 export const toTagRecord = (
@@ -17,7 +17,7 @@ export const toTagRecord = (
   );
 
 /**
- * Read the observed tags of an IVS Real-Time resource. Best-effort — a
+ * Read the observed tags of an IVS Real-Time resource. Best-effort -- a
  * failure (e.g. a race with deletion) reports no tags.
  */
 export const readIvsRealtimeTags = Effect.fn(function* (arn: string) {
@@ -55,7 +55,7 @@ export const syncIvsRealtimeTags = Effect.fn(function* (
 /**
  * Explicitly-typed pipeable retry helper (inlined `Effect.retry` in a
  * provider op widens the layer type in declaration emit). Retries
- * `ConflictException` — e.g. deleting a stage with an active session —
+ * `ConflictException` -- e.g. deleting a stage with an active session --
  * on a bounded schedule.
  */
 export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(

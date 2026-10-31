@@ -17,7 +17,7 @@ import type { ContactChannel } from "./ContactChannel.ts";
  * ```typescript
  * const sendActivationCode = yield* AWS.SSMContacts.SendActivationCode(email);
  *
- * // runtime — e.g. behind a "resend code" button
+ * // runtime -- e.g. behind a "resend code" button
  * yield* sendActivationCode();
  * ```
  *

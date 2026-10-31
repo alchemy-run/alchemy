@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:ListApplications`.
  *
- * Enumerates all AppRegistry applications in the account — useful in
+ * Enumerates all AppRegistry applications in the account -- useful in
  * discovery/dashboard functions that inventory registered applications.
  * Account-level: no resource argument. Provide the implementation with
  * `Effect.provide(AWS.AppRegistry.ListApplicationsHttp)`.
  * ### Discovering Applications
  * **Example:** List the Account's Applications
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listApplications = yield* AWS.AppRegistry.ListApplications();
  *
  * // runtime

@@ -17,7 +17,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * ### Reading Phone Numbers
  * **Example:** Read Phone Number Details
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const getPhoneNumber = yield* AWS.SocialMessaging.GetLinkedWhatsAppBusinessAccountPhoneNumber(account);
  *
  * // runtime

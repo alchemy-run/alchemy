@@ -6,7 +6,7 @@ import type { Discoverer } from "./Discoverer.ts";
 /**
  * Runtime binding for `schemas:StopDiscoverer`.
  *
- * Pauses schema discovery on the bound {@link Discoverer} — e.g. an ops
+ * Pauses schema discovery on the bound {@link Discoverer} -- e.g. an ops
  * function halting discovery during a noisy backfill so junk schemas are not
  * published to the `discovered-schemas` registry. The discoverer id is
  * injected from the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { Discoverer } from "./Discoverer.ts";
  * ### Controlling a Discoverer
  * **Example:** Pause Discovery
  * ```typescript
- * // init — bind the operation to the discoverer
+ * // init -- bind the operation to the discoverer
  * const stopDiscoverer = yield* AWS.Schemas.StopDiscoverer(discoverer);
  *
  * // runtime

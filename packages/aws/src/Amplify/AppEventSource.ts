@@ -49,11 +49,11 @@ export interface DeploymentStatusChangeEventSourceProps extends EventRouteProps 
 /**
  * Deliver Amplify Hosting deployment status changes (`aws.amplify` /
  * `"Amplify Deployment Status Change"` EventBridge events) to the host
- * Function — e.g. to notify a chat channel on failed builds or kick off
+ * Function -- e.g. to notify a chat channel on failed builds or kick off
  * cache invalidation when a deploy succeeds.
  *
  * The EventBridge pattern matches every Amplify app in the account and
- * region (the pattern must be literal — `Output` values such as `app.appId`
+ * region (the pattern must be literal -- `Output` values such as `app.appId`
  * do not resolve inside the deployed bundle); inspect `event.detail.appId` /
  * `event.detail.branchName` in the handler if multiple apps share the
  * Function. Provide `AWS.Lambda.EventSource` on the Function effect to

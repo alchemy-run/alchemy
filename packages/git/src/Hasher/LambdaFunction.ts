@@ -1,7 +1,7 @@
 import * as Lambda from "@alchemy.run/aws/Lambda/Function";
 /**
  * The pack hasher as an AWS Lambda (DESIGN §22.11): an Effect-native
- * Function that answers {@link HashEvent}s — the same scan the Worker runs
+ * Function that answers {@link HashEvent}s -- the same scan the Worker runs
  * inline, on a core several times faster and, above all, on as many cores
  * as there are chunks in flight. Declare it in the same stack as the Git
  * Worker (the stack needs both provider sets) and hand it to

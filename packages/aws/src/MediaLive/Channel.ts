@@ -41,7 +41,7 @@ type IdentifiedChannel = ObservedChannel & { Id: string; Arn: string };
 
 // Explicitly-typed pipeable retry helper (see internal.ts for why inline
 // Effect.retry is forbidden in provider ops). A freshly-created IAM role is
-// not immediately visible to MediaLive — createChannel rejects it with a
+// not immediately visible to MediaLive -- createChannel rejects it with a
 // message-discriminated UnprocessableEntityException naming the trust
 // relationship (patched in distilled to the typed `MediaLiveRoleNotYetTrusted`
 // tag) until IAM propagation settles.
@@ -64,7 +64,7 @@ export class MediaLiveChannelFailed extends Data.TaggedError("MediaLiveChannelFa
 export interface ChannelProps {
   /**
    * Name of the channel. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Names are mutable — changing the name
+   * app, stage, and logical ID. Names are mutable -- changing the name
    * updates the channel in place.
    */
   name?: string;
@@ -85,7 +85,7 @@ export interface ChannelProps {
    */
   inputAttachments?: medialive.InputAttachment[];
   /**
-   * The encoder settings — audio/video descriptions, output groups, and
+   * The encoder settings -- audio/video descriptions, output groups, and
    * timecode configuration.
    */
   encoderSettings?: medialive.EncoderSettings;
@@ -143,12 +143,12 @@ export interface Channel extends Resource<
 > {}
 
 /**
- * An AWS Elemental MediaLive channel — the live encoder that reads from
+ * An AWS Elemental MediaLive channel -- the live encoder that reads from
  * attached inputs, transcodes per its encoder settings, and writes to output
  * destinations (HLS, RTMP, MediaPackage, ...).
  *
  * Channels bill per running hour; Alchemy provisions channels in the `IDLE`
- * state and never starts them — start/stop is a runtime operation.
+ * state and never starts them -- start/stop is a runtime operation.
  *
  * ### Creating a Channel
  * **Example:** Single-pipeline HLS channel
@@ -209,7 +209,7 @@ export const ChannelProvider = () =>
       const isGone = (state: medialive.ChannelState | undefined) =>
         state === "DELETED" || state === "DELETING";
 
-      /** Describe by id; typed not-found (or tombstone state) → undefined. */
+      /** Describe by id; typed not-found (or tombstone state) -> undefined. */
       const getChannel = Effect.fn(function* (channelId: string) {
         const channel = yield* medialive
           .describeChannel({ ChannelId: channelId })
@@ -299,9 +299,9 @@ export const ChannelProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const name = yield* createName(id, news);
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           // MediaLive channel names are not unique, so a name match is only
-          // trusted when its immutable class agrees with the desired state —
+          // trusted when its immutable class agrees with the desired state --
           // during a replacement the same-named survivor is the doomed old
           // instance, not this one.
           let channel: IdentifiedChannel | undefined;
@@ -316,7 +316,7 @@ export const ChannelProvider = () =>
                 : undefined;
           }
 
-          // 2. Ensure — create if missing, then wait for CREATING to settle.
+          // 2. Ensure -- create if missing, then wait for CREATING to settle.
           if (channel === undefined) {
             const created = yield* medialive
               .createChannel({
@@ -337,7 +337,7 @@ export const ChannelProvider = () =>
             const fresh = yield* ensureIdentified(created.Channel, "CreateChannel Channel Id/Arn");
             channel = yield* awaitSettled(fresh.Id);
           } else {
-            // 3. Sync — cheap scalars are diffed against OBSERVED state; the
+            // 3. Sync -- cheap scalars are diffed against OBSERVED state; the
             // deep encoder/attachment documents are diffed against `olds` as
             // a no-op hint (Describe echoes them back default-expanded, so an
             // observed-vs-desired deep compare would always report drift).
@@ -389,7 +389,7 @@ export const ChannelProvider = () =>
           // typed describe; guard with a typed failure so TS sees it defined.
           const settled = yield* ensurePresent(channel, "reconciled channel state");
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMlTags(settled.Arn, desiredTags);
 
           yield* session.note(settled.Id);
@@ -402,10 +402,10 @@ export const ChannelProvider = () =>
             Effect.catchTag("NotFoundException", () => Effect.void),
             Effect.asVoid,
           );
-          // Deletion is async (DELETING → DELETED). Wait (bounded) so that
+          // Deletion is async (DELETING -> DELETED). Wait (bounded) so that
           // dependent Inputs/InputSecurityGroups can delete without long
           // conflict-retry loops; if the channel is still draining after the
-          // window, deletion is initiated and irreversible — let downstream
+          // window, deletion is initiated and irreversible -- let downstream
           // retries absorb the tail.
           yield* medialive.describeChannel({ ChannelId: output.channelId }).pipe(
             Effect.flatMap((channel) =>

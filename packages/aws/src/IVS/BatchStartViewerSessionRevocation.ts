@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ivs:BatchStartViewerSessionRevocation`.
  *
  * Starts revoking viewer sessions for up to 20 channel-ARN/viewer-ID
- * pairs in one call — the multi-channel form of
+ * pairs in one call -- the multi-channel form of
  * `StartViewerSessionRevocation` (e.g. kicking a banned viewer off every
  * channel they are watching). Per-pair failures are reported in the
  * response's `errors` array rather than failing the whole call. The
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * ### Revoking Viewer Sessions
  * **Example:** Revoke a Viewer Across Channels
  * ```typescript
- * // init — bind the account-level operation
+ * // init -- bind the account-level operation
  * const revokeViewerSessions =
  *   yield* AWS.IVS.BatchStartViewerSessionRevocation();
  *

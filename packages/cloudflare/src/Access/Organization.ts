@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 export type OrganizationProps = {
   /**
    * The unique subdomain assigned to your Zero Trust organization, e.g.
-   * `acme.cloudflareaccess.com`. Per-account this is functionally immutable —
+   * `acme.cloudflareaccess.com`. Per-account this is functionally immutable --
    * Cloudflare allocates exactly one team domain when the account first
    * enables Zero Trust and changing it is a manual support operation.
    *
@@ -279,7 +279,7 @@ export type Organization = Resource<
 >;
 
 /**
- * Account-level Cloudflare Zero Trust organization settings — the team
+ * Account-level Cloudflare Zero Trust organization settings -- the team
  * domain, login branding, session lifetimes, MFA, WARP authentication, etc.
  *
  * Wraps `PUT /accounts/{account_id}/access/organizations`.
@@ -295,7 +295,7 @@ export type Organization = Resource<
  *   resource from your stack leaves the Cloudflare-side settings untouched.
  * - Every deploy converges the whole organization on the declared props. A
  *   setting you don't declare goes back to Cloudflare's default, including
- *   one changed in the dashboard — declare MFA, `denyUnmatchedRequests` and
+ *   one changed in the dashboard -- declare MFA, `denyUnmatchedRequests` and
  *   the rest here to keep them.
  *
  * ### Configuring the organization
@@ -387,13 +387,13 @@ export const OrganizationProvider = () =>
       const desiredName = news.name ?? news.authDomain;
       // The body is the complete desired state: every setting the props
       // don't declare converges to its default.
-      // Observe — singleton lookup. The org always exists for any
+      // Observe -- singleton lookup. The org always exists for any
       // account that has enabled Zero Trust; only a brand-new account
       // returns "missing".
       const observed = yield* observe();
       const settings = settingsBody(news, desiredName, observed);
 
-      // Ensure — create on a fresh account. If a race or out-of-band
+      // Ensure -- create on a fresh account. If a race or out-of-band
       // setup created it between the observe and create call, fall
       // back to update.
       if (!observed) {
@@ -409,7 +409,7 @@ export const OrganizationProvider = () =>
         );
       }
 
-      // Sync — always push the full desired state so any drift converges
+      // Sync -- always push the full desired state so any drift converges
       // in one call. Cheap and idempotent.
       const updated = yield* zeroTrust.updateOrganizationForAccount({ accountId, ...settings });
 
@@ -417,7 +417,7 @@ export const OrganizationProvider = () =>
     }),
     delete: Effect.fn(function* () {
       yield* Effect.logWarning(
-        "Organization.delete is a no-op — the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
+        "Organization.delete is a no-op \u2014 the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
       );
     }),
     read: Effect.fn(function* ({ olds }) {

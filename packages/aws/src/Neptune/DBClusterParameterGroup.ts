@@ -25,7 +25,7 @@ export interface DBClusterParameterGroupProps {
   dbClusterParameterGroupName?: string;
   /**
    * DB cluster parameter group family, e.g. `neptune1.4`, `neptune1.3`.
-   * Immutable — forces replacement.
+   * Immutable -- forces replacement.
    */
   family: string;
   /**
@@ -68,7 +68,7 @@ export interface DBClusterParameterGroup extends Resource<
 > {}
 
 /**
- * An Amazon Neptune DB cluster parameter group — a named set of engine
+ * An Amazon Neptune DB cluster parameter group -- a named set of engine
  * configuration parameters (query timeout, audit logging, ...) that can be
  * attached to one or more Neptune {@link DBCluster}s.
  * ### Creating a Parameter Group
@@ -112,7 +112,7 @@ const toTagRecord = (
 /**
  * A parameter modify/reset issued immediately after another change fails with
  * `InvalidDBParameterGroupStateFault` ("has pending changes") until the prior
- * change settles — retry it on a short bounded schedule.
+ * change settles -- retry it on a short bounded schedule.
  */
 const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -141,7 +141,7 @@ export const DBClusterParameterGroupProvider = () =>
       });
 
       // All parameters (defaults + overrides) with their current values and
-      // apply types — the observed baseline for the parameter sync.
+      // apply types -- the observed baseline for the parameter sync.
       const readParameters = Effect.fn(function* (groupName: string) {
         return yield* neptune.describeDBClusterParameters
           .pages({ DBClusterParameterGroupName: groupName })
@@ -151,7 +151,7 @@ export const DBClusterParameterGroupProvider = () =>
           );
       });
 
-      // The subset of parameters the user has overridden (Source `user`) —
+      // The subset of parameters the user has overridden (Source `user`) --
       // used to compute resets when a prop entry is removed.
       const readUserParameters = Effect.fn(function* (groupName: string) {
         return yield* neptune.describeDBClusterParameters
@@ -186,7 +186,7 @@ export const DBClusterParameterGroupProvider = () =>
           if ((yield* toName(id, olds ?? { family: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
-          // Family is immutable — any change forces a fresh group.
+          // Family is immutable -- any change forces a fresh group.
           if (olds !== undefined && olds.family !== news.family) {
             return { action: "replace" } as const;
           }
@@ -215,10 +215,10 @@ export const DBClusterParameterGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live parameter-group state.
+          // Observe -- fetch live parameter-group state.
           let observed = yield* readGroup(name);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBParameterGroupAlreadyExistsFault` as a race with a peer
           // reconciler by re-reading.
           if (!observed?.DBClusterParameterGroupName) {
@@ -241,7 +241,7 @@ export const DBClusterParameterGroupProvider = () =>
             }
           }
 
-          // Sync parameters — diff observed cloud values against desired.
+          // Sync parameters -- diff observed cloud values against desired.
           const desiredParameters = news.parameters ?? {};
           const allParameters = yield* readParameters(name);
           const byName = new Map(allParameters.map((p) => [p.ParameterName, p]));
@@ -300,7 +300,7 @@ export const DBClusterParameterGroupProvider = () =>
 
           const arn = observed.DBClusterParameterGroupArn;
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && arn) {
@@ -330,7 +330,7 @@ export const DBClusterParameterGroupProvider = () =>
           // AWS account/region collection: the RDS-family control plane
           // serves parameter groups for every engine, so keep only families
           // beginning with `neptune`. Hydrating per-group parameters/tags
-          // would fan out one call per item — mirror `DBSubnetGroup.list` and
+          // would fan out one call per item -- mirror `DBSubnetGroup.list` and
           // emit empty maps instead.
           neptune.describeDBClusterParameterGroups.pages({}).pipe(
             Stream.runCollect,

@@ -44,7 +44,7 @@ export interface ApiKeyRestrictions {
 
 export interface ApiKeyProps {
   /**
-   * Name of the API key. Immutable — changing it replaces the key.
+   * Name of the API key. Immutable -- changing it replaces the key.
    * @default ${app}-${stage}-${id}
    */
   keyName?: string;
@@ -82,7 +82,7 @@ export interface ApiKey extends Resource<
     /** ARN of the API key resource. */
     keyArn: string;
     /**
-     * The key value clients send (`v1.public.…`). Wrapped in `Redacted` —
+     * The key value clients send (`v1.public....`). Wrapped in `Redacted` --
      * unwrap with `Redacted.value(apiKey.key)` where the raw value is
      * needed.
      */
@@ -106,11 +106,11 @@ export interface ApiKey extends Resource<
  * set of Location actions and resources. The key name is immutable;
  * restrictions, description, and expiry can be updated in place.
  *
- * The `key` attribute is the secret key value (`v1.public.…`) clients pass
+ * The `key` attribute is the secret key value (`v1.public....`) clients pass
  * as the `key` query parameter; it is wrapped in `Redacted`.
  *
  * Availability: Amazon Location classic (V1) is closed to newer AWS
- * accounts — `geo:CreateKey` is rejected service-side with an
+ * accounts -- `geo:CreateKey` is rejected service-side with an
  * `AccessDeniedException` regardless of IAM policy. Accounts onboarded to
  * Location before the V2 split can create keys normally.
  *
@@ -129,7 +129,7 @@ export interface ApiKey extends Resource<
  *     allowResources: [map.mapArn],
  *   },
  * });
- * // Redacted.value(key.key) → "v1.public.…" — append as ?key=… to tile URLs
+ * // Redacted.value(key.key) -> "v1.public...." -- append as ?key=... to tile URLs
  * ```
  *
  * **Example:** Key with Referer Restrictions and Expiry

@@ -105,7 +105,7 @@ export interface Monitor extends Resource<
 > {}
 
 /**
- * An AWS Deadline Cloud monitor — the hosted web console where artists and
+ * An AWS Deadline Cloud monitor -- the hosted web console where artists and
  * administrators view farms, queues, and jobs, authenticated through IAM
  * Identity Center.
  *
@@ -123,7 +123,7 @@ export interface Monitor extends Resource<
  *
  * **Example:** Export the Monitor URL
  * ```typescript
- * // The monitor's web console URL is available as an output attribute —
+ * // The monitor's web console URL is available as an output attribute --
  * // return it from the stack so users know where to sign in.
  * const monitor = yield* AWS.Deadline.Monitor("StudioMonitor", {
  *   subdomain: "studio-renders",
@@ -268,7 +268,7 @@ export const MonitorProvider = () =>
             }
           }
 
-          // Sync mutable settings — only when drifted from OBSERVED state.
+          // Sync mutable settings -- only when drifted from OBSERVED state.
           const described = state.described;
           const needsUpdate =
             displayName !== described.displayName ||
@@ -284,7 +284,7 @@ export const MonitorProvider = () =>
             yield* session.note(`Updated monitor ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncDeadlineTags(state.attrs.monitorArn, desiredTags);
 
           yield* session.note(state.attrs.monitorArn);

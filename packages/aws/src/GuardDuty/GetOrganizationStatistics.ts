@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:GetOrganizationStatistics`.
  *
  * Reports organization-wide GuardDuty enablement statistics (delegated administrator only).
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.GetOrganizationStatisticsHttp)`.
  * ### Organization Administration
  * **Example:** Read Org Statistics
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getOrganizationStatistics = yield* AWS.GuardDuty.GetOrganizationStatistics();
  *
  * // runtime

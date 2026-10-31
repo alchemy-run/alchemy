@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link GetQAppSession} — `instanceId` is injected from the bound Q App.
+ * Request for {@link GetQAppSession} -- `instanceId` is injected from the bound Q App.
  */
 export interface GetQAppSessionRequest extends Omit<
   qapps.GetQAppSessionInput,
@@ -14,12 +14,12 @@ export interface GetQAppSessionRequest extends Omit<
 /**
  * Runtime binding for `qapps:GetQAppSession`.
  *
- * Retrieves the current state of a Q App session — execution status plus the per-card status map. Provide the implementation with
+ * Retrieves the current state of a Q App session -- execution status plus the per-card status map. Provide the implementation with
  * `Effect.provide(AWS.QApps.GetQAppSessionHttp)`.
  * ### Sessions
  * **Example:** Poll a Session Until It Completes
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const getQAppSession = yield* AWS.QApps.GetQAppSession(app);
  *
  * // runtime

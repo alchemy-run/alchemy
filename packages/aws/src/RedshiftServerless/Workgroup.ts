@@ -117,7 +117,7 @@ export interface Workgroup extends Resource<
 > {}
 
 /**
- * An Amazon Redshift Serverless workgroup — the compute half of a serverless
+ * An Amazon Redshift Serverless workgroup -- the compute half of a serverless
  * data warehouse.
  *
  * A workgroup provides on-demand compute (measured in RPUs) against a
@@ -294,7 +294,7 @@ export const WorkgroupProvider = () =>
           // 1. Observe.
           let observed = yield* readWorkgroup(name);
 
-          // 2. Ensure — create if missing; tolerate a concurrent create.
+          // 2. Ensure -- create if missing; tolerate a concurrent create.
           if (observed === undefined) {
             const created = yield* redshiftserverless
               .createWorkgroup({
@@ -329,7 +329,7 @@ export const WorkgroupProvider = () =>
             });
           }
 
-          // 3. Sync — one updateWorkgroup per drifted field (multi-field
+          // 3. Sync -- one updateWorkgroup per drifted field (multi-field
           // updates are rejected). Only mutate fields the user specified.
           if (news.baseCapacity !== undefined && observed.baseCapacity !== baseCapacity) {
             observed = (yield* applyUpdate(name, { baseCapacity })) ?? observed;
@@ -365,7 +365,7 @@ export const WorkgroupProvider = () =>
               })) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(observed.workgroupArn!, desiredTags);
 
           // 4. Return fresh attributes.
@@ -376,7 +376,7 @@ export const WorkgroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* redshiftserverless.deleteWorkgroup({ workgroupName: output.workgroupName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            // A concurrent modification may still be settling — retry.
+            // A concurrent modification may still be settling -- retry.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
               schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),

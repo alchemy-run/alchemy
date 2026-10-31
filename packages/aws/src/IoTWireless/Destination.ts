@@ -73,7 +73,7 @@ export interface Destination extends Resource<
 > {}
 
 /**
- * An AWS IoT Core for LoRaWAN destination — the routing rule that delivers
+ * An AWS IoT Core for LoRaWAN destination -- the routing rule that delivers
  * uplink messages from wireless devices to an AWS IoT rule or MQTT topic.
  *
  * The destination name is its identity (changing it replaces the
@@ -215,7 +215,7 @@ export const DestinationProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // The name is the destination's identity — changing it replaces the
+        // The name is the destination's identity -- changing it replaces the
         // resource. Everything else updates in place via UpdateDestination.
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -229,10 +229,10 @@ export const DestinationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let destination = yield* getDestination(name);
 
-          // 2. ENSURE — create if missing; a Conflict means a peer created
+          // 2. ENSURE -- create if missing; a Conflict means a peer created
           //    it concurrently, so fall through to the sync step.
           if (destination === undefined) {
             yield* session.note(`creating destination ${name}`);
@@ -257,7 +257,7 @@ export const DestinationProvider = () =>
             });
           }
 
-          // 3. SYNC — apply the expression/description/role delta from
+          // 3. SYNC -- apply the expression/description/role delta from
           //    OBSERVED state; skip the API call entirely on no-op.
           const expressionDelta =
             destination.Expression !== news.expression ||
@@ -281,7 +281,7 @@ export const DestinationProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           const attrs = yield* toAttrs(destination, name);
           yield* syncIotWirelessTags(attrs.destinationArn, desiredTags);
 

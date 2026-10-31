@@ -25,7 +25,7 @@ export interface ResponsePlanProps {
 
   /**
    * Details used to create the incident when this response plan starts an
-   * incident: title, impact (1 = critical … 5 = no impact), optional summary,
+   * incident: title, impact (1 = critical ... 5 = no impact), optional summary,
    * dedupe string, SNS notification targets, and tags applied to the incident
    * record.
    */
@@ -75,7 +75,7 @@ export interface ResponsePlan extends Resource<
 > {}
 
 /**
- * An Incident Manager response plan — the template that automates the initial
+ * An Incident Manager response plan -- the template that automates the initial
  * response to incidents by engaging contacts, starting chat-channel
  * collaboration, and running Automation runbooks.
  *
@@ -110,7 +110,7 @@ const ResponsePlanResource = Resource<ResponsePlan>("AWS.SSMIncidents.ResponsePl
 
 export { ResponsePlanResource as ResponsePlan };
 
-// Normalized deep-equality for desired-vs-observed sync comparisons —
+// Normalized deep-equality for desired-vs-observed sync comparisons --
 // tolerates key ordering and treats absent optional lists as empty.
 const normalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(normalize);
@@ -209,7 +209,7 @@ export const ResponsePlanProvider = () =>
           // 1. OBSERVE
           let plan = yield* observe(name, output?.arn);
 
-          // 2. ENSURE — create if missing; tolerate the already-exists race.
+          // 2. ENSURE -- create if missing; tolerate the already-exists race.
           if (plan === undefined) {
             yield* session.note(`creating response plan ${name}`);
             const arn = yield* incidents
@@ -233,7 +233,7 @@ export const ResponsePlanProvider = () =>
           }
           const arn = plan.arn;
 
-          // 3. SYNC — diff each mutable aspect of the OBSERVED plan against
+          // 3. SYNC -- diff each mutable aspect of the OBSERVED plan against
           //    the desired state; call updateResponsePlan only on a delta.
           //    Empty strings / empty arrays clear a previously-set value.
           const desired = {
@@ -283,7 +283,7 @@ export const ResponsePlanProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

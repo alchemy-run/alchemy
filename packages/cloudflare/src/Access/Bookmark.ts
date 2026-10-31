@@ -66,10 +66,10 @@ export type Bookmark = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust Access bookmark application — an unprotected link
+ * A Cloudflare Zero Trust Access bookmark application -- an unprotected link
  * shown in the App Launcher.
  * @deprecated **Legacy resource.** Cloudflare has deprecated the dedicated
- * bookmarks API in favor of Access applications with `type: "bookmark"` —
+ * bookmarks API in favor of Access applications with `type: "bookmark"` --
  * prefer {@link Application} for new configurations. This resource is
  * provided for managing pre-existing bookmark records.
  *
@@ -138,7 +138,7 @@ export const BookmarkProvider = () =>
       const name = yield* createBookmarkName(id, news.name);
       const desiredVisible = news.appLauncherVisible ?? true;
 
-      // Observe — prefer the cached id, fall back to a name lookup so we
+      // Observe -- prefer the cached id, fall back to a name lookup so we
       // recover from out-of-band deletes and state-persistence failures.
       let observed: ObservedBookmark | undefined;
       if (output?.bookmarkId) {
@@ -148,7 +148,7 @@ export const BookmarkProvider = () =>
         observed = yield* findBookmarkByName(acct, name);
       }
 
-      // Ensure — create when missing. The legacy API requires the new
+      // Ensure -- create when missing. The legacy API requires the new
       // bookmark's UUID in the path, so derive a deterministic one from the
       // name: a retry after a partial failure converges on the same record.
       if (!observed || !observed.id) {
@@ -179,7 +179,7 @@ export const BookmarkProvider = () =>
         return toAttrs(created, acct);
       }
 
-      // Sync — PUT the full desired shape only on a real delta.
+      // Sync -- PUT the full desired shape only on a real delta.
       if (
         observed.name !== name ||
         observed.domain !== news.domain ||

@@ -153,14 +153,14 @@ export type BillingBudgetProps = {
   /**
    * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or
    * `billingAccounts/{id}`). If omitted, Alchemy uses the billing
-   * account linked to the current project. Immutable — changing it
+   * account linked to the current project. Immutable -- changing it
    * replaces the budget.
    */
   billingAccountId?: string;
   /**
    * Server-assigned budget id (the `{budget}` segment of
    * `billingAccounts/{billingAccount}/budgets/{budget}`). Omit on
-   * create; pass the observed id to update in place. Immutable —
+   * create; pass the observed id to update in place. Immutable --
    * changing it replaces the budget.
    */
   budgetId?: string;
@@ -176,7 +176,7 @@ export type BillingBudgetProps = {
    */
   amount: BudgetAmount;
   /**
-   * Filters that scope actual spend (projects, services, period, …).
+   * Filters that scope actual spend (projects, services, period, ...).
    */
   budgetFilter?: BudgetFilter;
   /**
@@ -228,7 +228,7 @@ export type BillingBudget = Resource<
  * Budgets have no labels field and the display name appears in alert
  * emails, so Alchemy finds its budget by display name within the current
  * project's scope: `read` reports a budget as owned only when it carries
- * the generated name (an explicit `displayName` is reported as unowned —
+ * the generated name (an explicit `displayName` is reported as unowned --
  * adopt it with `--adopt`), and nuke cannot discover budgets. The
  * physical id is a server-assigned UUID. Changing `billingAccountId` or
  * `budgetId` replaces the budget. Amount, filter, thresholds,

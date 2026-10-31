@@ -8,7 +8,7 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:ListStackResources`).
  *
  * Bind this operation to a {@link Stack} to enumerate all of the stack's
- * resource summaries (paginated) from inside a function runtime — the
+ * resource summaries (paginated) from inside a function runtime -- the
  * lighter-weight alternative to `DescribeStackResources` for stacks with many
  * resources. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.ListStackResourcesHttp)`.

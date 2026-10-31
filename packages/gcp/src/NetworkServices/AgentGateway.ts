@@ -89,11 +89,11 @@ export type AgentGatewayProps = {
    * `projects/{project}/locations/{location}/agentGateways/{agentGateway}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the gateway.
+   * Immutable -- changing it replaces the gateway.
    */
   agentGatewayId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * gateway. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -142,7 +142,7 @@ export type AgentGateway = Resource<
     agentGatewayId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Google-managed deployment, if set. */
     googleManaged: AgentGatewayGoogleManaged | undefined;
@@ -172,7 +172,7 @@ export type AgentGateway = Resource<
 >;
 
 /**
- * A Network Services Agent Gateway — the proxy that governs access to
+ * A Network Services Agent Gateway -- the proxy that governs access to
  * agents, MCP servers, and tools.
  *
  * Changing `agentGatewayId` or `location` replaces the gateway.

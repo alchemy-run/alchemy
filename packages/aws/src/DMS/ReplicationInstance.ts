@@ -123,7 +123,7 @@ export interface ReplicationInstance extends Resource<
 > {}
 
 /**
- * A DMS replication instance — the managed compute that runs migration and
+ * A DMS replication instance -- the managed compute that runs migration and
  * replication tasks. Provisioning takes several minutes and the instance is
  * billed hourly while it exists, so create it only when a migration is
  * running and destroy it promptly.
@@ -282,10 +282,10 @@ export const ReplicationInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* findInstance(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* dms
               .createReplicationInstance({
@@ -314,7 +314,7 @@ export const ReplicationInstanceProvider = () =>
           // InvalidResourceStateFault.
           observed = yield* waitForInstance(name);
 
-          // 3. Sync — compute the modify delta from OBSERVED state. Immutable
+          // 3. Sync -- compute the modify delta from OBSERVED state. Immutable
           //    properties are handled by diff (replacement), so only mutable
           //    aspects are compared here.
           const modify: dms.ModifyReplicationInstanceMessage = {
@@ -355,7 +355,7 @@ export const ReplicationInstanceProvider = () =>
             observed = yield* waitForInstance(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ReplicationInstanceArn!;
           const observedTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

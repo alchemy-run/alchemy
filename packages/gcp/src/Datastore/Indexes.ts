@@ -34,19 +34,19 @@ export type IndexProps = {
   /**
    * Entity kind this composite index applies to. If omitted, a unique
    * kind is generated from the stack, stage, and logical id. Immutable
-   * — changing it replaces the index.
+   * -- changing it replaces the index.
    */
   kind?: string;
   /**
-   * Ancestor mode (`NONE` or `ALL_ANCESTORS`). Immutable — changing it
+   * Ancestor mode (`NONE` or `ALL_ANCESTORS`). Immutable -- changing it
    * replaces the index.
    * @default "NONE"
    */
   ancestor?: IndexAncestor;
   /**
-   * Ordered indexed properties. Composite indexes need 2–100
+   * Ordered indexed properties. Composite indexes need 2-100
    * properties; single-property indexes are built automatically and
-   * cannot be created here. Immutable — changing properties replaces
+   * cannot be created here. Immutable -- changing properties replaces
    * the index.
    */
   properties: IndexedProperty[];
@@ -80,7 +80,7 @@ export type Index = Resource<
  *
  * Indexes apply to the project's default Datastore-mode database.
  * The index id is assigned by the API. Kind, ancestor mode, and
- * properties are immutable — changing them replaces the index.
+ * properties are immutable -- changing them replaces the index.
  * Indexes have no labels field, so Alchemy tracks an index by the id in
  * state; without state an index with the same definition is adopted when
  * its kind is the generated one and reported as unowned otherwise.

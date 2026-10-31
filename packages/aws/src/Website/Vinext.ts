@@ -9,7 +9,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**
- * The vinext-on-AWS framework module (it is its own deploy target — not
+ * The vinext-on-AWS framework module (it is its own deploy target -- not
  * OpenNext, not the Cloudflare Worker source).
  */
 export const VINEXT_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/aws";

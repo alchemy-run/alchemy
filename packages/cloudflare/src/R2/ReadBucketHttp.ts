@@ -72,7 +72,7 @@ export const makeReadR2HttpClient = (
           }),
         ),
         // Native R2 `head` resolves to `null` for a missing object rather
-        // than failing — mirror that for the HTTP-backed client.
+        // than failing -- mirror that for the HTTP-backed client.
         Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
         Effect.mapError(toR2Error),
       ),
@@ -137,7 +137,7 @@ export const makeReadR2HttpClient = (
 
 const objectBodyFromResponse = (key: string, res: r2.GetObjectResponse): R2ObjectBody => {
   const meta = httpMetadataOf(res);
-  // The HTTP body is a single-consumption stream — expose it both as a Stream
+  // The HTTP body is a single-consumption stream -- expose it both as a Stream
   // and via the buffering accessors, but the caller may only read it once.
   let response: Response | undefined;
   const getResponse = () => (response ??= new Response(Stream.toReadableStream(res.body) as any));

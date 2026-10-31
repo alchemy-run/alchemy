@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:CreateKxChangeset` — ingests data into a kdb database in the bound environment by creating a changeset from staged S3 objects — the Managed kdb data-ingestion primitive.
+ * Runtime binding for `finspace:CreateKxChangeset` -- ingests data into a kdb database in the bound environment by creating a changeset from staged S3 objects -- the Managed kdb data-ingestion primitive.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxChangesetHttp)`.
  * ### Ingesting Data

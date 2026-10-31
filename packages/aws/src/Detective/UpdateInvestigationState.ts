@@ -6,7 +6,7 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:UpdateInvestigationState`.
  *
- * Moves an investigation between `ACTIVE` and `ARCHIVED` — close out a
+ * Moves an investigation between `ACTIVE` and `ARCHIVED` -- close out a
  * triaged investigation from the same function that opened it. The graph
  * ARN is injected from the bound {@link Graph}.
  * Provide the implementation with

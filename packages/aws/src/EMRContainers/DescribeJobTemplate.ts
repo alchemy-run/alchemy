@@ -6,14 +6,14 @@ import type { JobTemplate } from "./JobTemplate.ts";
 /**
  * Runtime binding for `emr-containers:DescribeJobTemplate`.
  *
- * Reads the bound {@link JobTemplate}'s stored `StartJobRun` values — the
+ * Reads the bound {@link JobTemplate}'s stored `StartJobRun` values -- the
  * execution role, release label, job driver, and parameter configuration.
  * The template ID is injected from the binding. Provide the implementation
  * with `Effect.provide(AWS.EMRContainers.DescribeJobTemplateHttp)`.
  * ### Job Templates
  * **Example:** Read The Bound Template
  * ```typescript
- * // init — bind the operation to the template
+ * // init -- bind the operation to the template
  * const describeJobTemplate =
  *   yield* AWS.EMRContainers.DescribeJobTemplate(template);
  *

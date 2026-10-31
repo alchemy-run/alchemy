@@ -77,7 +77,7 @@ export interface Tenant extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 tenant — a logical container that groups related SES
+ * An Amazon SES v2 tenant -- a logical container that groups related SES
  * resources (email identities, configuration sets, templates) together, each
  * with its own reputation metrics, sending status, and optional
  * tenant-scoped suppression list. Useful for isolating email sending across
@@ -138,7 +138,7 @@ export interface Tenant extends Resource<
  *   suppression: { reasons: ["BOUNCE", "COMPLAINT"], scope: "TENANT" },
  * });
  *
- * // init — account-level bindings, scoped per call via TenantName
+ * // init -- account-level bindings, scoped per call via TenantName
  * const suppress = yield* SES.PutSuppressedDestination();
  * const listSuppressed = yield* SES.ListSuppressedDestinations();
  *
@@ -234,12 +234,12 @@ export const TenantProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getTenant(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create with the full desired set. AlreadyExists is a
-            //    race → fall through to the sync steps to converge.
+            // 2. ENSURE -- create with the full desired set. AlreadyExists is a
+            //    race -> fall through to the sync steps to converge.
             yield* sesv2
               .createTenant({
                 TenantName: name,
@@ -270,10 +270,10 @@ export const TenantProvider = () =>
           }
           const tenantArn = observed.TenantArn;
 
-          // 3. SYNC SUPPRESSION — diff observed suppression against desired and
+          // 3. SYNC SUPPRESSION -- diff observed suppression against desired and
           //    apply only on a real delta.
           //
-          //    SES requires both members together — a put carrying only one
+          //    SES requires both members together -- a put carrying only one
           //    fails with BadRequestException ("SuppressedReasons cannot be
           //    specified without SuppressionScope", and the mirror image). The
           //    prop nests them so that invalid state is unrepresentable and
@@ -292,7 +292,7 @@ export const TenantProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

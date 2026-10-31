@@ -30,7 +30,7 @@ export interface DatastoreProps {
    */
   lambdaAuthorizerArn?: string;
   /**
-   * Lossless compression format for stored image frames — `"HTJ2K"` or
+   * Lossless compression format for stored image frames -- `"HTJ2K"` or
    * `"JPEG_2000_LOSSLESS"`. Changing the format replaces the data store.
    * @default "HTJ2K"
    */
@@ -63,10 +63,10 @@ export interface Datastore extends Resource<
 > {}
 
 /**
- * An AWS HealthImaging data store — a HIPAA-eligible store for DICOM P10
+ * An AWS HealthImaging data store -- a HIPAA-eligible store for DICOM P10
  * medical images with sub-second image-frame retrieval.
  *
- * Data stores provision asynchronously (CREATING → ACTIVE, typically a few
+ * Data stores provision asynchronously (CREATING -> ACTIVE, typically a few
  * minutes) and must be empty (no image sets) before they can be deleted.
  * HealthImaging has no update API, so every property except tags triggers a
  * replacement.
@@ -126,7 +126,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
   });
 
-/** A data store mid-create rejects deletion with ConflictException — retry
+/** A data store mid-create rejects deletion with ConflictException -- retry
  * (bounded) while it settles. */
 const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -165,7 +165,7 @@ export const DatastoreProvider = () =>
       });
 
       // Data stores are addressed by a server-generated id; a name-based
-      // lookup scans the paginated list (names are not unique — take the
+      // lookup scans the paginated list (names are not unique -- take the
       // first live match).
       const findByName = Effect.fn(function* (name: string) {
         const matches = yield* medicalimaging.listDatastores.items({}).pipe(
@@ -249,7 +249,7 @@ export const DatastoreProvider = () =>
           const n = news;
           const o = olds;
           if (n === undefined || o === undefined) return undefined;
-          // HealthImaging has no UpdateDatastore — every property except
+          // HealthImaging has no UpdateDatastore -- every property except
           // tags is create-only and forces a replacement.
           if ((yield* toName(id, o)) !== (yield* toName(id, n))) {
             return { action: "replace" } as const;
@@ -263,7 +263,7 @@ export const DatastoreProvider = () =>
           if ((n.losslessStorageFormat ?? undefined) !== (o.losslessStorageFormat ?? undefined)) {
             return { action: "replace" } as const;
           }
-          // tags → default update
+          // tags -> default update
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -280,11 +280,11 @@ export const DatastoreProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an
+          // 1. OBSERVE -- cloud state is authoritative; output is only an
           // id cache.
           let observed = yield* observe(output?.datastoreId, name);
 
-          // 2. ENSURE — create if missing; a ConflictException is a create
+          // 2. ENSURE -- create if missing; a ConflictException is a create
           // race (or a leftover CREATE_FAILED store), resolved by re-reading.
           if (observed === undefined) {
             const created = yield* medicalimaging
@@ -306,12 +306,12 @@ export const DatastoreProvider = () =>
             });
           }
 
-          // Provisioning is async (CREATING → ACTIVE); wait bounded so tag
+          // Provisioning is async (CREATING -> ACTIVE); wait bounded so tag
           // syncs and dependents see an ACTIVE store.
           observed = yield* waitForActive(observed.datastoreId);
           const arn = yield* requireArn(observed);
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags.
           const observedTags = yield* readTags(arn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

@@ -63,9 +63,9 @@ export interface PredictionEventSourceProps extends EventRouteProps {
  * result is published to the account's default EventBridge bus (source
  * `aws.frauddetector`, detail-type `Event Prediction Result Returned`); this
  * subscribes the host Function to those events so it can trigger downstream
- * workflows — queue a manual review, block an account, notify the customer.
+ * workflows -- queue a manual review, block an account, notify the customer.
  *
- * Fraud Detector publishes to EventBridge automatically — no additional
+ * Fraud Detector publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

@@ -44,11 +44,11 @@ export type TlsInspectionPolicyProps = {
    * `projects/{project}/locations/{location}/tlsInspectionPolicies/{tlsInspectionPolicy}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   tlsInspectionPolicyId?: string;
   /**
-   * Location (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Location (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -62,7 +62,7 @@ export type TlsInspectionPolicyProps = {
   caPool: string;
   /**
    * Human-readable description. TlsInspectionPolicy has no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -82,7 +82,7 @@ export type TlsInspectionPolicyProps = {
    */
   customTlsFeatures?: string[];
   /**
-   * When true, do not trust the default public CA set — only CAs in
+   * When true, do not trust the default public CA set -- only CAs in
    * `trustConfig` are accepted. Defaults to false. Secure Web Proxy does
    * not yet honor this field.
    * @default false
@@ -107,7 +107,7 @@ export type TlsInspectionPolicy = Resource<
     tlsInspectionPolicyId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** CA pool used to issue interception certificates. */
     caPool: string | undefined;
@@ -133,7 +133,7 @@ export type TlsInspectionPolicy = Resource<
 >;
 
 /**
- * A Network Security TlsInspectionPolicy — CA pool and TLS settings used
+ * A Network Security TlsInspectionPolicy -- CA pool and TLS settings used
  * to intercept TLS for Secure Web Proxy and Cloud NGFW.
  *
  * TlsInspectionPolicy has no labels field, so Alchemy stamps ownership

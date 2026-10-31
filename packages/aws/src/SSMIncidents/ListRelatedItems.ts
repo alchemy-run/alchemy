@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:ListRelatedItems`.
  *
- * Lists the related items of an incident — attached metrics, runbook
+ * Lists the related items of an incident -- attached metrics, runbook
  * executions, parent tickets, and links. Related items live under runtime
  * incident-record ARNs, so the deploy-time grant is account-level
  * (`Resource: "*"`).

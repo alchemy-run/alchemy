@@ -12,7 +12,7 @@ export type DataStoresConversationProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the conversation.
+   * Immutable -- changing it replaces the conversation.
    */
   dataStore: string;
   /**

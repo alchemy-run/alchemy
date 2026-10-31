@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:RequestServiceQuotaIncrease` — submit a
+ * Runtime binding for `servicequotas:RequestServiceQuotaIncrease` -- submit a
  * quota increase request from inside a Function (e.g. automatically request
  * more capacity when utilization approaches the limit).
  *

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface PutTraceSegmentsRequest extends xray.PutTraceSegmentsRequest {}
 
 /**
- * Upload segment documents to X-Ray — custom instrumentation for work
+ * Upload segment documents to X-Ray -- custom instrumentation for work
  * the X-Ray SDK does not capture (background jobs, fan-out steps,
  * external calls).
  *
@@ -18,10 +18,10 @@ export interface PutTraceSegmentsRequest extends xray.PutTraceSegmentsRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:PutTraceSegments
+ * // init -- grants xray:PutTraceSegments
  * const putTraceSegments = yield* XRay.PutTraceSegments();
  *
- * // runtime — record a completed unit of work as its own segment
+ * // runtime -- record a completed unit of work as its own segment
  * const result = yield* putTraceSegments({
  *   TraceSegmentDocuments: [
  *     JSON.stringify({

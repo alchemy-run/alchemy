@@ -25,7 +25,7 @@ import { formatDeclaredPropertyYaml, matchYamlChange, matchYamlKey } from "./Pro
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
-// Shared with every other non-ink output path — notably it honors
+// Shared with every other non-ink output path -- notably it honors
 // FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
 const useColor = colorsEnabled();
 const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
@@ -65,7 +65,7 @@ const logFor = (fqn: string, message: string, level?: LogLevel.Severity) =>
  * In-progress statuses that represent real cloud work. Plain output has no
  * spinner, so these lines are the liveness signal in CI logs
  * (CloudFormation-style IN_PROGRESS rows). Bookkeeping transitions
- * (`pending`, `attaching`, `post-attach`) stay silent — they resolve in
+ * (`pending`, `attaching`, `post-attach`) stay silent -- they resolve in
  * milliseconds and would double the log for no information.
  */
 const isActive = (status: ApplyStatus): boolean =>
@@ -80,7 +80,7 @@ const isActive = (status: ApplyStatus): boolean =>
   status === "running";
 
 /**
- * Dim `(local)` / `(remote)` / `(local → live)` suffix for a resource row,
+ * Dim `(local)` / `(remote)` / `(local -> live)` suffix for a resource row,
  * or `""` when the row's mode matches the run default (the quiet common
  * case). See {@link formatModeNote} for the rule.
  */
@@ -89,7 +89,7 @@ const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
   return note ? ` ${dim(`(${note})`)}` : "";
 };
 
-/** Exported for unit tests — pure plan-preview rendering. */
+/** Exported for unit tests -- pure plan-preview rendering. */
 export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): string[] => {
   const allItems = [...Object.values(plan.resources), ...Object.values(plan.deletions)] as CRUD[];
   const tasks = [...Object.values(plan.actions ?? {}), ...Object.values(plan.actionDeletions ?? {})]
@@ -124,10 +124,10 @@ export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): s
       priorMode: item.action === "replace" ? item.state.providerMode : undefined,
       defaultMode: plan.defaultMode,
     });
-    // Surface FQN migrations: `[Assets] update (renamed from Bucket)` —
+    // Surface FQN migrations: `[Assets] update (renamed from Bucket)` --
     // the update exists to re-brand the moved row's physical resource, and
     // without the note the plan gives no hint why an untouched resource
-    // reconciles. (Only apply-side nodes can carry a rename — see
+    // reconciles. (Only apply-side nodes can carry a rename -- see
     // `ApplyNodeBase`.)
     const renamed =
       "renamedFrom" in item && item.renamedFrom?.length
@@ -295,11 +295,11 @@ export const LoggingCli = Layer.effect(
                     const took =
                       from === undefined ? "" : ` ${dim(`(${formatElapsed(now - from)})`)}`;
                     const message = event.message ?? statusNotes.get(event.fqn);
-                    // Failures carry their error as the message — paint it
+                    // Failures carry their error as the message -- paint it
                     // red so the line reads as the error line for that
                     // resource, without waiting for the final cause dump.
                     const msg = message
-                      ? ` ${dim("—")} ${event.status === "fail" ? red(message) : message}`
+                      ? ` ${dim("\u2014")} ${event.status === "fail" ? red(message) : message}`
                       : "";
                     // At the level `emit` gives the event, so `--log-level error`
                     // still shows a failed resource.

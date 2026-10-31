@@ -4,7 +4,7 @@ import { makeLocalStreamBinding } from "./StreamHttp.ts";
 import { WriteStream } from "./WriteStream.ts";
 
 /**
- * Local implementation of the {@link WriteStream} service — POSTs records
+ * Local implementation of the {@link WriteStream} service -- POSTs records
  * to the stream's HTTP ingest endpoint with the **current credentials**
  * instead of a native Worker binding (`WriteStreamBinding`) or a scoped
  * API token (`WriteStreamHttp`).

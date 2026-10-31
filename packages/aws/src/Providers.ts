@@ -262,7 +262,7 @@ export const providers = () =>
   Layer.effect(
     Providers,
     // Providers are PINNED to the environment they are registered with (the
-    // live chain provided at the bottom of this pipe) — see
+    // live chain provided at the bottom of this pipe) -- see
     // `pinCollectionEnvironment`. The ambient environment the STACK program
     // sees flips to the emulator in a dev run (bottom of this file), and the
     // pin is what keeps live-mode and mode-agnostic providers on the real
@@ -1234,7 +1234,7 @@ export const providers = () =>
             flociDual(EC2.FlowLog, () => EC2.FlowLogProvider()),
             flociDual(EC2.Instance, () => EC2.InstanceProvider()),
             // Dual EC2 networking glue: local (floci) ECS services/tasks run
-            // inside an emulated VPC — a live VPC can't host local containers
+            // inside an emulated VPC -- a live VPC can't host local containers
             // and local target groups can't reference a live vpcId.
             flociDual(EC2.InternetGateway, () => EC2.InternetGatewayProvider()),
             flociDual(EC2.KeyPair, () => EC2.KeyPairProvider()),
@@ -1266,11 +1266,11 @@ export const providers = () =>
           flociDual(ECS.CapacityProvider, () => ECS.CapacityProviderProvider()),
           flociDual(ECS.Cluster, () => ECS.ClusterProvider()),
           // Dual: live ECS in deploy, floci-emulated (RPC-sidecar-hosted,
-          // hot-reloading real containers) in dev — see FlociServiceProvider
+          // hot-reloading real containers) in dev -- see FlociServiceProvider
           // / FlociTaskProvider.
           // Hand-written floci local providers still live on the floci data
           // plane: declare it so deploy-time binding clients (Action bodies,
-          // plan-time `execute`) route to the emulator — and so a binding
+          // plan-time `execute`) route to the emulator -- and so a binding
           // spanning a `flociDual` sibling (RunTask(cluster, task)) does not
           // see "mixed data planes". Pinned by test/AWS/LocalDataPlane.test.ts.
           ProviderLayer.dual(ECS.Service, {
@@ -1298,7 +1298,7 @@ export const providers = () =>
           flociDual(ElastiCache.ServerlessCache, () => ElastiCache.ServerlessCacheProvider()),
           flociDual(ElastiCache.SubnetGroup, () => ElastiCache.SubnetGroupProvider()),
           // Dual ELBv2: floci emulates ALBs with locally-resolvable DNS
-          // (`*.elb.localhost.floci.io` → 127.0.0.1, host-routed on the
+          // (`*.elb.localhost.floci.io` -> 127.0.0.1, host-routed on the
           // gateway port) so local ECS services are reachable behind a
           // local load balancer in dev.
           flociDual(ELBv2.Listener, () => ELBv2.ListenerProvider()),
@@ -1385,12 +1385,12 @@ export const providers = () =>
           flociDual(LakeFormation.Permissions, () => LakeFormation.PermissionsProvider()),
           flociDual(LakeFormation.Resource, () => LakeFormation.ResourceProvider()),
           flociDual(Lambda.Alias, () => Lambda.AliasProvider()),
-          // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the
+          // Requires the alchemy floci fork >= 1.6.0-alchemy.2: the
           // reconciler's ownership scan calls lambda ListTags on
           // `event-source-mapping:` ARNs, which stock floci 1.6.0 rejects.
           flociDual(Lambda.EventSourceMapping, () => Lambda.EventSourceMappingProvider()),
           // Dual: live Lambda in deploy, floci-emulated (RPC-sidecar-hosted,
-          // hot-reloading) Lambda in dev — see FlociFunctionProvider.
+          // hot-reloading) Lambda in dev -- see FlociFunctionProvider.
           ProviderLayer.dual(Lambda.Function, {
             live: () => Lambda.FunctionProvider(),
             local: () => Lambda.FlociFunctionProvider(),
@@ -1400,7 +1400,7 @@ export const providers = () =>
           flociDual(Lambda.Version, () => Lambda.VersionProvider()),
           // Dual: dev builds the MicroVM image with a plain host-side
           // `docker build` (BuildKit layer cache against the user's real
-          // sources) and hands floci a pre-built `docker://` reference —
+          // sources) and hands floci a pre-built `docker://` reference --
           // see FlociMicrovmImageProvider.
           ProviderLayer.dual(Lambda.MicrovmImage, {
             live: () => Lambda.MicrovmImageProvider(),
@@ -1408,7 +1408,7 @@ export const providers = () =>
             dataPlane: flociServices,
           }),
           flociDual(Lambda.NetworkConnector, () => Lambda.NetworkConnectorProvider()),
-          // Dual: glue onto the (dual) Lambda Function — a live addPermission
+          // Dual: glue onto the (dual) Lambda Function -- a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
           // Live-only: floci does not emulate Web Functions, so `alchemy dev`
@@ -1529,7 +1529,7 @@ export const providers = () =>
           flociDual(Route53.ZoneVpcAssociation, () => Route53.ZoneVpcAssociationProvider()),
           flociDual(S3.Bucket, () => S3.BucketProvider()),
           // Dual: schedules created by e.g. `AWS.ECS.every` reference local
-          // cluster/task/role ARNs in dev — a live PutSchedule with a floci
+          // cluster/task/role ARNs in dev -- a live PutSchedule with a floci
           // role ARN fails validation.
           flociDual(Scheduler.ScheduleGroup, () => Scheduler.ScheduleGroupProvider()),
           flociDual(Scheduler.Schedule, () => Scheduler.ScheduleProvider()),
@@ -1559,7 +1559,7 @@ export const providers = () =>
           flociDual(SES.Tenant, () => SES.TenantProvider()),
           flociDual(SES.TenantResourceAssociation, () => SES.TenantResourceAssociationProvider()),
           flociDual(SNS.PlatformApplication, () => SNS.PlatformApplicationProvider()),
-          // Dual: glue onto the (dual) SNS Topic — a live subscribe with a
+          // Dual: glue onto the (dual) SNS Topic -- a live subscribe with a
           // floci topic ARN fails with InvalidParameterException: TopicArn.
           flociDual(SNS.Subscription, () => SNS.SubscriptionProvider()),
           flociDual(SNS.Topic, () => SNS.TopicProvider()),
@@ -1575,7 +1575,7 @@ export const providers = () =>
           flociDual(WAFv2.WebACLAssociation, () => WAFv2.WebACLAssociationProvider()),
           flociDual(WAFv2.WebACL, () => WAFv2.WebACLProvider()),
           flociDual(Website.AssetDeployment, () => Website.AssetDeploymentProvider()),
-          // ServerProvider is internally dual (LocalProvider.make → ServerLocal).
+          // ServerProvider is internally dual (LocalProvider.make -> ServerLocal).
           WebsiteServerProvider(),
           XRay.GroupProvider(),
           XRay.ResourcePolicyProvider(),
@@ -1920,9 +1920,9 @@ export const providers = () =>
     // a few seconds. Bounded so real rate-limit pressure still surfaces
     // instead of masking as an indefinite hang.
     Layer.provideMerge(Layer.succeed(Retry, awsRetryFactory)),
-    // In an `alchemy dev` run the AMBIENT environment — what stack
+    // In an `alchemy dev` run the AMBIENT environment -- what stack
     // composition code, plan-time data sources (`AWS.EC2.getAmi`), and any
-    // raw distilled call see — is the EMULATOR, so dev needs no real
+    // raw distilled call see -- is the EMULATOR, so dev needs no real
     // credentials and no call-site routing. The providers above were built
     // beneath the live chain and keep it (their lifecycle ops close over
     // their build context): live-mode and mode-agnostic resources still hit
@@ -1978,12 +1978,12 @@ const hasTransientNetworkCause = (cause: unknown, depth = 0): boolean => {
 };
 
 // Error codes raised while failing to even open a connection. bun's fetch
-// reports an unresolvable hostname (NXDOMAIN — e.g. an AWS service with no
+// reports an unresolvable hostname (NXDOMAIN -- e.g. an AWS service with no
 // endpoint in the ambient region, like IoT Managed Integrations outside its
 // launch regions) as `ConnectionRefused`/`FailedToOpenSocket`, which is
 // indistinguishable from a live-but-refusing host. These failures are almost
 // always permanent (wrong region, wrong endpoint), so they get a small retry
-// budget instead of the full 16-attempt transport budget — enough to ride out
+// budget instead of the full 16-attempt transport budget -- enough to ride out
 // a momentary blip, but a nonexistent endpoint fails in ~1.5s, not ~60s.
 const CONNECT_FAILURE_CODES = new Set([
   "ConnectionRefused", // bun: connect failed (includes NXDOMAIN)
@@ -2017,7 +2017,7 @@ const isHttpTransportError = (error: unknown): boolean => {
   // A Decode/EmptyBody error is only transient when its underlying cause is a
   // terminated/reset connection (e.g. a `read ETIMEDOUT` while streaming the
   // body surfaces as a `DecodeError`). A genuine malformed-body decode is
-  // permanent — retrying it would only waste the budget and mask the bug — so
+  // permanent -- retrying it would only waste the budget and mask the bug -- so
   // gate on the cause chain rather than the tag.
   if (tag === "DecodeError" || tag === "EmptyBodyError") {
     return hasTransientNetworkCause(reason);

@@ -142,7 +142,7 @@ export interface RecordingConfiguration extends Resource<
  * Attach the configuration to a channel via the channel's
  * `recordingConfigurationArn` prop; every broadcast on that channel is
  * then archived to the configured bucket. Recording configurations are
- * immutable — any settings change replaces the resource.
+ * immutable -- any settings change replaces the resource.
  * ### Recording Broadcasts
  * **Example:** Record a Channel to S3
  * ```typescript
@@ -215,7 +215,7 @@ export const RecordingConfigurationProvider = () =>
       });
 
       /**
-       * ListRecordingConfigurations has no name filter — enumerate and
+       * ListRecordingConfigurations has no name filter -- enumerate and
        * match exactly (names are not unique; first hit wins). Used only
        * when the output ARN cache is unavailable.
        */
@@ -249,7 +249,7 @@ export const RecordingConfigurationProvider = () =>
         }
         if (config.state === "CREATE_FAILED") {
           return yield* new IvsRecordingConfigurationFailed({
-            message: `IVS recording configuration '${arn}' entered CREATE_FAILED — is the S3 bucket in the same region and account?`,
+            message: `IVS recording configuration '${arn}' entered CREATE_FAILED \u2014 is the S3 bucket in the same region and account?`,
           });
         }
         return config;
@@ -269,7 +269,7 @@ export const RecordingConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          // There is no UpdateRecordingConfiguration — every setting
+          // There is no UpdateRecordingConfiguration -- every setting
           // except tags is immutable and requires a replacement.
           const changed =
             (yield* toName(id, olds)) !== (yield* toName(id, news)) ||
@@ -295,13 +295,13 @@ export const RecordingConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the live configuration is authoritative; the
+          // 1. Observe -- the live configuration is authoritative; the
           // output ARN is only an identifier cache.
           let observed = output?.recordingConfigurationArn
             ? yield* getByArn(output.recordingConfigurationArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing, then wait for ACTIVE.
+          // 2. Ensure -- create if missing, then wait for ACTIVE.
           if (observed === undefined) {
             const thumbnail = news.thumbnailConfiguration;
             const created = yield* ivs
@@ -333,7 +333,7 @@ export const RecordingConfigurationProvider = () =>
           yield* session.note(arn);
           const active = yield* awaitActive(arn);
 
-          // 3. Sync tags — the only mutable aspect. Diff against OBSERVED
+          // 3. Sync tags -- the only mutable aspect. Diff against OBSERVED
           // cloud tags so adoption converges.
           yield* syncIvsTags(arn, desiredTags);
 
@@ -343,7 +343,7 @@ export const RecordingConfigurationProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Deleting a configuration still attached to a channel raises
-          // ConflictException — retry through a bounded window, then
+          // ConflictException -- retry through a bounded window, then
           // tolerate already-gone.
           yield* ivs
             .deleteRecordingConfiguration({

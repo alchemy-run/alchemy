@@ -4,19 +4,19 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link GetLibraryItem} — `instanceId` is injected from the bound Q App.
+ * Request for {@link GetLibraryItem} -- `instanceId` is injected from the bound Q App.
  */
 export interface GetLibraryItemRequest extends Omit<qapps.GetLibraryItemInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:GetLibraryItem`.
  *
- * Retrieves a library item — its published app version, categories, status, and rating counts. Provide the implementation with
+ * Retrieves a library item -- its published app version, categories, status, and rating counts. Provide the implementation with
  * `Effect.provide(AWS.QApps.GetLibraryItemHttp)`.
  * ### Library Items
  * **Example:** Read a Library Item
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const getLibraryItem = yield* AWS.QApps.GetLibraryItem(app);
  *
  * // runtime

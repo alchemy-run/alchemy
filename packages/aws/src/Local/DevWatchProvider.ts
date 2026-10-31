@@ -1,7 +1,7 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 /**
- * INTERNAL — the shared skeleton for `alchemy dev` AWS providers that deploy
+ * INTERNAL -- the shared skeleton for `alchemy dev` AWS providers that deploy
  * into the floci emulator and keep a long-lived watch loop hot-swapping the
  * resource on file change ([Lambda FlociFunctionProvider](../Lambda/FlociFunctionProvider.ts),
  * [ECS FlociTaskProvider](../ECS/FlociTaskProvider.ts),
@@ -12,22 +12,22 @@
  * - **RPC-sidecar hosting** via {@link RpcProvider.effect} with the shared
  *   AWS provider group ([Local.ts](./Local.ts)), so the provider and its
  *   watch fibers survive exec-process hot reloads during `alchemy dev`.
- * - **Live-provider delegation** — builds the caller's LIVE provider layer
+ * - **Live-provider delegation** -- builds the caller's LIVE provider layer
  *   inside the floci override context ({@link flociServices} + optional
  *   caller-supplied extra service layers) and wraps every lifecycle method
  *   with {@link withProviderContext}, so the exact same reconcile/read/
  *   delete/list logic runs against the emulator gateway with the dummy
  *   account.
- * - **The instanceId-guarded watch registry** — one watch fiber per logical
+ * - **The instanceId-guarded watch registry** -- one watch fiber per logical
  *   id; a config change interrupts and restarts it; a create-first
  *   replacement's old-generation delete cannot kill the successor's watcher.
- * - **The dev diff policy** — the diff NEVER bundles or builds:
+ * - **The dev diff policy** -- the diff NEVER bundles or builds:
  *   resource-specific replacement rules run first (spec `replaceOn`), a
  *   fresh session with state rows but no registered watcher forces an
  *   `update` (converges the emulator and restarts the watcher), and
  *   structurally-equal props (spec `normalizeProps`) are a `noop` because
  *   content-only changes are the watch loop's job.
- * - **Serialized reconciles** — engine reconciles, watcher-triggered
+ * - **Serialized reconciles** -- engine reconciles, watcher-triggered
  *   re-reconciles ({@link DevWatchContext.rerunReconcile}), and deletes are
  *   serialized per logical id, so a rebuild-and-swap never interleaves with
  *   an engine-driven converge.
@@ -50,7 +50,7 @@ import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
 
 /**
- * The AWS provider group module ([Local.ts](./Local.ts)) — every
+ * The AWS provider group module ([Local.ts](./Local.ts)) -- every
  * {@link makeDevWatchProvider} consumer passes this so all floci dev
  * providers are served from the same group by the dev sidecar.
  */
@@ -119,17 +119,17 @@ export interface DevWatchSpec<Props, Attrs> {
   /**
    * The restart surface of the watch loop: everything that changes WHAT the
    * watcher builds or WHERE it publishes. Plain, canonically-hashable data
-   * only — closures degrade to stable placeholders under
+   * only -- closures degrade to stable placeholders under
    * {@link canonicalHash}. `news` arrives {@link stripEffects}-stripped.
    */
   readonly watchConfigOf: (news: Props, attrs: Attrs) => unknown;
   /**
-   * Transform the resolved props before EVERY delegated reconcile —
-   * engine-driven and watcher-driven alike — inside the per-id lock, with
+   * Transform the resolved props before EVERY delegated reconcile --
+   * engine-driven and watcher-driven alike -- inside the per-id lock, with
    * the floci override services provided. This is where a provider swaps a
    * build-here artifact form for a build-locally one (e.g. the MicroVM dev
    * provider docker-builds the image on the HOST and hands the live
-   * reconcile a `codeArtifact: { uri: "docker://…" }` instead of `main`/
+   * reconcile a `codeArtifact: { uri: "docker://..." }` instead of `main`/
    * `context`, so the emulator never zips, uploads, or builds anything).
    * The untransformed props stay in the watch registry, so restarts and
    * watch-config comparisons see the user's real inputs.
@@ -139,9 +139,9 @@ export interface DevWatchSpec<Props, Attrs> {
     news: Props;
   }) => Effect.Effect<Props, unknown, any>;
   /**
-   * Called after EVERY successful reconcile — engine-driven (a prop
+   * Called after EVERY successful reconcile -- engine-driven (a prop
    * change, a fresh session's converge) and watcher-driven
-   * ({@link DevWatchContext.rerunReconcile}) alike — inside the per-id
+   * ({@link DevWatchContext.rerunReconcile}) alike -- inside the per-id
    * lock, with the floci override services provided. This is where a
    * provider makes the emulator's RUNNING state follow the new revision
    * (e.g. ECS restarting tasks): the watch trigger only fires for FILE
@@ -150,7 +150,7 @@ export interface DevWatchSpec<Props, Attrs> {
    * and running tasks keep serving the old revision until the next source
    * edit.
    *
-   * `previous` is the attrs before this reconcile — `undefined` on a
+   * `previous` is the attrs before this reconcile -- `undefined` on a
    * greenfield create.
    */
   readonly onReconciled?: (input: {
@@ -205,7 +205,7 @@ interface WatchEntry {
   readonly instanceId: string;
   readonly configHash: string;
   fiber: Fiber.Fiber<void, never> | undefined;
-  /** The latest engine reconcile input (news/bindings/…) for re-runs. */
+  /** The latest engine reconcile input (news/bindings/...) for re-runs. */
   lastInput: any;
   /** The freshest attributes. */
   attrs: any;
@@ -248,7 +248,7 @@ export const makeDevWatchProvider = <
       >;
 
       // The live provider machinery, every lifecycle method endpoint-wrapped
-      // to the emulator — same F1 combinator the plain `flociDual` resources
+      // to the emulator -- same F1 combinator the plain `flociDual` resources
       // use, applied to a provider instance we build ourselves.
       const liveCtx = yield* Layer.buildWithScope(
         spec.liveProvider().pipe(Layer.provide(services)) as unknown as Layer.Layer<
@@ -280,7 +280,7 @@ export const makeDevWatchProvider = <
       };
 
       // Plan-status callbacks don't cross the RPC boundary (functions
-      // serialize to `null`) — the live machinery calls `session.note`, so
+      // serialize to `null`) -- the live machinery calls `session.note`, so
       // substitute a log-backed session when the wire stripped it.
       const withSafeSession = (input: any) =>
         typeof input?.session?.note === "function"
@@ -324,7 +324,7 @@ export const makeDevWatchProvider = <
           existing.configHash === configHash &&
           existing.instanceId === input.instanceId
         ) {
-          // Same watcher keeps running — just refresh the re-run input.
+          // Same watcher keeps running -- just refresh the re-run input.
           existing.lastInput = input;
           existing.attrs = attrs;
           return;
@@ -441,8 +441,8 @@ export const makeDevWatchProvider = <
           // Runtime props (an Effect-native Function's handler, a Layer)
           // arrive as Effects, which `isResolved` classifies as unresolved.
           // They are irrelevant to the dev diff, so strip them BEFORE the
-          // resolved check — otherwise this diff bails to the engine default
-          // (`havePropsChanged` → noop) and the "fresh session with a state
+          // resolved check -- otherwise this diff bails to the engine default
+          // (`havePropsChanged` -> noop) and the "fresh session with a state
           // row but no watcher" branch below never runs: `alchemy dev`
           // resumed over an existing stage would start no watch loop and
           // hot reload would silently be dead.
@@ -454,7 +454,7 @@ export const makeDevWatchProvider = <
             if (decision !== undefined) return decision;
           }
           // A fresh dev session has state rows but no running watcher (and
-          // possibly a wiped emulator) — force a reconcile to converge floci
+          // possibly a wiped emulator) -- force a reconcile to converge floci
           // and (re)start the watch loop. A DEAD watcher (its loop exited or
           // was interrupted) counts as none: nothing is handling content
           // changes for this id anymore.
@@ -469,7 +469,7 @@ export const makeDevWatchProvider = <
           // persisted (its rerunReconcile updates the emulator and the
           // sidecar's in-memory attrs, not the state store). If the
           // persisted attrs drifted from the watcher's current attrs, plan
-          // an update — the content-addressed reconcile is cheap, the
+          // an update -- the content-addressed reconcile is cheap, the
           // engine persists the fresh attrs, and downstream consumers
           // (stack outputs, Actions keyed on `code.hash`) see the swap
           // instead of replaying stale state forever.
@@ -479,14 +479,14 @@ export const makeDevWatchProvider = <
             return { action: "update" as const };
           }
           // Binding data (env vars, policy statements) is applied by
-          // reconcile, not the watch loop. An explicit `noop` is final — the
-          // engine does not re-check bindings after it — so a binding-only
+          // reconcile, not the watch loop. An explicit `noop` is final -- the
+          // engine does not re-check bindings after it -- so a binding-only
           // change must plan an update here.
           if (diffBindings(oldBindings, newBindings).some((b) => b.action !== "noop")) {
             return { action: "update" as const };
           }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {
-            // Content-only changes are the watch loop's job — the dev diff
+            // Content-only changes are the watch loop's job -- the dev diff
             // never bundles or builds.
             return { action: "noop" as const };
           }

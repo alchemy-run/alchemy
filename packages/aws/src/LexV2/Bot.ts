@@ -27,7 +27,7 @@ export class BotUnexpectedResponse extends Data.TaggedError("BotUnexpectedRespon
 
 export interface BotProps {
   /**
-   * Name of the bot. Mutable — renames update the bot in place (identity is
+   * Name of the bot. Mutable -- renames update the bot in place (identity is
    * the generated bot ID).
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -228,7 +228,7 @@ export const BotProvider = () =>
           return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
-        // All bot props are mutable via UpdateBot — no replacement triggers.
+        // All bot props are mutable via UpdateBot -- no replacement triggers.
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const botName = yield* createBotName(id, news);
@@ -240,13 +240,13 @@ export const BotProvider = () =>
           // Wire unit is whole seconds (idleSessionTTLInSeconds).
           const desiredTtl = toWireSeconds(news.idleSessionTTL) ?? 300;
 
-          // 1. OBSERVE — output.botId is only a cache; fall back to name.
+          // 1. OBSERVE -- output.botId is only a cache; fall back to name.
           let observed = output?.botId !== undefined ? yield* describeBot(output.botId) : undefined;
           if (observed === undefined) {
             observed = yield* findBotByName(botName);
           }
 
-          // 2. ENSURE — create when missing; a Conflict is a concurrent
+          // 2. ENSURE -- create when missing; a Conflict is a concurrent
           //    create of the same name.
           if (observed === undefined) {
             const created = yield* lexm
@@ -274,7 +274,7 @@ export const BotProvider = () =>
 
           const botId = observed.botId!;
 
-          // 3. SYNC — apply the delta when any declared prop drifted.
+          // 3. SYNC -- apply the delta when any declared prop drifted.
           if (
             observed.botName !== botName ||
             observed.roleArn !== news.roleArn ||
@@ -295,7 +295,7 @@ export const BotProvider = () =>
             observed = yield* waitForBotSettled(botId);
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const botArn = yield* botArnOf(botId);
           const observedTags = yield* readLexTags(botArn);
           yield* syncLexTags(botArn, observedTags, desiredTags);

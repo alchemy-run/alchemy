@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:GetExperiment`.
  *
- * Reads a running or finished experiment — its state (`pending`,
+ * Reads a running or finished experiment -- its state (`pending`,
  * `initiating`, `running`, `completed`, `stopped`, `failed`), per-action
  * progress, and log/report configuration. Experiments are created
  * dynamically, so this is an account-level binding addressed by experiment
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Running Experiments
  * **Example:** Poll an Experiment's State
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getExperiment = yield* AWS.FIS.GetExperiment();
  *
  * // runtime

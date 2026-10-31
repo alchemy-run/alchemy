@@ -23,7 +23,7 @@ export class VpcLatticeServiceUnexpectedResponse extends Data.TaggedError(
 
 export interface ServiceProps {
   /**
-   * Name of the service. If omitted, a unique name is generated. Immutable —
+   * Name of the service. If omitted, a unique name is generated. Immutable --
    * changing it replaces the resource.
    */
   name?: string;
@@ -33,7 +33,7 @@ export interface ServiceProps {
    */
   authType?: ServiceNetworkAuthType;
   /**
-   * Custom domain name for the service. Immutable — changing it replaces the
+   * Custom domain name for the service. Immutable -- changing it replaces the
    * resource.
    */
   customDomainName?: string;
@@ -91,7 +91,7 @@ export interface Service extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice service — an independently deployable unit of software
+ * An Amazon VPC Lattice service -- an independently deployable unit of software
  * (running on Lambda, ECS, EC2, or elsewhere) that is made discoverable through
  * a service network. Cheap control-plane resource.
  *
@@ -124,7 +124,7 @@ export const ServiceProvider = () =>
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 40, lowercase: true });
 
-      // getService only accepts an id or ARN — never a name.
+      // getService only accepts an id or ARN -- never a name.
       const observe = (serviceIdentifier: string) =>
         vpclattice
           .getService({ serviceIdentifier })

@@ -21,7 +21,7 @@ export interface ResourceServerProps {
    */
   userPoolId: string;
   /**
-   * Unique identifier of the resource server — conventionally an API URL
+   * Unique identifier of the resource server -- conventionally an API URL
    * like `https://api.example.com`. If omitted, a deterministic identifier
    * is generated from the app, stage, and logical ID. Changing this
    * triggers a replacement.
@@ -127,7 +127,7 @@ export const ResourceServerProvider = () =>
         stables: ["identifier", "userPoolId"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -174,7 +174,7 @@ export const ResourceServerProvider = () =>
               })
               .pipe(Effect.map((r) => r.ResourceServer));
           } else {
-            // 3. SYNC — name and scopes are mutable in place.
+            // 3. SYNC -- name and scopes are mutable in place.
             const drift =
               observed.Name !== name ||
               canonicalScopes(observed.Scopes) !== canonicalScopes(toWireScopes(news.scopes));

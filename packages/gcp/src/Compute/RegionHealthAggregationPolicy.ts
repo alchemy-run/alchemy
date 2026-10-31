@@ -36,20 +36,20 @@ export type RegionHealthAggregationPolicyProps = {
    */
   policyName?: string;
   /**
-   * Region the policy lives in. Immutable — changing it replaces the
+   * Region the policy lives in. Immutable -- changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
    * Optional description. Health aggregation policies have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix for
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix for
    * `list` / nuke.
    */
   description?: string;
   /**
    * Policy type. Regional policies must be `BACKEND_SERVICE_POLICY`.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    * @default "BACKEND_SERVICE_POLICY"
    */
   policyType?: RegionHealthAggregationPolicyType;
@@ -106,7 +106,7 @@ export type RegionHealthAggregationPolicy = Resource<
  * A regional Compute Engine health aggregation policy.
  *
  * Health aggregation policies define how endpoint health is rolled up for
- * backend services used by composite health checks. Type is immutable —
+ * backend services used by composite health checks. Type is immutable --
  * changing it replaces the policy. Thresholds and description update in
  * place via `regionHealthAggregationPolicies.patch`.
  *

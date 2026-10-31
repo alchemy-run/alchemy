@@ -26,7 +26,7 @@ export interface CreateWhatsAppMessageTemplateMediaRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Upload Template Header Media
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const uploadTemplateMedia = yield* AWS.SocialMessaging.CreateWhatsAppMessageTemplateMedia(account);
  *
  * // runtime

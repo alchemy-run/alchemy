@@ -3,16 +3,16 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { PublicRepository } from "./Repository.ts";
 
-/** Request for {@link PutImage} — `repositoryName` is injected. */
+/** Request for {@link PutImage} -- `repositoryName` is injected. */
 export interface PutImageRequest extends Omit<ecrpublic.PutImageRequest, "repositoryName"> {}
 
 /**
  * Runtime binding for `ecr-public:PutImage`.
  *
  * Creates or updates an image manifest in the bound
- * {@link PublicRepository} — the final step of an image push after all
- * referenced layers are uploaded ({@link InitiateLayerUpload} →
- * {@link UploadLayerPart} → {@link CompleteLayerUpload}). Provide the
+ * {@link PublicRepository} -- the final step of an image push after all
+ * referenced layers are uploaded ({@link InitiateLayerUpload} ->
+ * {@link UploadLayerPart} -> {@link CompleteLayerUpload}). Provide the
  * implementation with `Effect.provide(AWS.ECRPublic.PutImageHttp)`.
  *
  * ### Pushing Images

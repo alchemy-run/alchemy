@@ -62,7 +62,7 @@ export const BrowserLive = Layer.effect(
   Browser,
   Effect.gen(function* () {
     // Chrome processes launched for this runtime, keyed by session id.
-    // Shared node-side state — the loopback handler and the shutdown
+    // Shared node-side state -- the loopback handler and the shutdown
     // finalizer both operate on it.
     const browserProcesses = new Map<string, Process>();
     let headful = false;
@@ -80,12 +80,12 @@ export const BrowserLive = Layer.effect(
      * Node-side handler for the browser loopback route. Mirrors Miniflare's
      * `/browser/*` loopback endpoints (`workers-sdk/packages/miniflare/src/index.ts`):
      *
-     * - `POST|GET /browser/launch` — download (if needed) + launch Chrome,
+     * - `POST|GET /browser/launch` -- download (if needed) + launch Chrome,
      *   respond with the session info.
-     * - `GET /browser/status?sessionId=` — 200 while the process is alive,
+     * - `GET /browser/status?sessionId=` -- 200 while the process is alive,
      *   410 once it exited.
-     * - `POST /browser/close?sessionId=` — kill the process.
-     * - `GET /browser/sessionIds` — ids of all live processes.
+     * - `POST /browser/close?sessionId=` -- kill the process.
+     * - `GET /browser/sessionIds` -- ids of all live processes.
      */
     const handler: LoopbackServer.RawHandler = async (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -211,7 +211,7 @@ export const BrowserLive = Layer.effect(
  * ({@link BROWSER_VERSION}) is downloaded on first use into the shared
  * wrangler cache directory (so it is reused across projects and by
  * `wrangler dev`), and DevTools WebSocket/JSON traffic is proxied to its CDP
- * endpoint — `@cloudflare/puppeteer` works unchanged. Opt into the real,
+ * endpoint -- `@cloudflare/puppeteer` works unchanged. Opt into the real,
  * remote binding with `dev: { remote: true }`.
  */
 export const local = (props: BrowserProps): BindingHook<Browser | Loopback.Loopback> =>
@@ -354,7 +354,7 @@ export async function launchBrowser({ headful }: { headful?: boolean }): Promise
   } catch (error) {
     // Chrome may be alive but unready (hung startup, or the CDP socket never
     // became reachable). The process was never registered in
-    // `browserProcesses`, so nothing else will ever kill it — without this it
+    // `browserProcesses`, so nothing else will ever kill it -- without this it
     // outlives the runtime as an orphaned process tree.
     await closeBrowserProcess(browserProcess);
     throw error;
@@ -370,8 +370,8 @@ export async function launchBrowser({ headful }: { headful?: boolean }): Promise
  * `Process.close()` from `@puppeteer/browsers` does tree-kill on its happy
  * path (win32: `execSync("taskkill /pid <pid> /T /F")`; POSIX: SIGKILL to the
  * detached process group). But on Windows that `execSync` throws whenever
- * taskkill exits non-zero — which happens under CI load (a child in the tree
- * exiting mid-kill, or Access Denied) — and puppeteer then falls back to
+ * taskkill exits non-zero -- which happens under CI load (a child in the tree
+ * exiting mid-kill, or Access Denied) -- and puppeteer then falls back to
  * `ChildProcess.kill()`, which on Windows terminates ONLY the root pid:
  * Chrome's renderer/GPU/utility children survive as orphans. Orphaned Chrome
  * trees accumulating across tests starved the 4-core Windows CI runner until
@@ -421,7 +421,7 @@ function makeDownloadProgressLogger(): (downloadedBytes: number, totalBytes: num
 
 /**
  * Regex matching the `@puppeteer/browsers` error thrown when its cache
- * directory exists but the executable inside it is missing — typically
+ * directory exists but the executable inside it is missing -- typically
  * because a previous `install()` was interrupted mid-extraction.
  */
 const CORRUPTED_CACHE_ERROR_PATTERN =
@@ -541,7 +541,7 @@ const removeDir = (dir: string) =>
 
 /**
  * The global wrangler cache directory (`xdgAppPaths(".wrangler").cache()` in
- * `@cloudflare/workers-utils`) — a minimal, behaviour-identical port so the
+ * `@cloudflare/workers-utils`) -- a minimal, behaviour-identical port so the
  * Chrome build is shared with wrangler installs. Unlike wrangler's *config*
  * path there is no legacy `~/.wrangler` fallback.
  */

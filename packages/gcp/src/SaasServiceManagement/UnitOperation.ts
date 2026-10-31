@@ -66,12 +66,12 @@ export type UnitOperationProps = {
   /**
    * UnitOperation id (the `{unitOperation}` segment of
    * `projects/{project}/locations/{location}/unitOperations/{unitOperation}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the operation.
    */
   unitOperationId?: string;
   /**
-   * Region of the operation (`us-central1`, …). Immutable — changing it
+   * Region of the operation (`us-central1`, ...). Immutable -- changing it
    * replaces the operation. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -79,7 +79,7 @@ export type UnitOperationProps = {
   location?: string;
   /**
    * Unit this operation acts on. Accepts a unit id or a full resource
-   * name. Immutable — changing it replaces the operation.
+   * name. Immutable -- changing it replaces the operation.
    */
   unit: string;
   /**
@@ -187,7 +187,7 @@ export type UnitOperation = Resource<
 >;
 
 /**
- * An App Lifecycle Manager unit operation — one provision, upgrade,
+ * An App Lifecycle Manager unit operation -- one provision, upgrade,
  * deprovision, or flag-update of a Unit.
  *
  * `unitOperationId`, `location`, `unit`, and the chosen operation type

@@ -34,7 +34,7 @@ export interface IngressPointProps {
    * Type of the ingress endpoint: `OPEN` accepts unauthenticated SMTP;
    * `AUTH` requires SMTP AUTH credentials (see
    * {@link IngressPointProps.ingressPointConfiguration}); `MTLS` requires
-   * client certificates. Immutable — changing the type replaces the ingress
+   * client certificates. Immutable -- changing the type replaces the ingress
    * point.
    */
   type: mm.IngressPointType;
@@ -56,7 +56,7 @@ export interface IngressPointProps {
   ingressPointConfiguration?: mm.IngressPointConfiguration;
   /**
    * Network configuration: public (with IP type) or VPC-endpoint private.
-   * Immutable — changing it replaces the ingress point.
+   * Immutable -- changing it replaces the ingress point.
    * @default public IPV4
    */
   networkConfiguration?: mm.NetworkConfiguration;
@@ -95,7 +95,7 @@ export interface IngressPoint extends Resource<
 > {}
 
 /**
- * An SES Mail Manager ingress point — the SMTP endpoint that receives
+ * An SES Mail Manager ingress point -- the SMTP endpoint that receives
  * incoming email, screens it with a traffic policy, and processes it with a
  * rule set.
  *
@@ -174,7 +174,7 @@ export const IngressPointProvider = () =>
         return yield* getById(summary.IngressPointId);
       });
 
-      // Provisioning/updating is asynchronous — wait (bounded, ~2 min) for
+      // Provisioning/updating is asynchronous -- wait (bounded, ~2 min) for
       // the endpoint to leave its transitional state before mutating it.
       const waitForStable = (ingressPointId: string) =>
         repeatUntilMailManagerStable(
@@ -228,7 +228,7 @@ export const IngressPointProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // `type` and `networkConfiguration` are create-only — changing
+        // `type` and `networkConfiguration` are create-only -- changing
         // either replaces the ingress point. TlsPolicy transitions from or
         // to FIPS (including the omitted-default, which AWS creates as
         // FIPS) are rejected by UpdateIngressPoint, so they replace too.
@@ -259,7 +259,7 @@ export const IngressPointProvider = () =>
           // 1. OBSERVE.
           let ingress = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes.
+          // 2. ENSURE -- create if missing; a Conflict race re-observes.
           if (ingress === undefined) {
             yield* session.note(`creating ingress point ${name}`);
             const created = yield* mm
@@ -285,18 +285,18 @@ export const IngressPointProvider = () =>
             });
           }
 
-          // Provisioning is asynchronous — settle before mutating.
+          // Provisioning is asynchronous -- settle before mutating.
           const settled = yield* waitForStable(ingress.IngressPointId);
           ingress = settled ?? ingress;
 
-          // 3. SYNC — diff OBSERVED state against desired. The auth
+          // 3. SYNC -- diff OBSERVED state against desired. The auth
           //    configuration is write-only (the Get response only exposes
           //    password versions / secret ARN), so `olds` is used as a hint
           //    to push it when the prop changed.
           const configChanged =
             news.ingressPointConfiguration !== undefined &&
             !sameShape(olds?.ingressPointConfiguration, news.ingressPointConfiguration);
-          // AWS rejects any update from or to FIPS — those transitions go
+          // AWS rejects any update from or to FIPS -- those transitions go
           // through replacement (see diff), so only non-FIPS deltas are
           // pushed here.
           const tlsChanged =
@@ -332,7 +332,7 @@ export const IngressPointProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Deleting mid-provision conflicts — retry through the window.
+          // Deleting mid-provision conflicts -- retry through the window.
           yield* retryWhileMailManagerConflict(
             mm.deleteIngressPoint({ IngressPointId: output.ingressPointId }),
           ).pipe(
@@ -340,7 +340,7 @@ export const IngressPointProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
           // Deprovisioning is asynchronous and the endpoint keeps its rule
-          // set and traffic policy "in use" until it is fully gone — wait
+          // set and traffic policy "in use" until it is fully gone -- wait
           // (bounded, ~3 min) so dependent deletes don't conflict.
           yield* repeatUntilMailManagerStable(
             getById(output.ingressPointId),

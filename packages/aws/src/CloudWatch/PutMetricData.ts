@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
 
 /**
- * Runtime binding for `cloudwatch:PutMetricData` — publish custom metric
+ * Runtime binding for `cloudwatch:PutMetricData` -- publish custom metric
  * datums from inside a function runtime.
  *
  * Provide `CloudWatch.PutMetricDataHttp` on the hosting Lambda Function to
@@ -18,12 +18,12 @@ export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
- *     // init — grants cloudwatch:PutMetricData to the function
+ *     // init -- grants cloudwatch:PutMetricData to the function
  *     const putMetricData = yield* AWS.CloudWatch.PutMetricData();
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — publish a datum on every request
+ *         // runtime -- publish a datum on every request
  *         yield* putMetricData({
  *           Namespace: "MyApp/Payments",
  *           MetricData: [

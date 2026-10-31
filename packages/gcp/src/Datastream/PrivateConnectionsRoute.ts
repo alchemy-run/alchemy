@@ -30,7 +30,7 @@ export type PrivateConnectionsRouteProps = {
   /**
    * Parent private connection. Full name
    * `projects/{project}/locations/{location}/privateConnections/{privateConnection}`
-   * or the connection id (combined with `location`). Immutable —
+   * or the connection id (combined with `location`). Immutable --
    * changing it replaces the route.
    */
   privateConnection: string;
@@ -42,26 +42,26 @@ export type PrivateConnectionsRouteProps = {
   /**
    * Route id (the `{route}` segment of
    * `{privateConnection}/routes/{route}`). If omitted, a unique RFC1035
-   * name is generated. Immutable — changing it replaces the route.
+   * name is generated. Immutable -- changing it replaces the route.
    */
   routeId?: string;
   /**
-   * User-friendly display name. The API has no patch method — changing
+   * User-friendly display name. The API has no patch method -- changing
    * display name replaces the route.
    */
   displayName?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
-   * The API has no patch method — changing labels replaces the route.
+   * The API has no patch method -- changing labels replaces the route.
    */
   labels?: Record<string, string>;
   /**
-   * Destination address for the route (hostname or IP). Immutable —
+   * Destination address for the route (hostname or IP). Immutable --
    * changing it replaces the route.
    */
   destinationAddress: string;
   /**
-   * Destination port for the route. Immutable — changing it replaces
+   * Destination port for the route. Immutable -- changing it replaces
    * the route.
    */
   destinationPort?: number;

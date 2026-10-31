@@ -26,12 +26,12 @@ import {
 export type DeveloperProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the developer.
+   * current GCP project id. Immutable -- changing it replaces the developer.
    */
   organization?: string;
   /**
    * Developer email (unique within the organization, lowercase). If omitted,
-   * a unique `{physical}@alchemy.example` address is generated. Immutable —
+   * a unique `{physical}@alchemy.example` address is generated. Immutable --
    * changing it replaces the developer.
    */
   email?: string;
@@ -108,7 +108,7 @@ export type Developer = Resource<
  * An Apigee developer that can register apps and obtain API keys.
  *
  * Apigee developers have no labels field, so Alchemy stamps ownership into
- * custom attributes for `list` / nuke. Email is identity — changing `email`
+ * custom attributes for `list` / nuke. Email is identity -- changing `email`
  * replaces the developer. Name, attributes, and access type update in place.
  *
  * ### Creating a Developer

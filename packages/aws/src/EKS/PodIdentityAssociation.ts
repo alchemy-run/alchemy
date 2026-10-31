@@ -201,7 +201,7 @@ export const PodIdentityAssociationProvider = () =>
             ...news.tags,
           };
 
-          // Observe — locate the association either by stored
+          // Observe -- locate the association either by stored
           // associationId or by listing on (cluster, namespace, sa).
           let state = output?.associationId
             ? yield* readAssociationById({
@@ -215,7 +215,7 @@ export const PodIdentityAssociationProvider = () =>
                 serviceAccount: news.serviceAccount,
               });
 
-          // Ensure — create if missing. Tolerate `ResourceInUseException`
+          // Ensure -- create if missing. Tolerate `ResourceInUseException`
           // as a race with a peer reconciler.
           if (!state) {
             yield* eks
@@ -246,7 +246,7 @@ export const PodIdentityAssociationProvider = () =>
             }
           }
 
-          // Sync mutable fields — observed ↔ desired.
+          // Sync mutable fields -- observed <-> desired.
           const desiredRoleArn = news.roleArn as string;
           const desiredTargetRoleArn = news.targetRoleArn as string | undefined;
           const desiredDisableSessionTags = news.disableSessionTags ?? false;
@@ -267,7 +267,7 @@ export const PodIdentityAssociationProvider = () =>
             });
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({

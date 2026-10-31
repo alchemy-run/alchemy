@@ -20,7 +20,7 @@ export type TargetGrpcProxyProps = {
    */
   targetGrpcProxyName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute TargetGrpcProxy has
    * no labels field).
    */
@@ -80,7 +80,7 @@ export type TargetGrpcProxy = Resource<
  * load-balancing scheme `INTERNAL_SELF_MANAGED` (Traffic Director) and
  * point at a URL map whose backend services use protocol `GRPC`. This
  * resource maps to the global `targetGrpcProxies` collection. Compute
- * TargetGrpcProxy has no labels field — Alchemy ownership is stored in
+ * TargetGrpcProxy has no labels field -- Alchemy ownership is stored in
  * the description so nuke can find leaked proxies.
  *
  * ### Creating a Target gRPC Proxy

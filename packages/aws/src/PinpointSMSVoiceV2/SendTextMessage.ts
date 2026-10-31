@@ -16,7 +16,7 @@ export interface SendTextMessageRequest extends Omit<
  * Runtime binding for `sms-voice:SendTextMessage`.
  *
  * Sends an SMS message from the bound origination phone number to one
- * recipient — the effectful call made from a deployed Lambda or Task. The
+ * recipient -- the effectful call made from a deployed Lambda or Task. The
  * deploy-time half grants `sms-voice:SendTextMessage` on the number and
  * the runtime half injects its ARN as the request's `OriginationIdentity`.
  * Provide the implementation with
@@ -24,7 +24,7 @@ export interface SendTextMessageRequest extends Omit<
  * ### Sending Text Messages
  * **Example:** Send an SMS from a Lambda
  * ```typescript
- * // init — lease a number and bind the send operation
+ * // init -- lease a number and bind the send operation
  * const number = yield* AWS.PinpointSMSVoiceV2.PhoneNumber("Sender", {
  *   isoCountryCode: "US",
  *   messageType: "TRANSACTIONAL",

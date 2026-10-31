@@ -12,7 +12,7 @@ export interface GetResourcePolicyRequest extends Omit<
  * Runtime binding for `kinesis:GetResourcePolicy`.
  *
  * Bind this operation to a `Stream` to read the resource policy attached to
- * it (set via the stream's `resourcePolicy` prop) — the stream ARN is
+ * it (set via the stream's `resourcePolicy` prop) -- the stream ARN is
  * injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.GetResourcePolicyHttp)`.
  * ### Inspecting Streams

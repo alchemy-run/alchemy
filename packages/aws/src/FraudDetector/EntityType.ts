@@ -41,7 +41,7 @@ export interface EntityType extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector entity type — the classification of who or what an
+ * An Amazon Fraud Detector entity type -- the classification of who or what an
  * event is about (e.g. `customer`, `merchant`). Event types reference entity
  * types; they are cheap metadata objects.
  *
@@ -65,7 +65,7 @@ export const EntityTypeProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
-      /** Look an entity type up by name; typed not-found → undefined. */
+      /** Look an entity type up by name; typed not-found -> undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEntityTypes({ name })
@@ -104,7 +104,7 @@ export const EntityTypeProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // putEntityType is an idempotent upsert — call it to converge whether
+          // putEntityType is an idempotent upsert -- call it to converge whether
           // creating or updating the description.
           yield* frauddetector.putEntityType({
             name,
@@ -112,7 +112,7 @@ export const EntityTypeProvider = () =>
           });
 
           const entityType = yield* get(name);
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(entityType!.arn!, desiredTags);
 
           yield* session.note(name);

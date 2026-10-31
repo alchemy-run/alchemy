@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `application-signals:ListAuditFindings`.
  *
- * Returns audit findings — automated analysis of service behavior and root
+ * Returns audit findings -- automated analysis of service behavior and root
  * causes (performance issues, anomalies, potential problems) for the given
  * audit targets. Provide the implementation with
  * `Effect.provide(AWS.ApplicationSignals.ListAuditFindingsHttp)`.
  * ### Auditing Services
  * **Example:** List Audit Findings for a Service
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listAuditFindings = yield* AWS.ApplicationSignals.ListAuditFindings();
  *
  * // runtime

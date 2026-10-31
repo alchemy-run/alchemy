@@ -8,7 +8,7 @@ export interface CancelJobRequest extends batch.CancelJobRequest {}
 /**
  * Cancel a queued AWS Batch job from runtime code. Jobs in `SUBMITTED`,
  * `PENDING`, or `RUNNABLE` state are cancelled; jobs that already progressed
- * to `STARTING`/`RUNNING` are NOT cancelled (use `TerminateJob` for those) —
+ * to `STARTING`/`RUNNING` are NOT cancelled (use `TerminateJob` for those) --
  * the request still succeeds.
  *
  * ### Cancelling Jobs

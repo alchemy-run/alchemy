@@ -93,7 +93,7 @@ export interface DBClusterEndpoint extends Resource<
 > {}
 
 /**
- * A custom Aurora cluster endpoint — a DNS name that routes to a chosen
+ * A custom Aurora cluster endpoint -- a DNS name that routes to a chosen
  * subset of a cluster's instances, on top of the built-in writer and reader
  * endpoints of a `DBCluster`.
  *
@@ -212,10 +212,10 @@ export const DBClusterEndpointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch the endpoint's live state.
+          // Observe -- fetch the endpoint's live state.
           let observed = yield* readEndpoint(identifier);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBClusterEndpointAlreadyExistsFault` as a race with a peer
           // reconciler.
           if (!observed?.DBClusterEndpointIdentifier) {
@@ -239,7 +239,7 @@ export const DBClusterEndpointProvider = () =>
               });
             }
           } else {
-            // Sync mutable endpoint config — push desired shape.
+            // Sync mutable endpoint config -- push desired shape.
             yield* rds.modifyDBClusterEndpoint({
               DBClusterEndpointIdentifier: identifier,
               EndpointType: news.endpointType,
@@ -256,7 +256,7 @@ export const DBClusterEndpointProvider = () =>
 
           const dbClusterEndpointArn = observed.DBClusterEndpointArn;
 
-          // Sync tags — diff observed cloud tags against desired. The
+          // Sync tags -- diff observed cloud tags against desired. The
           // describeDBClusterEndpoints response does not include tags, so we
           // diff against the previously-recorded tag set on `output`.
           const observedTags = output?.tags ?? {};

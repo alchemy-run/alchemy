@@ -8,14 +8,14 @@ import type { LandingZone } from "./LandingZone.ts";
 /**
  * Shared HTTP scaffolding for the AWS Control Tower runtime bindings.
  *
- * Every capability follows the same shape — resolve the distilled operation,
+ * Every capability follows the same shape -- resolve the distilled operation,
  * register an IAM policy statement on the binding host, and return a runtime
  * callable. The only variation is the operation, the IAM action(s), and
  * whether the binding is scoped to one Control Tower resource (injecting its
  * identifier ARN into the request) or to the whole account (the baseline
  * catalog, list, and operation-status APIs, which are not resource-scoped).
  *
- * @internal — not exported from `index.ts`.
+ * @internal -- not exported from `index.ts`.
  */
 
 /** The Control Tower resources that resource-scoped bindings can target. */
@@ -83,7 +83,7 @@ export const makeControlTowerHttpBinding = <
 
 /**
  * Build the implementation effect for an account-level capability (no
- * resource argument — the baseline catalog, list, and operation-status
+ * resource argument -- the baseline catalog, list, and operation-status
  * APIs). The deploy-time half grants `iamActions` on `Resource: ["*"]`
  * because these operations are not resource-scoped.
  */

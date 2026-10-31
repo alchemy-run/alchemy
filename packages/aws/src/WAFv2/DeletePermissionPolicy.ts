@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 /**
- * Runtime binding for `wafv2:DeletePermissionPolicy` — remove the IAM
+ * Runtime binding for `wafv2:DeletePermissionPolicy` -- remove the IAM
  * policy that shares the bound {@link RuleGroup} with other accounts; the
  * rule group ARN is injected automatically. Deleting a policy that does
  * not exist succeeds.
@@ -14,7 +14,7 @@ import type { RuleGroup } from "./RuleGroup.ts";
  * ### Sharing Rule Groups
  * **Example:** Stop Sharing the Rule Group
  * ```typescript
- * // init — grants wafv2:DeletePermissionPolicy on the rule group
+ * // init -- grants wafv2:DeletePermissionPolicy on the rule group
  * const deletePermissionPolicy = yield* AWS.WAFv2.DeletePermissionPolicy(group);
  *
  * // runtime

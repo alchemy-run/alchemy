@@ -70,7 +70,7 @@ export interface StaticSiteProps {
    * and the default domain is excluded from the `urls` output.
    *
    * Requires `domain` when `false` (the site would be unreachable). Not
-   * applicable to Router-attached sites (`domain.router`) — they own no
+   * applicable to Router-attached sites (`domain.router`) -- they own no
    * distribution.
    * @default true
    */
@@ -125,7 +125,7 @@ export interface StaticSiteProps {
   /**
    * Local dev configuration. When `alchemy dev` runs, the build/upload is
    * skipped and `command` is spawned as a long-lived child process tied to
-   * the stack's scope. Alchemy does not proxy or interpret the process —
+   * the stack's scope. Alchemy does not proxy or interpret the process --
    * the dev server's own URL (e.g. `http://localhost:5173`) is what you
    * open in the browser.
    *
@@ -253,7 +253,7 @@ export interface StaticSiteProps {
  * // router that owns a domain, this declaration alone provisions the
  * // hostname end-to-end: the site binds it onto the router's distribution
  * // (alias), certificate (SAN), and Route 53 record set. Wildcard
- * // patterns and cross-stack router refs register KV host-matching only —
+ * // patterns and cross-stack router refs register KV host-matching only --
  * // those hostnames must be covered by the router's own domain.
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
@@ -284,7 +284,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       });
       const devUrl = Output.map(dev.url, (url) => url ?? props.dev?.url);
       // A Router-attached site registers with the Router in dev exactly as it
-      // does live — same resource types, same ids, same route entries — with
+      // does live -- same resource types, same ids, same route entries -- with
       // the local dev server standing in for the S3 origin.
       const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
       const kvNamespace = routerDomain
@@ -306,7 +306,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
   }).pipe(Namespace.push(id));
 
 /**
- * Dynamic server origin for {@link makeKvSite} — the KV metadata gains a
+ * Dynamic server origin for {@link makeKvSite} -- the KV metadata gains a
  * `servers` entry so requests that match no uploaded file are forwarded to
  * the server instead of a static fallback.
  * @internal
@@ -366,7 +366,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
   }
   if (props.cloudfrontUrl === false && !standaloneDomain) {
     return yield* Effect.die(
-      `"cloudfrontUrl: false" requires a "domain" — without one the site would be unreachable (the CloudFront default domain is its only URL).`,
+      `"cloudfrontUrl: false" requires a "domain" \u2014 without one the site would be unreachable (the CloudFront default domain is its only URL).`,
     );
   }
   if (routerDomain?.aliases?.length && !routerDomain.name) {
@@ -474,7 +474,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     distributionId = routerRef.distributionId;
     // One KV route entry per host pattern: the canonical name (or the
     // match-any-host "" pattern), each alias, and each redirect hostname
-    // (so redirected requests still match this site's route — the edge
+    // (so redirected requests still match this site's route -- the edge
     // function then 301s them from the site's KV metadata).
     const hostPatterns: [id: string, pattern: string | undefined][] = [
       ["RoutesUpdate", routerDomain.name],
@@ -503,12 +503,12 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
         }),
       { concurrency: "unbounded" },
     );
-    // Site→Router hostname binding: this site's concrete hostnames are
+    // Site->Router hostname binding: this site's concrete hostnames are
     // bound onto the Router's distribution (alias), managed certificate
-    // (SAN — a change replaces the certificate create-first), and Route 53
+    // (SAN -- a change replaces the certificate create-first), and Route 53
     // record set, so the declaration here alone fully provisions the
     // hostname. Wildcard patterns bind nothing concrete, and cross-stack
-    // Router refs carry no `bindTargets` (bindings are same-stack) — in
+    // Router refs carry no `bindTargets` (bindings are same-stack) -- in
     // both cases the site registers KV host-matching only and the
     // hostname must be covered by the Router's own `domain`.
     const concreteHostnames = [
@@ -535,7 +535,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       }
     }
     // Host-matched attachment: the site's own hostnames (the router's
-    // CloudFront URL never serves it — KV host-match). Path-only
+    // CloudFront URL never serves it -- KV host-match). Path-only
     // attachment: derived from the router's primary URL, inheriting the
     // router's precedence (including its `cloudfrontUrl` choice).
     urls = routerDomain.name
@@ -656,8 +656,8 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
 
     // The default origin is real (not a placeholder): static sites point
     // at the bucket through an OAC so requests that bypass the edge
-    // function's origin switch — CloudFront's custom-error-page fetches
-    // in particular — still resolve; server-backed sites point at the
+    // function's origin switch -- CloudFront's custom-error-page fetches
+    // in particular -- still resolve; server-backed sites point at the
     // server so misses stream from it even if the function is bypassed.
     const oac = server
       ? undefined
@@ -758,7 +758,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
 
   // The edge router signs S3 origin requests with OAC (sigv4, see
   // `setS3Origin` in cfcode.ts), so the bucket must allow the serving
-  // distribution — without this policy every request 403s.
+  // distribution -- without this policy every request 403s.
   const servingDistributionArn = routerDomain
     ? routerDomain.router.distributionArn
     : distribution!.distributionArn;
@@ -809,16 +809,16 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     invalidation,
     kvNamespace,
     /**
-     * The most significant URL the site serves at — always `urls[0]`.
+     * The most significant URL the site serves at -- always `urls[0]`.
      */
     url: urls[0],
     /**
-     * Every URL that serves this site, most significant first —
+     * Every URL that serves this site, most significant first --
      * `[https://<domain.name>?, ...aliases, <CloudFront default domain>?]`
      * (the default domain only while `cloudfrontUrl` is enabled).
      * Router-attached sites list their own hostnames (host-matched) or
      * the router's URL plus `domain.path` (path-only). Redirect
-     * hostnames never appear — they serve no content.
+     * hostnames never appear -- they serve no content.
      */
     urls,
   };
@@ -827,7 +827,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
 /**
  * Derive the CloudFront KV routing entries from the *uploaded* file list
  * (the `AssetDeployment`'s `files` attribute) so the manifest always
- * reflects exactly what landed in S3 — including build outputs that do not
+ * reflects exactly what landed in S3 -- including build outputs that do not
  * exist at plan time.
  */
 const buildKvEntries = (args: {
@@ -897,17 +897,17 @@ interface KvSiteMetadata {
   };
   /**
    * Server origin hosts (`[[host, lat?, lon?], ...]`) the edge router
-   * forwards misses to — see `findNearestServer` in cfcode.ts.
+   * forwards misses to -- see `findNearestServer` in cfcode.ts.
    */
   servers?: Array<Array<string>> | undefined;
   /**
    * Dedicated image-optimization origin: requests whose path starts with
-   * `route` are forwarded to `host` — see `metadata.image` in cfcode.ts.
+   * `route` are forwarded to `host` -- see `metadata.image` in cfcode.ts.
    */
   image?: { route: string; host: string } | undefined;
   /**
    * Router-attached redirect hostnames: matched requests whose `Host` is
-   * in `hosts` are 301'd to `https://<to>` (path + query preserved) — see
+   * in `hosts` are 301'd to `https://<to>` (path + query preserved) -- see
    * the `metadata.redirect` check in `routeSite` in cfcode.ts.
    */
   redirect?: { hosts: string[]; to: string } | undefined;

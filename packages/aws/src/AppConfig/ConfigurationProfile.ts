@@ -40,7 +40,7 @@ export interface ConfigurationProfileProps {
    * URI of the configuration source. Use `"hosted"` for the AppConfig hosted
    * configuration store, or an S3 URI (`s3://bucket/key`), SSM parameter/
    * document name, Secrets Manager secret, or CodePipeline pipeline ARN.
-   * Immutable — changing it replaces the profile.
+   * Immutable -- changing it replaces the profile.
    * @default "hosted"
    */
   locationUri?: string;
@@ -59,7 +59,7 @@ export interface ConfigurationProfileProps {
   validators?: ConfigurationValidator[];
   /**
    * Configuration profile type. `"AWS.Freeform"` for free-form configuration
-   * or `"AWS.AppConfig.FeatureFlags"` for feature flags. Immutable — changing
+   * or `"AWS.AppConfig.FeatureFlags"` for feature flags. Immutable -- changing
    * it replaces the profile.
    * @default "AWS.Freeform"
    */
@@ -89,7 +89,7 @@ export interface ConfigurationProfile extends Resource<
 > {}
 
 /**
- * An AWS AppConfig configuration profile — describes where the configuration
+ * An AWS AppConfig configuration profile -- describes where the configuration
  * data lives (the AppConfig hosted store, S3, SSM, Secrets Manager, or
  * CodePipeline) and how to validate it.
  *
@@ -235,7 +235,7 @@ export const ConfigurationProfileProvider = () =>
               Tags: desiredTags,
             });
           } else {
-            // 3. Sync — description, retrieval role, validators, and KMS key
+            // 3. Sync -- description, retrieval role, validators, and KMS key
             // are mutable in place.
             observed = yield* appconfig.updateConfigurationProfile({
               ApplicationId: applicationId,
@@ -265,7 +265,7 @@ export const ConfigurationProfileProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Hosted configuration versions block profile deletion, and
           // runtime writers (the CreateHostedConfigurationVersion binding)
-          // can add versions the engine never tracked — delete whatever
+          // can add versions the engine never tracked -- delete whatever
           // versions remain before deleting the profile.
           const versions = yield* appconfig.listHostedConfigurationVersions
             .pages({

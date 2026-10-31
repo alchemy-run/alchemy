@@ -9,17 +9,17 @@ export interface ListResolverRuleAssociationsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `route53resolver:ListResolverRuleAssociations` —
+ * Runtime binding for `route53resolver:ListResolverRuleAssociations` --
  * enumerate the VPC associations of the bound {@link ResolverRule}. The
  * request is automatically filtered to the bound rule
- * (`Filters: [{ Name: "ResolverRuleId", … }]`).
+ * (`Filters: [{ Name: "ResolverRuleId", ... }]`).
  *
  * Provide `Route53Resolver.ListResolverRuleAssociationsHttp` on the hosting
  * Lambda Function to satisfy the requirement.
  * ### Reading Rule State
  * **Example:** List the VPCs a Rule Is Live In
  * ```typescript
- * // init — grants route53resolver:ListResolverRuleAssociations on the rule
+ * // init -- grants route53resolver:ListResolverRuleAssociations on the rule
  * const listAssociations = yield* AWS.Route53Resolver.ListResolverRuleAssociations(rule);
  *
  * // runtime

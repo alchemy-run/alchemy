@@ -55,7 +55,7 @@ export interface MetricFilter extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs metric filter — extracts CloudWatch metrics from log
+ * A CloudWatch Logs metric filter -- extracts CloudWatch metrics from log
  * events matching a filter pattern.
  * ### Extracting Metrics
  * **Example:** Count Error Log Lines
@@ -173,7 +173,7 @@ export const MetricFilterProvider = () =>
           const filterName = output?.filterName ?? (yield* toFilterName(id, news));
           const desiredPattern = news.filterPattern ?? "";
 
-          // Observe — putMetricFilter has natural upsert semantics keyed by
+          // Observe -- putMetricFilter has natural upsert semantics keyed by
           // filter name; observation only decides whether to skip the put.
           const observed = yield* observe(logGroupName, filterName);
           const upToDate =

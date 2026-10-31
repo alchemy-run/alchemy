@@ -120,7 +120,7 @@ export interface Function extends Resource<
  *
  * ### Streaming disconnects <!-- api-prose -->
  *
- * Neon’s production host currently does not reliably propagate client disconnects
+ * Neon's production host currently does not reliably propagate client disconnects
  * to uncompressed response streams. An abandoned stream can retain its producer
  * and request-scoped resources until it finishes. Prefer finite responses and
  * application-bounded streams; do not rely on disconnect cleanup for long-lived

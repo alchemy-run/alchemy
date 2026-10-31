@@ -73,7 +73,7 @@ export interface PaymentMethodConfigurationProps {
   /**
    * Configuration name. If omitted, a unique name is generated from the
    * stack, stage, and logical id. Mutable. Max 100 characters. Used as
-   * the lookup key when the Stripe id is missing — this object has no
+   * the lookup key when the Stripe id is missing -- this object has no
    * metadata.
    */
   name?: string;
@@ -85,7 +85,7 @@ export interface PaymentMethodConfigurationProps {
   active?: boolean;
   /**
    * Parent configuration id. Specify to create a child configuration for
-   * a connected account. Create-only — changing it replaces the
+   * a connected account. Create-only -- changing it replaces the
    * configuration.
    */
   parent?: string;
@@ -280,7 +280,7 @@ export type PaymentMethodConfiguration = Resource<
   "Stripe.PaymentMethodConfiguration",
   PaymentMethodConfigurationProps,
   {
-    /** Stripe payment method configuration id (`pmc_…`). */
+    /** Stripe payment method configuration id (`pmc_...`). */
     id: string;
     /** Configuration name. */
     name: string;
@@ -300,7 +300,7 @@ export type PaymentMethodConfiguration = Resource<
 >;
 
 /**
- * A Stripe Payment Method Configuration — which payment methods Checkout,
+ * A Stripe Payment Method Configuration -- which payment methods Checkout,
  * PaymentIntents, and SetupIntents show when payment method types are not
  * set explicitly. `name` and per-method `displayPreference` update in
  * place. `parent` is create-only and changing it replaces the

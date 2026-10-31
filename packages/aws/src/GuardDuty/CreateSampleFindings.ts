@@ -6,7 +6,7 @@ import type { Detector } from "./Detector.ts";
 /**
  * Runtime binding for `guardduty:CreateSampleFindings`.
  *
- * Generates sample findings of the requested types — the standard way to exercise a finding-consumer pipeline end-to-end without staging a real threat.
+ * Generates sample findings of the requested types -- the standard way to exercise a finding-consumer pipeline end-to-end without staging a real threat.
  * The detector id is injected from the bound {@link Detector}.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.CreateSampleFindingsHttp)`.

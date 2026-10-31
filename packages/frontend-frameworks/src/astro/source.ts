@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
  * Alchemy Worker source provider for Astro projects.
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** --
  * this package deliberately does not depend on `alchemy`, so the types
  * below mirror the shapes of `SourceProvider` / `SourceContext` /
  * `DevContext` / `SourceBuildOutput` / `SourceHash` / `SourceDevHandle`
@@ -19,7 +19,7 @@ import { createRequire } from "node:module";
  *   `Framework` service, maps `serverModules` (entry first) to the
  *   bundle files, reads `clientDirectory` into an asset manifest, and
  *   computes a rebuild-free `input` hash over the project tree.
- * - `hash()` recomputes only the `input` hash (never builds) — the memo
+ * - `hash()` recomputes only the `input` hash (never builds) -- the memo
  *   fast path that lets an unchanged project skip the build entirely.
  * - `dev()` starts `astro dev` with the `ssr` environment executing
  *   inside workerd (via `@alchemy.run/cloudflare-runtime/vite`) and
@@ -42,10 +42,10 @@ import * as FrameworkCore from "../core/index.ts";
 import * as Astro from "./Astro.ts";
 import cloudflareTarget from "./cloudflare.ts";
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Structural mirrors of alchemy's source-provider contract
 // (packages/cloudflare/src/Workers/Source.ts). Keep in sync.
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 /** Mirror of alchemy's `SourceHash`. */
 export interface SourceHash {
@@ -95,7 +95,7 @@ export interface SourceContext {
   };
   readonly stack: { readonly name: string; readonly stage: string };
   readonly env: Record<string, unknown> | undefined;
-  /** Raw `props.assets` — a directory string or an asset-config object. */
+  /** Raw `props.assets` -- a directory string or an asset-config object. */
   readonly assets: string | Record<string, unknown> | undefined;
 }
 
@@ -130,7 +130,7 @@ export interface SourceDevHandle {
 
 /**
  * Structural twin of alchemy's `Cloudflare.Workers.SourceProviderError`
- * — same `_tag` and fields, so `Effect.catchTag` on the alchemy side
+ * -- same `_tag` and fields, so `Effect.catchTag` on the alchemy side
  * matches errors raised here.
  */
 export class SourceProviderError extends Data.TaggedError(
@@ -161,9 +161,9 @@ export interface SourceProvider {
   ) => Effect.Effect<SourceDevHandle, SourceError, SourceServices | Scope.Scope>;
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Options
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 /**
  * Controls which files are hashed to decide whether a rebuild is
@@ -193,8 +193,8 @@ export interface AstroSourceOptions {
   readonly rootDir?: string;
   /**
    * The user's own Worker entry (the user-entry seam): a module that wraps
-   * the Astro handler — imported from
-   * `@alchemy.run/frontend-frameworks/astro/entrypoints/server` — and adds
+   * the Astro handler -- imported from
+   * `@alchemy.run/frontend-frameworks/astro/entrypoints/server` -- and adds
    * exports of its own (Durable Object classes, a `scheduled` handler). A
    * path resolves against the root; a bare specifier resolves as a package
    * import. When unset, the vendored Astro server entrypoint is deployed.
@@ -279,9 +279,9 @@ const packageMeta: { version: string; root: string | undefined } = (() => {
 
 const packageVersion = packageMeta.version;
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Hashing primitives (mirror alchemy's Util/sha256 + Command/Memo)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const sha256Hex = (input: string | Uint8Array): Effect.Effect<string> =>
   Effect.sync(() => NodeCrypto.createHash("sha256").update(input).digest("hex"));
@@ -307,15 +307,15 @@ const sha256Object = (input: unknown): Effect.Effect<string> =>
     sha256Hex,
   );
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Glob / gitignore matching (self-contained approximation of the
 // glob + gitignore semantics alchemy's `hashDirectory` uses)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const escapeRegex = (char: string): string => (/[\\^$.|+()[\]{}]/.test(char) ? `\\${char}` : char);
 
 /**
- * Convert a glob body (no negation/anchoring — handled by callers) to a
+ * Convert a glob body (no negation/anchoring -- handled by callers) to a
  * regex source. Supports `**`, `*`, `?`; everything else is literal.
  */
 const globToRegexSource = (glob: string): string => {
@@ -327,7 +327,7 @@ const globToRegexSource = (glob: string): string => {
       const prevBoundary = i === 0 || glob[i - 1] === "/";
       let j = i + 2;
       if (prevBoundary && glob[j] === "/") {
-        // `**/` segment — zero or more whole path segments.
+        // `**/` segment -- zero or more whole path segments.
         out += "(?:[^/]+/)*";
         i = j + 1;
         continue;
@@ -428,11 +428,11 @@ const compileGlobs = (globs: ReadonlyArray<string>): Array<RegExp> =>
 const matchesAny = (regexes: ReadonlyArray<RegExp>, path: string): boolean =>
   regexes.some((regex) => regex.test(path));
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Directory walking + input hashing (mirror of alchemy's hashDirectory
 // / hashViteInput recipe: `${relative}:${hash}` per workspace, sorted,
-// hashed together — machine-independent, never hashes absolute paths)
-// ─────────────────────────────────────────────────────────────────────
+// hashed together -- machine-independent, never hashes absolute paths)
+// ---------------------------------------------------------------------
 
 const LOCKFILES = ["bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"];
 
@@ -525,7 +525,7 @@ const listFiles = (
   });
 
 /**
- * Deterministic content hash of a directory per the given memo options —
+ * Deterministic content hash of a directory per the given memo options --
  * the structural mirror of alchemy's `hashDirectory`.
  */
 const hashDirectory = (
@@ -588,7 +588,7 @@ const hashAstroInput = (
     const salt = [`${PROVIDER}@${packageVersion}`, ...(main === undefined ? [] : [`main:${main}`])];
     // Normalize workspace directories to a root-relative, `/`-separated
     // form so the hash label is identical whether the workspace came
-    // from the build (absolute) or from persisted state (relative) —
+    // from the build (absolute) or from persisted state (relative) --
     // and machine-independent (never hashes absolute paths).
     const toRelative = (cwd: string): string =>
       (path.isAbsolute(cwd) ? path.relative(rootDir, cwd) : path.normalize(cwd)).replaceAll(
@@ -641,12 +641,12 @@ const hashAstroInput = (
     return { hash, workspaces: relativeWorkspaces };
   });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Asset reading (mirror of alchemy's `readAssets`: per-file sha256
-// truncated to 32 hex chars — the hash format Cloudflare's asset-upload
-// sessions expect — with `.assetsignore` / `_headers` / `_redirects`
+// truncated to 32 hex chars -- the hash format Cloudflare's asset-upload
+// sessions expect -- with `.assetsignore` / `_headers` / `_redirects`
 // handling, and a manifest-shaped overall hash)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -723,18 +723,18 @@ const readClientAssets = (
     };
   });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // The provider
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 /**
  * Feed the Worker's literal env values into `process.env` so `astro:env`
  * server secrets (`getSecret`) resolve while Astro runs in the node process
- * — config loading and node prerendering read env from `process.env`. This
+ * -- config loading and node prerendering read env from `process.env`. This
  * is the role upstream's `loadWranglerEnv` (wrangler `vars` + `.dev.vars`)
  * plays at `astro:config:done`. Strings pass through, `Redacted<string>`s
  * are unwrapped, numbers/booleans are stringified; everything else
- * (Effects, resource bindings) is skipped — those are delivered as real
+ * (Effects, resource bindings) is skipped -- those are delivered as real
  * bindings at runtime, not build-time values. Exported for testing.
  */
 export const applyWorkerEnvToProcess = (
@@ -776,7 +776,7 @@ const assetConfigFromProps = (
  * The production build runs in a disposable child process with
  * `cwd = project root` (see `core/BuildChild.ts`): the natively-loaded
  * `astro.config.*` executes user plugins/integrations that may read the
- * cwd, mutate `process.env`, or `process.chdir` — none of which may touch
+ * cwd, mutate `process.env`, or `process.chdir` -- none of which may touch
  * the engine process. The shared `core/BuildChildRunner`
  * entry imports this module in the child and calls the exported
  * {@link buildInChild}.
@@ -797,7 +797,7 @@ export interface AstroBuildChildConfig {
 
 export const buildInChild = (config: AstroBuildChildConfig) =>
   Effect.gen(function* () {
-    // Worker env → process.env, confined to this disposable child (astro's
+    // Worker env -> process.env, confined to this disposable child (astro's
     // config loading and integrations read env at build time).
     yield* Effect.sync(() => {
       for (const [key, value] of Object.entries(config.env)) {

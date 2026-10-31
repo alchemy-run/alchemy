@@ -135,7 +135,7 @@ export interface DeploymentPropsBase extends PlatformProps {
   architecture?: "amd64" | "arm64";
   /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
-   * template (objects merge recursively; arrays and primitives replace) —
+   * template (objects merge recursively; arrays and primitives replace) --
    * a literal object in the shape of `PodTemplateSpec`, e.g.
    * `{ spec: { tolerations: [...], nodeSelector: {...} } }`.
    */
@@ -239,7 +239,7 @@ export interface Deployment extends Resource<
      */
     registry: RegistryState | undefined;
     /**
-     * The LoadBalancer URL (`http://<hostname>[:port]` — the cloud load
+     * The LoadBalancer URL (`http://<hostname>[:port]` -- the cloud load
      * balancer listens on the Service `port`, so a non-80 port is part of
      * the URL) when `serviceType` is `LoadBalancer`, otherwise
      * `undefined`. May be `undefined` immediately after a create while
@@ -489,7 +489,7 @@ const clusterOf = (cluster: DeploymentPropsBase["cluster"] | undefined) =>
 class ServiceNotReady extends Data.TaggedError("Kubernetes.ServiceNotReady")<{}> {}
 
 // Bounded ~3 min wait for the cloud load balancer to publish its hostname
-// (an EKS Auto Mode NLB typically appears within 2–3 min of the Service
+// (an EKS Auto Mode NLB typically appears within 2-3 min of the Service
 // apply).
 const loadBalancerRetrySchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]);
 
@@ -575,7 +575,7 @@ export const DeploymentProvider = () =>
         // A Deployment's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources (identity role, image repository).
         // There is no single enumeration that faithfully reconstructs that
-        // composite, so enumeration is intentionally empty — `read` (below)
+        // composite, so enumeration is intentionally empty -- `read` (below)
         // refreshes a known instance from its persisted output.
         list: () => Effect.succeed([] as Deployment["Attributes"][]),
         diff: Effect.fn(function* ({ olds = {} as DeploymentProps, news: input, output }) {
@@ -768,7 +768,7 @@ export const DeploymentProvider = () =>
           // `LoadBalancer` Services need platform defaults on some managed
           // clouds (EKS Auto Mode only reconciles Services carrying its
           // `loadBalancerClass`, and defaults new NLBs to the internal
-          // scheme) — ask the adapter. User `serviceAnnotations` always win.
+          // scheme) -- ask the adapter. User `serviceAnnotations` always win.
           let loadBalancerClass: string | undefined;
           let serviceAnnotations = news.serviceAnnotations;
           if (serviceType === "LoadBalancer") {
@@ -802,7 +802,7 @@ export const DeploymentProvider = () =>
 
           // Resolve the LoadBalancer URL if applicable. The cloud listener
           // is the Service `port` (Kubernetes maps `spec.ports[].port` 1:1
-          // to it), so the URL carries the port unless it's 80 — mirroring
+          // to it), so the URL carries the port unless it's 80 -- mirroring
           // `AWS.ECS.Service`'s url semantics.
           const hostname =
             serviceType === "LoadBalancer"
@@ -842,7 +842,7 @@ export const DeploymentProvider = () =>
             yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] });
             // A LoadBalancer Service carries the cloud controller's cleanup
             // finalizer; wait for it so the cloud load balancer is gone
-            // before the cluster (and its controller) can be deleted —
+            // before the cluster (and its controller) can be deleted --
             // deleting the cluster first leaks the load balancer.
             yield* Effect.forEach(
               (output.kubernetesObjects ?? []).filter((object) => object.kind === "Service"),

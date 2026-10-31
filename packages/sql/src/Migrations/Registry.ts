@@ -19,7 +19,7 @@ import { readMigrationRecords } from "./Records.ts";
  * satisfy the `{ out }` shape structurally, so `migrations: schema` works
  * without importing the Drizzle module.
  *
- * There is exactly ONE bookkeeping format — Alchemy's `__alchemy_migrations`
+ * There is exactly ONE bookkeeping format -- Alchemy's `__alchemy_migrations`
  * table. A database previously migrated with drizzle-kit, Prisma, or
  * wrangler is adopted by a one-way conversion: the foreign table's history
  * is copied into Alchemy's table once and the foreign table is left frozen
@@ -60,7 +60,7 @@ export const migrationsInputOf = (props: {
   props.migrations ? normalizeMigrationsInput(props.migrations) : undefined;
 
 /**
- * What prior state remembers about migrations — the bookkeeping table a
+ * What prior state remembers about migrations -- the bookkeeping table a
  * previous deploy used. Rows written by pre-registry Alchemy persisted
  * their table name (`d1_migrations`, `neon_migrations`, custom names), and
  * honoring it keeps them converging against the same table (upgraded in
@@ -95,7 +95,7 @@ export const resolveMigrations = (options: {
 /**
  * Apply pending migrations. The directory layout only selects how records
  * are read and keyed (drizzle-kit/Prisma dirs by directory name, flat dirs
- * by file path) — the bookkeeping is always Alchemy's table, converting
+ * by file path) -- the bookkeeping is always Alchemy's table, converting
  * foreign or legacy history on first contact (see `AlchemyFormat.ts`).
  */
 export const applyMigrations = (options: {
@@ -135,8 +135,8 @@ export interface MigrationRun {
 
 /**
  * The whole per-deploy migration pipeline: hash the directory (for state
- * drift tracking), resolve the bookkeeping table, and — when the directory
- * is non-empty — apply pending migrations. The database provider supplies
+ * drift tracking), resolve the bookkeeping table, and -- when the directory
+ * is non-empty -- apply pending migrations. The database provider supplies
  * only `withExecutor`, a bracket that acquires its target's
  * {@link SqlExecutor} (a D1 HTTP handle, a pg client over a Neon URI or
  * PlanetScale temp role, a mysql2 connection) around the apply.
@@ -197,9 +197,9 @@ export type MigrationHistoryChange =
 
 /**
  * Classify the migration half of a provider `diff`:
- * - `none` — hashes and bookkeeping table are unchanged
- * - `pending` — new files and/or a table rename; apply in place
- * - `rewritten` — an already-applied file was edited or removed
+ * - `none` -- hashes and bookkeeping table are unchanged
+ * - `pending` -- new files and/or a table rename; apply in place
+ * - `rewritten` -- an already-applied file was edited or removed
  */
 export const classifyMigrationHistory = (options: {
   news: { migrations?: MigrationsInput };

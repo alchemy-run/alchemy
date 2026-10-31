@@ -41,7 +41,7 @@ export type PingConfig = {
 export type ResponseStatusCode = {
   /** Exact HTTP status code to accept. */
   statusValue?: number;
-  /** HTTP status class to accept (`STATUS_CLASS_2XX`, …). */
+  /** HTTP status class to accept (`STATUS_CLASS_2XX`, ...). */
   statusClass?: string;
 };
 
@@ -105,7 +105,7 @@ export type JsonPathMatcher = {
 export type ContentMatcher = {
   /** String, regex, or JSON value to match. */
   content?: string;
-  /** Matcher (`CONTAINS_STRING`, `MATCHES_REGEX`, …). */
+  /** Matcher (`CONTAINS_STRING`, `MATCHES_REGEX`, ...). */
   matcher?: string;
   /** JSONPath matcher, used with `MATCHES_JSON_PATH`. */
   jsonPathMatcher?: JsonPathMatcher;
@@ -114,7 +114,7 @@ export type ContentMatcher = {
 export type MonitoredResource = {
   /**
    * Monitored resource type (`uptime_url`, `gce_instance`, `gae_app`,
-   * `k8s_service`, `cloud_run_revision`, …).
+   * `k8s_service`, `cloud_run_revision`, ...).
    */
   type?: string;
   /**
@@ -250,7 +250,7 @@ export type UptimeCheckConfig = Resource<
 >;
 
 /**
- * A Cloud Monitoring uptime check — an HTTP, HTTPS, TCP, or synthetic
+ * A Cloud Monitoring uptime check -- an HTTP, HTTPS, TCP, or synthetic
  * probe that measures availability.
  *
  * Config ids are assigned by the API. Alchemy stamps ownership into

@@ -209,7 +209,7 @@ export interface ServiceProps extends PlatformProps {
    */
   image?: string;
   /**
-   * Fly proxy services. Defaults to HTTP 80 + HTTPS 443 → {@link port}.
+   * Fly proxy services. Defaults to HTTP 80 + HTTPS 443 -> {@link port}.
    */
   services?: MachineService[];
   /**
@@ -260,7 +260,7 @@ export interface ServiceEndpoint {
   internalPort: number | undefined;
   /** `tcp` or `udp`. */
   protocol: string;
-  /** Fly proxy handlers (`tls`, `http`, `pg_tls`, …). Empty for raw TCP or UDP. */
+  /** Fly proxy handlers (`tls`, `http`, `pg_tls`, ...). Empty for raw TCP or UDP. */
   handlers: string[];
   /**
    * URL when the port speaks HTTP: `https://` for `tls` + `http`, `http://`
@@ -300,7 +300,7 @@ export type Service = Resource<
     region: string;
     /** Every region the Service's Machines run in. */
     regions: string[];
-    /** Observed state of replica 0 (`created`, `started`, `stopped`, …). */
+    /** Observed state of replica 0 (`created`, `started`, `stopped`, ...). */
     state: string;
     /**
      * Main public HTTP endpoint: the first published `tls` + `http` port
@@ -930,7 +930,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * **Example:** Install a native package unbundled
  * `build.install` runs `npm install` in the image for packages that
- * cannot be bundled, such as native addons — same `build.install` as
+ * cannot be bundled, such as native addons -- same `build.install` as
  * Lambda.
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(

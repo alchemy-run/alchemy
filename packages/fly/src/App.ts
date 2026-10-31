@@ -47,7 +47,7 @@ export interface AppProps {
    */
   orgSlug?: string;
   /**
-   * Isolated network name. Immutable after create — changing it replaces
+   * Isolated network name. Immutable after create -- changing it replaces
    * the App.
    */
   network?: string;
@@ -472,7 +472,7 @@ export const AppProvider = () =>
       if (nameChanged || orgChanged || networkChanged) {
         return {
           action: "replace" as const,
-          // Same physical name cannot exist twice — delete the old App first.
+          // Same physical name cannot exist twice -- delete the old App first.
           deleteFirst: !nameChanged,
         };
       }

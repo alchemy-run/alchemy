@@ -121,7 +121,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
       while: (e): e is Lambda.ResourceConflictException | Lambda.InvalidParameterValueException =>
         e._tag === "ResourceConflictException" ||
         // Destination validation races IAM policy propagation on the
-        // execution role — Lambda rejects the put until the role can reach
+        // execution role -- Lambda rejects the put until the role can reach
         // the destination.
         (e._tag === "InvalidParameterValueException" &&
           (e.message?.includes("The function execution role does not have permissions to call") ??

@@ -67,7 +67,7 @@ export interface TrafficPolicy extends Resource<
 > {}
 
 /**
- * An SES Mail Manager traffic policy — connection-level ALLOW/DENY rules an
+ * An SES Mail Manager traffic policy -- connection-level ALLOW/DENY rules an
  * ingress point applies before email reaches the rule set (sender CIDRs,
  * recipient patterns, TLS floor, message size cap).
  *
@@ -189,7 +189,7 @@ export const TrafficPolicyProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Every prop updates in place — no replacement triggers, so the
+        // Every prop updates in place -- no replacement triggers, so the
         // engine's default update path applies (no diff needed).
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -201,7 +201,7 @@ export const TrafficPolicyProvider = () =>
           // 1. OBSERVE.
           let policy = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes.
+          // 2. ENSURE -- create if missing; a Conflict race re-observes.
           if (policy === undefined) {
             yield* session.note(`creating traffic policy ${name}`);
             const created = yield* mm
@@ -224,7 +224,7 @@ export const TrafficPolicyProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED state against desired; apply only the
+          // 3. SYNC -- diff OBSERVED state against desired; apply only the
           //    delta.
           if (
             policy.TrafficPolicyName !== name ||
@@ -251,7 +251,7 @@ export const TrafficPolicyProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A traffic policy stays "in use" while a deleted ingress point
-          // finishes deprovisioning — retry through the Conflict window.
+          // finishes deprovisioning -- retry through the Conflict window.
           yield* retryWhileMailManagerConflict(
             mm.deleteTrafficPolicy({
               TrafficPolicyId: output.trafficPolicyId,

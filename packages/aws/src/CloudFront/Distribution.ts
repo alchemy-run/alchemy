@@ -434,7 +434,7 @@ export interface DistributionProps {
   continuousDeploymentPolicyId?: string;
   /**
    * Whether this is a staging distribution for blue/green deployments.
-   * Create-only — changing it forces a replacement.
+   * Create-only -- changing it forces a replacement.
    */
   staging?: boolean;
   /**
@@ -500,7 +500,7 @@ export interface Distribution extends Resource<
      */
     domainName: string;
     /**
-     * The distribution's own URL — what a viewer opens.
+     * The distribution's own URL -- what a viewer opens.
      *
      * `https://{domainName}` on AWS. Under `alchemy dev` the emulator has no
      * such hostname to offer (`*.cloudfront.net` resolves to nothing on a
@@ -810,7 +810,7 @@ export const DistributionProvider = () =>
           `CloudFront Distribution wait: polling deployment for ${distributionId}`,
         );
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
-          // Bound each poll — a wedged read must count as "not deployed
+          // Bound each poll -- a wedged read must count as "not deployed
           // yet" and retry, never hang the deploy (see the delete-wait).
           Effect.timeoutOrElse({
             duration: 30_000,
@@ -936,7 +936,7 @@ export const DistributionProvider = () =>
           `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
         ).pipe(
           // Bound each poll: a single wedged HTTP read (stale keep-alive
-          // socket) otherwise hangs the whole destroy — observed as a
+          // socket) otherwise hangs the whole destroy -- observed as a
           // disable-wait that logged one poll and then sat silent past a
           // 60-minute test budget. Timeout counts as "not ready yet" and
           // rides the same bounded retry.
@@ -1087,7 +1087,7 @@ export const DistributionProvider = () =>
           };
           const callerReference = instanceId;
 
-          // Observe — locate an existing distribution by id (cached on
+          // Observe -- locate an existing distribution by id (cached on
           // `output`) or by caller reference, which lets us recover from a
           // create that succeeded in the cloud but failed to persist its
           // attributes locally.
@@ -1098,7 +1098,7 @@ export const DistributionProvider = () =>
             observed = yield* getByCallerReference(callerReference);
           }
 
-          // Ensure — create the distribution if it's missing. Tolerate
+          // Ensure -- create the distribution if it's missing. Tolerate
           // `DistributionAlreadyExists` (race with a peer reconciler) by
           // re-reading via caller reference. Tags are applied at create
           // time when permissions allow; otherwise we fall back to
@@ -1213,7 +1213,7 @@ export const DistributionProvider = () =>
             return toAttrs(deployed, created.etag, created.tags, yield* resolveUrl(deployed));
           }
 
-          // Sync config — diff observed config against desired and patch
+          // Sync config -- diff observed config against desired and patch
           // via `updateDistribution` with the freshly observed ETag. We
           // keep the observed `CallerReference` because CloudFront does
           // not allow it to change, and fill every member the props don't
@@ -1267,7 +1267,7 @@ export const DistributionProvider = () =>
             });
           }
 
-          // Sync tags — diff observed cloud tags against desired and apply
+          // Sync tags -- diff observed cloud tags against desired and apply
           // only the delta. `observed.tags` is fetched fresh, so we don't
           // rely on stale `olds.tags`.
           const { removed, upsert } = diffTags(observed.tags, desiredTags);
@@ -1547,7 +1547,7 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
   for (const key of Object.keys(observed as Record<string, unknown>)) {
     // CloudFront list shapes pair `Quantity` with `Items`. A desired node
     // that declares a `Quantity` but no `Items` (e.g. a geo restriction of
-    // `{ RestrictionType: "none", Quantity: 0 }`) is fully specified —
+    // `{ RestrictionType: "none", Quantity: 0 }`) is fully specified --
     // filling `Items` from the observed config would desynchronize the two
     // and CloudFront rejects the update with `InconsistentQuantities`.
     if (
@@ -1571,14 +1571,14 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
  * (observed in practice: "Default root object is missing for the resource",
  * "The 'OriginCustomHeaders' field is missing"). `toConfig` emits only the
  * members the props express, so updating a live distribution fails on every
- * member the props don't model — some of which (e.g. per-origin
+ * member the props don't model -- some of which (e.g. per-origin
  * `CustomHeaders`, per-behavior `TrustedSigners`) are nested inside
  * collections and not expressible as props at all.
  *
  * The standard CloudFront update pattern is read-modify-write, which the
  * delete path here already uses (`{ ...current.config, Enabled: false }`).
- * This applies the same idea to updates: desired values always win — the
- * declared props still fully control drift — and only `undefined` members
+ * This applies the same idea to updates: desired values always win -- the
+ * declared props still fully control drift -- and only `undefined` members
  * are carried over from the observed config. `Origins` and `CacheBehaviors`
  * items are additionally merged by identity (`Id` / `PathPattern`) so their
  * nested unexpressed members carry over too.
@@ -1743,8 +1743,8 @@ const toConfig = (
  * The distribution's own URL.
  *
  * On AWS this is `https://` + the CloudFront domain name. The local emulator
- * has no such hostname — `*.cloudfront.net` resolves to nothing on a
- * developer's machine — so it serves each distribution's edge on a plain-HTTP
+ * has no such hostname -- `*.cloudfront.net` resolves to nothing on a
+ * developer's machine -- so it serves each distribution's edge on a plain-HTTP
  * port of its own and reports which one. Asking it here (rather than having
  * every consumer interpolate a URL from `domainName`) is what keeps `url`
  * openable in both modes. Anything unexpected falls back to the AWS-shaped
@@ -1765,7 +1765,7 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
     // A distribution legitimately has no edge port: the emulator binds one
     // opportunistically and stays Host-addressable when it can't, and the
     // endpoint 404s (with a JSON error body) for one it doesn't know yet.
-    // `client.get` does not fail on 404, so every shape lands here — `null`,
+    // `client.get` does not fail on 404, so every shape lands here -- `null`,
     // an error object, or a port-less entry. Anything that isn't a numeric
     // `Port` means "no local edge", which is the AWS URL.
     const edge = (yield* response.json) as { Port?: number } | null;
@@ -1778,7 +1778,7 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
     Effect.timeout("10 seconds"),
     Effect.provide(FetchHttpClient.layer),
     // `orElseSucceed` alone only covers the error channel. A malformed body
-    // throws inside the generator, which Effect surfaces as a DEFECT — that
+    // throws inside the generator, which Effect surfaces as a DEFECT -- that
     // escaped the fallback and killed a reconcile with a raw TypeError.
     // Resolving a convenience URL must never be able to fail a deploy.
     Effect.catchCause(() => Effect.succeed(awsUrl)),

@@ -37,7 +37,7 @@ export interface StartFHIRImportJobRequest extends Omit<
  * ### Importing FHIR Data
  * **Example:** Start a Bulk FHIR Import Job
  * ```typescript
- * // deploy time — bind the data store and the HealthLake data-access role
+ * // deploy time -- bind the data store and the HealthLake data-access role
  * const startImport = yield* HealthLake.StartFHIRImportJob(datastore, dataAccessRole);
  *
  * // runtime

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:InferICD10CM` — detect medical
+ * Runtime binding for `comprehendmedical:InferICD10CM` -- detect medical
  * conditions in clinical text and link them to ICD-10-CM ontology codes with
  * confidence scores.
  *
  * Comprehend Medical is a pure pay-per-call service with no resource to
  * manage: the binding takes no arguments and grants the function
  * `comprehendmedical:InferICD10CM` (the action has no resource-level IAM).
- * Pass the clinical note as raw text — no marshalling.
+ * Pass the clinical note as raw text -- no marshalling.
  *
  * ### Inferring ICD-10-CM Codes
  * **Example:** Infer ICD-10-CM Codes from a Clinical Note

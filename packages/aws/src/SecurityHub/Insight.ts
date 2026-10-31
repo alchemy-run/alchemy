@@ -44,7 +44,7 @@ export interface Insight extends Resource<
 > {}
 
 /**
- * A Security Hub custom insight — a saved finding query grouped by an
+ * A Security Hub custom insight -- a saved finding query grouped by an
  * attribute. Read its aggregated results at runtime with the
  * {@link GetInsightResults} binding.
  *
@@ -84,7 +84,7 @@ export const InsightProvider = () =>
           Effect.map((r) => r.Insights?.[0]),
           Effect.catchTags({
             ResourceNotFoundException: () => Effect.undefined,
-            // The whole hub may be disabled — the insight is gone too.
+            // The whole hub may be disabled -- the insight is gone too.
             InvalidAccessException: () => Effect.undefined,
             // Security Hub reports an unknown insight ARN as invalid input.
             InvalidInputException: () => Effect.undefined,
@@ -112,7 +112,7 @@ export const InsightProvider = () =>
             const live = yield* getInsight(output.insightArn);
             return live ? buildAttrs(live) : undefined;
           }
-          // No prior state — find by (deterministic) name. Insights cannot be
+          // No prior state -- find by (deterministic) name. Insights cannot be
           // tagged; the generated name embeds the app/stage physical-name
           // hash, so a match is ours.
           const name = yield* toName(id, olds ?? {});
@@ -124,7 +124,7 @@ export const InsightProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
 
-          // 1. OBSERVE — by cached ARN first, then by name.
+          // 1. OBSERVE -- by cached ARN first, then by name.
           let live: securityhub.Insight | undefined = output?.insightArn
             ? yield* getInsight(output.insightArn)
             : undefined;
@@ -141,7 +141,7 @@ export const InsightProvider = () =>
               Filters: news.filters,
               GroupByAttribute: news.groupByAttribute,
             });
-            // The read-after-create may lag — fall back to the desired state.
+            // The read-after-create may lag -- fall back to the desired state.
             final = (yield* getInsight(InsightArn)) ?? {
               InsightArn,
               Name: name,
@@ -153,7 +153,7 @@ export const InsightProvider = () =>
             live.GroupByAttribute !== news.groupByAttribute ||
             JSON.stringify(live.Filters) !== JSON.stringify(news.filters)
           ) {
-            // 3. SYNC — observed ↔ desired.
+            // 3. SYNC -- observed <-> desired.
             const arn = live.InsightArn!;
             yield* securityhub.updateInsight({
               InsightArn: arn,
@@ -176,7 +176,7 @@ export const InsightProvider = () =>
           return buildAttrs(final);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the insight (or the whole hub) may already be gone.
+          // Idempotent -- the insight (or the whole hub) may already be gone.
           yield* securityhub.deleteInsight({ InsightArn: output.insightArn }).pipe(
             Effect.catchTags({
               ResourceNotFoundException: () => Effect.void,

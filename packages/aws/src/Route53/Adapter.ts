@@ -30,10 +30,10 @@ export interface AdapterOptions {
 }
 
 /**
- * Publish a custom domain's DNS records in Route 53 — the default for AWS
+ * Publish a custom domain's DNS records in Route 53 -- the default for AWS
  * composites when `domain.dns` is omitted, and usable from any other
  * platform (a Cloudflare Worker through Cloudflare for SaaS, a Fly or
- * Railway site, …).
+ * Railway site, ...).
  *
  * AWS targets get `A` alias records (plus `AAAA` where the target serves
  * IPv6); other hostname targets get a `CNAME`; address targets get
@@ -68,11 +68,11 @@ const aliasTargetOf = (target: DnsHostnameTarget) => ({
  * props match the records AWS composites declared before DNS adapters
  * existed, so upgrading plans no changes:
  *
- * - `alias` — `AWS.Route53.Record` `id` (a lone `A` alias or `CNAME`), or
+ * - `alias` -- `AWS.Route53.Record` `id` (a lone `A` alias or `CNAME`), or
  *   `id-A` / `id-AAAA` for a dual-stack alias; `id-Addresses`
  *   (`AWS.Route53.RecordList`) for an address target.
- * - `aliasSet` — `AWS.Route53.Records` `id`.
- * - `records` — `AWS.Route53.RecordList` `id`.
+ * - `aliasSet` -- `AWS.Route53.Records` `id`.
+ * - `records` -- `AWS.Route53.RecordList` `id`.
  *
  * `hostedZoneId` is always passed (even `undefined`), exactly as before.
  */

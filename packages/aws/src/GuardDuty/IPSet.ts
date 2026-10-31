@@ -75,7 +75,7 @@ export interface IPSet extends Resource<
     format: string;
     /** S3 URI of the hosted list. */
     location: string;
-    /** Current status (`ACTIVE`, `INACTIVE`, `ACTIVATING`, `ERROR`, …). */
+    /** Current status (`ACTIVE`, `INACTIVE`, `ACTIVATING`, `ERROR`, ...). */
     status: string;
   },
   never,
@@ -83,7 +83,7 @@ export interface IPSet extends Resource<
 > {}
 
 /**
- * A GuardDuty trusted IP set — an S3-hosted list of IP addresses GuardDuty
+ * A GuardDuty trusted IP set -- an S3-hosted list of IP addresses GuardDuty
  * treats as trusted, suppressing findings for traffic from them. The list
  * file must exist in S3 before activation; name, location, and activation
  * are updatable in place, while format changes replace the set.
@@ -207,7 +207,7 @@ export const IPSetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — output.ipSetId is only a cache; fall back to a
+          // 1. OBSERVE -- output.ipSetId is only a cache; fall back to a
           // name search so a crash-and-retry converges.
           let ipSetId = output?.ipSetId;
           let live = ipSetId ? yield* getIPSet(detectorId, ipSetId) : undefined;
@@ -217,7 +217,7 @@ export const IPSetProvider = () =>
           }
 
           if (!live || !ipSetId) {
-            // 2. ENSURE — create with tags applied inline.
+            // 2. ENSURE -- create with tags applied inline.
             const created = yield* guardduty.createIPSet({
               DetectorId: detectorId,
               Name: name,
@@ -229,7 +229,7 @@ export const IPSetProvider = () =>
             });
             ipSetId = created.IpSetId;
           } else {
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const observedActive = ACTIVE_STATUSES.includes(live.Status);
             const drift =
               live.Name !== name ||
@@ -246,7 +246,7 @@ export const IPSetProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { accountId, region } = yield* AWSEnvironment.current;
             const arn = ipSetArn(region, accountId, detectorId, ipSetId);
             const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
@@ -273,7 +273,7 @@ export const IPSetProvider = () =>
           return yield* buildAttrs(detectorId, ipSetId, final);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the set (or its whole detector) may already be
+          // Idempotent -- the set (or its whole detector) may already be
           // gone; both surface as BadRequestException.
           yield* guardduty
             .deleteIPSet({

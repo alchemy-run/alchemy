@@ -79,7 +79,7 @@ export interface EgressOnlyInternetGateway extends Resource<
  * to give private, IPv6-addressed resources outbound-only internet access.
  *
  * Unlike a NAT gateway it is free, has no bandwidth charges, and does not
- * require an Elastic IP — but it works for IPv6 only. It always belongs to a
+ * require an Elastic IP -- but it works for IPv6 only. It always belongs to a
  * VPC (`vpcId` is required); the gateway must be paired with an IPv6
  * {@link Route} to actually carry traffic.
  *
@@ -241,7 +241,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the EIGW via cached id, else fall through to create.
+          // Observe -- find the EIGW via cached id, else fall through to create.
           let gw: ec2.EgressOnlyInternetGateway | undefined;
           if (output?.egressOnlyInternetGatewayId) {
             const lookup = yield* ec2
@@ -256,7 +256,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
             gw = lookup.EgressOnlyInternetGateways?.[0];
           }
 
-          // Ensure — create the EIGW if it isn't there yet.
+          // Ensure -- create the EIGW if it isn't there yet.
           if (gw === undefined) {
             yield* session.note("Creating Egress-Only Internet Gateway...");
             const result = yield* ec2.createEgressOnlyInternetGateway({
@@ -276,7 +276,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
 
           const eigwId = gw.EgressOnlyInternetGatewayId!;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({

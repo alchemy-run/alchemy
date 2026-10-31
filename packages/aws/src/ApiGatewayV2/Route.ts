@@ -19,8 +19,8 @@ export interface RouteProps {
   /**
    * The route key:
    *
-   * - HTTP APIs — `"GET /items"`, `"ANY /{proxy+}"`, or `"$default"`.
-   * - WebSocket APIs — `"$connect"`, `"$disconnect"`, `"$default"`, or a
+   * - HTTP APIs -- `"GET /items"`, `"ANY /{proxy+}"`, or `"$default"`.
+   * - WebSocket APIs -- `"$connect"`, `"$disconnect"`, `"$default"`, or a
    *   custom action name matched by the API's route selection expression.
    */
   routeKey: string;
@@ -89,7 +89,7 @@ export interface RouteType extends Resource<
 > {}
 
 /**
- * An API Gateway v2 Route — matches incoming requests (or WebSocket
+ * An API Gateway v2 Route -- matches incoming requests (or WebSocket
  * messages) and forwards them to an Integration.
  * ### HTTP API routes
  * **Example:** Catch-all $default route
@@ -263,13 +263,13 @@ export const RouteProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const apiId = output?.apiId ?? news.apiId;
 
-          // 1. OBSERVE — by cached route id, falling back to a lookup by
+          // 1. OBSERVE -- by cached route id, falling back to a lookup by
           //    route key (covers a crash after create but before persist).
           let observed = output?.routeId
             ? yield* getRouteSafe(apiId, output.routeId)
             : yield* findRouteByKey(apiId, news.routeKey);
 
-          // 2. ENSURE — create if missing; a ConflictException means the
+          // 2. ENSURE -- create if missing; a ConflictException means the
           //    route key was created concurrently, so adopt it by key.
           if (!observed?.RouteId) {
             observed = yield* retryOnTooManyRequests(
@@ -277,7 +277,7 @@ export const RouteProvider = () =>
             ).pipe(
               Effect.catchTag("BadRequestException", (error) =>
                 // AWS reports a duplicate route key as a BadRequestException
-                // ("Route with key ... already exists") — a race with a
+                // ("Route with key ... already exists") -- a race with a
                 // concurrent reconciler. Adopt the existing route.
                 findRouteByKey(apiId, news.routeKey).pipe(
                   Effect.flatMap((existing) =>
@@ -291,7 +291,7 @@ export const RouteProvider = () =>
           const routeId = observed.RouteId!;
           const snapshot = snapshotFromRoute(apiId, observed);
 
-          // 3. SYNC — update in place on drift (route key is mutable).
+          // 3. SYNC -- update in place on drift (route key is mutable).
           const desired = desiredRequest(news);
           const drift =
             snapshot.routeKey !== desired.RouteKey ||

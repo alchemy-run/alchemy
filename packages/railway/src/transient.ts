@@ -29,7 +29,7 @@ export const waitOutCreateRateLimit = <A, E extends { readonly _tag: string }, R
  * One in-flight environment-config mutation per environment. Railway's
  * own IaC apply is a single `environmentPatchCommit` of the whole desired
  * state. Alchemy splits that across Group / Bucket / ServiceDomain, and
- * `serviceDomainCreate` races those patches — the API answers
+ * `serviceDomainCreate` races those patches -- the API answers
  * `Failed to create service domain, please try again`.
  */
 const environmentConfigGates = new Map<string, Semaphore.Semaphore>();

@@ -18,18 +18,18 @@ export interface DescribeCapacityReservationRequest extends Omit<
  * `Describe*` actions do not support resource-level permissions, so the
  * grant is on `*`).
  *
- * Reads the bound load balancer's LCU capacity reservation status — pairs
+ * Reads the bound load balancer's LCU capacity reservation status -- pairs
  * with {@link ModifyCapacityReservation} to confirm a reservation is
  * `provisioned` before a known traffic spike. Provide the implementation
  * with `Effect.provide(AWS.ELBv2.DescribeCapacityReservationHttp)`.
  * ### Capacity Reservation
  * **Example:** Read the current reservation
  * ```typescript
- * // init — bind the operation to the load balancer
+ * // init -- bind the operation to the load balancer
  * const describeCapacityReservation =
  *   yield* AWS.ELBv2.DescribeCapacityReservation(loadBalancer);
  *
- * // runtime — read reservation state per Availability Zone
+ * // runtime -- read reservation state per Availability Zone
  * const reservation = yield* describeCapacityReservation();
  * const states = reservation.CapacityReservationState?.map((s) => s.State);
  * ```

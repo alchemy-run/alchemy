@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { BudgetAction } from "./BudgetAction.ts";
 
 /**
- * Request for {@link ExecuteBudgetAction} — the bound action's `AccountId`,
+ * Request for {@link ExecuteBudgetAction} -- the bound action's `AccountId`,
  * `BudgetName`, and `ActionId` are injected automatically.
  */
 export interface ExecuteBudgetActionRequest extends Omit<
@@ -16,14 +16,14 @@ export interface ExecuteBudgetActionRequest extends Omit<
  * Runtime binding for `budgets:ExecuteBudgetAction`.
  *
  * Bind this operation to a {@link BudgetAction} to approve, retry, reverse,
- * or reset it from inside a function runtime — e.g. an approval workflow that
+ * or reset it from inside a function runtime -- e.g. an approval workflow that
  * approves a pending kill-switch, or an automated recovery that reverses it
  * at the start of a new period. Provide the implementation with
  * `Effect.provide(AWS.Budgets.ExecuteBudgetActionHttp)`.
  * ### Executing Budget Actions
  * **Example:** Approve a Pending Action
  * ```typescript
- * // init — bind the operation to the action
+ * // init -- bind the operation to the action
  * const execute = yield* AWS.Budgets.ExecuteBudgetAction(action);
  *
  * // runtime

@@ -94,7 +94,7 @@ export const RootPolicyTypeProvider = () =>
           const policyType = output?.policyType ?? olds?.policyType;
           if (rootId === undefined || policyType === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
-            // (they deserialize as `undefined`) — report "not found" so the
+            // (they deserialize as `undefined`) -- report "not found" so the
             // engine re-drives the create.
             return undefined;
           }
@@ -103,7 +103,7 @@ export const RootPolicyTypeProvider = () =>
         // A RootPolicyType is the enable/disable state of one policy type on
         // one organization root. `listRoots` already returns each root's
         // `PolicyTypes` array inline, so we enumerate roots and emit one
-        // `Attributes` per (rootId, policyType) — no per-root fan-out needed.
+        // `Attributes` per (rootId, policyType) -- no per-root fan-out needed.
         // Outside an org management account `listRoots` rejects with a typed
         // error, which we degrade to [].
         list: () =>
@@ -142,12 +142,12 @@ export const RootPolicyTypeProvider = () =>
             }),
           ),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — read the root's policy-type list to see whether our
+          // Observe -- read the root's policy-type list to see whether our
           // type is already enabled. Both `rootId` and `policyType` are
           // stable identifiers, so `diff` replaces on any change.
           let state = yield* readRootPolicyType(news);
 
-          // Ensure — enable if missing. Tolerate
+          // Ensure -- enable if missing. Tolerate
           // `PolicyTypeAlreadyEnabledException` for idempotency. The list
           // can lag behind the enable call, so we fall back to a
           // `PENDING_ENABLE` synthetic state when read still returns nothing.

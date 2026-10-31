@@ -25,7 +25,7 @@ export interface LicenseConfigurationProps {
   description?: string;
   /**
    * Dimension used to track the license inventory: `vCPU`, `Instance`,
-   * `Core`, or `Socket`. Cannot be changed after creation — changing it
+   * `Core`, or `Socket`. Cannot be changed after creation -- changing it
    * replaces the license configuration.
    */
   licenseCountingType: LicenseCountingType;
@@ -85,7 +85,7 @@ export interface LicenseConfiguration extends Resource<
 > {}
 
 /**
- * An AWS License Manager license configuration — an abstraction of a
+ * An AWS License Manager license configuration -- an abstraction of a
  * customer license agreement that License Manager can track and enforce.
  *
  * A license configuration specifies the licensing dimension (vCPUs,
@@ -140,7 +140,7 @@ export const LicenseConfigurationProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
-      // Enumerate all license configurations (bounded manual pagination —
+      // Enumerate all license configurations (bounded manual pagination --
       // distilled exposes no `.pages` for this operation).
       const listAll = Effect.gen(function* () {
         const items: licensemanager.LicenseConfiguration[] = [];
@@ -240,20 +240,20 @@ export const LicenseConfigurationProvider = () =>
             ...internalTags,
           };
 
-          // 1. OBSERVE — output is only an ARN cache; cloud state decides.
+          // 1. OBSERVE -- output is only an ARN cache; cloud state decides.
           let observed = output?.licenseConfigurationArn
             ? yield* getByArn(output.licenseConfigurationArn)
             : undefined;
           if (observed === undefined) {
             // State may have been lost (or this is an adoption without a
-            // persisted ARN) — search by name before creating a duplicate.
+            // persisted ARN) -- search by name before creating a duplicate.
             const summary = yield* findByName(name);
             if (summary?.LicenseConfigurationArn) {
               observed = yield* getByArn(summary.LicenseConfigurationArn);
             }
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             const created = yield* licensemanager.createLicenseConfiguration({
               Name: name,
@@ -271,7 +271,7 @@ export const LicenseConfigurationProvider = () =>
           }
           const arn = observed.LicenseConfigurationArn!;
 
-          // 3. SYNC — diff each mutable aspect against OBSERVED cloud state
+          // 3. SYNC -- diff each mutable aspect against OBSERVED cloud state
           //    and send only the delta.
           const update: Omit<
             licensemanager.UpdateLicenseConfigurationRequest,
@@ -307,7 +307,7 @@ export const LicenseConfigurationProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — against observed cloud tags, never olds/output.
+          // 3b. SYNC TAGS -- against observed cloud tags, never olds/output.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

@@ -85,7 +85,7 @@ export interface Recipe extends Resource<
 > {}
 
 /**
- * An AWS Glue DataBrew recipe — an ordered list of data-transformation steps
+ * An AWS Glue DataBrew recipe -- an ordered list of data-transformation steps
  * (rename, filter, case conversion, etc.). Edits modify the `LATEST_WORKING`
  * version; setting `publish: true` snapshots numbered versions that recipe
  * jobs consume.
@@ -110,7 +110,7 @@ export interface Recipe extends Resource<
  * **Example:** Published Recipe for Jobs
  * ```typescript
  * // publish: true snapshots a numbered version (1.0, 2.0, ...) whenever the
- * // steps change — recipe jobs run the latest published version by default.
+ * // steps change -- recipe jobs run the latest published version by default.
  * const recipe = yield* AWS.DataBrew.Recipe("Clean", {
  *   publish: true,
  *   steps: [
@@ -264,7 +264,7 @@ export const RecipeProvider = () =>
             changed = true;
           }
 
-          // 3b. SYNC published versions — publish when the working copy
+          // 3b. SYNC published versions -- publish when the working copy
           // changed, or when publishing is desired but nothing is published.
           let versions = yield* publishedVersions(name);
           if (news.publish === true && (changed || versions.length === 0)) {

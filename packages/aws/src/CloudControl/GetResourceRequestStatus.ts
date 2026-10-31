@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const getResourceRequestStatus =
  *   yield* CloudControl.GetResourceRequestStatus();
  *
- * // runtime — bounded poll every 2s until the operation settles
+ * // runtime -- bounded poll every 2s until the operation settles
  * const settled = yield* getResourceRequestStatus({
  *   RequestToken: created.ProgressEvent!.RequestToken!,
  * }).pipe(

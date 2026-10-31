@@ -30,31 +30,31 @@ export interface HostnameProps {
    * The zone the hostname is created in. The hostname must be a subdomain
    * of (or equal to) the zone's name.
    *
-   * Stable — moving a hostname to another zone triggers a replacement.
+   * Stable -- moving a hostname to another zone triggers a replacement.
    */
   zoneId: string;
   /**
    * The hostname that points to the target gateway via CNAME, e.g.
    * `gateway.example.com`.
    *
-   * Immutable — the hostname is the resource's identity and cannot be
+   * Immutable -- the hostname is the resource's identity and cannot be
    * renamed, so changing it triggers a replacement.
    */
   name: string;
   /**
    * The target gateway of the hostname.
    *
-   * Immutable — the API cannot change a hostname's target after creation,
+   * Immutable -- the API cannot change a hostname's target after creation,
    * so changing it triggers a replacement.
    */
   target: HostnameTarget;
   /**
    * The DNSLink value used when `target` is `ipfs`, e.g.
-   * `/ipns/onboarding.ipfs.cloudflare.com`. Mutable — patched in place.
+   * `/ipns/onboarding.ipfs.cloudflare.com`. Mutable -- patched in place.
    */
   dnslink?: string;
   /**
-   * An optional description of the hostname. Mutable — patched in place.
+   * An optional description of the hostname. Mutable -- patched in place.
    */
   description?: string;
 }
@@ -83,7 +83,7 @@ export interface HostnameAttributes {
 export type Hostname = Resource<TypeId, HostnameProps, HostnameAttributes, never, Providers>;
 
 /**
- * A Cloudflare Web3 gateway hostname — serve Ethereum or IPFS content from
+ * A Cloudflare Web3 gateway hostname -- serve Ethereum or IPFS content from
  * a hostname on your zone via Cloudflare's distributed web gateways.
  *
  * A hostname's identity is its `name` within the zone; only `dnslink` and
@@ -91,7 +91,7 @@ export type Hostname = Resource<TypeId, HostnameProps, HostnameAttributes, never
  * triggers a replacement. Hostnames activate asynchronously: they start in
  * `pending` status and flip to `active` once the CNAME is verified.
  *
- * Note: Cloudflare has restricted Web3 gateways for new customers — on
+ * Note: Cloudflare has restricted Web3 gateways for new customers -- on
  * accounts without the entitlement, creation fails with the typed
  * `Web3HostnameNotEntitled` error.
  *
@@ -155,7 +155,7 @@ export const HostnameProvider = () =>
     // account-wide enumeration API, so fan out over every zone via
     // `listAllZones` and exhaustively paginate the per-zone list. Zones without
     // the Web3 entitlement (or where the scoped token lacks access) answer
-    // `Forbidden` — skip them rather than failing the whole enumeration.
+    // `Forbidden` -- skip them rather than failing the whole enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -184,7 +184,7 @@ export const HostnameProvider = () =>
       const oldName = output?.name ?? o.name;
       const oldTarget = output?.target ?? o.target;
       if (oldName === undefined && oldTarget === undefined) return undefined;
-      // The hostname is the resource's identity — no rename API exists.
+      // The hostname is the resource's identity -- no rename API exists.
       if (oldName !== undefined && oldName !== n.name) {
         return { action: "replace" } as const;
       }
@@ -212,7 +212,7 @@ export const HostnameProvider = () =>
 
       // Cold lookup: a hostname with this name may already exist in the
       // zone. Web3 hostnames carry no ownership markers, so we cannot
-      // prove we created it — brand it `Unowned` so the engine refuses
+      // prove we created it -- brand it `Unowned` so the engine refuses
       // to take over unless `adopt` is set.
       const name = output?.name ?? olds?.name;
       if (name !== undefined) {
@@ -226,20 +226,20 @@ export const HostnameProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the hostname id cached on `output` is a hint, not a
+      // 1. Observe -- the hostname id cached on `output` is a hint, not a
       //    guarantee: a missing hostname falls through to the name scan
       //    and then to create.
       let observed = output?.hostnameId ? yield* getHostname(zoneId, output.hostnameId) : undefined;
 
       // 2. Fall back to scanning the zone for a name match. Ownership has
-      //    already been verified upstream — `read` reports existing
+      //    already been verified upstream -- `read` reports existing
       //    hostnames as `Unowned` and the engine gates takeover behind
       //    the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByName(zoneId, news.name);
       }
 
-      // 3. Ensure — create when missing. Hostnames activate
+      // 3. Ensure -- create when missing. Hostnames activate
       //    asynchronously; return the `pending` state as-is rather than
       //    polling for `active` (activation depends on CNAME/edge
       //    propagation outside our control).
@@ -254,7 +254,7 @@ export const HostnameProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 4. Sync — diff observed dnslink/description against desired;
+      // 4. Sync -- diff observed dnslink/description against desired;
       //    skip the patch call entirely on a no-op.
       const dirty =
         (news.dnslink !== undefined && (observed.dnslink ?? undefined) !== news.dnslink) ||
@@ -275,7 +275,7 @@ export const HostnameProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Deletion is asynchronous (the hostname lingers in `deleting`
       // status); a hostname that is already gone answers 404 with the
-      // typed Web3HostnameNotFound tag — treat it as done.
+      // typed Web3HostnameNotFound tag -- treat it as done.
       yield* web3
         .deleteHostname({
           zoneId: output.zoneId,
@@ -290,7 +290,7 @@ type ObservedHostname = web3.GetHostnameResponse;
 /**
  * Read a hostname by id, mapping "gone" (`Web3HostnameNotFound`, Cloudflare
  * error code 1002 "Hostname does not exist.") to `undefined`. A hostname in
- * `deleting` status is treated as already gone — it cannot be converged.
+ * `deleting` status is treated as already gone -- it cannot be converged.
  */
 const getHostname = (zoneId: string, hostnameId: string) =>
   web3.getHostname({ zoneId, identifier: hostnameId }).pipe(
@@ -302,7 +302,7 @@ const getHostname = (zoneId: string, hostnameId: string) =>
 
 /**
  * Find a hostname by exact name within the zone. The name is a hostname's
- * identity — Cloudflare rejects duplicates — so at most one (non-deleting)
+ * identity -- Cloudflare rejects duplicates -- so at most one (non-deleting)
  * hostname can match.
  */
 const findByName = (zoneId: string, name: string) =>
@@ -318,7 +318,7 @@ const findByName = (zoneId: string, name: string) =>
 
 const toAttributes = (hostname: ObservedHostname, zoneId: string): HostnameAttributes => ({
   // Cloudflare always echoes id/name/target/status for a persisted
-  // hostname — distilled just types every response field as optional.
+  // hostname -- distilled just types every response field as optional.
   hostnameId: hostname.id ?? "",
   zoneId,
   name: hostname.name ?? "",

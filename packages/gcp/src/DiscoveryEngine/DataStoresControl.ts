@@ -93,12 +93,12 @@ export type DataStoresControlProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the control.
+   * Immutable -- changing it replaces the control.
    */
   dataStore: string;
   /**
    * Control id (1-63 characters, `a-z`, `_`, `-`). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the control.
+   * id is generated. Immutable -- changing it replaces the control.
    */
   controlId?: string;
   /**
@@ -106,7 +106,7 @@ export type DataStoresControlProps = {
    */
   displayName?: string;
   /**
-   * Solution this control belongs to. Immutable — changing it replaces
+   * Solution this control belongs to. Immutable -- changing it replaces
    * the control.
    * @default "SOLUTION_TYPE_SEARCH"
    */

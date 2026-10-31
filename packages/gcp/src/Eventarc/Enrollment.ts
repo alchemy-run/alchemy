@@ -38,13 +38,13 @@ export type EnrollmentProps = {
    * Enrollment id (the `{enrollment}` segment of
    * `projects/{project}/locations/{location}/enrollments/{enrollment}`).
    * If omitted, a unique name is generated. Must match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable —
+   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable --
    * changing it replaces the enrollment.
    */
   enrollmentId?: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
-   * — changing it replaces the enrollment. `US-CENTRAL1` is accepted
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...). Immutable
+   * -- changing it replaces the enrollment. `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -53,7 +53,7 @@ export type EnrollmentProps = {
   /**
    * MessageBus this enrollment reads from, as
    * `projects/{project}/locations/{location}/messageBuses/{messageBus}`
-   * or the `{messageBus}` segment. Immutable — changing it replaces the
+   * or the `{messageBus}` segment. Immutable -- changing it replaces the
    * enrollment.
    */
   messageBus: string;
@@ -93,7 +93,7 @@ export type Enrollment = Resource<
     enrollmentId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Source MessageBus resource name. */
     messageBus: string | undefined;
@@ -124,7 +124,7 @@ export type Enrollment = Resource<
  * An Eventarc Advanced enrollment that subscribes to messages on a
  * MessageBus and delivers matches to a Pipeline.
  *
- * `enrollmentId`, `location`, and `messageBus` are identity — changing
+ * `enrollmentId`, `location`, and `messageBus` are identity -- changing
  * any of them replaces the enrollment. Destination, CEL match, display
  * name, labels, and annotations update in place.
  *

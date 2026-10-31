@@ -29,14 +29,14 @@ export interface ManagedThingProps {
   /**
    * Authentication material used to onboard the device (e.g. the payload of
    * a Wi-Fi setup or Zigbee QR bar code). This is a device-onboarding
-   * credential — wrap it with `Redacted.make(...)`. Create-only — changing
+   * credential -- wrap it with `Redacted.make(...)`. Create-only -- changing
    * it replaces the managed thing.
    */
   authenticationMaterial: Redacted.Redacted<string>;
   /**
    * Type of the authentication material.
    * E.g. `WIFI_SETUP_QR_BAR_CODE`, `ZIGBEE_QR_BAR_CODE`, `ZWAVE_QR_BAR_CODE`.
-   * Create-only — changing it replaces the managed thing.
+   * Create-only -- changing it replaces the managed thing.
    */
   authenticationMaterialType: mi.AuthMaterialType;
   /**
@@ -104,7 +104,7 @@ export interface ManagedThing extends Resource<
 > {}
 
 /**
- * An AWS IoT Managed Integrations managed thing — the cloud representation of
+ * An AWS IoT Managed Integrations managed thing -- the cloud representation of
  * a device (or controller) onboarded through Managed integrations, carrying
  * its identity, protocol, and capability data model.
  *
@@ -214,13 +214,13 @@ export const ManagedThingProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative; output is only an Id cache.
+          // Observe -- cloud state is authoritative; output is only an Id cache.
           let thing =
             output?.managedThingId !== undefined
               ? yield* observeById(output.managedThingId)
               : yield* findByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (thing === undefined) {
             const created = yield* mi.createManagedThing({
               Role: news.role,
@@ -249,7 +249,7 @@ export const ManagedThingProvider = () =>
               });
             }
           } else if (thing.Id !== undefined) {
-            // Sync mutable, observable fields — apply only the delta.
+            // Sync mutable, observable fields -- apply only the delta.
             const observed = {
               name: thing.Name,
               credentialLockerId: thing.CredentialLockerId,
@@ -292,7 +292,7 @@ export const ManagedThingProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           if (thing.Arn !== undefined) {
             yield* syncManagedIntegrationsTags(thing.Arn, toTagRecord(thing.Tags), desiredTags);
           }

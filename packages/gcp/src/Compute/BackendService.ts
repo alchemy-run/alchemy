@@ -28,7 +28,7 @@ export type BackendServiceBackend = {
   group: string;
   /** Optional backend description. */
   description?: string;
-  /** Balancing mode (`UTILIZATION`, `RATE`, `CONNECTION`, …). */
+  /** Balancing mode (`UTILIZATION`, `RATE`, `CONNECTION`, ...). */
   balancingMode?: string;
   /** Capacity scaler in `[0.0, 1.0]`. */
   capacityScaler?: number;
@@ -59,13 +59,13 @@ export type BackendServiceProps = {
   /**
    * Name of the backend service. If omitted, a unique RFC1035 name is
    * generated from the stack, stage, and logical id. Must be 1-63
-   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable —
+   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable --
    * changing it replaces the resource.
    */
   name?: string;
   /**
    * User-facing description. Alchemy ownership is stamped into the stored
-   * description (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`);
+   * description (`[alchemy alchemy-stack=... alchemy-stage=... alchemy-id=...]`);
    * global backend services have no labels API.
    */
   description?: string;
@@ -76,7 +76,7 @@ export type BackendServiceProps = {
    */
   protocol?: string;
   /**
-   * Load balancer type. Immutable — changing it replaces the resource.
+   * Load balancer type. Immutable -- changing it replaces the resource.
    * @default "EXTERNAL"
    */
   loadBalancingScheme?: string;
@@ -96,7 +96,7 @@ export type BackendServiceProps = {
    */
   enableCDN?: boolean;
   /**
-   * Session affinity (`NONE`, `CLIENT_IP`, `GENERATED_COOKIE`, …).
+   * Session affinity (`NONE`, `CLIENT_IP`, `GENERATED_COOKIE`, ...).
    * @default "NONE"
    */
   sessionAffinity?: string;
@@ -200,12 +200,12 @@ export type BackendService = Resource<
 
 /**
  * A global Compute Engine backend service. Backend services define how
- * Google Cloud load balancers distribute traffic — protocol, timeout,
+ * Google Cloud load balancers distribute traffic -- protocol, timeout,
  * session affinity, health checks, and the backends themselves.
  *
  * Compute Engine backend services have no labels field, so Alchemy stamps
- * ownership into the description (`[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find them.
+ * ownership into the description (`[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find them.
  *
  * ### Creating a Backend Service
  * **Example:** Generated name

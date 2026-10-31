@@ -21,7 +21,7 @@ export interface UserProps {
    */
   username?: string;
   /**
-   * User attributes as name → value pairs (e.g.
+   * User attributes as name -> value pairs (e.g.
    * `{ email: "a@b.com", email_verified: "true" }`). Attributes declared
    * here are kept in sync; removing a previously declared attribute deletes
    * it from the user.
@@ -62,7 +62,7 @@ export interface User extends Resource<
 /**
  * A user within an Amazon Cognito user pool, created administratively via
  * `AdminCreateUser`. The invitation message is always suppressed
- * (`MessageAction: SUPPRESS`) — declaratively managed users never trigger
+ * (`MessageAction: SUPPRESS`) -- declaratively managed users never trigger
  * invite emails/SMS; set a permanent `password` to make the account usable
  * immediately.
  * ### Creating Users
@@ -97,7 +97,7 @@ export const User = Resource<User>("AWS.Cognito.User");
 const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
   value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
-/** Observed user attributes as a plain name → value record. */
+/** Observed user attributes as a plain name -> value record. */
 const attributeRecordOf = (attributes: cip.AttributeType[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (attributes ?? []).flatMap((attribute) => {
@@ -140,7 +140,7 @@ export const UserProvider = () =>
         stables: ["username", "userPoolId", "sub"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no
-        // global enumeration API of its own — nuke reaches it through the
+        // global enumeration API of its own -- nuke reaches it through the
         // parent's deletion, so enumeration returns empty per the
         // ProviderService doctrine.
         list: () => Effect.succeed([]),
@@ -167,10 +167,10 @@ export const UserProvider = () =>
           const userPoolId = news.userPoolId;
           const desiredAttributes = news.attributes ?? {};
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let observed = yield* getUser(userPoolId, username);
 
-          // 2. ENSURE — create when missing (invitation always suppressed);
+          // 2. ENSURE -- create when missing (invitation always suppressed);
           //    tolerate the create race.
           if (observed === undefined) {
             yield* cip
@@ -186,10 +186,10 @@ export const UserProvider = () =>
               .pipe(Effect.catchTag("UsernameExistsException", () => Effect.void));
             observed = yield* getUser(userPoolId, username);
           } else {
-            // 3. SYNC ATTRIBUTES — upsert declared attributes that drifted
+            // 3. SYNC ATTRIBUTES -- upsert declared attributes that drifted
             //    from the OBSERVED values; delete attributes that were
             //    previously declared but no longer are (`olds` is only the
-            //    hint for which attributes we manage — never for values).
+            //    hint for which attributes we manage -- never for values).
             const observedAttributes = attributeRecordOf(observed.UserAttributes);
             const upsert = Object.entries(desiredAttributes).filter(
               ([name, value]) => observedAttributes[name] !== value,
@@ -221,7 +221,7 @@ export const UserProvider = () =>
             return yield* Effect.die(`Cognito user ${username} not observable after create`);
           }
 
-          // 3b. SYNC PASSWORD — a permanent password confirms the account.
+          // 3b. SYNC PASSWORD -- a permanent password confirms the account.
           //    Passwords are write-only, so `olds` is the only drift signal;
           //    fresh creates and adoptions always apply it.
           if (
@@ -238,7 +238,7 @@ export const UserProvider = () =>
             });
           }
 
-          // 3c. SYNC ENABLED — diff against the OBSERVED flag.
+          // 3c. SYNC ENABLED -- diff against the OBSERVED flag.
           const desiredEnabled = news.enabled ?? true;
           if ((observed.Enabled ?? true) !== desiredEnabled) {
             yield* desiredEnabled

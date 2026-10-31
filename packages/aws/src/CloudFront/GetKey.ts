@@ -9,13 +9,13 @@ export interface GetKeyRequest extends Omit<kvs.GetKeyRequest, "KvsARN"> {}
  * Runtime binding for `cloudfront-keyvaluestore:GetKey`.
  *
  * Reads a single key's value from the bound KeyValueStore's data plane.
- * Values are sensitive — distilled decodes them as `Redacted<string>`;
+ * Values are sensitive -- distilled decodes them as `Redacted<string>`;
  * unwrap with `Redacted.value`. Provide the implementation with
  * `Effect.provide(AWS.CloudFront.GetKeyHttp)`.
  * ### Reading KeyValueStore Data
  * **Example:** Read a Key
  * ```typescript
- * // init — bind the operation to the store
+ * // init -- bind the operation to the store
  * const getKey = yield* CloudFront.GetKey(store);
  *
  * // runtime

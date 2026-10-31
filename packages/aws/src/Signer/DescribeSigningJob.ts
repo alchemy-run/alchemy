@@ -6,15 +6,15 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `signer:DescribeSigningJob`.
  *
  * Reads a signing job by the `jobId` returned from `StartSigningJob` /
- * `SignPayload` — its status (`InProgress`, `Succeeded`, `Failed`), the
+ * `SignPayload` -- its status (`InProgress`, `Succeeded`, `Failed`), the
  * signed object's S3 location, and the signature expiry. Account-level
- * operation — job ids are chosen per request at runtime, so the binding takes
+ * operation -- job ids are chosen per request at runtime, so the binding takes
  * no resource argument. Provide the implementation with
  * `Effect.provide(AWS.Signer.DescribeSigningJobHttp)`.
  * ### Observing Signing Jobs
  * **Example:** Wait for a Job to Finish
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeSigningJob = yield* AWS.Signer.DescribeSigningJob();
  *
  * // runtime

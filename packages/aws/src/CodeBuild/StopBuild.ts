@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StopBuild` — stops an in-progress build
+ * Runtime binding for `codebuild:StopBuild` -- stops an in-progress build
  * of the bound project by build id.
  * ### Stopping Builds
  * **Example:** Stop a Running Build

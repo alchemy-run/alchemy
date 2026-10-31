@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:BatchGetIncidentFindings`.
  *
- * Returns the details of the findings correlated with an incident — the
+ * Returns the details of the findings correlated with an incident -- the
  * CodeDeploy deployment or CloudFormation stack update suspected of causing
  * it. Findings live under runtime incident-record ARNs, so the deploy-time
  * grant is account-level (`Resource: "*"`).

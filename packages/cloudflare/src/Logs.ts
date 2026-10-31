@@ -79,7 +79,7 @@ export const CloudflareLogs = Effect.gen(function* () {
    * The telemetry query needs the `workers_observability:read` OAuth scope.
    * A token minted by an older login (before the scope joined the
    * defaults) keeps its original grants forever, so the query fails with a
-   * bare `Unauthorized`/`Forbidden` even though a fresh login would work —
+   * bare `Unauthorized`/`Forbidden` even though a fresh login would work --
    * explain the fix instead of surfacing the raw tag.
    */
   const explainMissingObservabilityScope = <A, R>(
@@ -94,7 +94,7 @@ export const CloudflareLogs = Effect.gen(function* () {
           return yield* Effect.die(
             new Error(
               "Cloudflare rejected the observability telemetry query (Unauthorized). " +
-                'Your stored credentials are likely missing the "workers_observability:read" scope — ' +
+                'Your stored credentials are likely missing the "workers_observability:read" scope \u2014 ' +
                 "OAuth tokens keep the scopes they were minted with, so tokens minted by " +
                 `an older login won't have it. Run \`${command}\` to mint a token with ` +
                 "the current default scopes, or use an API token that grants Workers Observability read access.",

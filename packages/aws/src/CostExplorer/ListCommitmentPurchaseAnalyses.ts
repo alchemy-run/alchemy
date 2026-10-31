@@ -16,7 +16,7 @@ export interface ListCommitmentPurchaseAnalysesRequest
  * ### Commitment Purchase Analysis
  * **Example:** List Analyses
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listCommitmentPurchaseAnalyses = yield* AWS.CostExplorer.ListCommitmentPurchaseAnalyses();
  *
  * // runtime

@@ -238,7 +238,7 @@ const make = (
 
 /**
  * A single consumer per child stream, started at spawn. A web
- * `ReadableStream` can only be locked once — previously `error()` (raced
+ * `ReadableStream` can only be locked once -- previously `error()` (raced
  * against `control()` during startup) locked stderr, and `pipe()`'s later
  * `pipeTo` silently failed, swallowing ALL worker console output under Bun.
  * The pump buffers chunks until forwarding is enabled, then streams them
@@ -268,7 +268,7 @@ const makeStreamPump = (
         }
       }
     } catch {
-      // Stream closed/aborted with the process — the buffer is complete.
+      // Stream closed/aborted with the process -- the buffer is complete.
     }
     return chunks.join("");
   })();

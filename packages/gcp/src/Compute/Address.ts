@@ -28,38 +28,38 @@ const MAX_NAME_LENGTH = 63;
 export type AddressProps = {
   /**
    * Name of the address. If omitted, a unique RFC1035 name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the address.
    */
   addressName?: string;
   /**
-   * Region to reserve the address in. Immutable — changing it replaces
+   * Region to reserve the address in. Immutable -- changing it replaces
    * the address. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Immutable — changing it replaces the address.
+   * Optional description. Immutable -- changing it replaces the address.
    */
   description?: string;
   /**
-   * Specific IP to reserve. If omitted, GCP assigns one. Immutable —
+   * Specific IP to reserve. If omitted, GCP assigns one. Immutable --
    * changing it replaces the address.
    */
   address?: string;
   /**
-   * `EXTERNAL` or `INTERNAL`. Immutable — changing it replaces the
+   * `EXTERNAL` or `INTERNAL`. Immutable -- changing it replaces the
    * address.
    * @default "EXTERNAL"
    */
   addressType?: compute.AddressAddressTypeEnum | (string & {});
   /**
-   * `IPV4` or `IPV6`. Immutable — changing it replaces the address.
+   * `IPV4` or `IPV6`. Immutable -- changing it replaces the address.
    * @default "IPV4"
    */
   ipVersion?: compute.AddressIpVersionEnum | (string & {});
   /**
-   * Prefix length when the resource is an IP range. Immutable — changing
+   * Prefix length when the resource is an IP range. Immutable -- changing
    * it replaces the address.
    */
   prefixLength?: number;
@@ -67,32 +67,32 @@ export type AddressProps = {
    * Purpose of an internal address (`GCE_ENDPOINT`, `DNS_RESOLVER`,
    * `VPC_PEERING`, `NAT_AUTO`, `IPSEC_INTERCONNECT`,
    * `SHARED_LOADBALANCER_VIP`, `PRIVATE_SERVICE_CONNECT`, `SERVERLESS`).
-   * Immutable — changing it replaces the address.
+   * Immutable -- changing it replaces the address.
    */
   purpose?: compute.AddressPurposeEnum | (string & {});
   /**
    * Network URL for internal addresses (`VPC_PEERING` /
-   * `IPSEC_INTERCONNECT`). Immutable — changing it replaces the address.
+   * `IPSEC_INTERCONNECT`). Immutable -- changing it replaces the address.
    */
   network?: string;
   /**
    * Subnetwork URL for internal `GCE_ENDPOINT` / `DNS_RESOLVER`
-   * addresses. Immutable — changing it replaces the address.
+   * addresses. Immutable -- changing it replaces the address.
    */
   subnetwork?: string;
   /**
    * Networking tier (`PREMIUM` or `STANDARD`). Internal addresses are
-   * always Premium. Immutable — changing it replaces the address.
+   * always Premium. Immutable -- changing it replaces the address.
    * @default "PREMIUM"
    */
   networkTier?: compute.AddressNetworkTierEnum | (string & {});
   /**
    * Endpoint type for reserved IPv6 addresses (`VM` or `NETLB`).
-   * Immutable — changing it replaces the address.
+   * Immutable -- changing it replaces the address.
    */
   ipv6EndpointType?: compute.AddressIpv6EndpointTypeEnum | (string & {});
   /**
-   * Public delegated prefix used to draw a BYOIP address. Immutable —
+   * Public delegated prefix used to draw a BYOIP address. Immutable --
    * changing it replaces the address.
    */
   ipCollection?: string;

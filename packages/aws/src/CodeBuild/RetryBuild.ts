@@ -4,8 +4,8 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:RetryBuild` — restarts a finished
- * (failed, stopped, …) build of the bound project by build id, producing a
+ * Runtime binding for `codebuild:RetryBuild` -- restarts a finished
+ * (failed, stopped, ...) build of the bound project by build id, producing a
  * new build.
  * ### Retrying Builds
  * **Example:** Retry a Failed Build

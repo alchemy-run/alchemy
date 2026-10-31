@@ -40,11 +40,11 @@ export type AuthProviderProps = {
    * `projects/{project}/locations/{location}/authProviders/{auth_provider}`).
    * If omitted, a unique RFC1035 name is generated. Must be 1-63
    * characters, start with a lowercase letter, and use only `a-z` and
-   * `-`. Immutable — changing it replaces the auth provider.
+   * `-`. Immutable -- changing it replaces the auth provider.
    */
   authProviderId?: string;
   /**
-   * Location of the auth provider. Immutable — changing it replaces the
+   * Location of the auth provider. Immutable -- changing it replaces the
    * auth provider.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -64,8 +64,8 @@ export type AuthProviderProps = {
    */
   blockedScopes?: string[];
   /**
-   * Workload identities (`principal://…`) of the agents that use this
-   * auth provider. Input-only — omitted from attributes.
+   * Workload identities (`principal://...`) of the agents that use this
+   * auth provider. Input-only -- omitted from attributes.
    */
   workloadIds?: string[];
   /**
@@ -96,7 +96,7 @@ export type AuthProvider = Resource<
     authProviderId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Human-readable description. */
     description: string | undefined;
@@ -108,7 +108,7 @@ export type AuthProvider = Resource<
     labels: Record<string, string>;
     /** Public auth method parameters (secrets stripped). */
     authProviderTypeParams: AuthProviderTypeParams | undefined;
-    /** Server-reported state (`ENABLED`, `DISABLED`, …). */
+    /** Server-reported state (`ENABLED`, `DISABLED`, ...). */
     state: string | undefined;
     /** Whether the auth provider is disabled. */
     disabled: boolean;
@@ -124,7 +124,7 @@ export type AuthProvider = Resource<
 >;
 
 /**
- * An Agent Identity auth provider — the credential configuration agents
+ * An Agent Identity auth provider -- the credential configuration agents
  * use to call third-party APIs (API keys, 2LO, or 3LO OAuth).
  *
  * `authProviderId` and `location` replace the resource. Description,

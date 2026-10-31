@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:StopKeyPhrasesDetectionJob` — request termination
+ * Runtime binding for `comprehend:StopKeyPhrasesDetectionJob` -- request termination
  * of an in-progress asynchronous key-phrase detection job. The job moves to
  * `STOP_REQUESTED` and then `STOPPED`; documents already processed are
  * written to the output location.

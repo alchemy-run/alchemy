@@ -32,12 +32,12 @@ export type DataProductsDataAssetProps = {
   /**
    * Parent Data Product resource name
    * (`projects/{project}/locations/{location}/dataProducts/{dataProduct}`).
-   * Immutable — changing it replaces the asset.
+   * Immutable -- changing it replaces the asset.
    */
   parent: string;
   /**
    * Data asset id. If omitted, a unique name is generated. Must match
-   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable — changing it
+   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`. Immutable -- changing it
    * replaces the asset.
    */
   dataAssetId?: string;

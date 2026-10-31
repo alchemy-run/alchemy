@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Restoring Data
  * **Example:** Poll a Table Restore
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const getTableRestoreStatus = yield* AWS.RedshiftServerless.GetTableRestoreStatus();
  *
  * const { tableRestoreStatus } = yield* getTableRestoreStatus({

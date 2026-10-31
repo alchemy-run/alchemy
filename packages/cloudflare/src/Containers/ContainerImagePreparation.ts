@@ -24,7 +24,7 @@ export const waitForContainerImage = <E, R>(options: {
       const seconds = Math.floor((now - started) / 1000);
       return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
     };
-    yield* options.session.note(`Preparing ${options.name} image… 0m 0s`, { kind: "status" });
+    yield* options.session.note(`Preparing ${options.name} image\u2026 0m 0s`, { kind: "status" });
     yield* Effect.gen(function* () {
       const result = yield* options.prepare;
       const time = elapsed(yield* Clock.currentTimeMillis);
@@ -41,7 +41,9 @@ export const waitForContainerImage = <E, R>(options: {
           message: result.reason ?? `Cloudflare could not prepare image '${options.name}'.`,
         });
       }
-      yield* options.session.note(`Preparing ${options.name} image… ${time}`, { kind: "status" });
+      yield* options.session.note(`Preparing ${options.name} image\u2026 ${time}`, {
+        kind: "status",
+      });
       return false;
     }).pipe(
       Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (ready) => ready }),

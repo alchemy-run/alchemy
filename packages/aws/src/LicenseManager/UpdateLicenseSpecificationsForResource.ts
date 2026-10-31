@@ -10,7 +10,7 @@ export interface UpdateLicenseSpecificationsForResourceRequest
 
 /**
  * Runtime binding for
- * `license-manager:UpdateLicenseSpecificationsForResource` — associate or
+ * `license-manager:UpdateLicenseSpecificationsForResource` -- associate or
  * disassociate license configurations with a resource (e.g. attach a
  * license configuration to an AMI so launches are tracked).
  *

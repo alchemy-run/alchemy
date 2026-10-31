@@ -166,7 +166,7 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * A Railway.Bucket is S3-compatible object storage in a Project. Each
  * environment gets its own isolated instance and credentials. Bind
  * {@link PutObject} / {@link GetObject} (and the other S3 object ops) in
- * Service init — Alchemy injects the endpoint and credentials.
+ * Service init -- Alchemy injects the endpoint and credentials.
  *
  * Railway has no labels. Ownership is stamped into the display name via
  * `createPhysicalName`. `name` updates in place. Changing `project`,

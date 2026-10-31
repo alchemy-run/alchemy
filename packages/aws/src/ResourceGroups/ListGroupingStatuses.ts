@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { Group } from "./Group.ts";
 
-/** Request for {@link ListGroupingStatuses} — the group is injected from the binding. */
+/** Request for {@link ListGroupingStatuses} -- the group is injected from the binding. */
 export type ListGroupingStatusesRequest = Omit<resourcegroups.ListGroupingStatusesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:ListGroupingStatuses`.
  *
  * Returns the status of the last grouping or ungrouping action for each
- * resource in the bound application {@link Group} — grouping members is
+ * resource in the bound application {@link Group} -- grouping members is
  * asynchronous, so this is how a function tracks a `GroupResources` /
  * `UngroupResources` request to `SUCCESS` or reads the failure reason. The
  * group name is injected from the binding. Provide the implementation with
@@ -18,7 +18,7 @@ export type ListGroupingStatusesRequest = Omit<resourcegroups.ListGroupingStatus
  * ### Enumerating Group Members
  * **Example:** Track A Pending Grouping Action
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const listGroupingStatuses = yield* AWS.ResourceGroups.ListGroupingStatuses(group);
  *
  * // runtime

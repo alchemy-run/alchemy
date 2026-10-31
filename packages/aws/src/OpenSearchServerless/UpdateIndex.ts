@@ -7,7 +7,7 @@ import type { Collection } from "./Collection.ts";
  * Runtime binding for the `UpdateIndex` operation scoped to one collection
  * (IAM actions `aoss:UpdateIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
- * Updates an index's schema in the bound {@link Collection} — add new fields
+ * Updates an index's schema in the bound {@link Collection} -- add new fields
  * or change field mappings at runtime. The calling principal must also be
  * granted `aoss:UpdateIndex` on the index pattern by a data
  * {@link AccessPolicy}. Provide the implementation with

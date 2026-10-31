@@ -23,7 +23,7 @@ import {
 import type { Providers } from "./Providers.ts";
 
 /**
- * Placement Group type. Hetzner currently offers only `spread` — Servers
+ * Placement Group type. Hetzner currently offers only `spread` -- Servers
  * in the group are placed on distinct physical hosts.
  */
 export type PlacementGroupType = "spread";
@@ -36,7 +36,7 @@ export interface PlacementGroupProps {
   name?: string;
   /**
    * Placement strategy. `spread` places each Server on a different
-   * physical host. Cannot be changed after creation — changing it
+   * physical host. Cannot be changed after creation -- changing it
    * replaces the group.
    *
    * @default "spread"
@@ -88,7 +88,7 @@ export type PlacementGroup = Resource<
  * A Hetzner Cloud Placement Group. Spread groups keep member Servers on
  * distinct physical hosts so a single hardware failure cannot take them
  * all down. Type is `spread` (the only type Hetzner currently offers)
- * and is immutable — changing it replaces the group. Name and labels
+ * and is immutable -- changing it replaces the group. Name and labels
  * update in place.
  *
  * Servers are attached from the Server resource (not here).

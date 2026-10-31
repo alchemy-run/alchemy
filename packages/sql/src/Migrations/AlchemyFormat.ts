@@ -23,8 +23,8 @@ export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 /**
  * THE Alchemy applied-migrations table: `id, hash, created_at, name,
  * applied_at`, name-keyed detection. This is deliberately drizzle's column
- * shape — a database whose history lives in `__drizzle_migrations` adopts
- * with a verbatim row copy — but Alchemy owns the table and it is the only
+ * shape -- a database whose history lives in `__drizzle_migrations` adopts
+ * with a verbatim row copy -- but Alchemy owns the table and it is the only
  * format Alchemy ever writes. Migrating from drizzle/prisma/wrangler
  * bookkeeping is a one-way conversion performed once (see `Convert.ts`).
  */
@@ -103,7 +103,7 @@ const renameSql = (from: string, to: string, dialect: MigrationDialect): string 
  * Rebuild an in-place table (legacy Alchemy 3-column / oldest 2-column /
  * wrangler-shaped) into the Alchemy shape, backfilling `hash` and
  * `created_at` from local records matched by name. A recorded row with no
- * matching local file is a hard error — mirrors the same rule conversion
+ * matching local file is a hard error -- mirrors the same rule conversion
  * applies (see `matchForeignRows`).
  */
 const rebuildInPlace = (options: {
@@ -165,7 +165,7 @@ const ensureTable = (options: {
     const shape = classifyTable(yield* tableColumns(executor, table));
     switch (shape) {
       case "absent": {
-        // Greenfield for us — but possibly not for the database. Adopt any
+        // Greenfield for us -- but possibly not for the database. Adopt any
         // history the previous tool (drizzle-kit / prisma / wrangler) left
         // behind: copy it into our table ONCE and freeze theirs. One-way.
         const history = yield* findForeignHistory({ executor, table });
@@ -182,7 +182,7 @@ const ensureTable = (options: {
         return;
       }
       case "drizzle-shaped":
-        // Already our column shape (shared with drizzle v1) — including
+        // Already our column shape (shared with drizzle v1) -- including
         // the case where the user pointed `table` straight at an existing
         // `__drizzle_migrations`. Adopt in place.
         return;

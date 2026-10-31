@@ -21,11 +21,11 @@ export interface VolumeSnapshotProps {
   /**
    * Parent Fly App. Changing it replaces the snapshot (a new snapshot is
    * created on the new App's Volume). There is no delete API for the old
-   * snapshot — it follows Volume `snapshot_retention`.
+   * snapshot -- it follows Volume `snapshot_retention`.
    */
   app: Ref<App>;
   /**
-   * Fly Volume id to snapshot (`vol_…`). Changing it replaces the
+   * Fly Volume id to snapshot (`vol_...`). Changing it replaces the
    * snapshot. Identity is the snapshot `id` returned by a subsequent
    * `listVolumeSnapshots`.
    */
@@ -40,7 +40,7 @@ export type VolumeSnapshot = Resource<
     appName: string;
     /** Fly Volume id this snapshot belongs to. */
     volumeId: string;
-    /** Fly snapshot id (`vs_…`). Identity of the resource. */
+    /** Fly snapshot id (`vs_...`). Identity of the resource. */
     snapshotId: string;
     /** Observed snapshot status, if the API returned one. */
     status: string | undefined;

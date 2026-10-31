@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for the `CancelQuery` operation (IAM action `neptune-graph:CancelQuery`),
  * scoped to one {@link Graph}.
  *
- * Cancels a query running on the bound graph by its query id — e.g. kill a runaway openCypher traversal found via {@link ListQueries}. Provide the implementation with
+ * Cancels a query running on the bound graph by its query id -- e.g. kill a runaway openCypher traversal found via {@link ListQueries}. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.CancelQueryHttp)`.
  * ### Managing Queries
  * **Example:** Cancel a runaway query

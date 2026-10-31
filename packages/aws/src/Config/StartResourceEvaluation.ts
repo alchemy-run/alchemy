@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:StartResourceEvaluation` — proactively
+ * Runtime binding for `config:StartResourceEvaluation` -- proactively
  * evaluate a hypothetical resource configuration against your PROACTIVE
  * Config rules before the resource is deployed.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Proactive Resource Evaluation
  * **Example:** Evaluate a Resource Before Deploying
  * ```typescript
- * // init — grants config:StartResourceEvaluation
+ * // init -- grants config:StartResourceEvaluation
  * const startResourceEvaluation = yield* AWS.Config.StartResourceEvaluation();
  *
  * // runtime

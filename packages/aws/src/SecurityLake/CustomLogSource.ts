@@ -99,7 +99,7 @@ export interface CustomLogSource extends Resource<
  * into the data lake. Requires `SecurityLake.DataLake` to already be enabled
  * in the Region.
  *
- * Every configuration property is create-only — changing any of them
+ * Every configuration property is create-only -- changing any of them
  * replaces the source.
  *
  * ### Registering a custom source
@@ -139,7 +139,7 @@ export const CustomLogSourceProvider = () =>
       });
 
       // listLogSources reports only the source identity (name + version) for
-      // custom sources — the Glue/provider attributes are only returned by
+      // custom sources -- the Glue/provider attributes are only returned by
       // createCustomLogSource, so `output` is the cache for those.
       const findByName = (sourceName: string, sourceVersion: string | undefined) =>
         securitylake.listLogSources.items({}).pipe(
@@ -162,7 +162,7 @@ export const CustomLogSourceProvider = () =>
           const sourceName = output?.sourceName ?? (yield* createName(id, olds ?? {}));
           const sourceVersion = output?.sourceVersion ?? olds?.sourceVersion;
           // An account that never onboarded Security Lake rejects
-          // listLogSources — that means "no source", not a failure.
+          // listLogSources -- that means "no source", not a failure.
           const observed = yield* findByName(sourceName, sourceVersion).pipe(
             Effect.catchTag(
               ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
@@ -171,7 +171,7 @@ export const CustomLogSourceProvider = () =>
           );
           if (observed === undefined) return undefined;
           // Custom log sources carry no tags, so ownership can't be
-          // distinguished — read reports observed state (merged with cached
+          // distinguished -- read reports observed state (merged with cached
           // create-time attributes).
           return {
             sourceName,
@@ -210,7 +210,7 @@ export const CustomLogSourceProvider = () =>
             ),
           ),
 
-        // There is no UpdateCustomLogSource — every property is create-only.
+        // There is no UpdateCustomLogSource -- every property is create-only.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const changed =
@@ -226,10 +226,10 @@ export const CustomLogSourceProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const sourceName = yield* createName(id, news);
 
-          // 1. OBSERVE — is the source already registered?
+          // 1. OBSERVE -- is the source already registered?
           const observed = yield* findByName(sourceName, news.sourceVersion);
 
-          // 2. ENSURE — create when missing. A ConflictException means a
+          // 2. ENSURE -- create when missing. A ConflictException means a
           // concurrent create won the race; fall through to observation.
           let attrs = output;
           if (observed === undefined) {
@@ -245,7 +245,7 @@ export const CustomLogSourceProvider = () =>
               })
               .pipe(
                 Effect.map((response) => response.source),
-                // A concurrent create won the race — keep cached attributes.
+                // A concurrent create won the race -- keep cached attributes.
                 Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             if (created !== undefined) {
@@ -253,7 +253,7 @@ export const CustomLogSourceProvider = () =>
             }
           }
 
-          // 3. RETURN — merge observed identity with cached create-time
+          // 3. RETURN -- merge observed identity with cached create-time
           // attributes (Glue ARNs / provider role are only reported by
           // create).
           const final = {

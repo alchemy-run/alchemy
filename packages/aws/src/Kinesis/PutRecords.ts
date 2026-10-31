@@ -8,7 +8,7 @@ export interface PutRecordsRequest extends Omit<Kinesis.PutRecordsInput, "Stream
 /**
  * Runtime binding for `kinesis:PutRecords`.
  *
- * Bind this operation to a `Stream` to write up to 500 records per call —
+ * Bind this operation to a `Stream` to write up to 500 records per call --
  * the stream name is injected automatically and `kinesis:PutRecords` is
  * granted on the stream. Provide the implementation with
  * `Effect.provide(AWS.Kinesis.PutRecordsHttp)`. For unbounded batching with
@@ -16,10 +16,10 @@ export interface PutRecordsRequest extends Omit<Kinesis.PutRecordsInput, "Stream
  * ### Writing Batches
  * **Example:** Put a Batch of Records
  * ```typescript
- * // init — bind the operation to the stream
+ * // init -- bind the operation to the stream
  * const putRecords = yield* AWS.Kinesis.PutRecords(stream);
  *
- * // runtime — write a batch from a handler
+ * // runtime -- write a batch from a handler
  * const result = yield* putRecords({
  *   Records: orders.map((order) => ({
  *     PartitionKey: order.id,

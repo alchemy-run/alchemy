@@ -17,7 +17,7 @@ export interface EncryptResult {
 
 /**
  * Encrypt with a Fly {@link SecretKey} (`nacl_box`, `nacl_secretbox`,
- * `xaes256gcm`, …). The App and key name are fixed by `Encrypt(key)`.
+ * `xaes256gcm`, ...). The App and key name are fixed by `Encrypt(key)`.
  *
  *
  * ### Encrypt a payload

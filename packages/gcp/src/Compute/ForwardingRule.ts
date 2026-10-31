@@ -30,44 +30,44 @@ export type ForwardingRuleServiceDirectoryRegistration =
 export type ForwardingRuleProps = {
   /**
    * Name of the forwarding rule. If omitted, a unique RFC1035 name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the rule.
    */
   forwardingRuleName?: string;
   /**
-   * Region the rule lives in. Immutable — changing it replaces the rule.
+   * Region the rule lives in. Immutable -- changing it replaces the rule.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Immutable — changing it replaces the rule.
+   * Optional description. Immutable -- changing it replaces the rule.
    */
   description?: string;
   /**
    * IP address or Address URL this rule accepts traffic on. When omitted,
-   * GCP assigns an ephemeral address. Immutable — changing a literal IP
+   * GCP assigns an ephemeral address. Immutable -- changing a literal IP
    * replaces the rule.
    */
   ipAddress?: string;
   /**
    * IP protocol (`TCP`, `UDP`, `ESP`, `AH`, `SCTP`, `ICMP`, `L3_DEFAULT`).
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   ipProtocol?: compute.ForwardingRuleIPProtocolEnum | (string & {});
   /**
    * Single port or `start-end` range. Mutually exclusive with `ports` and
-   * `allPorts`. Immutable — changing it replaces the rule.
+   * `allPorts`. Immutable -- changing it replaces the rule.
    */
   portRange?: string;
   /**
    * Up to five discrete ports. Mutually exclusive with `portRange` and
-   * `allPorts`. Immutable — changing it replaces the rule.
+   * `allPorts`. Immutable -- changing it replaces the rule.
    */
   ports?: string[];
   /**
    * Forward every port (and packets with no port). Mutually exclusive with
-   * `portRange` and `ports`. Immutable — changing it replaces the rule.
+   * `portRange` and `ports`. Immutable -- changing it replaces the rule.
    */
   allPorts?: boolean;
   /**
@@ -78,35 +78,35 @@ export type ForwardingRuleProps = {
   target?: string;
   /**
    * Backend service URL. Required for internal and external passthrough
-   * Network Load Balancers; omitted for other products. Immutable —
+   * Network Load Balancers; omitted for other products. Immutable --
    * changing it replaces the rule.
    */
   backendService?: string;
   /**
    * Forwarding rule type (`EXTERNAL`, `EXTERNAL_MANAGED`, `INTERNAL`,
-   * `INTERNAL_MANAGED`). Use `""` for some PSC endpoints. Immutable —
+   * `INTERNAL_MANAGED`). Use `""` for some PSC endpoints. Immutable --
    * changing it replaces the rule.
    * @default "EXTERNAL"
    */
   loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | "" | (string & {});
   /**
    * VPC network URL or name. Used for internal load balancing and PSC.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   network?: string;
   /**
    * Subnetwork URL or name. Required for custom-mode VPCs and IPv6
-   * external rules. Immutable — changing it replaces the rule.
+   * external rules. Immutable -- changing it replaces the rule.
    */
   subnetwork?: string;
   /**
-   * Networking tier (`PREMIUM` or `STANDARD`). Immutable — changing it
+   * Networking tier (`PREMIUM` or `STANDARD`). Immutable -- changing it
    * replaces the rule.
    * @default "PREMIUM"
    */
   networkTier?: compute.ForwardingRuleNetworkTierEnum | (string & {});
   /**
-   * `IPV4` or `IPV6`. Immutable — changing it replaces the rule.
+   * `IPV4` or `IPV6`. Immutable -- changing it replaces the rule.
    */
   ipVersion?: compute.ForwardingRuleIpVersionEnum | (string & {});
   /**
@@ -122,32 +122,32 @@ export type ForwardingRuleProps = {
   allowPscGlobalAccess?: boolean;
   /**
    * Skip auto-creating a DNS zone for a PSC consumer endpoint. Immutable
-   * — changing it replaces the rule.
+   * -- changing it replaces the rule.
    */
   noAutomateDnsZone?: boolean;
   /**
    * Use this INTERNAL load balancer as a packet-mirroring collector.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   isMirroringCollector?: boolean;
   /**
    * Optional prefix of the fully-qualified INTERNAL service name.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   serviceLabel?: string;
   /**
    * Restrict EXTERNAL regional rules to these source IPs or CIDRs (max
-   * 64). Immutable — changing it replaces the rule.
+   * 64). Immutable -- changing it replaces the rule.
    */
   sourceIpRanges?: string[];
   /**
    * Public delegated prefix used to draw a BYOIP IPv6 address. Immutable
-   * — changing it replaces the rule.
+   * -- changing it replaces the rule.
    */
   ipCollection?: string;
   /**
    * Service Directory registrations. Currently a single entry. Immutable
-   * — changing it replaces the rule.
+   * -- changing it replaces the rule.
    */
   serviceDirectoryRegistrations?: ForwardingRuleServiceDirectoryRegistration[];
   /**
@@ -239,7 +239,7 @@ export type ForwardingRule = Resource<
  * resource maps to the regional `forwardingRules` collection
  * (`globalForwardingRules` is a separate resource).
  *
- * Labels cannot be set on insert — Alchemy applies them with `setLabels`
+ * Labels cannot be set on insert -- Alchemy applies them with `setLabels`
  * after the rule exists. `target`, `allowGlobalAccess`, and
  * `allowPscGlobalAccess` update in place; name, region, IP, protocol,
  * ports, scheme, network, subnetwork, backend service, and description

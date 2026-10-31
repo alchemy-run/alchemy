@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:ListResourceEvaluations` — enumerate the
+ * Runtime binding for `config:ListResourceEvaluations` -- enumerate the
  * proactive resource evaluations run in the account, optionally filtered
  * by evaluation mode and time window.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Proactive Resource Evaluation
  * **Example:** List Proactive Evaluations
  * ```typescript
- * // init — grants config:ListResourceEvaluations
+ * // init -- grants config:ListResourceEvaluations
  * const listResourceEvaluations = yield* AWS.Config.ListResourceEvaluations();
  *
  * // runtime

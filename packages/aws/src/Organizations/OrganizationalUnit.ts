@@ -148,7 +148,7 @@ export const OrganizationalUnitProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
 
-          // Observe — locate the OU by ID if known, else by parent+name.
+          // Observe -- locate the OU by ID if known, else by parent+name.
           // We fetch fresh so the reconciler converges over drift, adoption,
           // and partial prior runs. `output.ouId` is treated only as a
           // cache.
@@ -159,7 +159,7 @@ export const OrganizationalUnitProvider = () =>
                 name,
               });
 
-          // Ensure — create the OU if missing. Tolerate
+          // Ensure -- create the OU if missing. Tolerate
           // `DuplicateOrganizationalUnitException` as adoption when a peer
           // reconciler created it concurrently.
           if (!state) {
@@ -182,7 +182,7 @@ export const OrganizationalUnitProvider = () =>
             }
           }
 
-          // Sync name — observed ↔ desired. `parentId` is replacement-only,
+          // Sync name -- observed <-> desired. `parentId` is replacement-only,
           // so the diff has handled any cross-parent move.
           if (state.name !== name) {
             yield* retryOrganizations(
@@ -193,7 +193,7 @@ export const OrganizationalUnitProvider = () =>
             );
           }
 
-          // Sync tags — diff observed cloud tags against desired so
+          // Sync tags -- diff observed cloud tags against desired so
           // adoption and drift converge correctly without trusting `olds`.
           const tags = yield* updateResourceTags({
             id,
@@ -261,7 +261,7 @@ const collectDescendantOUIds = (
       parentIds,
       (parentId) =>
         listOUsForParent(parentId).pipe(
-          // The OU was deleted after its parent was listed — skip its subtree.
+          // The OU was deleted after its parent was listed -- skip its subtree.
           Effect.catchTag("ParentNotFoundException", () =>
             Effect.succeed<organizations.OrganizationalUnit[]>([]),
           ),

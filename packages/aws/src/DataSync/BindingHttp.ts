@@ -6,14 +6,14 @@ import type { Task } from "./Task.ts";
 /**
  * Shared scaffolding for AWS DataSync HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action is
  * boilerplate.
  *
  * DataSync authorizes task-addressed actions against the *task* ARN
- * (`arn:…:task/task-id`) and execution-addressed actions against the
- * *task execution* ARN (`arn:…:task/task-id/execution/exec-id`), so every
+ * (`arn:...:task/task-id`) and execution-addressed actions against the
+ * *task execution* ARN (`arn:...:task/task-id/execution/exec-id`), so every
  * builder grants on both the bound task's ARN and its execution pattern.
  */
 const taskPolicyStatement = (task: Task, actions: readonly string[]) => ({
@@ -44,7 +44,7 @@ export const makeDataSyncTaskHttpBinding = <I extends { TaskArn?: string }, A, E
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (task: Task) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const TaskArn = yield* task.taskArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${task})`({

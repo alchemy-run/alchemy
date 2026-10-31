@@ -41,11 +41,11 @@ export interface Build extends Resource<
   {
     /**
      * Path to the build output, relative to the process's initial working
-     * directory (`initialCwd` — captured at startup, immune to transient
+     * directory (`initialCwd` -- captured at startup, immune to transient
      * chdir by tools sharing the process).
      *
      * Stored relative (rather than absolute) so the value is portable across
-     * machines — state written by a CI runner
+     * machines -- state written by a CI runner
      * (`/home/runner/work/.../dist`) resolves correctly on a local laptop and
      * vice versa. Consumers should resolve it against `initialCwd` to obtain
      * an absolute path.
@@ -145,7 +145,7 @@ export const BuildProvider = () =>
         // Anchored to the initial cwd: a live `process.cwd()` read can race
         // a concurrent tool's transient chdir (framework source builds),
         // and the relative `outdir` stored here is resolved again later
-        // (assets read) — mismatched bases corrupt the path.
+        // (assets read) -- mismatched bases corrupt the path.
         const cwd = path.resolve(initialCwd, props.cwd ?? ".");
         const outdir = path.resolve(cwd, props.outdir);
         if (!(yield* fs.exists(outdir))) {

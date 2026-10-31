@@ -18,21 +18,21 @@ export interface ZoneTransferTsigProps {
    * TSIG key name. If omitted, a unique name is generated from the app,
    * stage, and logical ID.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    * @default ${app}-${stage}-${id}
    */
   name?: string;
   /**
    * TSIG algorithm (e.g. `hmac-sha512.`).
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   algo: string;
   /**
-   * TSIG secret (base64-encoded key material). Kept redacted — it is
+   * TSIG secret (base64-encoded key material). Kept redacted -- it is
    * never stored in the resource's attributes.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   secret: Redacted.Redacted<string>;
 }
@@ -58,7 +58,7 @@ export type ZoneTransferTsig = Resource<
 
 /**
  * A Secondary DNS TSIG key
- * (`/accounts/{account_id}/secondary_dns/tsigs`) — shared-secret
+ * (`/accounts/{account_id}/secondary_dns/tsigs`) -- shared-secret
  * authentication for zone transfers between Cloudflare and external
  * nameservers. Reference it from a {@link ZoneTransferPeer} via
  * `tsigId`.
@@ -121,7 +121,7 @@ export const ZoneTransferTsigProvider = () =>
         const observed = yield* getTsig(acct, output.tsigId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic physical name. TSIGs carry no ownership markers,
       // so gate takeover behind adoption.
       const name = yield* createTsigName(id, olds?.name);
@@ -134,13 +134,13 @@ export const ZoneTransferTsigProvider = () =>
       const name = yield* createTsigName(id, news.name);
       const secret = Redacted.value(news.secret);
 
-      // Observe — the id cached on `output` is a hint, not a guarantee.
+      // Observe -- the id cached on `output` is a hint, not a guarantee.
       const observed = output?.tsigId
         ? yield* getTsig(output.accountId ?? accountId, output.tsigId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). Names are not
+        // Ensure -- greenfield (or out-of-band delete). Names are not
         // unique, so there is no AlreadyExists race to tolerate.
         const created = yield* dns.createZoneTransferTsig({
           accountId,
@@ -151,7 +151,7 @@ export const ZoneTransferTsigProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — PUT with the full body; skip the call on no delta. The
+      // Sync -- PUT with the full body; skip the call on no delta. The
       // observed secret comes back from the GET, so the comparison is
       // exact (not a guess from `olds`).
       if (observed.name === name && observed.algo === news.algo && observed.secret === secret) {
@@ -176,7 +176,7 @@ export const ZoneTransferTsigProvider = () =>
         .pipe(Effect.catchTag("TsigNotFound", () => Effect.void));
     }),
 
-    // Account collection — enumerate every TSIG in the account via the
+    // Account collection -- enumerate every TSIG in the account via the
     // account-scoped list API, paginate exhaustively, and hydrate each into
     // the same Attributes shape `read` returns (the secret is write-only and
     // never persisted).

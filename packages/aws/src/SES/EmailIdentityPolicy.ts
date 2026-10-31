@@ -47,7 +47,7 @@ export interface EmailIdentityPolicy extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 sending-authorization policy attached to an email identity —
+ * An Amazon SES v2 sending-authorization policy attached to an email identity --
  * lets the identity owner authorize other AWS accounts or IAM principals to
  * send email using the identity.
  *
@@ -221,13 +221,13 @@ export const EmailIdentityPolicyProvider = () =>
           const emailIdentity = output?.emailIdentity ?? news.emailIdentity;
           const policyName = output?.policyName ?? (yield* createName(id, news));
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const policies = yield* getPolicies(emailIdentity);
           const existing = policies?.[policyName];
           const desiredPolicy = stringifyPolicyDocument(news.policy);
 
           if (existing === undefined) {
-            // 2. ENSURE — create; AlreadyExists is a race → converge via update.
+            // 2. ENSURE -- create; AlreadyExists is a race -> converge via update.
             yield* sesv2
               .createEmailIdentityPolicy({
                 EmailIdentity: emailIdentity,
@@ -244,7 +244,7 @@ export const EmailIdentityPolicyProvider = () =>
                 ),
               );
           } else {
-            // 3. SYNC — update only when the stored document differs.
+            // 3. SYNC -- update only when the stored document differs.
             const changed = yield* Effect.sync(
               () => normalizePolicyDocument(existing) !== normalizePolicyDocument(news.policy),
             );

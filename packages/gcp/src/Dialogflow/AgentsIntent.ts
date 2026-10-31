@@ -69,17 +69,17 @@ export type AgentsIntentProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}`.
-   * Immutable — changing it replaces the intent.
+   * Immutable -- changing it replaces the intent.
    */
   agent: string;
   /**
    * Intent id (the `{intent}` segment). Server-assigned when omitted.
-   * Immutable — changing it replaces the intent.
+   * Immutable -- changing it replaces the intent.
    */
   intentId?: string;
   /**
    * Location used when `agent` is an id rather than a resource name.
-   * Immutable — changing it replaces the intent.
+   * Immutable -- changing it replaces the intent.
    * @default "global"
    */
   location?: string;

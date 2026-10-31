@@ -32,12 +32,12 @@ export type ImportJobProps = {
   /**
    * Import job id (the `{importJob}` segment of
    * `projects/{project}/locations/{location}/importJobs/{importJob}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the job.
    */
   importJobId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the job.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -45,7 +45,7 @@ export type ImportJobProps = {
   location?: string;
   /**
    * Source that receives imported frames. Full name or source id
-   * (combined with `location`). Immutable — changing it replaces the job.
+   * (combined with `location`). Immutable -- changing it replaces the job.
    */
   assetSource: string;
   /**

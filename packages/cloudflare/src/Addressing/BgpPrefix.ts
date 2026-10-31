@@ -25,7 +25,7 @@ export interface BgpPrefixProps {
   cidr: string;
   /**
    * Whether the BGP prefix is advertised to the internet (maps to
-   * `on_demand.advertised`). Mutable — patched in place; BGP propagation
+   * `on_demand.advertised`). Mutable -- patched in place; BGP propagation
    * is eventually consistent (minutes).
    * @default false
    */
@@ -83,7 +83,7 @@ export type BgpPrefix = Resource<TypeId, BgpPrefixProps, BgpPrefixAttributes, ne
  *
  * Cloudflare automatically creates BGP prefixes during BYOIP onboarding, so
  * reconcile adopts an existing BGP prefix matching the CIDR before creating
- * a new one. There is **no delete API** — destroying this resource only
+ * a new one. There is **no delete API** -- destroying this resource only
  * withdraws the advertisement (`advertised: false`) and drops the state.
  * ### Advertising a Prefix
  * **Example:** Advertise the whole BYOIP prefix
@@ -152,7 +152,7 @@ export const BgpPrefixProvider = () =>
         const observed = yield* getBgpPrefix(acct, prefixId, output.bgpPrefixId);
         return observed ? toAttributes(observed, prefixId, acct) : undefined;
       }
-      // Cold read — match on CIDR, which is unique within the parent prefix.
+      // Cold read -- match on CIDR, which is unique within the parent prefix.
       const cidr = output?.cidr ?? olds?.cidr;
       if (typeof cidr !== "string") return undefined;
       const match = yield* findByCidr(acct, prefixId, cidr);
@@ -184,7 +184,7 @@ export const BgpPrefixProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).map((bgp) => toAttributes(bgp, prefixId, accountId)),
             ),
-            // Parent prefix removed mid-enumeration — skip it.
+            // Parent prefix removed mid-enumeration -- skip it.
             Effect.catchTag("PrefixNotFound", () => Effect.succeed([] as BgpPrefixAttributes[])),
           ),
         { concurrency: 10 },
@@ -197,7 +197,7 @@ export const BgpPrefixProvider = () =>
       const acct = output?.accountId ?? accountId;
       const prefixId = news.prefixId as string;
 
-      // 1. Observe — by cached id first, then by CIDR: Cloudflare creates
+      // 1. Observe -- by cached id first, then by CIDR: Cloudflare creates
       //    BGP prefixes itself during onboarding, so an existing one with
       //    our CIDR is adopted rather than duplicated.
       let observed = output?.bgpPrefixId
@@ -207,7 +207,7 @@ export const BgpPrefixProvider = () =>
         observed = yield* findByCidr(acct, prefixId, news.cidr);
       }
 
-      // 2. Ensure — create if genuinely missing.
+      // 2. Ensure -- create if genuinely missing.
       if (!observed) {
         observed = yield* addressing.createPrefixBgpPrefix({
           accountId: acct,
@@ -217,7 +217,7 @@ export const BgpPrefixProvider = () =>
       }
       const bgpPrefixId = observed.id ?? "";
 
-      // 3. Sync — diff observed advertisement settings against desired and
+      // 3. Sync -- diff observed advertisement settings against desired and
       //    patch only the delta. `onDemandLocked` means a change is already
       //    propagating; retry (bounded) while locked.
       const desiredAdvertised = news.advertised ?? false;
@@ -252,7 +252,7 @@ export const BgpPrefixProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // No delete API exists — BGP prefixes live as long as the parent
+      // No delete API exists -- BGP prefixes live as long as the parent
       // BYOIP prefix. Withdraw the advertisement (best effort) and drop
       // the state.
       if (output.onDemand.advertised) {
@@ -280,7 +280,7 @@ const getBgpPrefix = (accountId: string, prefixId: string, bgpPrefixId: string) 
     .pipe(Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () => Effect.undefined));
 
 /**
- * Find a BGP prefix by exact CIDR — unique within a parent prefix. The
+ * Find a BGP prefix by exact CIDR -- unique within a parent prefix. The
  * parent prefix being gone reads as "no match".
  */
 const findByCidr = (accountId: string, prefixId: string, cidr: string) =>

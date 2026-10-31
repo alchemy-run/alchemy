@@ -47,7 +47,7 @@ export interface EmailTemplate extends Resource<
 > {}
 
 /**
- * An Amazon SES v2 email template — reusable subject/text/HTML content with
+ * An Amazon SES v2 email template -- reusable subject/text/HTML content with
  * `{{variable}}` personalization tags, rendered server-side when you send
  * templated email.
  * ### Creating Templates
@@ -164,7 +164,7 @@ export const EmailTemplateProvider = () =>
           let observed = yield* getTemplate(name);
 
           if (observed === undefined) {
-            // 2. ENSURE — AlreadyExists is a race → converge via update.
+            // 2. ENSURE -- AlreadyExists is a race -> converge via update.
             yield* sesv2
               .createEmailTemplate({
                 TemplateName: name,
@@ -185,14 +185,14 @@ export const EmailTemplateProvider = () =>
             observed.TemplateContent.Text !== desiredContent.Text ||
             observed.TemplateContent.Html !== desiredContent.Html
           ) {
-            // 3. SYNC content — only when the observed content drifted.
+            // 3. SYNC content -- only when the observed content drifted.
             yield* sesv2.updateEmailTemplate({
               TemplateName: name,
               TemplateContent: desiredContent,
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

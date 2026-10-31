@@ -108,7 +108,7 @@ export type KeyProps = {
    * `projects/{project}/locations/global/keys/{key}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Must match `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`, must not be UUID-like,
-   * and is immutable — changing it replaces the key.
+   * and is immutable -- changing it replaces the key.
    */
   keyId?: string;
   /**
@@ -116,7 +116,7 @@ export type KeyProps = {
    */
   displayName?: string;
   /**
-   * User annotations. API keys have no labels field — Alchemy ownership
+   * User annotations. API keys have no labels field -- Alchemy ownership
    * (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored here
    * so `list` / `pnpm nuke:gcp` can find owned keys. User keys are
    * preserved; Alchemy keys win on conflict.
@@ -127,7 +127,7 @@ export type KeyProps = {
    */
   restrictions?: KeyRestrictions;
   /**
-   * Service account the key is bound to. Immutable — changing it
+   * Service account the key is bound to. Immutable -- changing it
    * replaces the key. Binding enables service-account auth on the key.
    */
   serviceAccountEmail?: string;
@@ -143,7 +143,7 @@ export type Key = Resource<
     keyId: string;
     /** Project id. */
     project: string;
-    /** Always `global` — API keys are a global resource. */
+    /** Always `global` -- API keys are a global resource. */
     location: string;
     /** Human-readable display name. */
     displayName: string | undefined;
@@ -174,7 +174,7 @@ export type Key = Resource<
 /**
  * A Google Cloud API key (the API Keys API, `apikeys.googleapis.com`).
  *
- * Keys are global (`locations/global`). They have no labels — Alchemy
+ * Keys are global (`locations/global`). They have no labels -- Alchemy
  * stamps ownership into `annotations` so `read`, `list`, and
  * `pnpm nuke:gcp` can find them. `keyId` and `serviceAccountEmail` are
  * immutable; changing either replaces the key. Deletes are soft: the key

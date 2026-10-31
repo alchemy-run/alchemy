@@ -26,8 +26,8 @@ type TypeId = typeof TypeId;
 
 /**
  * The type of identity provider. Determines which `config` fields are
- * meaningful — see Cloudflare's IdP integration docs for the per-type
- * shapes. Immutable — changing the type triggers a replacement.
+ * meaningful -- see Cloudflare's IdP integration docs for the per-type
+ * shapes. Immutable -- changing the type triggers a replacement.
  */
 export type IdentityProviderType =
   | "onetimepin"
@@ -51,9 +51,9 @@ export type IdentityProviderType =
  * The full, untyped per-type configuration surface of an identity
  * provider. Re-exports distilled's request shape so the complete
  * Cloudflare config surface (OAuth client credentials, OIDC endpoints,
- * SAML certs and SSO targets, SCIM claims, …) is available without
+ * SAML certs and SSO targets, SCIM claims, ...) is available without
  * re-declaring the structure. Prefer the per-type configs
- * ({@link OidcConfig}, {@link SamlConfig}, {@link AzureADConfig}, …) —
+ * ({@link OidcConfig}, {@link SamlConfig}, {@link AzureADConfig}, ...) --
  * they are enforced by the discriminated {@link IdentityProviderProps}.
  */
 export type IdentityProviderConfig = zeroTrust.CreateIdentityProviderForAccountRequest["config"];
@@ -78,7 +78,7 @@ export interface OAuthClientConfig {
 
 /**
  * Configuration for the built-in one-time PIN login method. Takes no
- * parameters — users receive a PIN at their email address.
+ * parameters -- users receive a PIN at their email address.
  */
 export interface OneTimePinConfig {}
 
@@ -377,10 +377,10 @@ export interface IdentityProviderBaseProps {
   name?: string;
   /**
    * Zone to scope the identity provider to (legacy zone-level Access).
-   * When omitted, the IdP is created at the account level — the modern
+   * When omitted, the IdP is created at the account level -- the modern
    * Zero Trust organization scope.
    *
-   * Stable — moving an IdP between scopes triggers a replacement.
+   * Stable -- moving an IdP between scopes triggers a replacement.
    */
   zoneId?: string;
   /**
@@ -390,7 +390,7 @@ export interface IdentityProviderBaseProps {
 }
 
 /**
- * Input properties of an identity provider — a discriminated union on
+ * Input properties of an identity provider -- a discriminated union on
  * `type`, so each provider type only accepts (and requires) its own
  * config fields. Secret fields (e.g. `clientSecret`) are masked by
  * Cloudflare on read, so they diff against the previously declared props
@@ -399,67 +399,67 @@ export interface IdentityProviderBaseProps {
 export type IdentityProviderProps = IdentityProviderBaseProps &
   (
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "onetimepin";
         /** One-time PIN takes no configuration. */
         config?: OneTimePinConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "github" | "facebook" | "linkedin" | "yandex";
         /** OAuth client credentials for the social provider. */
         config: SocialOAuthConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "google";
         /** Google OAuth configuration. */
         config: GoogleConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "google-apps";
         /** Google Workspace configuration. */
         config: GoogleAppsConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "azureAD";
         /** Microsoft Entra ID configuration. */
         config: AzureADConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "centrify";
         /** Centrify configuration. */
         config: CentrifyConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "okta";
         /** Okta configuration. */
         config: OktaConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "onelogin";
         /** OneLogin configuration. */
         config: OneloginConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "pingone";
         /** PingOne configuration. */
         config: PingoneConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "oidc";
         /** Generic OIDC configuration. */
         config: OidcConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "saml";
         /** Generic SAML configuration. */
         config: SamlConfig;
@@ -471,7 +471,7 @@ export type IdentityProviderProps = IdentityProviderBaseProps &
         samlCertificateSetId?: string;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "cloudflare";
         /** The Cloudflare-managed (WARP) IdP takes no user configuration. */
         config?: IdentityProviderConfig;
@@ -509,7 +509,7 @@ export type IdentityProvider = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust Access identity provider — the login method
+ * A Cloudflare Zero Trust Access identity provider -- the login method
  * (one-time PIN, generic OIDC/SAML, or a named provider like GitHub,
  * Google, Okta, or Azure AD) users authenticate with before Access
  * policies evaluate.
@@ -518,7 +518,7 @@ export type IdentityProvider = Resource<
  * accepts (and requires) its own config fields, so a missing
  * `directoryId` on an `azureAD` IdP or a GitHub config on an `oidc` IdP
  * is a compile-time error. The `type` is immutable (config shapes are
- * disjoint per type — changing it replaces the IdP); name, config, and
+ * disjoint per type -- changing it replaces the IdP); name, config, and
  * SCIM settings converge in place. Cloudflare masks secret config fields
  * (`clientSecret`, API tokens) on read, so those fields diff against
  * your previously declared props instead of observed cloud state.
@@ -618,7 +618,7 @@ export const IdentityProviderProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // Config shapes are disjoint per type — model a type change as a
+      // Config shapes are disjoint per type -- model a type change as a
       // replacement even though the API technically allows the PUT.
       const oldType = output?.type ?? olds?.type;
       if (oldType !== undefined && oldType !== news.type) {
@@ -647,7 +647,7 @@ export const IdentityProviderProvider = () =>
       const acct = output?.accountId ?? accountId;
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
 
-      // Owned path — refresh by the cached id. Carry the SCIM secret
+      // Owned path -- refresh by the cached id. Carry the SCIM secret
       // forward from prior output; the API never returns it on GET.
       if (output?.identityProviderId) {
         const observed = yield* getIdp(zoneId, acct, output.identityProviderId);
@@ -656,13 +656,13 @@ export const IdentityProviderProvider = () =>
         }
       }
 
-      // Cold read — locate by deterministic name. Access IdPs carry no
+      // Cold read -- locate by deterministic name. Access IdPs carry no
       // ownership markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
       let match = yield* findByName(zoneId, acct, name);
       // The singleton types (`cloudflare`, `onetimepin`) exist at most once
       // per scope and their display name is user-irrelevant (the managed
-      // WARP IdP's is often "") — locate them by type when the name scan
+      // WARP IdP's is often "") -- locate them by type when the name scan
       // misses so adoption works regardless of the declared name.
       const type = olds?.type ?? output?.type;
       if (!match && isSingletonType(type)) {
@@ -677,7 +677,7 @@ export const IdentityProviderProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Account-scoped collection — exhaustively paginate the account's
+      // Account-scoped collection -- exhaustively paginate the account's
       // identity providers and hydrate each into the `read` Attributes
       // shape. The SCIM secret is masked by the API on list, so it is
       // carried as undefined (there is no prior state to thread through).
@@ -694,7 +694,7 @@ export const IdentityProviderProvider = () =>
           ),
         );
 
-      // Zone-scoped IdPs (legacy zone-level Access) — fan out across the
+      // Zone-scoped IdPs (legacy zone-level Access) -- fan out across the
       // account's zones. Zones without zone-level Access reject the
       // route; skip them.
       const zones = yield* listAllZones(accountId);
@@ -715,7 +715,7 @@ export const IdentityProviderProvider = () =>
         { concurrency: 10 },
       );
 
-      // The zone route can echo account-level IdPs back — keep each IdP
+      // The zone route can echo account-level IdPs back -- keep each IdP
       // once, under the scope that owns it.
       const seen = new Set(accountIdps.map((idp) => idp.identityProviderId));
       return [
@@ -730,7 +730,7 @@ export const IdentityProviderProvider = () =>
       const zoneId = news.zoneId as string | undefined;
       const generatedName = yield* createPhysicalName({ id });
 
-      // 1. Observe — the cached id is a hint; fall back to a name scan
+      // 1. Observe -- the cached id is a hint; fall back to a name scan
       //    (and, for the singleton types, a type scan) so out-of-band
       //    deletes / lost state converge.
       let observed = output?.identityProviderId
@@ -740,7 +740,7 @@ export const IdentityProviderProvider = () =>
         observed = yield* findByName(zoneId, accountId, news.name ?? generatedName);
       }
       // Singleton types (`cloudflare`, `onetimepin`) exist at most once per
-      // scope — creating a second one is rejected by the API, so an
+      // scope -- creating a second one is rejected by the API, so an
       // existing one found by type is ours to converge (ownership is gated
       // upstream: `read` reports it as Unowned and the engine only lets
       // reconcile run once adoption is approved).
@@ -748,14 +748,14 @@ export const IdentityProviderProvider = () =>
         observed = yield* findByType(zoneId, accountId, news.type);
       }
 
-      // Singletons keep their observed display name when none is declared —
+      // Singletons keep their observed display name when none is declared --
       // renaming the managed WARP IdP to a generated physical name on
       // adoption would be surprising. Everything else defaults to the
       // deterministic physical name (the resource's cold-read identity).
       const name =
         news.name ?? (isSingletonType(news.type) && observed ? observed.name : generatedName);
 
-      // 2. Ensure — create with the full desired body when missing. Names
+      // 2. Ensure -- create with the full desired body when missing. Names
       //    are not unique on Cloudflare's side, so there is no
       //    AlreadyExists race to tolerate for the non-singleton types (a
       //    singleton conflict is caught by the type scan above).
@@ -770,7 +770,7 @@ export const IdentityProviderProvider = () =>
         return toAttributes(created as ObservedIdp, zoneId, accountId, output?.scimSecret);
       }
 
-      // 3. Sync — the update API is a PUT of the full desired state.
+      // 3. Sync -- the update API is a PUT of the full desired state.
       //    Non-secret aspects (name, SCIM enablement) diff against
       //    observed cloud state; the config diffs against the previously
       //    declared props because Cloudflare masks secrets on read.
@@ -796,7 +796,7 @@ export const IdentityProviderProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // An IdP referenced by an application's `allowedIdps` can fail
-      // deletion — applications referencing the id as an Input get correct
+      // deletion -- applications referencing the id as an Input get correct
       // destroy ordering. A missing IdP (AccessIdentityProviderNotFound,
       // Cloudflare code 12135) means we're done.
       yield* deleteIdp(output.zoneId, output.accountId, output.identityProviderId).pipe(
@@ -818,7 +818,7 @@ interface IdpBody {
 
 /**
  * The SAML encryption certificate set, when the props are the `saml`
- * variant. Narrowing helper — `samlCertificateSetId` only exists on the
+ * variant. Narrowing helper -- `samlCertificateSetId` only exists on the
  * SAML member of the props union.
  */
 const samlCertificateSetIdOf = (props: IdentityProviderProps | undefined): string | undefined =>
@@ -858,7 +858,7 @@ const deleteIdp = (zoneId: string | undefined, accountId: string, identityProvid
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     // `""` is a legitimate declared name (the managed `cloudflare` IdP's
-    // display name is empty) — only generate when no name was declared.
+    // display name is empty) -- only generate when no name was declared.
     if (name !== undefined) return name;
     return yield* createPhysicalName({ id });
   });

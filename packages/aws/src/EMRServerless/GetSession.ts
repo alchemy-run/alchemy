@@ -12,7 +12,7 @@ export type GetSessionInput = Omit<emr.GetSessionRequest, "applicationId">;
 /**
  * Runtime binding for `emr-serverless:GetSession`.
  *
- * Reads an interactive session's detail on the bound {@link Application} —
+ * Reads an interactive session's detail on the bound {@link Application} --
  * state, execution role, idle time, resource utilization. Provide the
  * implementation with `Effect.provide(AWS.EMRServerless.GetSessionHttp)`.
  * ### Interactive Sessions

@@ -27,12 +27,12 @@ import { sha256, sha256Object } from "../Util/sha256.ts";
 export interface MemoOptions {
   /**
    * Glob patterns of files to hash. Paths are relative to the working
-   * directory and may reach outside it with `../` segments — useful in a
+   * directory and may reach outside it with `../` segments -- useful in a
    * monorepo where the build consumes sibling workspace packages that the
    * default (files under the working directory) does not cover.
    *
    * Note: providing `include` (or `exclude`) flips the {@link lockfile}
-   * default to `false` — pair it with `lockfile: true` to keep rebuilding
+   * default to `false` -- pair it with `lockfile: true` to keep rebuilding
    * when dependencies change.
    *
    * @default ["**\/*"] (all files, filtered by `exclude`)

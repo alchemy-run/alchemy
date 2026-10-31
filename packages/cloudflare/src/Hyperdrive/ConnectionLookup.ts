@@ -72,7 +72,7 @@ export class HyperdriveConfigLookupNotFound extends Data.TaggedError(
 
 /**
  * Look up an existing Cloudflare Hyperdrive configuration (created in the
- * dashboard or owned by another system) without managing its lifecycle —
+ * dashboard or owned by another system) without managing its lifecycle --
  * the data-source form (what Terraform calls a data source and Pulumi an
  * invoke). The configuration is read by `hyperdriveId` or `name` during
  * plan/deploy and is never created, updated or deleted: there is no state

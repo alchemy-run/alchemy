@@ -16,10 +16,10 @@ import type { Providers } from "../Providers.ts";
 /**
  * The zone of trust and access type an analyzer monitors.
  *
- * - `ACCOUNT` / `ORGANIZATION` — external-access analysis (the free tier):
+ * - `ACCOUNT` / `ORGANIZATION` -- external-access analysis (the free tier):
  *   surfaces resource policies that grant access to principals outside the
  *   account or organization.
- * - `ACCOUNT_UNUSED_ACCESS` / `ORGANIZATION_UNUSED_ACCESS` — unused-access
+ * - `ACCOUNT_UNUSED_ACCESS` / `ORGANIZATION_UNUSED_ACCESS` -- unused-access
  *   analysis (paid): surfaces unused IAM roles, users, and permissions.
  */
 export type AnalyzerType =
@@ -37,7 +37,7 @@ export interface AnalyzerProps {
    */
   analyzerName?: string;
   /**
-   * The analyzer's zone of trust and access type. Create-only — changing the
+   * The analyzer's zone of trust and access type. Create-only -- changing the
    * type replaces the analyzer.
    * @default "ACCOUNT"
    */
@@ -45,9 +45,9 @@ export interface AnalyzerProps {
   /**
    * How long access must go unused before the analyzer reports it as an
    * unused-access finding. Accepts any duration input (e.g. `"180 days"`);
-   * converted to whole days on the wire (valid range 1–365 days). Only valid
+   * converted to whole days on the wire (valid range 1-365 days). Only valid
    * for `ACCOUNT_UNUSED_ACCESS` / `ORGANIZATION_UNUSED_ACCESS` analyzers.
-   * Create-only — the API rejects in-place tracking-period updates, so
+   * Create-only -- the API rejects in-place tracking-period updates, so
    * changing this replaces the analyzer (delete-first, since accounts are
    * limited to one unused-access analyzer per Region). When omitted, the
    * analyzer's existing tracking period is left unmanaged.
@@ -78,7 +78,7 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
 }> {}
 
 /**
- * An AWS IAM Access Analyzer — continuously monitors resource policies to
+ * An AWS IAM Access Analyzer -- continuously monitors resource policies to
  * identify resources shared with an external entity (external-access
  * analyzers) or unused IAM access (unused-access analyzers).
  *
@@ -199,7 +199,7 @@ export const AnalyzerProvider = () =>
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
-          // only tags are mutable → default update path
+          // only tags are mutable -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -209,10 +209,10 @@ export const AnalyzerProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredUnusedAccessAge = toWireDays(news.unusedAccessAge);
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let analyzer = yield* observe(name);
 
-          // 2. ENSURE — createAnalyzer, tolerating a concurrent create race
+          // 2. ENSURE -- createAnalyzer, tolerating a concurrent create race
           if (analyzer === undefined) {
             yield* aa
               .createAnalyzer({
@@ -239,8 +239,8 @@ export const AnalyzerProvider = () =>
             });
           }
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags
-          // (unusedAccessAge is create-only — diff replaces on change, so
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags
+          // (unusedAccessAge is create-only -- diff replaces on change, so
           // there is no configuration sync step.)
           const observedTags = tagRecord(analyzer.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

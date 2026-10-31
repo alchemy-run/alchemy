@@ -7,7 +7,7 @@ export interface ListFunctionsRequest extends Lambda.ListFunctionsRequest {}
 /**
  * Runtime binding for `lambda:ListFunctions`.
  *
- * An account-level binding — call it with no arguments to get a callable
+ * An account-level binding -- call it with no arguments to get a callable
  * that lists function configurations in the region. Provide the
  * `ListFunctionsHttp` layer on the Function to satisfy the binding.
  * ### Function Metadata

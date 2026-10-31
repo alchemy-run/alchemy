@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:InviteAccountToOrganization`.
  *
  * Sends an invitation (handshake) to another account to join the organization as a member account.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.InviteAccountToOrganizationHttp)`.
  * ### Handshakes & Invitations
  * **Example:** Invite an Account
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const inviteAccountToOrganization = yield* AWS.Organizations.InviteAccountToOrganization();
  *
  * // runtime

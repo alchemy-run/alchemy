@@ -8,14 +8,14 @@ import type { Namespace } from "./Namespace.ts";
  * `redshift-serverless:CreateSnapshot` +
  * `redshift-serverless:TagResource`).
  *
- * Takes a manual snapshot of the bound {@link Namespace} — e.g. a
+ * Takes a manual snapshot of the bound {@link Namespace} -- e.g. a
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * namespace name is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.CreateSnapshotHttp)`.
  * ### Managing Snapshots
  * **Example:** Take a Manual Snapshot
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const createSnapshot = yield* AWS.RedshiftServerless.CreateSnapshot(namespace);
  *
  * // runtime

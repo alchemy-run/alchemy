@@ -39,25 +39,25 @@ export type SslCertificateProps = {
   sslCertificateName?: string;
   /**
    * Optional description. Compute SSL certificates have no labels field
-   * and no update API, so Alchemy ownership is stored in a `[alchemy …]`
+   * and no update API, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and any description change replaces the certificate.
    */
   description?: string;
   /**
    * `SELF_MANAGED` (upload PEM) or `MANAGED` (Google provisions). Inferred
    * from `managed.domains` vs `certificate` / `selfManaged` when omitted.
-   * Immutable — changing it replaces the certificate.
+   * Immutable -- changing it replaces the certificate.
    * @default "SELF_MANAGED"
    */
   type?: SslCertificateType;
   /**
-   * PEM certificate chain for a self-managed certificate. Immutable —
+   * PEM certificate chain for a self-managed certificate. Immutable --
    * changing it replaces the certificate.
    */
   certificate?: string;
   /**
    * PEM private key for a self-managed certificate. Write-only; not
-   * returned by the API. Immutable — changing it replaces the certificate.
+   * returned by the API. Immutable -- changing it replaces the certificate.
    */
   privateKey?: string;
   /**
@@ -66,7 +66,7 @@ export type SslCertificateProps = {
    */
   selfManaged?: SslCertificateSelfManaged;
   /**
-   * Google-managed certificate configuration. Immutable — changing domains
+   * Google-managed certificate configuration. Immutable -- changing domains
    * replaces the certificate.
    */
   managed?: SslCertificateManaged;
@@ -113,7 +113,7 @@ export type SslCertificate = Resource<
  * A global Compute Engine SSL certificate for HTTPS / SSL load balancing.
  *
  * Maps to the global `sslCertificates` collection (`regionSslCertificates`
- * is a separate resource). Certificates cannot be updated in place — every
+ * is a separate resource). Certificates cannot be updated in place -- every
  * user-facing field is immutable and changing it replaces the resource.
  * Compute SSL certificates have no labels field, so Alchemy stamps
  * ownership into the description for `list` / nuke.

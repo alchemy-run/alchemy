@@ -22,8 +22,8 @@ type TypeId = typeof TypeId;
 export type ListKind = "ip" | "asn" | "hostname" | "redirect";
 
 /**
- * An item in an `ip` list — an IPv4/IPv6 address or CIDR range
- * (IPv4 prefixes /8–/32, IPv6 prefixes /4–/64).
+ * An item in an `ip` list -- an IPv4/IPv6 address or CIDR range
+ * (IPv4 prefixes /8-/32, IPv6 prefixes /4-/64).
  */
 export type ListIpItem = {
   /**
@@ -37,7 +37,7 @@ export type ListIpItem = {
 };
 
 /**
- * An item in an `asn` list — an autonomous system number.
+ * An item in an `asn` list -- an autonomous system number.
  */
 export type ListAsnItem = {
   /**
@@ -78,7 +78,7 @@ export type ListHostnameItem = {
 };
 
 /**
- * An item in a `redirect` list — a source/target URL pair used by Bulk
+ * An item in a `redirect` list -- a source/target URL pair used by Bulk
  * Redirect rules.
  */
 export type ListRedirectItem = {
@@ -138,7 +138,7 @@ export type ListProps = {
    * An informative name for the list, used in filter and rule expressions
    * (e.g. `ip.src in $my_list`). Must contain only letters, numbers, and
    * underscores (max 50 characters). If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Cannot be changed after creation —
+   * from the app, stage, and logical ID. Cannot be changed after creation --
    * updating this property triggers a replacement.
    * @default ${app}_${stage}_${id}
    */
@@ -146,7 +146,7 @@ export type ListProps = {
   /**
    * The type of the list. Each kind supports specific list items
    * (IP addresses, ASNs, hostnames, or redirects). Cannot be changed after
-   * creation — updating this property triggers a replacement.
+   * creation -- updating this property triggers a replacement.
    */
   kind: ListKind;
   /**
@@ -205,7 +205,7 @@ export type ListAttributes = {
 export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
 
 /**
- * A Cloudflare account-level List (Lists API) — a named collection of IP
+ * A Cloudflare account-level List (Lists API) -- a named collection of IP
  * addresses, ASNs, hostnames, or URL redirects referenced from ruleset
  * expressions (`ip.src in $my_list`) and Bulk Redirect rules.
  *
@@ -349,7 +349,7 @@ export const ListProvider = () =>
         const observed = yield* getListById(acct, output.listId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. List names are unique per account, so an exact match
       // is authoritative.
       const name = yield* createListName(id, olds?.name);
@@ -362,18 +362,18 @@ export const ListProvider = () =>
       // resource if the generator's output for this id ever drifts.
       const name = yield* createListName(id, news.name ?? output?.name);
 
-      // Observe — the listId cached on `output` is a hint, not a guarantee:
+      // Observe -- the listId cached on `output` is a hint, not a guarantee:
       // a missing list falls through to "missing" and ensure recreates.
       let observed = output?.listId
         ? yield* getListById(output.accountId ?? accountId, output.listId)
         : undefined;
       const acct = observed ? (output?.accountId ?? accountId) : accountId;
 
-      // Ensure — create when missing. A duplicate-name conflict is a race
+      // Ensure -- create when missing. A duplicate-name conflict is a race
       // (or an out-of-band create): adopt the existing list with that name
       // when its kind matches. When the kind differs the list cannot be
       // converged in place (kind is immutable and names are unique), so the
-      // stale list is deleted and recreated — this is how a replacement of
+      // stale list is deleted and recreated -- this is how a replacement of
       // an explicitly-named list lands, since a create-first replacement
       // would always collide on the name.
       if (!observed) {
@@ -399,7 +399,7 @@ export const ListProvider = () =>
         );
       }
 
-      // Sync description — diff observed cloud state against desired and
+      // Sync description -- diff observed cloud state against desired and
       // skip the API call entirely on a no-op.
       if ((observed.description ?? undefined) !== news.description) {
         observed = yield* rules.updateList({
@@ -409,7 +409,7 @@ export const ListProvider = () =>
         });
       }
 
-      // Sync items — read the observed items fresh from the cloud, compare
+      // Sync items -- read the observed items fresh from the cloud, compare
       // against the desired set (keyed on value fields + comment, ignoring
       // server-assigned ids/timestamps), and on any delta replace the full
       // contents via the asynchronous bulk PUT, polling it to completion.
@@ -424,7 +424,7 @@ export const ListProvider = () =>
         yield* awaitBulkOperation(acct, operationId);
       }
 
-      // Return — re-read so eventually-consistent counters (numItems) and
+      // Return -- re-read so eventually-consistent counters (numItems) and
       // timestamps are as fresh as possible.
       const final = yield* getListById(acct, observed.id);
       return toAttributes(final ?? observed, acct);

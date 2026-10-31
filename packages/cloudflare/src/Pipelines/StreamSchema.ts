@@ -235,7 +235,7 @@ const toItem = (ast: AST.AST, path: string): { item: StreamFieldItem; nullable: 
     }
     case "Objects": {
       if (ast.indexSignatures.length > 0 || ast.propertySignatures.length === 0) {
-        // Records and empty objects carry arbitrary keys — store as JSON.
+        // Records and empty objects carry arbitrary keys -- store as JSON.
         return { item: { type: "json" }, nullable: false };
       }
       return {
@@ -288,12 +288,12 @@ export const isEffectSchema = (value: unknown): value is Schema.Top => Schema.is
  * transformations (e.g. `NumberFromString`) map to their wire type, and
  * records are sent with `Schema.toCodecJson(schema)`:
  *
- * - `String` → `string`, `Boolean` → `bool`
- * - `Number` → `float64`, `Int` → `int64` (`int32` when bounded to 32 bits)
- * - `Date` → `timestamp`, `Uint8Array` → `binary`
- * - `Array` → `list`, `Struct` / `Class` → `struct`
- * - `Record` / `Unknown` / `Json` → `json`
- * - optional or nullable fields → `required: false`
+ * - `String` -> `string`, `Boolean` -> `bool`
+ * - `Number` -> `float64`, `Int` -> `int64` (`int32` when bounded to 32 bits)
+ * - `Date` -> `timestamp`, `Uint8Array` -> `binary`
+ * - `Array` -> `list`, `Struct` / `Class` -> `struct`
+ * - `Record` / `Unknown` / `Json` -> `json`
+ * - optional or nullable fields -> `required: false`
  *
  * Unions of different types, tuples and recursive schemas have no stream
  * representation and throw {@link StreamSchemaUnsupported}. Override any

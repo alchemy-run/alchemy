@@ -138,7 +138,7 @@ export interface FrameworkSiteProps {
   app?: Ref<App>;
   /**
    * Process environment for the hosted server. Not Cloudflare Worker
-   * bindings — values become Machine env vars. Accepts `Output`s
+   * bindings -- values become Machine env vars. Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
   env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
@@ -278,7 +278,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   }
 
   // The build runs at APPLY time (`Website.Server` is a resource), so its
-  // attributes are Outputs here — derive every deploy input lazily and let
+  // attributes are Outputs here -- derive every deploy input lazily and let
   // the engine resolve them once the build has produced real paths. Reading
   // `build.distDir` eagerly in the composite body would observe an Output
   // proxy, not a string.
@@ -325,7 +325,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
 
   // SPA: hashed `/assets` at Tigris. HTML and unknown paths stay on
   // origin (NodeServe `notFoundHandling: "spa"`). Intercepting `/` with
-  // Tigris hangs SPA fallbacks — Fly does not rewrite `/counter/42` to
+  // Tigris hangs SPA fallbacks -- Fly does not rewrite `/counter/42` to
   // `index.html`.
   let statics:
     | Output.Output<
@@ -435,7 +435,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
  *
  * Composite-level tagged errors (`FrameworkSiteError`, filesystem) are
- * defects — `Alchemy.Stack` only admits `ConfigError` on the user
+ * defects -- `Alchemy.Stack` only admits `ConfigError` on the user
  * effect, same as Cloudflare/AWS Website composites.
  */
 export const makeFrameworkSite = (

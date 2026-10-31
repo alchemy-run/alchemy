@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetTextDetection` — get the results of an asynchronous text detection job started by StartTextDetection.
+ * Runtime binding for `rekognition:GetTextDetection` -- get the results of an asynchronous text detection job started by StartTextDetection.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetTextDetection` on `*` (Rekognition data-plane resources such

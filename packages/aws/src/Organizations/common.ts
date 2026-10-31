@@ -8,9 +8,9 @@ import * as Schedule from "effect/Schedule";
 /**
  * Distilled decodes `smithy.api#sensitive` strings (`Name`, `Email`,
  * `MasterAccountEmail`) into `Redacted.Redacted<string>` at runtime.
- * Attributes and equality checks must unwrap first — comparing the wrapper
+ * Attributes and equality checks must unwrap first -- comparing the wrapper
  * against a plain string is always `false` and would persist
- * `{ "__redacted__": … }` into state.
+ * `{ "__redacted__": ... }` into state.
  */
 export const unredact = (
   value: string | Redacted.Redacted<string> | undefined,

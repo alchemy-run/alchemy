@@ -39,7 +39,7 @@ export interface EntryProps {
   description?: string;
   /**
    * The custom DLP profile to attach the entry to at create time.
-   * Immutable — changing it triggers a replacement.
+   * Immutable -- changing it triggers a replacement.
    */
   profileId?: string;
 }
@@ -62,7 +62,7 @@ export type EntryAttributes = {
 export type Entry = Resource<TypeId, EntryProps, EntryAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust **DLP custom entry** — a standalone regular-
+ * A Cloudflare Zero Trust **DLP custom entry** -- a standalone regular-
  * expression detection that can be attached to a custom DLP profile.
  * Use it when entries are managed independently of the
  * {@link Profile} that groups them.
@@ -106,7 +106,7 @@ export const EntryProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The profile association is set at create time only — replace
+      // The profile association is set at create time only -- replace
       // when it changes.
       const oldProfileId = output?.profileId ?? olds?.profileId;
       if (oldProfileId !== undefined && oldProfileId !== news.profileId) {
@@ -155,7 +155,7 @@ export const EntryProvider = () =>
       // 1. Observe.
       const observed = output?.entryId ? yield* observeEntry(accountId, output.entryId) : undefined;
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* zeroTrust.createDlpEntryCustom({
           accountId,
@@ -168,7 +168,7 @@ export const EntryProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — PUT the full desired state when the observed state
+      // 3. Sync -- PUT the full desired state when the observed state
       //    differs; skip the call on a no-op.
       const dirty =
         observed.name !== name ||

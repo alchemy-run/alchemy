@@ -26,25 +26,25 @@ import {
 
 export type MattersSavedQueryProps = {
   /**
-   * Parent matter id. Immutable — changing it replaces the saved query.
+   * Parent matter id. Immutable -- changing it replaces the saved query.
    */
   matterId: string;
   /**
-   * Server-assigned saved query id. Leave blank on create. Immutable —
+   * Server-assigned saved query id. Leave blank on create. Immutable --
    * changing it replaces the saved query.
    */
   savedQueryId?: string;
   /**
    * Display name (max 100 characters including Alchemy's ownership
    * marker). Vault saved queries have no labels field, so ownership is
-   * stored in a `[alchemy …]` prefix and stripped from attributes. Vault
-   * has no saved-query update API — changing the name replaces the
+   * stored in a `[alchemy ...]` prefix and stripped from attributes. Vault
+   * has no saved-query update API -- changing the name replaces the
    * query.
    */
   displayName?: string;
   /**
    * Search parameters. Required on create. Vault has no saved-query
-   * update API — changing the query replaces the saved query.
+   * update API -- changing the query replaces the saved query.
    */
   query: vault.Query;
 };
@@ -74,7 +74,7 @@ export type MattersSavedQuery = Resource<
  * A Google Vault saved query on a matter.
  *
  * Vault saved queries have no labels field, so Alchemy stamps ownership
- * into `displayName` for `list` / nuke. There is no update API — changing
+ * into `displayName` for `list` / nuke. There is no update API -- changing
  * the query or display name replaces the saved query (delete-first).
  *
  * ### Creating a Saved Query

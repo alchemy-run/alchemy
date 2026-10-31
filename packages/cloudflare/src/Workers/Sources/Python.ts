@@ -14,17 +14,17 @@ import { bundleSource, resolveMainPath, watchBundleDirectory } from "./shared.ts
 
 /**
  * Whether a Worker `main` entry points at a Python module. Python Workers
- * skip the rolldown pipeline entirely — Cloudflare interprets `.py` sources
+ * skip the rolldown pipeline entirely -- Cloudflare interprets `.py` sources
  * directly with Pyodide, so the "bundle" is just the source files plus the
  * vendored `python_modules/` directory.
  *
  * The parameter is `unknown` on purpose. `getCompatibility` reaches this from
  * `WorkerProvider.precreate`, which is handed *raw, unresolved* props so
- * resources in a dependency cycle can signal early — and `main` is an
+ * resources in a dependency cycle can signal early -- and `main` is an
  * `Input`, so it can legitimately be an `Output` there (e.g. an entry path
  * derived from a `Command.Build` output). An unresolved Output is a callable
  * Proxy: it passes a `!== undefined` guard, `.split` yields another proxy,
- * and calling it returns `undefined` — so a value-shaped check explodes with
+ * and calling it returns `undefined` -- so a value-shaped check explodes with
  * a bare `TypeError`. Narrowing on `typeof === "string"` keeps the predicate
  * total: an unresolved `main` is simply not Python yet, and `reconcile`
  * re-derives compatibility from fully resolved props.
@@ -36,7 +36,7 @@ export const isPythonMain = (main: unknown): main is string =>
  * The Pyodide cross-compilation targets uv understands, keyed by the Python
  * version the Workers runtime selects from the compatibility date/flags.
  * The wheel index does not have to match the exact Pyodide release the
- * runtime uses — only the ABI (emscripten-wasm32) must be compatible.
+ * runtime uses -- only the ABI (emscripten-wasm32) must be compatible.
  * Mirrors pywrangler (cloudflare/workers-py `pywrangler/utils.py`).
  */
 const PYODIDE_TARGETS = {
@@ -56,7 +56,7 @@ const PYTHON_3_13_DEFAULT_ON = "2025-09-29";
 
 /**
  * The Python version the Workers runtime will use for the given
- * compatibility settings — the same selection pywrangler performs.
+ * compatibility settings -- the same selection pywrangler performs.
  */
 export const pythonVersionForCompatibility = (compatibility: {
   date: string;
@@ -85,7 +85,7 @@ const MANAGED_SDK_PACKAGE = "workers-runtime-sdk";
 
 export interface PythonWorkerBundleOptions {
   id: string;
-  /** Namespace-qualified id — the display prefix for log lines. */
+  /** Namespace-qualified id -- the display prefix for log lines. */
   fqn: string;
   /** Path (or `file://` URL) to the Worker's `.py` entry module. */
   main: string;
@@ -116,7 +116,7 @@ const runUv = Effect.fn(function* (
   ).pipe(
     Effect.mapError(
       uvError(
-        "Failed to run `uv` — Python Workers use uv (>= 0.8.10) to vendor " +
+        "Failed to run `uv` \u2014 Python Workers use uv (>= 0.8.10) to vendor " +
           "dependencies for Pyodide. Install it from https://docs.astral.sh/uv/ " +
           "and re-run.",
       ),
@@ -141,7 +141,7 @@ const runUv = Effect.fn(function* (
  *   optional `pyproject.toml` are vendored with uv into a staging directory
  *   under `.alchemy/`:
  *   resolve against the Pyodide wheel index for the runtime's Python
- *   version (`uv pip compile` → `pylock.toml`), install the prebuilt
+ *   version (`uv pip compile` -> `pylock.toml`), install the prebuilt
  *   wheels into an emscripten cross-venv (`uv venv` + `uv pip install
  *   --no-build`), and copy the venv's `site-packages` out. Re-vendoring
  *   is skipped while the `pyproject.toml` hash is unchanged.
@@ -201,7 +201,7 @@ const resolvePythonModulesDir = Effect.fn(function* (
 
   // 1. Resolve to a pylock.toml against the Pyodide wheel index. `--no-build`
   //    restricts the resolution to prebuilt (pure-Python or emscripten) wheels
-  //    — building a Pyodide-platformed wheel locally is not possible.
+  //    -- building a Pyodide-platformed wheel locally is not possible.
   const lockfile = path.join(staging, "pylock.toml");
   yield* runUv(
     [
@@ -280,13 +280,13 @@ const globFiles = (
   }).pipe(Effect.map((names) => names.map((name) => name.replaceAll("\\", "/")).sort()));
 
 /**
- * Read a Python Worker "bundle" from disk. There is no compilation step —
+ * Read a Python Worker "bundle" from disk. There is no compilation step --
  * the output is:
  *
  * 1. the entry module (first, so it becomes `main_module`), then every
  *    other `.py` file under the entry's directory, read as text;
  * 2. every file of the resolved `python_modules/` directory (vendored
- *    wheels), read as bytes and named `python_modules/<relpath>` —
+ *    wheels), read as bytes and named `python_modules/<relpath>` --
  *    Wrangler's vendored-module layout, which both the upload API and
  *    workerd resolve at runtime.
  */
@@ -378,7 +378,7 @@ export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
   });
 
 /**
- * Source provider for Python workers (`.py` entry): no bundling — the
+ * Source provider for Python workers (`.py` entry): no bundling -- the
  * entry plus sibling `.py` files upload as Python modules with
  * dependencies vendored via uv. The read is cached per run under the
  * shared `"build"` artifact key so diff and reconcile vendor once.

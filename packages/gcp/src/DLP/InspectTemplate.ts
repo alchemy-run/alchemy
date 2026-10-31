@@ -30,7 +30,7 @@ export type InspectTemplateProps = {
    * Template id (the `{inspectTemplate}` segment of
    * `projects/{project}/inspectTemplates/{inspectTemplate}`). If omitted,
    * a unique name is generated. Must match `[a-zA-Z0-9_-]+` and is at most
-   * 100 characters. Immutable — changing it replaces the template.
+   * 100 characters. Immutable -- changing it replaces the template.
    */
   templateId?: string;
   /**
@@ -40,7 +40,7 @@ export type InspectTemplateProps = {
   /**
    * Human-readable description (max 256 characters). Inspect templates
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -85,7 +85,7 @@ export type InspectTemplate = Resource<
  * A project-scoped Cloud DLP inspect template.
  *
  * Templates have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Template id is identity — changing it
+ * description for `list` / nuke. Template id is identity -- changing it
  * replaces the template. Display name, description, and inspect config
  * update in place.
  *

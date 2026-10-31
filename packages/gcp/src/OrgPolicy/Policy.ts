@@ -91,13 +91,13 @@ export type PolicyProps = {
   /**
    * Constraint this policy configures, e.g. `compute.disableSerialPortAccess`
    * or `constraints/compute.disableSerialPortAccess`. The `constraints/`
-   * prefix is stripped. Immutable — changing it replaces the policy.
+   * prefix is stripped. Immutable -- changing it replaces the policy.
    */
   constraint: string;
   /**
    * Parent resource: `projects/{project}`, `folders/{folder}`, or
    * `organizations/{organization}`. Defaults to the stack's GCP project.
-   * Immutable — changing it replaces the policy. Responses may rewrite a
+   * Immutable -- changing it replaces the policy. Responses may rewrite a
    * project id to the equivalent project number.
    */
   parent?: string;
@@ -141,7 +141,7 @@ export type Policy = Resource<
 /**
  * A Google Cloud Organization Policy on a project, folder, or organization.
  *
- * Identity is `(parent, constraint)` — the constraint must already exist
+ * Identity is `(parent, constraint)` -- the constraint must already exist
  * (built-in or custom). Organization policies have no labels or description
  * field; Alchemy treats existence at the computed name as ownership, and
  * `list` returns every policy set on the current project so `pnpm nuke:gcp`
@@ -467,7 +467,7 @@ export const PolicyProvider = () =>
       const name = output?.name ?? resourceName(parent, constraint);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      // No labels/description — existence at (parent, constraint) is ownership.
+      // No labels/description -- existence at (parent, constraint) is ownership.
       return toAttrs(existing, env.project);
     }),
 

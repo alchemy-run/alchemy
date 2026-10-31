@@ -6,7 +6,7 @@ import type { Redis } from "./Redis.ts";
 /**
  * Bind a {@link Redis} database with read access (`get`, `ping`).
  *
- * `ReadRedis` is the Context tag, the type, and the callable —
+ * `ReadRedis` is the Context tag, the type, and the callable --
  * `yield* Railway.ReadRedis(Cache)`. Provide {@link ReadRedisHttp}.
  *
  *

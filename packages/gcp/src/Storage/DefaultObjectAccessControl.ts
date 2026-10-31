@@ -17,13 +17,13 @@ import {
 export type DefaultObjectAccessControlProps = {
   /**
    * Name of the bucket whose default object ACL this entry belongs to.
-   * Immutable — changing it replaces the entry.
+   * Immutable -- changing it replaces the entry.
    */
   bucketName: string;
   /**
    * Principal granted the role on newly created objects. Forms include
    * `user-{email}`, `group-{email}`, `domain-{domain}`, `allUsers`, and
-   * `allAuthenticatedUsers`. Immutable — changing it replaces the entry.
+   * `allAuthenticatedUsers`. Immutable -- changing it replaces the entry.
    */
   entity: string;
   /**

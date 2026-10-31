@@ -16,7 +16,7 @@ export interface RecognizeUtteranceRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `lex:RecognizeUtterance` — send user text or audio to
+ * Runtime binding for `lex:RecognizeUtterance` -- send user text or audio to
  * an Amazon Lex V2 bot alias. Unlike `RecognizeText`, the response's
  * `messages`/`sessionState`/`interpretations` come back gzip-compressed and
  * base64-encoded, and an `audioStream` reply is available for voice bots.
@@ -27,7 +27,7 @@ export interface RecognizeUtteranceRequest extends Omit<
  * // init
  * const recognizeUtterance = yield* AWS.LexV2.RecognizeUtterance(alias);
  *
- * // runtime — response fields are gzip+base64; decode before use
+ * // runtime -- response fields are gzip+base64; decode before use
  * const reply = yield* recognizeUtterance({
  *   localeId: "en_US",
  *   sessionId: "user-123",

@@ -277,7 +277,7 @@ export function bindContainer(
 
 /**
  * Run a {@link Container} as a sidecar and reach one of its ports
- * directly — for a protocol other than HTTP, such as Redis or Postgres.
+ * directly -- for a protocol other than HTTP, such as Redis or Postgres.
  * See {@link bindContainer}.
  *
  * ### Binding a port

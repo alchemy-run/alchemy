@@ -8,16 +8,16 @@ import type { Rule } from "./Rule.ts";
  * events.
  *
  * Bind this operation to a {@link Rule} inside a function runtime to get a
- * callable that re-enables the rule — the runtime half of a feature toggle
+ * callable that re-enables the rule -- the runtime half of a feature toggle
  * or kill switch. Provide the `EnableRuleHttp` layer on the Function to
  * satisfy the binding.
  * ### Toggling Rules
  * **Example:** Re-enable the Bound Rule
  * ```typescript
- * // init — bind the rule (provide AWS.EventBridge.EnableRuleHttp on the Function)
+ * // init -- bind the rule (provide AWS.EventBridge.EnableRuleHttp on the Function)
  * const enableRule = yield* AWS.EventBridge.EnableRule(rule);
  *
- * // runtime — turn event routing back on
+ * // runtime -- turn event routing back on
  * yield* enableRule();
  * ```
  *

@@ -25,14 +25,14 @@ export type MonitoredResource = {
 export type SecurityMonitoringConditionProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the condition.
+   * Immutable -- changing it replaces the condition.
    */
   organization?: string;
   /**
    * Condition id (the `{security_monitoring_condition}` segment of
    * `organizations/{org}/securityMonitoringConditions/{id}`). If
-   * omitted, a unique `alc-` prefixed name is generated. 4–63
-   * characters, lowercase letters and hyphens. Immutable — changing it
+   * omitted, a unique `alc-` prefixed name is generated. 4-63
+   * characters, lowercase letters and hyphens. Immutable -- changing it
    * replaces the condition.
    */
   securityMonitoringConditionId?: string;
@@ -110,7 +110,7 @@ export type SecurityMonitoringCondition = Resource<
  *
  * Conditions have no labels or description. Generated ids are prefixed
  * `alc-` so `list` / nuke can distinguish Alchemy rows from
- * Google-defined conditions. Organization and id are identity —
+ * Google-defined conditions. Organization and id are identity --
  * changing them replaces the condition. Profile, scope, include, and
  * include-all update in place.
  *

@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Administration
  * **Example:** Revoke The Delegated Administrator
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disableOrganizationAdminAccount =
  *   yield* AWS.Detective.DisableOrganizationAdminAccount();
  *

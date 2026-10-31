@@ -6,7 +6,7 @@ import type { Monitor } from "./Monitor.ts";
 export interface StopQueryRequest extends Omit<im.StopQueryInput, "MonitorName"> {}
 
 /**
- * Runtime binding for `internetmonitor:StopQuery` — cancel an in-progress
+ * Runtime binding for `internetmonitor:StopQuery` -- cancel an in-progress
  * query on the bound {@link Monitor}; the monitor name is injected
  * automatically.
  *
@@ -15,7 +15,7 @@ export interface StopQueryRequest extends Omit<im.StopQueryInput, "MonitorName">
  * ### Querying Measurements
  * **Example:** Cancel a Running Query
  * ```typescript
- * // init — grants internetmonitor:StopQuery on the monitor
+ * // init -- grants internetmonitor:StopQuery on the monitor
  * const stopQuery = yield* AWS.InternetMonitor.StopQuery(monitor);
  *
  * // runtime

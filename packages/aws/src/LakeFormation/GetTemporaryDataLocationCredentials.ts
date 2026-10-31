@@ -19,7 +19,7 @@ export interface GetTemporaryDataLocationCredentialsRequest
  * ### Vending Data Access Credentials
  * **Example:** Vend Location-Scoped S3 Credentials
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getLocationCredentials =
  *   yield* AWS.LakeFormation.GetTemporaryDataLocationCredentials();
  *

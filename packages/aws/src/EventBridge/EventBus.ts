@@ -27,7 +27,7 @@ export interface EventBusProps {
   /**
    * Name of the event bus. Must match [/\.\-_A-Za-z0-9]+, 1-256 characters.
    * If omitted, a unique name will be generated.
-   * Cannot be "default" — use the default event bus by omitting eventBusName on rules.
+   * Cannot be "default" -- use the default event bus by omitting eventBusName on rules.
    */
   name?: EventBusName;
 
@@ -210,7 +210,7 @@ export const EventBusProvider = () =>
           Effect.gen(function* () {
             // Enumerate every event bus in the ambient account/region via
             // manual NextToken pagination (listEventBuses is not a paginated
-            // distilled op). The AWS-managed `default` bus is excluded — the
+            // distilled op). The AWS-managed `default` bus is excluded -- the
             // EventBus resource cannot manage it (name "default" is reserved).
             const attrs: {
               eventBusName: EventBusName;
@@ -251,7 +251,7 @@ export const EventBusProvider = () =>
                 ...(news.tags as Record<string, string> | undefined),
               };
 
-              // Observe — fetch live cloud state. We don't trust `output`
+              // Observe -- fetch live cloud state. We don't trust `output`
               // blindly: a bus deleted out of band shows up as missing and we
               // recreate. Foreign-tagged buses have already been screened by
               // `read` upstream.
@@ -261,7 +261,7 @@ export const EventBusProvider = () =>
                 })
                 .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-              // Ensure — create the bus if missing. Tolerate
+              // Ensure -- create the bus if missing. Tolerate
               // `ResourceAlreadyExistsException` as a race with a peer
               // reconciler: re-read and continue with the sync path.
               if (!described?.Arn) {
@@ -286,7 +286,7 @@ export const EventBusProvider = () =>
                   .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               }
 
-              // Sync mutable bus configuration — `updateEventBus` overwrites
+              // Sync mutable bus configuration -- `updateEventBus` overwrites
               // `description`, KMS key, DLQ, and log config in one shot, so we
               // call it unconditionally (idempotent for matching values).
               yield* eventbridge.updateEventBus({
@@ -299,7 +299,7 @@ export const EventBusProvider = () =>
                 LogConfig: news.logConfig,
               });
 
-              // Sync tags — diff observed cloud tags against desired. Adoption
+              // Sync tags -- diff observed cloud tags against desired. Adoption
               // may bring us a bus with its own tag set; diffing against the
               // freshly-fetched tags lets the reconciler converge regardless.
               const observedTagsList = yield* eventbridge
@@ -404,12 +404,12 @@ export const EventBusProvider = () =>
                   nextToken = page.NextToken;
                 } while (nextToken);
               }).pipe(
-                // Bus already gone (or vanishes mid-sweep) — nothing to sweep.
+                // Bus already gone (or vanishes mid-sweep) -- nothing to sweep.
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               );
 
               // The sweep and EventBridge's own bookkeeping are eventually
-              // consistent — a just-deleted rule can still count against the bus
+              // consistent -- a just-deleted rule can still count against the bus
               // for a few seconds. Retry the typed dependency violation on a
               // bounded schedule.
               yield* eventbridge
@@ -423,7 +423,7 @@ export const EventBusProvider = () =>
                     times: 10,
                   }),
                   // Bus already gone (deleted out-of-band, or a previous
-                  // destroy partially succeeded) — delete is idempotent.
+                  // destroy partially succeeded) -- delete is idempotent.
                   Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                 );
             }),

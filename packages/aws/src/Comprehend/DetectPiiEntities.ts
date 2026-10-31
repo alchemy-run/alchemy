@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectPiiEntities` — locate personally
- * identifiable information (names, addresses, bank account numbers, …) in
+ * Runtime binding for `comprehend:DetectPiiEntities` -- locate personally
+ * identifiable information (names, addresses, bank account numbers, ...) in
  * the input text, with entity type, score, and character offsets.
  *
  * The binding takes no arguments and grants the action on `*` (the action
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "My name is Jane Doe and my email is jane@example.com.",
  *   LanguageCode: "en",
  * });
- * // result.Entities: [{ Type: "NAME", BeginOffset: 11, … }, { Type: "EMAIL", … }]
+ * // result.Entities: [{ Type: "NAME", BeginOffset: 11, ... }, { Type: "EMAIL", ... }]
  * ```
  *
  * @binding

@@ -35,7 +35,7 @@ export interface ServiceDnsRecord {
 
 export interface ServiceProps {
   /**
-   * Name of the service — for DNS namespaces this becomes the DNS label
+   * Name of the service -- for DNS namespaces this becomes the DNS label
    * (`{name}.{namespace}`). Changing the name replaces the service.
    * @default a generated DNS-compatible physical name
    */
@@ -57,7 +57,7 @@ export interface ServiceProps {
   dnsRecords?: ServiceDnsRecord[];
   /**
    * How Route 53 responds to DNS queries: `MULTIVALUE` returns up to eight
-   * healthy records, `WEIGHTED` returns one. Create-only — changing it
+   * healthy records, `WEIGHTED` returns one. Create-only -- changing it
    * replaces the service.
    * @default "MULTIVALUE"
    */
@@ -75,7 +75,7 @@ export interface ServiceProps {
     failureThreshold?: number;
   };
   /**
-   * Custom health checking — instance health is pushed via
+   * Custom health checking -- instance health is pushed via
    * `UpdateInstanceCustomHealthStatus` instead of probed by Route 53.
    * Create-only: it cannot be added, changed, or removed after creation, so
    * any change replaces the service.
@@ -86,12 +86,12 @@ export interface ServiceProps {
   };
   /**
    * Set to `"HTTP"` to force API-only discovery even inside a DNS namespace.
-   * Create-only — changing it replaces the service.
+   * Create-only -- changing it replaces the service.
    */
   type?: "HTTP";
   /**
    * Custom service-level attributes (up to 30 key/value pairs) stored on the
-   * service and readable at runtime via `GetServiceAttributes`. Mutable —
+   * service and readable at runtime via `GetServiceAttributes`. Mutable --
    * reconcile diffs the observed attributes against this map, upserting
    * changed keys and deleting keys no longer declared.
    */
@@ -132,7 +132,7 @@ export interface Service extends Resource<
 > {}
 
 /**
- * An AWS Cloud Map service — a named entry in a namespace that instances
+ * An AWS Cloud Map service -- a named entry in a namespace that instances
  * register against. For DNS namespaces, Cloud Map creates the configured DNS
  * records per registered instance; every service is also queryable via the
  * `DiscoverInstances` API. This is what ECS `serviceRegistries[].registryArn`
@@ -367,7 +367,7 @@ export const ServiceProvider = () =>
           if (olds.type !== news.type) {
             return { action: "replace" } as const;
           }
-          // description / record TTLs / healthCheckConfig / tags → update
+          // description / record TTLs / healthCheckConfig / tags -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -375,10 +375,10 @@ export const ServiceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           let service = yield* observeService(news.namespaceId, name, output?.serviceId);
 
-          // 2. ENSURE — createService is synchronous
+          // 2. ENSURE -- createService is synchronous
           if (service === undefined) {
             service = yield* sd
               .createService({
@@ -400,7 +400,7 @@ export const ServiceProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.Service),
-                // a concurrent reconciler created it — observe instead
+                // a concurrent reconciler created it -- observe instead
                 Effect.catchTag("ServiceAlreadyExists", (e) =>
                   e.ServiceId !== undefined
                     ? sd.getService({ Id: e.ServiceId }).pipe(Effect.map((r) => r.Service))
@@ -414,7 +414,7 @@ export const ServiceProvider = () =>
             });
           }
 
-          // 3. SYNC — description / DNS record TTLs / health check config.
+          // 3. SYNC -- description / DNS record TTLs / health check config.
           // UpdateService deletes DnsRecords/HealthCheckConfig omitted from
           // the change, so we always send the FULL desired configuration and
           // only skip the call when observed already matches desired.
@@ -449,7 +449,7 @@ export const ServiceProvider = () =>
             }
           }
 
-          // 3b. SYNC SERVICE ATTRIBUTES — diff OBSERVED custom attributes
+          // 3b. SYNC SERVICE ATTRIBUTES -- diff OBSERVED custom attributes
           // against the desired map; upsert changed keys, delete undeclared
           const observedAttributes: { [key: string]: string | undefined } = yield* sd
             .getServiceAttributes({ ServiceId: service.Id })
@@ -477,7 +477,7 @@ export const ServiceProvider = () =>
             });
           }
 
-          // 3c. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3c. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(service.Arn);
           yield* syncTags(service.Arn, observedTags, desiredTags);
 
@@ -495,13 +495,13 @@ export const ServiceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // OBSERVE — instances registered at runtime (RegisterInstance
+          // OBSERVE -- instances registered at runtime (RegisterInstance
           // binding) block DeleteService; deregister any that remain and
           // await the async operations before deleting.
           yield* deregisterAllInstances(output.serviceId).pipe(
             Effect.catchTag("ServiceNotFound", () => Effect.void),
           );
-          // deregistrations still propagating surface as ResourceInUse —
+          // deregistrations still propagating surface as ResourceInUse --
           // retry through the visibility window (bounded)
           yield* retryWhileResourceInUse(sd.deleteService({ Id: output.serviceId })).pipe(
             Effect.catchTag("ServiceNotFound", () => Effect.void),

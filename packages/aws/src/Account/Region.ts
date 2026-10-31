@@ -27,7 +27,7 @@ export interface RegionProps {
   regionName: string;
   /**
    * Whether the Region should be opted in (enabled) for the account. Regions
-   * that are `ENABLED_BY_DEFAULT` cannot be disabled — attempting to disable
+   * that are `ENABLED_BY_DEFAULT` cannot be disabled -- attempting to disable
    * one fails with a `ValidationException`.
    */
   enabled: boolean;
@@ -67,7 +67,7 @@ export interface Region extends Resource<
  * minutes; reconcile waits (bounded) for the transition to settle and records
  * the observed status either way. Disabling a Region removes all IAM access
  * to resources in it, so destroying this resource intentionally does NOT
- * disable the Region — it only stops managing it (set `enabled: false`
+ * disable the Region -- it only stops managing it (set `enabled: false`
  * explicitly to opt out).
  *
  * ### Managing Region Opt-In
@@ -83,7 +83,7 @@ export interface Region extends Resource<
  * ```typescript
  * const region = yield* Account.Region("UsEast1", {
  *   regionName: "us-east-1",
- *   enabled: true, // ENABLED_BY_DEFAULT — reconcile makes no API mutation
+ *   enabled: true, // ENABLED_BY_DEFAULT -- reconcile makes no API mutation
  * });
  * ```
  *
@@ -110,7 +110,7 @@ export const RegionProvider = () =>
 
       // Region opt-in/out is asynchronous (typically a few minutes). Wait,
       // bounded, for an in-flight transition to settle; if it is still
-      // transitioning after the budget, return the transitional status —
+      // transitioning after the budget, return the transitional status --
       // re-running reconcile converges.
       const settle = (regionName: string, accountId: string | undefined) =>
         observe(regionName, accountId).pipe(
@@ -128,7 +128,7 @@ export const RegionProvider = () =>
       });
 
       return {
-        // Disabling a Region removes IAM access to everything in it — far too
+        // Disabling a Region removes IAM access to everything in it -- far too
         // destructive for an automatic nuke of an account-global setting.
         nuke: { skip: true },
         stables: [],
@@ -158,14 +158,14 @@ export const RegionProvider = () =>
                 AccountId: news.accountId,
               })
               .pipe(
-                // A concurrent transition already in flight — settle below
+                // A concurrent transition already in flight -- settle below
                 // observes whatever it converges to.
                 Effect.catchTag("ConflictException", () => Effect.void),
               );
             status = yield* settle(news.regionName, news.accountId);
           } else if (!news.enabled && isEnabledStatus(status)) {
             // Disabling an ENABLED_BY_DEFAULT Region is rejected by AWS with
-            // a typed ValidationException — let it propagate.
+            // a typed ValidationException -- let it propagate.
             yield* account
               .disableRegion({
                 RegionName: news.regionName,
@@ -178,7 +178,7 @@ export const RegionProvider = () =>
           return toAttributes(news.regionName, status);
         }),
         // Enumerate the opt-in Regions (every status except
-        // ENABLED_BY_DEFAULT — default Regions are not manageable slots).
+        // ENABLED_BY_DEFAULT -- default Regions are not manageable slots).
         list: () =>
           account.listRegions
             .items({

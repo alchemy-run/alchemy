@@ -12,13 +12,13 @@ export interface GetEffectivePermissionsForPathRequest
  * Runtime binding for `lakeformation:GetEffectivePermissionsForPath`.
  *
  * Returns the Lake Formation permissions in effect for the databases and
- * tables stored under a registered S3 path — an authorization audit for a
+ * tables stored under a registered S3 path -- an authorization audit for a
  * data location. Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.GetEffectivePermissionsForPathHttp)`.
  * ### Auditing Permissions
  * **Example:** Audit Permissions on a Registered Location
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getEffectivePermissions =
  *   yield* AWS.LakeFormation.GetEffectivePermissionsForPath();
  *

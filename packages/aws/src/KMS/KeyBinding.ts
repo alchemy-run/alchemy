@@ -12,7 +12,7 @@ import type { Key } from "./Key.ts";
  * alias and the IAM policy is scoped with the `kms:RequestAlias` condition
  * key, so the role can only use keys through that exact alias.
  *
- * @internal shared scaffolding for the KMS crypto bindings — not exported
+ * @internal shared scaffolding for the KMS crypto bindings -- not exported
  * from the service index.
  */
 export type KeyLike = Key | AliasName;
@@ -21,8 +21,8 @@ export type KeyLike = Key | AliasName;
  * Build the least-privilege IAM policy statement for a KMS crypto operation
  * against a {@link KeyLike} target.
  *
- * - `Key` resource → `Resource` is the exact key ARN.
- * - alias name → `Resource: "*"` constrained by the `kms:RequestAlias`
+ * - `Key` resource -> `Resource` is the exact key ARN.
+ * - alias name -> `Resource: "*"` constrained by the `kms:RequestAlias`
  *   condition, AWS's documented pattern for alias-scoped access. The runtime
  *   caller must (and does) address the key by that alias.
  *

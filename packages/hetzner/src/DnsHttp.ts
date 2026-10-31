@@ -8,7 +8,7 @@ import type { Zone } from "./Zone.ts";
  * Shared scaffolding for the HTTP-backed Hetzner DNS bindings.
  *
  * Hetzner Cloud tokens are project-scoped (`HCLOUD_TOKEN`) and issued
- * read-write or read-only — there is no per-permission token API. This
+ * read-write or read-only -- there is no per-permission token API. This
  * layer captures the ambient credentials available during stack-eval and
  * builds a {@link DnsAuth} that provides them to distilled RRSet ops. The
  * zone is fixed at `bind(zone)` time so callers never pass `id_or_name`.

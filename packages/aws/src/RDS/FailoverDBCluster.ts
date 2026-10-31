@@ -7,14 +7,14 @@ import type { DBCluster } from "./DBCluster.ts";
  * Runtime binding for the `FailoverDBCluster` operation (IAM action
  * `rds:FailoverDBCluster`).
  *
- * Forces a failover of the bound {@link DBCluster} — promotes a reader to
+ * Forces a failover of the bound {@link DBCluster} -- promotes a reader to
  * writer, e.g. for chaos testing or AZ evacuation. The cluster identifier
  * is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.FailoverDBClusterHttp)`.
  * ### Operating a Cluster
  * **Example:** Force a Failover
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const failoverDBCluster = yield* AWS.RDS.FailoverDBCluster(cluster);
  *
  * // runtime

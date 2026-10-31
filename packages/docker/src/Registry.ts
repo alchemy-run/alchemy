@@ -82,7 +82,7 @@ export const publishedRepoDigest = (
  *
  * Docker only reports `Created` when the image config carries a creation time:
  * API >= 1.44 omits it, older APIs backfill the year-1 zero value
- * (`0001-01-01T00:00:00Z`), and 25.0.0–25.0.3 returned an empty string. In any
+ * (`0001-01-01T00:00:00Z`), and 25.0.0-25.0.3 returned an empty string. In any
  * of those cases there is no real build time, so we fall back to the wall clock.
  */
 export const parseCreatedAt = (created: string | undefined): number => {

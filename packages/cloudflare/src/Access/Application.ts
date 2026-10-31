@@ -31,7 +31,7 @@ export class ApplicationUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * Application type literal — every value Cloudflare's Access service
+ * Application type literal -- every value Cloudflare's Access service
  * recognises. Stable across reconciles; changing it triggers a replacement.
  */
 export type ApplicationType =
@@ -50,19 +50,19 @@ export type ApplicationType =
  * A destination that this Access application protects.
  *
  * Cloudflare supports these destination flavours:
- * - `public` — a public hostname/URI you own in Cloudflare (the legacy
+ * - `public` -- a public hostname/URI you own in Cloudflare (the legacy
  *   `domain` field on `ApplicationProps` covers the simple case).
- * - `private` — a hostname or CIDR reachable through a Cloudflare Tunnel.
+ * - `private` -- a hostname or CIDR reachable through a Cloudflare Tunnel.
  *   Traffic from WARP-enrolled devices is intercepted and forwarded
  *   through the tunnel; identity is enforced before forwarding.
- * - `via_mcp_server_portal` — routes via a managed MCP server portal.
- * - `worker` / `preview_worker` — a specific Cloudflare Worker's production
+ * - `via_mcp_server_portal` -- routes via a managed MCP server portal.
+ * - `worker` / `preview_worker` -- a specific Cloudflare Worker's production
  *   traffic (custom domains, routes, `workers.dev`) or its version preview
  *   URLs, keyed by the Worker's immutable ID (its `workerId` attribute).
- *   Usually you don't write these by hand — set the `access` prop on the
+ *   Usually you don't write these by hand -- set the `access` prop on the
  *   `Cloudflare.Worker` instead, and the Worker enrolls itself into the
  *   application.
- * - `all_workers` / `all_preview_workers` — every Worker on the account
+ * - `all_workers` / `all_preview_workers` -- every Worker on the account
  *   (including ones created later), production or preview traffic
  *   respectively. Hostname-level policies take precedence over Worker-level
  *   policies, which take precedence over these account-level policies.
@@ -133,11 +133,11 @@ export type CorsHeaders = zeroTrust.AccessApplicationsCreateRequestCorsHeaders;
 export interface InlineApplicationPolicy {
   /** The action Access takes when a user matches this policy. */
   decision: PolicyDecision;
-  /** Rules evaluated with OR — matching any one grants the policy. */
+  /** Rules evaluated with OR -- matching any one grants the policy. */
   include: ReadonlyArray<PolicyRuleInput>;
-  /** Rules evaluated with NOT — matching any one denies the policy. */
+  /** Rules evaluated with NOT -- matching any one denies the policy. */
   exclude?: ReadonlyArray<PolicyExcludeRuleInput>;
-  /** Rules evaluated with AND — all must match. */
+  /** Rules evaluated with AND -- all must match. */
   require?: ReadonlyArray<PolicyRequireRuleInput>;
   /** Display name. Cloudflare generates one when omitted. */
   name?: string;
@@ -164,8 +164,8 @@ export interface InlineApplicationPolicy {
 export interface ApplicationProps {
   /**
    * Cloudflare id of an existing application to manage. The first deploy
-   * takes that application over — keeping its `aud` — instead of creating a
-   * new one. The application must exist — a missing id fails the deploy
+   * takes that application over -- keeping its `aud` -- instead of creating a
+   * new one. The application must exist -- a missing id fails the deploy
    * with `DeclaredApplicationNotFound` instead of creating one. Changing
    * the id replaces the resource.
    */
@@ -177,7 +177,7 @@ export interface ApplicationProps {
    * provider's observe step special-cases this by scanning the account for an
    * existing `warp` app when no `applicationId` is cached.
    *
-   * Immutable — changing the type triggers a replace.
+   * Immutable -- changing the type triggers a replace.
    */
   type: ApplicationType;
   /**
@@ -196,13 +196,13 @@ export interface ApplicationProps {
   domain?: string;
   /**
    * Destinations this application protects. Use for the modern multi-
-   * destination model — required for **Access for private apps** flows
+   * destination model -- required for **Access for private apps** flows
    * where traffic to a private hostname/CIDR is intercepted by WARP and
    * routed through a Cloudflare Tunnel, with Access enforcing identity
    * before the request reaches the upstream service.
    *
    * For simple public-hostname apps, set `domain` instead. The two are
-   * not mutually exclusive — Cloudflare treats `domain` as a shorthand
+   * not mutually exclusive -- Cloudflare treats `domain` as a shorthand
    * for adding a single `{ type: "public" }` destination.
    *
    * @example
@@ -293,7 +293,7 @@ export interface ApplicationProps {
    * order of precedence.
    *
    * Each entry can be:
-   * - an **inline policy** owned by this application —
+   * - an **inline policy** owned by this application --
    *   `{ decision, include, ... }` with the same rule model as
    *   `Cloudflare.Access.Policy` (created, updated, and deleted with the
    *   application; no separate resource needed),
@@ -306,7 +306,7 @@ export interface ApplicationProps {
    *   `purposeJustificationPrompt`, `sessionDuration`, `approvalGroups`).
    *
    * Cloudflare treats inline and reusable policies as mutually exclusive on
-   * one application — mixing the two forms fails validation.
+   * one application -- mixing the two forms fails validation.
    *
    * If omitted, the application's live policies are left as they are. Pass
    * `[]` to detach them.
@@ -383,7 +383,7 @@ export interface ApplicationAttributes {
  * Data other resources attach to an Access application via bindings.
  * Workers enrolling themselves (the `access` prop on `Cloudflare.Worker`)
  * push their `worker`/`preview_worker` destinations here; the application
- * deploys with — and converges on — the union of its own `destinations`
+ * deploys with -- and converges on -- the union of its own `destinations`
  * prop and every bound contribution.
  */
 export interface ApplicationBinding {
@@ -500,7 +500,7 @@ export type Application = Resource<
  * ### Protecting Cloudflare Workers
  * **Example:** Require Access on a specific Worker
  * ```typescript
- * // The application owns the policies (inline here — no separate Policy
+ * // The application owns the policies (inline here -- no separate Policy
  * // resource needed); the Worker enrolls itself via its `access` prop,
  * // covering its custom domains, routes, workers.dev URL, and version
  * // preview URLs.
@@ -514,13 +514,13 @@ export type Application = Resource<
  * export default class Api extends Cloudflare.Worker<Api>()("Api", {
  *   main: import.meta.url,
  *   access: { application: App },
- * }, /* ... *​/) {}
+ * }, /* ... *­/) {}
  * ```
  *
  * **Example:** Require Access on every Worker in the account
  * ```typescript
  * // Covers all current AND future Workers. Hostname-level policies beat
- * // Worker-level policies, which beat this account-level policy — so an
+ * // Worker-level policies, which beat this account-level policy -- so an
  * // individual Worker can still be opened up with its own application.
  * yield* Cloudflare.Access.Application("ProtectAllWorkers", {
  *   type: "self_hosted",
@@ -591,7 +591,7 @@ export const Application = Resource<Application>("Cloudflare.Access.Application"
 //   - `AccessReferenceNotFound` (400 `policy <id> not found`): Access
 //     validates referenced entities (e.g. the `policies` an application gates
 //     on) synchronously, but a *freshly created* policy propagates
-//     eventually-consistently — so a create/update referencing it, or a list
+//     eventually-consistently -- so a create/update referencing it, or a list
 //     hydrating an app that references it, is briefly rejected. Distilled
 //     types this 400 distinctly (vs. a generic `BadRequest`) so we retry only
 //     this case and still fail fast on real bad requests.
@@ -638,7 +638,7 @@ export const ApplicationProvider = () =>
 
       // Prefer the persisted physical id. After state loss there is no
       // applicationId to probe, so fall back to matching an existing app
-      // by domain — without this the engine plans a blind `create`, and
+      // by domain -- without this the engine plans a blind `create`, and
       // Cloudflare happily creates a second application on the same
       // domain with a fresh `aud`, silently breaking existing JWT
       // validation. Warp apps are excluded from the fallback: they are a
@@ -659,7 +659,7 @@ export const ApplicationProvider = () =>
         ...output,
         domain: output?.domain ?? olds?.domain,
       });
-      // Recovered by id → positively ours. Recovered by domain scan →
+      // Recovered by id -> positively ours. Recovered by domain scan ->
       // existence is certain but ownership is not (Access applications
       // carry no alchemy marker), so gate takeover behind `--adopt`.
       return knownId ? attrs : Unowned(attrs);
@@ -679,7 +679,7 @@ export const ApplicationProvider = () =>
         return yield* new ApplicationInvalidProps({
           message:
             "Cloudflare Access applications cannot mix inline policies with " +
-            "reusable policy references — use one form for the whole " +
+            "reusable policy references \u2014 use one form for the whole " +
             "`policies` list.",
         });
       }
@@ -708,7 +708,7 @@ export const ApplicationProvider = () =>
         });
       }
       if (!observed && news.type === "warp") {
-        // Warp is a singleton per account — reuse any existing app.
+        // Warp is a singleton per account -- reuse any existing app.
         observed = yield* findWarpApp(accountId);
       }
 
@@ -733,7 +733,7 @@ export const ApplicationProvider = () =>
           })
           .pipe(
             // A referenced policy may be propagating, or the call may be
-            // throttled (403) — ride out both before falling through.
+            // throttled (403) -- ride out both before falling through.
             retryTransientAccessError,
             // Distilled does not tag Conflict; surface any creation error
             // through the warp-singleton recovery path before re-failing.
@@ -750,7 +750,7 @@ export const ApplicationProvider = () =>
         observed = narrowApp(created as Parameters<typeof narrowApp>[0]);
       }
 
-      // 3. Sync — Cloudflare's update endpoint is PUT-style: anything missing
+      // 3. Sync -- Cloudflare's update endpoint is PUT-style: anything missing
       // from the body is reset. Start from the live application so settings
       // this resource does not manage survive, then apply the desired body.
       if (!observed.id) {
@@ -793,7 +793,7 @@ export const ApplicationProvider = () =>
             ...mergeSettings(observed, settingsOf(body)),
           })
           // A just-added policy reference may still be propagating, or the
-          // call may be throttled (403) — ride out both.
+          // call may be throttled (403) -- ride out both.
           .pipe(retryTransientAccessError);
         observed = narrowApp(updated as Parameters<typeof narrowApp>[0]);
       }
@@ -866,13 +866,13 @@ const resolveAllowedIdps = (
 // Cloudflare allows only one `warp` app per account. When we have no
 // cached applicationId, scan the account and reuse it. Requirements
 // (Credentials | HttpClient) are inferred and provided by the Provider
-// runtime — matches the un-annotated Tunnel.findTunnelByName pattern.
+// runtime -- matches the un-annotated Tunnel.findTunnelByName pattern.
 const findWarpApp = (accountId: string) =>
   zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
     Stream.runCollect,
     // A sibling app mid-teardown can transiently reject the whole
     // enumeration (AccessReferenceNotFound), and Cloudflare 403s when
-    // throttling — same transient windows `list` rides out.
+    // throttling -- same transient windows `list` rides out.
     retryTransientAccessError,
     Effect.map((chunk) =>
       Array.from(chunk).find((a) => (a as { type?: string | null }).type === "warp"),
@@ -905,7 +905,7 @@ const findByDomain = (accountId: string, domain: string) =>
 const observeById = (accountId: string, appId: string) =>
   Effect.gen(function* () {
     const r = yield* zeroTrust.getAccessApplicationForAccount({ accountId, appId }).pipe(
-      // A missing application is typed (404 → AccessApplicationNotFound):
+      // A missing application is typed (404 -> AccessApplicationNotFound):
       // observe falls through to recreate. Transient 403 back-pressure is
       // retried; anything else is a real failure and propagates.
       retryTransientAccessError,
@@ -1084,7 +1084,7 @@ const narrowApp = (raw: {
 // Inputs declared as `Input<string>` are concrete strings by the time the
 // reconciler runs (resolved by the Plan layer). We narrow them at the
 // resolution boundary, then build the request shape distilled already types
-// correctly — no cast-to-Parameters needed.
+// correctly -- no cast-to-Parameters needed.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1120,7 +1120,7 @@ type ResolvedPolicy =
 
 // The self-hosted policies item union: references (id string / link /
 // per-app overrides) plus application-owned inline policies
-// (`InlineAccessPolicy`, added to distilled's model — the API docs only
+// (`InlineAccessPolicy`, added to distilled's model -- the API docs only
 // carry the inline arm for infrastructure apps, but the live API accepts
 // it for self_hosted).
 type RequestPolicy =
@@ -1345,7 +1345,7 @@ const resolvePolicies = (
 ): ReadonlyArray<ResolvedPolicy> | undefined =>
   policies === undefined
     ? undefined
-    : // Inputs are concrete values here — the Plan layer resolved them
+    : // Inputs are concrete values here -- the Plan layer resolved them
       // before the reconciler ran. A whole `Access.Policy` resource resolves
       // to its Attributes; normalize it to the bare policy id so everything
       // downstream (diffing, request building) sees one shape.
@@ -1364,7 +1364,7 @@ const buildMutableBody = (
     type: news.type,
     name: resolvedName,
   };
-  // Warp apps cannot accept a user-supplied domain — Cloudflare derives it.
+  // Warp apps cannot accept a user-supplied domain -- Cloudflare derives it.
   if (news.type !== "warp" && news.domain !== undefined) {
     body.domain = news.domain;
   }
@@ -1472,7 +1472,7 @@ const policiesEq = (
       // Inline (application-owned) policy: compare the fields the caller
       // set against the observed policy body. Cloudflare echoes rule
       // objects structurally, so JSON equality is stable; getting this
-      // wrong is costly — a false inequality re-PUTs the policy list and
+      // wrong is costly -- a false inequality re-PUTs the policy list and
       // id-less inline items would mint fresh policies every deploy.
       if (o.reusable === true) return false;
       if (d.decision !== o.decision) return false;
@@ -1540,11 +1540,11 @@ const policiesEq = (
 
 /**
  * Zip desired inline policies with the observed application-owned policies
- * so an update PUT carries their ids and updates them in place — an id-less
+ * so an update PUT carries their ids and updates them in place -- an id-less
  * inline item in an update creates a brand-new policy (and drops the old
  * one), churning policy ids on every deploy that touches any app field.
  * Positional matching, guarded on `reusable === false` (never attach a
- * reusable policy's id to an inline body — that would mutate the shared
+ * reusable policy's id to an inline body -- that would mutate the shared
  * policy) and on a matching decision.
  */
 const attachObservedPolicyIds = (
@@ -1574,7 +1574,7 @@ const bodyEqualsObserved = (desired: AppMutableBody, observed: ObservedApp): boo
   if (desired.domain !== undefined && desired.domain !== observed.domain) {
     return false;
   }
-  // Same rule for destinations — Cloudflare may echo back an enriched
+  // Same rule for destinations -- Cloudflare may echo back an enriched
   // shape (e.g. server-assigned `vnetId`); we only diff when the caller
   // explicitly set them.
   if (

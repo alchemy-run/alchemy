@@ -22,9 +22,9 @@ export interface CreateParticipantTokenRequest extends Omit<
 
 /**
  * Mint a participant token that an end user presents to join the bound
- * stage — the effectful call made from a deployed Lambda or Task. The
+ * stage -- the effectful call made from a deployed Lambda or Task. The
  * `capabilities` field grants `PUBLISH` and/or `SUBSCRIBE` to the token
- * holder; `attributes` attaches profile data (display name, avatar, …) that
+ * holder; `attributes` attaches profile data (display name, avatar, ...) that
  * is visible to other participants. The returned `token` is sensitive and
  * surfaces as a `Redacted` value.
  *

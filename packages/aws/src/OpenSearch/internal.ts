@@ -66,7 +66,7 @@ export const domainEndpoint = (domain: opensearch.DomainStatus): string | undefi
  * its endpoint has been published. `Processing` can flip to `false` before
  * creation has fully finished (`DomainProcessingStatus` still `"Creating"`,
  * no `Endpoint` yet), so the processing status and the endpoint are both
- * required — otherwise the reconciler returns `endpoint: undefined` and every
+ * required -- otherwise the reconciler returns `endpoint: undefined` and every
  * data-plane binding resolves an empty endpoint.
  */
 export const isDomainActive = (domain: opensearch.DomainStatus | undefined): boolean =>

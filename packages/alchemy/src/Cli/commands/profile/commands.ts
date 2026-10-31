@@ -402,7 +402,7 @@ export const profileCommand = Command.make(
   instrumentCommand("profile")(
     Effect.fn(function* ({ envFile, main }) {
       if (!(yield* Interaction.Interaction).terminal.input) {
-        // No terminal to drive the hub — show the subcommand help instead,
+        // No terminal to drive the hub -- show the subcommand help instead,
         // which documents the flag-driven equivalents of every hub action.
         return yield* failWithHelp(["alchemy", "profile"]);
       }

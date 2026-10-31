@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:GetJob` — poll the status and full JSON
+ * Runtime binding for `mediaconvert:GetJob` -- poll the status and full JSON
  * of a submitted transcode job from runtime code.
  *
  * Job ids are server-assigned at runtime, so the binding takes no arguments

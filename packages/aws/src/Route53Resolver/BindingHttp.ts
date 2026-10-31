@@ -6,16 +6,16 @@ import type { ResolverRule } from "./ResolverRule.ts";
 /**
  * Shared scaffolding for AWS Route 53 Resolver HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action is
  * boilerplate:
  *
- * - {@link makeRoute53ResolverEndpointHttpBinding} — operations scoped to one
+ * - {@link makeRoute53ResolverEndpointHttpBinding} -- operations scoped to one
  *   bound {@link ResolverEndpoint}. The runtime callable injects the
  *   endpoint's ID as the request's `ResolverEndpointId`; the deploy-time half
  *   grants `actions` on the endpoint ARN.
- * - {@link makeRoute53ResolverRuleHttpBinding} — operations scoped to one
+ * - {@link makeRoute53ResolverRuleHttpBinding} -- operations scoped to one
  *   bound {@link ResolverRule}; injects `ResolverRuleId` and grants `actions`
  *   on the rule ARN.
  */

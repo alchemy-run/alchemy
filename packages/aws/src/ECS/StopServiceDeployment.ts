@@ -9,7 +9,7 @@ export interface StopServiceDeploymentRequest extends ECS.StopServiceDeploymentR
  * Runtime binding for `ecs:StopServiceDeployment`.
  *
  * Bind this operation to a `Service` inside a function runtime to get a
- * callable that stops an in-progress deployment of the bound service —
+ * callable that stops an in-progress deployment of the bound service --
  * either abandoning it or rolling back to the last completed revision.
  * The host is granted `ecs:StopServiceDeployment` on the service's
  * deployments.

@@ -6,7 +6,7 @@ import type { Monitor } from "./Monitor.ts";
 export interface GetQueryStatusRequest extends Omit<im.GetQueryStatusInput, "MonitorName"> {}
 
 /**
- * Runtime binding for `internetmonitor:GetQueryStatus` — check whether a
+ * Runtime binding for `internetmonitor:GetQueryStatus` -- check whether a
  * query started on the bound {@link Monitor} is `QUEUED`, `RUNNING`,
  * `SUCCEEDED`, `FAILED`, or `CANCELED`; the monitor name is injected
  * automatically.
@@ -16,7 +16,7 @@ export interface GetQueryStatusRequest extends Omit<im.GetQueryStatusInput, "Mon
  * ### Querying Measurements
  * **Example:** Poll a Query Until It Completes
  * ```typescript
- * // init — grants internetmonitor:GetQueryStatus on the monitor
+ * // init -- grants internetmonitor:GetQueryStatus on the monitor
  * const getQueryStatus = yield* AWS.InternetMonitor.GetQueryStatus(monitor);
  *
  * // runtime

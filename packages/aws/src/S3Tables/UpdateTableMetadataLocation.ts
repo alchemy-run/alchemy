@@ -16,7 +16,7 @@ export interface UpdateTableMetadataLocationRequest extends Omit<
  * Runtime binding for the `UpdateTableMetadataLocation` operation (IAM
  * action `s3tables:UpdateTableMetadataLocation` on the table ARN).
  *
- * Commits a new Iceberg metadata file for the bound {@link Table} — the
+ * Commits a new Iceberg metadata file for the bound {@link Table} -- the
  * write half of the Iceberg commit protocol: read the current version with
  * {@link GetTableMetadataLocation}, write a new metadata file into the
  * table's warehouse, then commit it here with the observed `versionToken`.
@@ -33,10 +33,10 @@ export interface UpdateTableMetadataLocationRequest extends Omit<
  *
  * const { versionToken, warehouseLocation } =
  *   yield* getTableMetadataLocation();
- * // ... write `${warehouseLocation}/metadata/00001-….metadata.json` ...
+ * // ... write `${warehouseLocation}/metadata/00001-....metadata.json` ...
  * yield* updateTableMetadataLocation({
  *   versionToken,
- *   metadataLocation: `${warehouseLocation}/metadata/00001-….metadata.json`,
+ *   metadataLocation: `${warehouseLocation}/metadata/00001-....metadata.json`,
  * });
  * ```
  *

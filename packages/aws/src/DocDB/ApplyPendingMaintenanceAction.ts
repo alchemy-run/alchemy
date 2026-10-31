@@ -4,12 +4,12 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `ApplyPendingMaintenanceAction` operation (IAM
- * action `rds:ApplyPendingMaintenanceAction` — DocumentDB shares the RDS
+ * action `rds:ApplyPendingMaintenanceAction` -- DocumentDB shares the RDS
  * control plane).
  *
  * Opts a DocumentDB cluster or instance into a pending maintenance action
  * (`system-update`, `db-upgrade`, `ca-certificate-rotation`) immediately or
- * at the next maintenance window — the apply half of maintenance
+ * at the next maintenance window -- the apply half of maintenance
  * automation. The target is an ARN carried in the request, so the grant
  * spans the account. Provide the implementation with
  * `Effect.provide(AWS.DocDB.ApplyPendingMaintenanceActionHttp)`.

@@ -14,25 +14,25 @@ type TypeId = typeof TypeId;
 /**
  * Which URLs Cloudflare normalizes.
  *
- * - `"incoming"` — normalize the URLs used for rule matching only
+ * - `"incoming"` -- normalize the URLs used for rule matching only
  *   (Cloudflare's zone default).
- * - `"both"` — additionally normalize the URLs forwarded to the origin.
- * - `"none"` — disable URL normalization entirely.
+ * - `"both"` -- additionally normalize the URLs forwarded to the origin.
+ * - `"none"` -- disable URL normalization entirely.
  */
 export type UrlNormalizationScope = "incoming" | "both" | "none";
 
 /**
  * Which normalization algorithm Cloudflare applies.
  *
- * - `"cloudflare"` — RFC 3986 normalization plus Cloudflare's extra
+ * - `"cloudflare"` -- RFC 3986 normalization plus Cloudflare's extra
  *   normalizations (e.g. collapsing `//` sequences). The zone default.
- * - `"rfc3986"` — strict RFC 3986 normalization only.
+ * - `"rfc3986"` -- strict RFC 3986 normalization only.
  */
 export type Type = "cloudflare" | "rfc3986";
 
 export interface Props {
   /**
-   * Zone whose URL normalization is managed. Stable — changing the zone
+   * Zone whose URL normalization is managed. Stable -- changing the zone
    * triggers a replacement (the old zone's URL normalization is reset to
    * Cloudflare defaults as the old instance deletes).
    */
@@ -42,7 +42,7 @@ export interface Props {
    * for rule matching only, `"both"` also normalizes URLs sent to the
    * origin, `"none"` disables normalization.
    *
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    *
    * @default "incoming"
    */
@@ -52,7 +52,7 @@ export interface Props {
    * `"cloudflare"` is RFC 3986 plus extra normalizations (e.g. `//`
    * collapsing), `"rfc3986"` is strict RFC 3986 only.
    *
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    *
    * @default "cloudflare"
    */
@@ -72,7 +72,7 @@ export type UrlNormalization = Resource<TypeId, Props, Attributes, never, Provid
 
 /**
  * The URL normalization configuration of a Cloudflare zone
- * (`/zones/{zone_id}/url_normalization`) — a zone-scoped **singleton**
+ * (`/zones/{zone_id}/url_normalization`) -- a zone-scoped **singleton**
  * controlling how Cloudflare normalizes incoming URLs before rule matching
  * and before forwarding to the origin.
  *
@@ -135,7 +135,7 @@ export const UrlNormalizationProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its URL normalization (every zone
       // has one).
       const allZones = yield* listAllZones(accountId);
@@ -178,7 +178,7 @@ export const UrlNormalizationProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       // The setting is a singleton that always exists with Cloudflare
-      // defaults — there is nothing to "own", so a cold read adopts freely
+      // defaults -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). A dead zone reads as gone.
       const observed = yield* urlNormalization
         .getUrlNormalization({ zoneId })
@@ -193,10 +193,10 @@ export const UrlNormalizationProvider = () =>
       const desiredScope = news.scope ?? DEFAULT_SCOPE;
       const desiredType = news.type ?? DEFAULT_TYPE;
 
-      // 1. Observe — the singleton always exists on a live zone.
+      // 1. Observe -- the singleton always exists on a live zone.
       const observed = yield* urlNormalization.getUrlNormalization({ zoneId });
 
-      // 2. Sync — PUT is a full replace of { scope, type }; skip the API
+      // 2. Sync -- PUT is a full replace of { scope, type }; skip the API
       //    entirely when the observed configuration already matches.
       if (observed.scope === desiredScope && observed.type === desiredType) {
         return toAttributes(zoneId, observed);
@@ -210,7 +210,7 @@ export const UrlNormalizationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // True reset operation — returns the zone to Cloudflare defaults.
+      // True reset operation -- returns the zone to Cloudflare defaults.
       // Idempotent: resetting an already-default zone succeeds, and a dead
       // zone is treated as already reset.
       yield* urlNormalization

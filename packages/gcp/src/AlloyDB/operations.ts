@@ -2,7 +2,7 @@ import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import * as Effect from "effect/Effect";
 import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
-/** AlloyDB cluster and instance creates take 15–30 minutes. */
+/** AlloyDB cluster and instance creates take 15-30 minutes. */
 const OPERATION_BUDGET = "45 minutes";
 
 /**

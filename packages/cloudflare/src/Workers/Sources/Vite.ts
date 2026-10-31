@@ -71,7 +71,7 @@ const makeViteLogger = (context: Context.Context<never>): vite.Logger => {
  * need the Cloudflare plugin in their `vite.config.ts`. Without a guard,
  * an Alchemy-orchestrated run instantiates that config-file instance
  * *alongside* the injected one: two same-named plugin stacks whose
- * cross-plugin API lookups resolve by name, and — in dev — two workerd
+ * cross-plugin API lookups resolve by name, and -- in dev -- two workerd
  * runtimes, only one of which carries the Worker's bindings. Guarding on
  * this variable lets the config-file instance stand down:
  *
@@ -85,11 +85,11 @@ const makeViteLogger = (context: Context.Context<never>): vite.Logger => {
  * The variable is set process-locally by `viteDev`/`viteBuild`, so it is
  * correct regardless of which process hosts Vite (`alchemy dev` runs the
  * dev server in the spawned local-provider host, not in the process that
- * evaluates the user's alchemy.run.ts — an env variable set there never
+ * evaluates the user's alchemy.run.ts -- an env variable set there never
  * reaches the config).
  *
  * Contract: the value is `"1"` while the process is Alchemy-orchestrated;
- * absence means not injected. It is deliberately never unset — Vite
+ * absence means not injected. It is deliberately never unset -- Vite
  * re-evaluates the app config on dev-server restarts long after
  * `viteDev` returned, and concurrent `viteBuild`s in one process would
  * race a save/restore. A process that ran an Alchemy build never also
@@ -111,10 +111,10 @@ export const viteDev = (
     const vite = yield* Effect.promise(() => loadVite(rootDir));
     // `port: 0` is a true OS-assigned random port on Vite >= 8.2.1
     // (vitejs/vite#23158); older Vite treats it as "no port given" and
-    // hunts upward from the 5173 default — colliding with (or
+    // hunts upward from the 5173 default -- colliding with (or
     // IPv6-shadowing) user-facing dev ports. Substitute a probed
     // ephemeral port there; `strictPort: false` handles the small
-    // probe→bind race by moving to the next ephemeral port.
+    // probe->bind race by moving to the next ephemeral port.
     const server =
       serverOptions.port === 0 && !viteSupportsPortZero(vite.version)
         ? {
@@ -159,7 +159,7 @@ type ViteWorkerBuildOutput = ViteBuildOutput & {
  * The child boundary is what makes concurrent builds safe: vite resolves a
  * relative root against live `process.cwd()`, plugins read cwd freely, and
  * build-time spawns chdir the hosting process transiently (cross-spawn's
- * PATH resolution) — so an in-process build both breaks under and causes
+ * PATH resolution) -- so an in-process build both breaks under and causes
  * cwd races when the engine runs builds concurrently.
  */
 export const viteBuild = (
@@ -198,7 +198,7 @@ export const viteBuild = (
 /**
  * The in-process build implementation. ONLY safe inside the dedicated
  * build child (`ViteBuildChildRunner.ts`), whose cwd is the project root
- * and which hosts no concurrent work — never call it from the engine
+ * and which hosts no concurrent work -- never call it from the engine
  * process (see {@link viteBuild}).
  */
 export const viteBuildInProcess = (
@@ -220,9 +220,9 @@ export const viteBuildInProcess = (
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
           customLogger: makeViteLogger(context),
-          // Disables the NATIVE rolldown progress reporter ("transforming…",
-          // "rendering chunks…", "computing gzip size…"): it prints from
-          // Rust straight to fd 1 and cannot be intercepted from JS — vite
+          // Disables the NATIVE rolldown progress reporter ("transforming...",
+          // "rendering chunks...", "computing gzip size..."): it prints from
+          // Rust straight to fd 1 and cannot be intercepted from JS -- vite
           // only enables it when logLevel >= info. Info-level build
           // summaries are suppressed with it; warnings and errors still
           // reach the customLogger above.
@@ -249,7 +249,7 @@ export const viteBuildInProcess = (
 // Emulate `vite build` env semantics for `props.env`: only
 // keys with Vite's default `VITE_` prefix are inlined into
 // the bundle as `import.meta.env.*`. `Redacted` values are
-// unwrapped — by prefixing with `VITE_` the user is opting
+// unwrapped -- by prefixing with `VITE_` the user is opting
 // them into the public bundle.
 const getDefine = (env: Record<string, unknown>) =>
   Object.fromEntries(
@@ -298,20 +298,20 @@ const resolveViteEnv = (env: Record<string, unknown>, selfUrl: string | undefine
               ? value
               : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
                 ? Redacted.value(value)
-                : // `Worker.URL` (bare tag or called) — resolved to this
+                : // `Worker.URL` (bare tag or called) -- resolved to this
                   // Worker's own URL. The bare tag is Effect-shaped, so
                   // check before `Effect.isEffect`.
                   isSelfUrl(value)
                   ? selfUrl
                   : // A `WorkerLoader` is a real Effect that also carries
-                    // the `~alchemy/Kind` marker — it is a binding, not a
+                    // the `~alchemy/Kind` marker -- it is a binding, not a
                     // runnable env value. Check it before `Effect.isEffect`
                     // so we don't execute it as an inlined env entry.
                     isWorkerLoader(value)
                     ? undefined
                     : // A `Cloudflare.Container` declaration is likewise
                       // Effect-shaped but is a binding (DO namespace +
-                      // ContainerApplication) — yielding it would resolve
+                      // ContainerApplication) -- yielding it would resolve
                       // the started-instance tag, which only exists inside
                       // a Durable Object (#997).
                       isContainerDecl(value)
@@ -326,7 +326,7 @@ const resolveViteEnv = (env: Record<string, unknown>, selfUrl: string | undefine
   });
 
 /**
- * Hash the vite project's input tree (root + workspaces + lockfiles) —
+ * Hash the vite project's input tree (root + workspaces + lockfiles) --
  * the rebuild-free change signal for the `input` hash slot.
  */
 export const hashViteInput = Effect.fn(function* <E, R>(
@@ -338,8 +338,8 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   // Resolved once: every workspace cwd is relative to the Vite root, so
   // the root must be an absolute base. Resolving it per call and passing
   // `rootDir` as its own cwd would apply a relative root twice
-  // (`path.resolve("app", "app")` → `<cwd>/app/app`), hashing a
-  // directory that doesn't exist — a constant hash that never registers
+  // (`path.resolve("app", "app")` -> `<cwd>/app/app`), hashing a
+  // directory that doesn't exist -- a constant hash that never registers
   // an edit, so the deploy no-ops forever. See issue #1016. Anchored to
   // the initial cwd so a transient chdir can't skew the resolution.
   const resolvedRoot = path.resolve(initialCwd, rootDir);
@@ -351,7 +351,7 @@ export const hashViteInput = Effect.fn(function* <E, R>(
     hashDirectory({ cwd: path.resolve(resolvedRoot, cwd), memo }).pipe(
       Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
     );
-  // `"."` — the root itself, never re-applied on top of itself.
+  // `"."` -- the root itself, never re-applied on top of itself.
   const hashRoot = hashWorkspaceDirectory(".", options);
   if (Array.isArray(options?.workspaces)) {
     return yield* Effect.all(
@@ -378,7 +378,7 @@ export const hashViteInput = Effect.fn(function* <E, R>(
 /**
  * Source provider for vite-based workers (`props.vite`, set by
  * `Website.Vite`): the vite builder produces the client assets and the
- * server bundle in one pass; diff never builds — the `input` hash over
+ * server bundle in one pass; diff never builds -- the `input` hash over
  * the project tree is the change signal.
  *
  * This module is the lazy-import boundary for the vite toolchain (see
@@ -399,7 +399,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         // root. The rolldown plugin resolves the worker entry with no
         // importer (i.e. against `process.cwd()`), which breaks when the
         // deploy runs from a different directory (e.g. a monorepo infra
-        // package) — absolutize before handing it over (#796).
+        // package) -- absolutize before handing it over (#796).
         // A package export or virtual module (`vike:server`) goes to Vite
         // as is.
         main: vite.main

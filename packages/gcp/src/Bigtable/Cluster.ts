@@ -36,7 +36,7 @@ export type AutoscalingLimits = {
 
 export type AutoscalingTargets = {
   /**
-   * Target CPU utilization percent (`10`–`80`).
+   * Target CPU utilization percent (`10`-`80`).
    */
   cpuUtilizationPercent?: number;
   /**
@@ -62,7 +62,7 @@ export type EncryptionConfig = {
   /**
    * Cloud KMS key
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Must be in the same region as the cluster. Immutable — changing it
+   * Must be in the same region as the cluster. Immutable -- changing it
    * replaces the cluster.
    */
   kmsKeyName?: string;
@@ -72,7 +72,7 @@ export type ClusterResourceProps = {
   /**
    * Parent instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the cluster.
    */
   instance: string;
@@ -81,18 +81,18 @@ export type ClusterResourceProps = {
    * `projects/{project}/instances/{instance}/clusters/{cluster}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 6-30 characters and match
-   * `[a-z][-a-z0-9]*`. Immutable — changing it replaces the cluster.
+   * `[a-z][-a-z0-9]*`. Immutable -- changing it replaces the cluster.
    */
   clusterId?: string;
   /**
    * Zone where nodes and storage reside (e.g. `us-central1-b`). Full
    * location names `projects/{project}/locations/{zone}` are accepted.
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    * @default "us-central1-b"
    */
   location?: string;
   /**
-   * Storage type used by this cluster (`SSD` or `HDD`). Immutable —
+   * Storage type used by this cluster (`SSD` or `HDD`). Immutable --
    * changing it replaces the cluster.
    * @default "SSD"
    */
@@ -105,11 +105,11 @@ export type ClusterResourceProps = {
    */
   serveNodes?: number;
   /**
-   * Node scaling factor. Immutable — changing it replaces the cluster.
+   * Node scaling factor. Immutable -- changing it replaces the cluster.
    */
   nodeScalingFactor?: bigtable.ClusterNodeScalingFactorEnum | (string & {});
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * cluster.
    */
   encryptionConfig?: EncryptionConfig;
@@ -134,7 +134,7 @@ export type Cluster = Resource<
     instanceId: string;
     /** Project id. */
     project: string;
-    /** Zone id (`us-central1-b`, …). */
+    /** Zone id (`us-central1-b`, ...). */
     location: string;
     /** Storage type (`SSD`, `HDD`). */
     defaultStorageType: string | undefined;
@@ -146,7 +146,7 @@ export type Cluster = Resource<
     encryptionConfig: EncryptionConfig | undefined;
     /** Cluster configuration currently applied. */
     clusterConfig: ClusterConfig | undefined;
-    /** Server-reported state (`READY`, `CREATING`, `RESIZING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, `RESIZING`, ...). */
     state: string | undefined;
   },
   never,
@@ -154,7 +154,7 @@ export type Cluster = Resource<
 >;
 
 /**
- * A Cloud Bigtable cluster — a resizable group of nodes in one zone
+ * A Cloud Bigtable cluster -- a resizable group of nodes in one zone
  * that serves every table in the parent instance.
  *
  * An instance always has at least one cluster (created with the

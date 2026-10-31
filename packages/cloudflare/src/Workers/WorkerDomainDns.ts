@@ -5,7 +5,7 @@ import * as Output from "alchemy/Output";
 import { defaultProviderMode } from "alchemy/ProviderMode";
 /**
  * `Cloudflare.Worker` custom domains whose DNS lives outside Cloudflare
- * (Route 53, Hetzner DNS, …), served through Cloudflare for SaaS.
+ * (Route 53, Hetzner DNS, ...), served through Cloudflare for SaaS.
  *
  * A native Worker custom domain only works for a hostname in a Cloudflare
  * zone of the account. For any other DNS host, each hostname becomes a
@@ -31,7 +31,7 @@ import type { WorkerDomainConfig, WorkerProps, WorkerRouteConfig } from "./Worke
 
 /**
  * A Worker's `domain` cannot be served through Cloudflare for SaaS as
- * configured — the SaaS zone or `cnameTarget` is missing, or it uses an
+ * configured -- the SaaS zone or `cnameTarget` is missing, or it uses an
  * option (`redirects`, `previews`) that only native custom domains
  * support. Raised as a defect while the stack program is being built,
  * before anything is deployed.
@@ -134,12 +134,12 @@ const composeSaasDomain = (
     const via = `\`domain.dns\` is "${dns.type}" (served through Cloudflare for SaaS)`;
     if ((domain.redirects?.length ?? 0) > 0) {
       return yield* fail(
-        `\`domain.redirects\` is not supported when ${via} — redirect rules need the hostname in a Cloudflare zone. Serve the redirect hostnames from the Worker, or move their DNS to Cloudflare.`,
+        `\`domain.redirects\` is not supported when ${via} \u2014 redirect rules need the hostname in a Cloudflare zone. Serve the redirect hostnames from the Worker, or move their DNS to Cloudflare.`,
       );
     }
     if (domain.previews === true) {
       return yield* fail(
-        `\`domain.previews\` is not supported when ${via} — Worker Previews need a native custom domain in a Cloudflare zone.`,
+        `\`domain.previews\` is not supported when ${via} \u2014 Worker Previews need a native custom domain in a Cloudflare zone.`,
       );
     }
     const cnameTarget = domain.cnameTarget;
@@ -152,7 +152,7 @@ const composeSaasDomain = (
     for (const hostname of hostnames) {
       if (typeof hostname !== "string") {
         return yield* fail(
-          `domain hostnames must be plain strings when ${via} — each one names its own resources.`,
+          `domain hostnames must be plain strings when ${via} \u2014 each one names its own resources.`,
         );
       }
     }
@@ -230,7 +230,7 @@ const resolveSaasZoneId = (
     }
     if (typeof name !== "string") {
       return yield* fail(
-        `a zone name given as an Output cannot be looked up while the stack is built — pass the zone id (\`domain.zoneId\`) or the \`Cloudflare.Zone.Zone\` resource (\`domain.zone\`).`,
+        `a zone name given as an Output cannot be looked up while the stack is built \u2014 pass the zone id (\`domain.zoneId\`) or the \`Cloudflare.Zone.Zone\` resource (\`domain.zone\`).`,
       );
     }
     const { accountId } = yield* yield* CloudflareEnvironment;

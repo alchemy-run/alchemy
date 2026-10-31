@@ -141,7 +141,7 @@ export interface ScheduledAction extends Resource<
 export const ScheduledAction = Resource<ScheduledAction>("AWS.AutoScaling.ScheduledAction");
 
 // A whole AutoScalingGroup resource resolves to its bare Attributes before
-// reaching the provider — narrow on the attributes shape, never on `Type`.
+// reaching the provider -- narrow on the attributes shape, never on `Type`.
 const toAutoScalingGroupName = (
   input: ScheduledActionProps["autoScalingGroup"] | undefined,
 ): string | undefined =>
@@ -253,7 +253,7 @@ export const ScheduledActionProvider = () =>
           }
           const scheduledActionName = output?.scheduledActionName ?? (yield* toName(id, news));
 
-          // Ensure + Sync — `putScheduledUpdateGroupAction` is the single
+          // Ensure + Sync -- `putScheduledUpdateGroupAction` is the single
           // create-or-update API. It overwrites the whole action, so we issue
           // it unconditionally (idempotent on matching params).
           yield* autoscaling.putScheduledUpdateGroupAction({
@@ -286,7 +286,7 @@ export const ScheduledActionProvider = () =>
           return toAttributes(action);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // `deleteScheduledAction` is idempotent — a missing action returns
+          // `deleteScheduledAction` is idempotent -- a missing action returns
           // success. Retry only the transient contention fault.
           yield* autoscaling
             .deleteScheduledAction({

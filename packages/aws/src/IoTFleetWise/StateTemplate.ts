@@ -83,12 +83,12 @@ export interface StateTemplate extends Resource<
 > {}
 
 /**
- * An AWS IoT FleetWise state template — a definition of which signals'
+ * An AWS IoT FleetWise state template -- a definition of which signals'
  * last-known state the Edge Agent reports for a {@link Vehicle}
  * (associated via the vehicle's `stateTemplates` prop).
  *
  * Only the description, tracked properties, and extra dimensions are
- * mutable — changing the name or signal catalog replaces the template.
+ * mutable -- changing the name or signal catalog replaces the template.
  * AWS IoT FleetWise is allowlist-gated and offered in
  * `us-east-1`/`eu-central-1` only.
  * ### Creating a State Template
@@ -177,10 +177,10 @@ export const StateTemplateProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readTemplate(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createStateTemplate({
@@ -270,7 +270,7 @@ export const StateTemplateProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteStateTemplate is idempotent — deleting a missing template
+          // DeleteStateTemplate is idempotent -- deleting a missing template
           // succeeds (its error union carries no not-found tag).
           yield* iotfleetwise
             .deleteStateTemplate({ identifier: output.stateTemplateName })

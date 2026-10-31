@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export type SettingsProps = {
   /**
-   * Zone whose waiting room settings are managed. Stable — changing the
+   * Zone whose waiting room settings are managed. Stable -- changing the
    * zone triggers a replacement (the old zone's settings are restored to
    * the value they had before Alchemy managed them).
    */
@@ -46,7 +46,7 @@ export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never
  * Zone-wide Cloudflare Waiting Room settings
  * (`/zones/{zone_id}/waiting_rooms/settings`).
  *
- * The settings object is a zone singleton — it always exists with
+ * The settings object is a zone singleton -- it always exists with
  * Cloudflare defaults, so this resource never creates or deletes anything
  * physical. Reconcile PUTs the settings when the observed value differs
  * from the desired one; destroy restores the value the zone had before
@@ -94,7 +94,7 @@ export const SettingsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its settings (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -102,7 +102,7 @@ export const SettingsProvider = () =>
         (zoneId) =>
           waitingRooms.getSetting({ zoneId }).pipe(
             // A freshly-minted scoped token propagates eventually-
-            // consistently across Cloudflare's edge — ride out transient
+            // consistently across Cloudflare's edge -- ride out transient
             // 403 blips before giving up on a zone. The backoff is CAPPED at
             // 5s and bounded to ~8 attempts (~40s): an uncapped
             // `Schedule.exponential` reaches a 64s single delay by the 8th
@@ -123,7 +123,7 @@ export const SettingsProvider = () =>
               ),
             ),
             // Plan-gated or partial zones reject the route; a zone the token
-            // still can't read (persistent 403) isn't ours to enumerate —
+            // still can't read (persistent 403) isn't ours to enumerate --
             // skip both rather than failing the whole listing.
             Effect.catchTags({
               InvalidRoute: () => Effect.undefined,
@@ -150,11 +150,11 @@ export const SettingsProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* waitingRooms.getSetting({ zoneId }).pipe(
-        // Zone deleted out-of-band — the settings are gone with it.
+        // Zone deleted out-of-band -- the settings are gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
-      // The settings singleton always exists with a Cloudflare default —
+      // The settings singleton always exists with a Cloudflare default --
       // there is nothing to "own", so a cold read adopts freely. The
       // observed value at adoption time becomes the initial value restored
       // on destroy.
@@ -169,16 +169,16 @@ export const SettingsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the settings singleton always exists.
+      // 1. Observe -- the settings singleton always exists.
       const observed = yield* waitingRooms.getSetting({ zoneId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       const initial =
         output !== undefined
           ? output.initialSearchEngineCrawlerBypass
           : observed.searchEngineCrawlerBypass;
 
-      // 3. Sync — PUT only when the observed value differs.
+      // 3. Sync -- PUT only when the observed value differs.
       const desired = news.searchEngineCrawlerBypass ?? false;
       if (observed.searchEngineCrawlerBypass === desired) {
         return toAttributes(zoneId, observed.searchEngineCrawlerBypass, initial);
@@ -192,7 +192,7 @@ export const SettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialSearchEngineCrawlerBypass } = output;
-      // Observe — if the zone itself is gone, so are the settings.
+      // Observe -- if the zone itself is gone, so are the settings.
       const observed = yield* waitingRooms
         .getSetting({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));

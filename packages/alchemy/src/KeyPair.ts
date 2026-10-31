@@ -119,14 +119,14 @@ const generate = (
 export const KeyPairProvider = () =>
   Provider.succeed(KeyPair, {
     reconcile: Effect.fn(function* ({ news = {}, output }) {
-      // Observe — there is no remote state. The cached `output` is the
+      // Observe -- there is no remote state. The cached `output` is the
       // authoritative current value; once minted the keypair is preserved
       // across reconciles to keep it stable.
       if (output?.privateKey && output?.publicKey) {
         return output;
       }
 
-      // Ensure — no observed value: mint a fresh keypair. The next
+      // Ensure -- no observed value: mint a fresh keypair. The next
       // reconcile will see this in `output` and short-circuit above.
       const generated = yield* Effect.sync(() => generate(news));
       return {

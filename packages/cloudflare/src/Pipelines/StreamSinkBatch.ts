@@ -11,7 +11,7 @@ import { StreamSink, type StreamSinkClient } from "./StreamSink.ts";
 import { StreamSendError, WriteStream, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
- * Batch packing for {@link StreamSink}. Internal — not exported from the
+ * Batch packing for {@link StreamSink}. Internal -- not exported from the
  * Pipelines barrel.
  */
 

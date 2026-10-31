@@ -13,7 +13,7 @@ const encoder = new TextEncoder();
  * Map the `UnprocessedItems` echoed by `BatchWriteItem` back onto the
  * original batch entries, preserving input order. The response is
  * deserialized (identity is lost), so entries are matched by canonical JSON
- * as a multiset — DynamoDB rejects batches containing duplicate keys, so a
+ * as a multiset -- DynamoDB rejects batches containing duplicate keys, so a
  * multiset over serialized entries is unambiguous in practice. If any echoed
  * entry fails to match (e.g. key-order drift in the echo), fall back to the
  * echoed entries verbatim so nothing is ever silently dropped from the retry.
@@ -69,7 +69,7 @@ export const TableSinkHttp = Layer.effect(
         maxBytes: 16_777_216,
         sizeOf: (request) => encoder.encode(JSON.stringify(request)).length,
         send: (batch) => write({ RequestItems: { [table.LogicalId]: [...batch] } }),
-        // UnprocessedItems are transient (throttling, internal errors) —
+        // UnprocessedItems are transient (throttling, internal errors) --
         // re-submit them on the bounded schedule.
         unprocessed: (out, batch) => selectUnprocessed(out.UnprocessedItems, batch),
       });

@@ -17,9 +17,9 @@ export interface GroupResourceQuery {
   /**
    * The type of the query.
    *
-   * - `TAG_FILTERS_1_0` — a tag-based query; `query` is a JSON string with
+   * - `TAG_FILTERS_1_0` -- a tag-based query; `query` is a JSON string with
    *   `ResourceTypeFilters` and `TagFilters`.
-   * - `CLOUDFORMATION_STACK_1_0` — a CloudFormation stack-based query;
+   * - `CLOUDFORMATION_STACK_1_0` -- a CloudFormation stack-based query;
    *   `query` is a JSON string with `ResourceTypeFilters` and `StackIdentifier`.
    */
   type: "TAG_FILTERS_1_0" | "CLOUDFORMATION_STACK_1_0";
@@ -107,7 +107,7 @@ export interface Group extends Resource<
 > {}
 
 /**
- * An AWS Resource Groups group — a collection of AWS resources defined by a
+ * An AWS Resource Groups group -- a collection of AWS resources defined by a
  * tag-based query, a CloudFormation stack query, or an attached service
  * configuration.
  *
@@ -195,7 +195,7 @@ const validateDefinition = (props: GroupProps) =>
     ? Effect.fail(
         new ResourceGroupDefinitionConflict({
           message:
-            "resourceQuery and configuration are mutually exclusive — a resource group is defined by exactly one of the two.",
+            "resourceQuery and configuration are mutually exclusive \u2014 a resource group is defined by exactly one of the two.",
         }),
       )
     : Effect.void;
@@ -290,7 +290,7 @@ export const GroupProvider = () =>
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
           // A group is either query-based or configuration-based for its
-          // whole life — switching between the two requires replacement.
+          // whole life -- switching between the two requires replacement.
           if ((olds.configuration !== undefined) !== (news.configuration !== undefined)) {
             return { action: "replace" } as const;
           }
@@ -301,13 +301,13 @@ export const GroupProvider = () =>
           const groupName = output?.groupName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
 
-          // OBSERVE — cloud state is authoritative; output is only a name cache.
+          // OBSERVE -- cloud state is authoritative; output is only a name cache.
           let live = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
             Effect.map((r) => r.Group),
             Effect.catchTag("NotFoundException", () => Effect.undefined),
           );
 
-          // ENSURE — create if missing; tolerate the already-exists race.
+          // ENSURE -- create if missing; tolerate the already-exists race.
           if (live === undefined) {
             live = yield* resourcegroups
               .createGroup({
@@ -326,7 +326,7 @@ export const GroupProvider = () =>
           }
           const groupArn = live.GroupArn;
 
-          // SYNC description — diff observed against desired; empty string
+          // SYNC description -- diff observed against desired; empty string
           // clears. Fields omitted from updateGroup are left unchanged.
           const desiredDescription = news.description ?? "";
           if ((live.Description ?? "") !== desiredDescription) {
@@ -336,7 +336,7 @@ export const GroupProvider = () =>
             });
           }
 
-          // SYNC resource query — only meaningful for query-based groups
+          // SYNC resource query -- only meaningful for query-based groups
           // (getGroupQuery rejects configuration-based groups).
           if (news.resourceQuery !== undefined) {
             const desiredQuery = toResourceQuery(news.resourceQuery);
@@ -355,7 +355,7 @@ export const GroupProvider = () =>
             }
           }
 
-          // SYNC service configuration — order-insensitive comparison, the
+          // SYNC service configuration -- order-insensitive comparison, the
           // API returns configuration items in arbitrary order.
           if (news.configuration !== undefined) {
             const desiredConfiguration = toConfiguration(news.configuration);
@@ -376,7 +376,7 @@ export const GroupProvider = () =>
             }
           }
 
-          // SYNC tags — diff against OBSERVED cloud tags so adoption
+          // SYNC tags -- diff against OBSERVED cloud tags so adoption
           // converges (createGroup tags only apply on first create).
           const observedTags = yield* readGroupTags(groupArn);
           const { upsert, removed } = diffTags(observedTags, {

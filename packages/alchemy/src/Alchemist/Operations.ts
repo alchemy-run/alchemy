@@ -1,7 +1,7 @@
 /**
  * The core of the Alchemist operations: the builds they choose from (with
  * or without the stack's program, or providers only), and the stack
- * {@link plan} → {@link apply} pair deploys and destroys share. Drift and
+ * {@link plan} -> {@link apply} pair deploys and destroys share. Drift and
  * nuke have their own namespaces.
  */
 import * as ConfigProvider from "effect/ConfigProvider";

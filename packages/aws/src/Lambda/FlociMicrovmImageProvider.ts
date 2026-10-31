@@ -3,10 +3,10 @@
 /**
  * The `alchemy dev` provider for `AWS.Lambda.MicrovmImage`: builds the image
  * as a plain LOCAL `docker build` and hands the emulator a pre-built
- * reference, so an image reload costs what a `docker build` costs — with
+ * reference, so an image reload costs what a `docker build` costs -- with
  * real BuildKit layer caching against the user's actual sources.
  *
- * The live flow (zip the context → upload to S3 → floci downloads, extracts
+ * The live flow (zip the context -> upload to S3 -> floci downloads, extracts
  * to a fresh temp dir, and docker-builds server-side) is faithful to the
  * real AWS API but hostile to dev: the fresh extract defeated layer caching
  * and every content edit cost a full image build (~60s measured). Here the
@@ -14,24 +14,24 @@
  *
  *  1. bundle (`main`) or use the user's context/Dockerfile as-is;
  *  2. `docker build -t alchemy-dev/microvm-<name>:<contentHash>` on the
- *     HOST daemon — unchanged layers cache, so a well-ordered Dockerfile
+ *     HOST daemon -- unchanged layers cache, so a well-ordered Dockerfile
  *     only rebuilds its tail (the alchemy-generated Dockerfile installs the
  *     runtime BEFORE copying the bundle for exactly this reason);
  *  3. delegate to the LIVE reconcile with
- *     `codeArtifact: { uri: "docker://<tag>" }` — the alchemy floci fork
- *     (≥ the docker-artifact build) short-circuits its build for that form
+ *     `codeArtifact: { uri: "docker://<tag>" }` -- the alchemy floci fork
+ *     (>= the docker-artifact build) short-circuits its build for that form
  *     and marks the version ACTIVE immediately.
  *
  * `RunMicrovm` defaults to the latest ACTIVE version, so every VM booted
  * after a rebuild runs the new image; running VMs are deliberately NOT
- * terminated — MicroVM sessions are stateful, and killing a user's live
+ * terminated -- MicroVM sessions are stateful, and killing a user's live
  * shell/sandbox on every source edit would be worse than serving the old
  * code until it re-runs.
  *
  * Built on the shared dev-watch skeleton
  * ([DevWatchProvider](../Local/DevWatchProvider.ts)); the watch trigger is
- * the shared [ImageSourceTrigger](../Local/ImageSourceTrigger.ts) (`main` →
- * rolldown module-graph watch, `context` → fs-watch incl. an
+ * the shared [ImageSourceTrigger](../Local/ImageSourceTrigger.ts) (`main` ->
+ * rolldown module-graph watch, `context` -> fs-watch incl. an
  * outside-context Dockerfile).
  */
 
@@ -186,7 +186,7 @@ export const FlociMicrovmImageProvider = () =>
           const tag = yield* buildLocalImage(id, news);
           if (tag === undefined) return news;
           // The live reconcile memoizes its resolved artifact per id for the
-          // run (`Artifacts.cached`) — but the sidecar's artifact store lives
+          // run (`Artifacts.cached`) -- but the sidecar's artifact store lives
           // for the whole dev session, so a rebuilt docker:// reference would
           // read back the FIRST reconcile's artifact and no-op forever. Evict
           // so the reconcile resolves the fresh reference.
@@ -213,7 +213,7 @@ export const FlociMicrovmImageProvider = () =>
             Stream.runForEach(() =>
               Effect.gen(function* () {
                 const startedAt = Date.now();
-                yield* Effect.logInfo(`microvm source changed — rebuilding`);
+                yield* Effect.logInfo(`microvm source changed \u2014 rebuilding`);
                 const previous = yield* ctx.currentAttrs;
                 const attrs = yield* ctx.rerunReconcile;
                 if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {

@@ -14,7 +14,7 @@ export interface ChannelProps {
   /**
    * Name of the channel (letters, digits, `-` and `_`; not unique across
    * channels). If omitted, a deterministic physical name is generated.
-   * Channel names are mutable — changing the name updates the channel in
+   * Channel names are mutable -- changing the name updates the channel in
    * place.
    */
   channelName?: string;
@@ -194,7 +194,7 @@ export const ChannelProvider = () =>
       });
 
       /**
-       * Channel names are not unique — `filterByName` narrows server-side
+       * Channel names are not unique -- `filterByName` narrows server-side
        * and we match exactly, taking the first hit. Used only when the
        * output ARN cache is unavailable (state-persistence failure).
        */
@@ -225,13 +225,13 @@ export const ChannelProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the live channel is authoritative; the output ARN
+          // 1. Observe -- the live channel is authoritative; the output ARN
           // is only an identifier cache.
           let observed = output?.channelArn
             ? yield* getByArn(output.channelArn)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing. CreateChannel also provisions
+          // 2. Ensure -- create if missing. CreateChannel also provisions
           // the channel's default stream key, which we leave in place (see
           // the StreamKey resource).
           if (observed === undefined) {
@@ -257,7 +257,7 @@ export const ChannelProvider = () =>
             });
           }
 
-          // 3. Sync — diff observed against desired for each prop the user
+          // 3. Sync -- diff observed against desired for each prop the user
           // specified and apply only the delta. All channel settings
           // (including the name) are mutable via UpdateChannel.
           const patch: Partial<ivs.UpdateChannelRequest> = {};
@@ -298,7 +298,7 @@ export const ChannelProvider = () =>
               .pipe(retryWhileThrottled, retryWhileConflict);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 3b. Sync tags -- diff against OBSERVED cloud tags so adoption
           // converges.
           yield* syncIvsTags(arn, desiredTags);
 
@@ -315,7 +315,7 @@ export const ChannelProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // DeleteChannel raises ConflictException while a stream is live
-          // — retry through a bounded window, then tolerate already-gone.
+          // -- retry through a bounded window, then tolerate already-gone.
           yield* ivs.deleteChannel({ arn: output.channelArn }).pipe(
             retryWhileThrottled,
             retryWhileConflict,

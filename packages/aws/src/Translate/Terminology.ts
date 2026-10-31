@@ -13,7 +13,7 @@ import { readTranslateTags, syncTranslateTags } from "./internal.ts";
 
 export interface TerminologyProps {
   /**
-   * Name of the terminology — up to 256 characters of letters, digits, and
+   * Name of the terminology -- up to 256 characters of letters, digits, and
    * hyphens (`^([A-Za-z0-9-]_?)+$`). If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing the name replaces the
    * terminology.
@@ -24,9 +24,9 @@ export interface TerminologyProps {
    */
   description?: string;
   /**
-   * The terminology file content — term pairs in the given `format`. For
+   * The terminology file content -- term pairs in the given `format`. For
    * `CSV`, the first row is the language-code header (e.g. `en,es`) and each
-   * subsequent row is a term pair. Updatable in place — `ImportTerminology`
+   * subsequent row is a term pair. Updatable in place -- `ImportTerminology`
    * is a true upsert (`MergeStrategy: OVERWRITE`); an overwrite takes up to
    * 10 minutes to fully propagate to translations.
    */
@@ -36,7 +36,7 @@ export interface TerminologyProps {
    */
   format: "CSV" | "TMX" | "TSV";
   /**
-   * Directionality of the terminology: `UNI` (source→targets, the default)
+   * Directionality of the terminology: `UNI` (source->targets, the default)
    * or `MULTI` (any listed language is a valid source).
    * @default "UNI"
    */
@@ -57,7 +57,7 @@ export interface Terminology extends Resource<
   TerminologyProps,
   {
     /**
-     * Name of the terminology — pass it as `TerminologyNames` to
+     * Name of the terminology -- pass it as `TerminologyNames` to
      * `TranslateText`/`TranslateDocument` or batch translation jobs.
      */
     terminologyName: string;
@@ -84,7 +84,7 @@ export interface Terminology extends Resource<
 > {}
 
 /**
- * An Amazon Translate custom terminology — a glossary of term pairs (CSV,
+ * An Amazon Translate custom terminology -- a glossary of term pairs (CSV,
  * TMX, or TSV) that pins how specific words and phrases (brand names,
  * product names, domain jargon) are translated. Reference it by name from
  * `TranslateText`, `TranslateDocument`, or batch translation jobs.
@@ -129,7 +129,7 @@ export const TerminologyProvider = () =>
     Terminology,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: TerminologyProps) {
-        // Translate names must match ^([A-Za-z0-9-]_?)+$ (≤ 256 chars);
+        // Translate names must match ^([A-Za-z0-9-]_?)+$ (<= 256 chars);
         // createPhysicalName's hyphenated output satisfies it directly.
         return props.terminologyName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
@@ -165,7 +165,7 @@ export const TerminologyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           const observed = yield* getOne(name);
 
           // GetTerminology returns a presigned download location rather than
@@ -186,7 +186,7 @@ export const TerminologyProvider = () =>
               MergeStrategy: "OVERWRITE",
               Description: news.description,
               TerminologyData: {
-                // The File schema is a SensitiveBlob — the encoder unwraps
+                // The File schema is a SensitiveBlob -- the encoder unwraps
                 // the Redacted back to raw bytes on the wire.
                 File: Redacted.make(bytes),
                 Format: news.format,
@@ -206,7 +206,7 @@ export const TerminologyProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the terminology may already be gone.
+          // Idempotent -- the terminology may already be gone.
           yield* translate
             .deleteTerminology({ Name: output.terminologyName })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));

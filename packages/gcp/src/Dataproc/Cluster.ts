@@ -53,12 +53,12 @@ export type ClusterProps = {
    * Cluster id unique within the project. If omitted, a unique RFC1035
    * name is generated from the stack, stage, and logical id. Must start
    * with a lowercase letter, contain only lowercase letters, numbers, and
-   * hyphens, and not end with a hyphen (up to 51 characters). Immutable —
+   * hyphens, and not end with a hyphen (up to 51 characters). Immutable --
    * changing it replaces the cluster.
    */
   clusterName?: string;
   /**
-   * Dataproc region (`us-central1`, `us-east1`, …). Immutable — changing
+   * Dataproc region (`us-central1`, `us-east1`, ...). Immutable -- changing
    * it replaces the cluster. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -70,24 +70,24 @@ export type ClusterProps = {
   labels?: Record<string, string>;
   /**
    * Cluster topology. `SINGLE_NODE` is a 1-VM cluster (no workers).
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    * @default "SINGLE_NODE"
    */
   clusterType?: dataproc.ClusterConfigClusterTypeEnum | (string & {});
   /**
-   * Dataproc image version (`2.2`, `2.2-debian12`, …). Prefix matches
-   * the server-resolved version. Immutable — changing it replaces the
+   * Dataproc image version (`2.2`, `2.2-debian12`, ...). Prefix matches
+   * the server-resolved version. Immutable -- changing it replaces the
    * cluster.
    */
   imageVersion?: string;
   /**
-   * Optional components to activate (`JUPYTER`, `ZEPPELIN`, `TRINO`, …).
-   * Immutable — changing them replaces the cluster.
+   * Optional components to activate (`JUPYTER`, `ZEPPELIN`, `TRINO`, ...).
+   * Immutable -- changing them replaces the cluster.
    */
   optionalComponents?: dataproc.SoftwareConfigOptionalComponentsItemEnumList;
   /**
    * Daemon properties (`core:hadoop.tmp.dir`, `spark:spark.executor.memory`,
-   * …). Immutable — changing them replaces the cluster.
+   * ...). Immutable -- changing them replaces the cluster.
    */
   properties?: Record<string, string>;
   /**
@@ -127,7 +127,7 @@ export type ClusterProps = {
   metadata?: Record<string, string>;
   /**
    * Master instances. `1` for standard or single-node, `3` for HA.
-   * Immutable — changing it replaces the cluster.
+   * Immutable -- changing it replaces the cluster.
    * @default 1
    */
   masterNumInstances?: number;
@@ -230,17 +230,17 @@ export type Cluster = Resource<
     clusterName: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     region: string;
     /** Server-assigned cluster UUID. */
     clusterUuid: string | undefined;
-    /** Server-reported state (`RUNNING`, `CREATING`, …). */
+    /** Server-reported state (`RUNNING`, `CREATING`, ...). */
     state: string | undefined;
     /** Extra status text, if any. */
     statusDetail: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Cluster topology (`SINGLE_NODE`, `STANDARD`, …). */
+    /** Cluster topology (`SINGLE_NODE`, `STANDARD`, ...). */
     clusterType: string;
     /** Resolved image version. */
     imageVersion: string | undefined;

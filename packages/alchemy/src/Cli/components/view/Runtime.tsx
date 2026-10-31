@@ -47,7 +47,7 @@ const InSession = Context.Reference<boolean>("Alchemy::Interaction/InSession", {
 });
 
 /**
- * One rendered block. Views are immutable once mounted — dynamic content
+ * One rendered block. Views are immutable once mounted -- dynamic content
  * flows through caller-owned stores (`LiveStore` + `useLiveStore`) that the
  * view component subscribes to, never through the runtime.
  */
@@ -67,7 +67,7 @@ interface StoreState {
 /**
  * The single external store the React root syncs from. It only tracks WHICH
  * blocks are mounted and in what region (static scrollback, in-session
- * transcript, live region, active prompt) — block content never changes
+ * transcript, live region, active prompt) -- block content never changes
  * after mount, so there is no update surface here.
  */
 class TerminalStore {
@@ -257,7 +257,7 @@ export const makeRuntime = (
     /** Settles when the instance exits; render crashes are routed out, never rethrown. */
     exit: Promise<void>;
     /**
-     * Flush any partial captured line into the Static transcript — called at
+     * Flush any partial captured line into the Static transcript -- called at
      * unmount so trailing output without a newline still lands. Lives on the
      * instance because it closes over this mount's capture buffers and must
      * die with it.
@@ -267,8 +267,8 @@ export const makeRuntime = (
   // Lifecycle state. `mounted` and `unmounting` deliberately overlap: during
   // teardown the instance stays in `mounted` until re-validation passes, so
   // prints/live views racing the drain still see a live renderer (and can
-  // abort the teardown). `sessionMounted` is an orthogonal axis — an
-  // `session()` region pins the renderer regardless of store idleness — and
+  // abort the teardown). `sessionMounted` is an orthogonal axis -- an
+  // `session()` region pins the renderer regardless of store idleness -- and
   // `disposed` is a terminal one-way latch.
   let mounted: Mounted | undefined;
   let unmounting: Promise<void> | undefined;
@@ -292,7 +292,7 @@ export const makeRuntime = (
   };
 
   const mount = async (alternateScreen = false): Promise<void> => {
-    // Never overlap a new Sigil root with one that is still tearing down —
+    // Never overlap a new Sigil root with one that is still tearing down --
     // Sigil keys instances by stdout and two live roots corrupt the output.
     while (unmounting !== undefined) await unmounting;
     if (disposed || mounted !== undefined) return;
@@ -309,7 +309,7 @@ export const makeRuntime = (
     const buffers = { stdout: "", stderr: "" };
     // A captured write that ends mid-line parks its tail here waiting for
     // the rest of the line. A real terminal would display the partial
-    // immediately — so when no continuation arrives promptly, flush the
+    // immediately -- so when no continuation arrives promptly, flush the
     // tail as its own row instead of holding it until unmount. Without the
     // deadline, a writer whose final chunk lacks a trailing newline (e.g.
     // a pretty-printed cause written raw to stderr) has its last line
@@ -391,7 +391,7 @@ export const makeRuntime = (
     // `beforeExit` listener on the first `waitUntilExit()` call and `unmount`
     // only removes a listener that already exists, so waiting only after
     // unmount leaks one process listener per mount cycle. A rejection means a
-    // component threw during render — Sigil has already unmounted itself, so
+    // component threw during render -- Sigil has already unmounted itself, so
     // drop the dead instance and surface the error instead of hanging.
     current.exit = sigil.waitUntilExit().then(
       () => undefined,
@@ -426,7 +426,7 @@ export const makeRuntime = (
         current.flushDirectStdio?.();
         // Drain: keep flushing until no new static output arrives between
         // flushes, so a `print` racing the teardown reaches the terminal.
-        // Unbounded by design — the bound is the renderer's convergence: the
+        // Unbounded by design -- the bound is the renderer's convergence: the
         // loop exits as soon as producers go quiet for one full flush.
         let staticCount;
         do {
@@ -438,7 +438,7 @@ export const makeRuntime = (
         // teardown, so leave the instance mounted for them instead.
         if (!force && (sessionMounted || !store.idle)) return;
         // A captured chunk that arrived DURING the drain may have parked a
-        // partial line and armed a flush timer. Flush and disarm now —
+        // partial line and armed a flush timer. Flush and disarm now --
         // otherwise the timer fires after `clearStatic()` below and the
         // stale fragment replays at the top of the next mount.
         current.flushDirectStdio?.();
@@ -452,7 +452,7 @@ export const makeRuntime = (
         store.clearStatic();
       } catch {
         // Teardown must be total: a crashed instance still ends up unmounted
-        // with console/stream patches restored — and with no armed partial
+        // with console/stream patches restored -- and with no armed partial
         // flush timer left to poke the store after clearStatic.
         if (mounted === current) mounted = undefined;
         try {
@@ -484,7 +484,7 @@ export const makeRuntime = (
       } else {
         const output = formatView(view, {
           ...capabilities,
-          // Re-read the width at render time — the boot-time snapshot goes
+          // Re-read the width at render time -- the boot-time snapshot goes
           // stale the moment the user resizes the terminal.
           columns: stdout.columns ?? capabilities.columns,
         });
@@ -543,8 +543,8 @@ export const makeRuntime = (
               </ScreenCancelGuard>,
             );
             // Not awaited (Effect.callback's register is synchronous), but
-            // never fire-and-forget: a mount failure — e.g. a synchronous
-            // throw from Sigil's render() — routes through `failRenderer`,
+            // never fire-and-forget: a mount failure -- e.g. a synchronous
+            // throw from Sigil's render() -- routes through `failRenderer`,
             // which fails this very interaction via the `failActive` hook
             // installed above instead of escaping as an unhandled rejection.
             mount().catch(failRenderer);
@@ -654,7 +654,7 @@ export const makeRuntime = (
     Effect.acquireRelease(makeLive(initial, options), (handle) => handle.close);
 
   /**
-   * A progress row is just a live view over a runtime-owned store — the
+   * A progress row is just a live view over a runtime-owned store -- the
    * handle mutates the store, React re-renders. Settling swaps the store to
    * its final state and commits the block to scrollback.
    */
@@ -714,7 +714,7 @@ export const makeRuntime = (
         browserLoginScreen({
           message: `${login.provider} authorization`,
           waitingLabel:
-            login.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)…",
+            login.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)\u2026",
           url: login.url,
           code: login.code,
           openFailed,

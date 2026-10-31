@@ -25,24 +25,24 @@ export interface IndexProps {
    */
   indexName?: string;
   /**
-   * The data type of the vectors stored in this index. Immutable — changing
+   * The data type of the vectors stored in this index. Immutable -- changing
    * it replaces the index.
    * @default "float32"
    */
   dataType?: "float32";
   /**
-   * The number of dimensions of the vectors stored in this index. Immutable —
+   * The number of dimensions of the vectors stored in this index. Immutable --
    * changing it replaces the index.
    */
   dimension: number;
   /**
-   * The distance metric used for similarity queries. Immutable — changing it
+   * The distance metric used for similarity queries. Immutable -- changing it
    * replaces the index.
    */
   distanceMetric: "euclidean" | "cosine";
   /**
    * Metadata keys that are stored but NOT filterable at query time. Immutable
-   * — changing it replaces the index.
+   * -- changing it replaces the index.
    */
   nonFilterableMetadataKeys?: string[];
   /**
@@ -73,7 +73,7 @@ export interface Index extends Resource<
 > {}
 
 /**
- * A vector index inside an S3 Vectors {@link VectorBucket} — stores vectors of
+ * A vector index inside an S3 Vectors {@link VectorBucket} -- stores vectors of
  * a fixed dimension and answers similarity queries under a distance metric.
  *
  * The index shape (data type, dimension, distance metric, non-filterable
@@ -133,7 +133,7 @@ export const IndexProvider = () =>
       return Index.Provider.of({
         stables: ["vectorBucketName", "indexName", "indexArn"],
         // Indexes are keyed by a parent vector bucket; global enumeration would
-        // require fanning out over every bucket. Return empty — the engine
+        // require fanning out over every bucket. Return empty -- the engine
         // reads owned indexes via read() using the cached output identity.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -161,7 +161,7 @@ export const IndexProvider = () =>
           const oldName = yield* createName(id, olds ?? {});
           const newName = yield* createName(id, news ?? {});
           if (oldName !== newName) return { action: "replace" } as const;
-          // The index shape is immutable — any change replaces.
+          // The index shape is immutable -- any change replaces.
           if (olds !== undefined && shapeKey(olds) !== shapeKey(news)) {
             return { action: "replace" } as const;
           }
@@ -173,10 +173,10 @@ export const IndexProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observe(vectorBucketName, name);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    ConflictException, which we treat as a race and re-observe.
           if (live === undefined) {
             yield* s3vectors
@@ -199,7 +199,7 @@ export const IndexProvider = () =>
 
           const indexArn = live?.indexArn ?? output?.indexArn;
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (indexArn !== undefined) {
             const currentTags = yield* observedTags(indexArn);
             const { upsert, removed } = diffTags(currentTags, desiredTags);

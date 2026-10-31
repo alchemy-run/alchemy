@@ -38,28 +38,28 @@ export interface DatasetProps {
   datasetName?: string;
   /**
    * The forecasting domain: `RETAIL`, `CUSTOM`, `INVENTORY_PLANNING`,
-   * `EC2_CAPACITY`, `WORK_FORCE`, `WEB_TRAFFIC`, or `METRICS`. Immutable —
+   * `EC2_CAPACITY`, `WORK_FORCE`, `WEB_TRAFFIC`, or `METRICS`. Immutable --
    * changing it replaces the dataset.
    */
   domain: string;
   /**
    * The dataset type: `TARGET_TIME_SERIES`, `RELATED_TIME_SERIES`, or
-   * `ITEM_METADATA`. Immutable — changing it replaces the dataset.
+   * `ITEM_METADATA`. Immutable -- changing it replaces the dataset.
    */
   datasetType: string;
   /**
    * The frequency of data collection (e.g. `D` for daily, `H` for hourly).
-   * Required for time-series datasets. Immutable — changing it replaces the
+   * Required for time-series datasets. Immutable -- changing it replaces the
    * dataset.
    */
   dataFrequency?: string;
   /**
-   * The schema describing the dataset's fields. Immutable — changing it
+   * The schema describing the dataset's fields. Immutable -- changing it
    * replaces the dataset.
    */
   schema: DatasetSchema;
   /**
-   * Customer-managed KMS encryption configuration. Immutable — changing it
+   * Customer-managed KMS encryption configuration. Immutable -- changing it
    * replaces the dataset.
    */
   encryptionConfig?: DatasetEncryptionConfig;
@@ -89,7 +89,7 @@ export interface Dataset extends Resource<
 > {}
 
 /**
- * An Amazon Forecast dataset — a typed, domain-scoped collection of
+ * An Amazon Forecast dataset -- a typed, domain-scoped collection of
  * time-series (or metadata) records described by a schema. Creating the
  * dataset is a cheap metadata operation; bulk imports and training happen
  * through separate import jobs and predictors.

@@ -5,17 +5,17 @@ import { AWSEnvironment } from "../Environment.ts";
 
 /**
  * Shared HTTP-binding scaffolding for the ApiGateway capabilities
- * (`CreateApiKeyHttp`, `GetUsageHttp`, `FlushStageCacheHttp`, …).
+ * (`CreateApiKeyHttp`, `GetUsageHttp`, `FlushStageCacheHttp`, ...).
  *
- * NOT exported from `index.ts` — this is internal plumbing, like
+ * NOT exported from `index.ts` -- this is internal plumbing, like
  * Cloudflare's `BucketHttp.ts`.
  *
  * API Gateway's control plane authorizes by HTTP verb (`apigateway:GET`,
- * `apigateway:POST`, …) against path-shaped ARNs
+ * `apigateway:POST`, ...) against path-shaped ARNs
  * (`arn:aws:apigateway:{region}::/usageplans/{id}/keys`), so every
- * capability reduces to { verb, ARN paths, operation }. Everything else —
+ * capability reduces to { verb, ARN paths, operation }. Everything else --
  * the runtime guard, host resolution, region lookup, and the
- * `host.bind` policy registration — is identical and lives here.
+ * `host.bind` policy registration -- is identical and lives here.
  */
 
 /** API Gateway authorizes control-plane calls by HTTP verb. */
@@ -29,7 +29,7 @@ export type ApiGatewayIamVerb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
  *
  * @param cap fully-qualified capability name, e.g. `AWS.ApiGateway.GetUsage`
  * @param target the bound resource (or a string literal for account-scoped
- *        capabilities) — used for the binding's identity label
+ *        capabilities) -- used for the binding's identity label
  * @param verb the API Gateway IAM verb the capability requires
  * @param paths builds the ARN path list once the deploy region is known;
  *        entries may be `Output`-derived (e.g. `Output.interpolate`)

@@ -53,7 +53,7 @@ export interface ConditionalForwarder extends Resource<
 
 /**
  * A conditional forwarder on an AWS Managed Microsoft AD (or AD Connector)
- * directory — forwards DNS queries for a remote domain to that domain's DNS
+ * directory -- forwards DNS queries for a remote domain to that domain's DNS
  * servers. Conditional forwarders are the prerequisite for trust
  * relationships with other domains.
  * ### Creating a Conditional Forwarder
@@ -145,10 +145,10 @@ export const ConditionalForwarderProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const props = news!;
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* ds
               .createConditionalForwarder({
@@ -163,7 +163,7 @@ export const ConditionalForwarderProvider = () =>
             observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
           }
 
-          // 3. Sync — update the DNS addresses only when observed state
+          // 3. Sync -- update the DNS addresses only when observed state
           //    differs from desired.
           if (!sameStringSet(observed?.DnsIpAddrs, props.dnsIpAddrs)) {
             yield* ds
@@ -193,7 +193,7 @@ export const ConditionalForwarderProvider = () =>
             })
             .pipe(
               retryWhileDirectoryUnavailable,
-              // The forwarder — or the whole parent directory — being gone
+              // The forwarder -- or the whole parent directory -- being gone
               // is success.
               Effect.catchTag("EntityDoesNotExistException", () => Effect.void),
             );

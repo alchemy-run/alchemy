@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `controltower:ListLandingZones`.
  *
  * An account-level operation that returns the organization's landing zone
- * ARN (a landing zone is a singleton — the list has at most one entry).
+ * ARN (a landing zone is a singleton -- the list has at most one entry).
  * Useful for governance functions that discover the landing zone before
  * reading its drift status. Provide the implementation with
  * `Effect.provide(AWS.ControlTower.ListLandingZonesHttp)`.
  * ### Inspecting the Landing Zone
  * **Example:** Discover the Landing Zone ARN
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listLandingZones = yield* AWS.ControlTower.ListLandingZones();
  *
  * // runtime

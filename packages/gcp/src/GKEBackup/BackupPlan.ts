@@ -33,7 +33,7 @@ import {
 export type RetentionPolicy = {
   /**
    * Default maximum age of a Backup created via this plan, in days
-   * (`0`–`365`). `0` disables automatic deletion.
+   * (`0`-`365`). `0` disables automatic deletion.
    */
   backupRetainDays?: number;
   /**
@@ -41,28 +41,28 @@ export type RetentionPolicy = {
    */
   locked?: boolean;
   /**
-   * Minimum age before a Backup can be deleted, in days (`0`–`90`).
+   * Minimum age before a Backup can be deleted, in days (`0`-`90`).
    */
   backupDeleteLockDays?: number;
 };
 
 export type TimeOfDay = {
-  /** Hours of day in 24-hour format (`0`–`23`). */
+  /** Hours of day in 24-hour format (`0`-`23`). */
   hours?: number;
-  /** Minutes of hour (`0`–`59`). */
+  /** Minutes of hour (`0`-`59`). */
   minutes?: number;
-  /** Seconds of minute (`0`–`59`). */
+  /** Seconds of minute (`0`-`59`). */
   seconds?: number;
   /** Fractional seconds, in nanoseconds. */
   nanos?: number;
 };
 
 export type CalendarDate = {
-  /** Year (`1`–`9999`), or `0` to omit. */
+  /** Year (`1`-`9999`), or `0` to omit. */
   year?: number;
-  /** Month (`1`–`12`), or `0` to omit. */
+  /** Month (`1`-`12`), or `0` to omit. */
   month?: number;
-  /** Day (`1`–`31`), or `0` to omit. */
+  /** Day (`1`-`31`), or `0` to omit. */
   day?: number;
 };
 
@@ -86,7 +86,7 @@ export type ExclusionWindow = {
 
 export type RpoConfig = {
   /**
-   * Target RPO in minutes (`60`–`86400`).
+   * Target RPO in minutes (`60`-`86400`).
    */
   targetRpoMinutes?: number;
   /**
@@ -169,11 +169,11 @@ export type BackupPlanProps = {
    * Backup plan id (the `{backupPlan}` segment of
    * `projects/{project}/locations/{location}/backupPlans/{backupPlan}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the plan.
+   * and logical id. Immutable -- changing it replaces the plan.
    */
   backupPlanId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the plan. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`. Must match the source cluster region.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -183,7 +183,7 @@ export type BackupPlanProps = {
    * Source GKE cluster. Full name
    * `projects/{project}/locations/{location}/clusters/{cluster}` (or the
    * zonal `zones/{zone}` form) or a cluster id combined with `location`.
-   * Immutable — changing it replaces the plan.
+   * Immutable -- changing it replaces the plan.
    */
   cluster: string;
   /**
@@ -259,7 +259,7 @@ export type BackupPlan = Resource<
 >;
 
 /**
- * A Backup for GKE backup plan — the configuration and schedule for a
+ * A Backup for GKE backup plan -- the configuration and schedule for a
  * line of cluster backups.
  *
  * Changing `backupPlanId`, `location`, or `cluster` replaces the plan.

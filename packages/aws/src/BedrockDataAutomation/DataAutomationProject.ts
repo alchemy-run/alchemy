@@ -43,18 +43,18 @@ export interface DataAutomationProjectProps {
   projectStage?: bda.DataAutomationProjectStage;
   /**
    * Whether the project processes files asynchronously (`ASYNC`) or
-   * synchronously (`SYNC`). Immutable — changing it replaces the project.
+   * synchronously (`SYNC`). Immutable -- changing it replaces the project.
    * @default ASYNC
    */
   projectType?: bda.DataAutomationProjectType;
   /**
-   * The standard (default) output the project produces per modality —
+   * The standard (default) output the project produces per modality --
    * document, image, video, and audio extraction settings. Pass `{}` to use
    * the service defaults.
    */
   standardOutputConfiguration: bda.StandardOutputConfiguration;
   /**
-   * Custom output configuration — the list of `Blueprint`s the project
+   * Custom output configuration -- the list of `Blueprint`s the project
    * applies to matched files.
    */
   customOutputConfiguration?: bda.CustomOutputConfiguration;
@@ -103,7 +103,7 @@ export interface DataAutomationProject extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock Data Automation Project — the configuration unit that
+ * An Amazon Bedrock Data Automation Project -- the configuration unit that
  * turns documents, images, audio, and video into structured output, with
  * optional custom output driven by `Blueprint`s.
  *
@@ -205,8 +205,8 @@ export const DataAutomationProjectProvider = () =>
         )?.projectArn;
       });
 
-      // Project create/update settle asynchronously (status IN_PROGRESS →
-      // COMPLETED | FAILED). Bounded poll: 25 × 3s ≈ 75s worst case.
+      // Project create/update settle asynchronously (status IN_PROGRESS ->
+      // COMPLETED | FAILED). Bounded poll: 25 × 3s ~ 75s worst case.
       const waitForSettled = Effect.fn(function* (
         projectArn: string,
         projectStage?: bda.DataAutomationProjectStage,
@@ -272,14 +272,14 @@ export const DataAutomationProjectProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the ARN.
           const cachedArn = output?.projectArn ?? (yield* findProjectArn(projectName));
           let live =
             cachedArn === undefined
               ? undefined
               : yield* observeProject(cachedArn, news.projectStage);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe by name. Wait for the async provisioning to settle.
           if (live === undefined) {
@@ -314,7 +314,7 @@ export const DataAutomationProjectProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED configuration against desired; apply the
+          // 3. SYNC -- diff OBSERVED configuration against desired; apply the
           //    idempotent PUT only on drift. The server may fill defaulted
           //    fields, in which case the PUT re-applies harmlessly.
           const drift =

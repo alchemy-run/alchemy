@@ -9,13 +9,13 @@ import type { Broker } from "./Broker.ts";
 /**
  * Shared HTTP scaffolding for the Amazon MQ runtime bindings.
  *
- * Every MQ capability follows the same shape — resolve the distilled
+ * Every MQ capability follows the same shape -- resolve the distilled
  * operation, register an IAM policy statement on the binding host, and return
  * a runtime callable that injects the broker id. The only variation is the
  * operation, the IAM action(s), and whether the binding is scoped to one
  * broker or to the whole account, so those are the only inputs.
  *
- * @internal — not exported from `index.ts`.
+ * @internal -- not exported from `index.ts`.
  */
 
 type MqRequirements = Credentials | Region | HttpClient.HttpClient;

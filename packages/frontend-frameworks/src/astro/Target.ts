@@ -7,8 +7,8 @@ import type * as Effect from "effect/Effect";
  * (`bundle`, `build`, `finish`, `serve`, opaque `config`). Astro needs one
  * framework-specific hook on top: the Astro *integration* (the adapter) that
  * gets pinned into the in-memory `AstroInlineConfig` for both `dev` and
- * `build`. Everything platform-specific — which vite plugins the adapter
- * injects, which server entrypoint it selects, how dev SSR executes — lives
+ * `build`. Everything platform-specific -- which vite plugins the adapter
+ * injects, which server entrypoint it selects, how dev SSR executes -- lives
  * inside that integration, so the framework half of this package never has to
  * know the platform.
  *
@@ -30,7 +30,7 @@ import {
 /**
  * The context an Astro target's wholesale `build` takeover receives: the
  * generic build context plus the inline Astro overlay the framework was
- * constructed with (`AstroFrameworkOptions.astro`) — carried so wholesale
+ * constructed with (`AstroFrameworkOptions.astro`) -- carried so wholesale
  * targets that re-run the framework in a child process (the AWS target)
  * can reconstruct it. Only JSON-serializable fields survive that process
  * boundary.
@@ -60,7 +60,7 @@ export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {
    * entry chunks. A target whose adapter entry is not otherwise
    * identifiable (e.g. the AWS target's `serverEntrypoint`, which astro
    * renames to `config.build.serverEntry`) selects the chunk that becomes
-   * `serverModules[0]` here. The Cloudflare target does not need it — its
+   * `serverModules[0]` here. The Cloudflare target does not need it -- its
    * vite plugin wraps the worker entry with a recognizable facade.
    */
   readonly selectServerEntry?: ((chunk: ServerEntryChunk) => boolean) | undefined;
@@ -69,7 +69,7 @@ export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {
 /**
  * How a target reaches the Astro framework module: a target value, a
  * `(config) => AstroTarget` factory, or a module specifier resolved from the
- * *project's* `node_modules` (whose `default` — or named `target` — export is
+ * *project's* `node_modules` (whose `default` -- or named `target` -- export is
  * the value or factory).
  */
 export type AstroTargetInput<Config = unknown> = DeployTargetInput<AstroTarget<Config>, Config>;

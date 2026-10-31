@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `GetUserId` operation (IAM action
  * `identitystore:GetUserId`), scoped to one {@link Instance}.
  *
- * Resolves a user's `UserId` from a unique attribute (e.g. the user name) — the canonical login-to-id lookup for apps federated through Identity Center. The instance's
+ * Resolves a user's `UserId` from a unique attribute (e.g. the user name) -- the canonical login-to-id lookup for apps federated through Identity Center. The instance's
  * `IdentityStoreId` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.GetUserIdHttp)`.
  * ### Looking Up Users
  * **Example:** Resolve a UserId From a User Name
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const getUserId = yield* AWS.IdentityCenter.GetUserId(instance);
  *
  * // runtime

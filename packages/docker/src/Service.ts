@@ -31,7 +31,7 @@ export interface ServicePropsBase extends PlatformProps {
   name?: string;
   /**
    * The engine the service is deployed to: a Docker context name, a
-   * `Docker.Context` resource, or a `Docker.Swarm` — passing the swarm also
+   * `Docker.Context` resource, or a `Docker.Swarm` -- passing the swarm also
    * orders the service after the swarm is initialized.
    */
   context?: Docker.EngineRef;
@@ -143,7 +143,7 @@ export interface BundledServiceProps extends ServicePropsBase {
 }
 
 /**
- * Service props — the image comes from exactly one of two sources, flat on
+ * Service props -- the image comes from exactly one of two sources, flat on
  * the props: `image` (a pre-built reference) or `main` (a bundled Effect
  * program).
  */
@@ -325,7 +325,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * A Docker Swarm service: N replicas of a container kept alive by the swarm,
  * deployed through the active (or a named) Docker context.
  *
- * The target engine must be a swarm manager — `Service` wraps
+ * The target engine must be a swarm manager -- `Service` wraps
  * `docker service`, swarm mode's orchestration API. Declare the swarm with
  * `Docker.Swarm` and pass it as `context` so the service deploys after the
  * swarm exists; for a plain single container on a non-swarm daemon use
@@ -333,16 +333,16 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of two sources:
  *
- * - `image` — run a pre-built reference (a registry ref, or a `Docker.Image`
+ * - `image` -- run a pre-built reference (a registry ref, or a `Docker.Image`
  *   / `Docker.RemoteImage` resource).
- * - `main` — bundle an inline Effect program into a generated bun image,
+ * - `main` -- bundle an inline Effect program into a generated bun image,
  *   built directly against the service's Docker context. The impl returns
- *   `{ fetch }` and may register background loops via `ServerHost.run` —
+ *   `{ fetch }` and may register background loops via `ServerHost.run` --
  *   the same effectful platform shape as `AWS.ECS.Service`.
  *
  * The bundled image is content-addressed and only rebuilt when the program
  * (or its generated Dockerfile) changes. It is built on the target engine's
- * local store — single-node swarms run it as-is; multi-node swarms need the
+ * local store -- single-node swarms run it as-is; multi-node swarms need the
  * image on a registry every node can reach (build with `Docker.Image` +
  * `registry` and pass the pushed ref as `image` instead).
  *
@@ -657,7 +657,7 @@ export const ServiceProvider = () =>
               : { action: "update" as const };
           }
 
-          // Bundled program: the image identity is the content hash — a code
+          // Bundled program: the image identity is the content hash -- a code
           // or bootstrap change rolls the service onto the new image.
           if (isBundledService(news)) {
             const hash = yield* serviceImage.hash({
@@ -949,7 +949,7 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
       name,
       context: dockerEngineContextName(props.context),
       // The bundled form's image identity is its content hash (compared
-      // separately in diff) — the `image` prop is only the environment base
+      // separately in diff) -- the `image` prop is only the environment base
       // there, and it participates in the hash.
       image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
       command: props.command ?? [],

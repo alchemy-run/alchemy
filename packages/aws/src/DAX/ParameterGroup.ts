@@ -50,7 +50,7 @@ export interface ParameterGroup extends Resource<
 > {}
 
 /**
- * A DAX parameter group — a named set of DAX engine parameters (item and
+ * A DAX parameter group -- a named set of DAX engine parameters (item and
  * query cache TTLs) that can be attached to one or more DAX
  * {@link Cluster}s.
  *
@@ -99,7 +99,7 @@ export const ParameterGroupProvider = () =>
         return response?.ParameterGroups?.[0];
       });
 
-      // Observed parameter values for the group (bounded pagination — DAX
+      // Observed parameter values for the group (bounded pagination -- DAX
       // has no paginated distilled ops).
       const readParameters = Effect.fn(function* (name: string) {
         const values: Record<string, string> = {};
@@ -150,7 +150,7 @@ export const ParameterGroupProvider = () =>
           if (group?.ParameterGroupName === undefined) return undefined;
           const parameters = yield* readParameters(name);
           // DAX parameter groups do not support tags, so ownership cannot be
-          // verified — return the attributes directly.
+          // verified -- return the attributes directly.
           return toAttrs(group, parameters, olds?.parameters);
         }),
 
@@ -158,10 +158,10 @@ export const ParameterGroupProvider = () =>
           const props = news ?? {};
           const name = output?.parameterGroupName ?? (yield* toName(id, props));
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* dax
               .createParameterGroup({
@@ -177,9 +177,9 @@ export const ParameterGroupProvider = () =>
             });
           }
 
-          // 3. Sync parameters — diff desired overrides against OBSERVED
+          // 3. Sync parameters -- diff desired overrides against OBSERVED
           // values and apply only the delta. (Description is create-only in
-          // the DAX API — UpdateParameterGroup accepts only parameter
+          // the DAX API -- UpdateParameterGroup accepts only parameter
           // values.)
           const observedParameters = yield* readParameters(name);
           const delta = Object.entries(props.parameters ?? {}).filter(
@@ -204,7 +204,7 @@ export const ParameterGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A parameter group still attached to a cluster rejects deletion
-          // with InvalidParameterGroupStateFault — retry (bounded) while the
+          // with InvalidParameterGroupStateFault -- retry (bounded) while the
           // cluster releases it. NotFound is success (idempotent delete).
           yield* dax
             .deleteParameterGroup({
@@ -237,7 +237,7 @@ export const ParameterGroupProvider = () =>
                 (group) =>
                   group.ParameterGroupName !== undefined &&
                   // AWS-managed default parameter groups (`default.dax1.0`,
-                  // …) always exist and can never be deleted — keep them out
+                  // ...) always exist and can never be deleted -- keep them out
                   // of enumeration for account-wide teardown (nuke).
                   !group.ParameterGroupName.startsWith("default."),
               )

@@ -17,7 +17,7 @@ export interface DescribeReplicationConfigurationsRequest extends Omit<
  * action `elasticfilesystem:DescribeReplicationConfigurations` on the file
  * system ARN).
  *
- * Reads the bound {@link FileSystem}'s replication configuration —
+ * Reads the bound {@link FileSystem}'s replication configuration --
  * destination file systems, replication status, and last-replicated
  * timestamps. A file system with no replication fails with the typed
  * `ReplicationNotFound`. Provide the implementation with

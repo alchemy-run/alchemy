@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DescribeStackDriftDetectionStatus` operation (IAM
- * action `cloudformation:DescribeStackDriftDetectionStatus` on `*` — the
+ * action `cloudformation:DescribeStackDriftDetectionStatus` on `*` -- the
  * detection id is not resource-scoped).
  *
  * Polls a drift-detection run started with {@link DetectStackDrift} until it

@@ -69,11 +69,11 @@ export interface CostCategory extends Resource<
 > {}
 
 /**
- * A Cost Explorer cost category — rule-based groupings that map your AWS
+ * A Cost Explorer cost category -- rule-based groupings that map your AWS
  * costs into named values (e.g. team, environment, project) usable across
  * Cost Explorer, Budgets, and CUR reports.
  *
- * Cost Explorer is a global service — all calls are pinned to `us-east-1`
+ * Cost Explorer is a global service -- all calls are pinned to `us-east-1`
  * regardless of the stack region. Rules, the default value, and split-charge
  * rules are mutable in place; changing the name replaces the category.
  *
@@ -204,7 +204,7 @@ export const CostCategoryProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          // UpdateCostCategoryDefinition cannot rename — name change replaces.
+          // UpdateCostCategoryDefinition cannot rename -- name change replaces.
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
@@ -215,7 +215,7 @@ export const CostCategoryProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const ruleVersion = news.ruleVersion ?? DEFAULT_RULE_VERSION;
 
-          // OBSERVE — cloud state is authoritative.
+          // OBSERVE -- cloud state is authoritative.
           const live = output?.costCategoryArn
             ? yield* getByArn(output.costCategoryArn)
             : yield* findByName(name);
@@ -223,7 +223,7 @@ export const CostCategoryProvider = () =>
           let costCategoryArn = live?.CostCategoryArn;
           let effectiveStart: string | undefined = live?.EffectiveStart;
           if (costCategoryArn === undefined) {
-            // ENSURE — create if missing.
+            // ENSURE -- create if missing.
             const created = yield* pinCe(
               ce.createCostCategoryDefinition({
                 Name: name,
@@ -238,7 +238,7 @@ export const CostCategoryProvider = () =>
             costCategoryArn = created.CostCategoryArn!;
             effectiveStart = created.EffectiveStart;
           } else {
-            // SYNC — diff observed rules/defaults against desired; apply only
+            // SYNC -- diff observed rules/defaults against desired; apply only
             // on drift.
             const observed = live!;
             const needsUpdate =
@@ -260,7 +260,7 @@ export const CostCategoryProvider = () =>
             }
           }
 
-          // SYNC TAGS — diff against observed cloud tags.
+          // SYNC TAGS -- diff against observed cloud tags.
           yield* syncCeTags(costCategoryArn, desiredTags);
 
           yield* session.note(costCategoryArn);

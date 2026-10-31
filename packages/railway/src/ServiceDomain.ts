@@ -131,7 +131,7 @@ export const deleteServiceDomainById = Effect.fn(function* (input: {
  * Remove the owned generated domain. Environment config is the source of
  * truth (`serviceDomains[id]: null`); GraphQL delete is the fallback.
  * Matches the recorded id and, if that id is missing from the live list,
- * the recorded hostname — never every generated domain.
+ * the recorded hostname -- never every generated domain.
  */
 export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
   projectId: string;
@@ -238,7 +238,7 @@ const createViaEnvironmentPatch = (input: { environmentId: string; serviceId: st
 /**
  * Official CLI / public-API mutation. Same input as
  * `railway domain` (`environmentId` + `serviceId`; optional `targetPort`
- * is omitted on create — pinning a port while PORT is set makes Railway
+ * is omitted on create -- pinning a port while PORT is set makes Railway
  * reject the mutation).
  *
  * @see https://docs.railway.com/integrations/api/manage-domains
@@ -331,7 +331,7 @@ const createViaMutation = (input: {
 /**
  * Terraform `railway_service_domain` requires `subdomain` and, after
  * create, immediately `serviceDomainUpdate`s to `{subdomain}.{suffix}`.
- * Create itself cannot take a subdomain — the GraphQL input only has
+ * Create itself cannot take a subdomain -- the GraphQL input only has
  * `environmentId` / `serviceId` / optional `targetPort`.
  *
  * @see https://github.com/terraform-community-providers/terraform-provider-railway/blob/master/internal/provider/resource_service_domain.go
@@ -381,9 +381,9 @@ const syncDomain = (input: {
  * claims a stable `{subdomain}.{suffix}` like Terraform, updates
  * `targetPort` in place, and returns the live record.
  *
- * Create itself cannot take a subdomain — Railway assigns
+ * Create itself cannot take a subdomain -- Railway assigns
  * `{serviceName}-{environmentName}.up.railway.app`. That first DNS label
- * must be ≤ 63 characters or the API returns "please try again". Extra
+ * must be <= 63 characters or the API returns "please try again". Extra
  * environments are capped at 24 chars so a 32-char service still fits.
  */
 export const ensureServiceDomain = Effect.fn(function* (input: {

@@ -99,8 +99,8 @@ export const isAlchemyOwnedMetadata = (
 
 /**
  * Diff observed Machine metadata against desired. Always pass **observed**
- * cloud metadata as `oldMetadata` — never `olds.metadata` or
- * `output.metadata` — so adoption converges.
+ * cloud metadata as `oldMetadata` -- never `olds.metadata` or
+ * `output.metadata` -- so adoption converges.
  */
 export const diffMachineMetadata = diffTags;
 
@@ -177,7 +177,7 @@ export const sanitizeFlyVolumeName = (name: string): string => {
  * used for alchemy-owned Fly Apps / Volumes / Secrets / SecretKeys.
  *
  * Untruncated names end with a hyphen (App) or underscore (Volume) plus
- * an 8–16 char RFC4648 base32 instance suffix. Truncated 30-char names
+ * an 8-16 char RFC4648 base32 instance suffix. Truncated 30-char names
  * keep that suffix (the human prefix is what gets cut).
  */
 export const matchesAlchemyPhysicalName = (name: string | undefined): boolean => {

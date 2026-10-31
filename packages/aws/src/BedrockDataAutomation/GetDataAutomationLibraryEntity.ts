@@ -14,7 +14,7 @@ export interface GetDataAutomationLibraryEntityRequest extends Omit<
 
 /**
  * Runtime binding for the `GetDataAutomationLibraryEntity` operation (IAM
- * action `bedrock:GetDataAutomationLibraryEntity` on the library ARN) —
+ * action `bedrock:GetDataAutomationLibraryEntity` on the library ARN) --
  * read a single entity (e.g. a `VOCABULARY` entry with its phrases) from the
  * bound library.
  *
@@ -23,11 +23,11 @@ export interface GetDataAutomationLibraryEntityRequest extends Omit<
  * ### Library Entities
  * **Example:** Read A Vocabulary Entity
  * ```typescript
- * // deploy time — bind the library
+ * // deploy time -- bind the library
  * const getEntity =
  *   yield* AWS.BedrockDataAutomation.GetDataAutomationLibraryEntity(library);
  *
- * // runtime — fetch the entity written by an ingestion job
+ * // runtime -- fetch the entity written by an ingestion job
  * const { entity } = yield* getEntity({
  *   entityType: "VOCABULARY",
  *   entityId,

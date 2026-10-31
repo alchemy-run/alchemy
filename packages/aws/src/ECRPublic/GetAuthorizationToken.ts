@@ -8,14 +8,14 @@ import type * as Effect from "effect/Effect";
  *
  * Retrieves a registry authorization token (valid for 12 hours) used to
  * authenticate `docker push` against `public.ecr.aws`. The token in the
- * response is `Redacted` — unwrap it with `Redacted.value` at the point of
+ * response is `Redacted` -- unwrap it with `Redacted.value` at the point of
  * use. Provide the implementation with
  * `Effect.provide(AWS.ECRPublic.GetAuthorizationTokenHttp)`.
  *
  * ### Registry Access
  * **Example:** Mint A Registry Auth Token
  * ```typescript
- * // init — registry-level binding takes no resource
+ * // init -- registry-level binding takes no resource
  * const getAuthorizationToken = yield* AWS.ECRPublic.GetAuthorizationToken();
  *
  * // runtime

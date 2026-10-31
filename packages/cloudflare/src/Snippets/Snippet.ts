@@ -14,13 +14,13 @@ import { listAllZones } from "../Zone/lookup.ts";
 
 export interface SnippetProps {
   /**
-   * Zone the snippet belongs to. Stable — changing the zone triggers
+   * Zone the snippet belongs to. Stable -- changing the zone triggers
    * replacement.
    */
   zoneId: string;
   /**
    * Name of the snippet. Snippet names may only contain letters, numbers,
-   * and underscores (`[a-zA-Z0-9_]`) — the name is the snippet's identity
+   * and underscores (`[a-zA-Z0-9_]`) -- the name is the snippet's identity
    * within the zone, so changing it triggers replacement.
    *
    * If omitted, a unique name is generated from the app, stage, and
@@ -35,7 +35,7 @@ export interface SnippetProps {
    * environment variables or bindings, 5ms CPU time, 2MB memory, and a
    * 32KB compressed size limit (500KB on Enterprise).
    *
-   * Mutable — updated in place via upload.
+   * Mutable -- updated in place via upload.
    */
   code: string;
   /**
@@ -68,7 +68,7 @@ export type Snippet = Resource<
 >;
 
 /**
- * A Cloudflare Snippet — a lightweight JavaScript module that runs on
+ * A Cloudflare Snippet -- a lightweight JavaScript module that runs on
  * Cloudflare's edge to modify HTTP traffic for a zone.
  *
  * Uploading a snippet does not activate it: traffic only flows through a
@@ -129,7 +129,7 @@ export const SnippetProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Snippets live inside a zone with no account-wide enumeration
-      // API — fan out across every zone and list snippets per zone.
+      // API -- fan out across every zone and list snippets per zone.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
         zones,
@@ -207,7 +207,7 @@ export const SnippetProvider = () =>
       const name = output?.name ?? (yield* createSnippetName(id, news.name));
       const mainModule = news.mainModule ?? DEFAULT_MAIN_MODULE;
 
-      // `putSnippet` (PUT) is a true upsert — one call converges greenfield
+      // `putSnippet` (PUT) is a true upsert -- one call converges greenfield
       // create, routine update, and adoption alike.
       const file = yield* Effect.sync(
         () =>
@@ -234,7 +234,7 @@ export const SnippetProvider = () =>
         // A snippet can only be deleted once no snippet rule references it.
         // The engine deletes referencing `SnippetRules` first (dependency
         // edge via `snippetName`), but the rule removal is eventually
-        // consistent — Cloudflare may still report `snippet is still used`
+        // consistent -- Cloudflare may still report `snippet is still used`
         // for a short window. Bounded-retry that lag before giving up.
         .pipe(
           Effect.retry({

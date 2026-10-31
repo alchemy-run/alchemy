@@ -29,7 +29,7 @@ export type CertificateMapEntryProps = {
   /**
    * Parent certificate map. Full name
    * `projects/{project}/locations/{location}/certificateMaps/{certificateMap}`
-   * or the map id (combined with `location`). Immutable — changing it
+   * or the map id (combined with `location`). Immutable -- changing it
    * replaces the entry.
    */
   certificateMap: string;
@@ -38,13 +38,13 @@ export type CertificateMapEntryProps = {
    * `.../certificateMaps/{certificateMap}/certificateMapEntries/{certificateMapEntry}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the entry.
+   * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable -- changing it replaces the entry.
    */
   certificateMapEntryId?: string;
   /**
    * Certificate Manager location. Used when `certificateMap` is a bare
    * id. Certificate maps are global resources; omit or set `"global"`.
-   * Immutable — changing it replaces the entry. `GLOBAL` is accepted and
+   * Immutable -- changing it replaces the entry. `GLOBAL` is accepted and
    * normalized to `global`.
    * @default "global"
    */
@@ -67,14 +67,14 @@ export type CertificateMapEntryProps = {
   certificates?: string[];
   /**
    * Hostname (FQDN, e.g. `www.example.com`) or wildcard (`*.example.com`)
-   * used as SNI. Mutually exclusive with `matcher`. Immutable — changing
+   * used as SNI. Mutually exclusive with `matcher`. Immutable -- changing
    * it replaces the entry.
    */
   hostname?: string;
   /**
    * Predefined matcher when this entry is not selected by SNI. `PRIMARY`
    * is served when the client omits SNI or the hostname is not in the
-   * map. Mutually exclusive with `hostname`. Immutable — changing it
+   * map. Mutually exclusive with `hostname`. Immutable -- changing it
    * replaces the entry. If both are set, `hostname` is used.
    */
   matcher?: CertificateMapEntryMatcher;
@@ -118,7 +118,7 @@ export type CertificateMapEntry = Resource<
 >;
 
 /**
- * A Certificate Manager certificate map entry — binds one or more
+ * A Certificate Manager certificate map entry -- binds one or more
  * certificates to an SNI hostname (or the PRIMARY fallback) inside a
  * certificate map.
  *

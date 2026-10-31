@@ -18,7 +18,7 @@ export const toTagRecord = (
 
 /**
  * Look up a single CloudHSM cluster by its cluster id. `describeClusters` is
- * a filtered list — an unknown id simply yields an empty page, so a miss is
+ * a filtered list -- an unknown id simply yields an empty page, so a miss is
  * `undefined` rather than a typed NotFound.
  */
 export const findClusterById = Effect.fn(function* (clusterId: string) {

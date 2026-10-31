@@ -56,7 +56,7 @@ export interface ProfilePermission extends Resource<
 > {}
 
 /**
- * A cross-account permission on an AWS Signer signing profile — one statement
+ * A cross-account permission on an AWS Signer signing profile -- one statement
  * in the profile's resource policy granting another AWS account (or IAM
  * identity) a Signer action such as `signer:StartSigningJob`. The Signer
  * counterpart of CloudFormation's `AWS::Signer::ProfilePermission`.
@@ -96,9 +96,9 @@ export const ProfilePermission = Resource<ProfilePermission>("AWS.Signer.Profile
 
 /**
  * The profile policy is capped at 20 statements, but the list API still
- * pages — walk it fully so revision ids and statement lookups are accurate.
+ * pages -- walk it fully so revision ids and statement lookups are accurate.
  * A profile that has never had a permission answers with a typed
- * `ResourceNotFoundException` ("No policies associated with profile …") —
+ * `ResourceNotFoundException` ("No policies associated with profile ...") --
  * observed as an empty policy. A genuinely missing profile surfaces on the
  * subsequent `addProfilePermission` instead.
  */
@@ -123,7 +123,7 @@ const listAllPermissions = Effect.fn(function* (profileName: string) {
   return { permissions, revisionId };
 });
 
-/** Concurrent policy edits bump the revision id — re-observe and retry. */
+/** Concurrent policy edits bump the revision id -- re-observe and retry. */
 const conflictRetry = {
   while: (e: { _tag: string }): boolean => e._tag === "ConflictException",
   schedule: Schedule.exponential("500 millis"),
@@ -151,7 +151,7 @@ export const ProfilePermissionProvider = () =>
         list: () =>
           Effect.gen(function* () {
             // A ProfilePermission is one statement inside a profile's
-            // resource policy — fan out: enumerate active profiles, list
+            // resource policy -- fan out: enumerate active profiles, list
             // each policy, emit one Attributes per statement id.
             const profileNames = yield* signer.listSigningProfiles
               .pages({ includeCanceled: false })
@@ -201,7 +201,7 @@ export const ProfilePermissionProvider = () =>
           const oldStatementId = yield* createStatementId(id, olds);
           const newStatementId = yield* createStatementId(id, news);
           // The statement id is the permission's identity within the policy
-          // and the profile is the policy's host — either change replaces.
+          // and the profile is the policy's host -- either change replaces.
           // action/principal/profileVersion converge in reconcile via
           // remove + re-add under the same statement id.
           if (news.profileName !== olds.profileName || oldStatementId !== newStatementId) {
@@ -214,11 +214,11 @@ export const ProfilePermissionProvider = () =>
           const statementId = output?.statementId ?? (yield* createStatementId(id, news));
 
           yield* Effect.gen(function* () {
-            // OBSERVE — the profile's policy is authoritative.
+            // OBSERVE -- the profile's policy is authoritative.
             const { permissions, revisionId } = yield* listAllPermissions(news.profileName);
             const existing = permissions.find((p) => p.statementId === statementId);
 
-            // SYNC — statements have no update API. If the existing statement
+            // SYNC -- statements have no update API. If the existing statement
             // differs from the desired one, remove it (revision-checked) and
             // fall through to re-add.
             if (existing !== undefined) {
@@ -234,12 +234,12 @@ export const ProfilePermissionProvider = () =>
                   revisionId: revisionId!,
                 })
                 .pipe(
-                  // Already removed by a concurrent writer — proceed to add.
+                  // Already removed by a concurrent writer -- proceed to add.
                   Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                 );
             }
 
-            // ENSURE — add the desired statement. A ConflictException here is
+            // ENSURE -- add the desired statement. A ConflictException here is
             // a revision race (or the remove above still propagating); the
             // outer retry re-observes and converges.
             yield* signer.addProfilePermission({

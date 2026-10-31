@@ -6,7 +6,7 @@ import type { Table } from "./Table.ts";
 export interface QueryRequest extends TSQ.QueryRequest {}
 
 /**
- * Runtime binding for `timestream-query:Query` — run SQL queries against a
+ * Runtime binding for `timestream-query:Query` -- run SQL queries against a
  * Timestream {@link Table}.
  *
  * Bind the operation to a table inside a function runtime to get a callable
@@ -19,10 +19,10 @@ export interface QueryRequest extends TSQ.QueryRequest {}
  * ### Querying Data
  * **Example:** Count rows in a table
  * ```typescript
- * // init — bind the operation to the table
+ * // init -- bind the operation to the table
  * const query = yield* Timestream.Query(table);
  *
- * // runtime — run a SQL query
+ * // runtime -- run a SQL query
  * const result = yield* query({
  *   QueryString: `SELECT COUNT(*) AS c FROM "${databaseName}"."${tableName}"`,
  * });

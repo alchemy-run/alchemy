@@ -21,7 +21,7 @@ export interface StartMessageMoveTaskRequest extends Omit<
  * Pass a `destination` Queue at bind time to redrive into a specific queue
  * (grants `sqs:SendMessage` + `sqs:GetQueueAttributes` on it and injects its
  * ARN as `DestinationArn`). Without a destination, messages are redriven to
- * their original source queues — which requires `sqs:SendMessage` on those
+ * their original source queues -- which requires `sqs:SendMessage` on those
  * queues, so the binding grants `sqs:SendMessage` on `*` in that mode.
  *
  * Provide the `StartMessageMoveTaskHttp` layer on the Function to implement

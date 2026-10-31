@@ -38,7 +38,7 @@ export interface ParameterGroupProps {
    */
   description?: string;
   /**
-   * Engine parameter overrides (name → value), e.g.
+   * Engine parameter overrides (name -> value), e.g.
    * `{ "maxmemory-policy": "allkeys-lru" }`. Parameters removed from this map
    * are reset to the engine default.
    * @default {} (engine defaults)
@@ -70,7 +70,7 @@ export interface ParameterGroup extends Resource<
 > {}
 
 /**
- * A MemoryDB parameter group — a named collection of engine parameter
+ * A MemoryDB parameter group -- a named collection of engine parameter
  * overrides applied to every node of any {@link Cluster} that references it
  * via `parameterGroupName`.
  *
@@ -111,7 +111,7 @@ export const ParameterGroupProvider = () =>
         return response?.ParameterGroups?.[0];
       });
 
-      // Observed engine parameters (name → value), paginated.
+      // Observed engine parameters (name -> value), paginated.
       const readParameters = Effect.fn(function* (name: string) {
         const parameters = new Map<string, string>();
         yield* memorydb.describeParameters.pages({ ParameterGroupName: name }).pipe(
@@ -177,10 +177,10 @@ export const ParameterGroupProvider = () =>
           const desiredTags = { ...internalTags, ...props.tags };
           const desired = props.parameters ?? {};
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* memorydb
               .createParameterGroup({
@@ -201,7 +201,7 @@ export const ParameterGroupProvider = () =>
             });
           }
 
-          // 3. Sync parameters — diff desired values against OBSERVED cloud
+          // 3. Sync parameters -- diff desired values against OBSERVED cloud
           // values and apply only the delta. Parameters dropped from the
           // desired map (present in olds) are reset to the engine default.
           const observedParams = yield* readParameters(name);
@@ -234,7 +234,7 @@ export const ParameterGroupProvider = () =>
               );
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
@@ -256,7 +256,7 @@ export const ParameterGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A parameter group still referenced by a cluster (or mid-update)
-          // rejects deletion with InvalidParameterGroupStateFault — retry
+          // rejects deletion with InvalidParameterGroupStateFault -- retry
           // bounded. NotFound is success (idempotent delete).
           yield* memorydb
             .deleteParameterGroup({

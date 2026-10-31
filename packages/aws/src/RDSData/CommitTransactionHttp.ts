@@ -9,7 +9,7 @@ export const CommitTransactionHttp = Layer.effect(
     tag: "AWS.RDSData.CommitTransaction",
     action: "rds-data:CommitTransaction",
     operation: rdsdata.commitTransaction,
-    // commit is transaction-scoped — no database/schema on the wire
+    // commit is transaction-scoped -- no database/schema on the wire
     makeInput: (
       request: CommitTransactionRequest,
       { resourceArn, secretArn },

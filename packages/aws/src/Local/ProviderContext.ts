@@ -21,7 +21,7 @@ import { AWSEnvironment } from "../Environment.ts";
  * engine's ambient context supplies (credentials, region, endpoint,
  * environment).
  *
- * Method identity/shape is preserved exactly — the Provider interface is
+ * Method identity/shape is preserved exactly -- the Provider interface is
  * structural, and the Proxy forwards non-function members (`version`,
  * `stables`, `aliases`, `nuke`, ...) untouched. Modeled on the lifecycle
  * Proxy in [Local/RpcProvider.ts](../../Local/RpcProvider.ts).
@@ -35,7 +35,7 @@ export const withProviderContext = <R extends ResourceLike>(
       const value = (target as any)[prop];
       if (prop === "modes" && value !== undefined) {
         // Mode-resolved variants (`findProviderByType(type, mode)`, used for
-        // stamped-mode deletes and `Alchemy.remote()`) bypass this Proxy —
+        // stamped-mode deletes and `Alchemy.remote()`) bypass this Proxy --
         // wrap the services THEY resolve to as well, so a live variant's
         // ops carry the same context. A local variant's own data-plane
         // override is provided closer and still wins.
@@ -63,9 +63,9 @@ export const withProviderContext = <R extends ResourceLike>(
   });
 
 /**
- * Capture the ambient AWS environment — the exact tag set a local data
+ * Capture the ambient AWS environment -- the exact tag set a local data
  * plane overrides: {@link Endpoint}, {@link Region}, {@link Credentials},
- * {@link AWSEnvironment} — as a layer that reproduces it verbatim. An
+ * {@link AWSEnvironment} -- as a layer that reproduces it verbatim. An
  * absent Endpoint is pinned as `undefined` (the SDK default resolver), so
  * a later ambient override cannot leak in.
  */
@@ -97,10 +97,10 @@ export const captureAwsEnvironment: Effect.Effect<Layer.Layer<any, never, never>
  * resolves) to the AWS environment captured at REGISTRATION, provided
  * closest around each lifecycle effect. Providers therefore always run
  * against the environment they were registered with, regardless of the
- * caller's ambient context — which in an `alchemy dev` run is the emulator
+ * caller's ambient context -- which in an `alchemy dev` run is the emulator
  * (see AWS/Providers.ts): composition-time lookups get the emulator for
  * free while live-mode and mode-agnostic providers keep hitting the real
- * cloud. Local variants still win — their own data-plane override is
+ * cloud. Local variants still win -- their own data-plane override is
  * provided closer.
  */
 export const pinCollectionEnvironment = <
@@ -116,7 +116,7 @@ export const pinCollectionEnvironment = <
   const wrap = (provider: ProviderService | undefined) => {
     if (provider === undefined) return undefined;
     // Stamp the registration-captured live environment so Binding clients
-    // for `Alchemy.remote()` resources can provide it closest — in a
+    // for `Alchemy.remote()` resources can provide it closest -- in a
     // `dev` run ambient is the emulator, and an unwrapped live client
     // would miss the real cloud.
     Object.assign(provider, { liveDataPlane: () => environment });

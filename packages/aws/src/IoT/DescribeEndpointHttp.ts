@@ -4,7 +4,7 @@ import { makeIotAccountHttpBinding } from "./BindingHttp.ts";
 import { DescribeEndpoint } from "./DescribeEndpoint.ts";
 
 /**
- * HTTP implementation of the {@link DescribeEndpoint} capability — grants
+ * HTTP implementation of the {@link DescribeEndpoint} capability -- grants
  * `iot:DescribeEndpoint` on `*` and calls the IoT `DescribeEndpoint` API.
  */
 export const DescribeEndpointHttp = Layer.effect(

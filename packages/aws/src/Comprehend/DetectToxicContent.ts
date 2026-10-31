@@ -3,9 +3,9 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectToxicContent` — run toxicity
+ * Runtime binding for `comprehend:DetectToxicContent` -- run toxicity
  * analysis over a list of text segments; the response carries one result per
- * segment with per-label scores (profanity, hate speech, harassment, …).
+ * segment with per-label scores (profanity, hate speech, harassment, ...).
  *
  * The binding takes no arguments and grants the action on `*` (the action
  * has no resource-level IAM).

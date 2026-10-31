@@ -117,7 +117,7 @@ export interface ProjectProps {
   /**
    * Name of the project. Forms the `<name>.pages.dev` subdomain, so it must
    * be unique across all of Cloudflare Pages and contain only lowercase
-   * letters, numbers, and dashes. The name is the project's identity —
+   * letters, numbers, and dashes. The name is the project's identity --
    * changing it triggers a replacement.
    * @default ${app}-${stage}-${id}
    */
@@ -180,7 +180,7 @@ export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, P
  *
  * The project is the container for Pages deployments, custom domains, and
  * per-environment configuration. Created without git `source` integration,
- * it is a direct-upload project — deployments are pushed via the API or
+ * it is a direct-upload project -- deployments are pushed via the API or
  * `wrangler pages deploy`.
  *
  * The project `name` is its identity (it forms the `<name>.pages.dev`
@@ -257,7 +257,7 @@ export const ProjectProvider = () =>
         return { action: "replace" } as const;
       }
       // The name is the project's identity (it forms the *.pages.dev
-      // subdomain) — renames are a delete + create.
+      // subdomain) -- renames are a delete + create.
       const oldName = output?.name ?? (yield* createProjectName(id, olds?.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
@@ -275,7 +275,7 @@ export const ProjectProvider = () =>
         const observed = yield* getProject(acct, output.name);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — the project name is deterministic, so look it up
+      // Cold read -- the project name is deterministic, so look it up
       // directly. Pages projects carry no ownership markers we can
       // inspect, so an existing match is reported as Unowned and takeover
       // is gated behind the adopt policy.
@@ -287,11 +287,11 @@ export const ProjectProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? output?.name ?? (yield* createProjectName(id));
 
-      // 1. Observe — the project name is its identity; a 404 falls
+      // 1. Observe -- the project name is its identity; a 404 falls
       //    through to "missing" and we (re)create.
       let observed = yield* getProject(accountId, name);
 
-      // 2. Ensure — create when missing, tolerating the AlreadyExists
+      // 2. Ensure -- create when missing, tolerating the AlreadyExists
       //    race by re-reading.
       if (!observed) {
         observed = yield* pages
@@ -313,7 +313,7 @@ export const ProjectProvider = () =>
           );
       }
 
-      // 3. Sync — diff observed cloud state against the desired props and
+      // 3. Sync -- diff observed cloud state against the desired props and
       //    PATCH only the delta. Cloudflare's PATCH deep-merges
       //    `deploymentConfigs`, so removed record keys are sent as
       //    explicit nulls.
@@ -331,7 +331,7 @@ export const ProjectProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       // Deleting a project deletes its deployments and detaches custom
-      // domains. A missing project is success — delete is idempotent.
+      // domains. A missing project is success -- delete is idempotent.
       yield* pages
         .deleteProject({
           accountId: output.accountId,
@@ -422,7 +422,7 @@ const toApiBuildConfig = (config: BuildConfig | undefined): ApiBuildConfig | und
 /**
  * Map the desired deployment config of one environment to the API shape.
  * When `observed` is provided, record-shaped fields include explicit
- * `null`s for observed keys absent from the desired config — Cloudflare's
+ * `null`s for observed keys absent from the desired config -- Cloudflare's
  * PATCH endpoint deep-merges, so this is how keys are removed.
  */
 const toApiEnvConfig = (
@@ -468,7 +468,7 @@ const mapBindingRecord = (
 /**
  * Overlay the desired record on top of the observed one, nulling observed
  * keys that are absent from the desired record so PATCH removes them.
- * `undefined` desired means "unmanaged" — leave the cloud state alone.
+ * `undefined` desired means "unmanaged" -- leave the cloud state alone.
  */
 const mergeRecord = (
   desired: Record<string, unknown> | undefined,
@@ -623,7 +623,7 @@ const recordDirty = (
 
 /**
  * Secrets read back as `{ type: "secret_text" }` without a value, so a
- * desired secret with a value can never be proven converged — treat
+ * desired secret with a value can never be proven converged -- treat
  * matching-type secrets as equal and rely on PATCH idempotency.
  */
 const envVarEquals = (desired: unknown, observed: unknown): boolean => {

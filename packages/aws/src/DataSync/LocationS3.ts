@@ -54,7 +54,7 @@ export interface LocationS3 extends Resource<
   {
     /** ARN of the DataSync location. */
     locationArn: string;
-    /** URI of the location (`s3://…`). */
+    /** URI of the location (`s3://...`). */
     locationUri: string;
   },
   {},
@@ -67,8 +67,8 @@ export interface LocationS3 extends Resource<
  *
  * S3 locations are immutable apart from their tags: any change to the
  * bucket, subdirectory, storage class, or access role replaces the location.
- * Reconcile is idempotent across state loss — the location is re-discovered
- * by its deterministic `s3://…` URI.
+ * Reconcile is idempotent across state loss -- the location is re-discovered
+ * by its deterministic `s3://...` URI.
  *
  * ### Creating S3 Locations
  * **Example:** Bucket root
@@ -156,11 +156,11 @@ export const LocationS3Provider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — output cache, else re-discover by deterministic URI.
+          // 1. OBSERVE -- output cache, else re-discover by deterministic URI.
           let arn = output?.locationArn ?? (yield* findLocationArnByUri(expectedUriOf(news)));
           let loc = arn ? yield* describe(arn) : undefined;
 
-          // 2. ENSURE — create if missing.
+          // 2. ENSURE -- create if missing.
           if (loc === undefined) {
             const created = yield* retryWhileRoleNotAssumable(
               datasync.createLocationS3({

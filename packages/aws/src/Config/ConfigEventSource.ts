@@ -27,7 +27,7 @@ export interface ConfigEventDetail {
    * `ConfigurationItemChangeNotification`.
    */
   messageType?: string;
-  /** Compliance events: the new evaluation result (`complianceType`, …). */
+  /** Compliance events: the new evaluation result (`complianceType`, ...). */
   newEvaluationResult?: Record<string, unknown>;
   /** Compliance events: the previous evaluation result. */
   oldEvaluationResult?: Record<string, unknown>;
@@ -87,7 +87,7 @@ export interface ConfigEventSourceProps extends EventRouteProps {
  * this subscribes the host Function to those events so it can alert on
  * noncompliant resources or chain remediation automation.
  *
- * AWS Config publishes to EventBridge automatically — no additional
+ * AWS Config publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

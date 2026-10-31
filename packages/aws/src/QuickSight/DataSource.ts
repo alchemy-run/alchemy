@@ -20,13 +20,13 @@ export class QuickSightDataSourceUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * Properties for an Amazon QuickSight data source — a connection to an
+ * Properties for an Amazon QuickSight data source -- a connection to an
  * external data store (Athena, S3, Redshift, an RDS engine, etc.) that
  * datasets read from.
  */
 export interface DataSourceProps {
   /**
-   * Unique id of the data source within the account. Stable — changing it
+   * Unique id of the data source within the account. Stable -- changing it
    * replaces the data source. If omitted, a unique id is generated.
    */
   dataSourceId?: string;
@@ -38,7 +38,7 @@ export interface DataSourceProps {
 
   /**
    * Type of the underlying data store (e.g. `ATHENA`, `S3`, `REDSHIFT`,
-   * `POSTGRESQL`). Immutable — changing the type replaces the data source.
+   * `POSTGRESQL`). Immutable -- changing the type replaces the data source.
    */
   type: quicksight.DataSourceType;
 
@@ -98,7 +98,7 @@ export interface DataSource extends Resource<
 > {}
 
 /**
- * An Amazon QuickSight data source — a connection to an external data store
+ * An Amazon QuickSight data source -- a connection to an external data store
  * that datasets read from.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -192,10 +192,10 @@ export const DataSourceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readSource(accountId, dataSourceId);
 
-          // 2. Ensure — create if missing; tolerate an AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate an AlreadyExists race.
           if (observed === undefined) {
             yield* quicksight
               .createDataSource({
@@ -223,7 +223,7 @@ export const DataSourceProvider = () =>
               });
             }
           } else {
-            // 3. Sync — apply mutable settings via an idempotent update.
+            // 3. Sync -- apply mutable settings via an idempotent update.
             yield* quicksight.updateDataSource({
               AwsAccountId: accountId,
               DataSourceId: dataSourceId,
@@ -246,7 +246,7 @@ export const DataSourceProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncQuickSightTags(observed.Arn, desiredTags);
 
           yield* session.note(dataSourceId);

@@ -19,7 +19,7 @@ export interface MountVolumeOptions {
 export interface MountedVolume {
   /** Mount path on the Server (same value as {@link MountVolumeOptions.path}). */
   path: string;
-  /** Device path (e.g. `/dev/disk/by-id/scsi-0HC_Volume_…`). */
+  /** Device path (e.g. `/dev/disk/by-id/scsi-0HC_Volume_...`). */
   device: string;
 }
 

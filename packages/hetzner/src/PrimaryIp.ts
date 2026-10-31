@@ -27,20 +27,20 @@ export type PrimaryIpType = "ipv4" | "ipv6";
 
 export interface PrimaryIpProps {
   /**
-   * Address family. Cannot be changed after creation — changing it
+   * Address family. Cannot be changed after creation -- changing it
    * triggers a replacement.
    */
   type: PrimaryIpType;
   /**
-   * Location name (`nbg1`, `fsn1`, `hel1`, …) or numeric Location ID.
+   * Location name (`nbg1`, `fsn1`, `hel1`, ...) or numeric Location ID.
    * Required unless `datacenter` is set. Cannot be changed after
-   * creation — changing it triggers a replacement.
+   * creation -- changing it triggers a replacement.
    */
   location?: string | number;
   /**
-   * Datacenter name (`nbg1-dc3`, `fsn1-dc14`, …) or numeric Datacenter
+   * Datacenter name (`nbg1-dc3`, `fsn1-dc14`, ...) or numeric Datacenter
    * ID. Alternative to `location`; a name is mapped onto the parent
-   * Location (`nbg1-dc3` → `nbg1`). Cannot be changed after creation —
+   * Location (`nbg1-dc3` -> `nbg1`). Cannot be changed after creation --
    * changing it triggers a replacement.
    */
   datacenter?: string | number;
@@ -89,7 +89,7 @@ export type PrimaryIp = Resource<
      */
     ip: string;
     /**
-     * Location name the IP is bound to (`nbg1`, `fsn1`, …).
+     * Location name the IP is bound to (`nbg1`, `fsn1`, ...).
      */
     location: string;
     /**
@@ -139,7 +139,7 @@ export type PrimaryIp = Resource<
  * `location` or a `datacenter`; Alchemy generates a unique name unless
  * you set `name`. Assignee wiring is a later resource.
  *
- * `type`, `location`, and `datacenter` are immutable — changing any of
+ * `type`, `location`, and `datacenter` are immutable -- changing any of
  * them replaces the Primary IP (new address). `name`, `autoDelete`,
  * `labels`, and `deleteProtection` update in place.
  *
@@ -193,7 +193,7 @@ const userLabels = (
 
 /**
  * Hetzner datacenter names are `{location}-dc{n}` (e.g. `nbg1-dc3`).
- * Numeric ids are passed through — Locations use a different id space.
+ * Numeric ids are passed through -- Locations use a different id space.
  */
 export const locationFromDatacenter = (datacenter: string | number): string | number => {
   if (typeof datacenter === "number") return datacenter;
@@ -339,11 +339,11 @@ export const PrimaryIpProvider = () =>
       const desiredAutoDelete = news.autoDelete ?? false;
       const desiredProtection = news.deleteProtection ?? false;
 
-      // Observe — cloud state is authoritative. `output.id` is a cache
+      // Observe -- cloud state is authoritative. `output.id` is a cache
       // for the stable identifier; if the IP is gone, we recreate.
       let current = yield* observe({ id, name, outputId: output?.id });
 
-      // Ensure — create only when missing. A Conflict is a race with a
+      // Ensure -- create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
         const placement = resolvePlacement(news);
@@ -384,7 +384,7 @@ export const PrimaryIpProvider = () =>
         current = created.primary_ip;
       }
 
-      // Sync — name / auto_delete / labels via PUT (labels overwrite the
+      // Sync -- name / auto_delete / labels via PUT (labels overwrite the
       // full set). Protection is a separate Action.
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);

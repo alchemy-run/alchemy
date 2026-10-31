@@ -28,7 +28,7 @@ export type DomainsBackupProps = {
   /**
    * Parent Managed Microsoft AD domain. Full name
    * `projects/{project}/locations/global/domains/{domain}` or the domain
-   * FQDN. Immutable — changing it replaces the backup.
+   * FQDN. Immutable -- changing it replaces the backup.
    */
   domain: string;
   /**
@@ -36,7 +36,7 @@ export type DomainsBackupProps = {
    * `.../domains/{domain}/backups/{backup}`). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
    * 1-63 characters, lowercase letters, numbers, and hyphens. Immutable
-   * — changing it replaces the backup.
+   * -- changing it replaces the backup.
    */
   backupId?: string;
   /**
@@ -64,7 +64,7 @@ export type DomainsBackup = Resource<
     labels: Record<string, string>;
     /** Backup type (`ON_DEMAND` or `SCHEDULED`). */
     type: string | undefined;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Additional status information, if available. */
     statusMessage: string | undefined;

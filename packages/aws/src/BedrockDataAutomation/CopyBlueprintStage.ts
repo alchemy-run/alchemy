@@ -14,7 +14,7 @@ export interface CopyBlueprintStageRequest extends Omit<
 
 /**
  * Runtime binding for the `CopyBlueprintStage` operation (IAM action
- * `bedrock:CopyBlueprintStage` on the blueprint ARN) — copy the bound
+ * `bedrock:CopyBlueprintStage` on the blueprint ARN) -- copy the bound
  * blueprint between its `DEVELOPMENT` and `LIVE` stages from a deployed
  * Function (e.g. promote a tuned development schema to live).
  *
@@ -23,11 +23,11 @@ export interface CopyBlueprintStageRequest extends Omit<
  * ### Blueprint Management
  * **Example:** Promote Development To Live
  * ```typescript
- * // deploy time — bind the blueprint
+ * // deploy time -- bind the blueprint
  * const copyStage =
  *   yield* AWS.BedrockDataAutomation.CopyBlueprintStage(blueprint);
  *
- * // runtime — promote the development copy
+ * // runtime -- promote the development copy
  * yield* copyStage({ sourceStage: "DEVELOPMENT", targetStage: "LIVE" });
  * ```
  *

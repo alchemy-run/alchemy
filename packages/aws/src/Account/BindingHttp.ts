@@ -12,8 +12,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * ARN is the caller's own account, fixed by the credentials rather than
  * chosen per resource).
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeAccountHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeAccountHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */

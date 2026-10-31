@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/tanstack-start` — TanStack Start
+ * `@alchemy.run/frontend-frameworks/tanstack-start` -- TanStack Start
  * integration implementing framework-core's `Framework` service, with the
  * deploy target passed as a value (AWS Lambda by default, via the
  * `@alchemy.run/frontend-frameworks/tanstack-start/aws` subpath module).
@@ -9,7 +9,7 @@
  * environments, and its `builder.buildApp` builds both in one pass. This
  * integration drives the project's own Vite install
  * (`createBuilder(...).buildApp()`) and forces the SSR bundle to be
- * self-contained so it deploys as a standalone Lambda — the project's
+ * self-contained so it deploys as a standalone Lambda -- the project's
  * `vite.config.ts` needs no adapter wiring.
  *
  * The default export is the e2e-harness factory contract: a
@@ -17,8 +17,8 @@
  * the fully-typed path with TanStack Start-specific options.
  *
  * This module (and `TanStackStart.ts`) is target-agnostic by contract: it
- * must not import anything AWS-specific. The AWS half — the Lambda entry
- * and the streaming adapter — lives behind
+ * must not import anything AWS-specific. The AWS half -- the Lambda entry
+ * and the streaming adapter -- lives behind
  * `@alchemy.run/frontend-frameworks/tanstack-start/aws`.
  */
 import type * as FileSystem from "effect/FileSystem";

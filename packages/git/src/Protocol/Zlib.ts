@@ -1,6 +1,6 @@
 import zlib from "node:zlib";
 /**
- * The zlib boundary — the ONLY module in `src/Protocol/` allowed to touch
+ * The zlib boundary -- the ONLY module in `src/Protocol/` allowed to touch
  * `node:zlib` (per DESIGN §7).
  *
  * | Need                                          | Tool                          |
@@ -13,7 +13,7 @@ import zlib from "node:zlib";
  * entry's zlib stream (RFC 1950) is self-terminating; `createInflate()`'s
  * `end` event fires at `Z_STREAM_END` mid-`write` without `.end()`, and
  * `inflate.bytesWritten` then reports the **exact compressed bytes
- * consumed** — the only way to find the next entry.
+ * consumed** -- the only way to find the next entry.
  * `DecompressionStream("deflate")` is disqualified for this: it errors on
  * trailing bytes and does not report consumption.
  */
@@ -52,7 +52,7 @@ const CHUNK = 65536;
  * `options.maxOutput`.
  */
 /**
- * Synchronous single-entry inflate — the fast path.
+ * Synchronous single-entry inflate -- the fast path.
  *
  * The streaming implementation below builds a `zlib.createInflate()`
  * Transform (EventEmitter, internal buffers) and takes an async event-loop
@@ -63,13 +63,13 @@ const CHUNK = 65536;
  * drives the engine synchronously and leaves the consumed-input count in
  * `bytesWritten`, which is exactly the pair a pack parser needs. It is an
  * internal API, so this returns `undefined` when it is unavailable (or
- * behaves unexpectedly) and the caller falls back to the stream path —
+ * behaves unexpectedly) and the caller falls back to the stream path --
  * notably relevant on workerd, whose `node:zlib` is a compatibility shim.
  */
 /**
  * Second synchronous path, on the PUBLIC API: `inflateSync(.., { info: true })`
  * returns `{ buffer, engine }`, and `engine.bytesWritten` is the input
- * consumed — the same pair `_processChunk` gives, without the internal.
+ * consumed -- the same pair `_processChunk` gives, without the internal.
  * zlib stops at the deflate stream's end, so trailing pack bytes are
  * ignored. Same `expectedSize` verification as above (a shim that returns
  * only a first chunk is caught by it). `undefined` = use the stream path.
@@ -139,7 +139,7 @@ const inflateEntryUnsafeSync = (
     // already declares turns that silent truncation into a fallback.
     if (expectedSize !== undefined && output.length !== expectedSize) {
       // workerd's shim returned only the first output chunk: the public
-      // `inflateSync({ info })` loops to completion — try it before paying
+      // `inflateSync({ info })` loops to completion -- try it before paying
       // for the streaming path (measured: the entries that hit this were
       // the only async work left in a production ingest).
       return inflateEntryInfoSync(buf, offset, maxOutput, expectedSize);
@@ -149,7 +149,7 @@ const inflateEntryUnsafeSync = (
       bytesConsumed,
     };
   } catch {
-    // Corrupt stream, truncated window, or an unsupported shim — the
+    // Corrupt stream, truncated window, or an unsupported shim -- the
     // stream path re-runs it and reports the real error.
     return undefined;
   } finally {
@@ -256,7 +256,7 @@ const inflateEntryStreaming = (
     const feed = (): void => {
       if (settled) return;
       if (pos >= end) {
-        // ran out of input without Z_STREAM_END — flushing EOF surfaces the
+        // ran out of input without Z_STREAM_END -- flushing EOF surfaces the
         // "unexpected end of file" error through the error handler above.
         inflater.end();
         return;
@@ -291,7 +291,7 @@ export const inflate = (data: Uint8Array): Effect.Effect<Uint8Array, ZlibError> 
   });
 
 /**
- * One-shot deflate at the given level (default 6 — the at-rest compression
+ * One-shot deflate at the given level (default 6 -- the at-rest compression
  * level for delta-resolved objects; non-delta pack entries are stored
  * verbatim and never re-compressed).
  */

@@ -84,7 +84,7 @@ export interface ClusterSubnetGroup extends Resource<
 > {}
 
 /**
- * An Amazon Redshift cluster subnet group — the set of VPC subnets a
+ * An Amazon Redshift cluster subnet group -- the set of VPC subnets a
  * provisioned Redshift cluster's nodes are placed into.
  *
  * Subnet groups are free and provision instantly. A {@link Cluster}
@@ -112,13 +112,13 @@ export const ClusterSubnetGroup = Resource<ClusterSubnetGroup>("AWS.Redshift.Clu
 /**
  * Retry an effect while the subnet group is still held by a cluster that is
  * mid-deletion (`InvalidClusterSubnetGroupStateFault`), bounded to ~10
- * minutes — a Redshift cluster releases its subnet group only once its own
+ * minutes -- a Redshift cluster releases its subnet group only once its own
  * deletion completes, several minutes after `deleteCluster` returns.
  *
  * Expressed as an explicitly-typed module-scope helper: inlining
  * `Effect.retry` in a lifecycle operation leaves `Retry.Return`'s
  * conditional type unresolved in the provider's inferred layer type, which
- * declaration emit widens to an `unknown` R — poisoning `AWS.providers()`
+ * declaration emit widens to an `unknown` R -- poisoning `AWS.providers()`
  * for every downstream consumer.
  */
 const retryWhileSubnetGroupInUse = <A, E extends { _tag: string }, R>(
@@ -194,10 +194,10 @@ export const ClusterSubnetGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const description = news.description ?? "Managed by Alchemy";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race
           //    with a peer reconciler by re-reading.
           if (!observed?.ClusterSubnetGroupName) {
             yield* redshift
@@ -219,7 +219,7 @@ export const ClusterSubnetGroupProvider = () =>
             }
           }
 
-          // 3. Sync — diff OBSERVED description/subnets against desired;
+          // 3. Sync -- diff OBSERVED description/subnets against desired;
           //    modifyClusterSubnetGroup replaces the whole subnet list.
           const observedSubnets = (observed.Subnets ?? []).flatMap((subnet) =>
             subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
@@ -241,7 +241,7 @@ export const ClusterSubnetGroupProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags (describe
+          // 3b. Sync tags -- diff against OBSERVED cloud tags (describe
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "subnetgroup", name);
@@ -255,7 +255,7 @@ export const ClusterSubnetGroupProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A cluster deleting out of this group holds it until the
-          // cluster's own deletion completes — retry through that window.
+          // cluster's own deletion completes -- retry through that window.
           yield* retryWhileSubnetGroupInUse(
             redshift
               .deleteClusterSubnetGroup({
@@ -276,7 +276,7 @@ export const ClusterSubnetGroupProvider = () =>
                   (group) =>
                     group.ClusterSubnetGroupName !== undefined &&
                     // `default` is auto-created by Redshift for the default
-                    // VPC — never ours, never census/nuke it.
+                    // VPC -- never ours, never census/nuke it.
                     group.ClusterSubnetGroupName !== "default",
                 ),
               ),

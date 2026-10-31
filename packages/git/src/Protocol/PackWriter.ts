@@ -1,10 +1,10 @@
 /**
- * No-delta pack emission (DESIGN §3.5) — streaming, constant memory:
+ * No-delta pack emission (DESIGN §3.5) -- streaming, constant memory:
  *
  * ```
- * PACK + version(2) + count(manifest.length)     — count known upfront
- * for each entry:  varint(type, size) + zdata    — stored zlib bytes, verbatim
- * sha1 trailer                                   — incremental over everything
+ * PACK + version(2) + count(manifest.length)     -- count known upfront
+ * for each entry:  varint(type, size) + zdata    -- stored zlib bytes, verbatim
+ * sha1 trailer                                   -- incremental over everything
  * ```
  *
  * No compression CPU at all: objects are stored pre-deflated (`zdata` is
@@ -12,8 +12,8 @@
  * concatenation + SHA-1. Serving no deltas / no thin packs is legal
  * (thin-pack/ofs-delta are protocol MAYs).
  *
- * The writer emits {@link PackEvent}s — raw pack bytes plus optional progress
- * marks — so the choreography layer can mux data onto side-band 1 and
+ * The writer emits {@link PackEvent}s -- raw pack bytes plus optional progress
+ * marks -- so the choreography layer can mux data onto side-band 1 and
  * progress onto band 2 without this module knowing about sideband framing.
  */
 import * as Effect from "effect/Effect";

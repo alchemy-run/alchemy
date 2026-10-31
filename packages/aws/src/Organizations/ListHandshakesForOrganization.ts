@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListHandshakesForOrganization`.
  *
- * Lists the handshakes sent by the organization's management account — outstanding and recently concluded invitations.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists the handshakes sent by the organization's management account -- outstanding and recently concluded invitations.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListHandshakesForOrganizationHttp)`.
  * ### Handshakes & Invitations
  * **Example:** List the Organization's Handshakes
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listHandshakesForOrganization = yield* AWS.Organizations.ListHandshakesForOrganization();
  *
  * // runtime

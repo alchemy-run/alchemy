@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateAutoPredictor` — kick off (re)training
+ * Runtime binding for `forecast:CreateAutoPredictor` -- kick off (re)training
  * of an AutoPredictor from a dataset group, the scheduled-retraining step of
  * a grandfathered Forecast deployment. Also grants `iam:PassRole`
  * (conditioned to `forecast.amazonaws.com`) for the KMS-encryption role an

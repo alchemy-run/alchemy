@@ -44,7 +44,7 @@ const unauthorized = HttpServerResponse.text("Unauthorized", { status: 401 });
  * `/__rpc__/*` get 401 even if they guess the path or the token.
  *
  * Implemented here (not `alchemy/Rpc.serveRpc`) so canvas Functions stay
- * under the 96KB start-command cap. Value methods only — no streams.
+ * under the 96KB start-command cap. Value methods only -- no streams.
  *
  * Importing this module registers the Function-runtime hook. Tagged
  * Functions that host RPC methods must import it (or `bindFunction`,

@@ -7,12 +7,12 @@ import * as Output from "alchemy/Output";
  * certificate and the records pointing hostnames at the AWS target, through
  * whichever DNS host `domain.dns` names.
  *
- * Route 53 — the default — keeps the exact resources AWS composites
+ * Route 53 -- the default -- keeps the exact resources AWS composites
  * declared before DNS adapters existed (an inline-validated
  * `AWS.ACM.Certificate` plus `AWS.Route53.Record`s), so existing stacks plan
  * no changes. Any other DNS host validates the certificate externally:
- * `Certificate` (`dnsValidation: "external"`) → the adapter's validation
- * records → `AWS.ACM.CertificateValidation`.
+ * `Certificate` (`dnsValidation: "external"`) -> the adapter's validation
+ * records -> `AWS.ACM.CertificateValidation`.
  *
  * Not exported from the AWS barrel.
  */
@@ -29,7 +29,7 @@ export const isRoute53Dns = (dns: DNS.DnsConfig | undefined) =>
 /**
  * The DNS adapter of an AWS custom domain: the explicit `dns` adapter, or
  * Route 53 (pinned to `hostedZoneId` when given) when omitted. Route 53 is
- * built directly — AWS composites need no registry lookup for their own
+ * built directly -- AWS composites need no registry lookup for their own
  * DNS host.
  */
 export const resolveDomainDns = (
@@ -51,12 +51,12 @@ export const resolveDomainDns = (
 /**
  * An ACM certificate for a custom domain, validated through `dns`.
  *
- * - Route 53 (omitted, explicit, or `false` — "no alias records" still
+ * - Route 53 (omitted, explicit, or `false` -- "no alias records" still
  *   validates in Route 53): `Certificate(id, props)` exactly as given; the
  *   provider publishes the validation records inline and waits.
  * - Any other host: `Certificate(id, { ...props, dnsValidation:
  *   "external" })`, the adapter's `{id}Validation` records (retained on
- *   destroy — ACM reuses one CNAME per name across certificates), and
+ *   destroy -- ACM reuses one CNAME per name across certificates), and
  *   `{id}Issued` (`AWS.ACM.CertificateValidation`).
  *
  * `certificateArn` resolves only once the certificate is issued, so a

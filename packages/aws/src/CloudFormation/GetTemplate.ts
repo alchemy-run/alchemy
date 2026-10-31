@@ -8,7 +8,7 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:GetTemplate`).
  *
  * Bind this operation to a {@link Stack} to read the deployed template body
- * from inside a function runtime — e.g. audit tooling that archives or diffs
+ * from inside a function runtime -- e.g. audit tooling that archives or diffs
  * the template actually running in the account. Provide the implementation
  * with `Effect.provide(AWS.CloudFormation.GetTemplateHttp)`.
  * ### Reading Stacks

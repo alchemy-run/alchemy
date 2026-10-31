@@ -47,7 +47,7 @@ export interface ApiDestinationProps {
 
   /**
    * Maximum invocations per second EventBridge sends to the endpoint. The
-   * unit (per second) is part of the AWS field's semantics — this is a rate
+   * unit (per second) is part of the AWS field's semantics -- this is a rate
    * limit, not a duration.
    * @default 300
    */
@@ -55,7 +55,7 @@ export interface ApiDestinationProps {
 }
 
 /**
- * An Amazon EventBridge API destination — an HTTPS endpoint configured as an
+ * An Amazon EventBridge API destination -- an HTTPS endpoint configured as an
  * event target, invoked with the authorization held by a {@link Connection}.
  *
  * API destinations do not support tags, so ownership is tracked by the
@@ -174,14 +174,14 @@ export const ApiDestinationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.apiDestinationName ?? (yield* createDestinationName(id, news));
 
-          // Observe — live cloud state is authoritative; a vanished
+          // Observe -- live cloud state is authoritative; a vanished
           // destination falls through to create.
           const observed = yield* eventbridge
             .describeApiDestination({ Name: name })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ApiDestinationArn) {
-            // Ensure — create the destination; tolerate an AlreadyExists
+            // Ensure -- create the destination; tolerate an AlreadyExists
             // race with a peer reconciler and converge via the update below.
             yield* eventbridge
               .createApiDestination({
@@ -194,7 +194,7 @@ export const ApiDestinationProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
-            // Sync — updateApiDestination overwrites the mutable aspects
+            // Sync -- updateApiDestination overwrites the mutable aspects
             // (description, connection, endpoint, method, rate limit) in one
             // shot (idempotent on matching values).
             yield* eventbridge.updateApiDestination({

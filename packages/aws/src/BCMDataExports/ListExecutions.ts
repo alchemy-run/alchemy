@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Export } from "./Export.ts";
 
 /**
- * Request for {@link ListExecutions} — the bound export's ARN is injected
+ * Request for {@link ListExecutions} -- the bound export's ARN is injected
  * automatically.
  */
 export interface ListExecutionsRequest extends Omit<bcm.ListExecutionsRequest, "ExportArn"> {}
@@ -20,7 +20,7 @@ export interface ListExecutionsRequest extends Omit<bcm.ListExecutionsRequest, "
  * ### Monitoring Executions
  * **Example:** List Recent Executions
  * ```typescript
- * // init — bind the operation to the export
+ * // init -- bind the operation to the export
  * const listExecutions = yield* AWS.BCMDataExports.ListExecutions(cur);
  *
  * // runtime

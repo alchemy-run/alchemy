@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:UpdateKxDataview` — advances a dataview of a kdb database in the bound environment to a new changeset (or new segment configurations) — how ingestion pipelines roll fresh data out to readers.
+ * Runtime binding for `finspace:UpdateKxDataview` -- advances a dataview of a kdb database in the bound environment to a new changeset (or new segment configurations) -- how ingestion pipelines roll fresh data out to readers.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.UpdateKxDataviewHttp)`.
  * ### Managing Dataviews

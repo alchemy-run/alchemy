@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `s3:CreateJob` (S3 Batch Operations).
  *
- * Submits a large-scale batch job — copy, tag, ACL, restore, or
- * Lambda-invoke — over a manifest of S3 objects, e.g. an ingest Lambda that
+ * Submits a large-scale batch job -- copy, tag, ACL, restore, or
+ * Lambda-invoke -- over a manifest of S3 objects, e.g. an ingest Lambda that
  * kicks off a bulk re-tagging run. The binding also grants `iam:PassRole` so
  * the function can hand the service the job's execution role. The account id
  * is resolved once via `sts:GetCallerIdentity`. Provide the implementation
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Running Batch Operations Jobs
  * **Example:** Submit a Suspended Tagging Job
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const createJob = yield* AWS.S3Control.CreateJob();
  *
  * // runtime

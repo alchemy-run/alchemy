@@ -27,18 +27,18 @@ export type EncryptionConfigProps = {
   /**
    * Organization id (the `{organization}` segment of
    * `organizations/{organization}/locations/{location}/encryptionConfigs/{encryptionConfig}`).
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   organizationId: string;
   /**
-   * Region (`us-central1`, …). Global is not supported. Immutable —
+   * Region (`us-central1`, ...). Global is not supported. Immutable --
    * changing it replaces the config.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * EncryptionConfig id. Currently only `"default"` is supported.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    * @default "default"
    */
   encryptionConfigId?: string;

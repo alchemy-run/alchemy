@@ -32,7 +32,7 @@ export interface BatchPutGeofenceRequest extends Omit<
  *     },
  *   ],
  * });
- * // result.Successes / result.Errors → per-geofence outcomes
+ * // result.Successes / result.Errors -> per-geofence outcomes
  * ```
  *
  * @binding

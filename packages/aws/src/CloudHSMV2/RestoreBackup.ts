@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `cloudhsm:RestoreBackup`).
  *
  * Recovers a CloudHSM backup in the `PENDING_DELETION` state back to
- * `READY` — the undo for `DeleteBackup`, available for 7 days after the
+ * `READY` -- the undo for `DeleteBackup`, available for 7 days after the
  * delete. Provide the implementation with
  * `Effect.provide(AWS.CloudHSMV2.RestoreBackupHttp)`.
  * ### Managing Backups

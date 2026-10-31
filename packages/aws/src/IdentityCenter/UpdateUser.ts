@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Managing Users
  * **Example:** Update a User's Display Name
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const updateUser = yield* AWS.IdentityCenter.UpdateUser(instance);
  *
  * // runtime

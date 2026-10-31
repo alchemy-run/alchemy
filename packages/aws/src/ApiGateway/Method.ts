@@ -68,7 +68,7 @@ export interface MethodProps {
    * `ApiGateway.Resource`.
    *
    * Passing a raw `restApiId` instead is still supported but opts out of
-   * automatic deployment ordering — you must then manage `Deployment.triggers`
+   * automatic deployment ordering -- you must then manage `Deployment.triggers`
    * yourself.
    */
   restApi?: RestApi;
@@ -131,8 +131,8 @@ export interface MethodType extends Resource<
 /**
  * An HTTP method on an API Gateway Resource.
  *
- * A `Method` is a single HTTP verb (`GET`, `POST`, `ANY`, …) attached to a
- * REST API resource path. Most methods also carry an `integration` — the
+ * A `Method` is a single HTTP verb (`GET`, `POST`, `ANY`, ...) attached to a
+ * REST API resource path. Most methods also carry an `integration` -- the
  * downstream target that actually handles the request (a Lambda function,
  * an HTTP endpoint, a mock response, etc.).
  * ### Binding to a RestApi
@@ -207,7 +207,7 @@ export const MethodResource = Resource<MethodType>("AWS.ApiGateway.Method");
 
 /**
  * `Input`-accepting mirror of {@link MethodProps} used by the `Method`
- * wrapper function — see {@link MethodProps} for per-field documentation.
+ * wrapper function -- see {@link MethodProps} for per-field documentation.
  */
 export interface MethodInputProps {
   restApi?: RestApi;
@@ -255,7 +255,7 @@ const MethodImpl = (id: string, props: MethodInputProps) =>
 
 /**
  * User-facing wrapper for the Method resource. Accepts `restApi: RestApi`
- * as the idiomatic way to attach a method — this both forwards the API id
+ * as the idiomatic way to attach a method -- this both forwards the API id
  * and registers the method as a binding on the RestApi so the scheduler
  * orders `Deployment` after it.
  */
@@ -354,7 +354,7 @@ const readMethodSnapshot = (p: { restApiId: string; resourceId: string; httpMeth
           cacheNamespace: integ.cacheNamespace,
           cacheKeyParameters: integ.cacheKeyParameters,
           contentHandling: integ.contentHandling,
-          // Wire milliseconds — a plain number is a valid `Duration.Input`,
+          // Wire milliseconds -- a plain number is a valid `Duration.Input`,
           // so the observed snapshot stays directly comparable to a desired
           // spec normalized via `toWireMillis`.
           timeout: integ.timeoutInMillis,
@@ -476,7 +476,7 @@ export const MethodProvider = () =>
           const resourceId = (output?.resourceId ?? news.resourceId) as string;
           const httpMethod = output?.httpMethod ?? news.httpMethod;
 
-          // Observe — read live method + integration as a single snapshot.
+          // Observe -- read live method + integration as a single snapshot.
           // `output.*` fields are never trusted as proxies for cloud state;
           // they're at most a cache for the natural-key tuple above.
           let observed = yield* readMethodSnapshot({
@@ -485,7 +485,7 @@ export const MethodProvider = () =>
             httpMethod,
           });
 
-          // Ensure — putMethod creates the method shape (auth type,
+          // Ensure -- putMethod creates the method shape (auth type,
           // request models, scopes, etc.). Some of those fields cannot be
           // patched in place by `updateMethod`, so on a "recreate-needed"
           // diff we drop the existing method and re-put. This is also the
@@ -536,7 +536,7 @@ export const MethodProvider = () =>
             }
           }
 
-          // Sync patchable scalar fields — observed ↔ desired.
+          // Sync patchable scalar fields -- observed <-> desired.
           const patches: ag.PatchOperation[] = [];
           if (authType !== observed.authorizationType) {
             patches.push({
@@ -568,7 +568,7 @@ export const MethodProvider = () =>
             });
           }
 
-          // Sync integration — putIntegration is an upsert; deleteIntegration
+          // Sync integration -- putIntegration is an upsert; deleteIntegration
           // tolerates missing integrations. Normalize the desired timeout to
           // wire milliseconds so it compares against the observed snapshot.
           const desiredIntegration = news.integration && {

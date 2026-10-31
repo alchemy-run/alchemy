@@ -168,7 +168,7 @@ export type SubscriptionBigQueryAttributes = {
   dropUnknownFields: boolean;
   /** Service account Pub/Sub writes to BigQuery as. */
   serviceAccountEmail: string | undefined;
-  /** Server-reported delivery state (`ACTIVE`, `PERMISSION_DENIED`, …). */
+  /** Server-reported delivery state (`ACTIVE`, `PERMISSION_DENIED`, ...). */
   state: string | undefined;
 };
 
@@ -182,7 +182,7 @@ export type SubscriptionProps = {
   subscriptionId?: string;
   /**
    * Topic this subscription receives from. Accepts a full resource name
-   * (`projects/{project}/topics/{topic}`) or a topic id. Immutable —
+   * (`projects/{project}/topics/{topic}`) or a topic id. Immutable --
    * changing it replaces the subscription.
    */
   topic: string;
@@ -209,7 +209,7 @@ export type SubscriptionProps = {
   messageRetentionDuration?: string;
   /**
    * Deliver messages with the same ordering key in publish order.
-   * Immutable — changing it replaces the subscription.
+   * Immutable -- changing it replaces the subscription.
    * @default false
    */
   enableMessageOrdering?: boolean;
@@ -222,7 +222,7 @@ export type SubscriptionProps = {
   enableExactlyOnceDelivery?: boolean;
   /**
    * Pub/Sub filter language expression. Only matching messages are
-   * delivered. Immutable — changing it replaces the subscription.
+   * delivered. Immutable -- changing it replaces the subscription.
    */
   filter?: string;
   /**
@@ -701,7 +701,7 @@ const SUBSCRIPTION_TYPE = "GCP.PubSub.Subscription";
 /**
  * The service account Alchemy mints for one subscription's BigQuery
  * writes. Keyed on the instance id, not just the name: IAM keeps serving a
- * deleted account's identity for minutes, so a destroy → redeploy that
+ * deleted account's identity for minutes, so a destroy -> redeploy that
  * re-created the same email would be rejected by Pub/Sub.
  */
 const bigqueryWriterKey = (subscription: string, instanceId: string) =>

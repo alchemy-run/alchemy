@@ -29,7 +29,7 @@ export type FeatureOnlineStoreBigtableAutoScaling = {
   minNodeCount?: number;
   /** Maximum node count (<= 10 * minNodeCount). */
   maxNodeCount?: number;
-  /** Target CPU percent (10–80). Defaults to 50. */
+  /** Target CPU percent (10-80). Defaults to 50. */
   cpuUtilizationTarget?: number;
 };
 
@@ -53,11 +53,11 @@ export type FeatureOnlineStoreDedicatedServingEndpoint = {
 export type FeatureOnlineStoreProps = {
   /**
    * Feature Online Store id. Valid characters `[a-z0-9_]`, must start
-   * with a letter, max 60. Immutable — changing it replaces the store.
+   * with a letter, max 60. Immutable -- changing it replaces the store.
    */
   featureOnlineStoreId?: string;
   /**
-   * Region. Immutable — changing it replaces the store.
+   * Region. Immutable -- changing it replaces the store.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -67,7 +67,7 @@ export type FeatureOnlineStoreProps = {
   labels?: Record<string, string>;
   /**
    * Bigtable storage. Mutually exclusive with `optimized`. Immutable
-   * storage type — switching to Optimized replaces the store.
+   * storage type -- switching to Optimized replaces the store.
    * @default { autoScaling: { minNodeCount: 1, maxNodeCount: 1 } } when `optimized` is unset
    */
   bigtable?: FeatureOnlineStoreBigtable;

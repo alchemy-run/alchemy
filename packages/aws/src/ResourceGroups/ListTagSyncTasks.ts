@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `resource-groups:ListTagSyncTasks`.
  *
  * Enumerates the account's tag-sync tasks (optionally filtered to a
- * specific group) with each task's status — how an ops function audits
+ * specific group) with each task's status -- how an ops function audits
  * which groups are kept in sync with a tag and alerts on tasks in `ERROR`.
  * Account-level: tasks span groups, so the grant is on `*`. Provide the
  * implementation with `Effect.provide(AWS.ResourceGroups.ListTagSyncTasksHttp)`.

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:UpdateRelatedItems`.
  *
- * Attaches or removes a related item on an incident — link the dashboard,
+ * Attaches or removes a related item on an incident -- link the dashboard,
  * ticket, or runbook execution your automation is working from. Related items
  * live under runtime incident-record ARNs, so the deploy-time grant is
  * account-level (`Resource: "*"`).

@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { GenerateAs2805KekValidation } from "./GenerateAs2805KekValidation.ts";
 
 /**
- * HTTP implementation of {@link GenerateAs2805KekValidation} — grants the
+ * HTTP implementation of {@link GenerateAs2805KekValidation} -- grants the
  * host Function `payment-cryptography:GenerateAs2805KekValidation` on the
  * KEK and calls the Payment Cryptography Data API at runtime.
  */

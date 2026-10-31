@@ -35,7 +35,7 @@ const LIST_MAX_PAGES = 100;
 /** The type of this amount. Stripe currently only supports monetary credits. */
 export type CreditGrantAmountType = "monetary";
 
-/** The category of this credit grant. Tracking only — not shown to customers. */
+/** The category of this credit grant. Tracking only -- not shown to customers. */
 export type CreditGrantCategory = "paid" | "promotional";
 
 /**
@@ -61,7 +61,7 @@ export interface CreditGrantAmount {
    */
   type: CreditGrantAmountType;
   /**
-   * Monetary amount. Required when `type` is `"monetary"`. Create-only —
+   * Monetary amount. Required when `type` is `"monetary"`. Create-only --
    * changing it replaces the grant.
    */
   monetary?: CreditGrantMonetaryAmount;
@@ -69,7 +69,7 @@ export interface CreditGrantAmount {
 
 export interface CreditGrantApplicablePrice {
   /**
-   * Stripe Price id (`price_…`) this grant can apply to. Metered prices
+   * Stripe Price id (`price_...`) this grant can apply to. Metered prices
    * only. Cannot be combined with `priceType`.
    */
   id: string;
@@ -97,8 +97,8 @@ export interface CreditGrantApplicabilityConfig {
 
 export interface CreditGrantProps {
   /**
-   * Id of the customer receiving the billing credits (`cus_…`). Required
-   * unless `customerAccount` is set. Create-only — changing it replaces
+   * Id of the customer receiving the billing credits (`cus_...`). Required
+   * unless `customerAccount` is set. Create-only -- changing it replaces
    * the grant.
    */
   customer?: string;
@@ -108,7 +108,7 @@ export interface CreditGrantProps {
    */
   customerAccount?: string;
   /**
-   * Amount of this credit grant. Create-only — changing it replaces the
+   * Amount of this credit grant. Create-only -- changing it replaces the
    * grant.
    */
   amount: CreditGrantAmount;
@@ -119,7 +119,7 @@ export interface CreditGrantProps {
    */
   applicabilityConfig?: CreditGrantApplicabilityConfig;
   /**
-   * Category of this credit grant. Tracking only — not shown to the
+   * Category of this credit grant. Tracking only -- not shown to the
    * customer. Create-only.
    * @default "paid"
    */
@@ -137,7 +137,7 @@ export interface CreditGrantProps {
   effectiveAt?: number;
   /**
    * Unix timestamp when the credits expire. If omitted, they never expire.
-   * Mutable — pass a new timestamp to update.
+   * Mutable -- pass a new timestamp to update.
    */
   expiresAt?: number;
   /**
@@ -157,11 +157,11 @@ export type CreditGrant = Resource<
   "Stripe.CreditGrant",
   CreditGrantProps,
   {
-    /** Stripe credit grant id (`credgr_…`). */
+    /** Stripe credit grant id (`credgr_...`). */
     id: string;
     /** Dashboard name, if set. */
     name: string | undefined;
-    /** Customer id receiving the credits (`cus_…`). */
+    /** Customer id receiving the credits (`cus_...`). */
     customer: string | undefined;
     /** Customer-account id receiving the credits, if set. */
     customerAccount: string | undefined;
@@ -193,7 +193,7 @@ export type CreditGrant = Resource<
 >;
 
 /**
- * A Stripe Credit Grant — prepaid or promotional billing credits allocated
+ * A Stripe Credit Grant -- prepaid or promotional billing credits allocated
  * to a customer and applied against metered prices. Amount, customer,
  * applicability, category, effective time, and priority are immutable;
  * changing them replaces the grant. `expiresAt` and `metadata` update in

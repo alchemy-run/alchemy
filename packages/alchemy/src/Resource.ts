@@ -123,7 +123,7 @@ export interface ResourceLike<
   /**
    * Per-resource adoption policy captured from the ambient {@link AdoptPolicy}
    * at registration time (e.g. via `.pipe(adopt(true))`). `undefined` means no
-   * resource-scoped override — the planner falls back to the stack/CLI default.
+   * resource-scoped override -- the planner falls back to the stack/CLI default.
    */
   Adopt: boolean | undefined;
   /**
@@ -138,7 +138,7 @@ export interface ResourceLike<
    * registration: `true` for platform-typed resources, whose registrations
    * must have resolved {@link Props} by plan time. `Plan.make` fails fast
    * with {@link MissingImplementationError} when this is set and `Props`
-   * are still `undefined` after the whole program has evaluated — a bare
+   * are still `undefined` after the whole program has evaluated -- a bare
    * tag was yielded but its `.make(props, impl)` Layer was never provided.
    */
   RequiresImplementation: boolean | undefined;
@@ -148,7 +148,7 @@ export interface ResourceLike<
    * `.pipe(renamedFrom("OldId"))`) and resolved against the same namespace
    * as the resource's own FQN. The planner migrates a state row found at a
    * former FQN to {@link FQN} instead of planning a create+delete
-   * replacement — see `renamedFrom` in Rename.ts for the full semantics.
+   * replacement -- see `renamedFrom` in Rename.ts for the full semantics.
    */
   FormerFqns: readonly string[] | undefined;
   /** @internal phantom */
@@ -170,7 +170,7 @@ export const isResource = (value: any): value is ResourceLike =>
   typeof value === "object" && value !== null && "Type" in value && "FQN" in value;
 
 /**
- * Does `value` reference an instance of the resource type `type` —
+ * Does `value` reference an instance of the resource type `type` --
  * either a locally-declared resource or a `Resource.ref(...)` to one?
  *
  * Two constraints that ad-hoc guards get wrong for refs, which resolve
@@ -183,7 +183,7 @@ export const isResource = (value: any): value is ResourceLike =>
  * - Accept `typeof value === "function"`: the proxy's target is
  *   callable (it needs an `apply` trap), so refs are not `"object"`.
  *
- * Either mistake silently rejects refs — in a Worker `env` that
+ * Either mistake silently rejects refs -- in a Worker `env` that
  * degrades the binding to a plain JSON var.
  */
 export const isResourceOfType = (value: unknown, type: string): boolean =>
@@ -210,8 +210,8 @@ export type Resource<
 
 /**
  * Accessor type for one attribute. Pure object attributes upgrade to
- * {@link Output.ObjectExpr} so nested access is typed —
- * `hyperpod.instanceGroups.workers` — while primitives, unions with
+ * {@link Output.ObjectExpr} so nested access is typed --
+ * `hyperpod.instanceGroups.workers` -- while primitives, unions with
  * `undefined`, branded string unions (`"a" | (string & {})`), and arrays
  * stay plain {@link Output.Output} (running them through `ToOutput` would
  * classify the `string & {}` branch as an object and explode into
@@ -240,7 +240,7 @@ export interface ResourceOptions {
   /**
    * Legacy type names this resource was previously registered under.
    *
-   * When a resource type is renamed (e.g. `"Cloudflare.Queue"` →
+   * When a resource type is renamed (e.g. `"Cloudflare.Queue"` ->
    * `"Cloudflare.Queues.Queue"`), state persisted under the old name must
    * still resolve to this resource's provider. Listing the old names here
    * makes provider lookup fall back from the legacy name to this type, so
@@ -259,7 +259,7 @@ export interface ResourceOptions {
    * plan time. Set by `Platform(...)` on its resource class: every
    * legitimate platform construction (a `.make(props, impl)` Layer build,
    * a tag declared with props, a plain `Worker("id", props)` call) produces
-   * defined `Props` — the only way a platform-typed registration reaches
+   * defined `Props` -- the only way a platform-typed registration reaches
    * the planner with `Props === undefined` is a bare-tag FORWARD REFERENCE
    * whose `.make` Layer never built. `Plan.make` fails fast with
    * {@link MissingImplementationError} in that case, instead of letting a
@@ -275,8 +275,8 @@ export interface ResourceOptions {
  * implementation was `yield*`ed, but its `.make(props, impl)` Layer never
  * built.
  *
- * Such a tag carries no configuration on its own — props AND impl both live
- * on the Layer — so its registration is a forward reference with `undefined`
+ * Such a tag carries no configuration on its own -- props AND impl both live
+ * on the Layer -- so its registration is a forward reference with `undefined`
  * props that the Layer's build repairs (in either order; see the #874
  * circular env-tag pattern). Props still `undefined` once the whole program
  * has evaluated means the Layer was never provided; `Plan.make` fails fast
@@ -318,7 +318,7 @@ export const missingImplementation = (type: string, id: string) =>
     message: [
       `${type}<${id}> was yielded without its implementation.`,
       "",
-      `\`${id}\` is declared as a bare tag — no props, no inline implementation — so both come from its \`.make(...)\` Layer:`,
+      `\`${id}\` is declared as a bare tag \u2014 no props, no inline implementation \u2014 so both come from its \`.make(...)\` Layer:`,
       "",
       `  export class ${id} extends ${type}<${id}>()("${id}") {}`,
       `  export const ${id}Live = ${id}.make({ /* props */ }, Effect.gen(function* () { /* ... */ }));`,
@@ -360,7 +360,7 @@ export function Resource<R extends ResourceLike>(
 
       // `remote()` opts resources out of local emulation during dev. The
       // captured Mode is either "live" (pinned) or undefined (run default).
-      // The Reference default is `undefined` — "no explicit decoration" —
+      // The Reference default is `undefined` -- "no explicit decoration" --
       // which is distinct from an explicit `remote(false)`.
       const ambientPolicy = yield* ProviderModePolicy;
       const ambientMode: ProviderMode | undefined = ambientPolicy ? "live" : undefined;
@@ -384,7 +384,7 @@ export function Resource<R extends ResourceLike>(
         // A resource may be `yield*`ed from several places (idempotent
         // registration). If a later site carries an *explicit* ambient
         // ProviderModePolicy that disagrees with what the resource was
-        // registered with, the decorations are conflicting — fail loudly
+        // registered with, the decorations are conflicting -- fail loudly
         // instead of silently picking one. A later site with NO ambient
         // policy simply inherits the registered resource (the common
         // "reference it from elsewhere" pattern).
@@ -524,7 +524,7 @@ export function Resource<R extends ResourceLike>(
   const Service = {
     /**
      * Build a typed reference to a deployed instance of this resource
-     * — in the current stack/stage by default, or in another via
+     * -- in the current stack/stage by default, or in another via
      * `options`. Resolves to the same shape as `yield*
      * MyResource("id", props)` so downstream code can read attributes
      * (`ref.someAttr`) exactly the way it would for a locally-declared

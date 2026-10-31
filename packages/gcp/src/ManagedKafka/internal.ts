@@ -238,7 +238,7 @@ export const isFailedState = (state: string | undefined) =>
   FAILED_STATES.has((state ?? "").toUpperCase());
 
 /**
- * Wait for a Managed Kafka operation. Cluster creates take 20–30 minutes;
+ * Wait for a Managed Kafka operation. Cluster creates take 20-30 minutes;
  * Connect clusters are similar. An operation that finished with
  * `ALREADY_EXISTS` (6) is a lost create race; `notFoundOk` also accepts
  * `NOT_FOUND` (5).

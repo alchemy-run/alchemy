@@ -17,29 +17,29 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * - **Runtime**: registers a `scheduled` listener that runs your Effect on
  *   each fire. The handler receives Cloudflare's `ScheduledController`,
  *   which has three members:
- *   - `controller.scheduledTime` — the fire time in milliseconds since the
+ *   - `controller.scheduledTime` -- the fire time in milliseconds since the
  *     Unix epoch.
- *   - `controller.cron` — the cron expression that fired.
- *   - `controller.noRetry()` — opts the invocation out of Cloudflare's
+ *   - `controller.cron` -- the cron expression that fired.
+ *   - `controller.noRetry()` -- opts the invocation out of Cloudflare's
  *     retry-on-failure. Only meaningful when the scheduled invocation can
- *     actually fail — see the failure & retry section below.
+ *     actually fail -- see the failure & retry section below.
  *
  *   Each member has its own section below with an Effect example first and
  *   an async example second.
  *
  * Requires `CronEventSourceLive` provided on the Worker's Effect.
  *
- * **Failure & retry semantics**: a failing handler won't crash the Worker —
+ * **Failure & retry semantics**: a failing handler won't crash the Worker --
  * the event source catches the failure and moves on. That also means
  * Cloudflare never observes a failed invocation, so its platform-level
  * retry (and `controller.noRetry()`) never comes into play here. Express
  * retry declaratively with `Effect.retry` inside the handler, and log or
  * report errors if you need visibility into failed runs. In async Workers
  * the opposite holds: a `scheduled` handler that throws (or rejects) marks
- * the invocation failed and Cloudflare may retry it — call
+ * the invocation failed and Cloudflare may retry it -- call
  * `controller.noRetry()` before rethrowing to suppress that.
  *
- * Async (non-Effect) Workers don't use `cron` — they attach schedules with
+ * Async (non-Effect) Workers don't use `cron` -- they attach schedules with
  * the Worker's `crons` prop and export their own `scheduled` handler from
  * the entry module (each section below includes the async variant). Pass
  * `crons: []` to remove all Cron Triggers from a Worker.
@@ -67,15 +67,15 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * );
  * ```
  *
- * **Example:** Async Worker — `crons` prop + exported `scheduled` handler
+ * **Example:** Async Worker -- `crons` prop + exported `scheduled` handler
  * ```typescript
- * // alchemy.run.ts — attach the cron expressions at deploy time
+ * // alchemy.run.ts -- attach the cron expressions at deploy time
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   crons: ["0 12 * * *"],
  * });
  *
- * // src/worker.ts — the entry module handles the fires itself
+ * // src/worker.ts -- the entry module handles the fires itself
  * export default {
  *   async scheduled(controller: ScheduledController) {
  *     console.log("cron fired");
@@ -83,7 +83,7 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * };
  * ```
  *
- * ### `controller.scheduledTime` — the fire time
+ * ### `controller.scheduledTime` -- the fire time
  * **Example:** Effect: record each fire on a Durable Object
  * ```typescript
  * export default class Worker extends Cloudflare.Worker<Worker>()(
@@ -109,7 +109,7 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * **Example:** Async: use the fire time as an idempotency key
  * ```typescript
  * // scheduledTime is the time the fire was *scheduled* for (not when it
- * // ran), so it is stable across retries of the same fire — a natural
+ * // ran), so it is stable across retries of the same fire -- a natural
  * // idempotency key for at-most-once side effects.
  * export default {
  *   async scheduled(controller: ScheduledController, env: WorkerEnv) {
@@ -121,10 +121,10 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * };
  * ```
  *
- * ### `controller.cron` — dispatch multiple schedules
+ * ### `controller.cron` -- dispatch multiple schedules
  * **Example:** Effect: one handler per expression
  * ```typescript
- * // Each handler only runs for fires of its own expression — the listener
+ * // Each handler only runs for fires of its own expression -- the listener
  * // checks controller.cron, so a midnight fire never runs the hourly handler.
  * yield* Cloudflare.Workers.cron("0 * * * *", () => syncFeeds);
  * yield* Cloudflare.Workers.cron("0 0 * * *", () => purgeExpired);
@@ -137,7 +137,7 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *   crons: ["0 * * * *", "0 0 * * *"],
  * });
  *
- * // src/worker.ts — one scheduled handler receives every fire
+ * // src/worker.ts -- one scheduled handler receives every fire
  * export default {
  *   async scheduled(controller: ScheduledController) {
  *     switch (controller.cron) {
@@ -152,14 +152,14 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * };
  * ```
  *
- * ### `controller.noRetry()` — failure & retry control
+ * ### `controller.noRetry()` -- failure & retry control
  * **Example:** Effect: bound retries with `Effect.retry`
  * ```typescript
  * import * as Schedule from "effect/Schedule";
  *
  * // The event source reports the invocation as successful even when the
  * // handler fails, so Cloudflare's platform retry rarely engages for Effect
- * // handlers — Effect.retry is the primary retry control. Calling
+ * // handlers -- Effect.retry is the primary retry control. Calling
  * // controller.noRetry() once retries are exhausted defensively covers
  * // anything that can still mark the invocation failed (e.g. a failing
  * // waitUntil task).
@@ -177,7 +177,7 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *
  * **Example:** Async: suppress retry for permanent failures
  * ```typescript
- * // src/worker.ts — a thrown error marks the invocation failed and
+ * // src/worker.ts -- a thrown error marks the invocation failed and
  * // Cloudflare may retry it; noRetry() opts this fire out of that.
  * export default {
  *   async scheduled(controller: ScheduledController) {

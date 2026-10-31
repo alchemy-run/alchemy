@@ -32,7 +32,7 @@ export interface VerifyDevicePositionRequest extends Omit<
  *     WiFiAccessPoints: [{ MacAddress: "A0:EC:F9:1E:32:C1", Rss: -66 }],
  *   },
  * });
- * // verdict.InferredState → inferred position + accuracy
+ * // verdict.InferredState -> inferred position + accuracy
  * ```
  *
  * @binding

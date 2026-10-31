@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the account's CloudHSM cluster backups (or backups shared with the
  * account when `Shared` is true), optionally filtered by backup id, cluster
- * id or state — the observation half of backup-retention and disaster-
+ * id or state -- the observation half of backup-retention and disaster-
  * recovery automation. Provide the implementation with
  * `Effect.provide(AWS.CloudHSMV2.DescribeBackupsHttp)`.
  * ### Managing Backups

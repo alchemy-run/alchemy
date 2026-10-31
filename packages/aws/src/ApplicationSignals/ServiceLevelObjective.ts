@@ -20,7 +20,7 @@ export class ServiceLevelObjectiveOperationFailed extends Data.TaggedError(
 export interface ServiceLevelObjectiveProps {
   /**
    * Name of the SLO (up to 127 characters, pattern
-   * `[0-9A-Za-z][-._A-Za-z0-9 ]*`). Changing the name replaces the SLO —
+   * `[0-9A-Za-z][-._A-Za-z0-9 ]*`). Changing the name replaces the SLO --
    * the API has no rename operation.
    * @default ${app}-${stage}-${id}
    */
@@ -37,7 +37,7 @@ export interface ServiceLevelObjectiveProps {
    * by Application Signals), a `MetricThreshold`, and a `ComparisonOperator`.
    *
    * Exactly one of `sliConfig` or `requestBasedSliConfig` must be provided.
-   * Switching between them replaces the SLO — the evaluation type of an
+   * Switching between them replaces the SLO -- the evaluation type of an
    * existing SLO cannot be changed.
    */
   sliConfig?: appsignals.ServiceLevelIndicatorConfig;
@@ -90,7 +90,7 @@ export interface ServiceLevelObjective extends Resource<
 
 /**
  * A CloudWatch Application Signals service level objective (SLO) that tracks
- * an attainment goal against a service level indicator — any CloudWatch
+ * an attainment goal against a service level indicator -- any CloudWatch
  * metric or metric-math expression, or a service operation discovered by
  * Application Signals.
  * ### Creating Service Level Objectives
@@ -310,7 +310,7 @@ export const ServiceLevelObjectiveProvider = () =>
             return { action: "replace" } as const;
           }
           // An SLO cannot switch between period-based and request-based
-          // evaluation — swapping the SLI config kind replaces the SLO.
+          // evaluation -- swapping the SLI config kind replaces the SLO.
           const oldKind = olds?.requestBasedSliConfig ? "RequestBased" : "PeriodBased";
           const newKind = news?.requestBasedSliConfig ? "RequestBased" : "PeriodBased";
           if (oldKind !== newKind) {
@@ -324,12 +324,12 @@ export const ServiceLevelObjectiveProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = desiredState(news);
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only a
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only a
           //    cache for the physical name.
           let live = yield* observeSlo(sloName);
 
           if (live === undefined) {
-            // 2. ENSURE — create when missing; a concurrent create surfaces
+            // 2. ENSURE -- create when missing; a concurrent create surfaces
             //    as the typed ConflictException, which we treat as a race
             //    and re-observe.
             live = yield* appsignals
@@ -343,7 +343,7 @@ export const ServiceLevelObjectiveProvider = () =>
                 Effect.catchTag("ConflictException", () => observeSlo(sloName)),
               );
           } else if (!subsetMatches(desired, observedState(live))) {
-            // 3. SYNC — converge every mutable aspect with a single PATCH;
+            // 3. SYNC -- converge every mutable aspect with a single PATCH;
             //    skipped entirely when the observed state already satisfies
             //    the desired state (update retains omitted parameters).
             live = yield* appsignals
@@ -357,7 +357,7 @@ export const ServiceLevelObjectiveProvider = () =>
             });
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(live.Arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -383,7 +383,7 @@ export const ServiceLevelObjectiveProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* appsignals.deleteServiceLevelObjective({ Id: output.sloName }).pipe(
-            // Idempotent delete — already-gone is success.
+            // Idempotent delete -- already-gone is success.
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

@@ -58,7 +58,7 @@ export type RepositoriesWorkflowConfigProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the workflow config.
    */
   repository: string;
@@ -69,7 +69,7 @@ export type RepositoriesWorkflowConfigProps = {
   location?: string;
   /**
    * Workflow config id. If omitted, a unique RFC1035 name is generated.
-   * Immutable — changing it replaces the workflow config.
+   * Immutable -- changing it replaces the workflow config.
    */
   workflowConfigId?: string;
   /**
@@ -132,7 +132,7 @@ export type RepositoriesWorkflowConfig = Resource<
 >;
 
 /**
- * A Dataform workflow configuration — executes a release config's
+ * A Dataform workflow configuration -- executes a release config's
  * compilation result on a schedule (or on demand).
  *
  * Workflow configs have no labels field, so ownership is the parent

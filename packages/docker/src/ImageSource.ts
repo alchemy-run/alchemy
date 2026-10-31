@@ -14,26 +14,26 @@ import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
 /**
- * INTERNAL — registry-agnostic container image-source machinery shared by
+ * INTERNAL -- registry-agnostic container image-source machinery shared by
  * the container platforms (`AWS.ECS.*`, `AWS.EKS.*` via ECR, and
  * `Kubernetes.*` workloads pushing to any registry).
  *
  * NOT exported from any barrel. Consumers import the module path directly.
  *
  * A platform's props separate the ENVIRONMENT (what the container is) from
- * the PROGRAM (`main` — "and run my bundled Effect program in it"):
+ * the PROGRAM (`main` -- "and run my bundled Effect program in it"):
  *
  * - environment (at most one): `image` (registry ref) | `context` +
  *   `dockerfile`-as-path (docker build) | inline `dockerfile` content
  *   (`Dockerfile.inline`) | the default bun base when `main` stands alone.
- * - `main` present → the bundle is injected into the environment (COPY +
- *   ENTRYPOINT) and pushed as a derived image. `main` absent → the
- *   environment runs verbatim: `image` is mirrored (docker pull → tag →
+ * - `main` present -> the bundle is injected into the environment (COPY +
+ *   ENTRYPOINT) and pushed as a derived image. `main` absent -> the
+ *   environment runs verbatim: `image` is mirrored (docker pull -> tag ->
  *   push, content-addressed on the ref), a Dockerfile builds as-is.
  *
  * Where images land is an {@link ImageRegistryTarget}: ECR supplies one that
  * auto-creates a private repository; a plain registry (a local `registry`
- * container, GHCR, Docker Hub, …) supplies one that pushes to
+ * container, GHCR, Docker Hub, ...) supplies one that pushes to
  * `<server>/<name>`.
  */
 
@@ -60,7 +60,7 @@ export interface BundledImageSource {
    * Environment Dockerfile: a string is a PATH (built in {@link context},
    * then the bundle is layered on top in a second stage); an
    * {@link InlineDockerfile} is inline content used as the environment
-   * preamble (built with no context — its own `COPY`s are unsupported).
+   * preamble (built with no context -- its own `COPY`s are unsupported).
    * The resulting environment must be able to run the bun runtime.
    * Exclusive with {@link image}.
    */
@@ -115,7 +115,7 @@ export interface DockerfileBuildOptions {
 }
 
 /**
- * Build the image from the user's own Dockerfile and build context — no
+ * Build the image from the user's own Dockerfile and build context -- no
  * Effect program is bundled.
  */
 export interface DockerfileImageSource extends DockerfileBuildOptions {
@@ -135,7 +135,7 @@ export interface DockerfileImageSource extends DockerfileBuildOptions {
 
 /**
  * Run a pre-built registry image. Registry-backed platforms may mirror it
- * into their own registry (ECR: docker pull → tag → push).
+ * into their own registry (ECR: docker pull -> tag -> push).
  */
 export interface RegistryImageSource {
   /**
@@ -219,14 +219,14 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
   if (source.image !== undefined && source.dockerfile !== undefined) {
     return Effect.die(
       new Error(
-        `'${id}': 'image' and 'dockerfile' are both set — declare exactly one environment source (an 'image' ref, or a Dockerfile)`,
+        `'${id}': 'image' and 'dockerfile' are both set \u2014 declare exactly one environment source (an 'image' ref, or a Dockerfile)`,
       ),
     );
   }
   if (source.image !== undefined && source.context !== undefined) {
     return Effect.die(
       new Error(
-        `'${id}': 'image' and 'context' are both set — declare exactly one environment source`,
+        `'${id}': 'image' and 'context' are both set \u2014 declare exactly one environment source`,
       ),
     );
   }
@@ -237,7 +237,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
   ) {
     return Effect.die(
       new Error(
-        `'${id}': inline 'dockerfile' content builds with no context — use a path dockerfile with 'context', or drop 'context'`,
+        `'${id}': inline 'dockerfile' content builds with no context \u2014 use a path dockerfile with 'context', or drop 'context'`,
       ),
     );
   }
@@ -264,7 +264,7 @@ export interface ImageRegistryTarget<R = never> {
 }
 
 export interface ResolveContainerImageOptions {
-  /** Logical resource id — keys the stable build-context directory. */
+  /** Logical resource id -- keys the stable build-context directory. */
   id: string;
   /**
    * The props bag carrying the image source fields (`main` / `context` /
@@ -282,7 +282,7 @@ export interface ResolveContainerImageOptions {
    */
   port?: number;
   /**
-   * True when the resource was declared without an inline Effect impl —
+   * True when the resource was declared without an inline Effect impl --
    * `main` is then bundled as-is without the virtual-entry bootstrap.
    */
   isExternal?: boolean;
@@ -323,11 +323,11 @@ const resolveContextPaths = Effect.fn(function* (source: {
  * Content hash for the sources whose identity is computable WITHOUT running
  * a bundler:
  *
- * - `context` — hash of the build-context directory + Dockerfile content +
+ * - `context` -- hash of the build-context directory + Dockerfile content +
  *   platform.
- * - `image` — hash of the image reference + platform (re-mirror only when
+ * - `image` -- hash of the image reference + platform (re-mirror only when
  *   the ref changes).
- * - `main` — `undefined`: the hash comes from the bundle output, so it is
+ * - `main` -- `undefined`: the hash comes from the bundle output, so it is
  *   only known inside `resolve`.
  *
  * Providers use this in `diff` to surface content drift (files changed under
@@ -347,7 +347,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
   if (kind === "context") {
     if (source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)) {
       // Inline content builds with no context; an unresolved (Output)
-      // content can't be hashed at plan time — defer to reconcile.
+      // content can't be hashed at plan time -- defer to reconcile.
       if (typeof source.dockerfile.content !== "string") return undefined;
       return (yield* sha256Object({
         dockerfile: source.dockerfile.content,
@@ -387,7 +387,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
 
   /**
    * The exact rolldown input/output options `bundleProgram` hands to
-   * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
+   * `Bundle.build` -- shared with {@link watchMain} so a dev watcher's
    * `Bundle.watch` observes the identical module graph.
    */
   const mainBundleOptions = (
@@ -520,7 +520,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * preamble is, in order of precedence: `envFrom` (a locally-built
    * environment tag from a path-`dockerfile` two-stage build), inline
    * `dockerfile` content (already resolved), the `image` ref, or the
-   * default bun base (`oven/bun` is Docker-Hub only — there is no
+   * default bun base (`oven/bun` is Docker-Hub only -- there is no
    * `docker/library/bun` and no `public.ecr.aws/oven/bun`).
    */
   const generateDockerfile = (source: BundledImageSource, port?: number, envFrom?: string) => {
@@ -535,7 +535,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`,
-      // `BunServices-YYY.js`, …). Non-trivial bundles always emit at
+      // `BunServices-YYY.js`, ...). Non-trivial bundles always emit at
       // least one; minimal bundles emit none and the COPY no-ops.
       `COPY *.js /app/`,
     ];
@@ -548,7 +548,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
 
   /**
    * Build (or mirror) and push an image to `target`, pushing with the
-   * target's credentials or — when it has none — the build machine's own
+   * target's credentials or -- when it has none -- the build machine's own
    * Docker login.
    */
   const push = (
@@ -623,13 +623,13 @@ export const makeContainerImageSource = Effect.gen(function* () {
     const repositoryUri = yield* target.repositoryUri;
 
     if (kind === "main") {
-      // Bundle → hash → (skip if pushed) → materialize generated Dockerfile
-      // → build + push.
+      // Bundle -> hash -> (skip if pushed) -> materialize generated Dockerfile
+      // -> build + push.
       const df = source.dockerfile;
       if (df !== undefined && isInlineDockerfile(df) && typeof df.content !== "string") {
         return yield* Effect.die(
           new Error(
-            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+            `'${id}': inline dockerfile content did not resolve to a string \u2014 Outputs in Dockerfile.inline must be resolvable at deploy time`,
           ),
         );
       }
@@ -693,7 +693,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
     }
 
     if (kind === "image") {
-      // Mirror: pull → tag → push. Content-addressed on the image ref, so
+      // Mirror: pull -> tag -> push. Content-addressed on the image ref, so
       // an already-mirrored ref is a no-op.
       const ref = (source as RegistryImageSource).image;
       const codeHash = (yield* computeStaticSourceHash(source, platform))!;
@@ -705,14 +705,14 @@ export const makeContainerImageSource = Effect.gen(function* () {
 
       yield* session.note(`Pulling container image ${ref}...`);
       // A registry pull can wedge indefinitely under Docker Hub throttling /
-      // credential-helper contention — bound it so a stuck pull fails the
+      // credential-helper contention -- bound it so a stuck pull fails the
       // deploy loudly instead of hanging the plan.
       yield* docker.image.pull(ref, platform).pipe(Effect.timeout("4 minutes"));
       yield* docker.image.tag(ref, imageUri);
       yield* session.note(`Pushing mirrored image ${imageUri}...`);
       const credentials = yield* target.credentials;
       // Pin the platform on push: with the containerd image store a bare
-      // push of a multi-arch tag sends every locally-present variant — a
+      // push of a multi-arch tag sends every locally-present variant -- a
       // stale other-arch variant in the local cache would reach the
       // registry and the container would crash with `exec format error`.
       yield* push(imageUri, credentials, platform);
@@ -720,14 +720,14 @@ export const makeContainerImageSource = Effect.gen(function* () {
       return { imageUri, repositoryUri, codeHash };
     }
 
-    // kind === "context": docker build the user's Dockerfile — from a path
+    // kind === "context": docker build the user's Dockerfile -- from a path
     // (in their context) or from inline content (empty stable context).
     const externalDf = (source as DockerfileImageSource).dockerfile;
     if (externalDf !== undefined && isInlineDockerfile(externalDf)) {
       if (typeof externalDf.content !== "string") {
         return yield* Effect.die(
           new Error(
-            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+            `'${id}': inline dockerfile content did not resolve to a string \u2014 Outputs in Dockerfile.inline must be resolvable at deploy time`,
           ),
         );
       }
@@ -780,7 +780,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * Content hash for ANY source kind without building or pushing an image.
    *
    * For `main` sources this runs the bundler (bootstrap entry included) so
-   * the hash reflects the exact image `resolve` would push — bootstrap
+   * the hash reflects the exact image `resolve` would push -- bootstrap
    * template changes and user-code edits both surface as drift. Providers
    * call this from `diff` and compare against `output.code.hash`; static
    * sources (`context` / `image`) delegate to
@@ -796,7 +796,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
     const platform = options.platform ?? "linux/amd64";
     if (imageSourceKind(options.source) === "main") {
       // Unresolved inline environment content (an Output) can't be hashed
-      // at plan time — return undefined so the diff defers to reconcile.
+      // at plan time -- return undefined so the diff defers to reconcile.
       const df = options.source.dockerfile;
       if (df !== undefined && isInlineDockerfile(df) && typeof df.content !== "string") {
         return undefined;
@@ -814,7 +814,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
   });
 
   /**
-   * The rolldown watch plan for a `main` source — the exact input/output
+   * The rolldown watch plan for a `main` source -- the exact input/output
    * options `resolve` bundles with, reusable verbatim with `Bundle.watch`
    * so a dev watcher observes the identical module graph and rebuild
    * triggers.

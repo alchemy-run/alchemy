@@ -27,7 +27,7 @@ import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
  * `import` statements and `require` for `require()` calls. An explicit
  * `conditionNames` list is applied as one set to BOTH kinds, and rolldown
  * adds only the current kind on top. Listing `"import"` here therefore
- * made every `require()` also match a package's `"import"` export — and
+ * made every `require()` also match a package's `"import"` export -- and
  * `exports` maps are matched in the PACKAGE's key order, so for `pg-pool`
  * (`{ import, require }`) a `require("pg-pool")` received the ESM namespace
  * and `pg` died with `TypeError: The superclass is not a constructor`.
@@ -40,8 +40,8 @@ export const NODE_CONDITION_NAMES: readonly string[] = ["node", "module", "defau
 
 /**
  * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
- * merely importing alchemy — the CLI command tree, the Cloudflare provider
- * barrel — never loads `@rolldown/binding-*`. A stack that bundles
+ * merely importing alchemy -- the CLI command tree, the Cloudflare provider
+ * barrel -- never loads `@rolldown/binding-*`. A stack that bundles
  * nothing must not require the native bundler to be loadable (#562).
  */
 const loadRolldown = () => import("rolldown");
@@ -58,7 +58,7 @@ export interface BundleExtraOptions {
    *
    * - `undefined` (default): plugin is enabled with the default packages
    *   (`effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
-   *   `@distilled.cloud/*` — see `DEFAULT_PURE_PACKAGES`).
+   *   `@distilled.cloud/*` -- see `DEFAULT_PURE_PACKAGES`).
    * - `PurePluginOptions`: plugin is enabled with the provided options.
    *   `packages` extends the defaults; set `replaceDefaults: true` to
    *   replace them instead.
@@ -82,7 +82,7 @@ export interface BundleExtraOptions {
  * The user-facing bundler configuration shared by every resource that
  * bundles an entrypoint with rolldown (AWS Lambda Function, Batch
  * JobDefinition, App Runner Service, ECR image sources, EC2 hosted
- * instances, Docker service images, Cloudflare container images, …):
+ * instances, Docker service images, Cloudflare container images, ...):
  * rolldown input/output overrides plus the {@link BundleExtraOptions}
  * (pure-annotation packages via `pure`, bundle analyzer).
  *
@@ -158,8 +158,8 @@ export declare namespace BundleWatchEvent {
  * `transform.define`.
  *
  * `globalThis.__ALCHEMY_RUNTIME__` is the runtime-phase flag: it is folded to
- * `true` in all bundled (runtime) artifacts — deployed Workers, Lambdas,
- * Containers, etc. — so any plan-only code guarded by
+ * `true` in all bundled (runtime) artifacts -- deployed Workers, Lambdas,
+ * Containers, etc. -- so any plan-only code guarded by
  * `if (!globalThis.__ALCHEMY_RUNTIME__)` becomes `if (!true)` and is
  * dead-code-eliminated from what ships.
  *
@@ -220,7 +220,7 @@ const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputO
 
 /**
  * Default `minify` to `"dce-only"` when the caller hasn't chosen a mode, so the
- * `if (false) { … }` branches produced by {@link ALCHEMY_DEFINE} are physically
+ * `if (false) { ... }` branches produced by {@link ALCHEMY_DEFINE} are physically
  * removed from every bundle (define alone only folds the condition; removal
  * needs DCE). Callers that opt into full minification (e.g. Workers) keep it.
  */
@@ -543,7 +543,7 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           // A bare import made BY a generated entry. Rolldown only WARNS on
           // an unresolved import and leaves it external, which for a
           // generated entry means the deployed process dies at boot with
-          // `Cannot find module` — the class of bug the shim design
+          // `Cannot find module` -- the class of bug the shim design
           // (`{Provider}/Bootstrap/*`) exists to prevent. Make it a build
           // error with the cause spelled out instead. Externals resolve to
           // `{ external: true }`, not null, so they pass through.

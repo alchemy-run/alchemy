@@ -25,27 +25,27 @@ export type AdaptiveMtDatasetProps = {
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/locations/{location}/adaptiveMtDatasets/{dataset}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the dataset.
+   * logical id. Immutable -- changing it replaces the dataset.
    */
   datasetId?: string;
   /**
-   * Location of the dataset (`us-central1`, `europe-west1`, …). Adaptive
-   * MT is regional. Immutable — changing it replaces the dataset.
+   * Location of the dataset (`us-central1`, `europe-west1`, ...). Adaptive
+   * MT is regional. Immutable -- changing it replaces the dataset.
    * @default "us-central1"
    */
   location?: string;
   /**
-   * User-facing display name. There is no update API — changing display name
+   * User-facing display name. There is no update API -- changing display name
    * replaces the dataset.
    */
   displayName?: string;
   /**
-   * BCP-47 source language code, for example `"en"`. Immutable —
+   * BCP-47 source language code, for example `"en"`. Immutable --
    * changing it replaces the dataset.
    */
   sourceLanguageCode: string;
   /**
-   * BCP-47 target language code, for example `"es"`. Immutable —
+   * BCP-47 target language code, for example `"es"`. Immutable --
    * changing it replaces the dataset.
    */
   targetLanguageCode: string;
@@ -87,7 +87,7 @@ export type AdaptiveMtDataset = Resource<
  * Without labels, ownership rests on the deterministic id: `read` reports a
  * resource it finds without prior state as unowned (adopt it with `--adopt`).
  * Adaptive MT datasets are location-scoped and have no labels field. Language
- * pair, location, and display name are immutable — there is no patch RPC.
+ * pair, location, and display name are immutable -- there is no patch RPC.
  *
  * ### Creating a Dataset
  * **Example:** English to Spanish

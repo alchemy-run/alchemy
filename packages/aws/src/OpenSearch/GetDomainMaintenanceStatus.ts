@@ -17,7 +17,7 @@ import type * as Effect from "effect/Effect";
  *   DomainName: name,
  *   MaintenanceId: maintenanceId,
  * });
- * // result.Status → "COMPLETED"
+ * // result.Status -> "COMPLETED"
  * ```
  *
  * @binding

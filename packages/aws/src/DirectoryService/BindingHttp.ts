@@ -7,8 +7,8 @@ import type { Directory } from "./Directory.ts";
 /**
  * Shared scaffolding for AWS Directory Service HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -16,7 +16,7 @@ import type { Directory } from "./Directory.ts";
 /**
  * Build the impl Effect for an account-level Directory Service operation
  * (enumerating directories, reading account limits). The deploy-time half
- * grants `actions` on `*` — these actions do not support resource-level
+ * grants `actions` on `*` -- these actions do not support resource-level
  * permissions.
  */
 export const makeDirectoryServiceAccountHttpBinding = <I, A, E, R>(options: {

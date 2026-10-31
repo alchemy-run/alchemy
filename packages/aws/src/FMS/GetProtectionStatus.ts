@@ -10,12 +10,12 @@ export interface GetProtectionStatusRequest extends fms.GetProtectionStatusReque
 /**
  * Runtime binding for `fms:GetProtectionStatus`.
  *
- * Returns policy-level attack summary information for Shield Advanced policies — DDoS attacks detected during the specified time period. Provide the
+ * Returns policy-level attack summary information for Shield Advanced policies -- DDoS attacks detected during the specified time period. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetProtectionStatusHttp)`.
  * ### Compliance and Protection Status
  * **Example:** Read a Shield Policy's Protection Status
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getProtectionStatus = yield* AWS.FMS.GetProtectionStatus();
  *
  * // runtime

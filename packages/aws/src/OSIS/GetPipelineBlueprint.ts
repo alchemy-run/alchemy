@@ -13,14 +13,14 @@ import type * as Effect from "effect/Effect";
  * ### Authoring Pipeline Configurations
  * **Example:** Fetch a Blueprint's Template
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getPipelineBlueprint = yield* AWS.OSIS.GetPipelineBlueprint();
  *
  * // runtime
  * const { Blueprint } = yield* getPipelineBlueprint({
  *   BlueprintName: "AWS-ApacheLogPipeline",
  * });
- * // Blueprint?.PipelineConfigurationBody — the YAML template
+ * // Blueprint?.PipelineConfigurationBody -- the YAML template
  * ```
  *
  * @binding

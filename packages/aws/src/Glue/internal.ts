@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-/** ARN partition — the testing account is on the standard AWS partition. */
+/** ARN partition -- the testing account is on the standard AWS partition. */
 const PARTITION = "aws";
 
 /** `arn:aws:glue:{region}:{account}:catalog` */
@@ -80,7 +80,7 @@ export const syncTags = Effect.fn("AWS.Glue.syncTags")(function* (
 });
 
 /**
- * Bounded retry through `CrawlerRunningException` — a crawler cannot be
+ * Bounded retry through `CrawlerRunningException` -- a crawler cannot be
  * updated or deleted while a crawl is in progress. Explicitly typed so the
  * conditional `Retry.Return` type does not leak into the provider's
  * declaration emit and widen `AWS.providers()` for downstream consumers.
@@ -94,7 +94,7 @@ export const retryWhileCrawlerRunning = <A, E extends { _tag: string }, R>(
   });
 
 /**
- * Bounded retry through `ConcurrentModificationException` — Glue catalog
+ * Bounded retry through `ConcurrentModificationException` -- Glue catalog
  * mutations occasionally race under concurrent reconciles. Explicitly typed
  * for the same declaration-emit reason as above.
  */
@@ -107,7 +107,7 @@ export const retryWhileConcurrentModification = <A, E extends { _tag: string }, 
   });
 
 /**
- * Bounded retry through `GlueRoleNotAssumable` — a freshly-created IAM role is
+ * Bounded retry through `GlueRoleNotAssumable` -- a freshly-created IAM role is
  * not yet assumable by the Glue service (IAM propagation), which surfaces as a
  * message-discriminated `InvalidInputException` (patched into a typed tag).
  * Explicitly typed for the same declaration-emit reason as above.
@@ -155,9 +155,9 @@ export const cleanMap = (
 
 /**
  * Glue writes crawler and job-run logs into SHARED, service-managed log
- * groups (`/aws-glue/crawlers`, `/aws-glue/python-jobs/output`, …) that it
+ * groups (`/aws-glue/crawlers`, `/aws-glue/python-jobs/output`, ...) that it
  * auto-creates on first use. The groups belong to the Glue service, not to
- * any one crawler/job, so a provider must never delete them — it reaps only
+ * any one crawler/job, so a provider must never delete them -- it reaps only
  * the streams it owns (named after the crawler, or prefixed by a run id).
  *
  * Best-effort and bounded: log cleanup is auxiliary to the already-completed
@@ -207,7 +207,7 @@ export const reapGlueLogStreams = (
  * Delete a Glue database, tolerating one that is already gone.
  *
  * A database registered under Lake Formation (e.g. one a DataZone
- * environment provisioned) only grants DROP to the principals LF lists — IAM
+ * environment provisioned) only grants DROP to the principals LF lists -- IAM
  * admin rights are not enough. A Lake Formation admin may re-open it to IAM
  * access control, after which the drop succeeds. A caller that is not an LF
  * admin gets the original denial back.

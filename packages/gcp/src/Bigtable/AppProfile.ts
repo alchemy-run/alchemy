@@ -44,14 +44,14 @@ export type StandardIsolation = {
 export type AppProfileProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the app profile.
+   * or the instance id. Immutable -- changing it replaces the app profile.
    */
   instance: string;
   /**
    * App profile id (the `{appProfile}` segment of
    * `.../instances/{instance}/appProfiles/{appProfile}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id. Must
-   * be 1-50 characters. Immutable — changing it replaces the app profile.
+   * be 1-50 characters. Immutable -- changing it replaces the app profile.
    */
   appProfileId?: string;
   /**
@@ -109,7 +109,7 @@ export type AppProfile = Resource<
 >;
 
 /**
- * A Cloud Bigtable app profile — how client traffic is routed across
+ * A Cloud Bigtable app profile -- how client traffic is routed across
  * clusters in an instance.
  *
  * The parent instance must already exist. Every instance has a built-in

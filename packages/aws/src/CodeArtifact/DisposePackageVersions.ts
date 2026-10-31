@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link DisposePackageVersions} — `domain`, `domainOwner`, and
+ * Request for {@link DisposePackageVersions} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface DisposePackageVersionsRequest extends Omit<
@@ -15,7 +15,7 @@ export interface DisposePackageVersionsRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:DisposePackageVersions`.
  *
- * Disposes package versions — deletes their assets and pins the version status to `Disposed` so the version number can never be reused with different content. Provide the implementation with
+ * Disposes package versions -- deletes their assets and pins the version status to `Disposed` so the version number can never be reused with different content. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.DisposePackageVersionsHttp)`.
  * ### Deleting Packages
  * **Example:** Dispose Package Versions

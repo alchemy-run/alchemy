@@ -5,12 +5,12 @@ import type * as Effect from "effect/Effect";
 export interface GetJobDetailsRequest extends SVC.GetJobDetailsInput {}
 
 /**
- * Runtime binding for `codepipeline:GetJobDetails` — fetches the details of
+ * Runtime binding for `codepipeline:GetJobDetails` -- fetches the details of
  * a job handed to a custom/Invoke action, including input artifacts and the
  * temporary artifact-store credentials (returned as `Redacted` values).
  *
  * CodePipeline job operations do not support resource-level permissions, so
- * the grant is on `*`. The binding takes no resource — the job id arrives
+ * the grant is on `*`. The binding takes no resource -- the job id arrives
  * with the invocation event.
  * ### Job Workers
  * **Example:** Fetch Job Details

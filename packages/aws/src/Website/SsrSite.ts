@@ -39,7 +39,7 @@ export type SsrSiteServerOrigin =
   | {
       type: "lambda";
       /**
-       * Lambda Function created with `functionUrl` enabled — its function URL
+       * Lambda Function created with `functionUrl` enabled -- its function URL
        * becomes the origin.
        */
       function: Function;
@@ -52,7 +52,7 @@ export type SsrSiteServerOrigin =
   | {
       type: "ecs";
       /**
-       * ECS Service created with `public: true` — its load balancer URL
+       * ECS Service created with `public: true` -- its load balancer URL
        * becomes the origin.
        */
       service: Service;
@@ -470,13 +470,13 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       invalidation,
       routeTargets,
       /**
-       * The most significant URL the site serves at — always `urls[0]`.
+       * The most significant URL the site serves at -- always `urls[0]`.
        */
       url: urls[0],
       /**
-       * Every URL that serves this site, most significant first —
+       * Every URL that serves this site, most significant first --
        * `[https://<domain.name>?, ...aliases, <CloudFront default
-       * domain>]`. Redirect hostnames never appear — they serve no
+       * domain>]`. Redirect hostnames never appear -- they serve no
        * content.
        */
       urls,

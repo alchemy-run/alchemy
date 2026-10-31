@@ -211,7 +211,7 @@ export interface ServiceProps extends PlatformProps {
   /**
    * Container image source for the service (low-level form). Required
    * unless `main` is given. Code-repository (GitHub) sources are not
-   * supported — they require an App Runner Connection whose handshake is
+   * supported -- they require an App Runner Connection whose handshake is
    * completed manually in the console.
    */
   imageRepository?: ServiceImageRepository;
@@ -219,7 +219,7 @@ export interface ServiceProps extends PlatformProps {
    * Module entrypoint for an Effect-native service (typically
    * `import.meta.url` from an inline Effect program). Alchemy bundles the
    * program, builds a container image, pushes it to a managed ECR
-   * repository, and provisions the instance/access IAM roles — mutually
+   * repository, and provisions the instance/access IAM roles -- mutually
    * exclusive with a caller-supplied `imageRepository`.
    */
   main?: string;
@@ -308,7 +308,7 @@ export interface ServiceProps extends PlatformProps {
    * (`/aws/apprunner/{serviceName}/{serviceId}/application` and
    * `.../service`) when the service is deleted.
    *
-   * By default they are deleted along with the service — App Runner itself
+   * By default they are deleted along with the service -- App Runner itself
    * leaves them behind, so every deploy+destroy cycle would otherwise
    * strand a pair. Set this when the logs must outlive the service (an
    * incident post-mortem, a compliance retention window). The kept groups
@@ -403,14 +403,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
 }
 
 /**
- * An AWS App Runner service — the zero-infrastructure way to run a
+ * An AWS App Runner service -- the zero-infrastructure way to run a
  * container behind an HTTPS endpoint: App Runner provisions,
  * load-balances, scales, and patches the fleet for you. Service creation
  * and deletion are asynchronous and take several minutes; the provider
  * waits (bounded) for operations to settle.
  *
  * `Service` is a Platform: alongside the low-level container-image form
- * (`imageRepository`), it supports Effect-native implementations — an
+ * (`imageRepository`), it supports Effect-native implementations -- an
  * inline Effect HTTP program that Alchemy bundles, containerizes, pushes
  * to a managed ECR repository, and deploys, provisioning the instance and
  * ECR access roles automatically. Capability bindings (e.g. DynamoDB
@@ -521,7 +521,7 @@ class AppRunnerServiceNotSettled extends Data.TaggedError("AppRunnerServiceNotSe
 }> {}
 
 /**
- * Case-insensitive status comparison — App Runner returns lowercase
+ * Case-insensitive status comparison -- App Runner returns lowercase
  * statuses for some resource types despite documenting uppercase.
  */
 const statusIs = (status: string | undefined, expected: string): boolean =>
@@ -651,7 +651,7 @@ const toWireObservability = (
 /**
  * True when any user-specified aspect of the source configuration differs
  * from the observed one. Only fields the user actually specified are
- * compared — the service fills in defaults that must not trigger
+ * compared -- the service fills in defaults that must not trigger
  * spurious deployments.
  */
 const sourceDrifted = (
@@ -763,7 +763,7 @@ const emptyPlatformAttributes: PlatformAttributes = {
  * (App Runner's own deployment and health-check events).
  *
  * Both names embed the AWS-generated service id, so a pair belongs to
- * exactly one service instance — it can never be shared with, or reused
+ * exactly one service instance -- it can never be shared with, or reused
  * by, another service.
  */
 const logGroupNamesFor = (serviceName: string, serviceId: string) => [
@@ -780,8 +780,8 @@ const logGroupNamesFor = (serviceName: string, serviceId: string) => [
  *
  * App Runner can flush a final batch of events after the service itself
  * is gone, silently re-creating a just-deleted group, so the delete is
- * followed by a bounded observe→delete convergence loop. A group that
- * never reappears — the common case — costs a single extra describe.
+ * followed by a bounded observe->delete convergence loop. A group that
+ * never reappears -- the common case -- costs a single extra describe.
  * Reaping is auxiliary to an already-completed service deletion, so a
  * group that survives the budget warns rather than failing the destroy.
  */
@@ -799,7 +799,7 @@ const reapLogGroup = Effect.fn(function* (logGroupName: string) {
     }),
   );
 
-  // A describe that cannot complete in time is not deletion proof —
+  // A describe that cannot complete in time is not deletion proof --
   // assume the group is still present and let the bounded loop converge.
   const observeGroup = logs.describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 }).pipe(
     Effect.map((response) =>
@@ -809,14 +809,14 @@ const reapLogGroup = Effect.fn(function* (logGroupName: string) {
       duration: "15 seconds",
       orElse: () =>
         Effect.logWarning(
-          `Timed out observing App Runner log group ${logGroupName} — assuming still present`,
+          `Timed out observing App Runner log group ${logGroupName} \u2014 assuming still present`,
         ).pipe(Effect.as(true)),
     }),
   );
 
   yield* deleteGroup;
 
-  // Re-reaps at t=0s/5s/…/30s, each attempt idempotent.
+  // Re-reaps at t=0s/5s/.../30s, each attempt idempotent.
   const stillPresent = yield* Effect.gen(function* () {
     const present = yield* observeGroup;
     if (present) yield* deleteGroup;
@@ -1115,7 +1115,7 @@ await bootstrap(entrypoint);
             content: file.content,
           })),
         });
-        // App Runner only runs x86_64 images — always build linux/amd64
+        // App Runner only runs x86_64 images -- always build linux/amd64
         // (cross-built via emulation on ARM64 hosts).
         return yield* buildAndPushEcrImage(docker, {
           imageUri,
@@ -1335,7 +1335,7 @@ await bootstrap(entrypoint);
               port,
             });
 
-            // App Runner env values must be strings — JSON-encode the rest.
+            // App Runner env values must be strings -- JSON-encode the rest.
             const runtimeEnvironmentVariables = Object.fromEntries(
               Object.entries({
                 ...bindingEnv,
@@ -1399,16 +1399,16 @@ await bootstrap(entrypoint);
           }
           const desired = effective as ResolvedServiceProps;
 
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           // identifier cache.
           let observed = output?.serviceArn ? yield* readService(output.serviceArn) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
 
-          // 2. Ensure — create if missing. A freshly-minted access role can
+          // 2. Ensure -- create if missing. A freshly-minted access role can
           // take a few seconds to become assumable by App Runner
-          // (InvalidRequestException "Error in assuming access role") —
+          // (InvalidRequestException "Error in assuming access role") --
           // retry through that IAM-propagation window (bounded).
           if (observed === undefined) {
             const created = yield* apprunner
@@ -1434,7 +1434,7 @@ await bootstrap(entrypoint);
             observed = created.Service;
           }
 
-          // Creation and prior updates run asynchronously — wait (bounded)
+          // Creation and prior updates run asynchronously -- wait (bounded)
           // for the service to settle before mutating it.
           const settled = yield* waitForSettled(observed.ServiceArn);
           if (settled === undefined) {
@@ -1451,7 +1451,7 @@ await bootstrap(entrypoint);
             });
           }
 
-          // 3. Sync — compare each user-specified aspect against OBSERVED
+          // 3. Sync -- compare each user-specified aspect against OBSERVED
           // state and send a single updateService with only the drifted
           // groups.
           const update: Omit<apprunner.UpdateServiceRequest, "ServiceArn"> = {};
@@ -1501,7 +1501,7 @@ await bootstrap(entrypoint);
             observed = updated;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncAppRunnerTags(observed.ServiceArn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -1511,13 +1511,13 @@ await bootstrap(entrypoint);
 
         delete: Effect.fn(function* ({ olds, output, force }) {
           // A service mid-operation rejects deletion with
-          // InvalidStateException — wait (bounded) for it to settle first.
+          // InvalidStateException -- wait (bounded) for it to settle first.
           const observed = yield* waitForSettled(output.serviceArn);
           if (observed !== undefined) {
             yield* apprunner.deleteService({ ServiceArn: output.serviceArn }).pipe(
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
-                // Already deleting — deletion is in progress.
+                // Already deleting -- deletion is in progress.
                 InvalidStateException: () => Effect.void,
               }),
             );
@@ -1546,7 +1546,7 @@ await bootstrap(entrypoint);
                   .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
               ),
               Stream.runDrain,
-              // The role may already be gone (delete re-run / race) —
+              // The role may already be gone (delete re-run / race) --
               // treat a missing role as "no policies" so delete is
               // idempotent.
               Effect.catchTag("NoSuchEntityException", () => Effect.void),

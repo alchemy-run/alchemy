@@ -41,15 +41,15 @@ export interface HostnameContentListProps {
   /**
    * The zone the hostname belongs to.
    *
-   * Stable — moving to another zone triggers a replacement.
+   * Stable -- moving to another zone triggers a replacement.
    */
   zoneId: string;
   /**
    * The Web3 hostname the content list belongs to. Must be an
-   * `ipfs_universal_path` hostname — other targets reject content-list
+   * `ipfs_universal_path` hostname -- other targets reject content-list
    * operations.
    *
-   * Stable — pointing at another hostname triggers a replacement.
+   * Stable -- pointing at another hostname triggers a replacement.
    */
   hostnameId: string;
   /**
@@ -60,7 +60,7 @@ export interface HostnameContentListProps {
   action?: "block";
   /**
    * The full desired set of content list entries. The list is replaced
-   * declaratively on every change (bulk PUT) — entries not present here
+   * declaratively on every change (bulk PUT) -- entries not present here
    * are removed.
    * @default []
    */
@@ -87,7 +87,7 @@ export type HostnameContentList = Resource<
 >;
 
 /**
- * The IPFS content-blocking list of a Web3 universal-path gateway hostname —
+ * The IPFS content-blocking list of a Web3 universal-path gateway hostname --
  * blocks specific CIDs or content paths from being served.
  *
  * The content list is a per-hostname singleton: it always exists for an
@@ -179,7 +179,7 @@ export const HostnameContentListProvider = () =>
               ),
             ),
             // Web3 is entitlement-gated and freshly minted tokens can
-            // briefly 403 — skip zones we can't enumerate.
+            // briefly 403 -- skip zones we can't enumerate.
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
@@ -192,7 +192,7 @@ export const HostnameContentListProvider = () =>
       const n = news as HostnameContentListProps;
       // zoneId/hostnameId are Input<string>; compare only once both
       // sides are concrete. The content list is a sub-singleton of the
-      // hostname — pointing elsewhere replaces it.
+      // hostname -- pointing elsewhere replaces it.
       const oldZone = output?.zoneId ?? o.zoneId;
       if (typeof oldZone === "string" && typeof n.zoneId === "string" && oldZone !== n.zoneId) {
         return { action: "replace" } as const;
@@ -230,12 +230,12 @@ export const HostnameContentListProvider = () =>
         entries: news.entries ?? [],
       };
 
-      // Observe — read the live list; the singleton always exists for a
+      // Observe -- read the live list; the singleton always exists for a
       // universal-path hostname, so "missing" only means the hostname
       // itself is gone (which is a real failure for reconcile).
       const observed = yield* observeContentList(zoneId, hostnameId);
 
-      // Sync — the bulk PUT replaces action + entries declaratively;
+      // Sync -- the bulk PUT replaces action + entries declaratively;
       // skip the API call entirely on a no-op.
       if (observed && sameContentList(observed, desired)) {
         return observed;
@@ -250,7 +250,7 @@ export const HostnameContentListProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // There is no DELETE endpoint — destroying the resource resets the
+      // There is no DELETE endpoint -- destroying the resource resets the
       // singleton to its empty default. If the hostname itself is already
       // gone (or no longer a universal-path gateway), there is nothing
       // left to reset.

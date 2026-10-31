@@ -33,7 +33,7 @@ export type ProductLabel = {
 
 export type ProductProps = {
   /**
-   * Product Search location. Immutable — changing it replaces the
+   * Product Search location. Immutable -- changing it replaces the
    * product.
    * @default "us-west1"
    */
@@ -41,7 +41,7 @@ export type ProductProps = {
   /**
    * Product id (the `{product}` segment of
    * `projects/{project}/locations/{location}/products/{product}`). If
-   * omitted, a unique id is generated. Immutable — changing it replaces
+   * omitted, a unique id is generated. Immutable -- changing it replaces
    * the product. At most 128 characters; cannot contain `/`.
    */
   productId?: string;
@@ -99,7 +99,7 @@ export type Product = Resource<
  * Products have no labels field (`productLabels` are search filters), so
  * ownership rests on the deterministic product id: a product found without
  * prior state is reported as unowned and only taken over with `--adopt`.
- * Location, product id, and `productCategory` are identity — changing any
+ * Location, product id, and `productCategory` are identity -- changing any
  * of them replaces the product. Display name, description, and labels
  * update in place.
  *

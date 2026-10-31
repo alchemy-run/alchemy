@@ -3,11 +3,11 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:ClassifyDocument` — classify a single
+ * Runtime binding for `comprehend:ClassifyDocument` -- classify a single
  * document in real time against a custom classifier endpoint or a
  * Comprehend prebuilt model ARN (`EndpointArn`).
  *
- * The binding takes no arguments and grants the action on `*` — endpoints
+ * The binding takes no arguments and grants the action on `*` -- endpoints
  * are addressed per-request via `EndpointArn`, so the grant cannot be
  * scoped tighter at deploy time.
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "Subject: your invoice for March is attached",
  *   EndpointArn: endpointArn,
  * });
- * // result.Classes: [{ Name: "INVOICE", Score: 0.98 }, …]
+ * // result.Classes: [{ Name: "INVOICE", Score: 0.98 }, ...]
  * ```
  *
  * @binding

@@ -110,11 +110,11 @@ export type LbEdgeExtensionProps = {
    * `projects/{project}/locations/{location}/lbEdgeExtensions/{lbEdgeExtension}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the extension.
+   * Immutable -- changing it replaces the extension.
    */
   lbEdgeExtensionId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the extension. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -133,7 +133,7 @@ export type LbEdgeExtensionProps = {
   extensionChains: ExtensionChain[];
   /**
    * Load balancing scheme shared by referenced forwarding rules.
-   * Immutable — changing it replaces the extension.
+   * Immutable -- changing it replaces the extension.
    * @default "EXTERNAL_MANAGED"
    */
   loadBalancingScheme?: LbEdgeExtensionLoadBalancingScheme;
@@ -157,7 +157,7 @@ export type LbEdgeExtension = Resource<
     lbEdgeExtensionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Attached forwarding rule resource names. */
     forwardingRules: string[];
@@ -179,7 +179,7 @@ export type LbEdgeExtension = Resource<
 >;
 
 /**
- * A Network Services LbEdgeExtension — a Service Extension that
+ * A Network Services LbEdgeExtension -- a Service Extension that
  * rewrites request headers so an Application Load Balancer can change
  * backend selection and Cloud CDN cache keys.
  *

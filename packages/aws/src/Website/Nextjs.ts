@@ -34,7 +34,7 @@ import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
 /**
  * The framework-integration module that drives the `@opennextjs/aws` build
- * (it is its own deploy target — the module IS the AWS pipeline).
+ * (it is its own deploy target -- the module IS the AWS pipeline).
  */
 export const NEXTJS_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/aws";
 
@@ -218,7 +218,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
 
     if (isLocal) {
       // Router-attached sites register with the Router in dev exactly as they
-      // do live — same resource types and ids — with `next dev` standing in
+      // do live -- same resource types and ids -- with `next dev` standing in
       // for the S3 + Lambda origins.
       const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
       const kvNamespace = routerDomain
@@ -354,7 +354,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     });
 
     // Tag cache (`revalidateTag` / `revalidatePath`): the schema OpenNext's
-    // `dynamodb` tag-cache override queries — `tag`/`path` primary key plus
+    // `dynamodb` tag-cache override queries -- `tag`/`path` primary key plus
     // the `revalidate` GSI on `path`/`revalidatedAt`.
     const tagCacheTable = yield* Table("TagCache", {
       partitionKey: "tag",
@@ -379,7 +379,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       handler: "handler",
       isExternal: true,
       // OpenNext's server-functions/default is a complete deployment unit
-      // (entry + traced .next output + its own node_modules) — ship as-is.
+      // (entry + traced .next output + its own node_modules) -- ship as-is.
       bundle: false,
       runtime: fnProps?.runtime ?? "nodejs24.x",
       architecture: fnProps?.architecture,

@@ -36,7 +36,7 @@ export interface DataAutomationLibraryProps {
    */
   libraryDescription?: string;
   /**
-   * Customer-managed KMS encryption for the library. Create-only — changing
+   * Customer-managed KMS encryption for the library. Create-only -- changing
    * the key replaces the library. When omitted, the service uses an
    * AWS-owned key.
    */
@@ -69,12 +69,12 @@ export interface DataAutomationLibrary extends Resource<
 > {}
 
 /**
- * An Amazon Bedrock Data Automation Library — a store of reusable entities
+ * An Amazon Bedrock Data Automation Library -- a store of reusable entities
  * (currently `VOCABULARY` entities: domain phrases with display forms) that
  * data automation projects reference via their
  * `dataAutomationLibraryConfiguration` to improve extraction accuracy.
  *
- * Entities are loaded into the library with ingestion jobs — see the
+ * Entities are loaded into the library with ingestion jobs -- see the
  * `InvokeDataAutomationLibraryIngestionJob` binding.
  *
  * ### Creating Libraries
@@ -105,7 +105,7 @@ export const DataAutomationLibrary = Resource<DataAutomationLibrary>(
 
 /**
  * Raised when a Data Automation library cannot be observed immediately after
- * a successful create — a race with a concurrent delete.
+ * a successful create -- a race with a concurrent delete.
  */
 export class DataAutomationLibraryNotObservable extends Data.TaggedError(
   "DataAutomationLibraryNotObservable",
@@ -192,11 +192,11 @@ export const DataAutomationLibraryProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the ARN.
           const cachedArn = output?.libraryArn ?? (yield* findLibraryArn(libraryName));
           let live = cachedArn === undefined ? undefined : yield* observeLibrary(cachedArn);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe by name. Create returns only arn + status, so
           //    re-observe for the full shape.
@@ -226,7 +226,7 @@ export const DataAutomationLibraryProvider = () =>
             });
           }
 
-          // 3. SYNC — diff the OBSERVED description against the desired one;
+          // 3. SYNC -- diff the OBSERVED description against the desired one;
           //    apply the idempotent update only on drift.
           if (unredact(live.libraryDescription ?? "") !== (news.libraryDescription ?? "")) {
             yield* bda.updateDataAutomationLibrary({
@@ -247,10 +247,10 @@ export const DataAutomationLibraryProvider = () =>
           yield* bda
             .deleteDataAutomationLibrary({ libraryArn: output.libraryArn })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-          // Deletion settles asynchronously (status ACTIVE → DELETING → gone)
+          // Deletion settles asynchronously (status ACTIVE -> DELETING -> gone)
           // and library names are unique, so wait for the terminal
-          // disappearance — otherwise an immediate same-name re-create
-          // conflicts with the vanishing library. Bounded: 10 × 3s ≈ 30s.
+          // disappearance -- otherwise an immediate same-name re-create
+          // conflicts with the vanishing library. Bounded: 10 × 3s ~ 30s.
           yield* observeLibrary(output.libraryArn).pipe(repeatUntilLibraryGone);
         }),
       });

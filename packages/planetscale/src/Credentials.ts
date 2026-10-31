@@ -64,8 +64,8 @@ export const fromAuthProvider = () =>
         Config.withDefault(DEFAULT_API_BASE_URL),
       );
       // Cache until shortly before the OAuth token expires (service tokens
-      // never expire) so a long `alchemy dev` session re-resolves — and
-      // thereby refreshes — the token instead of keeping the first, by then
+      // never expire) so a long `alchemy dev` session re-resolves -- and
+      // thereby refreshes -- the token instead of keeping the first, by then
       // dead, resolution forever.
       return yield* lazyCredentials<PlanetscaleResolvedCredentials, ConfigError>()(
         PLANETSCALE_AUTH_PROVIDER_NAME,

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DescribeAutoPredictor` — poll a training run
+ * Runtime binding for `forecast:DescribeAutoPredictor` -- poll a training run
  * started by {@link CreateAutoPredictor} until its `Status` reaches `ACTIVE`
  * (or `CREATE_FAILED`) and read its estimated time remaining.
  *

@@ -232,7 +232,7 @@ export const AddonProvider = () =>
         read: Effect.fn(function* ({ id, olds }) {
           const clusterName = olds.clusterName as string | undefined;
           // A crashed prior run can persist a row before its unresolved
-          // inputs were stripped — nothing observable yet.
+          // inputs were stripped -- nothing observable yet.
           if (clusterName === undefined || olds.addonName === undefined) {
             return undefined;
           }
@@ -251,13 +251,13 @@ export const AddonProvider = () =>
             ...news.tags,
           };
 
-          // Observe — fetch live cloud state by (clusterName, addonName).
+          // Observe -- fetch live cloud state by (clusterName, addonName).
           let state = yield* readAddon({
             clusterName,
             addonName,
           });
 
-          // Ensure — create if missing. Tolerate `ResourceInUseException`
+          // Ensure -- create if missing. Tolerate `ResourceInUseException`
           // as a race with a peer reconciler: re-read and continue with
           // sync.
           if (!state) {
@@ -282,7 +282,7 @@ export const AddonProvider = () =>
             });
           }
 
-          // Sync addon version / config — diff observed against desired.
+          // Sync addon version / config -- diff observed against desired.
           // updateAddon handles version, role, resolve conflicts, config
           // values, and pod identity associations atomically.
           const podIdentityChanged =
@@ -310,7 +310,7 @@ export const AddonProvider = () =>
             });
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({
@@ -390,7 +390,7 @@ const waitForAddonActive = Effect.fn(function* ({
     Effect.retry({
       while: (error) => error instanceof AddonNotReady,
       // Flat 5s polls, ~20 min budget (uncapped exponential sleeps for
-      // multi-minute stretches late in the wait — looks like a deadlock).
+      // multi-minute stretches late in the wait -- looks like a deadlock).
       // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
       // until nodes join and pull images, which can take most of the
       // budget when the addon installs alongside its node group.
@@ -416,7 +416,7 @@ const waitForAddonDeleted = Effect.fn(function* ({
     Effect.retry({
       while: (error) => error instanceof AddonStillExists,
       // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
-      // multi-minute stretches late in the wait — looks like a deadlock).
+      // multi-minute stretches late in the wait -- looks like a deadlock).
       schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
     }),
   );

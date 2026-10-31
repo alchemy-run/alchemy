@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Association status of a share recipient. Association is eventually
- * consistent — a new recipient transitions `associating → associated`.
+ * consistent -- a new recipient transitions `associating -> associated`.
  */
 export type ShareRecipientAssociationStatus =
   | "associating"
@@ -58,7 +58,7 @@ export type ShareRecipientAttributes = {
    */
   recipientAccountId: string;
   /**
-   * Association status of the recipient. Eventually consistent —
+   * Association status of the recipient. Eventually consistent --
    * `associating` settles to `associated`.
    */
   associationStatus: ShareRecipientAssociationStatus;
@@ -81,12 +81,12 @@ export type ShareRecipient = Resource<
 >;
 
 /**
- * A recipient on an existing Cloudflare share — grants another account or
+ * A recipient on an existing Cloudflare share -- grants another account or
  * organization access to the share's resources.
  *
  * This is an existence-only resource: there is no update API, so every prop
  * change triggers a replacement. Association is eventually consistent
- * (`associating → associated`). Do not manage the same recipient both inline
+ * (`associating -> associated`). Do not manage the same recipient both inline
  * on `Share.recipients` and through this resource.
  * ### Adding a Recipient
  * **Example:** Share with another account
@@ -128,7 +128,7 @@ export const ShareRecipientProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // No update API — every identity change is a replacement. By diff
+      // No update API -- every identity change is a replacement. By diff
       // time both sides are resolved strings.
       const oldShareId = output?.shareId ?? olds?.shareId;
       if (
@@ -163,7 +163,7 @@ export const ShareRecipientProvider = () =>
         const observed = yield* getRecipient(acct, shareId, output.recipientId);
         return observed ? toAttributes(observed, acct, shareId) : undefined;
       }
-      // Cold read — recover from lost state by matching the recipient
+      // Cold read -- recover from lost state by matching the recipient
       // account/organization id among the share's recipients.
       const target =
         (olds?.accountId as string | undefined) ?? (olds?.organizationId as string | undefined);
@@ -178,7 +178,7 @@ export const ShareRecipientProvider = () =>
       const targetAccountId = news.accountId as string | undefined;
       const targetOrganizationId = news.organizationId as string | undefined;
 
-      // Observe — the recipientId cached on `output` is a hint; fall
+      // Observe -- the recipientId cached on `output` is a hint; fall
       // through to a natural-key lookup so an AlreadyExists race converges
       // instead of failing, then to create. Existence-only resource: there
       // is no sync step.
@@ -192,7 +192,7 @@ export const ShareRecipientProvider = () =>
         return toAttributes(observed, acct, shareId);
       }
 
-      // Ensure — greenfield (or out-of-band delete).
+      // Ensure -- greenfield (or out-of-band delete).
       const created = yield* resourceSharing.createRecipient({
         accountId: acct,
         shareId,
@@ -224,7 +224,7 @@ export const ShareRecipientProvider = () =>
           Effect.map((chunk) =>
             Array.from(chunk).flatMap((page) => (page.result ?? []).map((share) => share.id)),
           ),
-          // The account cannot enumerate shares — nothing to list.
+          // The account cannot enumerate shares -- nothing to list.
           Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
         );
 
@@ -236,12 +236,12 @@ export const ShareRecipientProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
-                  // Disassociated recipients are "gone" — match `read`.
+                  // Disassociated recipients are "gone" -- match `read`.
                   .filter((r) => r.associationStatus !== "disassociated")
                   .map((r) => toAttributes(r, accountId, shareId)),
               ),
             ),
-            // The share vanished mid-enumeration or isn't ours — skip it.
+            // The share vanished mid-enumeration or isn't ours -- skip it.
             Effect.catchTag(["ShareNotFound", "Forbidden"], () =>
               Effect.succeed([] as ShareRecipientAttributes[]),
             ),
@@ -268,7 +268,7 @@ const getRecipient = (accountId: string, shareId: string, recipientId: string) =
 
 /**
  * Find a live recipient by its account/organization id. A missing share
- * surfaces as `ShareNotFound` — treat it as "no recipient".
+ * surfaces as `ShareNotFound` -- treat it as "no recipient".
  */
 const findRecipient = (accountId: string, shareId: string, target: string) =>
   resourceSharing.listRecipients.items({ accountId, shareId, perPage: 50 }).pipe(

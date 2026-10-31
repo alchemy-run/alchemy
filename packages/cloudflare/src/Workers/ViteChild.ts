@@ -37,7 +37,7 @@ export interface ViteChildHandle {
 
 // Resolved lazily at spawn time, NOT at module load: this module can be
 // carried into bundled user code (Workers), where `import.meta.resolve`
-// does not exist (workerd) — a module-level call would crash the bundle
+// does not exist (workerd) -- a module-level call would crash the bundle
 // at startup even though no child is ever spawned there. At spawn time
 // we are guaranteed to be in Node/bun.
 const resolveRunner = (basename: string) =>
@@ -74,7 +74,7 @@ export const startViteChild = (
       nodeExecPath !== undefined
         ? resolveNodeRunner("ViteChildRunner")
         : resolveRunner("ViteChildRunner");
-    // Redacted values can't cross the process boundary — the config is
+    // Redacted values can't cross the process boundary -- the config is
     // plain data once unwrapped. bun's `v8.serialize` output is not
     // readable by real V8 (and vice versa), so a cross-runtime spawn
     // sends JSON instead; the runner sniffs the encoding (V8 payloads
@@ -202,9 +202,9 @@ const BUILD_ERROR_TAIL = 200;
  *
  * Isolation is the point (the dev server already runs this way): an
  * in-process build both suffers from and causes transient `process.cwd()`
- * changes — cross-spawn `process.chdir`s the hosting process while
+ * changes -- cross-spawn `process.chdir`s the hosting process while
  * resolving a spawn's binary, and vite/plugins resolve relative paths
- * against live cwd — which corrupts concurrent deploys sharing the
+ * against live cwd -- which corrupts concurrent deploys sharing the
  * process. See `ViteBuildChildRunner.ts` for the child side.
  */
 export const runViteBuildChild = (
@@ -222,7 +222,7 @@ export const runViteBuildChild = (
         prefix: "alchemy-vite-build-",
       });
       const outputPath = path.join(outputDir, "result.v8");
-      // Redacted values can't cross the process boundary — the config is
+      // Redacted values can't cross the process boundary -- the config is
       // plain data once unwrapped.
       const serializedConfig = NodeV8.serialize(unwrapRedacted({ ...config, outputPath }));
       const child = yield* spawner.spawn(

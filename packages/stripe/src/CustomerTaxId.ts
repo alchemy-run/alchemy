@@ -30,7 +30,7 @@ export type CustomerTaxIdType = Exclude<TaxIdType, "unknown">;
 
 export interface CustomerTaxIdProps {
   /**
-   * Id of the Stripe Customer to attach the tax ID to (`cus_…`).
+   * Id of the Stripe Customer to attach the tax ID to (`cus_...`).
    * Changing it replaces the tax ID.
    */
   customer: string;
@@ -50,9 +50,9 @@ export type CustomerTaxId = Resource<
   "Stripe.CustomerTaxId",
   CustomerTaxIdProps,
   {
-    /** Stripe tax ID object id (`txi_…`). */
+    /** Stripe tax ID object id (`txi_...`). */
     id: string;
-    /** Id of the customer this tax ID is attached to (`cus_…`). */
+    /** Id of the customer this tax ID is attached to (`cus_...`). */
     customer: string;
     /** Type of the tax ID (e.g. `eu_vat`). */
     type: TaxIdType;
@@ -72,7 +72,7 @@ export type CustomerTaxId = Resource<
 >;
 
 /**
- * A Stripe Customer Tax ID — a tax identifier (VAT, EIN, GST, …) attached
+ * A Stripe Customer Tax ID -- a tax identifier (VAT, EIN, GST, ...) attached
  * to a Customer and printed on invoices. Existence-only: type and value
  * cannot be updated in place; changing `customer`, `type`, or `value`
  * replaces the tax ID. Destroy deletes it.

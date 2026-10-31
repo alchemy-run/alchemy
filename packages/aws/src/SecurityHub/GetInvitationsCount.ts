@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:GetInvitationsCount`.
  *
  * Returns the count of membership invitations received by this account (excluding accepted ones).
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetInvitationsCountHttp)`.
  * ### Members & Organization
  * **Example:** Count Pending Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getInvitationsCount = yield* AWS.SecurityHub.GetInvitationsCount();
  *
  * // runtime

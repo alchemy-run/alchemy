@@ -100,8 +100,8 @@ export const CustomPageProvider = () =>
   Provider.succeed(CustomPage, {
     stables: ["customPageId", "accountId", "type"],
     // Account-scoped collection (pattern b). The list response items already
-    // carry every Attribute field (uid/name/type) — read's Attributes don't
-    // include customHtml — so no per-item get is needed to match the read shape.
+    // carry every Attribute field (uid/name/type) -- read's Attributes don't
+    // include customHtml -- so no per-item get is needed to match the read shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* zeroTrust.listAccessCustomPages.pages({ accountId }).pipe(
@@ -155,7 +155,7 @@ export const CustomPageProvider = () =>
       const acct = output?.accountId ?? accountId;
       const name = yield* createPageName(id, news.name);
 
-      // Observe — prefer the cached id, fall back to a name lookup so we
+      // Observe -- prefer the cached id, fall back to a name lookup so we
       // recover from out-of-band deletes and state-persistence failures.
       let observed: ObservedPage | undefined;
       if (output?.customPageId) {
@@ -175,7 +175,7 @@ export const CustomPageProvider = () =>
         }
       }
 
-      // Ensure — create the page when missing. Tolerate a same-named create
+      // Ensure -- create the page when missing. Tolerate a same-named create
       // race by re-observing.
       if (!observed || !observed.uid) {
         const created = yield* zeroTrust
@@ -202,7 +202,7 @@ export const CustomPageProvider = () =>
         return toAttrs({ ...created, type: news.type }, acct);
       }
 
-      // Sync — converge name/html via PUT only on a real delta. The GET
+      // Sync -- converge name/html via PUT only on a real delta. The GET
       // returns the full customHtml so the comparison is observed-vs-desired.
       if (
         observed.name !== name ||

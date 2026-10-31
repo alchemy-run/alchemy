@@ -16,16 +16,16 @@ export type Monitor = Resource<
 >;
 
 /**
- * An Axiom monitor — a scheduled APL/MPL query that evaluates on a fixed
+ * An Axiom monitor -- a scheduled APL/MPL query that evaluates on a fixed
  * cadence and fires alerts via {@link Notifier notifiers} when its
  * condition is met.
  *
  * Three monitor `type`s are supported:
  *
- * - **`Threshold`** — fires when an aggregate result crosses a static
+ * - **`Threshold`** -- fires when an aggregate result crosses a static
  *   `threshold` (compared with `operator`).
- * - **`MatchEvent`** — fires for every event matching the query.
- * - **`AnomalyDetection`** — fires when results deviate from a learned
+ * - **`MatchEvent`** -- fires for every event matching the query.
+ * - **`AnomalyDetection`** -- fires when results deviate from a learned
  *   baseline by more than `tolerance` over `compareDays`.
  *
  * Changing `type` triggers a replacement; everything else updates in place.
@@ -100,7 +100,7 @@ export const MonitorProvider = () =>
         // account-wide `GET /v2/monitors` collection op (no pagination) whose
         // item schema is identical to `getMonitor`/`createMonitor`'s output, so
         // we fetch it once and each row already carries the exact `read`
-        // Attributes shape — directly usable by `delete` with no follow-up get.
+        // Attributes shape -- directly usable by `delete` with no follow-up get.
         list: () =>
           Effect.gen(function* () {
             const monitors = yield* list({});
@@ -114,7 +114,7 @@ export const MonitorProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — Axiom assigns the monitor id server-side, so the only
+          // Observe -- Axiom assigns the monitor id server-side, so the only
           // handle to a previously-created monitor is the cached
           // `output.id`. Probe for live state with that id; treat NotFound
           // (deleted out-of-band) as "no observed state" so we converge by
@@ -125,12 +125,12 @@ export const MonitorProvider = () =>
               )
             : undefined;
 
-          // Ensure — POST mints a new monitor with a fresh id.
+          // Ensure -- POST mints a new monitor with a fresh id.
           if (observed === undefined) {
             return yield* create(news);
           }
 
-          // Sync — the monitor exists; PATCH against its id with the
+          // Sync -- the monitor exists; PATCH against its id with the
           // desired props. `type` is replacement-only (handled in diff).
           return yield* update({ ...news, id: observed.id });
         }),

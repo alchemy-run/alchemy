@@ -26,7 +26,7 @@ export interface ListWhatsAppMessageTemplatesRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** List Templates
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const listTemplates = yield* AWS.SocialMessaging.ListWhatsAppMessageTemplates(account);
  *
  * // runtime

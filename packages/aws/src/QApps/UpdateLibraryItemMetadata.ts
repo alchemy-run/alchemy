@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link UpdateLibraryItemMetadata} — `instanceId` is injected from the bound Q App.
+ * Request for {@link UpdateLibraryItemMetadata} -- `instanceId` is injected from the bound Q App.
  */
 export interface UpdateLibraryItemMetadataRequest extends Omit<
   qapps.UpdateLibraryItemMetadataInput,
@@ -19,7 +19,7 @@ export interface UpdateLibraryItemMetadataRequest extends Omit<
  * ### Library Items
  * **Example:** Mark a Library Item Verified
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const updateLibraryItemMetadata = yield* AWS.QApps.UpdateLibraryItemMetadata(app);
  *
  * // runtime

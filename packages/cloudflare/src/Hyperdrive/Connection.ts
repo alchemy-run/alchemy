@@ -49,7 +49,7 @@ export type AccessOrigin = {
  *
  * Hyperdrive egresses through a TCP VPC Service
  * ({@link https://developers.cloudflare.com/workers-vpc/ Workers VPC}), which
- * routes over a Cloudflare Tunnel into the private network — e.g. an Aurora
+ * routes over a Cloudflare Tunnel into the private network -- e.g. an Aurora
  * or RDS instance inside an AWS VPC. The host and port live on the VPC
  * Service, so they are not repeated here. mTLS cannot be combined with a VPC
  * origin; TLS is managed on the VPC Service.
@@ -223,7 +223,7 @@ export const isHyperdriveConnection = (value: unknown): value is Connection =>
 export const ProviderLive = () =>
   Provider.succeed(Connection, {
     // `hyperdriveId` is stable within live mode: `updateConfig` never changes
-    // it, and the dev→deploy transition (which DOES mint a new id) is a
+    // it, and the dev->deploy transition (which DOES mint a new id) is a
     // mode-switch the engine plans as a REPLACEMENT, so updates can rely on it.
     stables: ["hyperdriveId", "accountId"],
     list: Effect.fn(function* () {
@@ -428,7 +428,7 @@ export const ProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the config is purely virtual: reconcile mints a
+ * Local (dev) provider -- the config is purely virtual: reconcile mints a
  * `dev:` id and echoes the desired props into attributes, with no cloud API
  * calls. The actual local behavior lives in the Worker binding: the local
  * runtime's Hyperdrive plugin is an origin passthrough driven by the
@@ -449,7 +449,7 @@ export const ProviderLocal = () =>
       // changes update in place; reconcile re-echoes them).
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -464,7 +464,7 @@ export const ProviderLocal = () =>
       };
     }),
     delete: Effect.fn(function* () {
-      // Purely virtual — dropping the state row is enough.
+      // Purely virtual -- dropping the state row is enough.
     }),
   });
 

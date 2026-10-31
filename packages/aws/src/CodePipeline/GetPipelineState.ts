@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
- * Runtime binding for `codepipeline:GetPipelineState` — returns the current
+ * Runtime binding for `codepipeline:GetPipelineState` -- returns the current
  * state of every stage and action in the pipeline, including in-flight
  * executions, transition states, and manual-approval tokens.
  * ### Observing Pipelines

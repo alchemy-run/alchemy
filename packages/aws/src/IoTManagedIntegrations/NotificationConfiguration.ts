@@ -24,7 +24,7 @@ export interface NotificationConfigurationProps {
    * `DEVICE_EVENT`, `DEVICE_COMMAND_REQUEST`, `DEVICE_OTA`,
    * `CONNECTOR_ASSOCIATION`, `ACCOUNT_ASSOCIATION`,
    * `CONNECTOR_ERROR_REPORT`. The event type is the configuration's
-   * identifier — at most one configuration exists per event type, and
+   * identifier -- at most one configuration exists per event type, and
    * changing it replaces the configuration.
    */
   eventType: mi.EventType;
@@ -56,7 +56,7 @@ export interface NotificationConfiguration extends Resource<
 > {}
 
 /**
- * An AWS IoT Managed Integrations notification configuration — routes one
+ * An AWS IoT Managed Integrations notification configuration -- routes one
  * event type (device state, lifecycle, OTA, discovery, association events)
  * to a {@link Destination}.
  *
@@ -149,11 +149,11 @@ export const NotificationConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative; the event type is the
+          // Observe -- cloud state is authoritative; the event type is the
           // identifier so no cached output is needed to find it.
           let configuration = yield* observe(news.eventType);
 
-          // Ensure — create if missing; tolerate a concurrent-create race.
+          // Ensure -- create if missing; tolerate a concurrent-create race.
           if (configuration === undefined) {
             yield* mi
               .createNotificationConfiguration({
@@ -170,7 +170,7 @@ export const NotificationConfigurationProvider = () =>
             }
           }
 
-          // Sync the destination — apply only the delta.
+          // Sync the destination -- apply only the delta.
           if (configuration.DestinationName !== news.destinationName) {
             yield* mi.updateNotificationConfiguration({
               EventType: news.eventType,
@@ -182,7 +182,7 @@ export const NotificationConfigurationProvider = () =>
             };
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncManagedIntegrationsTags(
             yield* configurationArn(news.eventType),
             toTagRecord(configuration.Tags),

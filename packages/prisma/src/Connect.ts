@@ -16,7 +16,7 @@ export interface ConnectClient {
    * Conventional application database URL, redacted.
    *
    * Resolves to the pooled Postgres URL first, then direct Postgres, then
-   * Accelerate — the serverless-safe default for application traffic. Dies
+   * Accelerate -- the serverless-safe default for application traffic. Dies
    * with a descriptive defect when the connection carries no URL at all.
    *
    * Feed it straight into `SQL.Postgres` / `Drizzle.Postgres`:
@@ -75,11 +75,11 @@ export interface ConnectClient {
 
 /**
  * Bind a {@link Connection} to any Function or Worker host (a Prisma
- * Compute app, AWS Lambda Function, Cloudflare Worker or Container, …) and
+ * Compute app, AWS Lambda Function, Cloudflare Worker or Container, ...) and
  * obtain the typed runtime client.
  *
  * `Connect` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Prisma.Connect(connection)`.
  *
  * Provide `Prisma.ConnectBinding` on the host implementation so Alchemy can
@@ -124,7 +124,7 @@ export interface ConnectClient {
  * ```
  *
  * A container is a real process with no workerd bindings, so the connection
- * travels as plain environment variables — the same channel Prisma Compute
+ * travels as plain environment variables -- the same channel Prisma Compute
  * and Lambda use. Start the container with
  * `api.start({ enableInternet: true })` so it can reach the database. (Hyperdrive, by contrast, is a workerd binding and is
  * unavailable inside a container.)

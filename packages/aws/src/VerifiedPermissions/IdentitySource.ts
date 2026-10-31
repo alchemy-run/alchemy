@@ -65,7 +65,7 @@ export interface OpenIdConnectConfiguration {
     groupEntityType: string;
   };
   /**
-   * Which token type the identity source consumes — exactly one of
+   * Which token type the identity source consumes -- exactly one of
    * `accessTokenOnly` or `identityTokenOnly`.
    */
   tokenSelection:
@@ -138,8 +138,8 @@ export interface IdentitySource extends Resource<
 
 /**
  * An identity source connects a Verified Permissions policy store to an
- * identity provider — an Amazon Cognito user pool or any OpenID Connect
- * (OIDC) IdP — so that `IsAuthorizedWithToken` and
+ * identity provider -- an Amazon Cognito user pool or any OpenID Connect
+ * (OIDC) IdP -- so that `IsAuthorizedWithToken` and
  * `BatchIsAuthorizedWithToken` can derive the principal directly from a JWT.
  * ### Connecting an Identity Provider
  * **Example:** Cognito User Pool
@@ -175,7 +175,7 @@ export interface IdentitySource extends Resource<
  */
 export const IdentitySource = Resource<IdentitySource>("AWS.VerifiedPermissions.IdentitySource");
 
-/** Desired props → the wire `Configuration` union. */
+/** Desired props -> the wire `Configuration` union. */
 const toConfiguration = (news: IdentitySourceProps): avp.Configuration =>
   news.cognito !== undefined
     ? {
@@ -198,7 +198,7 @@ const toConfiguration = (news: IdentitySourceProps): avp.Configuration =>
       };
 
 /**
- * Observed `ConfigurationDetail` → the plain props shape, for diffing the
+ * Observed `ConfigurationDetail` -> the plain props shape, for diffing the
  * desired configuration against what is actually deployed.
  */
 const toObservedConfiguration = (
@@ -249,7 +249,7 @@ const toObservedConfiguration = (
 
 /**
  * Canonicalize + serialize a configuration for drift comparison: arrays are
- * sorted (empty ≡ absent) and AWS-filled defaults (`principalIdClaim: "sub"`)
+ * sorted (empty == absent) and AWS-filled defaults (`principalIdClaim: "sub"`)
  * are applied so an untouched deploy is a no-op.
  */
 const normalize = (config: IdentitySourceConfiguration): string => {
@@ -294,7 +294,7 @@ const normalize = (config: IdentitySourceConfiguration): string => {
   return JSON.stringify(canonical);
 };
 
-/** Desired props → the wire `UpdateConfiguration` union (same field shapes). */
+/** Desired props -> the wire `UpdateConfiguration` union (same field shapes). */
 const toUpdateConfiguration = (news: IdentitySourceProps): avp.UpdateConfiguration =>
   toConfiguration(news) as avp.UpdateConfiguration;
 
@@ -311,7 +311,7 @@ export const IdentitySourceProvider = () =>
       return IdentitySource.Provider.of({
         stables: ["policyStoreId", "identitySourceId"],
 
-        // child of a policy store — not enumerable account-wide
+        // child of a policy store -- not enumerable account-wide
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -331,17 +331,17 @@ export const IdentitySourceProvider = () =>
             return { action: "replace" } as const;
           }
           // configuration + principalEntityType are mutable via
-          // updateIdentitySource → default update path
+          // updateIdentitySource -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const existing =
             output?.identitySourceId !== undefined
               ? yield* observe(news.policyStoreId, output.identitySourceId)
               : undefined;
 
-          // 2. ENSURE — a freshly created policy store is eventually
+          // 2. ENSURE -- a freshly created policy store is eventually
           // consistent; createIdentitySource can briefly 404 on it
           if (existing === undefined) {
             const created = yield* avp
@@ -363,14 +363,14 @@ export const IdentitySourceProvider = () =>
             };
           }
 
-          // 3. SYNC — diff observed configuration/principal type vs desired
+          // 3. SYNC -- diff observed configuration/principal type vs desired
           const desired = normalize(
             news.cognito !== undefined
               ? { cognito: news.cognito }
               : { openIdConnect: news.openIdConnect },
           );
           // If the response carries no configuration detail, we can't prove
-          // convergence — treat it as drift and (re)apply the desired config.
+          // convergence -- treat it as drift and (re)apply the desired config.
           const observedConfiguration = toObservedConfiguration(existing.configuration);
           const observed =
             observedConfiguration === undefined ? undefined : normalize(observedConfiguration);

@@ -19,7 +19,7 @@ export interface DomainProps {
   domainName?: string;
   /**
    * ARN of a KMS key used to encrypt assets in the domain. Defaults to an
-   * AWS-managed key. Immutable — changing it replaces the domain.
+   * AWS-managed key. Immutable -- changing it replaces the domain.
    */
   encryptionKey?: string;
   /**
@@ -50,7 +50,7 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An AWS CodeArtifact domain — the top-level container that groups a set of
+ * An AWS CodeArtifact domain -- the top-level container that groups a set of
  * package repositories and provides a single point for encryption, ownership
  * and cross-account access control.
  *
@@ -138,7 +138,7 @@ export const DomainProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // The encryption key is immutable — replace on change.
+          // The encryption key is immutable -- replace on change.
           if ((news?.encryptionKey ?? undefined) !== (olds?.encryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
@@ -163,10 +163,10 @@ export const DomainProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getDomain(name);
 
-          // 2. Ensure — domains are immutable; create if missing. Tolerate a
+          // 2. Ensure -- domains are immutable; create if missing. Tolerate a
           // concurrent-create race as an existing domain, and retry through
           // the deletion-propagation window where a freshly deleted domain
           // still rejects creates (ConflictException) while describeDomain
@@ -192,7 +192,7 @@ export const DomainProvider = () =>
               );
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncTags(observed!.arn!, desiredTags);
 
           // 4. Return fresh attributes.
@@ -201,7 +201,7 @@ export const DomainProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteDomain is idempotent — deleting a non-existent domain
+          // DeleteDomain is idempotent -- deleting a non-existent domain
           // succeeds (its typed error union has no not-found variant). A
           // domain whose repositories were deleted moments earlier can
           // transiently Conflict while those deletions propagate.

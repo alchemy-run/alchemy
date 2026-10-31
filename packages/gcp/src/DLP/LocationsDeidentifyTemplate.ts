@@ -32,12 +32,12 @@ export type LocationsDeidentifyTemplateProps = {
    * Template id (the `{deidentifyTemplate}` segment of
    * `projects/{project}/locations/{location}/deidentifyTemplates/{id}`).
    * If omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+`
-   * and is at most 100 characters. Immutable — changing it replaces the
+   * and is at most 100 characters. Immutable -- changing it replaces the
    * template.
    */
   templateId?: string;
   /**
-   * Processing location (`global`, `us`, `us-central1`, …). Immutable —
+   * Processing location (`global`, `us`, `us-central1`, ...). Immutable --
    * changing it replaces the template.
    * @default "global"
    */
@@ -49,7 +49,7 @@ export type LocationsDeidentifyTemplateProps = {
   /**
    * Human-readable description (max 256 characters). Deidentify templates
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -89,7 +89,7 @@ export type LocationsDeidentifyTemplate = Resource<
  * A location-scoped Cloud DLP de-identify template.
  *
  * Templates have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Location and template id are identity —
+ * description for `list` / nuke. Location and template id are identity --
  * changing them replaces the template. Display name, description, and
  * de-identify config update in place.
  *

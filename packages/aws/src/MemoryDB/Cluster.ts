@@ -75,7 +75,7 @@ export interface ClusterProps {
    */
   description?: string;
   /**
-   * Engine — `"redis"` or `"valkey"`.
+   * Engine -- `"redis"` or `"valkey"`.
    * @default "valkey"
    */
   engine?: string;
@@ -183,7 +183,7 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Amazon MemoryDB cluster — a durable, Redis/Valkey-compatible in-memory
+ * An Amazon MemoryDB cluster -- a durable, Redis/Valkey-compatible in-memory
  * database.
  *
  * Clusters take roughly 10-15 minutes to provision and are billed per node
@@ -357,10 +357,10 @@ export const ClusterProvider = () =>
           // The wire field is whole days.
           const snapshotRetentionDays = toWireDays(props.snapshotRetentionLimit);
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCluster(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* memorydb
               .createCluster({
@@ -399,7 +399,7 @@ export const ClusterProvider = () =>
           // calls do not hit InvalidClusterStateFault.
           observed = yield* waitForAvailable(name);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: memorydb.UpdateClusterRequest = { ClusterName: name };
           let mutated = false;
           if (props.description !== undefined && props.description !== observed.Description) {
@@ -470,7 +470,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForAvailable(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ARN;
           if (arn) {
             const observedTags = yield* readMemoryDbTags(arn);
@@ -493,7 +493,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const name = output.clusterName;
           // A cluster mid-create/modify rejects deletion with
-          // InvalidClusterStateFault — wait (bounded) for it to settle first.
+          // InvalidClusterStateFault -- wait (bounded) for it to settle first.
           // A cluster already deleting (or gone) is success.
           const settled = yield* waitUntilSettled(name).pipe(Effect.orElseSucceed(() => undefined));
           if (settled === undefined) {

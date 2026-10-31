@@ -38,11 +38,11 @@ export type JobTemplateProps = {
    * `projects/{project}/locations/{location}/jobTemplates/{job_template}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. 4-63 characters matching `[a-zA-Z][a-zA-Z0-9_-]*`.
-   * Immutable — changing it replaces the template.
+   * Immutable -- changing it replaces the template.
    */
   jobTemplateId?: string;
   /**
-   * Transcoder location (`us-central1`, `us-east1`, …). Immutable —
+   * Transcoder location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the template. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -51,7 +51,7 @@ export type JobTemplateProps = {
   location?: string;
   /**
    * Transcoding configuration (elementary streams, mux streams, inputs,
-   * outputs, manifests, …). The Transcoder API has no update method, so
+   * outputs, manifests, ...). The Transcoder API has no update method, so
    * changing `config` replaces the template.
    */
   config: JobConfig;
@@ -71,7 +71,7 @@ export type JobTemplate = Resource<
     name: string;
     /** Job template id (last path segment). */
     jobTemplateId: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Project id. */
     project: string;
@@ -91,7 +91,7 @@ export type JobTemplate = Resource<
  * `JobConfig` so jobs can be created with `templateId` instead of
  * repeating elementary/mux stream settings.
  *
- * The API exposes create, get, list, and delete only — there is no
+ * The API exposes create, get, list, and delete only -- there is no
  * patch. Changing `jobTemplateId`, `location`, `config`, or `labels`
  * replaces the template. Ownership is stamped with Alchemy labels so
  * `list` / nuke can find it.
@@ -255,7 +255,7 @@ export const JobTemplateProvider = () =>
             },
           })
           // ALREADY_EXISTS proves the template exists (a lost race, or a
-          // retried create whose first attempt landed) — wait for it to
+          // retried create whose first attempt landed) -- wait for it to
           // become readable instead of failing, so the attempt converges
           // rather than leaving an untracked template behind.
           .pipe(Effect.catchTag("Conflict", () => waitUntilExists(name)));

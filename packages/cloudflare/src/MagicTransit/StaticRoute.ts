@@ -12,7 +12,7 @@ const TypeId = "Cloudflare.MagicTransit.StaticRoute" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Scope of an ECMP static route — restricts the route to specific
+ * Scope of an ECMP static route -- restricts the route to specific
  * Cloudflare colos or regions.
  */
 export interface MagicStaticRouteScope {
@@ -28,7 +28,7 @@ export interface MagicStaticRouteProps {
    */
   prefix: string;
   /**
-   * The next-hop IP address for the static route — typically a Magic
+   * The next-hop IP address for the static route -- typically a Magic
    * tunnel's customer-side interface address.
    */
   nexthop: string;
@@ -46,7 +46,7 @@ export interface MagicStaticRouteProps {
    */
   weight?: number;
   /**
-   * Used only for ECMP routes — restrict the route to colos/regions.
+   * Used only for ECMP routes -- restrict the route to colos/regions.
    */
   scope?: MagicStaticRouteScope;
 }
@@ -83,15 +83,15 @@ export type MagicStaticRoute = Resource<
 >;
 
 /**
- * A Magic Transit / Magic WAN static route — steers traffic for a prefix
+ * A Magic Transit / Magic WAN static route -- steers traffic for a prefix
  * to a next-hop (usually a Magic tunnel interface address).
  *
- * Requires a Magic Transit or Magic WAN subscription on the account —
+ * Requires a Magic Transit or Magic WAN subscription on the account --
  * accounts that are not onboarded receive a typed
  * `MagicTransitNotOnboarded` error (Cloudflare code 1012).
  *
  * All properties are mutable in place via PUT. A route's practical
- * identity is the `(prefix, nexthop, priority)` triple — when state is
+ * identity is the `(prefix, nexthop, priority)` triple -- when state is
  * lost, `read` scans for a matching route and reports it as `Unowned` so
  * takeover is gated behind `--adopt`.
  * ### Creating a static route
@@ -150,7 +150,7 @@ export const MagicStaticRouteProvider = () =>
         const observed = yield* getRoute(acct, output.routeId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — match on the (prefix, nexthop, priority) triple.
+      // Cold read -- match on the (prefix, nexthop, priority) triple.
       // Routes carry no ownership markers; report as Unowned so takeover
       // is gated behind the adopt policy.
       const prefix = output?.prefix ?? olds?.prefix;
@@ -171,14 +171,14 @@ export const MagicStaticRouteProvider = () =>
       const nexthop = news.nexthop as string;
       const priority = news.priority ?? DEFAULT_PRIORITY;
 
-      // Observe — the id on `output` is a hint; fall back to scanning for
+      // Observe -- the id on `output` is a hint; fall back to scanning for
       // the identity triple when it is gone.
       let observed = output?.routeId ? yield* getRoute(accountId, output.routeId) : undefined;
       if (!observed) {
         observed = yield* findRoute(accountId, news.prefix, nexthop, priority);
       }
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createRoute({
           accountId,
@@ -192,7 +192,7 @@ export const MagicStaticRouteProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; full PUT, skip
+      // Sync -- diff observed cloud state against desired; full PUT, skip
       // on no-op.
       const dirty =
         observed.prefix !== news.prefix ||
@@ -230,14 +230,14 @@ export const MagicStaticRouteProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Account-scoped collection — the list API already returns the full
+      // Account-scoped collection -- the list API already returns the full
       // route shape, so each item maps directly to the `read` Attributes.
       return yield* magicTransit.listRoutes({ accountId }).pipe(
         Effect.map((response) =>
           (response.routes ?? []).map((route) => toAttributes(route, accountId)),
         ),
         // Accounts without a Magic Transit / Magic WAN subscription can't
-        // enumerate routes — treat as empty rather than failing the list.
+        // enumerate routes -- treat as empty rather than failing the list.
         Effect.catchTag("MagicTransitNotOnboarded", () => Effect.succeed([])),
       );
     }),

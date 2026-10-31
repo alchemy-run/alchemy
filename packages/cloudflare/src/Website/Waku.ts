@@ -14,7 +14,7 @@ import {
 
 /**
  * The specifier of the Waku source-provider module. The package must be
- * installed in the user's project — `loadSource` fails with a
+ * installed in the user's project -- `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
 const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
@@ -29,7 +29,7 @@ export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omi
    *
    * By default Waku's own RSC server entry is deployed. Point `main` at a
    * custom module when the deployed Worker must export more than Waku's
-   * fetch handler — e.g. Durable Object classes or additional handlers.
+   * fetch handler -- e.g. Durable Object classes or additional handlers.
    * The custom entry wraps Waku's handler by importing it from
    * `virtual:waku/server-entry` and re-exports the extras:
    *
@@ -60,7 +60,7 @@ export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    *
    * Waku links SSG pages without trailing slashes (`/about`), so
-   * `htmlHandling` defaults to `"drop-trailing-slash"` — the prerendered
+   * `htmlHandling` defaults to `"drop-trailing-slash"` -- the prerendered
    * `about/index.html` serves directly at `/about` instead of 307-redirecting
    * to `/about/`. Set `htmlHandling` explicitly to override.
    *
@@ -70,7 +70,7 @@ export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omi
   /**
    * Waku config overrides merged over the project's `waku.config.*`
    * (per-key; deploy-time values win). For values that vary by stage or
-   * come from other resources — static config belongs in `waku.config.*`.
+   * come from other resources -- static config belongs in `waku.config.*`.
    */
   waku?: {
     /**
@@ -104,13 +104,13 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
 /**
  * A Cloudflare Worker deployed from a [Waku](https://waku.gg) project.
  *
- * `Waku` builds the project programmatically — no `waku.config.ts` edits,
+ * `Waku` builds the project programmatically -- no `waku.config.ts` edits,
  * no Wrangler configuration, and no build command required. A project's
  * `waku.config.*` loads natively (same as waku's CLI) and is where all
  * Waku configuration (`srcDir`, `distDir`, `basePath`, ...) lives; the
  * `waku` prop overrides it per key at deploy time.
  * `unstable_adapter` is owned by Alchemy and must not be set. Note that a
- * standalone `vite.config.ts` is NOT loaded (same as waku's CLI) — Vite
+ * standalone `vite.config.ts` is NOT loaded (same as waku's CLI) -- Vite
  * config belongs in `waku.config.*`'s `vite` field. The RSC server
  * bundle deploys as the Worker script and the client output (including
  * SSG-prerendered pages) deploys as static assets.
@@ -130,7 +130,7 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * ### Deploying a Waku Site
  * A single call builds the project and deploys the RSC server bundle plus
- * the client assets — no configuration required.
+ * the client assets -- no configuration required.
  *
  * **Example:** Waku site
  * ```typescript
@@ -146,7 +146,7 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * ### Waku Config Overrides
  * Waku configuration lives in your `waku.config.*`. The `waku` prop
- * overrides it per key at deploy time — for values that vary by stage
+ * overrides it per key at deploy time -- for values that vary by stage
  * or come from other resources.
  *
  * **Example:** Stage-dependent base path
@@ -161,7 +161,7 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
  * ### Bindings
  * Pass resources through `env` like any other Worker. Server components
  * and API routes read them from the `cloudflare:workers` env at request
- * time. Prefer a guarded dynamic import in page modules — Waku's SSG step
+ * time. Prefer a guarded dynamic import in page modules -- Waku's SSG step
  * renders static pages in Node, where a top-level
  * `import { env } from "cloudflare:workers"` cannot resolve.
  *
@@ -178,8 +178,8 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * ### Custom Worker Entry
  * By default the deployed Worker entry is Waku's own RSC server entry.
- * When the Worker must export more than Waku's fetch handler — Durable
- * Object classes, additional handlers — point `main` at your own module
+ * When the Worker must export more than Waku's fetch handler -- Durable
+ * Object classes, additional handlers -- point `main` at your own module
  * that wraps Waku's handler (imported from `virtual:waku/server-entry`)
  * and re-exports the extras.
  *
@@ -217,7 +217,7 @@ type WakuInput<Bindings extends WorkerBindingProps> = InputProps<
  * ### Class Form
  * Calling `Waku` with no arguments returns a constructor you can `extend`
  * to declare the Worker as a named class. The class is both an `Effect`
- * you can `yield*` to deploy and a type you can reference elsewhere —
+ * you can `yield*` to deploy and a type you can reference elsewhere --
  * useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Waku Worker class
@@ -273,7 +273,7 @@ export const Waku: {
           ...props,
           compatibility: {
             ...props?.compatibility,
-            // Waku's server runtime needs AsyncLocalStorage — default to
+            // Waku's server runtime needs AsyncLocalStorage -- default to
             // nodejs_als when the user hasn't enabled it (or the broader
             // nodejs_compat) themselves.
             flags:

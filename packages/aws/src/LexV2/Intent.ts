@@ -26,7 +26,7 @@ export interface IntentProps {
    */
   localeId: string;
   /**
-   * Name of the intent. Mutable — renames update the intent in place
+   * Name of the intent. Mutable -- renames update the intent in place
    * (identity is the generated intent ID).
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -71,7 +71,7 @@ export interface Intent extends Resource<
     intentName: string;
     /** ID of the bot the intent belongs to. */
     botId: string;
-    /** Bot version the intent lives on — always `DRAFT`. */
+    /** Bot version the intent lives on -- always `DRAFT`. */
     botVersion: string;
     /** Locale the intent lives under. */
     localeId: string;
@@ -81,7 +81,7 @@ export interface Intent extends Resource<
 > {}
 
 /**
- * An intent on the DRAFT locale of an Amazon Lex V2 bot — an action the user
+ * An intent on the DRAFT locale of an Amazon Lex V2 bot -- an action the user
  * wants to perform, recognized from sample utterances.
  *
  * ### Creating Intents
@@ -164,7 +164,7 @@ export const IntentProvider = () =>
       return {
         stables: ["intentId", "botId", "botVersion", "localeId"],
 
-        // Sub-resource keyed entirely by its bot locale — nuke reaches it
+        // Sub-resource keyed entirely by its bot locale -- nuke reaches it
         // through the parent bot's deletion.
         list: () => Effect.succeed([]),
 
@@ -196,7 +196,7 @@ export const IntentProvider = () =>
               ? { enabled: news.fulfillmentCodeHook }
               : undefined;
 
-          // 1. OBSERVE — output.intentId is only a cache; fall back to name.
+          // 1. OBSERVE -- output.intentId is only a cache; fall back to name.
           let observed =
             output?.intentId !== undefined
               ? yield* describeIntent(news.botId, news.localeId, output.intentId)
@@ -205,7 +205,7 @@ export const IntentProvider = () =>
             observed = yield* findIntentByName(news.botId, news.localeId, intentName);
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             const created = yield* retryWhileConflict(
               lexm.createIntent({
@@ -227,7 +227,7 @@ export const IntentProvider = () =>
               });
             }
           } else if (
-            // 3. SYNC — UpdateIntent replaces the declared aspects; skip the
+            // 3. SYNC -- UpdateIntent replaces the declared aspects; skip the
             //    call when nothing drifted.
             observed.intentName !== intentName ||
             (observed.description ?? undefined) !== (news.description ?? undefined) ||

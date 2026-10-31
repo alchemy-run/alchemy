@@ -12,7 +12,7 @@ export interface PutActionInteractionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `personalize:PutActionInteractions`, scoped to one {@link EventTracker} —
+ * Runtime binding for `personalize:PutActionInteractions`, scoped to one {@link EventTracker} --
  * Records action-interaction events (Taken, Not Taken, Viewed) for the
  * NEXT_BEST_ACTION recipe through the bound {@link EventTracker}. Events
  * stream into the dataset group's Action interactions dataset.

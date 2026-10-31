@@ -47,7 +47,7 @@ export interface FargateProfileProps {
   selectors: eks.FargateProfileSelector[];
   /**
    * Subnet IDs to run Fargate pods in. **Fargate pods require PRIVATE subnets
-   * only** — a subnet that auto-assigns a public IP is rejected by EKS. Changing
+   * only** -- a subnet that auto-assigns a public IP is rejected by EKS. Changing
    * this replaces the profile.
    */
   subnets?: Input<string>[];
@@ -83,18 +83,18 @@ export interface FargateProfile extends Resource<
 > {}
 
 /**
- * An Amazon EKS Fargate profile — declares which pods (by namespace + labels)
+ * An Amazon EKS Fargate profile -- declares which pods (by namespace + labels)
  * run on AWS Fargate serverless compute instead of on EC2 nodes.
  *
  * Fargate profiles are immutable except for tags: any change to selectors, the
  * pod execution role, or subnets forces a replacement. Create and delete are
- * asynchronous (`CREATING` → `ACTIVE`, `DELETING` → gone, ~1–2 min each) and the
+ * asynchronous (`CREATING` -> `ACTIVE`, `DELETING` -> gone, ~1-2 min each) and the
  * provider waits for the terminal state. EKS allows only one Fargate profile per
  * cluster to be creating or deleting at a time, so the provider retries the
  * `ResourceInUseException` that surfaces when a peer profile operation is in
  * flight.
  *
- * **Fargate pods must run in private subnets** — pass private subnet IDs only.
+ * **Fargate pods must run in private subnets** -- pass private subnet IDs only.
  * ### Creating Fargate Profiles
  * **Example:** Run the `default` Namespace on Fargate
  * ```typescript
@@ -135,7 +135,7 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
     Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-// ~10 min at 5s spacing — Fargate profile transitions complete in 1–2 min.
+// ~10 min at 5s spacing -- Fargate profile transitions complete in 1-2 min.
 const waitSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]);
 
 // One profile per cluster may be creating/deleting at a time; back off on the
@@ -302,10 +302,10 @@ export const FargateProfileProvider = () =>
             ...news.tags,
           };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let state = yield* readProfile({ clusterName, fargateProfileName });
 
-          // Ensure — create if missing. A create raises ResourceInUseException
+          // Ensure -- create if missing. A create raises ResourceInUseException
           // if another profile on the cluster is creating/deleting; back off
           // and retry. Tolerate a create race with a peer reconciler.
           if (!state) {
@@ -337,7 +337,7 @@ export const FargateProfileProvider = () =>
             state = yield* waitForProfileActive(clusterName, fargateProfileName);
           }
 
-          // Sync tags — the only mutable aspect. Diff observed cloud tags
+          // Sync tags -- the only mutable aspect. Diff observed cloud tags
           // against desired.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
@@ -373,7 +373,7 @@ export const FargateProfileProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // A concurrent profile create/delete on the cluster raises
-                // ResourceInUseException — back off and retry the delete.
+                // ResourceInUseException -- back off and retry the delete.
                 ResourceInUseException: () => Effect.fail(new FargateProfileBusy()),
               }),
               Effect.retry({

@@ -16,7 +16,7 @@ export interface GenerateDataKeyPairRequest extends Omit<kms.GenerateDataKeyPair
  * the private key encrypted under the bound symmetric key for storage.
  *
  * The `PrivateKeyPlaintext` in the response is wrapped in `Redacted` so it
- * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
+ * never leaks into logs -- unwrap with `Redacted.value(...)` at the point of
  * use and discard it as soon as the local operation is done.
  *
  * ### Data Key Pairs
@@ -25,9 +25,9 @@ export interface GenerateDataKeyPairRequest extends Omit<kms.GenerateDataKeyPair
  * const generateDataKeyPair = yield* AWS.KMS.GenerateDataKeyPair(key);
  *
  * const pair = yield* generateDataKeyPair({ KeyPairSpec: "RSA_2048" });
- * // pair.PublicKey            — DER-encoded public key
- * // pair.PrivateKeyPlaintext  — Redacted; use locally then discard
- * // pair.PrivateKeyCiphertextBlob — persist; recover via the Decrypt binding
+ * // pair.PublicKey            -- DER-encoded public key
+ * // pair.PrivateKeyPlaintext  -- Redacted; use locally then discard
+ * // pair.PrivateKeyCiphertextBlob -- persist; recover via the Decrypt binding
  * ```
  *
  * @binding

@@ -33,7 +33,7 @@ export type CertificateAuthorityServiceConfig = {
    * CA pool that issues workload certificates
    * (`projects/{project}/locations/{location}/caPools/{caPool}`).
    * A bare pool id is expanded with this issuance config's project and
-   * location. Immutable — changing it replaces the issuance config.
+   * location. Immutable -- changing it replaces the issuance config.
    */
   caPool: string;
 };
@@ -49,12 +49,12 @@ export type CertificateIssuanceConfigProps = {
    * segment of `projects/{project}/locations/{location}/certificateIssuanceConfigs/{certificateIssuanceConfig}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * issuance config. Ids are unique across all locations.
    */
   certificateIssuanceConfigId?: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …). Immutable —
+   * Certificate Manager location (`global`, `us-central1`, ...). Immutable --
    * changing it replaces the issuance config. `US-CENTRAL1` is accepted
    * and normalized to `us-central1`. A regional CA pool may be referenced
    * from a `global` issuance config.
@@ -71,7 +71,7 @@ export type CertificateIssuanceConfigProps = {
   labels?: Record<string, string>;
   /**
    * Requested lifetime of issued certificates as a protobuf Duration
-   * (`2592000s` for 30 days). Valid range is 21-30 days. Immutable —
+   * (`2592000s` for 30 days). Valid range is 21-30 days. Immutable --
    * changing it replaces the issuance config.
    * @default "2592000s"
    */
@@ -79,18 +79,18 @@ export type CertificateIssuanceConfigProps = {
   /**
    * Percentage of elapsed lifetime at which renewal begins. Must be
    * 1-99 and leave at least 7 days after issuance and before expiry.
-   * Immutable — changing it replaces the issuance config.
+   * Immutable -- changing it replaces the issuance config.
    * @default 66
    */
   rotationWindowPercentage?: number;
   /**
    * Key algorithm used when generating the private key. `RSA_2048` or
-   * `ECDSA_P256`. Immutable — changing it replaces the issuance config.
+   * `ECDSA_P256`. Immutable -- changing it replaces the issuance config.
    * @default "RSA_2048"
    */
   keyAlgorithm?: CertificateIssuanceConfigKeyAlgorithm;
   /**
-   * CA that issues the workload certificate. Immutable — changing the
+   * CA that issues the workload certificate. Immutable -- changing the
    * CA pool replaces the issuance config.
    */
   certificateAuthorityConfig: CertificateAuthorityConfig;
@@ -106,7 +106,7 @@ export type CertificateIssuanceConfig = Resource<
     certificateIssuanceConfigId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -130,7 +130,7 @@ export type CertificateIssuanceConfig = Resource<
 >;
 
 /**
- * A Certificate Manager issuance config — how Google-managed certificates
+ * A Certificate Manager issuance config -- how Google-managed certificates
  * are minted from Certificate Authority Service (lifetime, rotation,
  * key algorithm, and CA pool).
  *

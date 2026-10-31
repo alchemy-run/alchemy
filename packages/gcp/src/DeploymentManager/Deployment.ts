@@ -57,7 +57,7 @@ export type TargetConfiguration = {
 export type DeploymentProps = {
   /**
    * Deployment name. If omitted, a unique RFC1035 name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the deployment.
    */
   deploymentId?: string;
@@ -133,7 +133,7 @@ export type Deployment = Resource<
 >;
 
 /**
- * A Google Cloud Deployment Manager deployment — a configuration that
+ * A Google Cloud Deployment Manager deployment -- a configuration that
  * creates and manages a set of Google Cloud resources together.
  *
  * Changing `deploymentId` replaces the deployment. Description, labels,

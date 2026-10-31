@@ -41,7 +41,7 @@ export const config = (
  * tests or when callers already have a PAT in hand.
  *
  * Pass `baseUrl` to target a GitHub Enterprise instance. It accepts a
- * hostname or URL and is normalized into the REST API base URL — a GitHub
+ * hostname or URL and is normalized into the REST API base URL -- a GitHub
  * Enterprise Server host gets `/api/v3` appended, a `*.ghe.com`
  * data-residency host gets the `api.` prefix.
  */
@@ -81,7 +81,7 @@ export const fromEnv = () =>
  * Alchemy AuthProvider for the configured profile (defaults to
  * the current Alchemy profile).
  *
- * Pass `baseUrl` to hard-code the GitHub host — it takes precedence over
+ * Pass `baseUrl` to hard-code the GitHub host -- it takes precedence over
  * whatever host the auth provider resolved from the profile config or
  * environment. `GitHub.providers({ baseUrl })` threads its option here.
  */

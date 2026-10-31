@@ -21,7 +21,7 @@ import {
 
 export interface PublicDnsNamespaceProps {
   /**
-   * Name of the namespace — must be a domain name you intend to serve
+   * Name of the namespace -- must be a domain name you intend to serve
    * publicly (a Route 53 public hosted zone is created for it). Changing the
    * name replaces the namespace.
    * @default a generated DNS-compatible physical name
@@ -69,14 +69,14 @@ export interface PublicDnsNamespace extends Resource<
 > {}
 
 /**
- * An AWS Cloud Map public DNS namespace — a service registry backed by a
+ * An AWS Cloud Map public DNS namespace -- a service registry backed by a
  * Route 53 **public** hosted zone, so registered instances are discoverable
  * on the public internet via DNS as well as via the `DiscoverInstances` API.
  *
  * The hosted zone incurs standard Route 53 charges while the namespace
  * exists, and the namespace name is only useful if you control the domain.
  *
- * Namespace creation and deletion are asynchronous — the provider polls the
+ * Namespace creation and deletion are asynchronous -- the provider polls the
  * Cloud Map operations API (bounded) until they complete.
  * ### Creating Namespaces
  * **Example:** Public DNS Namespace
@@ -158,7 +158,7 @@ export const PublicDnsNamespaceProvider = () =>
           // 1. OBSERVE
           let namespace = yield* observeNamespace("DNS_PUBLIC", name, output?.namespaceId);
 
-          // 2. ENSURE — create if missing (async operation); the created
+          // 2. ENSURE -- create if missing (async operation); the created
           // namespace is observed by the operation's target id, riding out
           // a same-name predecessor still deleting (see ensureNamespace)
           if (namespace === undefined) {
@@ -186,7 +186,7 @@ export const PublicDnsNamespaceProvider = () =>
             });
           }
 
-          // 3. SYNC — description + SOA TTL, observed vs desired
+          // 3. SYNC -- description + SOA TTL, observed vs desired
           const observedTtl = namespace.Properties?.DnsProperties?.SOA?.TTL;
           const descriptionDelta =
             news.description !== undefined && news.description !== namespace.Description;
@@ -204,7 +204,7 @@ export const PublicDnsNamespaceProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags
           const observedTags = yield* fetchObservedTags(namespace.Arn!);
           yield* syncTags(namespace.Arn!, observedTags, desiredTags);
 
@@ -218,7 +218,7 @@ export const PublicDnsNamespaceProvider = () =>
           ).pipe(
             Effect.catchTags({
               NamespaceNotFound: () => Effect.succeed({ OperationId: undefined }),
-              // an identical delete is already in flight — await THAT operation
+              // an identical delete is already in flight -- await THAT operation
               // instead of silently skipping the deletion
               DuplicateRequest: (e) => Effect.succeed({ OperationId: e.DuplicateOperationId }),
             }),

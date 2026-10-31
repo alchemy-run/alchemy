@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:DescribeBuckets`.
  *
  * Retrieves (queries) statistical data and other information about one or more S3 buckets that Amazon Macie monitors and analyzes for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DescribeBucketsHttp)`.
  * ### S3 Bucket Inventory
  * **Example:** Query Macie's Bucket Inventory
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeBuckets = yield* AWS.Macie2.DescribeBuckets();
  *
  * // runtime

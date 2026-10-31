@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:BatchGetBuilds` — reads the status of one
+ * Runtime binding for `codebuild:BatchGetBuilds` -- reads the status of one
  * or more builds by id (the ids returned from {@link StartBuild}). Bind it
  * to the project whose builds you poll.
  * ### Polling Builds

@@ -25,13 +25,13 @@ export type BackupRunProps = {
   /**
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the backup run.
    */
   instance: string;
   /**
-   * Storage location of the backup (`us`, `us-central1`, …). If omitted,
-   * Cloud SQL picks the closest multi-region. Immutable — changing it
+   * Storage location of the backup (`us`, `us-central1`, ...). If omitted,
+   * Cloud SQL picks the closest multi-region. Immutable -- changing it
    * replaces the backup run.
    */
   location?: string;
@@ -43,7 +43,7 @@ export type BackupRunProps = {
   description?: string;
   /**
    * Existing backup-run id used to observe a run when state is missing.
-   * The insert API assigns ids — this is not sent on insert.
+   * The insert API assigns ids -- this is not sent on insert.
    */
   backupRunId?: string;
 };
@@ -62,7 +62,7 @@ export type BackupRun = Resource<
     description: string | undefined;
     /** Run type (`ON_DEMAND`, `AUTOMATED`). */
     type: string | undefined;
-    /** Server-reported status (`ENQUEUED`, `RUNNING`, `SUCCESSFUL`, …). */
+    /** Server-reported status (`ENQUEUED`, `RUNNING`, `SUCCESSFUL`, ...). */
     status: string | undefined;
     /** Storage location. */
     location: string | undefined;
@@ -95,7 +95,7 @@ export type BackupRun = Resource<
  *
  * Insert assigns the run id. Alchemy stamps ownership into `description`
  * so `list` / `pnpm nuke:gcp` can find leaked rows. Changing `instance`
- * or `location` replaces the run. Description is create-only — backup
+ * or `location` replaces the run. Description is create-only -- backup
  * runs have no update API.
  *
  * ### Creating a Backup Run

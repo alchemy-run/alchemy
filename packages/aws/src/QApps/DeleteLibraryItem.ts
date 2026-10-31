@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link DeleteLibraryItem} — `instanceId` is injected from the bound Q App.
+ * Request for {@link DeleteLibraryItem} -- `instanceId` is injected from the bound Q App.
  */
 export interface DeleteLibraryItemRequest extends Omit<
   qapps.DeleteLibraryItemInput,
@@ -19,7 +19,7 @@ export interface DeleteLibraryItemRequest extends Omit<
  * ### Library Items
  * **Example:** Delete a Library Item
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const deleteLibraryItem = yield* AWS.QApps.DeleteLibraryItem(app);
  *
  * // runtime

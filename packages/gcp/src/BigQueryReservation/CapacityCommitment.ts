@@ -41,19 +41,19 @@ export type CapacityCommitmentProps = {
    * logical id. Must contain only lowercase letters, digits, or dashes;
    * start with a letter; not end with a dash; max 64 characters.
    * Commitments have no labels field, so Alchemy stamps ownership into
-   * this id (`alch---…`) for `list` / nuke. Immutable — changing it
+   * this id (`alch---...`) for `list` / nuke. Immutable -- changing it
    * replaces the commitment. Split/merge drops a caller-assigned id.
    */
   capacityCommitmentId?: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Immutable --
    * changing it replaces the commitment. Multi-regions `US` and `EU`
    * stay uppercase; regional ids are lowercased.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Number of slots in this commitment. Immutable — changing it
+   * Number of slots in this commitment. Immutable -- changing it
    * replaces the commitment. Edition commitments are typically sold in
    * 50-slot increments (legacy flat-rate in 100-slot increments).
    */
@@ -73,7 +73,7 @@ export type CapacityCommitmentProps = {
    */
   renewalPlan?: CapacityCommitmentRenewalPlan;
   /**
-   * Reservation edition. Immutable — changing it replaces the
+   * Reservation edition. Immutable -- changing it replaces the
    * commitment. `STANDARD` cannot purchase commitments; use
    * `ENTERPRISE` or `ENTERPRISE_PLUS`.
    * @default "ENTERPRISE"
@@ -82,7 +82,7 @@ export type CapacityCommitmentProps = {
   /**
    * Place the commitment in the organization's DR secondary region
    * (multi-region `US` or `EU` only). Preview; the project must be
-   * allow-listed. Immutable — changing it replaces the commitment.
+   * allow-listed. Immutable -- changing it replaces the commitment.
    */
   multiRegionAuxiliary?: boolean;
   /**
@@ -103,7 +103,7 @@ export type CapacityCommitment = Resource<
     capacityCommitmentId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `US`, …). */
+    /** Location id (`us-central1`, `US`, ...). */
     location: string;
     /** Number of slots. */
     slotCount: string | undefined;
@@ -131,11 +131,11 @@ export type CapacityCommitment = Resource<
 >;
 
 /**
- * A BigQuery capacity commitment — purchased slot capacity with a
+ * A BigQuery capacity commitment -- purchased slot capacity with a
  * committed period of usage.
  *
  * Commitments have no labels, so Alchemy stamps ownership into the
- * commitment id (`alch---…`) so `list` / `pnpm nuke:gcp` can find them.
+ * commitment id (`alch---...`) so `list` / `pnpm nuke:gcp` can find them.
  * Changing `capacityCommitmentId`, `location`, `slotCount`, `edition`,
  * or `multiRegionAuxiliary` replaces the commitment. `plan` and
  * `renewalPlan` update in place (plan can only lengthen).

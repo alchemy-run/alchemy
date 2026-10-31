@@ -61,7 +61,7 @@ export interface Discoverer extends Resource<
 > {}
 
 /**
- * An EventBridge schema discoverer — automatically infers schemas from the
+ * An EventBridge schema discoverer -- automatically infers schemas from the
  * events flowing through an event bus and publishes them (versioned) to the
  * AWS-managed `discovered-schemas` registry.
  *
@@ -135,7 +135,7 @@ export const DiscovererProvider = () =>
             const attrs = toAttrs(found);
             return (yield* hasAlchemyTags(id, found.Tags)) ? attrs : Unowned(attrs);
           }
-          // No cached id (the discoverer id is auto-assigned) — recover by
+          // No cached id (the discoverer id is auto-assigned) -- recover by
           // scanning for a discoverer branded with our ownership tags.
           const all = yield* schemas.listDiscoverers.items({}).pipe(
             Stream.runCollect,
@@ -165,7 +165,7 @@ export const DiscovererProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
 
-          // OBSERVE — output.discovererId is only an id cache.
+          // OBSERVE -- output.discovererId is only an id cache.
           let live:
             | {
                 Description?: string;
@@ -180,7 +180,7 @@ export const DiscovererProvider = () =>
             live = yield* describe(output.discovererId);
           }
 
-          // ENSURE — create if missing. The id is auto-assigned, so there is
+          // ENSURE -- create if missing. The id is auto-assigned, so there is
           // no name race to tolerate.
           if (live === undefined) {
             live = yield* schemas.createDiscoverer({
@@ -193,7 +193,7 @@ export const DiscovererProvider = () =>
           const discovererId = live.DiscovererId!;
           const discovererArn = live.DiscovererArn!;
 
-          // SYNC description / crossAccount — diff observed against desired.
+          // SYNC description / crossAccount -- diff observed against desired.
           const desiredCrossAccount = news.crossAccount ?? true;
           if (
             (news.description ?? "") !== (live.Description ?? "") ||
@@ -206,7 +206,7 @@ export const DiscovererProvider = () =>
             });
           }
 
-          // SYNC state — start/stop only on delta.
+          // SYNC state -- start/stop only on delta.
           const desiredState: DiscovererState = news.state ?? "STARTED";
           let state = (live.State ?? "STARTED") as DiscovererState;
           if (state !== desiredState) {
@@ -223,7 +223,7 @@ export const DiscovererProvider = () =>
             }
           }
 
-          // SYNC tags — diff against observed cloud tags.
+          // SYNC tags -- diff against observed cloud tags.
           yield* syncSchemasTags(discovererArn, id, news.tags);
 
           yield* session.note(discovererId);

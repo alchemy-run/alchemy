@@ -15,7 +15,7 @@ type TypeId = typeof TypeId;
 
 /**
  * How the certificate chain is bundled when the certificate is served.
- * Create-only — Cloudflare has no API to change the bundle method after
+ * Create-only -- Cloudflare has no API to change the bundle method after
  * upload, so changing it triggers a replacement.
  */
 export type BundleMethod = "ubiquitous" | "optimal" | "force";
@@ -51,7 +51,7 @@ export interface Props {
    * Zone the Keyless SSL certificate is uploaded to. Keyless SSL is a
    * zone-level Enterprise feature.
    *
-   * Immutable — moving a Keyless SSL configuration between zones triggers a
+   * Immutable -- moving a Keyless SSL configuration between zones triggers a
    * replacement.
    */
   zoneId: string;
@@ -59,18 +59,18 @@ export interface Props {
    * The zone's SSL certificate (or certificate and intermediates) in PEM
    * format. The private key never leaves your key server.
    *
-   * Immutable — the PATCH API has no certificate field, so changing the
+   * Immutable -- the PATCH API has no certificate field, so changing the
    * certificate triggers a replacement. Plain `string` (not `string`)
    * so it is statically comparable inside `diff`.
    */
   certificate: string;
   /**
    * Hostname of the externally running gokeyless key server that holds the
-   * private key. Mutable — patched in place.
+   * private key. Mutable -- patched in place.
    */
   host: string;
   /**
-   * Port Cloudflare uses to communicate with the key server. Mutable —
+   * Port Cloudflare uses to communicate with the key server. Mutable --
    * patched in place.
    * @default 24008
    */
@@ -78,7 +78,7 @@ export interface Props {
   /**
    * Human readable name for the Keyless SSL configuration. If omitted, a
    * deterministic name is generated from the app, stage, and logical ID.
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -87,12 +87,12 @@ export interface Props {
    * of broad trust), `optimal` (shortest chain, newest intermediates), or
    * `force` (use the chain exactly as uploaded).
    *
-   * Create-only — changing the bundle method triggers a replacement.
+   * Create-only -- changing the bundle method triggers a replacement.
    * @default "ubiquitous"
    */
   bundleMethod?: BundleMethod;
   /**
-   * Whether the Keyless SSL configuration is on or off. Mutable — patched in
+   * Whether the Keyless SSL configuration is on or off. Mutable -- patched in
    * place.
    * @default true
    */
@@ -135,7 +135,7 @@ export interface Attributes {
 export type KeylessCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A zone-level Keyless SSL configuration — serve TLS for a certificate whose
+ * A zone-level Keyless SSL configuration -- serve TLS for a certificate whose
  * private key stays on your own key server instead of being uploaded to
  * Cloudflare.
  *
@@ -193,7 +193,7 @@ export type KeylessCertificate = Resource<TypeId, Props, Attributes, never, Prov
  * ### Rotation
  * **Example:** Rotate by changing the certificate
  * ```typescript
- * // `certificate` is create-only — changing it replaces the configuration:
+ * // `certificate` is create-only -- changing it replaces the configuration:
  * // the new one is created and the old one is deleted.
  * const keyless = yield* Cloudflare.KeylessCertificate.KeylessCertificate("SiteKeyless", {
  *   zoneId: zone.zoneId,
@@ -226,7 +226,7 @@ export const KeylessCertificateProvider = () =>
     // account-wide enumeration API. Fan out over every zone in the account,
     // list its Keyless SSL configurations, and hydrate each into the exact
     // `read` Attributes shape. Zones without the Enterprise entitlement reject
-    // the route with the typed `Forbidden` error — skip them.
+    // the route with the typed `Forbidden` error -- skip them.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -253,11 +253,11 @@ export const KeylessCertificateProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ olds, news }) {
-      // diff runs during plan — `news` may still contain unresolved Outputs.
+      // diff runs during plan -- `news` may still contain unresolved Outputs.
       if (!isResolved(news)) return undefined;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (olds?.certificate === undefined) return undefined;
-      // The PATCH API has no certificate field — rotation replaces.
+      // The PATCH API has no certificate field -- rotation replaces.
       if (normalizePem(olds.certificate) !== normalizePem(news.certificate)) {
         return { action: "replace" } as const;
       }
@@ -265,7 +265,7 @@ export const KeylessCertificateProvider = () =>
       if ((olds.bundleMethod ?? "ubiquitous") !== (news.bundleMethod ?? "ubiquitous")) {
         return { action: "replace" } as const;
       }
-      // The PATCH API can set a tunnel but cannot clear one — removing it
+      // The PATCH API can set a tunnel but cannot clear one -- removing it
       // requires a replacement. (Adding/changing is an in-place update.)
       if (olds.tunnel !== undefined && news.tunnel === undefined) {
         return { action: "replace" } as const;
@@ -286,13 +286,13 @@ export const KeylessCertificateProvider = () =>
       if (zoneId === undefined) return undefined;
 
       // Owned path: refresh by our persisted identifier. Cloudflare keeps a
-      // tombstone with status "deleted" for a while — report it as gone.
+      // tombstone with status "deleted" for a while -- report it as gone.
       if (output?.keylessCertificateId) {
         const observed = yield* getKeylessCertificate(zoneId, output.keylessCertificateId);
         return observed ? toAttributes(observed, zoneId) : undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createKeylessName(id, olds?.name);
@@ -306,7 +306,7 @@ export const KeylessCertificateProvider = () =>
       const name = yield* createKeylessName(id, news.name);
       const desiredTunnel = resolveTunnel(news.tunnel);
 
-      // 1. Observe — the identifier cached on `output` is a hint, not a
+      // 1. Observe -- the identifier cached on `output` is a hint, not a
       //    guarantee: a missing (or tombstoned "deleted") configuration
       //    falls through to the name scan and then to create.
       let observed = output?.keylessCertificateId
@@ -319,7 +319,7 @@ export const KeylessCertificateProvider = () =>
         observed = yield* findByName(zoneId, name);
       }
 
-      // 3. Ensure — create when missing. Names are not unique on
+      // 3. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate. On zones without the Enterprise entitlement this
       //    fails with the typed `KeylessSslNotAvailable` error.
@@ -335,7 +335,7 @@ export const KeylessCertificateProvider = () =>
         });
       }
 
-      // 4. Sync — diff observed cloud state against desired and patch only
+      // 4. Sync -- diff observed cloud state against desired and patch only
       //    when something actually differs; skip the call on a no-op.
       //    `enabled` is create-time defaulted by Cloudflare, so it is only
       //    compared when explicitly configured.
@@ -366,7 +366,7 @@ export const KeylessCertificateProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Deleting an already-gone configuration answers with Cloudflare code
-      // 1005 ("Invalid or missing Keyless SSL") — convergence, not failure.
+      // 1005 ("Invalid or missing Keyless SSL") -- convergence, not failure.
       yield* keylessCertificates
         .deleteKeylessCertificate({
           zoneId: output.zoneId,

@@ -25,13 +25,13 @@ import {
 export type OccurrenceProps = {
   /**
    * Analysis note this occurrence attaches to, as
-   * `projects/{project}/notes/{note}` or a bare note id. Immutable —
+   * `projects/{project}/notes/{note}` or a bare note id. Immutable --
    * changing it replaces the occurrence.
    */
   noteName: string;
   /**
    * URI of the analyzed resource, for example
-   * `https://gcr.io/project/image@sha256:abc`. Immutable — changing it
+   * `https://gcr.io/project/image@sha256:abc`. Immutable -- changing it
    * replaces the occurrence.
    */
   resourceUri: string;
@@ -159,7 +159,7 @@ export type Occurrence = Resource<
  * digest.
  *
  * The occurrence id is assigned by the API. `noteName` and `resourceUri`
- * are identity — changing either replaces the occurrence. Occurrences have
+ * are identity -- changing either replaces the occurrence. Occurrences have
  * no labels field, so Alchemy stamps ownership into `remediation` for
  * `list` / nuke.
  *

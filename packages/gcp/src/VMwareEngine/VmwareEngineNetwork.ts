@@ -47,27 +47,27 @@ export type VmwareEngineNetworkProps = {
    * Network id (the `{vmwareEngineNetwork}` segment of
    * `projects/{project}/locations/{location}/vmwareEngineNetworks/{id}`).
    * If omitted, a unique RFC1035 name is generated. For `LEGACY`
-   * networks the API requires `{region}-default`. Immutable — changing
+   * networks the API requires `{region}-default`. Immutable -- changing
    * it replaces the network.
    */
   vmwareEngineNetworkId?: string;
   /**
    * Location. `STANDARD` networks are global (`global`). `LEGACY`
-   * networks are regional (`us-central1`). Immutable — changing it
+   * networks are regional (`us-central1`). Immutable -- changing it
    * replaces the network. `US-CENTRAL1` is accepted and normalized.
    * @default "global" (`STANDARD`) or the stack's GCP region (`LEGACY`)
    */
   location?: string;
   /**
    * Network type. `STANDARD` is global; `LEGACY` is the per-region
-   * singleton `{region}-default`. Immutable — changing it replaces the
+   * singleton `{region}-default`. Immutable -- changing it replaces the
    * network.
    * @default "STANDARD"
    */
   type?: VmwareEngineNetworkType;
   /**
    * Human-readable description. VMware Engine networks have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -89,7 +89,7 @@ export type VmwareEngineNetwork = Resource<
     type: string;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Server-generated uid. */
     uid: string | undefined;

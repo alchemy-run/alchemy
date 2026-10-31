@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `shield:DescribeDRTAccess`.
  *
  * Returns the IAM role and S3 log buckets the Shield Response Team (SRT) is
- * currently authorized to use while assisting with attack mitigation —
+ * currently authorized to use while assisting with attack mitigation --
  * useful for security-posture audit handlers. Requires an active Shield
  * Advanced subscription; without one the call fails with the typed
  * `ResourceNotFoundException`.
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Shield Response Team Access
  * **Example:** Audit SRT Access
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeDRTAccess = yield* AWS.Shield.DescribeDRTAccess();
  *
  * // runtime

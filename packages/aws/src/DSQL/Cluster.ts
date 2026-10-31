@@ -85,7 +85,7 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Amazon Aurora DSQL cluster — a serverless, distributed SQL database with
+ * An Amazon Aurora DSQL cluster -- a serverless, distributed SQL database with
  * active-active high availability and Postgres wire compatibility.
  *
  * Clusters are pay-per-use with no provisioned capacity, so they have
@@ -264,13 +264,13 @@ export const ClusterProvider = () =>
             "alchemy::instance": instanceId,
           };
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let observed =
             output?.clusterId === undefined
               ? yield* findCluster(id, instanceId)
               : yield* readCluster(output.clusterId);
 
-          // 2. Ensure — create if missing. DSQL assigns the identifier.
+          // 2. Ensure -- create if missing. DSQL assigns the identifier.
           let identifier = observed?.identifier ?? output?.clusterId;
           if (observed === undefined) {
             const created = yield* dsql.createCluster({
@@ -298,7 +298,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForActive(identifier!);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readTags(observed.arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
@@ -330,7 +330,7 @@ export const ClusterProvider = () =>
           const identifier = output.clusterId;
           const existing = yield* readCluster(identifier);
           if (existing === undefined) return;
-          // Deletion protection blocks delete — disable it first.
+          // Deletion protection blocks delete -- disable it first.
           if (existing.deletionProtectionEnabled) {
             yield* dsql
               .updateCluster({

@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListResourceInventoryRequest extends licensemanager.ListResourceInventoryRequest {}
 
 /**
- * Runtime binding for `license-manager:ListResourceInventory` — list the
+ * Runtime binding for `license-manager:ListResourceInventory` -- list the
  * resource inventory (instances and their platform details) discovered by
  * License Manager via Systems Manager inventory.
  *

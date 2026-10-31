@@ -7,7 +7,7 @@ import type { Channel } from "./Channel.ts";
  * Runtime binding for `medialive:StopChannel`.
  *
  * Stops the bound {@link Channel}, transitioning it from `RUNNING`
- * through `STOPPING` back to `IDLE` — the other half of a broadcast-window
+ * through `STOPPING` back to `IDLE` -- the other half of a broadcast-window
  * scheduler built on {@link StartChannel}. Stopping a channel that is not
  * running fails with the typed `ConflictException` tag. The channel id is
  * injected from the binding. Provide the implementation with
@@ -15,7 +15,7 @@ import type { Channel } from "./Channel.ts";
  * ### Controlling Channels
  * **Example:** Stop the Channel After the Broadcast
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const stopChannel = yield* AWS.MediaLive.StopChannel(channel);
  *
  * // runtime

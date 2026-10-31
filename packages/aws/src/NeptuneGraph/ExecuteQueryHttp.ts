@@ -4,7 +4,7 @@ import { makeNeptuneGraphGraphHttpBinding } from "./BindingHttp.ts";
 import { ExecuteQuery } from "./ExecuteQuery.ts";
 
 /**
- * HTTP implementation of the {@link ExecuteQuery} binding — signs
+ * HTTP implementation of the {@link ExecuteQuery} binding -- signs
  * `neptune-graph:ExecuteQuery` data-plane requests against the graph's HTTPS
  * endpoint and, at deploy time, grants the query IAM actions
  * (`ReadDataViaQuery`, `WriteDataViaQuery`, `DeleteDataViaQuery`) on the

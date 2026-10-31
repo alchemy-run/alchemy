@@ -17,8 +17,8 @@ export const effectClass: {
     : (Object.assign(
         class {},
         // Spreading the Effect prototype onto the class (static side) makes the
-        // class itself a real Effect — `Effect.isEffect(X)` is true, so
-        // `Effect.all([X])` / `Effect.forEach` work — and subclasses
+        // class itself a real Effect -- `Effect.isEffect(X)` is true, so
+        // `Effect.all([X])` / `Effect.forEach` work -- and subclasses
         // (`class Y extends effectClass(impl)`) inherit the protocol statically.
         Effectable.Prototype({
           label: "alchemy/EffectClass",
@@ -35,7 +35,7 @@ export const taggedFunction = <
 ): Tag & Fn => {
   // The Proxy below forwards every Effect-protocol key to `tag` (already an
   // Effect), so `asEffect`/`[Symbol.iterator]`/`pipe` need no explicit
-  // override — only `toString` diverges.
+  // override -- only `toString` diverges.
   const overrides = {
     toString: () => `${tag.toString()}.${fn.name}`,
   };

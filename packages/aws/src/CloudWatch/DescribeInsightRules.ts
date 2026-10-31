@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface DescribeInsightRulesRequest extends cloudwatch.DescribeInsightRulesInput {}
 
 /**
- * Runtime binding for `cloudwatch:DescribeInsightRules` — list the
+ * Runtime binding for `cloudwatch:DescribeInsightRules` -- list the
  * Contributor Insights rules in the account/region.
  *
  * Provide `CloudWatch.DescribeInsightRulesHttp` on the hosting Lambda
@@ -13,7 +13,7 @@ export interface DescribeInsightRulesRequest extends cloudwatch.DescribeInsightR
  * ### Reading Insight Rules
  * **Example:** List Contributor Insights Rules
  * ```typescript
- * // init — grants cloudwatch:DescribeInsightRules
+ * // init -- grants cloudwatch:DescribeInsightRules
  * const describeInsightRules = yield* AWS.CloudWatch.DescribeInsightRules();
  *
  * // runtime

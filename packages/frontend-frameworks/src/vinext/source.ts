@@ -13,7 +13,7 @@ import type {
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
 /**
- * `@alchemy.run/frontend-frameworks/vinext/source` — alchemy Worker
+ * `@alchemy.run/frontend-frameworks/vinext/source` -- alchemy Worker
  * source provider for vinext. Implements the `WorkerSourceModule`
  * contract structurally (no alchemy import).
  *
@@ -62,9 +62,9 @@ const PACKAGE_VERSION: string = (
   createRequire(import.meta.url)("../../package.json") as { version: string }
 ).version;
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Structural mirror of alchemy's Worker source contract
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 export interface SourceHash {
   readonly bundle: string | undefined;
@@ -210,9 +210,9 @@ const sha256Object = (value: unknown): string => sha256(JSON.stringify(stableVal
 const isBindingMarker = (value: unknown): boolean =>
   typeof value === "object" && value !== null && "~alchemy/Kind" in value;
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Hash / assets (same contract as waku/source)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const LOCKFILE_NAMES = [
   "bun.lock",
@@ -483,9 +483,9 @@ const assetsConfigOf = (assets: unknown): Record<string, unknown> | undefined =>
   return Object.keys(config).length > 0 ? config : undefined;
 };
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Vite createBuilder + output collection
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 type ViteModule = typeof import("vite");
 

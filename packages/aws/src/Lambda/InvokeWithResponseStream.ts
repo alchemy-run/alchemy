@@ -11,7 +11,7 @@ export interface InvokeWithResponseStreamRequest extends Omit<
 /**
  * Runtime binding for `lambda:InvokeFunction` over the response-streaming
  * API. Invokes the bound {@link Function} and returns the streaming
- * response — `EventStream` yields `PayloadChunk` events followed by a final
+ * response -- `EventStream` yields `PayloadChunk` events followed by a final
  * `InvokeComplete` event.
  *
  * Provide the `InvokeWithResponseStreamHttp` layer on the Function to

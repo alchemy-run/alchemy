@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:DescribeEffectivePolicy`.
  *
- * Returns the contents of the effective policy of the specified type for an account — the aggregation of inherited plus directly attached management policies (tag, backup, AI-services opt-out, …).
- * Account-level operation — Organizations is a management-account-scoped
+ * Returns the contents of the effective policy of the specified type for an account -- the aggregation of inherited plus directly attached management policies (tag, backup, AI-services opt-out, ...).
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DescribeEffectivePolicyHttp)`.
  * ### Policies & Effective Policy
  * **Example:** Read an Account's Effective Tag Policy
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeEffectivePolicy = yield* AWS.Organizations.DescribeEffectivePolicy();
  *
  * // runtime

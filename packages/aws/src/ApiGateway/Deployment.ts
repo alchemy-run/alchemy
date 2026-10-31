@@ -18,7 +18,7 @@ export interface DeploymentProps {
    * `RestApiBinding` already registered on the API (each `Method`,
    * `Resource`, etc. that was declared with `restApi: api`) and pulls
    * those into its dependency graph. Adding a new `Method` automatically
-   * causes the next apply to produce a fresh deployment — no user-authored
+   * causes the next apply to produce a fresh deployment -- no user-authored
    * `DependsOn` or `triggers` hash required.
    */
   restApi?: RestApi;
@@ -29,7 +29,7 @@ export interface DeploymentProps {
   restApiId?: Input<string>;
   /** Description of the deployment. */
   description?: string;
-  /** Name of a stage API Gateway creates alongside the deployment (legacy pattern — prefer a separate `Stage`). */
+  /** Name of a stage API Gateway creates alongside the deployment (legacy pattern -- prefer a separate `Stage`). */
   stageName?: string;
   /** Description of the stage created via `stageName`. */
   stageDescription?: string;
@@ -46,7 +46,7 @@ export interface DeploymentProps {
   /**
    * Opaque key/value map; when any value changes, a replacement deployment
    * is planned. Each value may be a literal string or an `Input<string>`
-   * (such as a resource output) — output references create real dependency
+   * (such as a resource output) -- output references create real dependency
    * edges, which is how Alchemy ensures a new deployment runs after the
    * resources it references are updated.
    *
@@ -78,7 +78,7 @@ export interface DeploymentType extends Resource<
  * A Deployment captures whatever methods, integrations, resources, and
  * authorizers currently exist on the REST API and produces an immutable
  * `deploymentId` that a `Stage` can point at. Pass the `RestApi` value on
- * `restApi` and Alchemy handles all the ordering for you — the deployment
+ * `restApi` and Alchemy handles all the ordering for you -- the deployment
  * will run after every method bound to the API.
  *
  * **Example:** Deployment of a REST API
@@ -104,7 +104,7 @@ export interface DeploymentType extends Resource<
  * Usually you do not have to: `restApi` already makes the Deployment
  * depend on every method, so any change to a method re-plans a new
  * deployment. Use `triggers` when you want to couple the deployment to a
- * signal Alchemy cannot see — for example, a manual version bump or a
+ * signal Alchemy cannot see -- for example, a manual version bump or a
  * hash of configuration computed outside the stack.
  *
  * **Example:** Force redeploy on a version bump
@@ -204,7 +204,7 @@ export const DeploymentProvider = () =>
         stables: ["deploymentId", "restApiId"] as const,
         // Deployments are sub-resources keyed by `restApiId`. Enumerate every
         // RestApi in the account/region, then page every deployment under each
-        // one and flatten — yielding the same Attributes shape `read` returns.
+        // one and flatten -- yielding the same Attributes shape `read` returns.
         list: () =>
           Effect.gen(function* () {
             const restApiIds = yield* ag.getRestApis.pages({}).pipe(
@@ -287,7 +287,7 @@ export const DeploymentProvider = () =>
           );
           const restApiId = (output?.restApiId ?? news.restApiId) as string;
 
-          // Observe — fetch the live deployment if we have a cached id.
+          // Observe -- fetch the live deployment if we have a cached id.
           // A Deployment is immutable apart from `description`, so we never
           // trust a stale `output.description` for diffing.
           let observed = output?.deploymentId
@@ -299,7 +299,7 @@ export const DeploymentProvider = () =>
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
-          // Ensure — create a new deployment if there isn't one yet.
+          // Ensure -- create a new deployment if there isn't one yet.
           // `createDeployment` always produces a fresh deploymentId, so we
           // only call it when missing; any change that should produce a new
           // deployment is modeled as `replace` in `diff`.
@@ -327,7 +327,7 @@ export const DeploymentProvider = () =>
 
           const deploymentId = observed.id!;
 
-          // Sync description — observed ↔ desired.
+          // Sync description -- observed <-> desired.
           if (description !== observed.description) {
             yield* retryOnApiStatusUpdating(
               ag.updateDeployment({

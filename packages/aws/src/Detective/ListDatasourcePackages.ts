@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for `detective:ListDatasourcePackages`.
  *
  * Lists the behavior graph's data source packages (core CloudTrail/VPC Flow,
- * EKS audit, ASFF findings) and their ingest state — audit what Detective is
+ * EKS audit, ASFF findings) and their ingest state -- audit what Detective is
  * actually ingesting. The graph ARN is injected from the bound {@link Graph}.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.ListDatasourcePackagesHttp)`.

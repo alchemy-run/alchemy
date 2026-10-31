@@ -7,14 +7,14 @@ import type { PolicyStatement } from "./Policy.ts";
  *
  * IAM's runtime surface (policy simulation, credential reports, access
  * advisor, account audit) targets *arbitrary* IAM entities discovered at
- * runtime — e.g. a compliance Lambda iterating every role in the account —
+ * runtime -- e.g. a compliance Lambda iterating every role in the account --
  * so every binding is account-level and grants its action(s) on
  * `Resource: ["*"]` (where AWS scopes the action to an entity, the entity is
  * chosen per request and unknowable at deploy time). The only variation
  * between bindings is the distilled operation and the IAM action.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeIamHttpBinding({ … }))`. Genuinely-different
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeIamHttpBinding({ ... }))`. Genuinely-different
  * bindings (e.g. `GetAccessKeyLastUsed`, which injects the identifier of a
  * bound canonical `AccessKey`) stay bespoke.
  */

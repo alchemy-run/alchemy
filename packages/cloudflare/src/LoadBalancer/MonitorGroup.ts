@@ -43,7 +43,7 @@ export interface MonitorGroupProps {
   /**
    * A short description of the monitor group. Monitor groups have no name
    * field, so the description doubles as the group's identity for state
-   * recovery — if omitted, a unique name is generated from the app, stage,
+   * recovery -- if omitted, a unique name is generated from the app, stage,
    * and logical ID.
    * @default ${app}-${stage}-${id}
    */
@@ -76,7 +76,7 @@ export type MonitorGroup = Resource<
 >;
 
 /**
- * A Cloudflare Load Balancing monitor group — aggregates several
+ * A Cloudflare Load Balancing monitor group -- aggregates several
  * {@link Monitor}s into one health signal that a
  * {@link Pool} can reference via `monitorGroup` (mutually
  * exclusive with `monitor`).
@@ -129,7 +129,7 @@ export const MonitorGroupProvider = () =>
       return undefined;
     }),
 
-    // Monitor groups are an account-scoped collection — paginate the
+    // Monitor groups are an account-scoped collection -- paginate the
     // account-wide list and hydrate each into the exact `read` Attributes
     // shape (pattern (b) in processes/list-support.md).
     list: Effect.fn(function* () {
@@ -152,7 +152,7 @@ export const MonitorGroupProvider = () =>
         const observed = yield* getMonitorGroup(acct, output.monitorGroupId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // description (our physical name). Monitor groups carry no ownership
       // marker, so report the match as Unowned.
       const description = yield* createDescription(id, olds?.description);
@@ -166,12 +166,12 @@ export const MonitorGroupProvider = () =>
       const description = yield* createDescription(id, news.description);
       const members = buildMembers(news);
 
-      // 1. Observe — output.monitorGroupId is a cache hint.
+      // 1. Observe -- output.monitorGroupId is a cache hint.
       const observed = output?.monitorGroupId
         ? yield* getMonitorGroup(output.accountId ?? accountId, output.monitorGroupId)
         : undefined;
 
-      // 2. Ensure — missing: create with the full desired body.
+      // 2. Ensure -- missing: create with the full desired body.
       if (!observed) {
         const created = yield* loadBalancers.createMonitorGroup({
           accountId,
@@ -181,7 +181,7 @@ export const MonitorGroupProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — PUT the full desired body when anything drifts; skip
+      // 3. Sync -- PUT the full desired body when anything drifts; skip
       //    the call on a no-op.
       const dirty =
         observed.description !== description ||
@@ -206,7 +206,7 @@ export const MonitorGroupProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // A group still referenced by a pool cannot be deleted — retry the
+      // A group still referenced by a pool cannot be deleted -- retry the
       // typed MonitorGroupInUse tag with bounded backoff while the engine
       // tears down dependents.
       yield* loadBalancers

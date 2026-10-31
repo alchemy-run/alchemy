@@ -11,7 +11,7 @@ export const CreateAccessPointHttp = Layer.effect(
     actions: ["elasticfilesystem:CreateAccessPoint"],
     // Tag-on-create authorizes elasticfilesystem:TagResource against the
     // ARN of the access point being created, which is unknowable at deploy
-    // time — grant it on `*`.
+    // time -- grant it on `*`.
     wildcardActions: ["elasticfilesystem:TagResource"],
   }),
 );

@@ -16,7 +16,7 @@ type TypeId = typeof TypeId;
 
 /**
  * Deployment status of the certificate. Deploying and deleting are
- * asynchronous (`pending_deployment` → `active`, `pending_deletion` →
+ * asynchronous (`pending_deployment` -> `active`, `pending_deletion` ->
  * `deleted`), typically settling within minutes.
  */
 export type HostnameCertificateStatus =
@@ -32,7 +32,7 @@ export type HostnameCertificateStatus =
 
 export type HostnameCertificateProps = {
   /**
-   * Zone the certificate is uploaded to. Cannot be changed after upload —
+   * Zone the certificate is uploaded to. Cannot be changed after upload --
    * updating this property triggers a replacement.
    */
   zoneId: string;
@@ -40,12 +40,12 @@ export type HostnameCertificateProps = {
    * The per-hostname client certificate in PEM format, presented by
    * Cloudflare to your origin for hostnames associated with it via
    * {@link HostnameAssociation}. Cannot be changed after
-   * upload — updating this property triggers a replacement.
+   * upload -- updating this property triggers a replacement.
    */
   certificate: string;
   /**
    * The certificate's private key in PEM format. Cannot be changed after
-   * upload — updating this property triggers a replacement.
+   * upload -- updating this property triggers a replacement.
    */
   privateKey: Redacted.Redacted<string>;
 };
@@ -87,7 +87,7 @@ export type HostnameCertificate = Resource<
  * and enables hostname-level AOP.
  *
  * Certificates are immutable: there is no update API, so changing any
- * property triggers a replacement. Deployment is asynchronous — the
+ * property triggers a replacement. Deployment is asynchronous -- the
  * certificate starts in `pending_deployment` and becomes `active` within a
  * few minutes; deletion likewise passes through `pending_deletion`.
  * ### Uploading a hostname certificate
@@ -139,7 +139,7 @@ export const HostnameCertificateProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Per-hostname client certificates live inside a zone and are only
-      // enumerable per-zone — fan out over every zone in the account.
+      // enumerable per-zone -- fan out over every zone in the account.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
         zones,
@@ -173,7 +173,7 @@ export const HostnameCertificateProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      // Compare the certificate only when the old value is known — an
+      // Compare the certificate only when the old value is known -- an
       // Output-valued `certificate` doesn't survive a `creating`-state
       // round-trip (it deserializes as `undefined`).
       if (
@@ -181,7 +181,7 @@ export const HostnameCertificateProvider = () =>
           normalizePem(olds.certificate) !== normalizePem(news.certificate)) ||
         unwrap(olds.privateKey) !== unwrap(news.privateKey)
       ) {
-        // There is no update API for hostname client certificates — every
+        // There is no update API for hostname client certificates -- every
         // change is a replacement.
         return { action: "replace" } as const;
       }
@@ -195,7 +195,7 @@ export const HostnameCertificateProvider = () =>
         const observed = yield* observeById(zoneId, output.certificateId);
         if (observed) return toAttributes(observed, zoneId);
       }
-      // Cold read — recover by listing and matching on the certificate PEM
+      // Cold read -- recover by listing and matching on the certificate PEM
       // content (the only identity available; hostname client certificates
       // have no name or tags). A content match IS the desired state, so
       // adoption is safe without an `Unowned` gate.
@@ -210,7 +210,7 @@ export const HostnameCertificateProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the certificate id is the stable identifier; fall
+      // 1. Observe -- the certificate id is the stable identifier; fall
       //    through a HostnameCertificateNotFound (or a pending/completed
       //    deletion) to the list+content match so we recover from
       //    out-of-band deletes and partial state persistence.
@@ -218,14 +218,14 @@ export const HostnameCertificateProvider = () =>
         ? yield* observeById(zoneId, output.certificateId)
         : yield* findByContent(zoneId, news.certificate);
 
-      // 2. Ensure — upload if missing. Cloudflare rejects uploading a PEM
+      // 2. Ensure -- upload if missing. Cloudflare rejects uploading a PEM
       //    identical to an existing certificate (code 1406); tolerate the
       //    race (or an orphaned prior upload) by re-listing and adopting the
-      //    certificate with identical PEM content. A destroy→deploy cycle
+      //    certificate with identical PEM content. A destroy->deploy cycle
       //    also hits 1406 while the old certificate's tombstone is still
       //    `pending_deletion` (observed live: it settles to `deleted` within
       //    ~10 seconds, after which re-uploading the PEM resurrects it under
-      //    the same id) — ride that window out with a bounded retry of the
+      //    the same id) -- ride that window out with a bounded retry of the
       //    whole create-or-adopt step.
       if (!observed) {
         observed = yield* originTls
@@ -250,7 +250,7 @@ export const HostnameCertificateProvider = () =>
           );
       }
 
-      // 3. Return — deployment is asynchronous (`pending_deployment` →
+      // 3. Return -- deployment is asynchronous (`pending_deployment` ->
       //    `active`); we do not block on activation.
       return toAttributes(observed, zoneId);
     }),
@@ -265,7 +265,7 @@ export const HostnameCertificateProvider = () =>
           // The certificate cannot be deleted while a hostname association
           // still references it (code 1433) or while its initial deployment
           // is still propagating (code 1434). Both clear within seconds once
-          // the association is voided / the deployment lands — ride them out
+          // the association is voided / the deployment lands -- ride them out
           // with a bounded retry.
           Effect.retry({
             while: (e) =>
@@ -274,7 +274,7 @@ export const HostnameCertificateProvider = () =>
             times: 10,
           }),
           // Already gone (404 / code 1551) or already on its way out
-          // (code 1414 pending deletion) — delete is idempotent.
+          // (code 1414 pending deletion) -- delete is idempotent.
           Effect.catchTag(
             ["HostnameCertificateNotFound", "CertificatePendingDeletion"],
             () => Effect.void,
@@ -296,7 +296,7 @@ const observeById = (zoneId: string, certificateId: string) =>
   );
 
 // Locate a live certificate by exact PEM content. Tombstoned certificates
-// are excluded so a destroy→deploy cycle re-creates (resurrects) instead of
+// are excluded so a destroy->deploy cycle re-creates (resurrects) instead of
 // adopting a certificate that is on its way out.
 const findByContent = (zoneId: string, certificate: string) =>
   Effect.gen(function* () {

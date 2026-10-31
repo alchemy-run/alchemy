@@ -28,7 +28,7 @@ export interface SchemaMappingProps {
    * `NAME`, `PHONE_NUMBER`), an optional `matchKey` used by rule-based
    * matching, and optional `groupName`/`subType`/`hashed` metadata.
    *
-   * Mutable in place — but a schema mapping becomes immutable while it is
+   * Mutable in place -- but a schema mapping becomes immutable while it is
    * referenced by a matching workflow.
    */
   mappedInputFields: entityresolution.SchemaInputAttribute[];
@@ -56,9 +56,9 @@ export interface SchemaMapping extends Resource<
 > {}
 
 /**
- * An AWS Entity Resolution schema mapping — the schema of an input customer
+ * An AWS Entity Resolution schema mapping -- the schema of an input customer
  * records table. It tells Entity Resolution the attribute type of each column
- * (name, email, phone, unique id, …) and which columns rule-based matching
+ * (name, email, phone, unique id, ...) and which columns rule-based matching
  * compares via `matchKey`.
  *
  * ### Creating Schema Mappings
@@ -101,7 +101,7 @@ export const SchemaMappingProvider = () =>
         return props.schemaName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
-      /** Get a schema mapping by name; typed not-found → undefined. */
+      /** Get a schema mapping by name; typed not-found -> undefined. */
       const getByName = Effect.fn(function* (schemaName: string) {
         return yield* entityresolution
           .getSchemaMapping({ schemaName })
@@ -119,7 +119,7 @@ export const SchemaMappingProvider = () =>
             schemaName: mapping.schemaName,
             schemaArn: mapping.schemaArn,
           };
-          // getSchemaMapping does not return tags — read them via
+          // getSchemaMapping does not return tags -- read them via
           // listTagsForResource for the ownership check.
           const tags = yield* readEntityResolutionTags(mapping.schemaArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -139,10 +139,10 @@ export const SchemaMappingProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — names are unique, so the name IS the identity.
+          // 1. Observe -- names are unique, so the name IS the identity.
           let mapping = yield* getByName(name);
 
-          // 2. Ensure — create when missing; tolerate the concurrent-create
+          // 2. Ensure -- create when missing; tolerate the concurrent-create
           //    race, then re-observe: the create response is a structural
           //    subset of the Get shape (it omits createdAt/updatedAt/
           //    hasWorkflows).
@@ -160,7 +160,7 @@ export const SchemaMappingProvider = () =>
             });
           }
 
-          // 3. Sync — description and mapped fields update in place (fails
+          // 3. Sync -- description and mapped fields update in place (fails
           //    with a typed ConflictException while a workflow references
           //    the schema). Only call the API on an actual delta.
           if (
@@ -189,7 +189,7 @@ export const SchemaMappingProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // deleteSchemaMapping succeeds even when the mapping is already
           // gone; it conflicts while a matching workflow still references
-          // the schema (the engine deletes dependents first — retry the
+          // the schema (the engine deletes dependents first -- retry the
           // eventual-consistency window).
           yield* entityresolution.deleteSchemaMapping({ schemaName: output.schemaName }).pipe(
             Effect.retry({
