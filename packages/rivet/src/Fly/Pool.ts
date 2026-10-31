@@ -55,21 +55,19 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
     expected: "a reachable control plane",
     // Fly Machines reach the internet without a network of their own.
     network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // Every class the pool hosts is bundled into the node program;
+    // RivetKit is installed beside it (it loads a native addon).
     nodes: (nodes) =>
-      Effect.gen(function* () {
-        // Every class the pool hosts is bundled into the node program;
-        // RivetKit is installed beside it (it loads a native addon).
-        yield* Fly.Service(`${id}Nodes`, {
-          main: nodes.program.main,
-          build: {
-            input: nodes.program.build.input,
-            install: [`rivetkit@${RIVETKIT_VERSION}`],
-          },
-          public: false,
-          region: options.region ?? "iad",
-          count: options.replicas ?? 1,
-          guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
-          env: nodeEnvironment(nodes),
-        });
-      }),
+      Fly.Service(`${id}Nodes`, {
+        main: nodes.program.main,
+        build: {
+          input: nodes.program.build.input,
+          install: [`rivetkit@${RIVETKIT_VERSION}`],
+        },
+        public: false,
+        region: options.region ?? "iad",
+        count: options.replicas ?? 1,
+        guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
+        env: nodeEnvironment(nodes),
+      }).pipe(Effect.asVoid),
   });
