@@ -2,7 +2,7 @@ import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
+import type { AssetsConfig, AssetsProps } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -16,9 +16,11 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
   extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "rules">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.,
+   * and `retainPrevious` to keep the previous build's hashed files served
+   * after a deploy.
    */
-  assets?: AssetsConfig;
+  assets?: AssetsConfig & Pick<AssetsProps, "retainPrevious">;
 }
 
 /**
