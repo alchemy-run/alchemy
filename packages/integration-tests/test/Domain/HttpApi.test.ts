@@ -98,36 +98,78 @@ class Balance extends Domain.View("Balance", {
   }),
 }) {}
 
-class Wallets extends Domain.Model("HttpWallets", {
-  aggregates: [Wallet],
-  views: [Balance],
-}) {}
-class WalletApi extends Domain.Api("WalletApi", Deposit, Wallet, Balance) {}
-
 // ---------------------------------------------------------------- the HTTP surface
 
-/** Who is over their request budget: an Api-wide middleware refuses an `x-limited` caller. */
-class RateLimited extends Domain.Rejection("RateLimited") {}
-class RateLimit extends RpcMiddleware.Service<RateLimit>()("Test/RateLimit", {
-  error: RateLimited.pipe(HttpApiSchema.status(429)),
-}) {}
-const RateLimitLive = Layer.succeed(RateLimit, (effect, { headers }) =>
-  Option.isSome(Headers.get(headers, "x-limited")) ? Effect.fail(new RateLimited()) : effect,
+/**
+ * A session with a client half: a typed client attaches the caller as
+ * `x-owner`. The server holds one for its own calls, as "server".
+ */
+class SignedSession extends RpcMiddleware.Service<SignedSession, { provides: Owner }>()(
+  "Test/SignedSession",
+  { error: Unauthenticated.pipe(HttpApiSchema.status(401)), requiredForClient: true },
+) {}
+const SignedSessionLive = Layer.succeed(SignedSession, (effect, { headers }) =>
+  Option.match(Headers.get(headers, "x-owner"), {
+    onNone: () => Effect.fail(new Unauthenticated()),
+    onSome: (owner) => Effect.provideService(effect, Owner, owner),
+  }),
 );
-class LimitedApi extends Domain.Api("LimitedApi", Deposit, Wallet, Balance) {}
-const Limited = LimitedApi.middleware(RateLimit);
+const ServerCredential = RpcMiddleware.layerClient(SignedSession, ({ request, next }) =>
+  next({ ...request, headers: Headers.set(request.headers, "x-owner", "server") }),
+);
+
+class Signed extends Domain.Event("Signed", { owner: Schema.String }) {}
+class Sign extends Domain.Command("Sign", {
+  target: Schema.String,
+  middleware: [SignedSession],
+  events: [Signed],
+  reply: { owner: Schema.NullOr(Schema.String) },
+}) {}
+class Ledger extends Domain.Aggregate("Ledger", {
+  id: Schema.String,
+  state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
+  initial: { owner: null },
+  commands: [Sign],
+  decide: {
+    Sign: Effect.fn(function* () {
+      return [new Signed({ owner: yield* Owner })];
+    }),
+  },
+  evolve: { Signed: (_, e) => ({ owner: e.owner }) },
+  reply: { Sign: (s) => ({ owner: s.owner }) },
+}) {}
+class Wallets extends Domain.Model("HttpWallets", {
+  aggregates: [Wallet, Ledger],
+  views: [Balance],
+}) {}
+class WalletApi extends Domain.Api("WalletApi", {
+  model: Wallets,
+  commands: ["Deposit"],
+  aggregates: ["Wallet"],
+}) {}
+class LedgerApi extends Domain.Api("LedgerApi", {
+  model: Wallets,
+  commands: ["Sign"],
+  views: [],
+}) {}
 
 /** Every call the Api serves. */
 const WalletHttp = DomainHttp.toHttpApi(WalletApi);
 
 /** An Api for HTTP clients that may only deposit: publishing less is a smaller Api. */
-class DepositOnlyApi extends Domain.Api("DepositOnlyApi", Deposit) {}
+class DepositOnlyApi extends Domain.Api("DepositOnlyApi", {
+  model: Wallets,
+  commands: ["Deposit"],
+  views: [],
+}) {}
 
 /** The hosted model, its middleware, and an in-process Bun server with a client for it. */
-const Hosted = Layer.mergeAll(SessionLive, RateLimitLive, Wallets.layer(Layer.empty)).pipe(
-  Layer.provide(InMemory),
-  Layer.provideMerge(BunHttpServer.layerTest),
-);
+const Hosted = Layer.mergeAll(
+  SessionLive,
+  SignedSessionLive,
+  ServerCredential,
+  Wallets.layer(Layer.empty),
+).pipe(Layer.provide(InMemory), Layer.provideMerge(BunHttpServer.layerTest));
 
 const serve = <Id extends string, Groups extends HttpApiGroup.Constraint>(
   api: HttpApi.HttpApi<Id, Groups>,
@@ -381,32 +423,25 @@ describe("Domain toHttpApi", () => {
     }).pipe(Effect.provide(Served)),
   );
 
-  it.live("middleware applied to the whole Api guards every endpoint, live reads included", () =>
+  it.live("a middleware's client half never replaces the HTTP caller's headers", () =>
     Effect.gen(function* () {
-      const limited = { owner: "kim", headers: { "x-limited": "1" } };
+      // The server holds a credential for its own calls; an HTTP caller signs as itself.
       expect(
-        yield* send("POST", "/Deposit", {
-          ...limited,
-          body: { target: "w-9", input: { amount: 1, at } },
-        }),
-      ).toEqual({ status: 429, body: { _tag: "RateLimited" } });
-      expect(yield* send("GET", "/Balance/w-9/watch", limited)).toEqual({
-        status: 429,
-        body: { _tag: "RateLimited" },
+        yield* send("POST", "/Sign", { owner: "alice", body: { target: "l-1", input: {} } }),
+      ).toEqual({
+        status: 200,
+        body: { reply: { owner: "alice" }, stream: "Ledger/l-1", version: 1 },
       });
-      // Without the header, the same calls go through.
-      yield* send("POST", "/Deposit", {
-        owner: "kim",
-        body: { target: "w-9", input: { amount: 1, at } },
+      // A caller without one is refused, not signed in as the server.
+      expect(yield* send("POST", "/Sign", { body: { target: "l-2", input: {} } })).toEqual({
+        status: 401,
+        body: { _tag: "Unauthenticated" },
       });
-      const watch = yield* listen("/Balance/w-9/watch", { owner: "kim" });
-      expect(watch.status).toBe(200);
-      expect((yield* watch.take(1))[0]!.data.state).toEqual({ owner: "kim", balance: 1 });
     }).pipe(
       Effect.provide(
         (() => {
-          const LimitedHttp = DomainHttp.toHttpApi(Limited);
-          return serve(LimitedHttp.api, LimitedHttp.layer);
+          const LedgerHttp = DomainHttp.toHttpApi(LedgerApi);
+          return serve(LedgerHttp.api, LedgerHttp.layer);
         })(),
       ),
     ),
@@ -489,19 +524,19 @@ describe("Domain toHttpApi", () => {
     }
   });
 
-  it("publishes every call the Api serves, in the order it lists them", () => {
+  it("publishes every call the Api serves: commands, views, streams, then aggregates", () => {
     expect(
       Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
     ).toEqual([
       ["Deposit", "POST", "/Deposit"],
-      ["Wallet.get", "GET", "/Wallet/:key"],
-      ["Wallet.watch", "GET", "/Wallet/:key/watch"],
-      ["Wallet.events", "GET", "/Wallet/:key/events"],
       ["Balance.get", "GET", "/Balance/:key"],
       ["Balance.watch", "GET", "/Balance/:key/watch"],
       ["Balance.events", "GET", "/Balance/:key/events"],
       ["Balance.list", "GET", "/Balance/:key/list"],
       ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
+      ["Wallet.get", "GET", "/Wallet/:key"],
+      ["Wallet.watch", "GET", "/Wallet/:key/watch"],
+      ["Wallet.events", "GET", "/Wallet/:key/events"],
     ]);
   });
 

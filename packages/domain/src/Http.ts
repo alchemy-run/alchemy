@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -9,32 +10,33 @@ import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
+import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import type { Entry } from "./Api.ts";
+import type { Servable } from "./Api.ts";
 import { DefinitionError } from "./internal.ts";
 import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /**
- * What {@link toHttpApi} reads from an Api class: its entries, the RPCs it
- * serves, and its in-process client (`clientInProcess`), which runs every
- * call through the Api's own handlers and middleware.
+ * What {@link toHttpApi} reads from an Api class: what it serves, its RPCs,
+ * and its in-process client (`clientInProcess`), which runs every call
+ * through the Api's own handlers and middleware.
  */
 export interface Publishable {
   readonly apiName: string;
-  readonly entries: ReadonlyArray<Entry>;
+  readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
 }
 
-/** One call an Api serves: the entry it belongs to, the client method, and its RPC tag. */
+/** One call an Api serves: what it belongs to, the client method, and its RPC tag. */
 interface Operation {
   /** A command's tag, or a view's, stream's or aggregate's name. */
-  readonly entry: string;
+  readonly name: string;
   /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
   readonly operation: string;
   /** The RPC tag the server answers to (`Deposit`, `Balance.get`). */
@@ -43,26 +45,24 @@ interface Operation {
   readonly stream: boolean;
 }
 
-/** Every call an Api serves, in the order it lists its entries. */
+/** Every call an Api serves, in the order it serves them. */
 const operationsOf = (api: Publishable): ReadonlyArray<Operation> =>
-  api.entries.flatMap((entry): ReadonlyArray<Operation> => {
-    if (entry.kind === "Command") {
-      return [{ entry: entry.tag, operation: "send", rpc: entry.rpc._tag, stream: false }];
+  api.serves.flatMap((served): ReadonlyArray<Operation> => {
+    if (served.kind === "Command") {
+      return [{ name: served.tag, operation: "send", rpc: served.rpc._tag, stream: false }];
     }
-    const name = nameOf(entry);
-    return Object.entries(readRpcs(entry)).flatMap(([call, rpc]) => {
+    const name = nameOf(served);
+    return Object.entries(readRpcs(served)).flatMap(([call, rpc]) => {
       if (rpc === undefined) return [];
-      // The group's RPC also carries middleware applied to the whole Api.
-      const served = (api.group.requests.get(rpc._tag) ?? rpc) as Rpc.AnyWithProps;
       // A stream's `get` RPC is its client's `peek`.
       const operation =
-        (call as keyof ReadRpcs) === "get" && entry.kind === "Stream" ? "peek" : call;
+        (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
       return [
         {
-          entry: name,
+          name,
           operation,
-          rpc: served._tag,
-          stream: RpcSchema.isStreamSchema(served.successSchema),
+          rpc: rpc._tag,
+          stream: RpcSchema.isStreamSchema((rpc as Rpc.AnyWithProps).successSchema),
         },
       ];
     });
@@ -70,11 +70,12 @@ const operationsOf = (api: Publishable): ReadonlyArray<Operation> =>
 
 /**
  * What serving the HTTP API needs: the hosted model and the Layers of the
- * middleware its entries declare, as for the Api itself.
+ * middleware what the Api serves declares, as for the Api itself. Not the
+ * client half of any middleware: the HTTP caller sends its own headers.
  */
 export type Requirements<A extends Publishable> = Exclude<
   Effect.Services<A["clientInProcess"]>,
-  Scope.Scope
+  Scope.Scope | RpcMiddleware.ForClient<any>
 >;
 
 /** The group, an HttpApi holding only it, and the Layers that serve it. */
@@ -163,7 +164,7 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
   // The request's headers go to the call, so its middleware reads cookies and tokens as usual.
   const headers = request.request.headers;
   if (operation.operation === "send") {
-    const send = client[operation.entry] as (
+    const send = client[operation.name] as (
       target: unknown,
       input: unknown,
       options: object,
@@ -175,7 +176,7 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
     };
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
-  const reads = client[operation.entry] as Record<
+  const reads = client[operation.name] as Record<
     string,
     (
       key: string,
@@ -248,13 +249,13 @@ const endpointOf = (
   const error = errors.length === 0 ? undefined : errors;
   const endpoint =
     operation.operation === "send"
-      ? HttpApiEndpoint.post(operation.rpc, `/${operation.entry}`, {
+      ? HttpApiEndpoint.post(operation.rpc, `/${operation.name}`, {
           payload: rpc.payloadSchema,
           success: rpc.successSchema,
           error,
         })
       : operation.stream
-        ? HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key/${operation.operation}`, {
+        ? HttpApiEndpoint.get(operation.rpc, `/${operation.name}/:key/${operation.operation}`, {
             params: { key: fields.key! },
             // `events` resumes after a cursor; `watch` takes nothing but the key.
             ...(fields.after ? { query: { after: fields.after } } : {}),
@@ -262,7 +263,7 @@ const endpointOf = (
             error,
           })
         : operation.operation === "list"
-          ? HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key/list`, {
+          ? HttpApiEndpoint.get(operation.rpc, `/${operation.name}/:key/list`, {
               params: { key: fields.key! },
               query: {
                 order: fields.order!,
@@ -275,8 +276,8 @@ const endpointOf = (
           : HttpApiEndpoint.get(
               operation.rpc,
               operation.operation === "snapshot"
-                ? `/${operation.entry}/:key/snapshot`
-                : `/${operation.entry}/:key`,
+                ? `/${operation.name}/:key/snapshot`
+                : `/${operation.name}/:key`,
               {
                 params: { key: fields.key! },
                 // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
@@ -295,11 +296,11 @@ const endpointOf = (
  * | Call                    | Method and path              | Input                                   |
  * | ----------------------- | ---------------------------- | --------------------------------------- |
  * | a command               | `POST /<Command>`            | JSON body: `target`, `commandId`, input |
- * | `get`, `peek`           | `GET /<Entry>/{key}`         | `?stream=&version=` waits for a write   |
- * | `snapshot`              | `GET /<Entry>/{key}/snapshot`| `?stream=&version=` waits for a write   |
- * | `list`                  | `GET /<Entry>/{key}/list`    | `?order=&take=&after=`                  |
- * | `watch`                 | `GET /<Entry>/{key}/watch`   | Server-Sent Events                      |
- * | `events`                | `GET /<Entry>/{key}/events`  | Server-Sent Events, `?after=` a cursor  |
+ * | `get`, `peek`           | `GET /<Name>/{key}`         | `?stream=&version=` waits for a write   |
+ * | `snapshot`              | `GET /<Name>/{key}/snapshot`| `?stream=&version=` waits for a write   |
+ * | `list`                  | `GET /<Name>/{key}/list`    | `?order=&take=&after=`                  |
+ * | `watch`                 | `GET /<Name>/{key}/watch`   | Server-Sent Events                      |
+ * | `events`                | `GET /<Name>/{key}/events`  | Server-Sent Events, `?after=` a cursor  |
  *
  * A command answers with its receipt; a read with what the Api's own client
  * gets (`null` for an empty key). A typed failure answers with its `_tag`
@@ -378,7 +379,11 @@ export const toHttpApi = <A extends Publishable>(
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
-      const client = api.clientInProcess as Effect.Effect<Client, never, Scope.Scope>;
+      // Without the client half of any middleware: a credential the server
+      // holds for its own calls must never replace the HTTP caller's headers.
+      const client = api.clientInProcess.pipe(
+        Effect.updateContext(Context.omit(...clientHalves)),
+      ) as Effect.Effect<Client, never, Scope.Scope>;
       for (const { operation, isDeclared } of published) {
         // Only the endpoint's declared failures are public; anything else is a defect.
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
@@ -395,6 +400,13 @@ export const toHttpApi = <A extends Publishable>(
       return handlers;
     });
   };
+
+  // The keys `RpcMiddleware.layerClient` provides a middleware's client half under.
+  const clientHalves = [
+    ...new Set(
+      [...api.group.requests.values()].flatMap((rpc) => [...(rpc as Rpc.AnyWithProps).middlewares]),
+    ),
+  ].map((tag) => ({ key: `${tag.key}/Client` }) as unknown as Context.Key<never, unknown>);
 
   const httpApi = HttpApi.make(name).add(group as never);
   return {

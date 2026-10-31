@@ -67,11 +67,11 @@ Each published call becomes one endpoint, by one rule:
 | Call                           | Endpoint                    | Input                                                    |
 | ------------------------------ | --------------------------- | -------------------------------------------------------- |
 | A command                      | `POST /<Command>`           | A JSON body: `target`, an optional `commandId`, and the input |
-| A view's or aggregate's `get`, a stream's `peek` | `GET /<Entry>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
-| A view's `snapshot`            | `GET /<Entry>/{key}/snapshot` | `?stream=&version=` waits for that write               |
-| A view's or stream's `list`    | `GET /<Entry>/{key}/list`   | `?order=&take=&after=`                                   |
-| `watch`                        | `GET /<Entry>/{key}/watch`  | None. Answers with Server-Sent Events                    |
-| `events`                       | `GET /<Entry>/{key}/events` | `?after=` a cursor. Answers with Server-Sent Events      |
+| A view's or aggregate's `get`, a stream's `peek` | `GET /<Name>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
+| A view's `snapshot`            | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for that write               |
+| A view's or stream's `list`    | `GET /<Name>/{key}/list`   | `?order=&take=&after=`                                   |
+| `watch`                        | `GET /<Name>/{key}/watch`  | None. Answers with Server-Sent Events                    |
+| `events`                       | `GET /<Name>/{key}/events` | `?after=` a cursor. Answers with Server-Sent Events      |
 
 A command's body is the same JSON as its RPC payload, and every answer is the same JSON the typed client receives: a command answers with its receipt (`reply`, `stream`, `version`), and a read with the key's state (`null` for a key with nothing in it) or a page. The key of a read is in the path, because a read takes no body. `GET /AccountSummary/c-1-main?stream=…&version=3` reads your own write after a deposit. `stream` and `version` go together.
 
@@ -109,7 +109,7 @@ Each failure is in the OpenAPI document under its status, with its schema. Input
 
 ## The same checks as the Api
 
-Every call goes through the Api's own handlers, in process, with the HTTP request's headers. So the entry's middleware (a session from a cookie or a token), its `validate` and its rejections run exactly as for the typed client. The input is decoded once, by the endpoint, so a transform such as a `DateTimeUtc` field arrives as a date and is not decoded again.
+Every call goes through the Api's own handlers, in process, with the HTTP request's headers. So the middleware of what it calls (a session from a cookie or a token), its `validate` and its rejections run exactly as for the typed client. The input is decoded once, by the endpoint, so a transform such as a `DateTimeUtc` field arrives as a date and is not decoded again.
 
 ## Limits
 
