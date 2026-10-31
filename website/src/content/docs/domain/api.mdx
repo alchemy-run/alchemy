@@ -115,14 +115,14 @@ Reading an aggregate directly is handy for an account's own screen. For anything
 The tutorial's bank exposes registration, deposits, withdrawals and the account summary.
 
 ```typescript title="src/BankApi.api.ts"
-export class BankApi extends Domain.Api(
-  "BankApi",
-  RegisterCustomer,
-  DepositMoney,
-  WithdrawMoney,
-  AccountSummary,
-) {}
+export class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"],
+  views: ["AccountSummary"],
+}) {}
 ```
+
+`model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view and stream. `[]` serves none of a kind. Aggregates are read directly only when you name them.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
 
@@ -131,14 +131,12 @@ Leaving something out is how you keep it internal. `OpenAccount` isn't listed, b
 Different clients need different surfaces. In the example bank, customers and support agents use the same model through two Apis.
 
 ```typescript title="packages/domain/src/SupportApi.api.ts"
-export class SupportApi extends Domain.Api(
-  "SupportApi",
-  FreezeAccount,
-  ChangeOwner,
-  ApproveTransfer,
-  AccountSummary,
-  AccountActivity,
-) {}
+export class SupportApi extends Domain.Api("SupportApi", {
+  model: Bank,
+  commands: ["FreezeAccount", "ChangeOwner", "ApproveTransfer"],
+  views: ["AccountSummary", "AccountActivity"],
+  streams: [],
+}) {}
 ```
 
 `FreezeAccount` and `ChangeOwner` are on the support Api and not the customer one. `AccountSummary` is on both.
@@ -296,5 +294,9 @@ The caller's `decide` and `validate` read the `CurrentActor` the trusted Layer p
 `clientInProcess` needs a `Scope`. In a Worker, build it per request, like the served Api: Workers forbid sharing I/O across requests. In a long-lived process, `CustomerApi.layerClientInProcess` provides `CustomerApi.Client` in process for the life of the Layer, so code that asks for the client runs the same in process or over the network.
 
 Tests use the same client. To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).
+
+To serve every call as a plain HTTP JSON API with an OpenAPI document, see [Plain HTTP and OpenAPI](/domain/http-api).
+
+To give an agent the Api's calls as tools, in the app or over MCP, see [MCP](/domain/mcp).
 
 Next, [Story](/domain/story): how to state each rule as an example, and run it.

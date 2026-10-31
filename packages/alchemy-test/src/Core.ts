@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
 import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, provideFreshArtifactStore } from "alchemy/Artifacts";
@@ -29,7 +30,7 @@ import { Stage } from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
-import { kindOf } from "alchemy/Util/LogRecord";
+import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
@@ -427,24 +428,80 @@ const alchemyLayer = Layer.mergeAll(
   AlchemyContextLive,
 );
 
+/** Most lines one capture keeps; older ones are dropped first. */
+const RESOURCE_LOG_LIMIT = 5_000;
+
+/** The open {@link captureResourceLog} buffers, by resource fqn. */
+const resourceCaptures = new Map<string, Set<Array<string>>>();
+
+/**
+ * Copies each record tagged with a captured resource (`fqn`) into its open
+ * captures. Installed beside the runner's loggers, so it also sees the shared
+ * sidecar's records, which the spawner logs in whichever file started the
+ * sidecar rather than in the test that deployed the resource.
+ */
+const resourceRecorder = Logger.make<unknown, void>((options) => {
+  if (resourceCaptures.size === 0) return;
+  const record = recordOf(options);
+  const fqn = record.attributes.fqn;
+  const captures = typeof fqn === "string" ? resourceCaptures.get(fqn) : undefined;
+  if (captures === undefined || (record.kind !== "log" && record.kind !== "output")) return;
+  const line = stripVTControlCharacters(
+    record.kind === "log" ? record.data.message : record.data.text,
+  );
+  for (const lines of captures) {
+    lines.push(line);
+    if (lines.length > RESOURCE_LOG_LIMIT) lines.splice(0, lines.length - RESOURCE_LOG_LIMIT);
+  }
+});
+
+/**
+ * Start capturing what the resource `fqn` logs — its processes' output (a dev
+ * Worker's console, a Vite dev server) and alchemy's lines about it — whether
+ * its provider runs in the dev sidecar or in-process. Start it before the
+ * deploy; the returned effect reads every line since, without ANSI styling.
+ * The capture ends with the enclosing scope.
+ */
+export const captureResourceLog = (
+  fqn: string,
+): Effect.Effect<Effect.Effect<string>, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const lines: Array<string> = [];
+      let captures = resourceCaptures.get(fqn);
+      if (captures === undefined) resourceCaptures.set(fqn, (captures = new Set()));
+      captures.add(lines);
+      return lines;
+    }),
+    (lines) =>
+      Effect.sync(() => {
+        const captures = resourceCaptures.get(fqn);
+        captures?.delete(lines);
+        if (captures?.size === 0) resourceCaptures.delete(fqn);
+      }),
+  ).pipe(Effect.map((lines) => Effect.sync(() => lines.join("\n"))));
+
 /**
  * The runner's loggers, minus typed event records: deploys draw their
  * progress through `AlchemyDeploy.applyAndRender` (the `LoggingCli` lines), so printing each
  * event object too would only repeat it. `onEvent` subscribers installed
- * inside still see every event.
+ * inside still see every event. Adds the {@link resourceRecorder}.
  */
 const withoutEventRecords = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.flatMap(Logger.CurrentLoggers, (loggers) =>
     effect.pipe(
       Effect.provideService(
         Logger.CurrentLoggers,
-        new Set(
-          [...loggers].map((logger) =>
-            Logger.make<unknown, void>((options) => {
-              if (kindOf(options) !== "event") logger.log(options);
-            }),
-          ),
-        ),
+        new Set([
+          ...[...loggers]
+            .filter((logger) => logger !== resourceRecorder)
+            .map((logger) =>
+              Logger.make<unknown, void>((options) => {
+                if (kindOf(options) !== "event") logger.log(options);
+              }),
+            ),
+          resourceRecorder,
+        ]),
       ),
     ),
   );
