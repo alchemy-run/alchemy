@@ -273,9 +273,23 @@ const applyPending = (options: {
     for (const record of records) {
       if (lookupApplied(applied, record.name)) continue;
       const bookkeeping = insertSql(table, executor.dialect, record);
-      yield* executor.applyMigration
+      const send = executor.applyMigration
         ? executor.applyMigration(record, bookkeeping)
         : executor.batch([...record.statements, bookkeeping]);
+      // A batch can commit and still lose its reply. Its bookkeeping row says
+      // whether it landed, so a lost reply is not a failure and only a
+      // transient failure that did not land is resent (#1889).
+      yield* send.pipe(
+        Effect.catchTag(
+          "MigrationError",
+          Effect.fn(function* (error) {
+            const after = yield* appliedHistory(executor, table);
+            if (lookupApplied(after, record.name)) return;
+            if (!error.transient) return yield* error;
+            yield* send;
+          }),
+        ),
+      );
     }
   });
 
