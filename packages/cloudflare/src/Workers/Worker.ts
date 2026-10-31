@@ -802,6 +802,12 @@ export interface WorkerProps<
      * - Python Workers get `python_workers` instead of the JavaScript defaults.
      *
      * Duplicate flags are removed when defaults are applied.
+     *
+     * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
+     * the client disconnects: the handler's finalizers run as an interruption
+     * and the Worker stays alive until they finish. Without the flag,
+     * Cloudflare cancels the request and its finalizers never run. `alchemy
+     * dev` does not report client disconnects.
      */
     flags?: (
       | "nodejs_compat"
