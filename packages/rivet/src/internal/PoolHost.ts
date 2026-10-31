@@ -6,6 +6,7 @@
  *
  * @internal
  */
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -58,15 +59,22 @@ const durableObjectsPlugin = (objects: ReadonlyArray<PoolDurableObject>) => {
   ];
 };
 
-/** `${stack}-${stage}-${id}` as a lowercase DNS label of at most `max` characters. */
+/**
+ * `${stack}-${stage}-${id}` as a lowercase DNS label of at most `max`
+ * characters. A longer one keeps its start and ends in a hash of the whole,
+ * so labels for different ids never collide.
+ */
 export const stackDnsLabel = Effect.fn(function* (id: string, max = 63) {
   const stack = yield* Stack;
-  return `${stack.name}-${stack.stage}-${id}`
+  const full = `${stack.name}-${stack.stage}-${id}`
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, max)
-    .replace(/-+$/, "");
+    .replace(/^-+|-+$/g, "");
+  if (full.length <= max) return full;
+  const hash = yield* Effect.sync(() =>
+    createHash("sha256").update(full).digest("hex").slice(0, 8),
+  );
+  return `${full.slice(0, max - 9).replace(/-+$/, "")}-${hash}`;
 });
 
 /** A pool Layer was provided to something other than a Durable Object's Effect. */

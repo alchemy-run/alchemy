@@ -67,6 +67,9 @@ DEVICE=/dev/disk/by-id/google-${DISK_DEVICE}
 blkid "$DEVICE" >/dev/null || mkfs.ext4 -F "$DEVICE"
 mkdir -p ${MOUNT_PATH}
 mountpoint -q ${MOUNT_PATH} || mount "$DEVICE" ${MOUNT_PATH}
+# Container-Optimized OS drops inbound traffic except SSH: open the engine's ports.
+iptables -C INPUT -p tcp --dport ${API_PORT} -j ACCEPT 2>/dev/null || iptables -A INPUT -p tcp --dport ${API_PORT} -j ACCEPT
+iptables -C INPUT -p tcp --dport ${PEER_PORT} -j ACCEPT 2>/dev/null || iptables -A INPUT -p tcp --dport ${PEER_PORT} -j ACCEPT
 PRIVATE_IP="$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)"
 docker rm -f rivet-engine >/dev/null 2>&1 || true
 docker run -d --name rivet-engine --restart always --network host \\
