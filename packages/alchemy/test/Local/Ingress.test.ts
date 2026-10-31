@@ -11,8 +11,6 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Ingress from "@/Local/Ingress.ts";
-import { ResourceContext } from "@/ResourceContext.ts";
-import { Stack } from "@/Stack.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const config: Ingress.IngressConfig = { type: FORWARDER_TYPE };
@@ -198,41 +196,27 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
 });
 
 describe("Ingress.createTarget", { tags: ["unit", "local"] }, () => {
-  const inResource = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provideService(Stack, {
-        name: "myapp",
-        stage: "dev_alice",
-        resources: {},
-        bindings: {},
-        actions: {},
-      }),
-      Effect.provideService(ResourceContext, {
-        logicalId: "Build",
-        fqn: "Web/Build",
-        instanceId: "instance-1",
-        type: "Website.Server",
-      }),
-    );
+  const resource = {
+    stack: { name: "myapp", stage: "dev_alice" },
+    id: "Build",
+    fqn: "Web/Build",
+    type: "Website.Server",
+  };
 
-  it.live("derives the target from the stack and the running resource", () =>
-    Effect.gen(function* () {
-      expect(yield* inResource(Ingress.createTarget())).toEqual({
-        stack: "myapp",
-        stage: "dev_alice",
-        fqn: "Web/Build",
-        id: "Build",
-        label: "Build",
-        type: "Website.Server",
-      });
-    }),
-  );
+  it("derives the target from the provider's identity", () => {
+    expect(Ingress.createTarget(resource)).toEqual({
+      stack: "myapp",
+      stage: "dev_alice",
+      fqn: "Web/Build",
+      id: "Build",
+      label: "Build",
+      type: "Website.Server",
+    });
+  });
 
-  it.live("a composite names the label after its site", () =>
-    Effect.gen(function* () {
-      const derived = yield* inResource(Ingress.createTarget({ label: "Web" }));
-      expect(derived.label).toBe("Web");
-      expect(derived.id).toBe("Build");
-    }),
-  );
+  it("a composite names the label after its site", () => {
+    const derived = Ingress.createTarget({ ...resource, label: "Web" });
+    expect(derived.label).toBe("Web");
+    expect(derived.id).toBe("Build");
+  });
 });

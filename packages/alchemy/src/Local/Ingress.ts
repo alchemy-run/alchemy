@@ -26,8 +26,6 @@ import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import type * as Scope from "effect/Scope";
 import * as Contributions from "../Contributions.ts";
-import { ResourceContext } from "../ResourceContext.ts";
-import { Stack } from "../Stack.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import type { PlatformServices } from "../Util/PlatformServices.ts";
 
@@ -174,23 +172,25 @@ export class IngressAdapterNotFound extends Data.TaggedError("IngressAdapterNotF
 }
 
 /**
- * The {@link IngressTarget} of the resource whose lifecycle operation is
- * running, from the ambient `Stack` and `ResourceContext`. `label` defaults
- * to the resource's logical id.
+ * The {@link IngressTarget} of a resource, from the identity its provider
+ * already holds: the `Stack` service read when the provider layer was built,
+ * and the `id` and `fqn` its lifecycle operation was called with. `label`
+ * defaults to the logical id.
  */
-export const createTarget = Effect.fn("Ingress.createTarget")(function* (
-  options: { readonly label?: string } = {},
-) {
-  const stack = yield* Stack;
-  const resource = yield* ResourceContext;
-  return {
-    stack: stack.name,
-    stage: stack.stage,
-    fqn: resource.fqn,
-    id: resource.logicalId,
-    label: options.label ?? resource.logicalId,
-    type: resource.type,
-  } satisfies IngressTarget;
+export const createTarget = (resource: {
+  readonly stack: { readonly name: string; readonly stage: string };
+  readonly id: string;
+  readonly fqn: string;
+  /** The resource type, for example `Cloudflare.Worker`. */
+  readonly type: string;
+  readonly label?: string;
+}): IngressTarget => ({
+  stack: resource.stack.name,
+  stage: resource.stack.stage,
+  fqn: resource.fqn,
+  id: resource.id,
+  label: resource.label ?? resource.id,
+  type: resource.type,
 });
 
 /** The factory for `type`: an {@link Adapters} entry first, then a contributed one. */
