@@ -40,7 +40,7 @@ import * as Semaphore from "effect/Semaphore";
  * workflow. Bumping this pin (with a new `x.y.z-alchemy.N` tag) is how an
  * emulator change reaches users.
  */
-export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:2.1.0-alchemy.3";
+export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:2.1.0-alchemy.4";
 
 /** Default gateway port (LocalStack-compatible). */
 export const DEFAULT_FLOCI_PORT = 4566;
