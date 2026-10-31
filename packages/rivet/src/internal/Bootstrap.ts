@@ -18,7 +18,11 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import { DurableObjectHasNoPool, type DurableObjectRuntimeContext } from "../DurableObject.ts";
+import {
+  DurableObjectHasNoPool,
+  PlatformDeclaration,
+  type DurableObjectRuntimeContext,
+} from "../DurableObject.ts";
 import { runDurableObjects } from "./Runtime.ts";
 
 /** Build each entrypoint's class phase, then run the node until it is stopped. */
@@ -40,7 +44,11 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
   const program = Effect.gen(function* () {
     const hosted = [];
     for (const entrypoint of entrypoints) {
-      const context = yield* Layer.build(entrypointLayer(entrypoint));
+      // A class's `yield*` is its namespace; the node builds its Platform.
+      const declaration =
+        (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
+        entrypoint;
+      const context = yield* Layer.build(entrypointLayer(declaration));
       const runtime = Context.get(context, entrypointTag)
         .RuntimeContext as DurableObjectRuntimeContext;
       const built = runtime.hosted();

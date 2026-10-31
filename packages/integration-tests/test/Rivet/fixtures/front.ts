@@ -1,6 +1,6 @@
 /**
  * The HTTP front of the conformance suite: a Docker service on the control
- * plane's network that calls the Durable Objects through `Rivet.Client`.
+ * plane's network that calls the Durable Objects through the gateway.
  */
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
@@ -26,8 +26,8 @@ export default class Front extends Docker.Service<Front>()(
     };
   }).pipe(Effect.provide(Cluster)),
   Effect.gen(function* () {
-    const counters = yield* Rivet.Client(Counter);
-    const greeters = yield* Rivet.Client(Greeter);
+    const counters = yield* Counter;
+    const greeters = yield* Greeter;
     const conformance = conformanceFetch(counters);
     return {
       fetch: Effect.gen(function* () {
@@ -41,5 +41,5 @@ export default class Front extends Docker.Service<Front>()(
         return yield* conformance;
       }),
     };
-  }).pipe(Effect.provide(Cluster)),
+  }),
 ) {}

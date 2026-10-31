@@ -159,7 +159,7 @@ export const Pool = (
             namespace: cluster.namespace,
             name,
           });
-          // The class joins the pool's nodes, and learns which pool hosts it.
+          // The class joins the pool's nodes.
           yield* pool.bind`${object.LogicalId}`({
             durableObjects: [
               {
@@ -170,7 +170,13 @@ export const Pool = (
             ],
             env,
           });
-          yield* object.bind`Pool`({ pool: name });
+          // What callers need to reach the class through the gateway.
+          yield* object.bind`Pool`({
+            pool: name,
+            endpoint: cluster.nodeEndpoint ?? cluster.endpoint,
+            namespace: cluster.namespace,
+            token: cluster.token,
+          });
           // One node image per stack; every pool builds FROM it.
           const image = yield* Docker.Image("RivetNodeImage", {
             build: {

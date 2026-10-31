@@ -2,7 +2,6 @@
  * @alchemy.run/rivet — Durable Objects on Rivet 3 control planes, with
  * their nodes hosted on any cloud.
  */
-export * from "./Client.ts";
 export * from "./Cluster.ts";
 export * from "./DurableObject.ts";
 export { DurableObjectState, SqlRowCountMismatch } from "./DurableObjectState.ts";

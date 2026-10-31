@@ -2,7 +2,7 @@ import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import { DurableObject, DurableObjectProvider } from "./DurableObject.ts";
+import { DurableObjectProvider, DurableObjectResource } from "./DurableObject.ts";
 import { Namespace, NamespaceProvider } from "./Namespace.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
 
@@ -22,7 +22,10 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([DurableObject, Namespace, Pool, Random])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([DurableObjectResource, Namespace, Pool, Random]),
+  ).pipe(
     Layer.provide(
       Layer.mergeAll(
         DurableObjectProvider(),
