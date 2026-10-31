@@ -4,12 +4,15 @@ import * as Command from "effect/cli/Command";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Alchemist from "@/Alchemist/index.ts";
 import { providerCommand } from "@/Cli/commands/provider.ts";
 import * as Contributions from "@/Contributions.ts";
 import * as Interaction from "@/Interaction.ts";
+import * as Ingress from "@/Local/Ingress.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 interface Dependency {
   /** `package.json` of the dependency; omit to leave it uninstalled. */
@@ -351,6 +354,138 @@ export default { name: ${JSON.stringify(name)}, devTrust: Effect.succeed(Effect.
           expect(contributionErrorMessage(error)).toBe(
             "other and alchemy both contribute a state store named local",
           );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
+
+    /**
+     * Packages that each contribute `ingress` adapters. The sources import
+     * `effect`, so the project lives under this package.
+     */
+    const ingressProject = (dependencies: Record<string, string>) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        return yield* project(
+          Object.fromEntries(
+            Object.entries(dependencies).map(([name, source]) => [
+              name,
+              contributingPackage(name, source),
+            ]),
+          ),
+          { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
+        );
+      });
+
+    /** A provider contributing one adapter whose origins end in `.<name>.test`. */
+    const ingressSource = (provider: string, type: string, host: string) =>
+      `import * as Effect from "effect/Effect";
+const origin = (target) => "http://" + target.label + ".${host}.test";
+const adapter = { origin: (target) => Effect.succeed(origin(target)), attach: (target) => Effect.succeed(origin(target)) };
+export default { name: ${JSON.stringify(provider)}, ingress: { ${JSON.stringify(type)}: Effect.succeed({ make: () => Effect.succeed(adapter) }) } };`;
+
+    it.effect(
+      "a provider contributes an ingress adapter by type",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* ingressProject({
+            "router-one": ingressSource("one", "router", "one"),
+            "router-two": ingressSource("two", "other-router", "two"),
+          });
+          const factory = yield* inDirectory(root, Contributions.ingress("other-router"));
+          const adapter = yield* factory.make(undefined);
+          const target = {
+            stack: "s",
+            stage: "dev",
+            fqn: "Api",
+            id: "Api",
+            label: "api",
+            type: "T",
+          };
+          expect(yield* adapter.origin(target)).toBe("http://api.two.test");
+        }).pipe(
+          Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)),
+          Effect.scoped,
+        ),
+      // Exclusive: changes the process's working directory.
+      { exclusive: true },
+    );
+
+    it.effect(
+      "two providers contributing one ingress adapter name is an error",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* ingressProject({
+            "first-router": ingressSource("first", "router", "first"),
+            "second-router": ingressSource("second", "router", "second"),
+          });
+          const error = yield* Effect.flip(inDirectory(root, Contributions.ingress("router")));
+          expect(contributionErrorMessage(error)).toBe(
+            "second and first both contribute an ingress adapter named router",
+          );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
+
+    it.effect(
+      "an ingress adapter nobody contributes is an error",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* ingressProject({
+            "some-router": ingressSource("some", "router", "some"),
+          });
+          const missing = yield* Effect.flip(inDirectory(root, Contributions.ingress("nope")));
+          expect(contributionErrorMessage(missing)).toBe(
+            "No installed package contributes an ingress adapter named nope",
+          );
+          // A name only Object.prototype has is not a contributed name.
+          const inherited = yield* Effect.flip(
+            inDirectory(root, Contributions.ingress("toString")),
+          );
+          expect(contributionErrorMessage(inherited)).toBe(
+            "No installed package contributes an ingress adapter named toString",
+          );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
+
+    it.effect(
+      "Ingress resolves a contributed adapter, and Adapters wins over it",
+      () =>
+        Effect.gen(function* () {
+          const root = yield* ingressProject({
+            "some-router": ingressSource("some", "router", "contributed"),
+          });
+          const target = {
+            stack: "s",
+            stage: "dev",
+            fqn: "Api",
+            id: "Api",
+            label: "api",
+            type: "T",
+          };
+          const services = Layer.merge(PlatformServices, FetchHttpClient.layer);
+          const contributed = yield* inDirectory(
+            root,
+            Ingress.origin({ type: "router" }, target).pipe(Effect.provide(services)),
+          );
+          expect(contributed).toBe("http://api.contributed.test");
+
+          const override = Layer.succeed(Ingress.Adapters, {
+            router: {
+              make: () =>
+                Effect.succeed({
+                  origin: () => Effect.succeed("http://overridden.test"),
+                  attach: () => Effect.succeed("http://overridden.test"),
+                }),
+            },
+          });
+          const overridden = yield* inDirectory(
+            root,
+            Ingress.origin({ type: "router" }, target).pipe(
+              Effect.provide(Layer.merge(services, override)),
+            ),
+          );
+          expect(overridden).toBe("http://overridden.test");
         }).pipe(Effect.scoped),
       { exclusive: true },
     );

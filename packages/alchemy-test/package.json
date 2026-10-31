@@ -105,5 +105,10 @@
   },
   "engines": {
     "bun": ">=1.3"
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/test/IngressContributions"
+    ]
   }
 }

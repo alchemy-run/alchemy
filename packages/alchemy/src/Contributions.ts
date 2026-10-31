@@ -16,6 +16,7 @@ import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
 import type { Interaction } from "./Interaction.ts";
+import type { IngressFactory } from "./Local/Ingress.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
 import type { PlatformServices } from "./Util/PlatformServices.ts";
@@ -52,6 +53,14 @@ export interface Contributions {
    * Names are global: two providers contributing one name is an error.
    */
   readonly stateStores?: Readonly<Record<string, StateStore>>;
+  /**
+   * The provider's dev ingress adapters by `IngressConfig.type`, e.g.
+   * `{ portless: ... }`: the routers a resource's `dev.ingress` can name.
+   * `alchemy dev` resolves the one a resource names inside its sidecar, from
+   * the project's dependencies. Names are global: two providers contributing
+   * one name is an error.
+   */
+  readonly ingress?: Readonly<Record<string, Lazy<IngressFactory>>>;
   /** CLI commands the provider adds. */
   readonly cli?: Cli;
   /**
@@ -571,6 +580,33 @@ export const stateStores = Effect.fn("Contributions.stateStores")(function* () {
     }
   }
   return stores;
+});
+
+/**
+ * The dev ingress adapter factory contributed under `type` through a
+ * provider's `ingress` field. Fails with a {@link ContributionError} when no
+ * provider contributes it, two do, or its module fails to load.
+ */
+export const ingress = Effect.fn("Contributions.ingress")(function* (type: string) {
+  let owner:
+    | { readonly provider: Contributions; readonly factory: Lazy<IngressFactory> }
+    | undefined;
+  for (const provider of yield* load()) {
+    const adapters = provider.ingress;
+    if (adapters === undefined || !Object.hasOwn(adapters, type)) continue;
+    if (owner !== undefined) {
+      return yield* new ContributionError({
+        message: `${provider.name} and ${owner.provider.name} both contribute an ingress adapter named ${type}`,
+      });
+    }
+    owner = { provider, factory: adapters[type]! };
+  }
+  if (owner === undefined) {
+    return yield* new ContributionError({
+      message: `No installed package contributes an ingress adapter named ${type}`,
+    });
+  }
+  return yield* resolve(owner.provider, `ingress adapter ${type}`, owner.factory);
 });
 
 /** Load one lazy field, failing with a {@link ContributionError} naming the provider. */
