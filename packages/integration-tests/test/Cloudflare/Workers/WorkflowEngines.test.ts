@@ -140,6 +140,27 @@ describe.concurrent.each([
   );
 
   test(
+    "completes sequential durable sleeps without alarm retry backoff",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("sleep-hops");
+      const run = yield* start(url, "SleepHops", id);
+      const result = yield* request<RunStatus>(run.status).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (status) => status._tag !== "Running" && status._tag !== "NotStarted",
+          times: 10,
+        }),
+      );
+      expect(result).toEqual({ _tag: "Completed", result: "rested" });
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(
+        Array.from({ length: 10 }, (_, hop) => `hop-${hop}`),
+      );
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
     "waits for a signal from outside",
     Effect.gen(function* () {
       const { url } = yield* stack;

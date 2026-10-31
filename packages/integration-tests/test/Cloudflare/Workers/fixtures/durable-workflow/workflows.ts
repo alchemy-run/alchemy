@@ -24,6 +24,13 @@ export const Nap = Workflow.make("Nap", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** More healthy alarm hops than the callback retry budget. */
+export const SleepHops = Workflow.make("SleepHops", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Waits for someone outside to approve it. */
 export const Approval = DurableDeferred.make("approval", { success: Schema.String });
 
@@ -92,6 +99,24 @@ export const NapLive = Workflows.layer(
   }),
 );
 
+export const SleepHopsLive = Workflows.layer(
+  SleepHops,
+  Effect.gen(function* () {
+    const record = yield* Recorder;
+    return Effect.fn(function* ({ id }) {
+      for (let hop = 0; hop < 10; hop++) {
+        yield* DurableClock.sleep({
+          name: `sleep-${hop}`,
+          duration: "100 millis",
+          inMemoryThreshold: 0,
+        });
+        yield* Activity.make({ name: `hop-${hop}`, execute: record(id, `hop-${hop}`) });
+      }
+      return "rested";
+    });
+  }),
+);
+
 export const ApproveLive = Workflows.layer(
   Approve,
   Effect.gen(function* () {
@@ -142,6 +167,7 @@ export const ParentLive = Workflows.layer(
 export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
   NapLive,
+  SleepHopsLive,
   ApproveLive,
   CheckoutLive,
   ParentLive,

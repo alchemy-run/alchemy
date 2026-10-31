@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Journal } from "./journal.ts";
-import { Approval, Approve, Checkout, Greet, Nap, Parent } from "./workflows.ts";
+import { Approval, Approve, Checkout, Greet, Nap, Parent, SleepHops } from "./workflows.ts";
 
 export type { Status } from "alchemy/Workflows";
 
@@ -14,6 +14,7 @@ export const app = Effect.gen(function* () {
   const workflows = {
     Greet: yield* Workflows.RunWorkflow(Greet),
     Nap: yield* Workflows.RunWorkflow(Nap),
+    SleepHops: yield* Workflows.RunWorkflow(SleepHops),
     Approve: yield* Workflows.RunWorkflow(Approve),
     Checkout: yield* Workflows.RunWorkflow(Checkout),
     Parent: yield* Workflows.RunWorkflow(Parent),
