@@ -12,6 +12,7 @@ import {
 } from "../DynamoDB/Stream.ts";
 import type { Table } from "../DynamoDB/Table.ts";
 import { processBatch } from "../internal/EventSourceBatch.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -40,72 +41,77 @@ export const TableEventSource = Layer.effect(
       // handler below. Namespaced under the host so the mapping's logical
       // identity matches the previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const latestStreamArn = table.latestStreamArn.pipe(
-              Output.mapEffect((arn) =>
-                typeof arn === "string"
-                  ? Effect.succeed(arn)
-                  : Effect.die(`latestStreamArn is not a string: ${arn}`),
-              ),
-            );
+        yield* wireEventSource(host, table, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const latestStreamArn = table.latestStreamArn.pipe(
+                Output.mapEffect((arn) =>
+                  typeof arn === "string"
+                    ? Effect.succeed(arn)
+                    : Effect.die(`latestStreamArn is not a string: ${arn}`),
+                ),
+              );
 
-            const streamViewType = props.streamViewType ?? "NEW_AND_OLD_IMAGES";
+              const streamViewType = props.streamViewType ?? "NEW_AND_OLD_IMAGES";
 
-            yield* Effect.logInfo(
-              `Lambda TableEventSource: binding stream ${streamViewType} for ${table.LogicalId}`,
-            );
-            yield* table.bind`AWS.DynamoDB.Stream(${host}, ${table}, ${streamViewType})`({
-              streamSpecification: {
-                StreamEnabled: true,
-                StreamViewType: streamViewType,
-              },
-            });
-
-            yield* Effect.logInfo(
-              `Lambda TableEventSourcePolicy: creating mapping for ${host.LogicalId} <- ${table.LogicalId}`,
-            );
-
-            yield* host.bind`Allow(${host}, AWS.DynamoDB.Table.ReadStream(${table}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "dynamodb:DescribeStream",
-                    "dynamodb:GetRecords",
-                    "dynamodb:GetShardIterator",
-                  ],
-                  Resource: [latestStreamArn],
+              yield* Effect.logInfo(
+                `Lambda TableEventSource: binding stream ${streamViewType} for ${table.LogicalId}`,
+              );
+              yield* table.bind`AWS.DynamoDB.Stream(${host}, ${table}, ${streamViewType})`({
+                streamSpecification: {
+                  StreamEnabled: true,
+                  StreamViewType: streamViewType,
                 },
-              ],
-            });
+              });
 
-            yield* host.bind`Allow(${host}, AWS.DynamoDB.ListStreams(${table}))`({
-              policyStatements: [
+              yield* Effect.logInfo(
+                `Lambda TableEventSourcePolicy: creating mapping for ${host.LogicalId} <- ${table.LogicalId}`,
+              );
+
+              yield* host.bind`Allow(${host}, AWS.DynamoDB.Table.ReadStream(${table}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "dynamodb:DescribeStream",
+                      "dynamodb:GetRecords",
+                      "dynamodb:GetShardIterator",
+                    ],
+                    Resource: [latestStreamArn],
+                  },
+                ],
+              });
+
+              yield* host.bind`Allow(${host}, AWS.DynamoDB.ListStreams(${table}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: ["dynamodb:ListStreams"],
+                    Resource: [table.tableArn],
+                  },
+                ],
+              });
+
+              yield* Mapping(
+                `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${table.LogicalId})`,
                 {
-                  Effect: "Allow",
-                  Action: ["dynamodb:ListStreams"],
-                  Resource: [table.tableArn],
+                  functionName: Lambda.qualifiedNameOf(host),
+                  eventSourceArn: latestStreamArn,
+                  batchSize: props.batchSize,
+                  maximumBatchingWindow: props.maximumBatchingWindow,
+                  enabled: true,
+                  startingPosition: props.startingPosition ?? "LATEST",
+                  startingPositionTimestamp: props.startingPositionTimestamp,
+                  parallelizationFactor: props.parallelizationFactor,
+                  bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
+                  maximumRecordAge: props.maximumRecordAge,
+                  maximumRetryAttempts: props.maximumRetryAttempts,
+                  tumblingWindow: props.tumblingWindow,
                 },
-              ],
-            });
-
-            yield* Mapping(`AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${table.LogicalId})`, {
-              functionName: Lambda.qualifiedNameOf(host),
-              eventSourceArn: latestStreamArn,
-              batchSize: props.batchSize,
-              maximumBatchingWindow: props.maximumBatchingWindow,
-              enabled: true,
-              startingPosition: props.startingPosition ?? "LATEST",
-              startingPositionTimestamp: props.startingPositionTimestamp,
-              parallelizationFactor: props.parallelizationFactor,
-              bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-              maximumRecordAge: props.maximumRecordAge,
-              maximumRetryAttempts: props.maximumRetryAttempts,
-              tumblingWindow: props.tumblingWindow,
-            });
-          }),
+              );
+            }),
+          ),
         );
       }
 

@@ -27,6 +27,8 @@ import { spawnSync } from "node:child_process";
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as S3 from "@distilled.cloud/aws/s3";
+import * as Alchemy from "alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
@@ -38,8 +40,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
+import EcsRemoteTask from "./fixtures/ecs-remote/task.ts";
+import { liveContext } from "./fixtures/live.ts";
 import { rawAwsJson } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
@@ -397,6 +402,57 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
         // The task's destroy deletes its log group.
         yield* stack.destroy();
         expect(yield* findGroup(task.logGroupName)).toBeUndefined();
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
+    "a dev ECS task's bindings reach an Alchemy.remote() bucket in the real cloud",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const outputs = yield* stack.deploy(
+          Effect.gen(function* () {
+            const cluster = yield* AWS.ECS.Cluster("EcsRemoteCluster", {});
+            const task = yield* EcsRemoteTask;
+            const bucket = yield* AWS.S3.Bucket("EcsRemoteBucket", { forceDestroy: true }).pipe(
+              Alchemy.remote(),
+            );
+            return { cluster, task, bucketName: bucket.bucketName };
+          }),
+        );
+        expect(outputs.task.taskDefinitionArn).toContain(":000000000000:");
+        expect(outputs.bucketName).not.toContain("dev:");
+
+        // Serving the marker means the task's PutObject succeeded.
+        const { taskId } = yield* runTaskRoundTrip({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: outputs.task.taskDefinitionArn,
+          port: 17364,
+          marker: "ecs-remote-marker",
+        });
+
+        // Out-of-band: the object landed in the REAL bucket.
+        const body = yield* S3.getObject({ Bucket: outputs.bucketName, Key: "from-ecs.txt" }).pipe(
+          Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+          Effect.provide(liveContext),
+        );
+        expect(body).toBe("from-ecs");
+
+        yield* stack.destroy();
+
+        yield* assertTornDown({
+          clusterName: outputs.cluster.clusterName,
+          taskDefinitionArn: outputs.task.taskDefinitionArn,
+          taskId,
+        });
+        const bucketGone = yield* S3.headBucket({ Bucket: outputs.bucketName }).pipe(
+          Effect.map(() => false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+          Effect.provide(liveContext),
+        );
+        expect(bucketGone).toBe(true);
       }),
     { timeout: 300_000 },
   );

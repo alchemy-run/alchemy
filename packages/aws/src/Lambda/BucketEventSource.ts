@@ -11,6 +11,7 @@ import {
 import type { BucketNotification, NotificationsProps } from "../S3/BucketNotifications.ts";
 import { normalizeBucketNotification } from "../S3/normalizeBucketNotification.ts";
 import type { S3EventType } from "../S3/S3Event.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -55,34 +56,36 @@ export const BucketEventSource = Layer.effect(
       // handler below. Namespaced under the host so the sub-resources' logical
       // identity matches the previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          func.LogicalId,
-          Effect.gen(function* () {
-            const { events: Events = ["s3:ObjectCreated:*"], prefix, suffix } = props ?? {};
-            const filterRules = [
-              ...(prefix !== undefined ? [{ Name: "prefix" as const, Value: prefix }] : []),
-              ...(suffix !== undefined ? [{ Name: "suffix" as const, Value: suffix }] : []),
-            ];
-            yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(func),
-              principal: "s3.amazonaws.com",
-              sourceArn: bucket.bucketArn,
-            });
-            yield* bucket.bind(`AWS.S3.Notifications(${bucket.LogicalId})`, {
-              notificationConfiguration: {
-                LambdaFunctionConfigurations: [
-                  {
-                    LambdaFunctionArn: Lambda.qualifiedArnOf(func),
-                    Events,
-                    ...(filterRules.length > 0
-                      ? { Filter: { Key: { FilterRules: filterRules } } }
-                      : {}),
-                  },
-                ],
-              },
-            });
-          }),
+        yield* wireEventSource(func, bucket, (func) =>
+          Namespace.push(
+            func.LogicalId,
+            Effect.gen(function* () {
+              const { events: Events = ["s3:ObjectCreated:*"], prefix, suffix } = props ?? {};
+              const filterRules = [
+                ...(prefix !== undefined ? [{ Name: "prefix" as const, Value: prefix }] : []),
+                ...(suffix !== undefined ? [{ Name: "suffix" as const, Value: suffix }] : []),
+              ];
+              yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(func),
+                principal: "s3.amazonaws.com",
+                sourceArn: bucket.bucketArn,
+              });
+              yield* bucket.bind(`AWS.S3.Notifications(${bucket.LogicalId})`, {
+                notificationConfiguration: {
+                  LambdaFunctionConfigurations: [
+                    {
+                      LambdaFunctionArn: Lambda.qualifiedArnOf(func),
+                      Events,
+                      ...(filterRules.length > 0
+                        ? { Filter: { Key: { FilterRules: filterRules } } }
+                        : {}),
+                    },
+                  ],
+                },
+              });
+            }),
+          ),
         );
       }
 

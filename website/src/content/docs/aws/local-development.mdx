@@ -175,6 +175,49 @@ const secret = yield* AWS.SecretsManager.Secret("ProdSecret", { ... })
   .pipe(Alchemy.remote());
 ```
 
+A local Function bound to a remote resource reaches it in the real
+cloud with your own credentials. `alchemy dev` keeps a temporary copy
+of them in the emulator, refreshed before they expire, and the binding
+signs its calls with them:
+
+```typescript
+const bucket = yield* AWS.S3.Bucket("Uploads").pipe(Alchemy.remote());
+// inside a local Lambda: writes land in the real bucket
+const putObject = yield* AWS.S3.PutObject(bucket);
+```
+
+Events flow the other way too. A local Lambda can consume a remote
+queue, stream, table, bucket, topic, bus or API:
+
+```typescript
+const queue = yield* AWS.SQS.Queue("Jobs").pipe(Alchemy.remote());
+// inside a local Lambda: real messages invoke this handler on your machine
+yield* AWS.SQS.consumeQueueMessages(queue, {}, handler);
+```
+
+AWS can only invoke a real Lambda, so `alchemy dev` deploys a small stub
+Lambda in your stage and points the event source at it. The stub forwards
+each invocation to your machine through an SQS queue and returns your
+handler's result, so batch failures, retries and API responses behave as
+they do in the cloud. The stub goes away when you destroy the stage or
+deploy for real.
+
+Some combinations can't work, and `alchemy dev` refuses them before it
+creates anything:
+
+| Combination                                                             | Why                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------- |
+| A remote resource configured with a local one, e.g. a remote Lambda bound to a local bucket | The real cloud can't reach your machine                    |
+| A remote queue, bus or pipe delivering to a local queue or ECS cluster | Only Lambda targets are bridged                           |
+| A local Lambda connecting to a remote ElastiCache, MemoryDB, DAX or DocumentDB | Their endpoints are private to the VPC                    |
+| A local Cloudflare Worker calling a remote AWS resource                | Not bridged yet; pipe the Worker through `Alchemy.remote()` |
+
+The error names both resources. Pipe both through `Alchemy.remote()`, or
+neither.
+
+Remote calls run with your credentials, not the Function's role, so a
+missing IAM permission only shows up once you deploy.
+
 If a remote resource needs credentials you don't have,
 `alchemy dev` tells you before touching anything:
 

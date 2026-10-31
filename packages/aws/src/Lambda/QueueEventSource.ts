@@ -13,6 +13,7 @@ import {
   type SQSBatchResponse,
   type SQSEvent,
 } from "../SQS/QueueEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -38,27 +39,29 @@ export const QueueEventSource = Layer.effect(
       // work is registering the runtime handler below. Namespaced under the host
       // so the mapping's logical identity matches the previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
-                  Resource: [queue.queueArn],
-                },
-              ],
-            });
+        yield* wireEventSource(host, queue, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                    Resource: [queue.queueArn],
+                  },
+                ],
+              });
 
-            yield* Mapping(`${queue.LogicalId}-EventSource`, {
-              functionName: Lambda.qualifiedNameOf(host),
-              eventSourceArn: queue.queueArn,
-              batchSize: props.batchSize,
-              maximumBatchingWindow: props.maximumBatchingWindow,
-              enabled: true,
-            });
-          }),
+              yield* Mapping(`${queue.LogicalId}-EventSource`, {
+                functionName: Lambda.qualifiedNameOf(host),
+                eventSourceArn: queue.queueArn,
+                batchSize: props.batchSize,
+                maximumBatchingWindow: props.maximumBatchingWindow,
+                enabled: true,
+              });
+            }),
+          ),
         );
       }
 

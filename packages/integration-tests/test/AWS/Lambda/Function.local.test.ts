@@ -29,29 +29,62 @@ import { fileURLToPath } from "node:url";
  */
 import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as Region from "@alchemy.run/aws/Region";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as ApiGateway from "@distilled.cloud/aws/api-gateway";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Events from "@distilled.cloud/aws/eventbridge";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import * as SSM from "@distilled.cloud/aws/ssm";
+import * as Alchemy from "alchemy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
+import { Stack } from "alchemy/Stack";
+import { createInternalTags, hasTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { liveContext } from "../Local/fixtures/live.ts";
 import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
+import RemoteBindingFunctionLive, {
+  RemoteBindingFunction,
+} from "./fixtures/floci-remote-binding/handler.ts";
+import RemoteEventsFunctionLive, {
+  RemoteEventsFunction,
+} from "./fixtures/floci-remote-events/handler.ts";
+import RemotePushFunctionLive, {
+  RemotePushFunction,
+} from "./fixtures/floci-remote-push/handler.ts";
+import UnbridgedConnectFunctionLive, {
+  UnbridgedConnectFunction,
+} from "./fixtures/floci-unbridged/connect.ts";
+import UnbridgedEventFunctionLive, {
+  UnbridgedEventFunction,
+} from "./fixtures/floci-unbridged/event.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
 const devFixtureDir = fileURLToPath(new URL("../Lambda/fixtures/floci-dev", import.meta.url));
 const esmHandlerPath = fileURLToPath(
   new URL("../Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
+);
+
+/** Deploy for real from a dev test file: the run mode `alchemy deploy` uses. */
+const asDeploy = Layer.effect(
+  AlchemyContext,
+  AlchemyContext.pipe(Effect.map((context) => ({ ...context, dev: false }))),
 );
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
@@ -412,4 +445,421 @@ test.provider(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
+);
+
+test.provider(
+  "a dev Function's bindings reach Alchemy.remote() resources in the real cloud",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemoteBindingFunction;
+        }).pipe(Effect.provide(RemoteBindingFunctionLive)),
+      );
+      // The function itself is emulated.
+      expect(fn.functionUrl).toContain("localhost:4566");
+
+      const fetchText = (path: string) =>
+        client.get(`${fn.functionUrl!.replace(/\/$/, "")}${path}`).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(response.text, (body) => ({ status: response.status, body })),
+          ),
+          Effect.retry({
+            while: (): boolean => true,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 60,
+          }),
+        );
+
+      // First invoke pulls the Lambda runtime image; wait for the function to serve.
+      const info = yield* fetchText("/info").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName, queueUrl } = JSON.parse(info.body) as {
+        bucketName: string;
+        queueUrl: string;
+      };
+
+      // A freshly-minted live key takes a few seconds to propagate.
+      const put = yield* fetchText("/put?key=hello.txt&value=from-floci").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 30,
+        }),
+      );
+      expect(put.body).toBe("ok");
+      const get = yield* fetchText("/get?key=hello.txt");
+      expect(get).toEqual({ status: 200, body: "from-floci" });
+
+      // Out-of-band: the object landed in the REAL bucket.
+      const object = yield* S3.getObject({ Bucket: bucketName, Key: "hello.txt" }).pipe(
+        Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+        Effect.provide(liveContext),
+      );
+      expect(object).toBe("from-floci");
+
+      // A binding that resolves its credentials when the layer is built
+      // (before any resource is bound) reaches the real queue too.
+      const sent = yield* fetchText("/send?value=from-floci");
+      expect(sent).toEqual({ status: 200, body: "ok" });
+      const received = yield* SQS.receiveMessage({
+        QueueUrl: queueUrl,
+        WaitTimeSeconds: 5,
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (result): boolean => (result.Messages ?? []).length > 0,
+          times: 10,
+        }),
+        Effect.provide(liveContext),
+      );
+      expect(received.Messages?.[0]?.Body).toBe("from-floci");
+
+      // The developer's credentials reach the Lambda through the emulator.
+      const { name, stage } = yield* Stack;
+      const relayed = yield* SSM.getParameter({
+        Name: `/alchemy/${name}/${stage}/dev-credentials`,
+        WithDecryption: true,
+      }).pipe(Effect.provide(flociContext));
+      expect(relayed.Parameter?.Value).toBeDefined();
+
+      yield* stack.destroy();
+
+      const gone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(gone).toBe(true);
+      // SQS reports a deleted queue for up to a minute.
+      const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
+        Effect.provide(liveContext),
+      );
+      expect(queueGone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
+    timeout: 540_000,
+  },
+);
+
+test.provider(
+  "a dev Function consumes event sources in the real cloud",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemoteEventsFunction;
+        }).pipe(Effect.provide(RemoteEventsFunctionLive)),
+      );
+      expect(fn.functionUrl).toContain("localhost:4566");
+
+      const info = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({ status: response.status, body })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 60,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName, queueUrl } = JSON.parse(info.body) as {
+        bucketName: string;
+        queueUrl: string;
+      };
+
+      // Real events, produced out of band in the real cloud.
+      yield* SQS.sendMessage({ QueueUrl: queueUrl, MessageBody: "from-the-cloud" }).pipe(
+        Effect.provide(liveContext),
+      );
+      yield* S3.putObject({ Bucket: bucketName, Key: "uploads/hello.txt", Body: "hi" }).pipe(
+        Effect.provide(liveContext),
+      );
+
+      // The local Lambda handled both and wrote the results to the real bucket.
+      const read = (key: string) =>
+        S3.getObject({ Bucket: bucketName, Key: key }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "NoSuchKey",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 30,
+          }),
+          Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+          Effect.provide(liveContext),
+        );
+      expect(yield* read("received/from-the-cloud")).toBe("from-the-cloud");
+      expect(yield* read("seen/hello.txt")).toBe("uploads/hello.txt");
+      // The real stub Lambda the events went through: the one sharing the
+      // emulated Function's bridge queue.
+      const local = yield* Lambda.getFunctionConfiguration({
+        FunctionName: fn.functionName,
+      }).pipe(Effect.provide(flociContext));
+      // Env values come back Redacted.
+      const bridgeQueueOf = (config: Lambda.FunctionConfiguration) => {
+        const value = config.Environment?.Variables?.ALCHEMY_DEV_BRIDGE_QUEUE_URL;
+        return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+      };
+      const bridgeQueue = bridgeQueueOf(local);
+      expect(bridgeQueue).toBeDefined();
+      const stubs = Lambda.listFunctions.items({}).pipe(
+        Stream.filter((config) => bridgeQueueOf(config) === bridgeQueue),
+        Stream.map((config) => config.FunctionName),
+        Stream.runCollect,
+        Effect.provide(liveContext),
+      );
+      expect(yield* stubs).toHaveLength(1);
+
+      // Promote: the same stack deployed for real. The Function now runs in
+      // the cloud, so the stub, its queue and its bucket are collected, and
+      // the real Function consumes the queue itself.
+      const promoted = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* RemoteEventsFunction;
+          }).pipe(Effect.provide(RemoteEventsFunctionLive)),
+        )
+        .pipe(Effect.provide(asDeploy));
+      expect(promoted.functionArn).not.toContain(":000000000000:");
+      expect(yield* stubs).toHaveLength(0);
+      const bridgeQueueGone = yield* SQS.getQueueAttributes({ QueueUrl: bridgeQueue! }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
+        Effect.provide(liveContext),
+      );
+      expect(bridgeQueueGone).toBe(true);
+      yield* SQS.sendMessage({ QueueUrl: queueUrl, MessageBody: "after-promotion" }).pipe(
+        Effect.provide(liveContext),
+      );
+      expect(yield* read("received/after-promotion")).toBe("after-promotion");
+
+      yield* stack.destroy();
+
+      expect(yield* stubs).toHaveLength(0);
+
+      const bucketGone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(bucketGone).toBe(true);
+      // SQS reports a deleted queue for up to a minute.
+      const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
+        Effect.provide(liveContext),
+      );
+      expect(queueGone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
+    timeout: 540_000,
+  },
+);
+
+test.provider(
+  "dev rejects the edges no bridge carries, by name, before creating anything",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const edgeOf = (exit: Exit.Exit<unknown, unknown>) =>
+        Exit.isFailure(exit)
+          ? exit.cause.reasons.flatMap((reason) =>
+              reason._tag === "Die" ? [reason.defect as { _tag?: string }] : [],
+            )
+          : [];
+
+      // A deployed Function cannot receive an emulated queue's events.
+      const event = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* UnbridgedEventFunction;
+          }).pipe(Effect.provide(UnbridgedEventFunctionLive), Alchemy.remote()),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(event)).toContainEqual(
+        expect.objectContaining({
+          _tag: "UnbridgedDevEdge",
+          from: "UnbridgedEventFunction",
+          to: "UnbridgedQueue",
+        }),
+      );
+
+      // This machine cannot reach a cache that only has a private endpoint.
+      const connect = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* UnbridgedConnectFunction;
+          }).pipe(Effect.provide(UnbridgedConnectFunctionLive)),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(connect)).toContainEqual(
+        expect.objectContaining({ _tag: "UnbridgedDevEdge", edge: "connect" }),
+      );
+
+      // Only Lambda targets are bridged: a real bus cannot deliver to an
+      // emulated queue.
+      const route = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const bus = yield* AWS.EventBridge.EventBus("UnbridgedBus", {}).pipe(Alchemy.remote());
+            const queue = yield* AWS.SQS.Queue("UnbridgedTargetQueue");
+            yield* AWS.EventBridge.events(bus, { source: ["alchemy.test"] }).toQueue(queue);
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(route)).toContainEqual(
+        expect.objectContaining({
+          _tag: "UnbridgedDevEdge",
+          from: "UnbridgedTargetQueue",
+          to: "UnbridgedBus",
+          edge: "event",
+        }),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 120_000 },
+);
+
+test.provider(
+  "real-cloud push sources reach a dev Function and get its responses back",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+      const { region } = yield* AWSEnvironment.current.pipe(Effect.provide(liveContext));
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemotePushFunction;
+        }).pipe(Effect.provide(RemotePushFunctionLive)),
+      );
+      expect(fn.functionUrl).toContain("localhost:4566");
+      const info = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({ status: response.status, body })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 60,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName, busName } = JSON.parse(info.body) as {
+        bucketName: string;
+        busName: string;
+      };
+
+      // The real API, found by its tags.
+      const tags = yield* createInternalTags("RemotePushApi");
+      const findApis = ApiGateway.getRestApis.items({}).pipe(
+        Stream.filter((api) => api.id !== undefined && hasTags(tags, api.tags)),
+        Stream.map((api) => api.id!),
+        Stream.runCollect,
+        Effect.provide(liveContext),
+      );
+      const [apiId] = yield* findApis;
+      expect(apiId).toBeDefined();
+      const invokeUrl = `https://${apiId}.execute-api.${region}.amazonaws.com/test`;
+      const get = (path: string, until: (status: number) => boolean) =>
+        client.get(`${invokeUrl}${path}`).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(response.text, (body) => ({
+              status: response.status,
+              served: response.headers["x-served-by"],
+              body,
+            })),
+          ),
+          Effect.retry({
+            while: (): boolean => true,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 30,
+          }),
+          // A fresh stage answers 403/404 for a few seconds.
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (res): boolean => until(res.status),
+            times: 30,
+          }),
+        );
+
+      // The local handler's response, status and headers come back through the stub.
+      const hello = yield* get("/hello?name=sam", (status) => status === 201);
+      expect(hello.status).toBe(201);
+      expect(hello.served).toBe("floci");
+      expect(JSON.parse(hello.body)).toEqual({ path: "/hello", name: "sam" });
+
+      // A failing local handler fails the real invocation.
+      const boom = yield* get("/boom", (status) => status === 502);
+      expect(boom.status).toBe(502);
+
+      // A custom bus in the real cloud delivers to the local handler.
+      yield* Events.putEvents({
+        Entries: [
+          {
+            EventBusName: busName,
+            Source: "alchemy.test",
+            DetailType: "Ping",
+            Detail: JSON.stringify({ id: "evt-1" }),
+          },
+        ],
+      }).pipe(Effect.provide(liveContext));
+      const recorded = yield* S3.getObject({ Bucket: bucketName, Key: "bus/evt-1" }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "NoSuchKey",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 30,
+        }),
+        Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+        Effect.provide(liveContext),
+      );
+      expect(recorded).toBe("Ping");
+
+      yield* stack.destroy();
+
+      expect(yield* findApis).toEqual([]);
+      const bucketGone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(bucketGone).toBe(true);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:apigateway",
+      "provider:aws:eventbridge",
+      "local",
+    ],
+    timeout: 540_000,
+  },
 );

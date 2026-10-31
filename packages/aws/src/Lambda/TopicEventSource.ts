@@ -11,6 +11,7 @@ import {
   type TopicEventSourceService,
   type TopicNotification,
 } from "../SNS/TopicEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -41,24 +42,26 @@ export const TopicEventSource = Layer.effect(
       // Namespaced under the host so the sub-resources' logical identity matches
       // the previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* Permission(`AWS.Lambda.InvokeFunction(${topic.LogicalId})`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "sns.amazonaws.com",
-              sourceArn: topic.topicArn,
-            });
+        yield* wireEventSource(host, topic, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* Permission(`AWS.Lambda.InvokeFunction(${topic.LogicalId})`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "sns.amazonaws.com",
+                sourceArn: topic.topicArn,
+              });
 
-            yield* Subscription(`AWS.SNS.Subscription(${topic.LogicalId}, ${host.LogicalId})`, {
-              topicArn: topic.topicArn,
-              protocol: "lambda",
-              endpoint: Lambda.qualifiedArnOf(host),
-              attributes: props.attributes,
-              returnSubscriptionArn: true,
-            });
-          }),
+              yield* Subscription(`AWS.SNS.Subscription(${topic.LogicalId}, ${host.LogicalId})`, {
+                topicArn: topic.topicArn,
+                protocol: "lambda",
+                endpoint: Lambda.qualifiedArnOf(host),
+                attributes: props.attributes,
+                returnSubscriptionArn: true,
+              });
+            }),
+          ),
         );
       }
 

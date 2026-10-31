@@ -47,7 +47,12 @@ import {
   tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
-import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
+import {
+  defaultProviderMode,
+  stampedMode,
+  UnbridgedDevEdge,
+  type ProviderMode,
+} from "./ProviderMode.ts";
 import {
   isResource,
   missingImplementation,
@@ -1139,6 +1144,38 @@ const makePlan = <A>(
         return [fqn, deps.filter((dep) => newNodeFqns.has(dep))] as const;
       }),
     ]);
+
+    // A dev run must never configure a real-cloud resource with an identity
+    // that exists only on the developer's machine (a floci ARN, a `dev:`
+    // id): the real cloud would reject it, or accept it and silently never
+    // deliver. Bridges declare real-cloud stand-ins instead (e.g. AWS's
+    // stub Lambdas for emulated event targets), so whatever still depends
+    // on an emulated resource from the real cloud is unbridged.
+    if (runDefaultMode === "local") {
+      const modes = new Map<string, ProviderMode | undefined>();
+      for (const resource of resources) {
+        modes.set(resource.FQN, (yield* resolveProviderAndMode(resource)).mode);
+      }
+      for (const resource of resources) {
+        if (modes.get(resource.FQN) !== "live") continue;
+        const emulated = (rawUpstreamDependencies[resource.FQN] ?? []).find(
+          (dep) => modes.get(dep) === "local",
+        );
+        if (emulated !== undefined) {
+          return yield* Effect.die(
+            new UnbridgedDevEdge({
+              message:
+                `'${resource.FQN}' runs in the real cloud but depends on '${emulated}', which ` +
+                "`alchemy dev` emulates on this machine, and no bridge carries that edge. " +
+                `Pipe '${emulated}' through Alchemy.remote() too, or emulate '${resource.FQN}'.`,
+              from: resource.FQN,
+              to: emulated,
+              edge: "reference",
+            }),
+          );
+        }
+      }
+    }
 
     // Resources that participate in a cycle when both prop and binding
     // edges are considered. Used below to decide whether an acyclic

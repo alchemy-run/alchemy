@@ -707,6 +707,19 @@ export const describeDataPlane = (resource: {
   });
 
 /**
+ * Whether a resource runs on the developer's machine in this run: its
+ * resolved mode is `local`, whether or not its provider registered a local
+ * data plane. Everything else lives in a real cloud.
+ */
+export const isEmulated = (resource: {
+  readonly Type: string;
+  readonly Mode?: ProviderMode | undefined;
+}): Effect.Effect<boolean> =>
+  describeDataPlane(resource).pipe(
+    Effect.map((plane) => plane.kind === "local" || plane.kind === "undeclared"),
+  );
+
+/**
  * The data-plane override layer for a resource, or `undefined` when its
  * clients target the real cloud for any reason (see
  * {@link describeDataPlane} for which).

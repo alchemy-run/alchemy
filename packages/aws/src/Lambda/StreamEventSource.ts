@@ -10,6 +10,7 @@ import {
   type StreamEventSourceService,
   type StreamRecordsHandler,
 } from "../Kinesis/StreamEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -37,47 +38,49 @@ export const StreamEventSource = Layer.effect(
       // work is registering the runtime handler below. Namespaced under the host
       // so the mapping's logical identity matches the previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.StreamEventSource(${stream}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "kinesis:DescribeStream",
-                    "kinesis:GetRecords",
-                    "kinesis:GetShardIterator",
-                    "kinesis:ListShards",
-                  ],
-                  Resource: [stream.streamArn],
-                },
-              ],
-            });
+        yield* wireEventSource(host, stream, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.Lambda.StreamEventSource(${stream}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "kinesis:DescribeStream",
+                      "kinesis:GetRecords",
+                      "kinesis:GetShardIterator",
+                      "kinesis:ListShards",
+                    ],
+                    Resource: [stream.streamArn],
+                  },
+                ],
+              });
 
-            yield* Mapping(
-              `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${stream.LogicalId})`,
-              {
-                functionName: Lambda.qualifiedNameOf(host),
-                eventSourceArn: stream.streamArn,
-                batchSize: props.batchSize,
-                maximumBatchingWindow: props.maximumBatchingWindow,
-                enabled: true,
-                startingPosition: props.startingPosition ?? "LATEST",
-                startingPositionTimestamp: props.startingPositionTimestamp,
-                parallelizationFactor: props.parallelizationFactor,
-                bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-                maximumRecordAge: props.maximumRecordAge,
-                maximumRetryAttempts: props.maximumRetryAttempts,
-                tumblingWindow: props.tumblingWindow,
-                functionResponseTypes: props.functionResponseTypes,
-                destinationConfig: props.destinationConfig,
-                filterCriteria: props.filterCriteria,
-                kmsKeyArn: props.kmsKeyArn,
-                metricsConfig: props.metricsConfig,
-              },
-            );
-          }),
+              yield* Mapping(
+                `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${stream.LogicalId})`,
+                {
+                  functionName: Lambda.qualifiedNameOf(host),
+                  eventSourceArn: stream.streamArn,
+                  batchSize: props.batchSize,
+                  maximumBatchingWindow: props.maximumBatchingWindow,
+                  enabled: true,
+                  startingPosition: props.startingPosition ?? "LATEST",
+                  startingPositionTimestamp: props.startingPositionTimestamp,
+                  parallelizationFactor: props.parallelizationFactor,
+                  bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
+                  maximumRecordAge: props.maximumRecordAge,
+                  maximumRetryAttempts: props.maximumRetryAttempts,
+                  tumblingWindow: props.tumblingWindow,
+                  functionResponseTypes: props.functionResponseTypes,
+                  destinationConfig: props.destinationConfig,
+                  filterCriteria: props.filterCriteria,
+                  kmsKeyArn: props.kmsKeyArn,
+                  metricsConfig: props.metricsConfig,
+                },
+              );
+            }),
+          ),
         );
       }
 

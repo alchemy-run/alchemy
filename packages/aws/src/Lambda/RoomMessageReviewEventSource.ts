@@ -10,6 +10,7 @@ import {
   type RoomMessageReviewHandlerFn,
   type RoomMessageReviewProps,
 } from "../IVSChat/RoomMessageReviewEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -68,39 +69,41 @@ export const RoomMessageReviewEventSource = Layer.effect(
       // registering the runtime dispatcher below. Namespaced under the
       // host for stable logical identity.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            // IVS Chat VALIDATES the invoke permission when the handler is
-            // associated (CreateRoom/UpdateRoom fails with "invalid lambda
-            // permission" otherwise), so the Permission must exist BEFORE
-            // the room and cannot reference the room's ARN (that would be
-            // circular). Scope it to this account's rooms instead — the
-            // pattern the IVS Chat resource-policy docs recommend.
-            const { accountId, region } =
-              yield* AWSEnvironment.current as unknown as Effect.Effect<{
-                accountId: string;
-                region: string;
-              }>;
-            const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedArnOf(host),
-              principal: "ivschat.amazonaws.com",
-              sourceAccount: accountId,
-              sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
-            });
+        yield* wireEventSource(host, room, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              // IVS Chat VALIDATES the invoke permission when the handler is
+              // associated (CreateRoom/UpdateRoom fails with "invalid lambda
+              // permission" otherwise), so the Permission must exist BEFORE
+              // the room and cannot reference the room's ARN (that would be
+              // circular). Scope it to this account's rooms instead — the
+              // pattern the IVS Chat resource-policy docs recommend.
+              const { accountId, region } =
+                yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                  accountId: string;
+                  region: string;
+                }>;
+              const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedArnOf(host),
+                principal: "ivschat.amazonaws.com",
+                sourceAccount: accountId,
+                sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,
+              });
 
-            // The Permission echoes the `functionName` prop (the function
-            // ARN) as an attribute — threading it as the handler `uri`
-            // makes the room reconcile only AFTER the invoke permission
-            // exists.
-            yield* room.bind`AWS.IVSChat.RoomMessageReview(${host}, ${room})`({
-              messageReviewHandler: {
-                uri: permission.functionName,
-                fallbackResult: props?.fallbackResult,
-              },
-            });
-          }),
+              // The Permission echoes the `functionName` prop (the function
+              // ARN) as an attribute — threading it as the handler `uri`
+              // makes the room reconcile only AFTER the invoke permission
+              // exists.
+              yield* room.bind`AWS.IVSChat.RoomMessageReview(${host}, ${room})`({
+                messageReviewHandler: {
+                  uri: permission.functionName,
+                  fallbackResult: props?.fallbackResult,
+                },
+              });
+            }),
+          ),
         );
       }
 
