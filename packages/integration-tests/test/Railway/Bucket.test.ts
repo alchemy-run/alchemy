@@ -166,6 +166,11 @@ test.provider(
       expect(creds.endpoint.length).toBeGreaterThan(0);
       expect(creds.accessKeyId.length).toBeGreaterThan(0);
       expect(Redacted.value(creds.secretAccessKey).length).toBeGreaterThan(0);
+      expect(created.bucket.secretAccessKey).toBeDefined();
+      expect(
+        created.bucket.secretAccessKey !== undefined &&
+          Redacted.value(created.bucket.secretAccessKey) === Redacted.value(creds.secretAccessKey),
+      ).toBe(true);
 
       yield* withBucketS3(
         creds,
