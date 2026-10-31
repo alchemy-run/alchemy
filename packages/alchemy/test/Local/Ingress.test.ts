@@ -201,6 +201,7 @@ describe("Ingress.createTarget", { tags: ["unit", "local"] }, () => {
     id: "Build",
     fqn: "Web/Build",
     type: "Website.Server",
+    config: { type: "forwarder" },
   };
 
   it("derives the target from the provider's identity", () => {
@@ -214,8 +215,11 @@ describe("Ingress.createTarget", { tags: ["unit", "local"] }, () => {
     });
   });
 
-  it("a composite names the label after its site", () => {
-    const derived = Ingress.createTarget({ ...resource, label: "Web" });
+  it("the route is called the config's name when it has one", () => {
+    const derived = Ingress.createTarget({
+      ...resource,
+      config: { type: "forwarder", name: "Web" },
+    });
     expect(derived.label).toBe("Web");
     expect(derived.id).toBe("Build");
   });

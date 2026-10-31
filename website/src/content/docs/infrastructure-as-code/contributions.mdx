@@ -168,7 +168,9 @@ resource's dev URL through a local router. A router's package, here
 
 `alchemy dev` resolves it inside its sidecar, from the project's
 dependencies, when a resource names it in `dev.ingress`. Names are global:
-two providers contributing the same name is an error. The adapter itself is
+two providers contributing the same name is an error. The adapter names each
+route from `target.label`: the `name` the user set on the `IngressConfig`,
+else the resource's logical id. The adapter itself is
 described in [Local Provider](/infrastructure-as-code/local-provider#route-the-url-through-ingress).
 
 ## What contributed code can use
