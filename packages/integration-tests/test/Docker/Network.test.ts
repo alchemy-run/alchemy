@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -79,6 +80,26 @@ describe(
         yield* stack.destroy();
         const gone = yield* docker.network.inspect(first.id).pipe(Effect.flip);
         expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    // Swarm caps overlay network names at 63 characters; a long logical id in
+    // a long stack name must still produce a creatable name.
+    test.provider("creates an overlay network under a long generated name", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* ensureDockerSwarm;
+        yield* stack.destroy();
+        const network = yield* stack.deploy(
+          Docker.Network("an-overlay-network-with-a-rather-long-logical-identifier", {
+            driver: "overlay",
+          }),
+        );
+        expect(network.driver).toBe("overlay");
+        expect(network.name.length).toBeLessThanOrEqual(63);
+        const info = yield* docker.network.inspect(network.id);
+        expect(info.Driver).toBe("overlay");
+        yield* stack.destroy();
       }),
     );
 
