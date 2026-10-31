@@ -391,6 +391,8 @@ flaky.test.provider(
       });
 
       yield* stack.destroy();
+      // A retried attempt starts over, so its first batch is faulted again.
+      yield* Ref.update(sends, (counts) => ({ ...counts, lost_reply_notes: 0 }));
 
       const database = yield* stack.deploy(program);
       expect((yield* Ref.get(sends))["lost_reply_notes"]).toEqual(1);
@@ -430,6 +432,8 @@ flaky.test.provider(
       });
 
       yield* stack.destroy();
+      // A retried attempt starts over, so its first batch is faulted again.
+      yield* Ref.update(sends, (counts) => ({ ...counts, dropped_request_notes: 0 }));
 
       const database = yield* stack.deploy(program);
       expect((yield* Ref.get(sends))["dropped_request_notes"]).toEqual(2);
