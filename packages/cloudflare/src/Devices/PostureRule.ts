@@ -191,7 +191,7 @@ export const DevicePostureRuleProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -205,6 +205,9 @@ export const DevicePostureRuleProvider = () =>
       // carry no ownership markers, so brand the match `Unowned`.
       const name = yield* createRuleName(id, olds?.name);
       const match = yield* findByName(acct, name);
+      // A create-first replacement reuses the name: the generation it is
+      // replacing is not the replacement, so report nothing there yet.
+      if (match && match.id === previous?.postureRuleId) return undefined;
       if (match) return Unowned(toAttributes(match, acct));
       return undefined;
     }),
