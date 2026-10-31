@@ -138,6 +138,7 @@ export class AgentApi extends Domain.Api("AgentApi", {
   commands: ["DepositMoney", "RequestTransfer"],
   views: ["AccountSummary"],
   streams: [],
+  aggregates: [],
 }) {}
 
 const BankMcp = DomainAi.toMcp(AgentApi);
