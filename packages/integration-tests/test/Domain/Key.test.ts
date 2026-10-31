@@ -158,7 +158,7 @@ export const streamedByRef = Story.streamed(OrgFeed, Tour.ref("t-1"));
 const acme = OrgId.make("acme");
 const globex = OrgId.make("globex");
 
-describe("Domain keyed by a schema", () => {
+describe("Domain keyed by a schema", { tags: ["unit", "local"] }, () => {
   it.effect("folds every aggregate's events into the org they name", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),

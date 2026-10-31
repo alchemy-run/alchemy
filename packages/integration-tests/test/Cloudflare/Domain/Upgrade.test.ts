@@ -227,7 +227,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
 );
 
 /**
@@ -280,7 +280,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
 );
 
 /**
@@ -314,5 +314,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 300_000 },
 );

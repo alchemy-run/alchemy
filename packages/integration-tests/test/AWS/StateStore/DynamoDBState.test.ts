@@ -555,6 +555,7 @@ test(
       expect(seen.size).toBe(40);
     }
   }),
+  { tags: ["unit", "provider:aws", "provider:aws:statestore", "local"] },
 );
 
 // A deploy that stalls past its lease (a paused laptop, a GC pause) and

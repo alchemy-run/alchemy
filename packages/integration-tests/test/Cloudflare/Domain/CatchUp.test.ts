@@ -132,103 +132,107 @@ const historyNow = (url: string) =>
 // Locally a redeploy restarts every object at once; live, an object keeps its old
 // code until it has been idle, and the catch-up must wait it out.
 for (const dev of [true, false]) {
-  describe(dev ? "local catch-up" : "live catch-up", () => {
-    const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+  describe(
+    dev ? "local catch-up" : "live catch-up",
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"] },
+    () => {
+      const { test } = Test.make({ providers: Cloudflare.providers(), dev });
 
-    test.provider(
-      // The mode is in the name: the stack is named after the test, and the local and
-      // live runs must not share one.
-      `${dev ? "local" : "live"}: a view added in a redeploy catches up, and a version bump rebuilds it`,
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
+      test.provider(
+        // The mode is in the name: the stack is named after the test, and the local and
+        // live runs must not share one.
+        `${dev ? "local" : "live"}: a view added in a redeploy catches up, and a version bump rebuilds it`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
 
-          const { worker: v1 } = yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV1 };
-            }),
-          );
-          const url = v1.url!.replace(/\/+$/, "");
-          yield* serving(url, "v1");
-          const history: Record<string, ReadonlyArray<number>> = {
-            "a-1": [10, 20],
-            "a-2": [5],
-            "a-3": [7, 8, 9],
-          };
-          for (const [account, amounts] of Object.entries(history)) {
-            for (const amount of amounts) yield* deposit(url, account, amount);
-          }
+            const { worker: v1 } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV1 };
+              }),
+            );
+            const url = v1.url!.replace(/\/+$/, "");
+            yield* serving(url, "v1");
+            const history: Record<string, ReadonlyArray<number>> = {
+              "a-1": [10, 20],
+              "a-2": [5],
+              "a-3": [7, 8, 9],
+            };
+            for (const [account, amounts] of Object.entries(history)) {
+              for (const amount of amounts) yield* deposit(url, account, amount);
+            }
 
-          // Redeploy with the view: the accounts' history reaches it without another command.
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV2 };
-            }),
-          );
-          yield* serving(url, "v2");
-          // The deploy returned once the backfill was done.
-          if (!dev) expect(yield* historyNow(url)).toBe(true);
-          for (const [account, amounts] of Object.entries(history)) {
-            expect(yield* deposits(url, account, amounts)).toEqual(amounts);
-          }
+            // Redeploy with the view: the accounts' history reaches it without another command.
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV2 };
+              }),
+            );
+            yield* serving(url, "v2");
+            // The deploy returned once the backfill was done.
+            if (!dev) expect(yield* historyNow(url)).toBe(true);
+            for (const [account, amounts] of Object.entries(history)) {
+              expect(yield* deposits(url, account, amounts)).toEqual(amounts);
+            }
 
-          // One key fed by every account merges their history in the order it was committed.
-          const committed = Object.entries(history).flatMap(([account, amounts]) =>
-            amounts.map((amount) => `${account}:${amount}`),
-          );
-          expect(yield* timeline(url, committed.length)).toEqual(committed);
+            // One key fed by every account merges their history in the order it was committed.
+            const committed = Object.entries(history).flatMap(([account, amounts]) =>
+              amounts.map((amount) => `${account}:${amount}`),
+            );
+            expect(yield* timeline(url, committed.length)).toEqual(committed);
 
-          // Caught up, it receives new deposits live, after the history.
-          yield* deposit(url, "a-1", 30);
-          expect(yield* deposits(url, "a-1", [10, 20, 30])).toEqual([10, 20, 30]);
-          expect(yield* historyComplete(url)).toBe(true);
+            // Caught up, it receives new deposits live, after the history.
+            yield* deposit(url, "a-1", 30);
+            expect(yield* deposits(url, "a-1", [10, 20, 30])).toEqual([10, 20, 30]);
+            expect(yield* historyComplete(url)).toBe(true);
 
-          // Redefine the view (it now doubles each deposit) and bump its version: it is
-          // rebuilt. Written while the deploy waits on the rebuild: a new account, and an
-          // account that was inactive.
-          const writes = yield* Effect.forkChild(
-            Effect.gen(function* () {
-              yield* serving(url, "v3");
-              yield* deposit(url, "a-4", 4);
-              yield* deposit(url, "a-2", 6);
-            }),
-          );
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV3 };
-            }),
-          );
-          yield* Fiber.join(writes);
-          // New code with the same model: no second run, and the history stays complete.
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV3b };
-            }),
-          );
-          yield* serving(url, "v3b");
-          if (!dev) expect(yield* historyNow(url)).toBe(true);
-          const doubled: Record<string, ReadonlyArray<number>> = {
-            "a-1": [20, 40, 60],
-            "a-2": [10, 12],
-            "a-3": [14, 16, 18],
-            "a-4": [8],
-          };
-          expect(yield* historyComplete(url)).toBe(true);
-          for (const [account, amounts] of Object.entries(doubled)) {
-            expect(yield* deposits(url, account, amounts)).toEqual(amounts);
-          }
-          // The timeline was not rebuilt: it kept its history in order, and received the
-          // new deposits live (live deliveries from different accounts arrive in any order).
-          const after = yield* timeline(url, committed.length + 3);
-          expect(after?.slice(0, committed.length + 1)).toEqual([...committed, "a-1:30"]);
-          expect([...(after?.slice(committed.length + 1) ?? [])].sort()).toEqual([
-            "a-2:6",
-            "a-4:4",
-          ]);
+            // Redefine the view (it now doubles each deposit) and bump its version: it is
+            // rebuilt. Written while the deploy waits on the rebuild: a new account, and an
+            // account that was inactive.
+            const writes = yield* Effect.forkChild(
+              Effect.gen(function* () {
+                yield* serving(url, "v3");
+                yield* deposit(url, "a-4", 4);
+                yield* deposit(url, "a-2", 6);
+              }),
+            );
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV3 };
+              }),
+            );
+            yield* Fiber.join(writes);
+            // New code with the same model: no second run, and the history stays complete.
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV3b };
+              }),
+            );
+            yield* serving(url, "v3b");
+            if (!dev) expect(yield* historyNow(url)).toBe(true);
+            const doubled: Record<string, ReadonlyArray<number>> = {
+              "a-1": [20, 40, 60],
+              "a-2": [10, 12],
+              "a-3": [14, 16, 18],
+              "a-4": [8],
+            };
+            expect(yield* historyComplete(url)).toBe(true);
+            for (const [account, amounts] of Object.entries(doubled)) {
+              expect(yield* deposits(url, account, amounts)).toEqual(amounts);
+            }
+            // The timeline was not rebuilt: it kept its history in order, and received the
+            // new deposits live (live deliveries from different accounts arrive in any order).
+            const after = yield* timeline(url, committed.length + 3);
+            expect(after?.slice(0, committed.length + 1)).toEqual([...committed, "a-1:30"]);
+            expect([...(after?.slice(committed.length + 1) ?? [])].sort()).toEqual([
+              "a-2:6",
+              "a-4:4",
+            ]);
 
-          yield* stack.destroy();
-        }),
-      { timeout: 600_000 },
-    );
-  });
+            yield* stack.destroy();
+          }),
+        { timeout: 600_000 },
+      );
+    },
+  );
 }

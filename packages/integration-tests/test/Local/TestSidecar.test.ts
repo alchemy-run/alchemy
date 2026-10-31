@@ -74,7 +74,7 @@ live.test(
 
 const cleanupOrder: Array<string> = [];
 
-describe("file-owned runtime cleanup", () => {
+describe("file-owned runtime cleanup", { tags: ["local"] }, () => {
   const nested = Test.make({
     providers: Layer.empty,
     dev: true,

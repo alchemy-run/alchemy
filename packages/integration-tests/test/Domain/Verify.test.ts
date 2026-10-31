@@ -128,7 +128,7 @@ class OpenForCustomer extends Domain.Command("OpenForCustomer", {
 // A plain string target accepts ids that are not an AccountId.
 class OpenAny extends Domain.Command("OpenAny", { target: Schema.String, events: [Opened] }) {}
 
-describe("Domain verify", () => {
+describe("Domain verify", { tags: ["unit", "local"] }, () => {
   it("finds no problem in a correct model", () => {
     expect(Domain.verify(Bank)).toEqual([]);
   });
