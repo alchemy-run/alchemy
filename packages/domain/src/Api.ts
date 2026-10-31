@@ -29,8 +29,8 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
+import { DefinitionError, NotInModel, Unreadable, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { DefinitionError } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
@@ -538,7 +538,9 @@ const notInModel = (
 ): DefinitionError | undefined =>
   unresolved.length === 0
     ? undefined
-    : new DefinitionError(`${unresolved[0]} is not part of the ${apiModel.modelName} model`);
+    : new DefinitionError({
+        reason: new NotInModel({ entity: unresolved[0]!, model: apiModel.modelName }),
+      });
 
 const handlersOf = (
   apiModel: Model.Any,
@@ -555,7 +557,7 @@ const handlersOf = (
         const aggregate = internals.commands.get(entry.tag);
         if (!aggregate) {
           return yield* Effect.die(
-            new DefinitionError(`${entry.tag} is served, but no hosted aggregate handles it`),
+            new DefinitionError({ reason: new UnroutedCommand({ command: entry.tag }) }),
           );
         }
         const declared = declaredOnly(entry.rpc);
@@ -573,6 +575,12 @@ const handlersOf = (
             ),
           );
         continue;
+      }
+      // Serving an aggregate's state without its read contract would skip its middleware.
+      if (entry.kind === "Aggregate" && !entry.definition.read) {
+        return yield* Effect.die(
+          new DefinitionError({ reason: new Unreadable({ aggregate: entry.aggregateName }) }),
+        );
       }
       const name = nameOf(entry);
       const rpcs = readRpcs(entry);
@@ -766,12 +774,8 @@ const handlersOf = (
                 (stored) =>
                   store.state(id).pipe(
                     Effect.flatMap(({ state }) => check("events", refOf(id))(stateOf(state))),
-                    Effect.as([
-                      {
-                        event: internals.kernel.decodeEvent(stored.event),
-                        envelope: decodeEnvelope(stored.envelope),
-                      },
-                    ]),
+                    Effect.andThen(internals.kernel.decodeEvent(stored.event)),
+                    Effect.map((event) => [{ event, envelope: decodeEnvelope(stored.envelope) }]),
                   ),
               ),
             ),
