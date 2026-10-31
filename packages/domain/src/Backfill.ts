@@ -274,11 +274,53 @@ export type Phase = "unknown" | "discover" | "ready" | "complete";
 
 /** The root of a consumer's run: one object per consumer generation. */
 export interface RunRpc {
-  /** Start the run, once: `true` if it is complete already. */
-  readonly begin: (target: string, plan: Plan) => Effect.Effect<boolean>;
+  /**
+   * Start the run, once. A run already started (or complete) is found, not
+   * started again; one started with a different plan (the consumer reads other
+   * sources now, without a version bump) answers `changed`.
+   */
+  readonly begin: (target: string, plan: Plan) => Effect.Effect<Begin>;
   readonly phase: (target: string) => Effect.Effect<Phase>;
   readonly progress: (target: string) => Effect.Effect<Progress>;
 }
+
+/** What starting a run answers. */
+export type Begin =
+  | { readonly status: "started" | "complete" }
+  /** Started with another plan: it reads what `started` says, not what was asked. */
+  | { readonly status: "changed"; readonly started: Plan };
+
+/** Whether two plans read the same sources, at the same generations, the same way. */
+export const samePlan = (a: Plan, b: Plan) => {
+  const sources = (plan: Plan) =>
+    plan.sources === undefined ? "*" : [...plan.sources].sort().join(",");
+  const generations = (plan: Plan) =>
+    Object.entries(plan.generations ?? {})
+      .filter(([, generation]) => generation > 0)
+      .sort(([x], [y]) => x.localeCompare(y))
+      .map(([source, generation]) => `${source}#${generation}`)
+      .join(",");
+  return (
+    a.singleSource === b.singleSource &&
+    sources(a) === sources(b) &&
+    generations(a) === generations(b)
+  );
+};
+
+/**
+ * Why a deploy can't wait on a run started with another plan: the consumer now
+ * reads sources its run doesn't, and only a new generation reads them.
+ */
+export const planChanged = (target: string, started: Plan, asked: Plan) => {
+  const list = (plan: Plan) =>
+    plan.sources === undefined ? "every source" : plan.sources.join(", ");
+  return `${target} now reads ${list(asked)}, but its backfill was started reading ${list(started)}. Bump its version to rebuild it from every source's history.`;
+};
+
+/** A consumer reads other sources than its backfill was started with, at the same version. */
+export class PlanChanged extends Data.TaggedError("BackfillPlanChanged")<{
+  readonly message: string;
+}> {}
 
 /** How far a run has got, for a deploy to report while it waits. */
 export interface Progress {
@@ -2092,12 +2134,17 @@ export const makeRun = (
       storage.exclusive(
         Effect.gen(function* () {
           const state = yield* getState(target);
-          if (state !== undefined) return state.phase === "complete";
+          if (state !== undefined) {
+            // The first plan stands: a run reads one set of sources, start to finish.
+            if (!samePlan(state.plan, plan))
+              return { status: "changed", started: state.plan } satisfies Begin;
+            return { status: state.phase === "complete" ? "complete" : "started" } satisfies Begin;
+          }
           yield* storage.put({
             [stateKey(target)]: { plan, phase: "discover" } satisfies RunState,
           });
           yield* jobs.schedule(`drive:${target}`, 0);
-          return false;
+          return { status: "started" } satisfies Begin;
         }),
       ),
     phase: (target: string) =>

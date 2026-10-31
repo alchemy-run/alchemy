@@ -15,6 +15,10 @@ import BenchV1 from "./fixtures/bench/v1.ts";
 import BenchV2Short from "./fixtures/bench/v2-short.ts";
 import BenchV2 from "./fixtures/bench/v2.ts";
 import BenchV3 from "./fixtures/bench/v3.ts";
+import LedgerV1 from "./fixtures/catch-up/v1.ts";
+import LedgerV2WideBumped from "./fixtures/catch-up/v2-wide-bumped.ts";
+import LedgerV2Wide from "./fixtures/catch-up/v2-wide.ts";
+import LedgerV2 from "./fixtures/catch-up/v2.ts";
 
 /**
  * How a deploy and a backfill behave together on Cloudflare: a deploy waits
@@ -217,6 +221,42 @@ describe.sequential("a deploy and its backfill", () => {
         yield* deployOf(stack, BenchV3);
         yield* serving(url, "v3");
         yield* checkViews(url);
+        yield* stack.destroy();
+      }),
+    { timeout: 900_000 },
+  );
+
+  test.provider(
+    "a view that reads more sources without a version bump fails the deploy, and a bump rebuilds it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* call(url, "POST", "/deposit/a-2/5");
+        yield* ledger(LedgerV2);
+
+        // The timeline's backfill read accounts only: the deploy refuses to wait on it.
+        const refused = yield* ledger(LedgerV2Wide).pipe(
+          Effect.as(""),
+          Effect.catchCause((cause) => Effect.succeed(String(cause))),
+        );
+        expect(refused).toContain("Bump its version");
+
+        yield* ledger(LedgerV2WideBumped);
+        yield* serving(url, "v2-wide-bumped");
+        const timeline = JSON.parse(yield* call(url, "GET", "/timeline")) as {
+          entries: Array<string>;
+        } | null;
+        expect([...(timeline?.entries ?? [])].sort()).toEqual(["a-1:10", "a-2:5"]);
         yield* stack.destroy();
       }),
     { timeout: 900_000 },

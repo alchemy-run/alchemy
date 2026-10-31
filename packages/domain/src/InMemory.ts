@@ -1056,9 +1056,18 @@ export const make = (
           targets,
           (target) => {
             const plan = plans(target);
-            return plan === undefined
-              ? Effect.void
-              : Effect.asVoid(run(target).begin(target, plan));
+            if (plan === undefined) return Effect.void;
+            // A consumer that reads other sources than its run started with, at the same
+            // version: building the model fails, saying to bump the version.
+            return Effect.flatMap(run(target).begin(target, plan), (begun) =>
+              begun.status === "changed"
+                ? Effect.die(
+                    new Backfill.PlanChanged({
+                      message: Backfill.planChanged(target, begun.started, plan),
+                    }),
+                  )
+                : Effect.void,
+            );
           },
           { discard: true },
         );

@@ -1614,7 +1614,7 @@ const durableObjectPlatform = (
         run: {
           begin: (target, plan) =>
             Effect.flatMap(consumerOf(target, RUN_ROOT, "run"), (stub) =>
-              callOnce<boolean>(stub.bfRunBegin(target, plan)),
+              callOnce<Backfill.Begin>(stub.bfRunBegin(target, plan)),
             ),
           phase: (target) =>
             complete.has(target)
@@ -1660,16 +1660,25 @@ const durableObjectPlatform = (
                       ? Effect.die(new Error(`backfill: ${target} isn't in the code this runs yet`))
                       : Effect.succeed(fromBinding(namespace).getByName(RUN_ROOT));
                   });
-                for (const target of targets)
-                  yield* task(
+                for (const target of targets) {
+                  const begun = yield* task(
                     `begin-${target}`,
                     reachable(
                       Effect.flatMap(root(target), (stub) =>
-                        unwrapDefects<boolean>(stub.bfRunBegin(target, plans[target]!)),
+                        unwrapDefects<Backfill.Begin>(stub.bfRunBegin(target, plans[target]!)),
                       ),
                     ),
                     { retries: REACH_RETRIES },
                   );
+                  // Started reading other sources: waiting on it would report a history
+                  // that misses the new ones. The deploy fails, saying to bump the version.
+                  if (begun.status === "changed")
+                    return yield* Effect.die(
+                      new Backfill.PlanChanged({
+                        message: Backfill.planChanged(target, begun.started, plans[target]!),
+                      }),
+                    );
+                }
                 // Each check's output is the runs' progress: the deploy reads the latest one
                 // from the instance's steps, and reports it while it waits.
                 for (let check = 0; ; check++) {

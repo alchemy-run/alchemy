@@ -97,6 +97,29 @@ class DoubledDeposits extends Domain.View("Deposits", {
   evolve: { Deposited: (s, e) => ({ amounts: [...s.amounts, e.amount * 2] }) },
 }) {}
 
+/** Every deposit, in the order the view applied them: one key. */
+class Activity extends Domain.View("Activity", {
+  from: [Account],
+  key: Schema.String,
+  keyOf: { Deposited: () => "all" },
+  state: Schema.Struct({ entries: Schema.Array(Schema.String) }),
+  initial: { entries: [] },
+  evolve: { Deposited: (s, e) => ({ entries: [...s.entries, `deposit ${e.amount}`] }) },
+}) {}
+
+/** The same view, now reading the journal too. */
+class WideActivity extends Domain.View("Activity", {
+  from: [Account, Journal],
+  key: Schema.String,
+  keyOf: { Deposited: () => "all", Logged: () => "all" },
+  state: Schema.Struct({ entries: Schema.Array(Schema.String) }),
+  initial: { entries: [] },
+  evolve: {
+    Deposited: (s, e) => ({ entries: [...s.entries, `deposit ${e.amount}`] }),
+    Logged: (s, e) => ({ entries: [...s.entries, `log ${e.note}`] }),
+  },
+}) {}
+
 // ---------------------------------------------------------------- one model, three deploys
 
 class Before extends Domain.Model("Bank", { aggregates: [Account, Journal] }) {}
@@ -112,6 +135,15 @@ class Redefined extends Domain.Model("Bank", {
 class WithTimeline extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   projections: [Timeline],
+}) {}
+
+class WithActivity extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [Activity],
+}) {}
+class WithWideActivity extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [WideActivity],
 }) {}
 
 const HOUR = 60 * 60 * 1000;
@@ -167,6 +199,42 @@ const amounts = (id: string) =>
   });
 
 describe("Domain catch-up", () => {
+  it.live(
+    "a view that reads more sources without a version bump fails the deploy; with one, it is rebuilt from all of them",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(
+          Before,
+          Layer.empty,
+          Effect.gen(function* () {
+            yield* deposit("a-1", 10);
+            const journals = yield* Journal;
+            yield* journals.send(Journal.ref("j-1"), new Log({ note: "opened" }));
+          }),
+        );
+        yield* bank.deploy(WithActivity, Layer.empty, bank.settle);
+        // Its backfill read Account only: waiting on it would miss the journal's history.
+        const refused = yield* bank.deploy(WithWideActivity, Layer.empty, Effect.void).pipe(
+          Effect.as(""),
+          Effect.catchCause((cause) => Effect.succeed(String(cause))),
+        );
+        expect(refused).toContain("BackfillPlanChanged");
+        expect(refused).toContain("Bump its version");
+        const entries = yield* bank.deploy(
+          WithWideActivity,
+          Layer.empty,
+          Effect.gen(function* () {
+            yield* bank.settle;
+            const view = yield* WideActivity;
+            return Option.getOrUndefined(yield* view.query("all"))?.entries;
+          }),
+          { versions: { Activity: 1 } },
+        );
+        expect([...(entries ?? [])].sort()).toEqual(["deposit 10", "log opened"]);
+      }).pipe(Effect.provide(platform().services)),
+  );
+
   it.live("a view added later folds the events recorded before it", () =>
     Effect.gen(function* () {
       const bank = platform();

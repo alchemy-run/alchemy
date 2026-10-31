@@ -297,6 +297,25 @@ describe("Domain backfill (simulated)", () => {
     }),
   );
 
+  scenario(
+    "a run started again with another plan answers so, and keeps the plan it started with",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 5, 20, 3)) yield* commit();
+        yield* sim.deploy();
+        const other = { ...sim.planOf(TARGET), sources: ["A", "B"] };
+        const begun = yield* sim.run_(TARGET).role.begin(TARGET, other);
+        expect(begun.status).toBe("changed");
+        if (begun.status === "changed") expect(begun.started).toEqual(sim.planOf(TARGET));
+        yield* sim.run();
+        // Once complete, the same plan finds it complete, and another still answers so.
+        expect((yield* sim.run_(TARGET).role.begin(TARGET, sim.planOf(TARGET))).status).toBe(
+          "complete",
+        );
+        expect((yield* sim.run_(TARGET).role.begin(TARGET, other)).status).toBe("changed");
+      }),
+  );
+
   scenario("a run started again, from several places, runs once", (sim) =>
     Effect.gen(function* () {
       for (const commit of history(sim, 5, 20, 3)) yield* commit();

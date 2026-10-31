@@ -60,3 +60,38 @@ export class Rebuilt extends Domain.Model("Ledger", {
   aggregates: [Account],
   views: [DoubledDeposits, Timeline],
 }) {}
+
+export class Noted extends Domain.Event("Noted", { note: Schema.String }) {}
+export class Note extends Domain.Command("Note", {
+  target: Schema.String,
+  input: { note: Schema.String },
+  events: [Noted],
+}) {}
+/** A second aggregate, for a view that comes to read it too. */
+export class Journal extends Domain.Aggregate("Journal", {
+  id: Schema.String,
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [Note],
+  decide: { Note: (_, cmd) => [new Noted({ note: cmd.note })] },
+  evolve: { Noted: (s) => s },
+}) {}
+
+/** The timeline, now reading the journal too: the same view, at the same version unless bumped. */
+export class WideTimeline extends Domain.View("Timeline", {
+  from: [Account, Journal],
+  key: Schema.String,
+  keyOf: { Deposited: () => "all", Noted: () => "all" },
+  state: Schema.Struct({ entries: Schema.Array(Schema.String) }),
+  initial: { entries: [] },
+  evolve: {
+    Deposited: (s, e, { source }) => ({ entries: [...s.entries, `${source.id}:${e.amount}`] }),
+    Noted: (s, e) => ({ entries: [...s.entries, `note:${e.note}`] }),
+  },
+}) {}
+
+/** A deploy whose timeline reads the journal too. */
+export class Widened extends Domain.Model("Ledger", {
+  aggregates: [Account, Journal],
+  views: [Deposits, WideTimeline],
+}) {}
