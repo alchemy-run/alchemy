@@ -34,6 +34,7 @@ export const withConnection =
       Effect.retry({
         while: (error) =>
           error._tag === "StorageOverloaded" ||
+          error._tag === "TooManyRequests" ||
           error._tag === "BadGateway" ||
           error._tag === "ServiceUnavailable" ||
           error._tag === "GatewayTimeout" ||
@@ -41,5 +42,8 @@ export const withConnection =
         schedule: Schedule.spaced("5 seconds"),
         times: 72,
       }),
+      // This retry owns the whole wait: the SDK's own retry of the same
+      // errors would multiply it.
+      Rivet.Retry.none,
       Effect.provide(Rivet.credentials({ token: connection.token, endpoint: connection.endpoint })),
     );

@@ -258,7 +258,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
             ),
           ),
         });
-        yield* EC2.VolumeAttachment(`${id}DiskAttachment${i}`, {
+        const attachment = yield* EC2.VolumeAttachment(`${id}DiskAttachment${i}`, {
           volumeId: disk.volumeId,
           instanceId: instance.instanceId,
           device: "/dev/sdf",
@@ -268,13 +268,15 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
           targetId: instance.instanceId,
           port: 6420,
         });
-        attached.push(target.targetId);
+        attached.push(target.targetId, attachment.volumeId);
       }
 
       const endpoint = Output.interpolate`http://${loadBalancer.dnsName}`;
       const namespace = yield* Namespace(`${id}Namespace`, {
-        // Ordered after the listener and every instance: the namespace is
-        // created through the API they serve.
+        // Ordered after the listener, every instance and every disk: the
+        // namespace is created through the API they serve. Everything that
+        // uses the control plane (pools, through the namespace) is then
+        // deleted before any of them, while the engines still have their disks.
         endpoint: Output.all(endpoint, listener.listenerArn, ...attached).pipe(
           Output.map(([url]) => url),
         ),
