@@ -12,6 +12,13 @@
  * const worker = yield* stack.deploy(program).pipe(Effect.provide(forwarder.adapters));
  * const answer = yield* getRouted(worker.url); // worker.url is on the forwarder
  * ```
+ *
+ * A test that runs under the real `alchemy dev` sidecar can't hand the sidecar
+ * a service. There the package contributes {@link sharedFactory} under the
+ * same {@link FORWARDER_TYPE} (see `IngressContributions.ts`), so
+ * `forwarderConfig()` resolves inside the sidecar the way an installed
+ * router's adapter does, and the test reaches the routed origin with
+ * {@link getRouted}.
  */
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
@@ -26,6 +33,7 @@ import {
 } from "alchemy/Local/Ingress";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 
 /** The `IngressConfig.type` the forwarder's factory is registered under. */
 export const FORWARDER_TYPE = "forwarder";
@@ -112,6 +120,8 @@ export const makeForwarder = Effect.gen(function* () {
         server.closeAllConnections();
       }),
   );
+  // Never what keeps a process alive: a shared forwarder has no owner to close it.
+  server.unref();
   const { port } = server.address() as AddressInfo;
 
   const hostOf = (domain: string, target: IngressTarget) =>
@@ -167,6 +177,24 @@ export const makeForwarder = Effect.gen(function* () {
     made: () => made,
   } satisfies Forwarder;
 });
+
+let shared: Promise<Forwarder> | undefined;
+
+/**
+ * The forwarder's factory for a process that can't be handed one: the first
+ * adapter it builds starts a forwarder that lives until the process exits, and
+ * every later one shares it, so routes added by one call are served by the
+ * port an earlier call returned.
+ */
+export const sharedFactory: IngressFactory = {
+  make: (options) =>
+    Effect.promise(
+      () =>
+        (shared ??= Effect.runPromise(
+          Effect.flatMap(Scope.make(), (scope) => Scope.provide(makeForwarder, scope)),
+        )),
+    ).pipe(Effect.flatMap((forwarder) => forwarder.factory.make(options))),
+};
 
 /** What a client sees from {@link getRouted}. */
 export interface Answer {
