@@ -111,5 +111,5 @@ test(
     );
     expect(board).toEqual({ notes: [`t1-${run}`, `t2-${run}`, `t4-${run}`] });
   }),
-  { timeout: 180_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 180_000 },
 );

@@ -40,6 +40,6 @@ for (const mode of ["config", "environment"] as const) {
         expect(error._tag).toBe("FlociError");
         expect(error.message).toBe("external floci server unavailable at http://localhost:0");
       }),
-    { exclusive: true, timeout: 15_000 },
+    { tags: ["provider:aws", "local"], exclusive: true, timeout: 15_000 },
   );
 }

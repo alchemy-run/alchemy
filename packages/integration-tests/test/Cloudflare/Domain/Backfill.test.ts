@@ -135,130 +135,134 @@ const lastWait = (workerName: string) =>
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-describe.sequential("a deploy and its backfill", () => {
-  test.provider(
-    "a deploy waits for the backfill and reports its progress, and the same deploy again changes nothing",
-    (stack) =>
-      Effect.gen(function* () {
-        const { url, workerName } = yield* seeded(stack);
-        yield* deployOf(stack, BenchV2);
-        yield* serving(url, "v2");
-        yield* checkViews(url);
+describe.sequential(
+  "a deploy and its backfill",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    test.provider(
+      "a deploy waits for the backfill and reports its progress, and the same deploy again changes nothing",
+      (stack) =>
+        Effect.gen(function* () {
+          const { url, workerName } = yield* seeded(stack);
+          yield* deployOf(stack, BenchV2);
+          yield* serving(url, "v2");
+          yield* checkViews(url);
 
-        // What the deploy reported as it waited: the run, done, over every account.
-        const wait = yield* lastWait(workerName);
-        const [run] = progressOf(wait.steps ?? []) ?? [];
-        expect(run?.target).toBe("view:Deposits");
-        expect(run?.phase).toBe("complete");
-        expect(run?.done).toBe(run?.subtrees);
-        expect(run?.instances).toBeGreaterThanOrEqual(ACCOUNTS);
+          // What the deploy reported as it waited: the run, done, over every account.
+          const wait = yield* lastWait(workerName);
+          const [run] = progressOf(wait.steps ?? []) ?? [];
+          expect(run?.target).toBe("view:Deposits");
+          expect(run?.phase).toBe("complete");
+          expect(run?.done).toBe(run?.subtrees);
+          expect(run?.instances).toBeGreaterThanOrEqual(ACCOUNTS);
 
-        // The same model again: nothing to backfill, nothing to wait for.
-        const plan = yield* stack.plan(
-          Effect.gen(function* () {
-            return { worker: yield* BenchV2 };
-          }),
-        );
-        expect(plan.resources["Ledger.DomainBackfillRun"]?.action).toBe("noop");
-
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-
-  test.provider(
-    "a deploy that times out leaves the backfill running, and the next deploy waits for it",
-    (stack) =>
-      Effect.gen(function* () {
-        const { url } = yield* seeded(stack);
-        expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
-        yield* deployOf(stack, BenchV2);
-        yield* serving(url, "v2");
-        yield* checkViews(url);
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-
-  test.provider(
-    "an interrupted deploy leaves the backfill running, and the next deploy waits for it",
-    (stack) =>
-      Effect.gen(function* () {
-        const { url } = yield* seeded(stack);
-        // Interrupt the deploy once the view's code is up and its backfill has begun.
-        const deploy = yield* Effect.forkChild(deployOf(stack, BenchV2));
-        yield* serving(url, "v2");
-        yield* Fiber.interrupt(deploy);
-        yield* deployOf(stack, BenchV2);
-        yield* checkViews(url);
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-
-  test.provider(
-    "a version bump while a backfill runs rebuilds the view from the history",
-    (stack) =>
-      Effect.gen(function* () {
-        const { url } = yield* seeded(stack);
-        expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
-        yield* deployOf(stack, BenchV3);
-        yield* serving(url, "v3");
-        yield* checkViews(url);
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-
-  test.provider(
-    "removing a view while it backfills stops it, and adding it back rebuilds it",
-    (stack) =>
-      Effect.gen(function* () {
-        const { url } = yield* seeded(stack);
-        expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
-        yield* deployOf(stack, BenchV1);
-        yield* serving(url, "v1");
-        yield* deployOf(stack, BenchV3);
-        yield* serving(url, "v3");
-        yield* checkViews(url);
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-
-  test.provider(
-    "a view that reads more sources without a version bump fails the deploy, and a bump rebuilds it",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
-        const ledger = (worker: typeof LedgerV1) =>
-          stack.deploy(
+          // The same model again: nothing to backfill, nothing to wait for.
+          const plan = yield* stack.plan(
             Effect.gen(function* () {
-              return { worker: yield* worker };
+              return { worker: yield* BenchV2 };
             }),
           );
-        const { worker } = yield* ledger(LedgerV1);
-        const url = worker.url!.replace(/\/+$/, "");
-        yield* serving(url, "v1");
-        yield* call(url, "POST", "/deposit/a-1/10");
-        yield* call(url, "POST", "/deposit/a-2/5");
-        yield* ledger(LedgerV2);
+          expect(plan.resources["Ledger.DomainBackfillRun"]?.action).toBe("noop");
 
-        // The timeline's backfill read accounts only: the deploy refuses to wait on it.
-        const refused = yield* ledger(LedgerV2Wide).pipe(
-          Effect.as(""),
-          Effect.catchCause((cause) => Effect.succeed(String(cause))),
-        );
-        expect(refused).toContain("Bump its version");
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
 
-        yield* ledger(LedgerV2WideBumped);
-        yield* serving(url, "v2-wide-bumped");
-        const timeline = JSON.parse(yield* call(url, "GET", "/timeline")) as {
-          entries: Array<string>;
-        } | null;
-        expect([...(timeline?.entries ?? [])].sort()).toEqual(["a-1:10", "a-2:5"]);
-        yield* stack.destroy();
-      }),
-    { timeout: 900_000 },
-  );
-});
+    test.provider(
+      "a deploy that times out leaves the backfill running, and the next deploy waits for it",
+      (stack) =>
+        Effect.gen(function* () {
+          const { url } = yield* seeded(stack);
+          expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
+          yield* deployOf(stack, BenchV2);
+          yield* serving(url, "v2");
+          yield* checkViews(url);
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "an interrupted deploy leaves the backfill running, and the next deploy waits for it",
+      (stack) =>
+        Effect.gen(function* () {
+          const { url } = yield* seeded(stack);
+          // Interrupt the deploy once the view's code is up and its backfill has begun.
+          const deploy = yield* Effect.forkChild(deployOf(stack, BenchV2));
+          yield* serving(url, "v2");
+          yield* Fiber.interrupt(deploy);
+          yield* deployOf(stack, BenchV2);
+          yield* checkViews(url);
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "a version bump while a backfill runs rebuilds the view from the history",
+      (stack) =>
+        Effect.gen(function* () {
+          const { url } = yield* seeded(stack);
+          expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
+          yield* deployOf(stack, BenchV3);
+          yield* serving(url, "v3");
+          yield* checkViews(url);
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "removing a view while it backfills stops it, and adding it back rebuilds it",
+      (stack) =>
+        Effect.gen(function* () {
+          const { url } = yield* seeded(stack);
+          expect(yield* stillRunning(deployOf(stack, BenchV2Short))).toBe(true);
+          yield* deployOf(stack, BenchV1);
+          yield* serving(url, "v1");
+          yield* deployOf(stack, BenchV3);
+          yield* serving(url, "v3");
+          yield* checkViews(url);
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "a view that reads more sources without a version bump fails the deploy, and a bump rebuilds it",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const ledger = (worker: typeof LedgerV1) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* worker };
+              }),
+            );
+          const { worker } = yield* ledger(LedgerV1);
+          const url = worker.url!.replace(/\/+$/, "");
+          yield* serving(url, "v1");
+          yield* call(url, "POST", "/deposit/a-1/10");
+          yield* call(url, "POST", "/deposit/a-2/5");
+          yield* ledger(LedgerV2);
+
+          // The timeline's backfill read accounts only: the deploy refuses to wait on it.
+          const refused = yield* ledger(LedgerV2Wide).pipe(
+            Effect.as(""),
+            Effect.catchCause((cause) => Effect.succeed(String(cause))),
+          );
+          expect(refused).toContain("Bump its version");
+
+          yield* ledger(LedgerV2WideBumped);
+          yield* serving(url, "v2-wide-bumped");
+          const timeline = JSON.parse(yield* call(url, "GET", "/timeline")) as {
+            entries: Array<string>;
+          } | null;
+          expect([...(timeline?.entries ?? [])].sort()).toEqual(["a-1:10", "a-2:5"]);
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+  },
+);

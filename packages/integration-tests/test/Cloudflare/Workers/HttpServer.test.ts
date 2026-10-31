@@ -283,7 +283,7 @@ test.provider(
       expect(events).toEqual(["started", "released:interrupt"]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
 );
 
 // Without `enable_request_signal`, Cloudflare cancels the request when the
@@ -298,5 +298,5 @@ test.provider(
       expect(events).toEqual(["started"]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
 );

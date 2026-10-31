@@ -34,7 +34,7 @@ const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 // so this needs no CloudFront lifecycle and runs outside the live gate.
 describe.skipIf(runEmulated)(
   "AWS.Website.Astro plan",
-  { tags: ["provider:aws", "provider:aws:website"] },
+  { tags: ["provider:aws", "provider:aws:website", "live"] },
   () => {
     test.provider(
       "a config-file output 'static' plans an assets-only site without the astro.output prop",

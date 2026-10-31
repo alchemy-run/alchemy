@@ -198,7 +198,7 @@ const amounts = (id: string) =>
     return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
   });
 
-describe("Domain catch-up", () => {
+describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
   it.live(
     "a view that reads more sources without a version bump fails the deploy; with one, it is rebuilt from all of them",
     () =>

@@ -158,5 +158,5 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV !== "1")(
       );
       expect(removed).toBe(true);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:organizations", "local"], timeout: 120_000 },
 );

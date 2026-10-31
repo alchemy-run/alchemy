@@ -63,7 +63,8 @@
     "prepare": "pnpm prepare:hooks && pnpm prepare:patch && pnpm ensure:built",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint -c oxlint.config.ts"
+    "lint": "oxlint -c oxlint.config.ts && pnpm lint:tests",
+    "lint:tests": "oxlint -c oxlint.tests.config.ts packages/alchemy/test packages/integration-tests/test packages/better-auth/test"
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",

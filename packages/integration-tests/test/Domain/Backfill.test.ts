@@ -89,17 +89,26 @@ const scenario = (
     readonly others?: ReadonlyArray<string>;
   } = {},
 ) =>
-  it.effect(name, () =>
-    Effect.forEach(
-      Array.from({ length: options.seeds ?? 20 }, (_, seed) => seed + 1),
-      (seed) =>
-        Effect.gen(function* () {
-          const sim = new Sim(seed, TARGET, options.faults ?? noFaults, undefined, options.others);
-          yield* run(sim);
-          yield* verify(sim);
-        }).pipe(Effect.annotateLogs({ seed })),
-      { discard: true },
-    ),
+  it.effect(
+    name,
+    () =>
+      Effect.forEach(
+        Array.from({ length: options.seeds ?? 20 }, (_, seed) => seed + 1),
+        (seed) =>
+          Effect.gen(function* () {
+            const sim = new Sim(
+              seed,
+              TARGET,
+              options.faults ?? noFaults,
+              undefined,
+              options.others,
+            );
+            yield* run(sim);
+            yield* verify(sim);
+          }).pipe(Effect.annotateLogs({ seed })),
+        { discard: true },
+      ),
+    { tags: ["unit", "local"] },
   );
 
 /** History recorded before the consumer existed, then a deploy, then the backfill. */
@@ -110,7 +119,7 @@ const backfill = (sim: Sim, sources: number, events: number, keys: number) =>
     yield* sim.run();
   });
 
-describe("Domain backfill (simulated)", () => {
+describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
   scenario("a consumer with no history completes", (sim) =>
     Effect.gen(function* () {
       yield* sim.deploy();
