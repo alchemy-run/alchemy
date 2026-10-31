@@ -25,7 +25,8 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* sharedStack.destroy();
+        // NO_DESTROY keeps the stack between runs, so iterate on it.
+        if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
         const { url } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const front = yield* Front;
