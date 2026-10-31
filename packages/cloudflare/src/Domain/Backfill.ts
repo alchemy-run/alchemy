@@ -87,7 +87,7 @@ const runIdOf = (targets: ReadonlyArray<string>, resource: string) => {
 
 const POLL = "1 second";
 /** How many times a run that started before the new version arrived is run again, and how soon. */
-const MAX_RESTARTS = 10;
+const MAX_RESTARTS = 30;
 const RESTART_DELAY = "2 seconds";
 
 /**
@@ -175,11 +175,13 @@ const BackfillLive = () =>
               instanceId,
             })
             .pipe(Effect.retry(retryInternal));
-          // Started on an edge that doesn't have the uploaded Worker (or its entrypoint) yet: run it again
-          // once the new version has arrived.
+          // Started on an edge that doesn't have the uploaded Worker (or its entrypoint, or the
+          // consumer's class) yet: run it again once the new version has arrived.
           if (
             instance.status === "errored" &&
-            /entrypoint name .* was not found|^Worker not found/.test(error?.message ?? "") &&
+            /entrypoint name .* was not found|^Worker not found|isn't in the code this runs yet/.test(
+              error?.message ?? "",
+            ) &&
             restarts < MAX_RESTARTS
           ) {
             restarts += 1;

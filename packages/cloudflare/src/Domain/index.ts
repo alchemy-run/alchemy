@@ -30,6 +30,7 @@ import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
@@ -572,6 +573,21 @@ const scannerRpc = (scanner: () => Backfill.Scanner) => ({
  * (an alarm may run for 15 minutes): keys still reading history are called again.
  */
 const RELAY_ROOT_WAIT_MS = 5 * 60_000;
+
+/** A step of the deploy's Workflow couldn't reach a consumer's class: this invocation runs older code. */
+class Unreachable extends Data.TaggedError("Unreachable")<{ readonly message: string }> {}
+
+/**
+ * A Workflow step that reaches a consumer's class fails (rather than dies) when
+ * the invocation runs code without it, and is tried a few times. A run started
+ * on an edge that doesn't have the deployed code yet stays on that code: it
+ * ends with this error, and the deploy starts it again (see `Backfill.ts`).
+ */
+const reachable = <A>(effect: Effect.Effect<A>) =>
+  effect.pipe(
+    Effect.catchCause((cause) => Effect.fail(new Unreachable({ message: Cause.pretty(cause) }))),
+  );
+const REACH_RETRIES = { limit: 3, delay: "1 second", backoff: "constant" } as const;
 
 /** The object of a consumer's class at the root of its run: it drives the run's passes. */
 const RUN_ROOT = "~run";
@@ -1567,12 +1583,42 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             Effect.gen(function* () {
               const plans = { ...plansOf(params.targets, planOf), ...params.plans };
               const targets = params.targets.filter((target) => plans[target] !== undefined);
+              // This isolate doesn't build the model: reach each run's root by its binding.
+              const workerEnv = yield* WorkerEnvironment;
+              const root = (target: string) =>
+                Effect.suspend(() => {
+                  const { kind, name } = Backfill.consumerOf(target);
+                  const namespace =
+                    workerEnv[consumerClass(kind, name, generationOfTarget(target))];
+                  return namespace === undefined
+                    ? Effect.die(new Error(`backfill: ${target} isn't in the code this runs yet`))
+                    : Effect.succeed(
+                        (
+                          { getByName: (key) => makeRpcStub(namespace.getByName(key)) } as Namespace
+                        ).getByName(RUN_ROOT),
+                      );
+                });
               for (const target of targets)
-                yield* task(`begin-${target}`, net.run.begin(target, plans[target]!));
+                yield* task(
+                  `begin-${target}`,
+                  reachable(
+                    Effect.flatMap(root(target), (stub) =>
+                      unwrapDefects<boolean>(stub.bfRunBegin(target, plans[target]!)),
+                    ),
+                  ),
+                  { retries: REACH_RETRIES },
+                );
               for (let check = 0; ; check++) {
                 const phases = yield* task(
                   `check-${check}`,
-                  Effect.forEach(targets, (target) => net.run.phase(target)),
+                  reachable(
+                    Effect.forEach(targets, (target) =>
+                      Effect.flatMap(root(target), (stub) =>
+                        unwrapDefects<Backfill.Phase>(stub.bfRunPhase(target)),
+                      ),
+                    ),
+                  ),
+                  { retries: REACH_RETRIES },
                 );
                 if (phases.every((phase) => phase === "complete")) return { complete: true };
                 yield* sleep(
