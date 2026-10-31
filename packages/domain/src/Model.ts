@@ -11,6 +11,7 @@ import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import { DefinitionError, ForeignAppend, MissingWorkflowEngine } from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -18,6 +19,7 @@ import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type ModelHost,
   Platform,
   type PolicyStore,
   type ProjectionKit,
@@ -175,6 +177,16 @@ export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
   /**
+   * Before Domain version 0, models in one Worker that listed the same
+   * aggregate, view or saga shared its Durable Object class, and so its data.
+   * Each model now has classes of its own, and the first deploy moves the
+   * shared class to one of them. Set this on the model that keeps that data;
+   * the others start empty. The deploy fails until exactly one model sets it.
+   *
+   * @default false
+   */
+  readonly legacyData?: boolean;
+  /**
    * Each view's version, by name (0 when omitted). Bump a view's version to
    * rebuild it from the history: after its state was lost, or once its
    * `evolve` or routing changed what it should hold. Every view and
@@ -259,10 +271,12 @@ export const make = <
       const handlers = layered ? (first as Layer.Layer<HandledBy<P, J, G>, E, R>) : second!;
       return Layer.effectContext(
         build(
+          name,
           definitions,
           handlers,
           members.sagas ?? [],
           Telemetry.resolve(options?.telemetry),
+          options?.legacyData ?? false,
           options?.versions ?? {},
         ),
       );
@@ -346,14 +360,22 @@ const observeProjection =
   };
 
 const build = <A, E, R>(
+  modelName: string,
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
+  legacyData: boolean,
   versions: { readonly [view: string]: number | undefined },
 ) =>
   Effect.gen(function* () {
-    const platform = yield* Platform;
+    // The model's own storage: models sharing a definition never share its data.
+    const platform = yield* (yield* Platform).model({
+      modelName,
+      id: definitions,
+      sagas: sagas.map((saga) => saga.workflow._tag),
+      legacyData,
+    });
     const kernel = yield* Kernel.make(definitions, telemetry);
     for (const [view, version] of Object.entries(versions)) {
       if (version) kernel.setVersion(`view:${view}`, version);
@@ -465,12 +487,15 @@ const build = <A, E, R>(
       const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
       if (Option.isNone(engine)) {
         return yield* Effect.die(
-          new Kernel.DefinitionError(
-            `${sagas.map((saga) => saga.sagaName).join(", ")} need a platform that runs workflows`,
-          ),
+          new DefinitionError({
+            reason: new MissingWorkflowEngine({ sagas: sagas.map((saga) => saga.sagaName) }),
+          }),
         );
       }
-      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+      // The model's own runs: its sagas register and start under `<model>/<saga>`.
+      const modelEngine = Saga.engineFor(engine.value, modelName);
+      hosts = Context.add(hosts, WorkflowEngine.WorkflowEngine, modelEngine);
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.
@@ -527,10 +552,9 @@ const build = <A, E, R>(
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
+              const inputs = yield* kernel.projectionInputs(projection, key, batch);
               // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
-              yield* implementation.handle(
-                kernel.projectionInputs(projection, key, batch),
-              ) as Effect.Effect<void>;
+              yield* implementation.handle(inputs) as Effect.Effect<void>;
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
@@ -629,7 +653,8 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const result = yield* store.send(id, kernel.encodeCommand(aggregate, command), meta);
+          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
             result._tag === "Accepted"
@@ -645,7 +670,7 @@ const aggregateClient = (
         );
         return result._tag === "Rejected"
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
-          : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+          : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
     schedule: (target, command, options) =>
       Effect.gen(function* () {
@@ -653,7 +678,7 @@ const aggregateClient = (
         const { id, meta } = yield* metaFor(target, command, options, true);
         const at = yield* store.schedule(
           id,
-          kernel.encodeCommand(aggregate, command),
+          yield* kernel.encodeCommand(aggregate, command),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -799,18 +824,24 @@ const viewHost = (
     watchEach,
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
+        Stream.mapEffect((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) =>
+              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -845,9 +876,16 @@ const streamHost = (
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
       ? Effect.succeedNone
-      : store
-          .tail(key, meta.seq - 1)
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
+      : store.tail(key, meta.seq - 1).pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeedNone,
+              onSome: (entry) => Effect.asSome(decode(entry)),
+            }),
+          ),
+        );
   return {
     peek: (key, options) => {
       const atLeast = options?.atLeast;
@@ -881,18 +919,23 @@ const streamHost = (
       ),
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map(decode),
+        Stream.mapEffect(decode),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: decode(row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -909,29 +952,31 @@ const streamHost = (
         const writer = kernel.writerOf(stream);
         if (!meta || !writer || writer.projectionName !== meta.projection) {
           return Effect.die(
-            new Kernel.DefinitionError(
-              `Only the projection that lists ${stream.streamName} in \`writes\` may append to it, with the input it is handling`,
-            ),
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
           );
         }
         meta.appends += 1;
-        return store.append(meta.key, {
-          origin: [meta.position, meta.appends],
-          source: meta.source,
-          sourceSeq: meta.sourceSeq,
-          at: meta.at,
-          commandId: meta.commandId,
-          events: events.map((event) => kernel.encodeEvent(event as { readonly _tag: string })),
-        });
+        const position: [number, number] = [meta.position, meta.appends];
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            store.append(meta.key, {
+              origin: position,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
       }),
   };
 };
 
 /** How much history has reached a consumer, as the platform reports it. */
-const history = (
-  platform: Platform["Service"],
-  target: () => string,
-): Effect.Effect<View.History> =>
+const history = (platform: ModelHost, target: () => string): Effect.Effect<View.History> =>
   Effect.suspend(() =>
     platform.history
       ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))

@@ -258,7 +258,7 @@ it("the model is well defined", () => {
 });
 ```
 
-Each problem is a `Domain.DefinitionError` with a message that names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
 ## Run it
 
@@ -317,6 +317,17 @@ That rule keeps each model free to change. A support tool built on another model
     { from: "api", to: "bank" },
   ]}
 />
+
+## Give each model its own data
+
+Each model owns its data. Two models can use the same aggregate definition, and each still gets its own instances:
+
+```typescript
+class Billing extends Domain.Model("Billing", { aggregates: [Account], views: [Ledger] }) {}
+class Audit extends Domain.Model("Audit", { aggregates: [Account], views: [Owners] }) {}
+```
+
+Account `a-1` in Billing and account `a-1` in Audit are different instances, with their own events. `Ledger` only hears Billing's accounts, and `Owners` only hears Audit's. Every platform keeps them apart, even on the same Worker; see [Cloudflare: Host several models in one Worker](/domain/cloudflare#host-several-models-in-one-worker). Give every model its own name: hosting two models with the same name on one platform fails.
 
 ## Read the rest of the manual
 

@@ -376,6 +376,15 @@ export const WorkerBundle = Effect.gen(function* () {
   };
 });
 
+/**
+ * Export a bridge class under `name`. A name that isn't an identifier, like a
+ * Domain model's `Billing.AccountAggregate`, is exported by alias.
+ */
+const exportClass = (name: string, base: string, local: string) =>
+  /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
+    ? `export class ${name} extends ${base} {}`
+    : `const ${local} = class extends ${base} {};\nexport { ${local} as ${JSON.stringify(name)} };`;
+
 export const makeEffectVirtualEntry = (
   exports: Record<string, WorkerExport>,
   stack: { name: string; stage: string },
@@ -419,13 +428,17 @@ ${[
   ...(hasDoClasses
     ? [
         "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, meta);",
-        ...doClasses.map((id) => `export class ${id} extends DurableObjectBridge("${id}") {}`),
+        ...doClasses.map((id, i) =>
+          exportClass(id, `DurableObjectBridge(${JSON.stringify(id)})`, `DurableObjectClass${i}`),
+        ),
       ]
     : []),
   ...(hasWfClasses
     ? [
         "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, meta);",
-        ...wfClasses.map((id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`),
+        ...wfClasses.map((id, i) =>
+          exportClass(id, `WorkflowBridgeFn(${JSON.stringify(id)})`, `WorkflowClass${i}`),
+        ),
       ]
     : []),
 ].join("\n")}

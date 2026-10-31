@@ -11,6 +11,16 @@ import type { RuntimeContext } from "./RuntimeContext.ts";
 declare const ImplementedTypeId: unique symbol;
 
 /**
+ * Annotates a workflow with the name an engine stores its runs under, when
+ * that differs from the workflow's own name. An engine that names storage
+ * after the workflow, like Cloudflare's Durable Object engine with one class
+ * per workflow, uses it as given.
+ */
+export class StorageName extends Context.Service<StorageName, string>()(
+  "alchemy/Workflows/StorageName",
+) {}
+
+/**
  * Marks a workflow as runnable here: something in the context implements it.
  * `Workflows.layer` provides it for the workflow it implements, and a remote
  * engine, like `AWS.Lambda.DurableFunctionEngine`, for the workflows its

@@ -161,7 +161,7 @@ describe.sequential("a deploy and its backfill", () => {
             return { worker: yield* BenchV2 };
           }),
         );
-        expect(plan.resources.DomainBackfillRun?.action).toBe("noop");
+        expect(plan.resources["Ledger.DomainBackfillRun"]?.action).toBe("noop");
 
         yield* stack.destroy();
       }),

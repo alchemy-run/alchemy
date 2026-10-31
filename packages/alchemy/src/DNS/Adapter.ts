@@ -160,7 +160,7 @@ export class DnsAdapterNotRegistered extends Data.TaggedError("DnsAdapterNotRegi
  */
 export interface DnsZone {
   /** Zone id or name (Route 53: hosted zone id). Inferred per hostname when omitted. */
-  zone?: string;
+  zone?: Input<string> | undefined;
   /** Host-specific options from the adapter constructor, e.g. `{ proxied: true }`. */
   options?: { readonly [key: string]: unknown };
 }
@@ -223,7 +223,7 @@ export const adapterLayer = <R>(
  */
 export const bind = <R>(adapter: DnsAdapter<R>, config: DnsConfig): DnsAdapter<R> => {
   const zone: DnsZone = {
-    ...(config.zone === undefined ? {} : { zone: config.zone as string }),
+    ...(config.zone === undefined ? {} : { zone: config.zone }),
     ...(config.options === undefined ? {} : { options: config.options }),
   };
   return {

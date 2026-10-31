@@ -12,6 +12,9 @@ export const RpcServerBun = RpcServer.layerServer(
         | { type: "parent" }
       >({
         port: 0,
+        // Loopback only, as in RpcServerNode: with no hostname Bun listens on
+        // every interface.
+        hostname: "127.0.0.1",
         fetch: (request, server) => {
           const url = new URL(request.url);
           if (

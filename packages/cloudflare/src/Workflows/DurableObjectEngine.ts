@@ -9,6 +9,7 @@ import {
   makeCurrentActivity,
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
+import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -158,7 +159,7 @@ const makeEngine = (
           Effect.gen(function* () {
             if (namespaces.has(workflow._tag)) return;
             const namespace = yield* declare(
-              `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+              `${workflowClassName(workflow)}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
             namespaces.set(
@@ -604,6 +605,17 @@ type ObjectImpl = Effect.Effect<
  * `Cloudflare.DurableObject` is typed for single-stage implementations, so it
  * is re-typed here for the two-stage form it runs.
  */
+/**
+ * The class name a workflow's runs are stored under: its `StorageName`, which
+ * may be dotted like a Domain model's `Billing.OpenAccount`, or else its name.
+ */
+const workflowClassName = (workflow: Workflow.Any) => {
+  const storageName = Context.getOrUndefined(workflow.annotations, StorageName);
+  return storageName === undefined
+    ? workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")
+    : storageName.replace(/[^A-Za-z0-9_.]/g, "_");
+};
+
 const declare = CloudflareDurableObject as unknown as (
   name: string,
   impl: ObjectImpl,
