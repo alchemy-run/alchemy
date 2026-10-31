@@ -754,6 +754,26 @@ export const make = (
             return role;
           });
           sourceRoles.set(kit.name, sourceRole);
+          // A lazy view's key reads its history from its one source the first time
+          // it is read; after that, it is read like any other.
+          const caughtUp = new Set<string>();
+          const ready = (key: string): Effect.Effect<void> =>
+            Effect.suspend(() => {
+              const lazy = kit.lazy;
+              if (lazy === undefined || caughtUp.has(key)) return Effect.void;
+              const ref = { source: lazy.source, id: key };
+              return consumer(key)
+                .start(target, ref, 5_000)
+                .pipe(
+                  Effect.repeat({ until: (started) => started === "settled", times: 20 }),
+                  Effect.tap((started) =>
+                    Effect.sync(() => {
+                      if (started === "settled") caughtUp.add(key);
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+            });
           return {
             receive: (key, deliveries) =>
               Effect.gen(function* () {
@@ -763,16 +783,26 @@ export const make = (
                   yield* lock.withPermits(1)(apply(key, deliveries));
               }),
             read: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.snapshot)),
+              ),
             changes: (key) =>
               Stream.unwrap(
-                get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
+                  Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
+                ),
               ),
             list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
-                get(key).pipe(
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
                   Effect.map((current) => {
                     let last = after;
                     return SubscriptionRef.changes(current.entries).pipe(

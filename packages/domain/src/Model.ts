@@ -11,7 +11,12 @@ import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
-import { DefinitionError, ForeignAppend, MissingWorkflowEngine } from "./DefinitionError.ts";
+import {
+  DefinitionError,
+  ForeignAppend,
+  LazyViewNeedsOneSource,
+  MissingWorkflowEngine,
+} from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -187,6 +192,13 @@ export interface LayerOptions<Views extends string = string> {
    * complete, the view's `history` says so.
    */
   readonly versions?: { readonly [View in Views]?: number };
+  /**
+   * Views that fill lazily. A deploy that adds or rebuilds one waits for
+   * nothing: each key reads its history the first time it is read (or when its
+   * source next changes). Only for a view that reads one aggregate and is keyed
+   * by it, so each key's history is its own instance's events.
+   */
+  readonly lazy?: ReadonlyArray<Views>;
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -264,6 +276,7 @@ export const make = <
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? false,
           options?.versions ?? {},
+          options?.lazy ?? [],
         ),
       );
     }
@@ -353,6 +366,7 @@ const build = <A, E, R>(
   telemetry: Telemetry.Resolved,
   legacyData: boolean,
   versions: { readonly [view: string]: number | undefined },
+  lazy: ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
     // The model's own storage: models sharing a definition never share its data.
@@ -395,12 +409,28 @@ const build = <A, E, R>(
         ),
       );
     }
+    const viewTarget = (name: string) =>
+      CatchUp.targetId({ kind: "view", name, generation: kernel.generationOf("view", name) });
+    // A lazy view's keys each read their one source's history when first read.
+    const lazySources = new Map<string, string>();
+    for (const name of lazy) {
+      const sources = kernel.sourcesOf(viewTarget(name));
+      if (sources?.length !== 1 || !kernel.singleSource(viewTarget(name)))
+        return yield* Effect.die(
+          new DefinitionError({ reason: new LazyViewNeedsOneSource({ view: name }) }),
+        );
+      lazySources.set(name, sources[0]!);
+    }
     for (const view of definitions.views) {
+      const source = lazySources.get(view.viewName);
       viewStores.set(
         view.viewName,
         yield* platform.view(
           view,
-          Object.assign(kernel.viewKit(view, deliver), { push: Watch.viewPush(kernel, view) }),
+          Object.assign(kernel.viewKit(view, deliver), {
+            push: Watch.viewPush(kernel, view),
+            ...(source === undefined ? {} : { lazy: { source } }),
+          }),
         ),
       );
     }
@@ -432,13 +462,10 @@ const build = <A, E, R>(
         kernel,
         view,
         viewStores.get(view.viewName)!,
-        history(platform, () =>
-          CatchUp.targetId({
-            kind: "view",
-            name: view.viewName,
-            generation: kernel.generationOf("view", view.viewName),
-          }),
-        ),
+        // A lazy view's key reads its history before it answers: every answer has it all.
+        lazySources.has(view.viewName)
+          ? Effect.succeed({ complete: true })
+          : history(platform, () => viewTarget(view.viewName)),
       );
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
@@ -541,7 +568,13 @@ const build = <A, E, R>(
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.
-    if (platform.start) yield* platform.start(kernel.targets, kernel.planOf);
+    // Lazy views have no backfill: their keys catch up when read.
+    const lazyTargets = new Set([...lazySources.keys()].map(viewTarget));
+    if (platform.start)
+      yield* platform.start(
+        kernel.targets.filter((target) => !lazyTargets.has(target)),
+        kernel.planOf,
+      );
 
     return Context.add(hosts, Internals, {
       kernel,
