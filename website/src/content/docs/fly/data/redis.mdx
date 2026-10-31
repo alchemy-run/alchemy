@@ -52,13 +52,13 @@ Yield `Fly.ReadWriteRedis` (or `ReadRedis` / `WriteRedis`) in
 the Service's constructor. Provide the matching `*Http` layer.
 
 ```typescript
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 const Cache = Fly.Redis("Cache");
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, port: 3000 },
+  { main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const cache = yield* Fly.ReadWriteRedis(Cache);
     return {

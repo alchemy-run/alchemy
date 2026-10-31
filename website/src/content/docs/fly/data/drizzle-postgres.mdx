@@ -3,13 +3,13 @@ title: Drizzle Postgres on Fly
 description: Connect a Fly Service to Managed Postgres and deploy reviewed Drizzle migrations.
 ---
 
-Run Drizzle in a `Fly.Service`, with [Fly Managed Postgres](/fly/data/postgres) on the same organization's private network. Start with [Fly setup](/fly/setup), the [Service tutorial](/fly/tutorial/part-2), and a `src/schema.ts` exporting `Users` from the [Postgres client guide](/sql/drizzle/postgres).
+Run Drizzle in a `Fly.Service`, with [Fly Managed Postgres](/fly/data/postgres) on the same organization's private network. Start with [Fly setup](/fly/setup), the [Service tutorial](/fly/tutorial/part-1), and a `src/schema.ts` exporting `Users` from the [Postgres client guide](/sql/drizzle/postgres).
 
 ## Install the database dependencies
 
 ```sh
-pnpm add drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg
-pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+pnpm add @alchemy.run/drizzle drizzle-orm@1.0.0-rc.5 @effect/sql-pg
+pnpm add -D drizzle-kit@1.0.0-rc.5
 ```
 
 The Drizzle versions match the repository's Effect integration.
@@ -55,26 +55,12 @@ Commit the schema, SQL, and snapshots together; CI deploys this reviewed history
 
 ```typescript
 // src/db.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 
 export const Db = Fly.Postgres("Db", { region: "iad" });
 ```
 
 This provisions a billed Managed Postgres cluster, not an unmanaged Postgres Machine.
-
-## Keep the driver outside the bundle
-
-```diff lang="typescript"
- // src/api.ts — the Service from the tutorial
- {
-   app: Site,
-   main: import.meta.url,
-   region: "iad",
-+  build: { install: ["pg"] },
- }
-```
-
-`pg` must be installed in the Service image because bundling its CommonJS exports breaks the driver's interop.
 
 ## Bind the cluster
 
@@ -98,7 +84,7 @@ The binding attaches the cluster to the Service's App and supplies pooled and di
 pnpm alchemy deploy
 ```
 
-Keep the tutorial's `yield* Api` and public IP in the Stack, using `Fly.providers()`. This first deployment creates the database and a handler that does not yet query application tables.
+Keep the tutorial's `yield* Api` in the Stack, using `Fly.providers()`. This first deployment creates the database and a handler that does not yet query application tables.
 
 ## Apply the committed SQL
 
@@ -111,7 +97,7 @@ Supply the cluster's `connectionUri` as the migration runner's secret `DATABASE_
 ## Open the runtime client
 
 ```diff lang="typescript"
-+import * as Drizzle from "alchemy/Drizzle/Postgres";
++import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 
  const conn = yield* Fly.ConnectPostgres(Db);
 +const db = yield* Drizzle.Postgres(conn.connectionString);
