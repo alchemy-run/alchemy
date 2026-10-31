@@ -1005,6 +1005,7 @@
         "default": "./lib/Workstations/index.js"
       },
       "./Container/internal/*": null,
+      "./Firestore/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
