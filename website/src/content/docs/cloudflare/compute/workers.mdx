@@ -296,9 +296,41 @@ const site = yield* Cloudflare.Worker("Site", {
 
 A `_headers` or `_redirects` file in the directory is applied
 automatically, and a `.assetsignore` file excludes files from the
-upload. If the directory comes from a build command, use
+upload.
+
+If the directory comes from a build command, use
 [StaticSite](/cloudflare/frontend/static-site). For Vite projects, use
 the [Vite resource](/cloudflare/frontend/vite).
+
+### Keep the previous build's chunks
+
+A page loaded before a deploy still references the previous build's
+content-hashed files. When it lazily loads one after the deploy, such as
+the chunk for a route it had not visited yet, the new build no longer
+has it and the request 404s. `retainPrevious` keeps those files served
+while the next build is live:
+
+```typescript
+assets: {
+  directory: "./dist",
+  retainPrevious: { paths: ["assets/**"] },
+},
+```
+
+`paths` are globs relative to the assets directory. Match only
+content-hashed build output: a file the new build has always wins over a
+retained one with the same path. Each deploy records the current build's
+matching files in the Worker's state and adds the previous build's files
+the new build lacks to the upload. One build is kept: a build's files
+stay served while the next build is live and are dropped when the build
+after that deploys. A redeploy of the same build, such as a Worker-only
+change, keeps the previous build served.
+
+No bytes are uploaded again. Cloudflare's upload session is
+content-addressed and does not ask for files it still stores. If it no
+longer stores a retained file, that file is dropped with a warning and
+the deploy goes on. Retained files are ordinary assets, so they are
+served without invoking the Worker.
 
 ## URLs and domains
 
