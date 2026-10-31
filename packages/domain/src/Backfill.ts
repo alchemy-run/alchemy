@@ -267,9 +267,9 @@ export interface RelayRpc {
   ) => Effect.Effect<RelayResult>;
 }
 
-/** What a relay answers: whether all of its items are done, and how many calls the account's load refused. */
+/** What a relay answers: which of its items are done, and how many calls the account's load refused. */
 export interface RelayResult {
-  readonly done: boolean;
+  readonly done: ReadonlyArray<boolean>;
   readonly refused: number;
 }
 
@@ -1640,6 +1640,9 @@ const CALL_TIMEOUT_MS = 20_000;
  */
 const RELAY_RETRY_MS = 250;
 const RELAY_RETRY_MAX_MS = 30_000;
+/** Calls the account's load refused before a relay gives an item back to the run's root. */
+const RELAY_REFUSALS = 3;
+
 /** Failed calls a relay makes again at once, before it waits. */
 const RELAY_RETRY_AT_ONCE = 2;
 
@@ -1679,7 +1682,7 @@ export const makeRelay = (net: Network) => {
     Effect.gen(function* () {
       // A pass with no time to retry (one try at everything) expects failures: it doesn't log them.
       const quiet = until <= (yield* Clock.currentTimeMillis);
-      for (let tries = 0; ; tries++) {
+      for (let tries = 0, refusals = 0; ; tries++) {
         const limit = yield* attempt();
         const result = yield* (
           quiet ? effect : effect.pipe(Effect.timeout(`${limit} millis`))
@@ -1692,6 +1695,9 @@ export const makeRelay = (net: Network) => {
         // call the account's load refused: wait at once, longer each time.
         const refused = overloaded(result.cause);
         if (refused && tally !== undefined) tally.refused += 1;
+        // Refused a few times: give it back to the run's root, which sends it again at a
+        // lower load, rather than hold the rest of its round until the pass's deadline.
+        if (refused && ++refusals >= RELAY_REFUSALS) return undefined;
         if (!refused && tries < RELAY_RETRY_AT_ONCE) continue;
         const wait = yield* backoff(
           refused ? tries + 1 : tries - RELAY_RETRY_AT_ONCE + 1,
@@ -1779,12 +1785,13 @@ export const makeRelay = (net: Network) => {
       return { done, refused: tally.refused };
     });
 
+  /** Work through `items`: whether each is done. */
   const work = (
     name: string,
     relayRun: RelayRun,
     items: ReadonlyArray<RelayItem>,
     tally: Tally,
-  ): Effect.Effect<boolean> =>
+  ): Effect.Effect<ReadonlyArray<boolean>> =>
     Effect.gen(function* () {
       const until = relayRun.deadline;
       const child = (suffix: string, chunk: ReadonlyArray<RelayItem>) =>
@@ -1797,8 +1804,8 @@ export const makeRelay = (net: Network) => {
             () => Effect.map(Clock.currentTimeMillis, (now) => until - now + CALL_TIMEOUT_MS),
             tally,
           ),
-          (result) => {
-            if (result === undefined) return false;
+          (result): ReadonlyArray<boolean> => {
+            if (result === undefined) return chunk.map(() => false);
             tally.refused += result.refused;
             return result.done;
           },
@@ -1812,23 +1819,24 @@ export const makeRelay = (net: Network) => {
         const done = yield* Effect.forEach(chunks, (chunk, i) => child(`/${i}`, chunk), {
           concurrency: RELAY_FANOUT,
         });
-        return done.every(Boolean);
+        return done.flat();
       }
       const only = items.length === 1 ? items[0]! : undefined;
       if (only !== undefined && "path" in only) {
         // One directory node: list it, and work through what it lists here.
         const next = yield* listed(only.path, relayRun, until, tally);
-        if (next === undefined) return false;
+        if (next === undefined) return [false];
         yield* trace("relay-listed", { name, path: only.path, items: next.length });
-        return yield* work(name, relayRun, next, tally);
+        return [(yield* work(name, relayRun, next, tally)).every(Boolean)];
       }
-      const done = yield* Effect.forEach(
+      return yield* Effect.forEach(
         items,
         (item, i) =>
-          "path" in item ? child(`.${i}`, [item]) : instance(relayRun, item.ref, until, tally),
+          "path" in item
+            ? Effect.map(child(`.${i}`, [item]), (done) => done[0] === true)
+            : instance(relayRun, item.ref, until, tally),
         { concurrency: RELAY_FANOUT },
       );
-      return done.every(Boolean);
     });
 
   /**
@@ -1925,35 +1933,47 @@ export const makeRun = (
       // Rounds of `window` subtrees, each handed to the relay tree in one call: one object
       // runs at most six calls at once, so the tree, not this root, fans them out. Like TCP's
       // congestion window, it doubles while the account takes the load, then grows by a
-      // quarter, and halves when Cloudflare refuses calls: a wide run stays under the
-      // account's limit rather than hit it all at once and wait it out.
+      // quarter, and halves when Cloudflare refuses calls; the subtrees a round gave back
+      // go again later. A wide run stays under the account's limit rather than hit it all
+      // at once and wait it out.
       let window = state.window ?? RUN_WINDOW;
       let growing = state.window === undefined;
-      let next = 0;
+      const queue = [...todo];
       let refused = 0;
       let done = items !== undefined;
-      for (let round = 0; next < todo.length; round++) {
+      for (let round = 0; queue.length > 0; round++) {
         if (!quiet && round > 0 && (yield* Clock.currentTimeMillis) >= deadline) break;
-        const batch = todo.slice(next, next + Math.max(1, Math.round(window)));
-        next += batch.length;
+        const batch = queue.splice(0, Math.max(1, Math.round(window)));
         const result = yield* relay.run(
           `${state.phase}-${state.misses ?? 0}/${round}`,
           relayRun,
           batch,
         );
         refused += result.refused;
-        if (result.done)
-          yield* storage.put(
-            Object.fromEntries(batch.map((item) => [doneKey(target, state.phase, item), true])),
-          );
-        else done = false;
+        const marks: Record<string, true> = {};
+        const back: Array<RelayItem> = [];
+        batch.forEach((item, i) => {
+          if (result.done[i] === true) marks[doneKey(target, state.phase, item)] = true;
+          else back.push(item);
+        });
+        yield* storage.put(marks);
         if (result.refused > 0) {
           growing = false;
           window = Math.max(1, window / 2);
         } else window = Math.min(todo.length, growing ? window * 2 : window * 1.25);
+        if (back.length === 0) continue;
+        // One try at everything: what wasn't done waits for the next pass.
+        if (quiet) {
+          done = false;
+          continue;
+        }
+        queue.push(...back);
+        // Nothing went through: wait a little before sending it again.
+        if (back.length === batch.length)
+          yield* Effect.sleep(`${yield* backoff(1, 1_000, 5_000)} millis`);
       }
+      if (queue.length > 0) done = false;
       window = Math.max(1, Math.round(window));
-      if (next < todo.length) done = false;
       yield* Effect.logInfo(
         `backfill run-pass ${target} ${state.phase} done=${done} subtrees=${todo.length} window=${window} refused=${refused} in ${(yield* Clock.currentTimeMillis) - started}ms`,
       );
