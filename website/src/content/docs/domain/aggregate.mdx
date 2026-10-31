@@ -299,7 +299,7 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-The same client reads an instance's current state with `accounts.state(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Both fail with `AlreadyExecuted` when that command already ran, and `unschedule` fails with `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
+The same client reads an instance's current state with `accounts.state(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Both fail with `AlreadyExecuted` when that command already ran (`schedule` with `replace: "always"` runs it again instead), and `unschedule` fails with `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
 
 Clients outside the model send commands through an [Api](/domain/api). An aggregate with a `read` contract can also be read through one, so a client can fetch an account, watch it change, and follow its events.
 

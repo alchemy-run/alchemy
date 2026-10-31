@@ -82,6 +82,91 @@ class Holds extends Domain.Model("Holds", {
   policies: [HoldDeadline],
 }) {}
 
+// A ticket that stalls an hour after it opens or resumes, unless it is paused.
+// The stall timer keeps one deterministic id per ticket, so it fires as a
+// stale no-op while the ticket is paused, then must be armed again on resume.
+class TicketOpened extends Domain.Event("TicketOpened") {}
+class TicketPaused extends Domain.Event("TicketPaused") {}
+class TicketResumed extends Domain.Event("TicketResumed") {}
+class TicketStalled extends Domain.Event("TicketStalled") {}
+
+class OpenTicket extends Domain.Command("OpenTicket", {
+  target: Schema.String,
+  events: [TicketOpened],
+}) {}
+class PauseTicket extends Domain.Command("PauseTicket", {
+  target: Schema.String,
+  events: [TicketPaused],
+}) {}
+class ResumeTicket extends Domain.Command("ResumeTicket", {
+  target: Schema.String,
+  events: [TicketResumed],
+}) {}
+/** Records the stall only on an open ticket; on a paused one it records nothing. */
+class MarkStalled extends Domain.Command("MarkStalled", {
+  target: Schema.String,
+  events: [TicketStalled],
+}) {}
+
+class Ticket extends Domain.Aggregate("Ticket", {
+  id: Schema.String,
+  state: Schema.Struct({ status: Schema.Literals(["none", "open", "paused", "stalled"]) }),
+  initial: { status: "none" },
+  commands: [OpenTicket, PauseTicket, ResumeTicket, MarkStalled],
+  decide: {
+    OpenTicket: () => [new TicketOpened()],
+    PauseTicket: () => [new TicketPaused()],
+    ResumeTicket: () => [new TicketResumed()],
+    MarkStalled: (state) => (state.status === "open" ? [new TicketStalled()] : []),
+  },
+  evolve: {
+    TicketOpened: () => ({ status: "open" as const }),
+    TicketPaused: () => ({ status: "paused" as const }),
+    TicketResumed: () => ({ status: "open" as const }),
+    TicketStalled: () => ({ status: "stalled" as const }),
+  },
+}) {}
+
+class StallTimer extends Domain.Policy("StallTimer", {
+  from: Ticket,
+  on: [TicketOpened, TicketResumed],
+}) {}
+/** Arms the stall timer under `stall:<id>`, with the given `replace`. */
+const StallTimerLive = (replace: Domain.Aggregate.ScheduleOptions["replace"]) =>
+  StallTimer.toLayer(
+    Effect.gen(function* () {
+      const tickets = yield* Ticket;
+      return Effect.fn(function* ({ source }) {
+        yield* tickets
+          .schedule(source, new MarkStalled(), {
+            after: "1 hour",
+            commandId: `stall:${source.id}`,
+            replace,
+          })
+          // "already armed": with `replace: "pending"`, this loses the timer
+          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      });
+    }),
+  );
+
+class Tickets extends Domain.Model("Tickets", {
+  aggregates: [Ticket],
+  policies: [StallTimer],
+}) {}
+
+const t1 = Ticket.ref("t-1");
+/** Open, pause before the hour, let the timer fire as a no-op, resume. */
+const pausedThroughTheDeadline = [
+  Story.clock("2026-01-01T00:00:00Z"),
+  Story.when(t1, new OpenTicket()),
+  Story.clock("2026-01-01T00:30:00Z"),
+  Story.when(t1, new PauseTicket()),
+  Story.clock("2026-01-01T01:00:00Z"),
+  Story.then(t1, new TicketOpened(), new TicketPaused()),
+  Story.when(t1, new ResumeTicket()),
+  Story.then(t1, new TicketResumed()),
+] as const;
+
 const story = Story.make(Holds, { layer: HoldDeadlineLive });
 const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(Layer.provide(InMemory));
 const h1 = Hold.ref("h-1");
@@ -206,5 +291,61 @@ describe("Domain schedule", () => {
         new Domain.NotScheduled({ aggregate: "Hold", id: "h-8", commandId: "never" }),
       );
     }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("replace 'always' schedules a command id that already ran", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.schedule("h-10", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* Effect.sleep("100 millis");
+      expect(
+        (yield* Effect.flip(
+          holds.schedule("h-10", new ExpireHold(), { after: "20 millis", commandId: "x" }),
+        ))._tag,
+      ).toBe("AlreadyExecuted");
+      const receipt = yield* holds.schedule("h-10", new ExpireHold(), {
+        after: "1 hour",
+        commandId: "x",
+        replace: "always",
+      });
+      expect(receipt.commandId).toBe("x");
+      // the new one is pending: it can be cancelled, and was not run
+      yield* holds.unschedule("h-10", "x");
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+});
+
+describe("Domain schedule, armed again under the same id", () => {
+  it.effect("by default, a timer that fired as a no-op is lost when armed again", () =>
+    Story.make(Tickets, { layer: StallTimerLive("pending") })(
+      ...pausedThroughTheDeadline,
+      Story.clock("2026-01-01T03:00:00Z"),
+      Story.then(t1),
+      Story.state(t1, (s) => expect(s.status).toBe("open")),
+    ),
+  );
+
+  it.effect("with replace 'always', the timer armed again fires", () =>
+    Story.make(Tickets, { layer: StallTimerLive("always") })(
+      ...pausedThroughTheDeadline,
+      Story.clock("2026-01-01T02:00:00Z"),
+      Story.then(t1, new TicketStalled()),
+    ),
+  );
+
+  it.effect("with replace 'always', a pending timer is still replaced, not doubled", () =>
+    Story.make(Tickets, { layer: StallTimerLive("always") })(
+      Story.clock("2026-01-01T00:00:00Z"),
+      Story.when(t1, new OpenTicket()),
+      Story.clock("2026-01-01T00:30:00Z"),
+      Story.when(t1, new PauseTicket()),
+      Story.when(t1, new ResumeTicket()),
+      Story.then(t1, new TicketOpened(), new TicketPaused(), new TicketResumed()),
+      // the first timer was due at 01:00; resuming replaced it with one due at 01:30
+      Story.clock("2026-01-01T01:00:00Z"),
+      Story.then(t1),
+      Story.clock("2026-01-01T01:30:00Z"),
+      Story.then(t1, new TicketStalled()),
+    ),
   );
 });

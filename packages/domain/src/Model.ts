@@ -552,6 +552,7 @@ const aggregateClient = (
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
+          options.replace,
         );
         return { commandId: meta.commandId, at: DateTime.makeUnsafe(at) };
       }).pipe(
