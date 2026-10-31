@@ -248,10 +248,7 @@ export class Sim {
     return bar < 0 ? this.target : key.slice(0, bar);
   }
 
-  /**
-   * Run something while a node tells `path` of a sweep: work that lands on the
-   * node between reading its children and recording that it told them.
-   */
+  /** Run something just before a run lists `path`: work that lands while it lists the directory. */
   interject: ((path: string) => Effect.Effect<void>) | undefined = undefined;
 
   /**
@@ -495,57 +492,17 @@ export class Sim {
         ),
       child: (path, child) =>
         this.call(this.node(path).object, () => this.node(path).role.child(path, child), "child"),
-      news: (path, targets, plans) =>
-        this.call(
-          this.node(path).object,
-          () => this.node(path).role.news(path, targets, plans),
-          "news",
-        ),
-      sweep: (path, target, phase, plan) =>
-        Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
-          this.call(
-            this.node(path).object,
-            () => this.node(path).role.sweep(path, target, phase, plan),
-            "sweep",
-          ),
-        ),
-      report: (path, target, phase, child, trail) =>
-        this.call(
-          this.node(path).object,
-          () => this.node(path).role.report(path, target, phase, child, trail),
-          "report",
-        ),
-      settled: (path, target, ref) =>
-        this.call(
-          this.node(path).object,
-          () => this.node(path).role.settled(path, target, ref),
-          "settled",
-        ),
-      phase: (path, target) =>
-        this.call(this.node(path).object, () => this.node(path).role.phase(path, target), "phase"),
-      status: (path) =>
-        this.call(this.node(path).object, () => this.node(path).role.status(path), "status"),
       list: (path, after) =>
-        this.call(this.node(path).object, () => this.node(path).role.list(path, after), "list"),
+        Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
+          this.call(this.node(path).object, () => this.node(path).role.list(path, after), "list"),
+        ),
     },
     source: {
-      scan: (ref, target) =>
+      cursor: (ref, target) =>
         this.call(
           this.source(ref).object,
-          () => this.busy(this.source(ref)).role.scan(target),
-          "scan",
-        ),
-      ready: (ref, target, reportTo) =>
-        this.call(
-          this.source(ref).object,
-          () => this.busy(this.source(ref)).role.ready(target, reportTo),
-          "ready",
-        ),
-      pull: (ref, target, key, after) =>
-        this.call(
-          this.source(ref).object,
-          () => this.busy(this.source(ref)).role.pull(target, key, after),
-          "pull",
+          () => this.busy(this.source(ref)).role.cursor(target),
+          "cursor",
         ),
       log: (ref, after, limit) =>
         this.call(
@@ -561,14 +518,18 @@ export class Sim {
         ),
     },
     consumer: {
-      source: (target, key, stream, ref) =>
+      push: (target, key, deliveries) =>
         this.call(
           this.key(key).object,
-          () => this.busy(this.key(key)).role.source(target, stream, ref),
-          "source",
+          () => this.busy(this.key(key)).role.push(target, deliveries),
+          "push",
         ),
-      ready: (target, key) =>
-        this.call(this.key(key).object, () => this.busy(this.key(key)).role.ready(target), "ready"),
+      ready: (target, key, waitMillis) =>
+        this.call(
+          this.key(key).object,
+          () => this.busy(this.key(key)).role.ready(target, waitMillis),
+          "ready",
+        ),
       start: (target, key, ref, waitMillis) =>
         this.call(
           this.key(key).object,
@@ -576,9 +537,39 @@ export class Sim {
           "start",
         ),
     },
+    scanner: {
+      scan: (target, ref, waitMillis) =>
+        this.call(
+          this.scanner(target, ref).object,
+          () => this.scanner(target, ref).role.scan(target, ref, waitMillis),
+          "scan",
+        ),
+      ready: (target, ref, waitMillis) =>
+        this.call(
+          this.scanner(target, ref).object,
+          () => this.scanner(target, ref).role.ready(target, waitMillis),
+          "scanner-ready",
+        ),
+      kick: (target, ref) =>
+        this.call(
+          this.scanner(target, ref).object,
+          () => this.scanner(target, ref).role.kick(target, ref),
+          "kick",
+        ),
+    },
     relay: {
       run: (name, run, items) =>
         this.call(this.relay(name), () => this.relays.run(name, run, items), "relay"),
+    },
+    run: {
+      begin: (target, plan) =>
+        this.call(
+          this.run_(target).object,
+          () => this.run_(target).role.begin(target, plan),
+          "begin",
+        ),
+      phase: (target) =>
+        this.call(this.run_(target).object, () => this.run_(target).role.phase(target), "phase"),
     },
   };
 
@@ -594,25 +585,71 @@ export class Sim {
     return object;
   }
 
-  /** Consumers keyed by their source whose run has found every key with its history. */
-  readonly relayed = new Set<string>();
+  /** Each source instance's scanner, per target: an object of the consumer's class. */
+  readonly scanners = new Map<string, { object: SimObject; role: Backfill.Scanner }>();
+  scanner(target: string, ref: Backfill.SourceRef) {
+    const name = `${target}|${ref.source}/${ref.id}`;
+    let found = this.scanners.get(name);
+    if (!found) {
+      const object = new SimObject(`scanner:${name}`, this, (id) =>
+        this.scanners.get(name)!.role.run(id),
+      );
+      found = {
+        object,
+        role: Backfill.makeScanner(
+          object.storage,
+          object.jobsApi,
+          this.net,
+          {
+            // The consumer's own code routes the rows it reads from a source's log.
+            route: (target, ref, rows) =>
+              (rows as SourceData["events"]).map((event) => ({
+                seq: event.seq,
+                deliveries: this.deliveries(this.source(ref), event, true, target),
+              })),
+          },
+          this.limits,
+        ),
+      };
+      this.scanners.set(name, found);
+    }
+    return found;
+  }
 
   /**
-   * The deploy's Workflow for a consumer keyed by its source: one pass of a relay
-   * run, again a second later until every key has its history.
+   * Each consumer's run root. Like the deploy's Workflow, it makes one pass at a
+   * time (each one try at everything), again a second later until done.
    */
-  private readonly workflow = new SimObject("workflow", this, (target) =>
-    this.relays
-      .run(`run:${target}`, { target, plan: this.planOf(target), waitMillis: 0 }, [{ path: "" }])
-      .pipe(
-        Effect.flatMap((done) =>
-          Effect.sync(() => {
-            if (done) this.relayed.add(target);
-            else this.schedule(this.workflow, target, 1_000);
-          }),
-        ),
-      ),
-  );
+  readonly runs = new Map<string, { object: SimObject; role: Backfill.Run }>();
+  run_(target: string) {
+    let found = this.runs.get(target);
+    if (!found) {
+      const object = new SimObject(`run:${target}`, this, (id) =>
+        this.runs.get(target)!.role.run(id),
+      );
+      found = {
+        object,
+        role: Backfill.makeRun(object.storage, object.jobsApi, this.net, {
+          waitMillis: 0,
+          againMillis: 1_000,
+        }),
+      };
+      this.runs.set(target, found);
+    }
+    return found;
+  }
+
+  /** The targets whose run is complete. */
+  completed() {
+    return this.targets.filter(
+      (target) =>
+        (
+          this.runs.get(target)?.object.data.get(`run:${encodeURIComponent(target)}`) as
+            | { phase: string }
+            | undefined
+        )?.phase === "complete",
+    );
+  }
 
   node(path: string) {
     let node = this.nodes.get(path);
@@ -620,9 +657,7 @@ export class Sim {
       const object = new SimObject(`node:${path}`, this, (id) => this.node(path).role.run(id));
       node = {
         object,
-        role: Backfill.makeNode(object.storage, object.jobsApi, this.net, this.limits, (target) =>
-          this.planOf(target),
-        ),
+        role: Backfill.makeNode(object.storage, object.jobsApi, this.net, this.limits),
       };
       this.nodes.set(path, node);
     }
@@ -683,7 +718,6 @@ export class Sim {
         this.net,
         {
           ref,
-          targets: () => (knows() ? this.targets.filter((t) => this.feeds(ref.source, t)) : []),
           model: () => (knows() ? this.targets : []),
           singleSource: () => this.singleSource,
           log: (after, limit) =>
@@ -694,20 +728,6 @@ export class Sim {
           markLive: (target) =>
             Effect.flatMap(object.storage.get<Routed>("routed"), (routed) =>
               object.storage.put({ routed: { ...routed, [target]: data.events.length } }),
-            ),
-          rows: (after, limit, target) =>
-            Effect.sync(() =>
-              data.events
-                .filter((event) => event.seq > after)
-                .slice(0, limit)
-                .map((event) => ({
-                  seq: event.seq,
-                  deliveries: this.deliveries(data, event, true, target),
-                })),
-            ),
-          rowsAt: (seqs, target) =>
-            Effect.sync(() =>
-              seqs.flatMap((seq) => this.deliveries(data, data.events[seq - 1]!, true, target)),
             ),
         },
         this.limits,
@@ -810,9 +830,8 @@ export class Sim {
                   next = { ...next, [target]: before + 1 };
                   send.push(...deliveries);
                 } else {
-                  send.push(
-                    ...(yield* source.role.onCommit(target, deliveries, before, before + 1)),
-                  );
+                  // Behind here: withheld, for its reader to read from the log.
+                  yield* source.role.onCommit(target);
                 }
               }
               yield* storage.put({ routed: next });
@@ -948,13 +967,10 @@ export class Sim {
     if (options.running)
       for (const source of this.sources.values())
         source.staleUntil = Math.max(source.staleUntil, this.now + 20_000);
-    return this.retry(this.net.node.news("a7", this.targets, this.plans())).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          for (const target of this.targets)
-            if (this.planOf(target).singleSource) this.schedule(this.workflow, target, 0);
-        }),
-      ),
+    return Effect.forEach(
+      this.targets,
+      (target) => this.retry(this.net.run.begin(target, this.planOf(target))),
+      { discard: true },
     );
   }
 
@@ -972,13 +988,7 @@ export class Sim {
           continue;
         }
         const busy = yield* this.step();
-        if (
-          this.completedAt === undefined &&
-          (this.relayed.has(this.target) ||
-            (
-              this.nodes.get("")?.object.data.get("complete") as ReadonlyArray<string> | undefined
-            )?.includes(this.target))
-        )
+        if (this.completedAt === undefined && this.completed().includes(this.target))
           this.completedAt = this.vt;
         if (!busy && pending.length === 0) return steps;
         if (!busy) {
@@ -990,11 +1000,8 @@ export class Sim {
     });
   }
 
-  /** The root's status, with the consumers keyed by their source whose run is done. */
+  /** Which targets' runs are complete. */
   status() {
-    return Effect.map(this.node("").role.status(""), (status) => ({
-      ...status,
-      complete: [...status.complete, ...this.relayed],
-    }));
+    return Effect.sync(() => ({ complete: this.completed() }));
   }
 }

@@ -123,7 +123,7 @@ describe("Domain backfill (simulated)", () => {
 
   scenario("a hot key fed by every source", (sim) => backfill(sim, 25, 80, 1));
 
-  scenario("leaves that fill split, and the sweep reaches the instances they moved", (sim) =>
+  scenario("leaves that fill split, and a run reaches the instances they moved", (sim) =>
     Effect.gen(function* () {
       yield* backfill(sim, 60, 120, 4);
       // 60 instances over 16 leaves of 3: leaves split into deeper children.
@@ -136,13 +136,13 @@ describe("Domain backfill (simulated)", () => {
   );
 
   scenario(
-    "a child that links while its parent tells its children takes part in the sweep",
+    "an instance that lists itself in a new leaf while a run lists the directory is caught up",
     (sim) =>
       Effect.gen(function* () {
         for (const commit of history(sim, 3, 9, 2)) yield* commit();
         const linked = new Set(sim.nodes.keys());
         let interjected = false;
-        // While the root tells its children, an instance lists itself in a leaf that isn't linked yet.
+        // While a run lists a node, an instance lists itself in a leaf that isn't linked yet.
         sim.interject = (path) => {
           if (interjected || path === "") return Effect.void;
           interjected = true;
@@ -235,7 +235,7 @@ describe("Domain backfill (simulated)", () => {
     { faults: { callBefore: 0.08, callAfter: 0.08, crash: 0.08 }, seeds: 60 },
   );
 
-  scenario("the sweep walks only the subtrees of the sources the consumer reads", (sim) =>
+  scenario("a run walks only the subtrees of the sources the consumer reads", (sim) =>
     Effect.gen(function* () {
       sim.sourcesOf = () => ["A"];
       // Instances of a source the consumer doesn't read: listed in their own subtree.
@@ -283,12 +283,13 @@ describe("Domain backfill (simulated)", () => {
     }),
   );
 
-  scenario("news that arrives twice, from several nodes, starts one sweep", (sim) =>
+  scenario("a run started again, from several places, runs once", (sim) =>
     Effect.gen(function* () {
       for (const commit of history(sim, 5, 20, 3)) yield* commit();
       yield* sim.deploy();
-      yield* sim.retry(sim.net.node.news("3f", [TARGET], sim.plans([TARGET])));
-      yield* sim.retry(sim.net.node.news("", [TARGET], sim.plans([TARGET])));
+      yield* sim.retry(sim.net.run.begin(TARGET, sim.planOf(TARGET)));
+      yield* sim.run();
+      yield* sim.retry(sim.net.run.begin(TARGET, sim.planOf(TARGET)));
       yield* sim.run();
     }),
   );

@@ -181,7 +181,6 @@ export const make = (
         memoryJobs(address, (id) => node(path).run(id)),
         net,
         limits,
-        (target) => planOf(target),
       );
       nodes.set(path, found);
     }
@@ -199,38 +198,58 @@ export const make = (
     const { kind, name } = Backfill.consumerOf(target);
     return consumerRoles.get(`${kind}:${name}`)?.(key);
   };
+  /** Each consumer's routing of a source's stored rows, as of the latest build: what its scanners use. */
+  const consumerRoutes = new Map<string, Backfill.ScannerHost["route"]>();
+  const scanners = new Map<string, Backfill.Scanner>();
+  /** The scanner of one source instance, for one consumer generation. */
+  const scanner = (target: string, ref: Backfill.SourceRef) => {
+    const address = `scanner:${target}/${ref.source}/${ref.id}`;
+    let found = scanners.get(address);
+    if (!found) {
+      const lock = stored(`lock:${address}`, () => Semaphore.makeUnsafe(1));
+      const { kind, name } = Backfill.consumerOf(target);
+      const role: Backfill.Scanner = Backfill.makeScanner(
+        memoryStorage(address, lock),
+        memoryJobs(address, (id) => role.run(id)),
+        net,
+        {
+          route: (target, ref, rows) =>
+            consumerRoutes.get(`${kind}:${name}`)?.(target, ref, rows) ?? [],
+        },
+        limits,
+      );
+      scanners.set(address, (found = role));
+    }
+    return found;
+  };
+  const runs = new Map<string, Backfill.Run>();
+  /** The root of a consumer generation's run. Each pass is one try at everything; keys work between. */
+  const run = (target: string) => {
+    let found = runs.get(target);
+    if (!found) {
+      const address = `run:${target}`;
+      const lock = stored(`lock:${address}`, () => Semaphore.makeUnsafe(1));
+      const role: Backfill.Run = Backfill.makeRun(
+        memoryStorage(address, lock),
+        memoryJobs(address, (id) => role.run(id)),
+        net,
+        { waitMillis: 0, againMillis: 0 },
+      );
+      runs.set(target, (found = role));
+    }
+    return found;
+  };
   const net: Backfill.Network = {
     node: {
       register: (path, ref) => node(path).register(path, ref),
       child: (path, child) => node(path).child(path, child),
-      news: (path, targets, plans) => node(path).news(path, targets, plans),
-      sweep: (path, target, phase, plan) => node(path).sweep(path, target, phase, plan),
-      report: (path, target, phase, child, trail) =>
-        node(path).report(path, target, phase, child, trail),
-      settled: (path, target, ref) => node(path).settled(path, target, ref),
-      phase: (path, target) => node(path).phase(path, target),
-      status: (path) => node(path).status(path),
       list: (path, after) => node(path).list(path, after),
     },
     source: {
       // A source no longer in the model has nothing to give.
-      scan: (ref, target) =>
+      cursor: (ref, target) =>
         Effect.suspend(
-          () =>
-            sourceRoles.get(ref.source)?.(ref.id).scan(target) ??
-            Effect.succeed("discovered" as const),
-        ),
-      ready: (ref, target, reportTo) =>
-        Effect.suspend(
-          () =>
-            sourceRoles.get(ref.source)?.(ref.id).ready(target, reportTo) ??
-            Effect.succeed("settled" as const),
-        ),
-      pull: (ref, target, key, after) =>
-        Effect.suspend(
-          () =>
-            sourceRoles.get(ref.source)?.(ref.id).pull(target, key, after) ??
-            Effect.succeed({ deliveries: [], live: true }),
+          () => sourceRoles.get(ref.source)?.(ref.id).cursor(target) ?? Effect.succeed(0),
         ),
       log: (ref, after, limit) =>
         Effect.suspend(
@@ -244,10 +263,14 @@ export const make = (
         ),
     },
     consumer: {
-      source: (target, key, stream, ref) =>
-        Effect.suspend(() => consumerRole(target, key)?.source(target, stream, ref) ?? Effect.void),
-      ready: (target, key) =>
-        Effect.suspend(() => consumerRole(target, key)?.ready(target) ?? Effect.void),
+      push: (target, key, deliveries) =>
+        Effect.suspend(() => consumerRole(target, key)?.push(target, deliveries) ?? Effect.void),
+      ready: (target, key, waitMillis) =>
+        Effect.suspend(
+          () =>
+            consumerRole(target, key)?.ready(target, waitMillis) ??
+            Effect.succeed("settled" as const),
+        ),
       start: (target, key, ref, waitMillis) =>
         Effect.suspend(
           () =>
@@ -255,22 +278,20 @@ export const make = (
             Effect.succeed("settled" as const),
         ),
     },
+    scanner: {
+      scan: (target, ref, waitMillis) =>
+        Effect.suspend(() => scanner(target, ref).scan(target, ref, waitMillis)),
+      ready: (target, ref, waitMillis) =>
+        Effect.suspend(() => scanner(target, ref).ready(target, waitMillis)),
+      kick: (target, ref) => Effect.suspend(() => scanner(target, ref).kick(target, ref)),
+    },
     relay: { run: (name, run, items) => Effect.suspend(() => relay.run(name, run, items)) },
+    run: {
+      begin: (target, plan) => Effect.suspend(() => run(target).begin(target, plan)),
+      phase: (target) => Effect.suspend(() => run(target).phase(target)),
+    },
   };
   const relay = Backfill.makeRelay(net);
-  /** Consumers keyed by their source whose run has found every key with its history. */
-  const relayed = new Set<string>();
-  /**
-   * One pass of a relay run over the directory: it starts every key, and is
-   * done once each has its history. Keys work on the work queue between passes.
-   */
-  const relayPass = (target: string, plan: Backfill.Plan) =>
-    Effect.gen(function* () {
-      if (relayed.has(target)) return true;
-      const done = yield* relay.run(target, { target, plan, waitMillis: 0 }, [{ path: "" }]);
-      if (done) relayed.add(target);
-      return done;
-    });
   /** List an instance in the directory; its first commit waits for it. */
   const register = (ref: Backfill.SourceRef) =>
     node(Backfill.leafOf(ref)).register(Backfill.leafOf(ref), ref);
@@ -425,7 +446,6 @@ export const make = (
             net,
             {
               ref: { source: kit.name, id },
-              targets: () => kit.targets,
               model: () => model,
               singleSource: (target) => planOf(target)?.singleSource === true,
               log: (after, limit) =>
@@ -441,30 +461,6 @@ export const make = (
                   const current = instance(id);
                   current.routed = { ...current.routed, [target]: current.version };
                 }),
-              rows: (after, limit, target) =>
-                Effect.sync(() =>
-                  Backfill.routeRows(
-                    kit.replay,
-                    id,
-                    kit.targets,
-                    target,
-                    instance(id)
-                      .events.filter((event) => event.envelope.seq > after)
-                      .slice(0, limit),
-                    (event) => event.envelope.seq,
-                  ),
-                ),
-              rowsAt: (seqs, target) =>
-                Effect.sync(() =>
-                  Backfill.routeRows(
-                    kit.replay,
-                    id,
-                    kit.targets,
-                    target,
-                    seqs.map((seq) => instance(id).events[seq - 1]!),
-                    (event) => event.envelope.seq,
-                  ).flatMap((row) => row.deliveries),
-                ),
             },
             limits,
           );
@@ -712,6 +708,9 @@ export const make = (
           return role;
         });
         consumerRoles.set(`view:${kit.name}`, consumer);
+        consumerRoutes.set(`view:${kit.name}`, (target, ref, rows) =>
+          kit.history(target, ref.source, ref.id, rows),
+        );
         // As a source: other views and projections read its entries.
         const sourceRole = memo((key: string) => {
           const address = `source:${kit.name}/${key}`;
@@ -724,7 +723,6 @@ export const make = (
             net,
             {
               ref: { source: kit.name, id: key },
-              targets: () => kit.targets,
               model: () => model,
               singleSource: (target) => planOf(target)?.singleSource === true,
               log: (after, limit) =>
@@ -741,28 +739,6 @@ export const make = (
                   const { seq } = yield* SubscriptionRef.get(current.snapshot);
                   current.routed = { ...current.routed, [target]: seq };
                 }),
-              rows: (after, limit, target) =>
-                Effect.map(entries, (all) =>
-                  Backfill.routeRows(
-                    kit.replay,
-                    key,
-                    kit.targets,
-                    target,
-                    all.filter((entry) => entry.seq > after).slice(0, limit),
-                    (entry) => entry.seq,
-                  ),
-                ),
-              rowsAt: (seqs, target) =>
-                Effect.map(entries, (all) =>
-                  Backfill.routeRows(
-                    kit.replay,
-                    key,
-                    kit.targets,
-                    target,
-                    seqs.map((seq) => all[seq - 1]!),
-                    (entry) => entry.seq,
-                  ).flatMap((row) => row.deliveries),
-                ),
             },
             limits,
           );
@@ -935,6 +911,9 @@ export const make = (
           return role;
         });
         consumerRoles.set(`projection:${kit.name}`, consumer);
+        consumerRoutes.set(`projection:${kit.name}`, (target, ref, rows) =>
+          kit.history(target, ref.source, ref.id, rows),
+        );
         return {
           receive: (delivery) =>
             Effect.gen(function* () {
@@ -1061,31 +1040,24 @@ export const make = (
         };
       }),
 
-    // A deploy that adds consumers tells the directory; it starts their backfill.
+    // A deploy that adds consumers starts their runs.
     start: (targets, plans) =>
       Effect.suspend(() => {
         model = targets;
         planOf = plans;
-        if (targets.length === 0) return Effect.void;
-        const announced: Record<string, Backfill.Plan> = {};
-        const relays: Array<Effect.Effect<void>> = [];
-        for (const target of targets) {
-          const plan = plans(target);
-          if (plan !== undefined) announced[target] = plan;
-          if (plan?.singleSource === true) relays.push(Effect.asVoid(relayPass(target, plan)));
-        }
-        return net.node.news("00", targets, announced).pipe(Effect.andThen(enqueueWork(relays)));
+        return Effect.forEach(
+          targets,
+          (target) => {
+            const plan = plans(target);
+            return plan === undefined
+              ? Effect.void
+              : Effect.asVoid(run(target).begin(target, plan));
+          },
+          { discard: true },
+        );
       }),
     history: (target) =>
-      Effect.suspend(() => {
-        // Keyed by its source: complete once a pass finds every key with its history.
-        const plan = planOf(target);
-        if (plan?.singleSource === true)
-          return Effect.map(relayPass(target, plan), (complete) => ({ complete }));
-        return Effect.map(net.node.status(""), (status) => ({
-          complete: status.complete.includes(target),
-        }));
-      }),
+      Effect.map(run(target).phase(target), (phase) => ({ complete: phase === "complete" })),
   });
 
   return {
