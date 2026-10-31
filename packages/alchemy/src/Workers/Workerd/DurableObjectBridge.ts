@@ -9,6 +9,8 @@
 import type * as cf from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import type * as Tracer from "effect/Tracer";
 import type { CallbackFactory } from "../../Callback.ts";
 import type { DurableObjectExport } from "../DurableObject.ts";
 import { makeDurableObjectInstance, type DurableObjectInstance } from "../DurableObjectBridge.ts";
@@ -48,6 +50,14 @@ export interface WorkerdDurableObjectBridgeOptions {
     state: cf.DurableObjectState,
     track: (promise: Promise<unknown>) => void,
   ) => Context.Context<never>;
+  /**
+   * Split what the engine's stubs append to an RPC call's arguments (the
+   * caller's trace context) off the arguments, returning the call's parent
+   * span when there is one.
+   */
+  readonly rpcArgs?: (
+    args: ReadonlyArray<unknown>,
+  ) => readonly [args: ReadonlyArray<unknown>, parent: Option.Option<Tracer.AnySpan>];
 }
 
 /**
@@ -95,7 +105,11 @@ export const makeDurableObjectBridge =
             const bind = (member: any) =>
               typeof member === "function" ? member.bind(target) : member;
             if (typeof prop !== "string" || prop in target) return bind((target as any)[prop]);
-            return this.#core.dispatch(prop);
+            if (adapter.rpcArgs === undefined) return this.#core.dispatch(prop);
+            return (...callArgs: unknown[]) => {
+              const [args, parent] = adapter.rpcArgs!(callArgs);
+              return this.#core.dispatch(prop, Option.getOrUndefined(parent))(...args);
+            };
           },
         });
       }

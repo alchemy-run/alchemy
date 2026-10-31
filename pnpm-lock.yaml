@@ -8825,6 +8825,9 @@ importers:
       pathe:
         specifier: 'catalog:'
         version: 2.0.3
+      picomatch:
+        specifier: 'catalog:'
+        version: 4.0.7
       rolldown:
         specifier: 1.2.13
         version: 1.2.13
@@ -8853,6 +8856,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      '@types/picomatch':
+        specifier: 'catalog:'
+        version: 4.0.3
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

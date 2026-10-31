@@ -47,6 +47,7 @@ export const ALCHEMY_TEST_DEV = Core.ALCHEMY_TEST_DEV;
 export const resolveDev = Core.resolveDev;
 export const defaultStage = Core.defaultStage;
 export const resolveStage = Core.resolveStage;
+export const captureResourceLog = Core.captureResourceLog;
 
 interface TestFn {
   (name: string, eff: TestEffect<void>, options?: TestOptions): void;

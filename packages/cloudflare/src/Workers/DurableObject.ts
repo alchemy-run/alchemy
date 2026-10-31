@@ -1402,6 +1402,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         // A function because `jurisdiction` wraps the sub-namespace it returns.
         // The return annotation checks the value against the interface, so a
         // method missing here is a compile error.
+        // Without a `scriptName` the class is hosted by this Worker, so its
+        // `DurableObjectBridge` ships in this bundle and strips the trace
+        // context a stub appends. A class in another script may be plain JS
+        // or an older deploy, so its calls carry only the caller's arguments.
+        const stubOptions = { errors, traceContext: scriptName === undefined };
         const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
           // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
           // a Worker's `env` bind as the `durable_object_namespace` it is.
@@ -1415,12 +1420,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[namespace]),
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(ns!.getByName(name, options), { errors }),
+            makeRpcStub(ns!.getByName(name, options), stubOptions),
           newUniqueId: () => ns!.newUniqueId(),
           idFromName: (name: string) => ns!.idFromName(name),
           idFromString: (id: string) => ns!.idFromString(id),
           get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(ns!.get(id, options), { errors }),
+            makeRpcStub(ns!.get(id, options), stubOptions),
           jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
             makeNamespace(restrictToJurisdiction(ns, jurisdiction)),
         });
