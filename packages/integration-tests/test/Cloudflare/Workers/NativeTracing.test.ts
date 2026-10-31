@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import {
   CloudflareTelemetryCompatibilityError,
+  type CloudflareTelemetryProps,
   MIN_CLOUDFLARE_TRACING_DATE,
 } from "@alchemy.run/cloudflare/Workers/Telemetry";
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
@@ -18,8 +19,8 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
-import BoundLogsWorker from "./fixtures/native-tracing/bound-logs-worker.ts";
 import type { TraceSink } from "./fixtures/native-tracing/collector.ts";
+import { makeLogsWorker } from "./fixtures/native-tracing/logs-worker.ts";
 import NativeTracingWorker, { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -99,9 +100,6 @@ type Bindings = ReadonlyArray<ResourceBinding<Worker["Binding"]>>;
 const tracesBind = (traces: NonNullable<Worker["Binding"]["observability"]>["traces"]): Bindings =>
   [{ sid: "Cloudflare.Telemetry", data: { observability: { traces } } }] as unknown as Bindings;
 
-const logsBind = (logs: NonNullable<Worker["Binding"]["observability"]>["logs"]): Bindings =>
-  [{ sid: "Cloudflare.Telemetry", data: { observability: { logs } } }] as unknown as Bindings;
-
 describe(
   "resolveObservability",
   {
@@ -155,42 +153,6 @@ describe(
       expect(resolved.logs?.invocationLogs).toBe(true);
       expect(resolved.traces?.enabled).toBe(true);
       expect(resolved.traces?.headSamplingRate).toBe(0.1);
-    });
-
-    unit("bound logs fill in when props omit them", () => {
-      const resolved = resolveObservability(
-        {},
-        logsBind({ enabled: true, invocationLogs: true, destinations: ["otel-logs"] }),
-      );
-      expect(resolved.logs?.enabled).toBe(true);
-      expect(resolved.logs?.invocationLogs).toBe(true);
-      expect(resolved.logs?.destinations).toEqual(["otel-logs"]);
-    });
-
-    unit("explicit logs win over the bind", () => {
-      const resolved = resolveObservability(
-        { observability: { enabled: true, logs: { enabled: false, invocationLogs: false } } },
-        logsBind({ enabled: true, invocationLogs: true, destinations: ["otel-logs"] }),
-      );
-      expect(resolved.logs?.enabled).toBe(false);
-      expect(resolved.logs?.destinations).toBeUndefined();
-    });
-
-    unit("traces and logs from one bind both fill in", () => {
-      const resolved = resolveObservability({}, [
-        {
-          sid: "Cloudflare.Telemetry",
-          data: {
-            observability: {
-              traces: { enabled: true, destinations: ["otel-traces"] },
-              logs: { enabled: true, invocationLogs: true, destinations: ["otel-logs"] },
-            },
-          },
-        },
-      ] as unknown as Bindings);
-      expect(resolved.traces?.destinations).toEqual(["otel-traces"]);
-      expect(resolved.logs?.destinations).toEqual(["otel-logs"]);
-      expect(resolved.logs?.invocationLogs).toBe(true);
     });
 
     unit("no bind returns default logs", () => {
@@ -282,8 +244,90 @@ test.provider(
   },
 );
 
+const logsSettings = (accountId: string, scriptName: string) =>
+  workers
+    .getScriptScriptAndVersionSetting({ accountId, scriptName })
+    .pipe(Effect.map((settings) => settings.observability?.logs));
+
+const LOGS_TAGS = ["provider:cloudflare", "provider:cloudflare:worker", "live"];
+
 test.provider(
-  "bound observability.logs merge over the default logs config",
+  "Cloudflare.Telemetry() turns on Workers Logs by default",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      // The Worker's props carry observability without logs, so the
+      // default logs config doesn't apply: only the bind turns logs on.
+      const worker = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* makeLogsWorker(
+            "NativeTracingLogsDefault",
+            {},
+            { observability: { enabled: true } },
+          );
+        }),
+      );
+
+      const logs = yield* logsSettings(accountId, worker.workerName);
+      expect(logs?.enabled).toBe(true);
+      expect(logs?.invocationLogs).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+    }).pipe(logLevel),
+  { tags: LOGS_TAGS, timeout: 180_000 },
+);
+
+test.provider(
+  "Cloudflare.Telemetry({ logs }) configures Workers Logs and updates in place",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const deploy = (telemetry: CloudflareTelemetryProps) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const destination = yield* Cloudflare.Workers.ObservabilityDestination(
+              "NativeTracingLogsDest",
+              {
+                url: "https://example.com/v1/logs",
+                logpushDataset: "opentelemetry-logs",
+                // example.com rejects POSTs; this destination never updates.
+                skipPreflightCheck: true,
+              },
+            );
+            const worker = yield* makeLogsWorker("NativeTracingLogsOptions", {
+              ...telemetry,
+              logs: { ...telemetry.logs, destinations: [destination.slug] },
+            });
+            return { workerName: worker.workerName, slug: destination.slug };
+          }),
+        );
+
+      const first = yield* deploy({ logs: { persist: false, headSamplingRate: 0.5 } });
+      const logs = yield* logsSettings(accountId, first.workerName);
+      expect(logs?.enabled).toBe(true);
+      expect(logs?.invocationLogs).toBe(true);
+      expect(logs?.persist).toBe(false);
+      expect(logs?.headSamplingRate).toBe(0.5);
+      expect(logs?.destinations).toEqual([first.slug]);
+
+      yield* deploy({ logs: { enabled: false, invocationLogs: false } });
+      const off = yield* logsSettings(accountId, first.workerName);
+      expect(off?.enabled).toBe(false);
+      expect(off?.invocationLogs).toBe(false);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(first.workerName, accountId);
+    }).pipe(logLevel),
+  { tags: LOGS_TAGS, timeout: 180_000 },
+);
+
+test.provider(
+  "explicit observability.logs wins over Cloudflare.Telemetry({ logs })",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -291,7 +335,16 @@ test.provider(
 
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* BoundLogsWorker;
+          return yield* makeLogsWorker(
+            "NativeTracingLogsOverride",
+            { logs: { persist: false, headSamplingRate: 0.5 } },
+            {
+              observability: {
+                enabled: true,
+                logs: { enabled: true, invocationLogs: false, persist: true },
+              },
+            },
+          );
         }),
       );
 
@@ -299,20 +352,16 @@ test.provider(
         accountId,
         scriptName: worker.workerName,
       });
+      // Telemetry still binds traces; the explicit logs object is kept whole.
       expect(settings.observability?.traces?.enabled).toBe(true);
-      expect(settings.observability?.logs?.enabled).toBe(true);
-      expect(settings.observability?.logs?.persist).toBe(false);
-      expect(settings.observability?.logs?.headSamplingRate).toBe(0.5);
-      // The default config's invocation logs survive the bound logs.
-      expect(settings.observability?.logs?.invocationLogs).toBe(true);
+      expect(settings.observability?.logs?.invocationLogs).toBe(false);
+      expect(settings.observability?.logs?.persist).toBe(true);
+      expect(settings.observability?.logs?.headSamplingRate).not.toBe(0.5);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
-  },
+  { tags: LOGS_TAGS, timeout: 180_000 },
 );
 
 test.provider(

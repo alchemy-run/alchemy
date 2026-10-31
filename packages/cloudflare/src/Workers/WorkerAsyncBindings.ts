@@ -814,35 +814,30 @@ export const getCacheBinding = (bindings: ReadonlyArray<ResourceBinding<Worker["
   };
 };
 
-const DEFAULT_LOGS: NonNullable<WorkerObservability["logs"]> = {
-  enabled: true,
-  invocationLogs: true,
-};
-
 const DEFAULT_OBSERVABILITY: WorkerObservability = {
   enabled: true,
-  logs: DEFAULT_LOGS,
+  logs: {
+    enabled: true,
+    invocationLogs: true,
+  },
 };
 
 /**
  * Resolve the observability metadata to upload. An explicit
  * `news.observability.traces` / `news.observability.logs` wins; otherwise
- * the traces and logs contributed by a binding such as
- * `Cloudflare.Telemetry()` fill in. Bound logs are merged over the default
- * logs config. A cache-style `??` on the whole object would drop the
- * default `logs.invocationLogs`.
+ * the traces and logs contributed by `Cloudflare.Telemetry()` (a single
+ * binding row — rows are collapsed by sid) fill in. A cache-style `??` on
+ * the whole object would drop the default `logs.invocationLogs`.
  */
 export const resolveObservability = (
   news: Pick<WorkerProps, "observability">,
   bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
 ): WorkerObservability => {
   const observability = news.observability ?? DEFAULT_OBSERVABILITY;
-  const bound = bindings.flatMap((b) => (b.data.observability ? [b.data.observability] : []));
-  const traces = bound.find((o) => o.traces != null)?.traces;
-  const logs = bound.find((o) => o.logs != null)?.logs;
+  const bound = bindings.find((b) => b.data.observability != null)?.data.observability;
   return {
     ...observability,
-    ...(observability.traces == null && traces != null && { traces }),
-    ...(news.observability?.logs == null && logs != null && { logs: { ...DEFAULT_LOGS, ...logs } }),
+    ...(observability.traces == null && bound?.traces != null && { traces: bound.traces }),
+    ...(news.observability?.logs == null && bound?.logs != null && { logs: bound.logs }),
   };
 };
