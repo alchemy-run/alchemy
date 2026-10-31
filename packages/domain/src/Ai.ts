@@ -11,7 +11,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
-import { DefinitionError } from "./internal.ts";
+import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
 import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
 
 /** What {@link toToolkit} reads from an Api class: what it serves, its RPCs, and its in-process client. */
@@ -222,11 +222,15 @@ export const toToolkit = <A extends Toolable, R = never>(
     .filter(({ tool }) => {
       if (tool.name.length > MAX_NAME) {
         problems.push(
-          new DefinitionError(`The tool name ${tool.name} is longer than ${MAX_NAME} characters`),
+          new DefinitionError({
+            reason: new ToolNameTooLong({ tool: tool.name, max: MAX_NAME }),
+          }),
         );
       } else if (names.has(tool.name)) {
         problems.push(
-          new DefinitionError(`Two calls of ${api.apiName} make the tool ${tool.name}`),
+          new DefinitionError({
+            reason: new DuplicateTool({ api: api.apiName, tool: tool.name }),
+          }),
         );
       } else {
         names.add(tool.name);

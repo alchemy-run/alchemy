@@ -161,6 +161,7 @@ class DepositOnlyApi extends Domain.Api("DepositOnlyApi", {
   model: Wallets,
   commands: ["Deposit"],
   views: [],
+  aggregates: [],
 }) {}
 
 /** The hosted model, its middleware, and an in-process Bun server with a client for it. */

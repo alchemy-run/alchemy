@@ -74,6 +74,8 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
             );
             assert(url, `url not found in output: "${url}"`);
             expect(url).toMatch(/^ws:\/\//);
+            // The sidecar listens on loopback only, under every runtime.
+            expect(new URL(url).hostname).toBe("127.0.0.1");
 
             // Open the parent websocket inside the scope so it stays alive
             // for the duration of the RPC exchange below; closing it later
