@@ -32,7 +32,11 @@ class Totals extends Domain.View("Totals", {
 }) {}
 
 class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: [Totals] }) {}
-class CounterApi extends Domain.Api("CounterApi", Increment, Totals) {}
+class CounterApi extends Domain.Api("CounterApi", {
+  model: Counters,
+  commands: ["Increment"],
+  views: ["Totals"],
+}) {}
 
 const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
