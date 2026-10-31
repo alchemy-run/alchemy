@@ -85,6 +85,11 @@ const BackfillTypeId = "Cloudflare.Domain.Backfill";
  *
  * ### Rebuilding and cancelling <!-- api-prose -->
  *
+ * A run reads the sources its consumer read when it started. A deploy whose
+ * consumer reads other sources at the same version (a view that now reads a
+ * journal as well as accounts) fails, saying to bump the version: waiting on
+ * the run would report a history that misses the new source.
+ *
  * To run a backfill again, bump the consumer's version: the new generation is
  * a new class with its own run, and the same Worker upload deletes the old
  * generation's class, data and run. To stop a backfill, remove the consumer
@@ -318,8 +323,15 @@ const BackfillLive = () =>
             id = yield* start(attempt);
             continue;
           }
+          // A consumer that reads other sources than its run: the reason is the whole message.
+          const changed = /BackfillPlanChanged: (.*)$/s.exec(message)?.[1];
+          const reason = message
+            ? `: ${failed.error?.name ?? "Error"}: ${message.replace(/\.$/, "")}`
+            : "";
           return yield* new BackfillFailed({
-            message: `The backfill of ${label} ended ${current.status}${message ? `: ${failed.error?.name ?? "Error"}: ${message}` : ""}. Where it got to: ${where()}.`,
+            message:
+              changed ??
+              `The backfill of ${label} ended ${current.status}${reason}.${progress === undefined ? "" : ` Where it got to: ${where()}.`}`,
             instanceId: id,
             status: current.status,
           });

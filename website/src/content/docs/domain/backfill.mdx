@@ -54,6 +54,12 @@ const BankLive = Bank.layer(BankPolicies).pipe(
 
 Past it, the deploy fails with `BackfillStillRunning`, naming how far each run got, and the runs keep going on Cloudflare. Deploy again and it waits on the same runs from where they are, or returns at once if they finished meanwhile. Stopping a deploy with Ctrl-C works the same way.
 
+A run reads the sources its consumer read when the run started. If you change what a view reads, say it now reads a journal as well as accounts, its history would miss the new source unless you bump its version, so the deploy fails and says so:
+
+```sh
+view:Timeline now reads Account, Journal, but its backfill was started reading Account. Bump its version to rebuild it from every source's history.
+```
+
 To run a backfill again, bump the consumer's version. The new generation is a new class with its own run, and the same Worker upload deletes the previous generation, its data and its run. Until the deploy returns, reads of the view see the new generation fill in. To stop a backfill, remove the consumer and deploy: its classes, and the run with them, are deleted. Either way it is one upload, so a consumer never has two runs at once.
 
 ## Width
