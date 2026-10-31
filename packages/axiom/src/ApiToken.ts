@@ -130,7 +130,8 @@ export const ApiTokenProvider = () =>
           }
           return {
             ...result,
-            token: Redacted.make(result.token),
+            // The SDK decodes the token as Redacted; accept a plain string too.
+            token: Redacted.isRedacted(result.token) ? result.token : Redacted.make(result.token),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

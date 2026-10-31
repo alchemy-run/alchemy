@@ -8539,6 +8539,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
+      '@cloudflare/workers-types':
+        specifier: 5.20261026.1
+        version: 5.20261026.1
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)

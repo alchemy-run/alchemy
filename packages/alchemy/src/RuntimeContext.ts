@@ -28,6 +28,13 @@ export interface BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
+  /**
+   * Serve even when the impl shape has no `fetch` handler and no RPC
+   * methods. Set by runtimes whose served handler carries routes of its
+   * own — e.g. a runtime that routes Durable Object calls itself, so a
+   * worker that only hosts Durable Objects still serves.
+   */
+  alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
