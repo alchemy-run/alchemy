@@ -2775,6 +2775,7 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * By default a deploy lets an active Durable Object keep running its
  * current code for up to 5 minutes while it waits to hibernate.
  * `codeUpdateStrategy` changes how long, or applies the new code at once.
+ * See [Code updates](/cloudflare/compute/code-updates).
  *
  * **Example:** Shorter deferral for Durable Object code updates
  * ```typescript

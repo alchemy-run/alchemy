@@ -599,6 +599,10 @@ export default defineConfig({
                   label: "WebSockets",
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
+                {
+                  label: "Code updates",
+                  link: "/cloudflare/compute/code-updates",
+                },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
                 {
                   label: "Container lifecycle",
