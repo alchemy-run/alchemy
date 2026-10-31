@@ -544,7 +544,9 @@ layer(services, { excludeTestServices: true })((it) => {
       // base + 2 probes free.
       const tryBind = (port: number) =>
         Effect.callback<NodeNet.Server | undefined>((resume) => {
-          const server = NodeNet.createServer();
+          // Drop accepted connections: a local tool's keep-alive probe would
+          // otherwise keep `server.close` from completing (see `occupy`).
+          const server = NodeNet.createServer((socket) => socket.destroy());
           server.once("error", () => resume(Effect.succeed(undefined)));
           server.listen({ port, exclusive: true }, () => resume(Effect.succeed(server)));
           return Effect.sync(() => server.close());
