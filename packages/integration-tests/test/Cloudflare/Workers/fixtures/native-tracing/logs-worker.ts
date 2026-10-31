@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { CloudflareTelemetryProps } from "@alchemy.run/cloudflare/Workers/Telemetry";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
+import type { InputProps } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -12,7 +13,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 export const makeLogsWorker = (
   id: string,
   telemetry: CloudflareTelemetryProps = {},
-  props: Partial<WorkerProps> = {},
+  props: InputProps<Partial<WorkerProps>> = {},
 ) =>
   Cloudflare.Worker(
     id,
