@@ -1,0 +1,58 @@
+{
+  "name": "@alchemy.run/oxlint-plugin-domain",
+  "version": "2.0.0-beta.84",
+  "description": "oxlint rules that check @alchemy.run/domain models against the alchemy-domain skill.",
+  "keywords": [
+    "alchemy",
+    "domain-driven-design",
+    "effect",
+    "oxlint",
+    "oxlint-plugin"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/oxlint-plugin-domain"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./configs": "./src/configs.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./configs": {
+        "types": "./lib/configs.d.ts",
+        "bun": "./src/configs.ts",
+        "default": "./lib/configs.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,124 @@
+import { storyCoverage } from "../src/rules/story-coverage.ts";
+import { bank, kennel, tester } from "./tester.ts";
+
+const head = `import * as Domain from "@alchemy.run/domain";\n`;
+
+tester.run("story-coverage", storyCoverage, {
+  valid: [
+    // Sent by a story.
+    {
+      filename: bank("src/Account/OpenAccount.command.ts"),
+      code: `${head}export class OpenAccount extends Domain.Command("OpenAccount", { events: [AccountOpened] }) {}`,
+    },
+    // Shown through one of its events (a command only a policy sends).
+    {
+      filename: bank("src/Account/WithdrawMoney.command.ts"),
+      code: `${head}export class WithdrawMoney extends Domain.Command("WithdrawMoney", { events: [MoneyWithdrawn] }) {}`,
+    },
+    {
+      filename: bank("src/Account/NotOpen.rejection.ts"),
+      code: `${head}export class NotOpen extends Domain.Rejection("NotOpen") {}`,
+    },
+    // Only commands, rejections and external systems are checked.
+    {
+      filename: bank("src/Account/Account.aggregate.ts"),
+      code: `${head}export class Account extends Domain.Aggregate("Account", {}) {}`,
+    },
+    // A rejection no command or saga lists (a view's \`validate\` returns it): Api tests cover it.
+    {
+      filename: bank("src/Forbidden.rejection.ts"),
+      code: `${head}export class Forbidden extends Domain.Rejection("Forbidden") {}`,
+    },
+    // A rejection only a \`rejects\` list the rule cannot read names is skipped.
+    {
+      filename: bank("src/Account/Reopened.rejection.ts"),
+      code: `${head}export class Reopened extends Domain.Rejection("Reopened") {}`,
+    },
+    // Each declared error is built and failed: \`Story.fail\` (stubbed), tagged \`failed\` (real).
+    {
+      filename: bank("src/Fraud/FraudCheck.external.ts"),
+      code: `${head}export class ScoreUnavailable extends Domain.Rejection("ScoreUnavailable") {}
+export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
+  score: { args: {}, success: {}, error: ScoreUnavailable },
+}) {}`,
+    },
+    // An op without a declared error needs no failing story.
+    {
+      filename: bank("src/Settlement/Payments.external.ts"),
+      code: `${head}export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: { args: {}, success: {}, error: RefundDeclined },
+  capture: { args: {}, success: {} },
+}) {}`,
+    },
+  ],
+  invalid: [
+    {
+      // \`FreezeAccount\` lists it in another file.
+      filename: bank("src/Account/Frozen.rejection.ts"),
+      code: `${head}export class Frozen extends Domain.Rejection("Frozen") {}`,
+      errors: [{ messageId: "rejection", data: { name: "Frozen" } }],
+    },
+    {
+      // A saga's rejection: a story asserts its \`Rejected\` status.
+      filename: bank("src/Transfer/ExecuteTransfer.saga.ts"),
+      code: `${head}export class DestinationClosed extends Domain.Rejection("DestinationClosed") {}
+export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", { rejects: [DestinationClosed] }) {}`,
+      errors: [{ messageId: "rejection", data: { name: "DestinationClosed" } }],
+    },
+    {
+      // \`charge\` is only answered with \`succeed\`, and its error is never built.
+      filename: bank("src/Settlement/Payments.external.ts"),
+      code: `${head}export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: { args: {}, success: {}, error: RefundDeclined },
+  charge: { args: {}, success: {}, error: ChargeDeclined },
+}) {}`,
+      errors: [
+        { messageId: "error", data: { system: "Payments", op: "charge", name: "ChargeDeclined" } },
+      ],
+    },
+    {
+      // The error is built for another op: \`Payments.refund\` fails, \`Payments.charge\` never does.
+      filename: bank("src/Settlement/Payments.external.ts"),
+      code: `${head}export class Payments extends Domain.ExternalSystem("Payments", {
+  charge: { args: {}, success: {}, error: RefundDeclined },
+}) {}`,
+      errors: [
+        { messageId: "error", data: { system: "Payments", op: "charge", name: "RefundDeclined" } },
+      ],
+    },
+    {
+      filename: bank("src/Account/CloseAccount.command.ts"),
+      code: `${head}export class AccountClosed extends Domain.Event("AccountClosed", {}) {}
+export class CloseAccount extends Domain.Command("CloseAccount", { events: [AccountClosed] }) {}`,
+      errors: [{ messageId: "command", data: { name: "CloseAccount" } }],
+    },
+    {
+      // A story that only names the class (an import) does not cover it.
+      filename: bank("src/Account/OpenAccount.command.ts"),
+      code: `${head}export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
+export class OpenAccount extends Domain.Command("OpenAccount", { events: [AccountOpened], rejects: [AlreadyOpen] }) {}`,
+      errors: [{ messageId: "rejection", data: { name: "AlreadyOpen" } }],
+    },
+  ],
+});
+
+tester.run("story-coverage (kebab, messages file)", storyCoverage, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class NotHungry extends Domain.Rejection("NotHungry") {}
+export class FeedDog extends Domain.Command("FeedDog", { events: [DogFed] }) {}`,
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class Asleep extends Domain.Rejection("Asleep") {}
+export class WalkDog extends Domain.Command("WalkDog", { events: [DogWalked], rejects: [Asleep] }) {}`,
+      errors: [
+        { messageId: "rejection", data: { name: "Asleep" } },
+        { messageId: "command", data: { name: "WalkDog" } },
+      ],
+    },
+  ],
+});
