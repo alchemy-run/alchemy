@@ -26,7 +26,7 @@ import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
 import { sha256 } from "alchemy/Util/sha256";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "alchemy/Util/Terminal";
+import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -81,18 +81,14 @@ type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
 };
 
 const workerStartedMessage = (elapsed: number, url: URL): string => {
+  const style = terminalStyle();
   const duration = `${Math.round(elapsed)}ms`;
-  if (!colorsEnabled()) {
-    return `Started in ${duration} → ${url}`;
-  }
-  return `Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} → ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET}`;
+  return `Started in ${style.hex(theme.color.success)(duration)} → ${style.hex(theme.color.info).underline(String(url))}`;
 };
 
 const workerUpdatedMessage = (elapsed: number): string => {
   const duration = `${Math.round(elapsed)}ms`;
-  return colorsEnabled()
-    ? `Updated in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET}`
-    : `Updated in ${duration}`;
+  return `Updated in ${terminalStyle().hex(theme.color.success)(duration)}`;
 };
 
 // Hosts that bind every interface — the dev server is then reachable at

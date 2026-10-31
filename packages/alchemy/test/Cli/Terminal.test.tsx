@@ -33,7 +33,7 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
-import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
+import { ApprovePlan, approvePlanScreen } from "@/Cli/components/view/ApprovePlan.tsx";
 import { formatView } from "@/Cli/components/view/Format.tsx";
 import {
   NukeProgress,
@@ -112,6 +112,10 @@ class CaptureStream extends PassThrough {
 class InputStream extends PassThrough {
   readonly isTTY = true;
   isRaw = false;
+  /** Answer the OSC 7501 support query like a terminal that shows program status. */
+  constructor(readonly supportsProgramStatus = false) {
+    super();
+  }
   private resolveReady: (() => void) | undefined;
   readonly ready = new Promise<void>((resolve) => {
     this.resolveReady = resolve;
@@ -135,7 +139,7 @@ class InputStream extends PassThrough {
       // Raw mode starts before Sigil finishes querying the terminal. Answer
       // its device query, then allow input handlers to attach before typing.
       setImmediate(() => {
-        this.write("\x1b[?1;2c");
+        this.write(`${this.supportsProgramStatus ? "\x1b]7501;?\x1b\\" : ""}\x1b[?1;2c`);
         setImmediate(() => this.resolveReady?.());
       });
     });
@@ -2766,5 +2770,222 @@ it.effect(
         }
       }
     }),
+  { tags: ["unit", "local"] },
+);
+
+const programStatus = (pairs: string, msg: string) =>
+  `7501;${pairs}:app=alchemy:msg=${Buffer.from(msg).toString("base64")}`;
+
+it.effect(
+  "reports a prompt as blocked to terminals that show program status",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      const blocked = programStatus("state=blocked:kind=question", "New profile name");
+      yield* Effect.promise(() => stdout.waitFor(blocked));
+
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      // Answering withdraws the record.
+      yield* Effect.promise(() => stdout.waitFor("7501;state=clear"));
+      expect(stdout.output.indexOf("7501;state=clear")).toBeGreaterThan(
+        stdout.output.indexOf(blocked),
+      );
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "reports a plan approval as blocked on permission",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+      const plan = planWith([], [deleteNode({}, "Resource")]);
+
+      const fiber = yield* service.prompt.screen(approvePlanScreen(plan)).pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() =>
+        stdout.waitFor(programStatus("state=blocked:kind=permission", "Deploy?")),
+      );
+      yield* Effect.sync(() => stdin.write("n"));
+      expect(yield* Fiber.join(fiber)).toBe(false);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "sends no program status to terminals that don't confirm support",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("New profile name"));
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      expect(stdout.output).not.toContain("7501;state=");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "truncates a long progress detail instead of wrapping the row",
+  () => {
+    const output = formatStatic(
+      <TaskRow
+        icon="⋮"
+        label="SandboxContainer (Cloudflare.Container)"
+        detail={`#11 pushing manifest for registry.cloudflare.com/${"a".repeat(80)}\nsecond line`}
+      >
+        <Text>pre-creating</Text>
+      </TaskRow>,
+      { columns: 80 },
+    );
+
+    expect(output.split("\n")).toHaveLength(1);
+    expect(output).toContain("SandboxContainer (Cloudflare.Container) · #11 pushing manifest");
+    expect(output).toContain("…");
+    expect(output.endsWith("pre-creating")).toBe(true);
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "wraps a failure detail in its own column",
+  () => {
+    const output = formatStatic(
+      <TaskRow icon="×" label="Worker" detail={"x ".repeat(60).trim()} detailOverflow="wrap">
+        <Text>fail</Text>
+      </TaskRow>,
+      { columns: 40 },
+    );
+    const lines = output.split("\n");
+
+    expect(lines.length).toBeGreaterThan(1);
+    // The label and status stay intact on the first line.
+    expect(lines[0]).toMatch(/^× Worker · x.* fail$/);
+  },
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "keeps a prompt's blocked status while the deploy behind it progresses",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+      const tree = new PlanTree(
+        planWith([updateNode({ v: 1 }, { v: 2 }, "A"), updateNode({ v: 1 }, { v: 2 }, "B")]),
+        { mode: "apply", label: "Deploying stack", busy: true },
+      );
+      const live = yield* service.live(<Plan tree={tree} />);
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      const blocked = programStatus("state=blocked:kind=question", "New profile name");
+      yield* Effect.promise(() => stdout.waitFor(blocked));
+
+      const progressedAt = stdout.output.length;
+      tree.emit({
+        type: "apply.resource.status",
+        fqn: "A",
+        id: "A",
+        resourceType: "Test.Resource",
+        status: "updated",
+      });
+      yield* Effect.promise(flushEffects);
+      yield* Effect.promise(flushEffects);
+      // The terminal keeps showing the prompt, not the deploy's progress.
+      expect(stdout.output.slice(progressedAt)).not.toContain("7501;state=working");
+
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      // Once answered, the deploy's latest progress is reported again.
+      yield* Effect.promise(() =>
+        stdout.waitFor(programStatus("state=working:progress=50", "Deploying stack")),
+      );
+      yield* live.close;
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "truncates a long label before hiding a row's status or failure",
+  () => {
+    const output = formatStatic(
+      <TaskRow
+        icon="×"
+        label="VeryLongResourceName (Cloudflare.Worker)"
+        detail={<Text color="red">failure message must be visible</Text>}
+        detailOverflow="wrap"
+      >
+        <Text>fail</Text>
+      </TaskRow>,
+      { columns: 40 },
+    );
+    const lines = output.split("\n");
+
+    expect(lines[0]).toContain("…");
+    expect(lines[0]?.endsWith("fail")).toBe(true);
+    // The failure wraps within its own column, beside the truncated label.
+    const message = lines
+      .map((line, index) =>
+        index === 0 ? line.slice(line.indexOf("· ") + 2, -"fail".length) : line,
+      )
+      .join(" ")
+      .replaceAll(/\s+/g, " ")
+      .trim();
+    expect(message).toBe("failure message must be visible");
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "keeps a failure row's status and whole message in a narrow terminal",
+  () => {
+    for (const columns of [30, 20]) {
+      const output = formatStatic(
+        <TaskRow
+          icon="×"
+          label="Worker"
+          detail="failure message must be visible"
+          detailOverflow="wrap"
+        >
+          <Text>fail</Text>
+        </TaskRow>,
+        { columns },
+      );
+      const lines = output.split("\n");
+
+      expect(lines.every((line) => line.length <= columns)).toBe(true);
+      expect(lines[0]?.endsWith("fail")).toBe(true);
+      const words = output.replaceAll(/\bfail\s*$/gm, "").replaceAll(/[×·…]|Wor\S*/g, " ");
+      expect(words.split(/\s+/).filter(Boolean)).toEqual([
+        "failure",
+        "message",
+        "must",
+        "be",
+        "visible",
+      ]);
+    }
+  },
   { tags: ["unit", "local"] },
 );

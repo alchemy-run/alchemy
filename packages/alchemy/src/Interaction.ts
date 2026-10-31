@@ -29,7 +29,7 @@ import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import type { ReactNode } from "react";
 import { UserFacingError } from "./UserFacingError.ts";
-import { ANSI_DIM, ANSI_RESET, ansiFg, colorsEnabled, unicodeEnabled } from "./Util/Terminal.ts";
+import { colorsEnabled, terminalStyle, unicodeEnabled } from "./Util/Terminal.ts";
 import { glyphsFor, statusColor, type StatusVariant } from "./Util/Theme.ts";
 
 /** The user dismissed the active terminal interaction. */
@@ -408,9 +408,12 @@ export const makeNonInteractive = (options: NonInteractiveOptions = {}): Interac
     alternateScreen: false,
   };
 
-  const colorize = (hex: string, value: string) =>
-    colors ? `${ansiFg(hex)}${value}${ANSI_RESET}` : value;
-  const muted = (value: string) => (colors ? `${ANSI_DIM}${value}${ANSI_RESET}` : value);
+  // Detect the color level for `stdout` unless the caller decided.
+  const style = terminalStyle(
+    options.colors === undefined ? { stream: stdout } : { colors: options.colors },
+  );
+  const colorize = (hex: string, value: string) => style.hex(hex)(value);
+  const muted = style.dim;
 
   // Plain-string equivalent of the CLI's `Status` component: colored glyph,
   // the message (painted for errors), and a muted `· detail` suffix.
@@ -547,7 +550,9 @@ export const layer = (options: TerminalOptions = {}) =>
         ? layerSigil(options)
         : layerNonInteractive({
             stdout: options.stdout,
-            colors: capabilities.colors,
+            // Only an explicit choice: the service detects the color level
+            // itself, which a resolved boolean would flatten to truecolor.
+            colors: options.colors,
             unicode: capabilities.unicode,
           });
     }),
