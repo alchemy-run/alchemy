@@ -13,6 +13,7 @@ import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 import { WebhookHostLive } from "./WebhookHost.ts";
 import {
   ExportedHandlerMethods,
+  isExportedHandlerMethod,
   WorkerEnvironment,
   WorkerTypeId,
   type WorkerEvent,
@@ -30,6 +31,11 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const exports: Record<string, WorkerExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
+  // `ExportedHandler` methods returned on the user's shape (`scheduled`,
+  // `email`, `queue`, …), keyed by event type. Their channels are unknown
+  // (the shape is untyped), so they are dispatched next to `listeners`
+  // rather than registered as `FunctionListener`s.
+  const shapeHandlers = new Map<WorkerEvent["type"], unknown>();
 
   const ctx = {
     Type: WorkerTypeId,
@@ -58,10 +64,21 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
       options?: { shape?: Record<string, unknown> },
     ) => {
-      // Capture the user's full default-export shape so `exports` can
-      // expose any non-handler methods on it as RPC methods on the
-      // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
-      if (options?.shape) userShape = options.shape;
+      // Capture the user's default-export shape for RPC, omitting
+      // ExportedHandler methods (`fetch`, `scheduled`, `email`, `queue`,
+      // …). Those are event listeners, not WorkerEntrypoint RPC methods.
+      const shape = options?.shape;
+      if (shape) {
+        userShape = Object.fromEntries(
+          Object.entries(shape).filter(([key]) => !isExportedHandlerMethod(key)),
+        );
+      }
+      for (const method of ExportedHandlerMethods) {
+        const methodHandler = shape?.[method];
+        if (method !== "fetch" && methodHandler != null) {
+          shapeHandlers.set(method, methodHandler);
+        }
+      }
       return ctx.listen(makeRequestHandler(handler));
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
@@ -93,12 +110,21 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             env,
             context,
           };
-          const effects: Effect.Effect<unknown>[] = [];
+          const effects: Effect.Effect<unknown, unknown, unknown>[] = [];
           for (const handler of handlers) {
             const eff = handler(event);
             if (Effect.isEffect(eff)) {
               effects.push(eff);
             }
+          }
+          // A shape method is either `(input) => Effect` or a bare Effect.
+          // A failure rejects the WorkerEntrypoint promise, so Cloudflare
+          // can retry scheduled and queue events.
+          const shapeHandler = shapeHandlers.get(type);
+          const shapeEffect =
+            typeof shapeHandler === "function" ? shapeHandler(request) : shapeHandler;
+          if (Effect.isEffect(shapeEffect)) {
+            effects.push(shapeEffect);
           }
           if (effects.length === 1) {
             return [effects[0], services];

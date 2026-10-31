@@ -836,7 +836,8 @@ export interface WorkerProps<
    * the schedules at deploy time. Effect-native Workers usually skip this
    * prop and call `Cloudflare.Workers.cron(expression, handler)` in the Init
    * phase instead, which attaches the expression and registers the runtime
-   * listener in one step.
+   * listener in one step. An Effect-native Worker can also set this prop and
+   * return a `scheduled` handler next to `fetch`.
    *
    * Pass an empty array to remove all Cron Triggers.
    */
@@ -1859,6 +1860,26 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  *         const value = yield* kv.get("key");
  *         return HttpServerResponse.text(value ?? "not found");
  *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * Other `ExportedHandler` methods returned next to `fetch` (`scheduled`,
+ * `email`, `queue`, `tail`, …) handle those events. They are event
+ * handlers, not RPC methods, so they are not callable through a service
+ * binding. Every other method on the returned object is an RPC method.
+ *
+ * **Example:** Scheduled handler on the Worker
+ * ```typescript
+ * export default class MyWorker extends Cloudflare.Worker<MyWorker>()(
+ *   "MyWorker",
+ *   { main: import.meta.url, crons: ["0 * * * *"] },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *       scheduled: (controller: ScheduledController) =>
+ *         Effect.log(`cron fired at ${controller.scheduledTime}`),
  *     };
  *   }),
  * ) {}
