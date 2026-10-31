@@ -34,6 +34,8 @@ export const hiveService = (labels: Record<string, string>) =>
       location,
       hiveMetastoreConfig: {
         version: "3.1.2",
+        // Federations reach their backends over gRPC.
+        endpointProtocol: "GRPC",
         configOverrides: {
           "hive.metastore.warehouse.dir": Output.interpolate`gs://${warehouse.bucketName}/hive`,
         },

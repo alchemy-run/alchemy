@@ -13,6 +13,8 @@ export const ProbeService = Effect.gen(function* () {
     location: "us-central1",
     hiveMetastoreConfig: {
       version: "3.1.2",
+      // Federations reach their backends over gRPC.
+      endpointProtocol: "GRPC",
       configOverrides: {
         "hive.metastore.warehouse.dir": Output.interpolate`gs://${warehouse.bucketName}/hive`,
       },
@@ -28,6 +30,8 @@ export const ProbeBackup = Effect.gen(function* () {
 export const ProbeFederation = Effect.gen(function* () {
   const project = yield* deployProject;
   const service = yield* ProbeService;
+  // The backend must be ACTIVE: wait for the backup, which holds it UPDATING.
+  yield* ProbeBackup;
   return yield* GCP.Metastore.Federation("ProbeFederation", {
     location: "us-central1",
     version: "3.1.2",
