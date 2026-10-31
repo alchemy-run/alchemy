@@ -128,7 +128,9 @@ test.provider(
       expect(Object.keys(legacy).sort()).toEqual([
         "AccountAggregate",
         "ApproveWorkflow",
+        "DomainDirectory",
         "OwnersView",
+        "OwnersViewRun",
       ]);
       expect(
         (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
@@ -156,7 +158,9 @@ test.provider(
       expect(yield* namespacesOf(scriptName)).toEqual({
         "Billing.AccountAggregate": legacy.AccountAggregate,
         "Billing.ApproveWorkflow": legacy.ApproveWorkflow,
+        "Billing.DomainDirectory": legacy.DomainDirectory,
         "Billing.OwnersView": legacy.OwnersView,
+        "Billing.OwnersViewRun": legacy.OwnersViewRun,
       });
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
 

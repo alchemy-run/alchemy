@@ -1087,7 +1087,7 @@ export const make = (
         Effect.map(run(target).phase(target), (phase) => ({ complete: phase === "complete" })),
     };
   });
-  const claim = hostedModels();
+  const claim = hostedModels({ release: true });
   const platform = Platform.of({
     model: ({ modelName, id }) => Effect.as(claim(modelName, id), hostFor(modelName)),
   });

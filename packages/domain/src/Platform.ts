@@ -647,11 +647,20 @@ export class Platform extends Context.Service<
 /**
  * Track the models a platform hosts: `claim` fails while a different model
  * with the same name is hosted, since both would address the same storage.
- * The same model may be built again, during or after an earlier build.
+ * The same model may be built again while an earlier build is open.
  *
  * @internal
  */
-export const hostedModels = () => {
+export const hostedModels = ({
+  release,
+}: {
+  /**
+   * Free a model's name when its build closes, so it can be built again as
+   * a redeploy. A platform whose builds outlive their scope, like a Worker's
+   * init, keeps every name for as long as it runs.
+   */
+  readonly release: boolean;
+}) => {
   const hosted = new Map<string, { readonly id: object; builds: number }>();
   return (modelName: string, id: object): Effect.Effect<void, never, Scope> =>
     Effect.acquireRelease(
@@ -671,6 +680,7 @@ export const hostedModels = () => {
       // Built again after this build closes (a redeploy), the name is free.
       () =>
         Effect.sync(() => {
+          if (!release) return;
           const held = hosted.get(modelName);
           if (held !== undefined && --held.builds === 0) hosted.delete(modelName);
         }),

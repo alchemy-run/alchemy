@@ -1482,7 +1482,7 @@ const record = (modelName: string, legacyName: string, legacyData: boolean, name
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
 const claimsOf = (host: object) => {
   let claim = claims.get(host);
-  if (claim === undefined) claims.set(host, (claim = hostedModels()));
+  if (claim === undefined) claims.set(host, (claim = hostedModels({ release: false })));
   return claim;
 };
 
