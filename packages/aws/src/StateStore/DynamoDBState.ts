@@ -6,7 +6,9 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
 import * as Provisioning from "alchemy/State/Provisioning";
 import {
+  ReadOnlyState,
   type PersistedState,
+  readOnlyStateError,
   State,
   type StateService,
   StateStoreError,
@@ -203,7 +205,8 @@ const toError = (cause: unknown) =>
  * conditional put. The second deploy fails immediately instead of mixing
  * rows. The holder refreshes the lease until the store closes. A killed
  * process stops refreshing, the lease expires, and the next deploy can
- * take it.
+ * take it. `alchemy plan` and a drift check read without the lease and
+ * never write, so they need only read access and never block a deploy.
  *
  * The table and overflow bucket are created on the first state operation
  * if they do not already exist, the table with deletion protection and
@@ -347,6 +350,7 @@ export const makeDynamoDBState = (options: DynamoDBStateOptions = {}) =>
 
 const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   const leaseScope = yield* Effect.scope;
+  const readOnly = yield* ReadOnlyState;
   // Captured under `withoutSdkDebugLogs` (below), so every store call runs
   // with the raised floor: request payloads are state, and state holds
   // secrets.
@@ -875,10 +879,14 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   // Stages this store has entered in the catalog.
   const registered = keyedCache<void>();
 
+  /** A write: under the stage's lease, and refused in a read-only run. */
   const guarded = <A>(
     request: { stack: string; stage: string },
     op: (snapshot: Snapshot, lease: HeldLease) => Effect.Effect<A, StateStoreError>,
   ): Effect.Effect<A, StateStoreError> => {
+    if (readOnly) {
+      return Effect.fail(readOnlyStateError(label, request.stack, request.stage));
+    }
     const key = `${request.stack}/${request.stage}`;
     return leases.get(key, acquireLease(request.stack, request.stage, leaseScope)).pipe(
       Effect.tap((lease) => lease.checkLive),
@@ -889,6 +897,17 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       ),
     );
   };
+
+  /** A read: under the stage's lease, or without one in a read-only run. */
+  const guardedRead = <A>(
+    request: { stack: string; stage: string },
+    op: (snapshot: Snapshot) => Effect.Effect<A, StateStoreError>,
+  ): Effect.Effect<A, StateStoreError> =>
+    readOnly
+      ? snapshots
+          .get(`${request.stack}/${request.stage}`, loadStage(request.stack, request.stage))
+          .pipe(Effect.flatMap(op))
+      : guarded(request, op);
 
   const verifyHeldLeases: Effect.Effect<void, StateStoreError> = Effect.suspend(() =>
     Effect.forEach(
@@ -1085,14 +1104,14 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       ),
     listStages: (stack) => verifyHeldLeases.pipe(Effect.andThen(listStages(stack))),
     get: (request) =>
-      guarded(request, ({ records }) => {
+      guardedRead(request, ({ records }) => {
         const record = records.get(request.fqn);
         return record === undefined
           ? Effect.undefined
           : parse<PersistedState>(record.text, `record '${request.fqn}'`);
       }),
     getReplacedResources: (request) =>
-      guarded(request, ({ records }) =>
+      guardedRead(request, ({ records }) =>
         Effect.forEach(Array.from(records), ([fqn, record]) =>
           parse<PersistedState>(record.text, `record '${fqn}'`),
         ).pipe(Effect.map((values) => values.filter((value) => value.status === "replaced"))),
@@ -1144,7 +1163,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
           )
         : deleteStage(stack, stage),
     list: (request) =>
-      guarded(request, ({ records }) => Effect.succeed(Array.from(records.keys()))),
+      guardedRead(request, ({ records }) => Effect.succeed(Array.from(records.keys()))),
     // Always read fresh, without the lease: cross-stack references read
     // the outputs of stages another deploy may hold.
     getOutput: Effect.fn(function* (request) {

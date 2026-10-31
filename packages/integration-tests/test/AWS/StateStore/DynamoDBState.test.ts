@@ -11,6 +11,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
+import * as Output from "alchemy/Output";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -19,6 +20,7 @@ import * as Exit from "effect/Exit";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
+import { READ_ONLY_STACK, ReadOnlyRole, runAsReadOnlyRole } from "./fixtures/read-only-cli.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -762,6 +764,85 @@ test.provider(
     }),
   // Exclusive: sets `CI` on the process.
   { tags: [...tags, "provider:aws:s3"], timeout: 240_000, exclusive: true },
+);
+
+// #2751: `alchemy plan` and `alchemy drift` only read state. They need only
+// read access to the table and overflow bucket, and a deploy holding the
+// stage's lease does not block them.
+test.provider(
+  "plan and drift read DynamoDB state as a read-only role while a deploy holds the lease",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { storage, role } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const table = yield* AWS.DynamoDB.Table("StateTable", {
+            partitionKey: "PK",
+            sortKey: "SK",
+            attributes: { PK: "S", SK: "S" },
+          });
+          const bucket = yield* AWS.S3.Bucket("OverflowBucket", { forceDestroy: true });
+          const role = yield* ReadOnlyRole([
+            {
+              Effect: "Allow",
+              Action: ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:Query"],
+              Resource: table.tableArn,
+            },
+            { Effect: "Allow", Action: ["s3:ListBucket"], Resource: bucket.bucketArn },
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject"],
+              Resource: Output.interpolate`${bucket.bucketArn}/*`,
+            },
+          ]);
+          return {
+            storage: {
+              tableName: table.tableName,
+              overflowBucketName: bucket.bucketName,
+              migrateFrom: false as const,
+            },
+            role,
+          };
+        }),
+      );
+      const stage = stack.stage;
+      const leaseToken = dynamodb
+        .getItem({
+          TableName: storage.tableName,
+          Key: { PK: { S: `STAGE#${READ_ONLY_STACK}#${stage}` }, SK: { S: "LEASE" } },
+          ConsistentRead: true,
+        })
+        .pipe(Effect.map(({ Item }) => Item?.token?.S));
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // A deploy of the stage, holding its lease.
+          const deploy = yield* makeDynamoDBState(storage);
+          yield* deploy.setOutput({ stack: READ_ONLY_STACK, stage, value: {} });
+          const held = yield* leaseToken;
+          expect(held).toBeDefined();
+
+          for (const command of ["plan", "drift"] as const) {
+            const { exitCode, output } = yield* runAsReadOnlyRole(role.roleArn, command, stage, {
+              READ_ONLY_STATE_TABLE: storage.tableName,
+              READ_ONLY_STATE_BUCKET: storage.overflowBucketName,
+            });
+            // A failure shows the CLI's output.
+            expect({ command, exitCode, output: exitCode === 0 ? "" : output }).toEqual({
+              command,
+              exitCode: 0,
+              output: "",
+            });
+          }
+          // The deploy still holds its lease and can keep writing.
+          expect(yield* leaseToken).toBe(held);
+          yield* deploy.setOutput({ stack: READ_ONLY_STACK, stage, value: { done: true } });
+          yield* deploy.deleteStack({ stack: READ_ONLY_STACK, stage });
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
 );
 
 // Each deploy/destroy of a Stack declaring the DynamoDB state store releases

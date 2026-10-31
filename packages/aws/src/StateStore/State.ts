@@ -4,7 +4,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
-import { State, StateStoreError } from "alchemy/State/State";
+import { ReadOnlyState, State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import { globalLogs } from "alchemy/Util/LogRecord";
 import * as Effect from "effect/Effect";
@@ -103,7 +103,9 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  * object written with `If-None-Match` / `If-Match`. The second deploy
  * fails immediately instead of mixing rows. The holder refreshes the
  * lease until the store closes. A killed process stops refreshing, the
- * lease expires, and the next deploy can take it.
+ * lease expires, and the next deploy can take it. `alchemy plan` and a
+ * drift check read without the lease and never write, so they need only
+ * `s3:GetObject` and `s3:ListBucket` and never block a deploy.
  *
  * The bucket is created lazily on the first state operation if it does
  * not already exist — nothing touches AWS credentials at layer
@@ -241,10 +243,12 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       const bucketName =
         options.bucketName ?? createStateBucketName(accountId, region, options.name);
       const ensure = ensureStateBucket(bucketName, region, options);
-      // First use creates the bucket (except in CI); every use converges
-      // its settings.
+      // First use creates the bucket (except in CI); every use but a
+      // read-only one converges its settings.
       yield* (yield* stateBucketExists(bucketName))
-        ? ensure
+        ? (yield* ReadOnlyState)
+          ? Effect.void
+          : ensure
         : Provisioning.deployMissing(
             {
               backend: "aws-s3",

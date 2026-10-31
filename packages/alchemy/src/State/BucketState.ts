@@ -6,7 +6,13 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
+import {
+  ReadOnlyState,
+  readOnlyStateError,
+  StateStoreError,
+  type PersistedState,
+  type StateService,
+} from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
 /**
@@ -25,7 +31,9 @@ import { encodeState, reviveState } from "./StateEncoding.ts";
  * object, written with conditional puts. The second deploy fails
  * immediately instead of mixing rows. The holder refreshes the lease until
  * the store closes; a killed process stops refreshing, the lease expires,
- * and the next deploy can take it.
+ * and the next deploy can take it. A read-only run (`alchemy plan`, a
+ * drift check) reads without the lease and refuses writes, so it needs
+ * only read access and never blocks a deploy.
  *
  * Each backend supplies a {@link BucketObjects}: plain object operations
  * plus a version token (an S3 ETag, a Cloud Storage generation) for the
@@ -172,6 +180,7 @@ const parseLease = (text: string): LeaseRecord => {
 export const makeBucketState = (options: BucketStateOptions) =>
   Effect.gen(function* () {
     const leaseScope = yield* Effect.scope;
+    const readOnly = yield* ReadOnlyState;
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
     const objects = yield* Effect.cached(options.objects);
     const use = <A>(
@@ -399,7 +408,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
         }),
       ).pipe(Effect.flatMap((lease) => lease));
 
-    const guarded = <A>(
+    const leased = <A>(
       request: { stack: string; stage: string },
       op: Effect.Effect<A, StateStoreError>,
     ): Effect.Effect<A, StateStoreError> =>
@@ -407,6 +416,21 @@ export const makeBucketState = (options: BucketStateOptions) =>
         Effect.flatMap((lease) => lease.checkLive),
         Effect.andThen(op),
       );
+
+    /** A read: under the stage's lease, or without one in a read-only run. */
+    const guardedRead = <A>(
+      request: { stack: string; stage: string },
+      op: Effect.Effect<A, StateStoreError>,
+    ): Effect.Effect<A, StateStoreError> => (readOnly ? op : leased(request, op));
+
+    /** A write: under the stage's lease, and refused in a read-only run. */
+    const guardedWrite = <A>(
+      request: { stack: string; stage: string },
+      op: Effect.Effect<A, StateStoreError>,
+    ): Effect.Effect<A, StateStoreError> =>
+      readOnly
+        ? Effect.fail(readOnlyStateError(options.label, request.stack, request.stage))
+        : leased(request, op);
 
     const verifyHeldLeases: Effect.Effect<void, StateStoreError> = Effect.suspend(() =>
       Effect.forEach(
@@ -425,7 +449,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       listStacks: () => verifyHeldLeases.pipe(Effect.andThen(listChildren(prefix))),
       listStages: (stack: string) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),
-      get: (request) => guarded(request, readJson<PersistedState>(resourceKey(request))),
+      get: (request) => guardedRead(request, readJson<PersistedState>(resourceKey(request))),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
           state.get({
@@ -436,37 +460,39 @@ export const makeBucketState = (options: BucketStateOptions) =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        guarded(
+        guardedWrite(
           request,
           writeJson(resourceKey(request), request.value).pipe(Effect.as(request.value)),
         ),
       delete: (request) =>
-        guarded(
+        guardedWrite(
           request,
           use((o) => o.delete(resourceKey(request))),
         ),
       // A stack-wide delete locks every stage it is about to remove, so a
       // concurrent deploy fails the lease instead of racing the delete.
       deleteStack: ({ stack, stage }) =>
-        stage === undefined
-          ? verifyHeldLeases.pipe(
-              Effect.andThen(state.listStages(stack)),
-              Effect.flatMap((stages) =>
-                Effect.forEach(
-                  stages,
-                  (found) =>
-                    guarded(
-                      { stack, stage: found },
-                      deleteAll(stagePrefix({ stack, stage: found })),
-                    ),
-                  { discard: true },
+        readOnly
+          ? Effect.fail(readOnlyStateError(options.label, stack, stage ?? "*"))
+          : stage === undefined
+            ? verifyHeldLeases.pipe(
+                Effect.andThen(state.listStages(stack)),
+                Effect.flatMap((stages) =>
+                  Effect.forEach(
+                    stages,
+                    (found) =>
+                      guardedWrite(
+                        { stack, stage: found },
+                        deleteAll(stagePrefix({ stack, stage: found })),
+                      ),
+                    { discard: true },
+                  ),
                 ),
-              ),
-              Effect.andThen(deleteAll(`${prefix}${stack}/`)),
-            )
-          : guarded({ stack, stage }, deleteAll(stagePrefix({ stack, stage }))),
+                Effect.andThen(deleteAll(`${prefix}${stack}/`)),
+              )
+            : guardedWrite({ stack, stage }, deleteAll(stagePrefix({ stack, stage }))),
       list: (request) =>
-        guarded(
+        guardedRead(
           request,
           use((o) => o.listKeys(stagePrefix(request))).pipe(
             Effect.map((keys) =>
@@ -482,9 +508,9 @@ export const makeBucketState = (options: BucketStateOptions) =>
             ),
           ),
         ),
-      getOutput: (request) => guarded(request, readJson(outputKey(request))),
+      getOutput: (request) => guardedRead(request, readJson(outputKey(request))),
       setOutput: (request) =>
-        guarded(
+        guardedWrite(
           request,
           writeJson(outputKey(request), request.value).pipe(Effect.as(request.value)),
         ),

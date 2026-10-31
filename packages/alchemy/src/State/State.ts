@@ -31,6 +31,27 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   readonly [UserFacingError] = true;
 }
 
+/**
+ * Whether the run only reads state: `alchemy plan`, and a non-interactive
+ * `alchemy drift` without `--repair`. A store that leases stages takes no
+ * lease in a read-only run and fails every write with
+ * {@link readOnlyStateError}, so the run needs only read access to the store
+ * and never blocks a concurrent deploy. Stores read it when they are built.
+ */
+export const ReadOnlyState = Context.Reference<boolean>("alchemy/ReadOnlyState", {
+  defaultValue: () => false,
+});
+
+/** Run `effect` as a read-only run (see {@link ReadOnlyState}). */
+export const readOnlyState = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, ReadOnlyState, true);
+
+/** The error a store fails a write with in a read-only run. */
+export const readOnlyStateError = (label: string, stack: string, stage: string) =>
+  new StateStoreError({
+    message: `the ${label} state store is read-only in this run; refusing to write '${stack}/${stage}'`,
+  });
+
 export class State extends Context.Service<State, Effect.Effect<StateService>>()("alchemy/State") {}
 
 /**
