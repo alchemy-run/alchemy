@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import * as AdoptPolicy from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -122,6 +123,80 @@ test.provider.skipIf(!entitled)(
           accountId,
           customPageId: replaced.customPageId,
         })
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+      expect(afterDestroy?.uid ?? undefined).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
+    timeout: 120_000,
+  },
+);
+
+// An active zone the account owns, for the self-hosted application below.
+const zoneName = process.env.CLOUDFLARE_TEST_ACCESS_ZONE_NAME ?? "alchemy-test-2.us";
+
+const LOGIN_HTML = `<html><head><title>Sign in to {{ app_name }}</title></head><body>
+<h1>Sign in to {{ app_name }}</h1>
+<cf-access-authbox></cf-access-authbox>
+</body></html>`;
+
+test.provider.skipIf(!entitled)(
+  "liquid login page assigned to an application, then unassigned",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployApp = (assign: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(
+              AdoptPolicy.adopt(true),
+            );
+            const login = yield* Cloudflare.Access.CustomPage("LoginPage", {
+              type: "login",
+              contractVersion: 1,
+              customHtml: LOGIN_HTML,
+            });
+            const app = yield* Cloudflare.Access.Application("CustomPagesApp", {
+              type: "self_hosted",
+              domain: `alchemy-test-custom-pages.${zoneName}`,
+              customPages: assign ? [login.customPageId] : [],
+            });
+            return { login, app };
+          }),
+        );
+
+      const { login, app } = yield* deployApp(true);
+      expect(login.type).toEqual("login");
+      expect(login.contractVersion).toEqual(1);
+
+      const page = yield* zeroTrust.getAccessCustomPage({
+        accountId,
+        customPageId: login.customPageId,
+      });
+      expect(page.contractVersion).toEqual(1);
+      expect(page.customHtml).toEqual(LOGIN_HTML);
+
+      const assigned = yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: app.applicationId,
+      });
+      expect("customPages" in assigned && assigned.customPages).toEqual([login.customPageId]);
+
+      // Unassign — the application falls back to the account default.
+      yield* deployApp(false);
+      const unassigned = yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: app.applicationId,
+      });
+      expect(("customPages" in unassigned && unassigned.customPages) || []).toEqual([]);
+
+      yield* stack.destroy();
+
+      const afterDestroy = yield* zeroTrust
+        .getAccessCustomPage({ accountId, customPageId: login.customPageId })
         .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.uid ?? undefined).toBeUndefined();
     }).pipe(logLevel),
