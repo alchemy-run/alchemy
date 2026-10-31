@@ -224,6 +224,9 @@ const JsonFlag = Flag.String("json").pipe(
 
 // ---------------------------------------------------------------- calls
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 /** A JSON flag's value: its JSON, or the text itself when it is not JSON (a date, an id). */
 const parseValue = (text: string): unknown => {
   try {
@@ -351,12 +354,13 @@ const commandOf = <E, R>(
         try: () => JSON.parse(json.value) as unknown,
         catch: (cause) => userError(`--json is not valid JSON: ${String(cause)}`, cause),
       });
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        return yield* userError("--json must be a JSON object");
-      }
-      // Its fields are the flags' fields: a command's input fields go to `input`.
+      if (!isRecord(value)) return yield* userError("--json must be a JSON object");
+      // Its fields are the flags' fields: a command's input fields go to
+      // `input`, given flat or as the wire's own `input` object.
       for (const [key, field] of Object.entries(value)) {
         if (inputFields.has(key)) input[key] = field;
+        else if (key === "input" && inputFields.size > 0 && isRecord(field))
+          Object.assign(input, field);
         else wire[key] = field;
       }
     }
