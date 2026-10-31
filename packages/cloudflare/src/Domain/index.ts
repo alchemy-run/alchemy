@@ -133,18 +133,14 @@ const declare = CloudflareDurableObject as unknown as (
 ) => Effect.Effect<Namespace, never, Worker>;
 
 /**
- * The object that holds a view or projection key for one generation: a rebuilt
- * consumer's keys are new objects, so they run the deployed code at once and
- * the previous generation's are left as they were (a shadow rebuild).
+ * The Durable Object class of a view or projection generation. A rebuilt
+ * consumer is a new class (`DepositsViewV1`): it exists only in the code that
+ * rebuilds it, so none of its objects can start on older code during a
+ * rollout, and the previous generation's are left as they were (a shadow
+ * rebuild).
  */
-const objectName = (key: string, generation: number | undefined) =>
-  generation === undefined || generation === 0 ? key : `${key}#${generation}`;
-
-/** The same namespace, with each key in its object for `generation`. */
-const atGeneration = (namespace: Namespace, generation: number): Namespace =>
-  generation === 0
-    ? namespace
-    : { getByName: (key: string) => namespace.getByName(objectName(key, generation)) };
+const consumerClass = (kind: "view" | "projection", name: string, generation: number) =>
+  `${name}${kind === "view" ? "View" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
 
 /** A consumer's generation from its target id: `view:Name#2` is 2. */
 const generationOfTarget = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
@@ -577,35 +573,30 @@ const scannerRpc = (scanner: () => Backfill.Scanner) => ({
  */
 const RELAY_ROOT_WAIT_MS = 5 * 60_000;
 
-/** The relay at the root of a run for `target`: it drives the run, and records when it is done. */
-const relayRoot = (target: string) => `run:${target}`;
+/** The object of a consumer's class at the root of its run: it drives the run's passes. */
+const RUN_ROOT = "~run";
+
+/** The object of a consumer's class for one relay of its run. */
+const relayName = (target: string, name: string) => `~relay/${target}/${name}`;
 
 /**
- * A relay: one node of a run's tree, each its own object (see `Backfill.makeRelay`).
- * New objects, so they run the deployed code. The root of a run (`relayRoot`)
- * drives its passes from its alarm (see `Backfill.makeRun`), so whoever starts
- * it (the deploy's Workflow, or the first call after a local redeploy) only
- * asks how far it has got.
+ * A consumer object's run methods. Every part of a consumer's run (its root,
+ * relays and scanners) is an object of the consumer's own class: a class the
+ * deploy adds exists only in the deployed code, so none of them can start on
+ * older code during a rollout. The root (`RUN_ROOT`) drives the run's passes
+ * from its alarm (see `Backfill.makeRun`), so whoever starts it (the deploy's
+ * Workflow, or the first call after a local redeploy) only asks how far it
+ * has got.
  */
-const relayObject = (net: Backfill.Network) =>
-  Effect.gen(function* () {
-    return Effect.gen(function* () {
-      const relay = Backfill.makeRelay(net);
-      let run: Backfill.Run | undefined;
-      const runtime = yield* backfillRuntime((id) => run!.run(id));
-      run = Backfill.makeRun(runtime.storage, runtime.jobs, net, {
-        waitMillis: RELAY_ROOT_WAIT_MS,
-        againMillis: 1_000,
-      });
-      const root = run;
-      return {
-        run: (name: string, run: Backfill.RelayRun, items: ReadonlyArray<Backfill.RelayItem>) =>
-          reportDefects(relay.run(name, run, items)),
-        begin: (target: string, plan: Backfill.Plan) => reportDefects(root.begin(target, plan)),
-        phase: (target: string) => reportDefects(root.phase(target)),
-      };
-    });
-  });
+const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
+  bfRelayRun: (
+    name: string,
+    relayRun: Backfill.RelayRun,
+    items: ReadonlyArray<Backfill.RelayItem>,
+  ) => reportDefects(relay.run(name, relayRun, items)),
+  bfRunBegin: (target: string, plan: Backfill.Plan) => reportDefects(run().begin(target, plan)),
+  bfRunPhase: (target: string) => reportDefects(run().phase(target)),
+});
 
 /** How long before a key that couldn't list itself in the directory tries again. */
 const REGISTER_RETRY_MS = 2_000;
@@ -936,6 +927,7 @@ const viewObject = (
         (id): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
           Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
             if (id.startsWith("bf-scan:")) return scannerFor().run(id);
+            if (id.startsWith("drive:")) return runFor().run(id);
             if (key === undefined) return Effect.void;
             if (id === "bf-flush") return sourceFor(key).flush;
             if (id.startsWith("bf-merge:"))
@@ -964,6 +956,14 @@ const viewObject = (
         (scanner ??= Backfill.makeScanner(runtime.storage, runtime.jobs, net, {
           route: (target, ref, rows) => kit.history(target, ref.source, ref.id, rows),
         }));
+      // An object of this class named `RUN_ROOT` drives the run; others relay it.
+      let run: Backfill.Run | undefined;
+      const runFor = (): Backfill.Run =>
+        (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
+          waitMillis: RELAY_ROOT_WAIT_MS,
+          againMillis: 1_000,
+        }));
+      const relay = Backfill.makeRelay(net);
       const sourceFor = (key: string): Backfill.Source =>
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: {
@@ -1006,6 +1006,7 @@ const viewObject = (
         after: (after: number) => reportDefects(entriesAfter(after)),
         // The backfill protocol, as a source, a consumer and a scanner.
         ...scannerRpc(() => scannerFor()),
+        ...runRpc(relay, runFor),
         bfLog: (key: string, after: number, limit: number) =>
           reportDefects(sourceFor(key).log(after, limit)),
         bfCursor: (key: string, target: string) => reportDefects(sourceFor(key).cursor(target)),
@@ -1230,11 +1231,13 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
       const runtime = yield* backfillRuntime((id) =>
         id.startsWith("bf-scan:")
           ? scannerFor().run(id)
-          : Effect.flatMap(state.storage.get<string>(ID_KEY), (key) =>
-              key !== undefined && id.startsWith("bf-merge:")
-                ? consumerFor(key).merge(id.slice("bf-merge:".length))
-                : Effect.void,
-            ),
+          : id.startsWith("drive:")
+            ? runFor().run(id)
+            : Effect.flatMap(state.storage.get<string>(ID_KEY), (key) =>
+                key !== undefined && id.startsWith("bf-merge:")
+                  ? consumerFor(key).merge(id.slice("bf-merge:".length))
+                  : Effect.void,
+              ),
       );
       // An object of this class named for a source instance scans it (see `scannerName`).
       let scanner: Backfill.Scanner | undefined;
@@ -1242,6 +1245,14 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         (scanner ??= Backfill.makeScanner(runtime.storage, runtime.jobs, net, {
           route: (target, ref, rows) => kit.history(target, ref.source, ref.id, rows),
         }));
+      // An object of this class named `RUN_ROOT` drives the run; others relay it.
+      let run: Backfill.Run | undefined;
+      const runFor = (): Backfill.Run =>
+        (run ??= Backfill.makeRun(runtime.storage, runtime.jobs, net, {
+          waitMillis: RELAY_ROOT_WAIT_MS,
+          againMillis: 1_000,
+        }));
+      const relay = Backfill.makeRelay(net);
       const consumerFor = (key: string): Backfill.Consumer =>
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
           key,
@@ -1269,6 +1280,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
         checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
         // The backfill protocol, as a consumer and a scanner.
         ...scannerRpc(() => scannerFor()),
+        ...runRpc(relay, runFor),
         bfPush: (key: string, target: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).push(target, deliveries)))),
         bfConsumerReady: (key: string, target: string, waitMillis?: number) =>
@@ -1412,8 +1424,6 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     // The objects the backfill protocol reaches: directory nodes, sources by name,
     // consumers by kind and name.
     let directory: Namespace | undefined;
-    let relays: Namespace | undefined;
-    const relayStub = (name: string) => relays!.getByName(name);
     const sources = new Map<string, Namespace>();
     const consumers = new Map<string, Namespace>();
     const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
@@ -1428,21 +1438,28 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         ? { getByName: (name: string) => makeRpcStub(namespace.getByName(name)) }
         : undefined;
     };
-    /** The generation of each view in this code, as a source: its keys' objects. */
+    /** The generation of each view in this code, as a source: its keys' class. */
     const viewGenerations = new Map<string, number>();
-    const sourceNamespace = (source: string) =>
-      sources.get(source) ?? bound(`${source}Aggregate`) ?? bound(`${source}View`);
-    /** The object that holds a source instance: a rebuilt view's key is named for its generation. */
-    const sourceObject = (namespace: Namespace, ref: Backfill.SourceRef) =>
-      namespace.getByName(
-        objectName(ref.id, ref.generation ?? viewGenerations.get(ref.source) ?? 0),
+    /** A source's class: an aggregate's, or a view generation's (a rebuilt view's keys are its class's). */
+    const sourceNamespace = (ref: Backfill.SourceRef) => {
+      const view = consumerClass(
+        "view",
+        ref.source,
+        ref.generation ?? viewGenerations.get(ref.source) ?? 0,
       );
+      return (
+        sources.get(`${ref.source}Aggregate`) ??
+        bound(`${ref.source}Aggregate`) ??
+        sources.get(view) ??
+        bound(view)
+      );
+    };
+    const sourceObject = (namespace: Namespace, ref: Backfill.SourceRef) =>
+      namespace.getByName(ref.id);
     const consumerStub = (target: string, key: string) => {
       const { kind, name } = Backfill.consumerOf(target);
-      return (
-        consumers.get(`${kind}:${name}`) ??
-        bound(`${name}${kind === "view" ? "View" : "Projection"}`)
-      )?.getByName(objectName(key, generationOfTarget(target)));
+      const cls = consumerClass(kind, name, generationOfTarget(target));
+      return (consumers.get(cls) ?? bound(cls))?.getByName(key);
     };
     const consumerOf = (target: string, key: string) => {
       const stub = consumerStub(target, key);
@@ -1461,19 +1478,19 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       source: {
         // A source no longer in the model has nothing to give.
         cursor: (ref, target) => {
-          const namespace = sourceNamespace(ref.source);
+          const namespace = sourceNamespace(ref);
           return namespace
             ? unwrapDefects<number>(sourceObject(namespace, ref).bfCursor(ref.id, target))
             : Effect.succeed(0);
         },
         log: (ref, after, limit) => {
-          const namespace = sourceNamespace(ref.source);
+          const namespace = sourceNamespace(ref);
           return namespace
             ? unwrapDefects(sourceObject(namespace, ref).bfLog(ref.id, after, limit))
             : Effect.succeed([]);
         },
         handoff: (ref, target, key, through) => {
-          const namespace = sourceNamespace(ref.source);
+          const namespace = sourceNamespace(ref);
           return namespace
             ? unwrapDefects(sourceObject(namespace, ref).bfHandoff(ref.id, target, key, through))
             : Effect.succeed("live" as const);
@@ -1511,14 +1528,22 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           ),
       },
       relay: {
-        run: (name, run, items) => unwrapDefects(relayStub(name).run(name, run, items)),
+        run: (name, run, items) =>
+          Effect.flatMap(consumerOf(run.target, relayName(run.target, name)), (stub) =>
+            unwrapDefects<boolean>(stub.bfRelayRun(name, run, items)),
+          ),
       },
       run: {
-        begin: (target, plan) => unwrapDefects(relayStub(relayRoot(target)).begin(target, plan)),
+        begin: (target, plan) =>
+          Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
+            unwrapDefects<boolean>(stub.bfRunBegin(target, plan)),
+          ),
         phase: (target) =>
           complete.has(target)
             ? Effect.succeed("complete" as const)
-            : unwrapDefects<Backfill.Phase>(relayStub(relayRoot(target)).phase(target)).pipe(
+            : Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
+                unwrapDefects<Backfill.Phase>(stub.bfRunPhase(target)),
+              ).pipe(
                 Effect.tap((phase) =>
                   Effect.sync(() => {
                     if (phase === "complete") complete.add(target);
@@ -1528,7 +1553,6 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       },
     };
     directory = yield* inInit(declare("DomainDirectory", directoryObject(net)));
-    relays = yield* inInit(declare("DomainRelay", relayObject(net)));
 
     // A deploy's backfill: start each new consumer's run, then wait until every one is
     // complete. Reconciliation starts it and waits for it.
@@ -1587,7 +1611,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
               `${aggregate.aggregateName}Aggregate`,
               aggregateObject(kit, net, current, consumerPlans),
             );
-            sources.set(aggregate.aggregateName, namespace);
+            sources.set(`${aggregate.aggregateName}Aggregate`, namespace);
             return {
               send: (id, command, meta) =>
                 announce.pipe(
@@ -1660,15 +1684,11 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const declared = yield* declare(
-              `${view.viewName}View`,
-              viewObject(kit, net, current, consumerPlans),
-            );
-            // Its keys for this generation; the backfill names them by the generation it asks for.
-            const namespace = atGeneration(declared, kit.generation);
-            sources.set(view.viewName, declared);
+            const cls = consumerClass("view", view.viewName, kit.generation);
+            const namespace = yield* declare(cls, viewObject(kit, net, current, consumerPlans));
+            sources.set(cls, namespace);
             viewGenerations.set(view.viewName, kit.generation);
-            consumers.set(`view:${view.viewName}`, declared);
+            consumers.set(cls, namespace);
             const read = (key: string) =>
               announce.pipe(
                 Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
@@ -1709,12 +1729,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       projection: (projection, kit) =>
         inInit(
           Effect.gen(function* () {
-            const declared = yield* declare(
-              `${projection.projectionName}Projection`,
-              projectionObject(kit, net, consumerPlans),
-            );
-            const namespace = atGeneration(declared, kit.generation);
-            consumers.set(`projection:${projection.projectionName}`, declared);
+            const cls = consumerClass("projection", projection.projectionName, kit.generation);
+            const namespace = yield* declare(cls, projectionObject(kit, net, consumerPlans));
+            consumers.set(cls, namespace);
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),

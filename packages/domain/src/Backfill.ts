@@ -1665,8 +1665,9 @@ export const makeRun = (
       const state = yield* getState(target);
       if (state === undefined || state.phase === "complete") return;
       const started = yield* Clock.currentTimeMillis;
+      // Each pass its own relays: new objects, in case one was left on older code.
       const done = yield* relay.run(
-        `run:${target}`,
+        `${state.phase}-${state.misses ?? 0}`,
         { target, plan: state.plan, phase: state.phase, waitMillis: options.waitMillis },
         [{ path: "" }],
       );
