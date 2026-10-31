@@ -130,7 +130,11 @@ export const startViteChild = (
           stderr: "pipe",
           env: childEnv,
           extendEnv: false,
-          killSignal: "SIGKILL",
+          // SIGTERM lets the child close its runtime, whose finalizer removes
+          // the Docker containers its Workers started (`ctx.container`);
+          // SIGKILL would leave them running.
+          killSignal: "SIGTERM",
+          forceKillAfter: "10 seconds",
         },
       ),
     );

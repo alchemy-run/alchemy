@@ -13,6 +13,7 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import { dedupeBindings, isResolved } from "@/Diff";
+import { onEvent, type Event } from "@/Events.ts";
 import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -21,7 +22,6 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Progress, type ProgressEvent } from "@/Report.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
@@ -595,7 +595,7 @@ test(
 );
 
 test(
-  "reports each diffed resource and action through the ambient Progress reporter",
+  "reports each diffed resource and action as events",
   Effect.gen(function* () {
     yield* seed({
       A: {
@@ -613,7 +613,7 @@ test(
       },
     });
     const Announce = Action("Announce", (_: { table: string }) => Effect.succeed(1));
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     yield* Effect.gen(function* () {
       const target = yield* BindingTarget("A", { name: "target" });
       yield* target.bind("TestBinding", { env: { FEATURE_FLAG: "on" } });
@@ -621,7 +621,7 @@ test(
       yield* Announce({ table: "users" });
     }).pipe(
       makePlan,
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -629,40 +629,40 @@ test(
     );
 
     // Phase markers land before any node event: state loads, then diffing.
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    expect(events[0]).toMatchObject({ _tag: "plan.phase", phase: "loading-state" });
-    expect(events[1]).toMatchObject({ _tag: "plan.phase", phase: "computing-plan" });
+    expect(events[0]).toMatchObject({ type: "plan.phase", phase: "loading-state" });
+    expect(events[1]).toMatchObject({ type: "plan.phase", phase: "computing-plan" });
 
     // Each resource diff announces its start before the planned completion.
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.started")
+        .filter((event) => event.type === "plan.resource.started")
         .map(({ logicalId }) => logicalId)
         .sort(),
     ).toEqual(["A", "MyQueue"]);
 
     const nodes = events.filter(
-      (event) => event._tag === "plan.resource.completed" || event._tag === "plan.action.completed",
+      (event) => event.type === "plan.resource.completed" || event.type === "plan.action.completed",
     );
     const byId = Object.fromEntries(nodes.map((event) => [event.logicalId, event]));
     // resource rows carry their binding rows across the wire
     expect(byId.A).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "update",
       bindings: [{ sid: "TestBinding", action: "create" }],
       total: 2,
     });
     expect(byId.MyQueue).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "create",
       bindings: [],
       total: 2,
     });
     // stack actions get their own events
     expect(byId.Announce).toMatchObject({
-      _tag: "plan.action.completed",
+      type: "plan.action.completed",
       actionType: "Announce",
       action: "run",
       completed: 1,
@@ -670,7 +670,7 @@ test(
     });
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.completed")
+        .filter((event) => event.type === "plan.resource.completed")
         .map(({ completed }) => completed)
         .sort(),
     ).toEqual([1, 2]);
@@ -679,7 +679,7 @@ test(
 );
 
 test(
-  "destroy plans report deletions through the ambient Progress reporter",
+  "destroy plans report deletions as events",
   Effect.gen(function* () {
     yield* seed({
       MyBucket: {
@@ -696,10 +696,10 @@ test(
         downstream: [],
       },
     });
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     const { name, stage } = yield* resolveStackId;
     const plan = yield* Plan.destroy({ name, stage }).pipe(
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -708,13 +708,13 @@ test(
     );
 
     expect(plan.deletions.MyBucket).toMatchObject({ action: "delete" });
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+    const nodes = events.filter((event) => event.type === "plan.resource.completed");
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       fqn: "MyBucket",
       logicalId: "MyBucket",
       resourceType: "Test.Bucket",

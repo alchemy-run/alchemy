@@ -72,8 +72,8 @@ catalog:
   "@effect/sql-sqlite-do": "^4.1.0"
   "@effect/tsgo": "^0.57.0"
   "@effect/vitest": "^4.1.0"
-  "@foldkit/ui": "^0.169.0"
-  "@foldkit/vite-plugin": "^0.28.0"
+  "@foldkit/ui": "^0.170.0"
+  "@foldkit/vite-plugin": "^0.29.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
   "@fontsource-variable/jetbrains-mono": "^5.3.0"
@@ -180,7 +180,7 @@ catalog:
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.11.2"
-  foldkit: "^0.169.0"
+  foldkit: "^0.170.0"
   heap-js: "^2.5.0"
   hono: "^4.12.14"
   http-cache-semantics: "^4.3.0"
@@ -310,8 +310,8 @@ patchedDependencies:
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260923.1
   - "@alchemy.run/sigil@0.1.0-alpha.1"
-  - "@foldkit/vite-plugin@0.27.0"
-  - foldkit@0.167.0
+  - "@foldkit/vite-plugin@0.29.0"
+  - foldkit@0.170.0
   - "@solidjs/start@2.0.6"
   - "@cloudflare/workers-types@5.20261026.1"
   - "@cloudflare/workerd-darwin-64@1.20261026.1"
@@ -342,7 +342,7 @@ minimumReleaseAgeExclude:
   - "@cloudflare/vitest-plugin@1.4.0"
   - miniflare@5.20260930.0-alpha
   - wrangler@4.145.0
-  - "@foldkit/ui@0.167.0"
+  - "@foldkit/ui@0.170.0"
   - drizzle-kit@1.0.0-rc.5
   - drizzle-orm@1.0.0-rc.5
   - svelte@5.57.3

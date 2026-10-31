@@ -87,7 +87,7 @@ class Balance extends Domain.View("Balance", {
 
 class Wallets extends Domain.Model("Wallets", { aggregates: [Wallet], views: [Balance] }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Deposit, Wallet, Balance) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Wallets, aggregates: ["Wallet"] }) {}
 
 // ---------------------------------------------------------------- the CLI over HTTP
 
@@ -318,7 +318,7 @@ describe("Domain toCli", () => {
     ),
   );
 
-  it.live("lists entries and their request/response operations in --help", () =>
+  it.live("lists what the Api serves and its request/response operations in --help", () =>
     hosted(
       Effect.gen(function* () {
         const run = yield* cliOver;
@@ -358,7 +358,16 @@ describe("Domain toCli", () => {
           // `target` here is the input's own field, not the wallet.
           input: { target: Schema.String },
         }) {}
-        class RenameApi extends Domain.Api("RenameApi", Rename) {}
+        class Names extends Domain.Aggregate("Names", {
+          id: WalletId,
+          state: Schema.Struct({}),
+          initial: {},
+          commands: [Rename],
+          decide: { Rename: () => [] },
+          evolve: {},
+        }) {}
+        class Renames extends Domain.Model("Renames", { aggregates: [Names] }) {}
+        class RenameApi extends Domain.Api("RenameApi", { model: Renames }) {}
         const run = yield* cliOver;
         const help = yield* run(toCli(RenameApi, { name: "rename" }) as typeof asSam, [
           "rename",
@@ -384,16 +393,34 @@ describe("Domain toCli", () => {
           target: WalletId,
           events: [Deposited],
         }) {}
-        class ClashApi extends Domain.Api("ClashApi", Deposit, Clash) {}
+        class Clashing extends Domain.Aggregate("Clashing", {
+          id: WalletId,
+          state: Schema.Struct({}),
+          initial: {},
+          commands: [Clash],
+          decide: { deposit: () => [] },
+          evolve: { Deposited: (s) => s },
+        }) {}
+        class Clashes extends Domain.Model("Clashes", { aggregates: [Wallet, Clashing] }) {}
+        class ClashApi extends Domain.Api("ClashApi", { model: Clashes, views: [] }) {}
         expect(yield* defectOf(toCli(ClashApi, { name: "clash" }))).toMatchObject({
           _tag: "DefinitionError",
-          message: "ClashApi: entries `Deposit` and `deposit` are both the command deposit",
+          message: "ClashApi: `Deposit` and `deposit` are both the command deposit",
         });
         class Reserved extends Domain.Command("Reserved", {
           target: WalletId,
           input: { json: Schema.String },
         }) {}
-        class ReservedApi extends Domain.Api("ReservedApi", Reserved) {}
+        class Reserving extends Domain.Aggregate("Reserving", {
+          id: WalletId,
+          state: Schema.Struct({}),
+          initial: {},
+          commands: [Reserved],
+          decide: { Reserved: () => [] },
+          evolve: {},
+        }) {}
+        class Reserves extends Domain.Model("Reserves", { aggregates: [Reserving] }) {}
+        class ReservedApi extends Domain.Api("ReservedApi", { model: Reserves }) {}
         expect(yield* defectOf(toCli(ReservedApi, { name: "reserved" }))).toMatchObject({
           _tag: "DefinitionError",
           message: expect.stringContaining("--json, which the CLI reserves"),

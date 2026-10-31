@@ -1,5 +1,6 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -11,6 +12,7 @@ import type { Platform } from "../Platform.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ScopedPlanStatusSession } from "../Report.ts";
 import type { ResourceBinding, ResourceClassLike, ResourceLike } from "../Resource.ts";
+import { LogAnnotation } from "../Util/LogAnnotation.ts";
 import { sha256 } from "../Util/sha256.ts";
 import * as RpcProvider from "./RpcProvider.ts";
 
@@ -283,7 +285,27 @@ export const make = <
       // shutdown, interrupting every registered instance and running its
       // finalizers (killing the processes).
       // Close independent instances concurrently at provider shutdown.
-      const rootScope = yield* Scope.fork(yield* Effect.scope, "parallel");
+      const providerScope = yield* Effect.scope;
+      // Registered before the fork, so it runs after every instance closed.
+      let closingAt: number | undefined;
+      yield* Scope.addFinalizer(
+        providerScope,
+        Effect.flatMap(Clock.currentTimeMillis, (now) =>
+          closingAt === undefined
+            ? Effect.void
+            : Effect.logDebug(`shutdown: stopped ${cls.Type} instances in ${now - closingAt}ms`),
+        ),
+      );
+      const rootScope = yield* Scope.fork(providerScope, "parallel");
+      // Registered after the fork, so it runs first: the shutdown start.
+      yield* Scope.addFinalizer(
+        providerScope,
+        Effect.flatMap(Clock.currentTimeMillis, (now) => {
+          if (instances.size === 0) return Effect.void;
+          closingAt = now;
+          return Effect.logDebug(`shutdown: stopping ${instances.size} ${cls.Type} instance(s)`);
+        }),
+      );
 
       // Keyed by FQN (namespace path + logical id): a restart replaces the
       // entry, a replacement's new generation overwrites it (and the old
@@ -313,9 +335,14 @@ export const make = <
         return { config, configHash };
       });
 
-      const teardown = Effect.fn(function* (instance: Instance<R["Attributes"]>) {
+      const teardown = Effect.fn(function* (fqn: string, instance: Instance<R["Attributes"]>) {
+        const start = yield* Clock.currentTimeMillis;
         yield* Fiber.interrupt(instance.fiber);
         yield* Scope.close(instance.scope, Exit.void);
+        const end = yield* Clock.currentTimeMillis;
+        yield* Effect.logDebug(`stopped ${fqn} in ${end - start}ms`).pipe(
+          Effect.annotateLogs(LogAnnotation.fqn, fqn),
+        );
       });
 
       const startInstance = Effect.fn(function* (
@@ -435,18 +462,18 @@ export const make = <
               const existing = instances.get(fqn);
               if (existing) {
                 if (existing.configHash === configHash) {
-                  yield* Effect.log(`[${fqn}] No changes, using existing instance`);
+                  yield* Effect.log(`No changes, using existing instance`);
                   // Adopt the newest instanceId so a later replacement's
                   // old-generation delete cannot tear this instance down.
                   existing.instanceId = instanceId;
                   return yield* Fiber.join(existing.fiber);
                 }
-                yield* Effect.log(`[${fqn}] Changes detected, restarting instance`);
-                yield* teardown(existing);
+                yield* Effect.log(`Changes detected, restarting instance`);
+                yield* teardown(fqn, existing);
                 instances.delete(fqn);
               }
               return yield* startInstance(input, session, config, configHash);
-            }),
+            }).pipe(Effect.annotateLogs(LogAnnotation.fqn, fqn)),
           );
         }),
         delete: Effect.fn(function* ({
@@ -469,7 +496,7 @@ export const make = <
                 return;
               }
               if (existing) {
-                yield* teardown(existing);
+                yield* teardown(fqn, existing);
                 instances.delete(fqn);
               }
               // Runs even when nothing is registered: cross-restart state

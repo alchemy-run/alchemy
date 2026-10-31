@@ -8,17 +8,16 @@ import type * as Headers from "effect/http/Headers";
 import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
-import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Runtime from "effect/Runtime";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
-import type { Entry } from "./Api.ts";
+import type { Servable } from "./Api.ts";
 import { DefinitionError } from "./internal.ts";
-import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
+import { type Operation, operationsOf } from "./ReadRpcs.ts";
 
 /**
- * A command line for an Api: one subcommand per entry, run as a client of the
+ * A command line for an Api: one subcommand per thing it serves, run as a client of the
  * deployed Api over its HTTP protocol. Not part of the Domain core: import it
  * from `@alchemy.run/domain/Cli`, so an app that builds no CLI never loads
  * `effect/cli`.
@@ -27,7 +26,7 @@ import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 /** What {@link toCli} reads from an Api class. */
 export interface Cliable {
   readonly apiName: string;
-  readonly entries: ReadonlyArray<Entry>;
+  readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly client: Effect.Effect<unknown, never, any>;
 }
@@ -68,42 +67,10 @@ export interface Options<E = never, R = never> {
 /** The errors a command of the CLI fails with. */
 export type Failure<E = never> = CallRejected | CliError.UserError | E;
 
-// ---------------------------------------------------------------- calls of an Api
-
-/** One call an Api serves. */
-interface Operation {
-  readonly entry: Entry;
-  /** A command's tag, or a view's, stream's or aggregate's name. */
-  readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `list`, ...). */
-  readonly operation: string;
-  /** The RPC the server answers, with middleware applied to the whole Api. */
-  readonly rpc: Rpc.AnyWithProps;
-  readonly stream: boolean;
-}
-
-/** Every call an Api serves, in the order it lists its entries. */
-const operationsOf = (api: Cliable): ReadonlyArray<Operation> =>
-  api.entries.flatMap((entry): ReadonlyArray<Operation> => {
-    const served = (rpc: Rpc.Any) => (api.group.requests.get(rpc._tag) ?? rpc) as Rpc.AnyWithProps;
-    if (entry.kind === "Command") {
-      return [{ entry, name: entry.tag, operation: "send", rpc: served(entry.rpc), stream: false }];
-    }
-    const name = nameOf(entry);
-    return Object.entries(readRpcs(entry)).flatMap(([call, read]) => {
-      if (read === undefined) return [];
-      const rpc = served(read);
-      // A stream's `get` RPC is its client's `peek`.
-      const operation =
-        (call as keyof ReadRpcs) === "get" && entry.kind === "Stream" ? "peek" : call;
-      return [{ entry, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) }];
-    });
-  });
-
 // ---------------------------------------------------------------- naming
 
 /**
- * The command-line name of an entry, an operation or a field: kebab-case
+ * The command-line name of a command, view, stream, aggregate, operation or field: kebab-case
  * (`AccountSummary` → `account-summary`, `commandId` → `command-id`).
  */
 export const kebab = (name: string): string =>
@@ -293,10 +260,10 @@ const invoke = (
   payload: Record<string, unknown>,
   headers: Headers.Input | undefined,
 ): Effect.Effect<unknown, unknown> => {
-  const entry = (client as Record<string, unknown>)[op.name];
+  const served = (client as Record<string, unknown>)[op.name];
   if (op.operation === "send") {
     const { target, input, commandId } = payload;
-    const send = entry as (
+    const send = served as (
       target: unknown,
       input: unknown,
       options: unknown,
@@ -304,7 +271,7 @@ const invoke = (
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
   const { key, ...options } = payload;
-  const read = (entry as Record<string, (key: unknown, options: unknown) => unknown>)[
+  const read = (served as Record<string, (key: unknown, options: unknown) => unknown>)[
     op.operation
   ]!;
   return read(key, { ...options, headers }) as Effect.Effect<unknown, unknown>;
@@ -312,21 +279,19 @@ const invoke = (
 
 /**
  * The CLI runs every request/response call. Live reads (`watch`, `events`)
- * are streams, so they stay out. Once entries declare `expose`, an entry
- * whose `exposureOf(entry).cli` is `false` stays out here too.
+ * are streams, so they stay out.
  */
 const published = (op: Operation): boolean => !op.stream;
 
 /**
- * An entry's help text: a command's Schema `description` annotation, or what
- * it is (`Send the Deposit command.`, `Read the Balance view.`). Once
- * entries declare `description`, this reads it with `descriptionOf(entry)`.
+ * A subcommand's help text: a command's Schema `description` annotation, or
+ * what it is (`Send the Deposit command.`, `Read the Balance view.`).
  */
 const descriptionOf = (op: Operation): string =>
-  (op.entry.kind === "Command" ? SchemaAST.resolveDescription(op.entry.ast) : undefined) ??
-  (op.entry.kind === "Command"
+  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
+  (op.served.kind === "Command"
     ? `Send the ${op.name} command.`
-    : `Read the ${op.name} ${op.entry.kind.toLowerCase()}.`);
+    : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
 
 /** What each read prints, for its help. */
 const READS: Record<string, string> = {
@@ -426,9 +391,9 @@ const commandOf = <E, R>(
 /**
  * An Effect CLI command for an Api: a client that calls the deployed Api over
  * its HTTP protocol, so a person or an agent in a terminal can run any
- * request/response call. The tree is read from the Api's entries:
+ * request/response call. The tree is read from what the Api serves:
  *
- * - each entry is a subcommand named in kebab-case (`AccountSummary` →
+ * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
  *   `account-summary`). A command runs as that subcommand; a view, an
  *   aggregate or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
@@ -438,7 +403,7 @@ const commandOf = <E, R>(
  *   takes a typed flag; any other field takes its JSON (`--at-least
  *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the flags as
  *   one object (`{"target":"a-1","amount":1000}`), and flags override it.
- * - two entries with one command name, or a field whose flag another field
+ * - two of them with one command name, or a field whose flag another field
  *   or the CLI takes, fail every run with a `DefinitionError`.
  * - the input is decoded against the call's schema before anything is sent;
  *   an invalid input fails as a `CliError.UserError`.
@@ -485,26 +450,26 @@ export const toCli = <A extends Cliable, E = never, R = never>(
 ): Command.Command<string, unknown, {}, Failure<E>, ClientServices<A> | R> => {
   // A name the CLI cannot give fails every run, like the model's own definition problems.
   const problems: Array<DefinitionError> = [];
-  const byEntry = new Map<string, Array<Operation>>();
-  for (const op of operationsOf(api)) {
-    const ops = byEntry.get(op.name) ?? [];
+  const byName = new Map<string, Array<Operation>>();
+  for (const op of operationsOf(api.serves)) {
+    const ops = byName.get(op.name) ?? [];
     ops.push(op);
-    byEntry.set(op.name, ops);
+    byName.set(op.name, ops);
   }
   const names = new Map<string, string>();
   const subcommands: Array<Command.Command<string, unknown, {}, Failure<E>, R>> = [];
-  for (const [entry, all] of byEntry) {
-    const name = kebab(entry);
+  for (const [served, all] of byName) {
+    const name = kebab(served);
     const taken = names.get(name);
     if (taken !== undefined) {
       problems.push(
         new DefinitionError(
-          `${api.apiName}: entries \`${taken}\` and \`${entry}\` are both the command ${name}`,
+          `${api.apiName}: \`${taken}\` and \`${served}\` are both the command ${name}`,
         ),
       );
       continue;
     }
-    names.set(name, entry);
+    names.set(name, served);
     const ops = all.filter(published);
     if (ops.length === 0) continue;
     let command: Command.Command<string, unknown, {}, Failure<E>, R>;

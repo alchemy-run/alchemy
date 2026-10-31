@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 export interface OtlpCollector {
   readonly server: Server;
@@ -8,7 +9,10 @@ export interface OtlpCollector {
   readonly url: string;
   /** Responses fully written to the client. */
   readonly completedRequests: { value: number };
-  /** Received batches, including exports whose client disconnected. */
+  /**
+   * Received `POST /v1/*` export batches, including exports whose client
+   * disconnected. Any other request is answered 404 and not recorded.
+   */
   readonly requests: Array<{
     body: string;
     receivedAt: number;
@@ -23,11 +27,17 @@ export interface OtlpCollector {
   readonly releaseResponses: () => void;
 }
 
+/** OTLP/HTTP exports are `POST`s to a signal path (`/v1/traces`, `/v1/logs`, …). */
+const isOtlpExport = (method: string | undefined, url: string | undefined) =>
+  method === "POST" && url?.startsWith("/v1/") === true;
+
 /**
  * Starts a local OTLP endpoint that records exports and completed responses.
  * Matching `holdResponse` batches wait for explicit release, so tests can
- * assert response/export ordering without timer races. The Node server is
- * a test adapter only.
+ * assert response/export ordering without timer races. Only OTLP exports
+ * (`POST /v1/*`) are recorded: dev tools that probe local ports (a terminal
+ * app sending `GET /` to every listener it sees) get a 404 instead of
+ * landing in `requests`. The Node server is a test adapter only.
  */
 export const startOtlpCollector = (
   options: {
@@ -49,6 +59,11 @@ export const startOtlpCollector = (
         pending.clear();
       };
       const server = createServer((request, response) => {
+        if (!isOtlpExport(request.method, request.url)) {
+          request.resume();
+          response.writeHead(404).end();
+          return;
+        }
         let body = "";
         request.setEncoding("utf8");
         request.on("data", (chunk: string) => {
@@ -112,6 +127,31 @@ export const startOtlpCollector = (
       }).pipe(Effect.orDie),
   );
 
+/** One line the delayed collector child writes to stdout. */
+const CollectorEvent = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ type: Schema.Literal("ready"), port: Schema.Number }),
+    Schema.Struct({
+      type: Schema.Literal("received"),
+      id: Schema.Number,
+      body: Schema.String,
+      at: Schema.Number,
+    }),
+    Schema.Struct({
+      type: Schema.Literals(["responding", "finished"]),
+      id: Schema.Number,
+      at: Schema.Number,
+    }),
+    Schema.Struct({
+      type: Schema.Literal("closed"),
+      id: Schema.Number,
+      at: Schema.Number,
+      aborted: Schema.Boolean,
+    }),
+  ]),
+);
+const decodeCollectorEvent = Schema.decodeUnknownExit(CollectorEvent);
+
 /** Node's native HTTP close events expose cancellations that Bun's adapter omits. */
 export const startDelayedOtlpCollector = () =>
   Effect.acquireRelease(
@@ -132,6 +172,12 @@ export const startDelayedOtlpCollector = () =>
         const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
         let nextId = 0;
         const server = createServer((request, response) => {
+          // Record OTLP exports only; dev tools probe local listeners with GET /.
+          if (request.method !== "POST" || !request.url?.startsWith("/v1/")) {
+            request.resume();
+            response.writeHead(404).end();
+            return;
+          }
           let body = "";
           request.setEncoding("utf8");
           request.on("data", (chunk) => { body += chunk; });
@@ -172,12 +218,15 @@ export const startDelayedOtlpCollector = () =>
         pending += String(data);
         let newline: number;
         while ((newline = pending.indexOf("\n")) !== -1) {
-          const message = JSON.parse(pending.slice(0, newline)) as
-            | { type: "ready"; port: number }
-            | { type: "received"; id: number; body: string; at: number }
-            | { type: "responding" | "finished"; id: number; at: number }
-            | { type: "closed"; id: number; at: number; aborted: boolean };
+          const line = pending.slice(0, newline);
           pending = pending.slice(newline + 1);
+          const decoded = decodeCollectorEvent(line);
+          if (decoded._tag === "Failure") {
+            console.error(`Undecodable OTLP collector event: ${line}`);
+            resume(Effect.fail(new Error(`Undecodable OTLP collector event: ${line}`)));
+            continue;
+          }
+          const message = decoded.value;
           if (message.type === "ready") {
             resume(
               Effect.succeed({
