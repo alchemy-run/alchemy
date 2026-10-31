@@ -1562,7 +1562,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       relay: {
         run: (name, run, items) =>
           Effect.flatMap(consumerOf(run.target, relayName(run.target, name)), (stub) =>
-            callOnce<boolean>(stub.bfRelayRun(name, run, items)),
+            callOnce<Backfill.RelayResult>(stub.bfRelayRun(name, run, items)),
           ),
       },
       run: {
