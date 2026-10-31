@@ -1070,6 +1070,20 @@ export const ClusterProvider = () =>
             }
           }
 
+          // A cluster with an update in flight (an access-entry or config change
+          // a crashed deploy left behind) refuses deletion with
+          // ResourceInUseException: let its updates settle first.
+          const updateIds = yield* eks.listUpdates({ name: output.clusterName }).pipe(
+            Effect.map((response) => response.updateIds ?? []),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
+          );
+          for (const updateId of updateIds) {
+            yield* waitForUpdate(output.clusterName, updateId).pipe(
+              Effect.catchTag("EKSClusterOperationFailed", () => Effect.void),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }
+
           yield* eks
             .deleteCluster({
               name: output.clusterName,
