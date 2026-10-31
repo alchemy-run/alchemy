@@ -3,6 +3,7 @@ import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import type { InputProps } from "alchemy/Input";
+import type { IngressConfig } from "alchemy/Local/Ingress";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
 import {
@@ -1087,6 +1088,23 @@ export interface WorkerProps<
          * different edge location.
          */
         cf?: Record<string, unknown>;
+        /**
+         * Route this Worker's dev URL through an ingress adapter, for example
+         * `Portless.Ingress()`, so `url` is a stable HTTPS name instead of
+         * `http://localhost:<port>`.
+         *
+         * Under `alchemy dev`, `url` and `urls[0]` become the adapter's origin
+         * and `urls` is `[origin, ...localhost URLs]`. `Worker.URL`, the
+         * Stream and Images public URLs and a Vite app's public URL use the
+         * origin too. Service bindings, Durable Objects, tail consumers, the
+         * local edge and the R2 S3 credentials endpoint keep using the local
+         * listener. Changing `ingress` restarts the Worker but keeps its port.
+         *
+         * `alchemy dev` fails to start the Worker when the adapter can't be
+         * resolved or can't route, instead of advertising a URL that isn't
+         * routed. Inert on deploy.
+         */
+        ingress?: IngressConfig;
         /**
          * Stub the authenticated Access state in local dev. In production,
          * `ctx.access` is populated by Cloudflare's edge after a request

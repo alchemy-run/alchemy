@@ -19,6 +19,8 @@ import {
   makeScopedArtifacts,
 } from "alchemy/Artifacts";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import { isResolved } from "alchemy/Diff";
+import * as Ingress from "alchemy/Local/Ingress";
 import * as LocalProvider from "alchemy/Local/LocalProvider";
 import { Stack } from "alchemy/Stack";
 import { unwrapRedacted } from "alchemy/Util";
@@ -148,12 +150,23 @@ export const LocalWorkerProvider = () =>
       // Proxies are deliberately NOT owned by the per-instance scope: they
       // survive restarts so the worker's URL stays stable across rebuilds
       // and config changes. Torn down by `stop` on delete.
+      //
+      // The dev ingress route lives with the proxy, in a child scope of its
+      // entry: it points at the proxy (never at a workerd or Vite port, which
+      // change behind it), and goes when the proxy does.
       const proxyInstances = new Map<
         string,
         {
-          serverOptions: DevServerOptions;
+          /** The listener options, without `ingress`: routing must not move the port. */
+          serverOptions: Omit<DevServerOptions, "ingress">;
           instance: WorkerProxy.WorkerProxyInstance;
           scope: Scope.Closeable;
+          route?: {
+            readonly ingress: Ingress.IngressConfig;
+            readonly listener: string;
+            readonly origin: string;
+            readonly scope: Scope.Closeable;
+          };
         }
       >();
 
@@ -217,7 +230,10 @@ export const LocalWorkerProvider = () =>
         return consumers;
       });
 
-      const startProxy = Effect.fn(function* (id: string, serverOptions: DevServerOptions) {
+      const startProxy = Effect.fn(function* (
+        id: string,
+        serverOptions: Omit<DevServerOptions, "ingress">,
+      ) {
         const scope = yield* Scope.fork(rootScope);
         const instance = yield* workerProxy.serve(serverOptions).pipe(Scope.provide(scope));
         proxyInstances.set(id, { serverOptions, instance, scope });
@@ -232,16 +248,83 @@ export const LocalWorkerProvider = () =>
         }
       });
 
-      const maybeStartProxy = Effect.fn(function* (id: string, serverOptions: DevServerOptions) {
-        const existing = proxyInstances.get(id);
-        if (existing) {
-          if (Equal.equals(existing.serverOptions, serverOptions)) {
-            return existing.instance;
-          }
-          yield* stopProxy(id);
+      /**
+       * The URL the ingress adapter routes to: the proxy's, with the scheme
+       * of a Vite child that serves TLS (the proxy relays it untouched).
+       */
+      const listenerOf = (id: string, instance: WorkerProxy.WorkerProxyInstance) => {
+        const listener = new URL(instance.url);
+        if (servedViteHttps.get(id)) listener.protocol = "https:";
+        return listener;
+      };
+
+      /**
+       * Make the proxy's route match `ingress`: none removes it, an unchanged
+       * one stays, a changed one is replaced. Fails when the adapter can't
+       * route, so a Worker never advertises an origin nothing answers on.
+       */
+      const syncRoute = Effect.fn(function* (
+        identity: { readonly id: string; readonly fqn: string },
+        ingress: Ingress.IngressConfig | undefined,
+      ) {
+        const entry = proxyInstances.get(identity.fqn);
+        if (entry === undefined) return;
+        const listener = listenerOf(identity.fqn, entry.instance);
+        const current = entry.route;
+        if (
+          current !== undefined &&
+          ingress !== undefined &&
+          Equal.equals(current.ingress, ingress) &&
+          current.listener === listener.href
+        ) {
+          return;
         }
-        return yield* startProxy(id, serverOptions);
+        if (current !== undefined) {
+          entry.route = undefined;
+          yield* Scope.close(current.scope, Exit.void);
+        }
+        if (ingress === undefined) return;
+        const target = Ingress.createTarget({ stack, ...identity, type: Worker.Type });
+        const scope = yield* Scope.fork(entry.scope);
+        const origin = yield* Ingress.route(ingress, target, listener).pipe(
+          Scope.provide(scope),
+          Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+        );
+        entry.route = { ingress, listener: listener.href, origin, scope };
       });
+
+      const maybeStartProxy = Effect.fn(function* (
+        identity: { readonly id: string; readonly fqn: string },
+        options: DevServerOptions,
+      ) {
+        const { ingress, ...serverOptions } = options;
+        const existing = proxyInstances.get(identity.fqn);
+        if (existing && !Equal.equals(existing.serverOptions, serverOptions)) {
+          yield* stopProxy(identity.fqn);
+        }
+        const instance =
+          proxyInstances.get(identity.fqn)?.instance ??
+          (yield* startProxy(identity.fqn, serverOptions));
+        yield* syncRoute(identity, ingress);
+        return instance;
+      });
+
+      /** The ingress origin routed to a Worker's proxy, if it has one. */
+      const originOf = (id: string): string | undefined => proxyInstances.get(id)?.route?.origin;
+
+      /** The URL clients reach a Worker at: its ingress origin, else its proxy. */
+      const publicUrlOf = (id: string, proxy: WorkerProxy.WorkerProxyInstance): string =>
+        originOf(id) ?? proxy.url.toString().replace(/\/$/, "");
+
+      /** `urls` as a Worker advertises them: the ingress origin, if any, then the local ones. */
+      const withOrigin = (origin: string | undefined, local: string[]): string[] =>
+        origin === undefined ? local : [origin, ...local];
+
+      /** The URL a start log announces: the ingress origin, else `fallback`. */
+      const announcedUrl = (id: string, fallback: URL): URL => {
+        const origin = originOf(id);
+        return origin === undefined ? fallback : new URL(origin);
+      };
 
       const toRuntimeModules = Effect.fn(function* (bundle: Bundle.BundleOutput) {
         const modules: Module[] = [];
@@ -597,6 +680,7 @@ export const LocalWorkerProvider = () =>
       const materializeWorkerBindings = Effect.fn(function* (
         config: WorkerConfig,
         selfUrl: string | undefined,
+        listenerUrl: string | undefined,
       ) {
         const accountId = yield* localAccountId;
         return yield* materializeRuntimeBindings(
@@ -607,6 +691,7 @@ export const LocalWorkerProvider = () =>
           {
             accountId,
             selfUrl,
+            listenerUrl,
             stack: { name: stack.name, stage: stack.stage },
           },
         );
@@ -926,7 +1011,7 @@ export const LocalWorkerProvider = () =>
                       access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
                       // clients reach the Worker at, as Miniflare uses its public URL.
-                      publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      publicUrl: publicUrlOf(worker.fqn, proxy),
                       bindings: worker.workerBindings as never,
                       hyperdrives: worker.hyperdrives,
                       durableObjectNamespaces: worker.durableObjectNamespaces,
@@ -1133,7 +1218,10 @@ export const LocalWorkerProvider = () =>
                   const message = Effect.log(
                     status === "update"
                       ? workerUpdatedMessage(Date.now() - start)
-                      : workerStartedMessage(Date.now() - start, proxy.url),
+                      : workerStartedMessage(
+                          Date.now() - start,
+                          announcedUrl(worker.fqn, proxy.url),
+                        ),
                   );
                   status = "update";
                   return message;
@@ -1175,9 +1263,11 @@ export const LocalWorkerProvider = () =>
 
       const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
+        const proxy = yield* maybeStartProxy(worker, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
-        yield* Effect.log(workerStartedMessage(Date.now() - start, proxy.url));
+        yield* Effect.log(
+          workerStartedMessage(Date.now() - start, announcedUrl(worker.fqn, proxy.url)),
+        );
         return proxy.url;
       });
 
@@ -1259,7 +1349,8 @@ export const LocalWorkerProvider = () =>
                   startViteChild(
                     {
                       rootDir: root,
-                      publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      publicUrl: publicUrlOf(worker.fqn, proxy),
+                      listenerUrl: proxy.url.toString().replace(/\/$/, ""),
                       accountId,
                       storageDirectory,
                       stack: { name: stack.name, stage: stack.stage },
@@ -1348,14 +1439,17 @@ export const LocalWorkerProvider = () =>
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
         const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
+        const proxy = yield* maybeStartProxy(worker, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
+        // The route was made before the child started; a child that serves
+        // TLS changes the scheme the adapter must dial.
+        yield* syncRoute(worker, worker.dev.ingress);
         const url = new URL(proxy.url);
         if (servedViteHttps.get(worker.fqn)) url.protocol = "https:";
         // The programmatic vite API never prints the CLI's URL banner — and
         // vite's own URL is the internal (port-shuffled) server behind the
-        // stable proxy, so advertise the proxy instead.
-        yield* Effect.log(workerStartedMessage(Date.now() - start, url));
+        // stable proxy, so advertise the proxy (or its ingress origin) instead.
+        yield* Effect.log(workerStartedMessage(Date.now() - start, announcedUrl(worker.fqn, url)));
         return url;
       });
 
@@ -1367,7 +1461,7 @@ export const LocalWorkerProvider = () =>
       // serves `bundle`: each successful bundle is served through the
       // make-before-break `serveWith` path.
       const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
+        const proxy = yield* maybeStartProxy(worker, worker.dev);
         // Queue requests until the source's first bundle is served.
         yield* proxy.unset();
         // `resolveSource` is typed against the full `SourceServices` union
@@ -1461,11 +1555,23 @@ export const LocalWorkerProvider = () =>
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
                 []
-              : yield* maybeStartProxy(fqn, {
-                  ...news.dev,
-                  mode: "worker" as const,
-                  port: news.dev?.port ?? DEFAULT_DEV_PORT,
-                }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
+              : yield* maybeStartProxy(
+                  { id, fqn },
+                  {
+                    ...news.dev,
+                    mode: "worker" as const,
+                    port: news.dev?.port ?? DEFAULT_DEV_PORT,
+                    // Options derived from a cycle peer are unresolved here: serve
+                    // the raw URL now and let `start` route, once they resolve.
+                    ingress: isResolved(news.dev?.ingress) ? news.dev?.ingress : undefined,
+                  },
+                ).pipe(
+                  Effect.flatMap((proxy) =>
+                    Effect.map(resolveLocalUrls(proxy.url), (raw) =>
+                      withOrigin(originOf(fqn), raw),
+                    ),
+                  ),
+                );
           return {
             // No cloud script exists in dev — fabricate a `dev:`-marked
             // identity (the shared local-provider convention, and the
@@ -1499,6 +1605,7 @@ export const LocalWorkerProvider = () =>
           if (config.dev.mode === "external") {
             dropServeState(fqn);
             yield* closeWorkerd(fqn);
+            yield* syncRoute({ id: config.id, fqn }, undefined);
             yield* edge.removeRoutes(fqn);
             yield* releaseEdgeDomain(fqn);
             const urls = config.dev.url ? [config.dev.url] : [];
@@ -1528,9 +1635,13 @@ export const LocalWorkerProvider = () =>
             config.bindingDescriptors.some(
               (b) => b.type === "self_url" || b.type === "r2_s3_credentials",
             ) || Object.values(config.env ?? {}).some(isSelfUrl);
-          const selfUrl = needsSelfUrl
-            ? (yield* maybeStartProxy(fqn, config.dev)).url.toString().replace(/\/$/, "")
+          const listenerUrl = needsSelfUrl
+            ? (yield* maybeStartProxy(config, config.dev)).url.toString().replace(/\/$/, "")
             : undefined;
+          // Behind an ingress the Worker's own URL is its origin, but the R2 S3
+          // endpoint keeps dialing the listener (see `listenerUrl` in
+          // `materializeRuntimeBindings`).
+          const selfUrl = listenerUrl === undefined ? undefined : (originOf(fqn) ?? listenerUrl);
           // Substitute `Worker.URL` sentinels once, up front — the runtime
           // bindings, the Vite define entries, and the child-process config
           // all consume the resolved URL as a plain string.
@@ -1543,7 +1654,11 @@ export const LocalWorkerProvider = () =>
                   ]),
                 )
               : config.env;
-          const workerBindings = yield* materializeWorkerBindings({ ...config, env }, selfUrl);
+          const workerBindings = yield* materializeWorkerBindings(
+            { ...config, env },
+            selfUrl,
+            listenerUrl,
+          );
           const worker: RunnableWorkerConfig = {
             ...config,
             env,
@@ -1576,9 +1691,10 @@ export const LocalWorkerProvider = () =>
                 ? runAssetsOnly(worker)
                 : runSource(worker);
           // In dev, `urls` is the dev server's actual surface — localhost
-          // first, then LAN addresses for wildcard hosts. Deployed domains
-          // are not served by this session, so they don't appear.
-          const urls = yield* resolveLocalUrls(serverUrl);
+          // first, then LAN addresses for wildcard hosts, behind the ingress
+          // origin when the Worker has one. Deployed domains are not served by
+          // this session, so they don't appear.
+          const urls = withOrigin(originOf(fqn), yield* resolveLocalUrls(serverUrl));
           return {
             workerId: `dev:${config.name}`,
             workerName: config.name,
@@ -1625,8 +1741,12 @@ export const LocalWorkerProvider = () =>
         // The Python-bundle watcher spawns `uv` (ChildProcessSpawner) and
         // reads vendored modules (FileSystem) from inside `start`;
         // `readAssetsConfigFiles` (assets `_headers`/`_redirects`) needs
-        // FileSystem + Path.
-        ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+        // FileSystem + Path. A dev ingress adapter runs under the services
+        // the sidecar gives every local provider.
+        | ChildProcessSpawner.ChildProcessSpawner
+        | FileSystem.FileSystem
+        | Path.Path
+        | Ingress.IngressServices
       >;
     }),
   );
