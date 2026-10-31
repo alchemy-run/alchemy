@@ -887,13 +887,13 @@ describe("Domain Story", () => {
     }) {}
     class Louds extends Domain.Model("Louds", { aggregates: [Counter], views: [Loud] }) {}
     return Story.make(Louds)(Story.when(c1, new Increment({ by: 1 }))).pipe(
-      Effect.exit,
-      Effect.map((exit) =>
-        expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
-          _tag: "DefinitionError",
-          reason: { _tag: "UndeclaredEmit", view: "Loud", event: "Capped" },
-        }),
-      ),
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure._tag).toBe("StoryFailure");
+        expect(failure.reason).toContain(
+          "DefinitionError: Loud emitted 'Capped', which it does not declare in events",
+        );
+      }),
     );
   });
 

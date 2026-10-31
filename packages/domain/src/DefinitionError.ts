@@ -324,6 +324,17 @@ export class MissingGroup extends Data.TaggedError("MissingGroup")<{
   }
 }
 
+/** A consumer receives a delivery for a newer generation than the code it runs. */
+export class NewerGeneration extends Data.TaggedError("NewerGeneration")<{
+  readonly consumer: string;
+  readonly sent: number;
+  readonly runs: number;
+}> {
+  override get message() {
+    return `${this.consumer} received generation ${this.sent} but runs ${this.runs}: this instance runs older code`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -356,7 +367,8 @@ export type Reason =
   | ReservedFlag
   | DuplicateFlag
   | DuplicateCommand
-  | MissingGroup;
+  | MissingGroup
+  | NewerGeneration;
 
 /**
  * A domain definition error, found while the kernel is built or when a
