@@ -3761,7 +3761,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
-        const observability = resolveObservability(news, bindings);
+        const observability = yield* resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -4955,7 +4955,7 @@ export const LiveWorkerProvider = () =>
                         ]),
                       )
                     : undefined,
-                observability: resolveObservability(news, bindings),
+                observability: yield* resolveObservability(news, bindings),
                 tags,
               },
               files: [
