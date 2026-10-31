@@ -111,7 +111,10 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
           });
           return yield* HttpServerResponse.json({
             init: Object.fromEntries(
-              Object.entries(jsonStrings).map(([k, v]) => [k, Option.getOrNull(v)]),
+              Object.entries(jsonStrings).map(([k, v]: [string, Option.Option<unknown>]) => [
+                k,
+                Option.getOrNull(v),
+              ]),
             ),
             runtime,
             env: {
