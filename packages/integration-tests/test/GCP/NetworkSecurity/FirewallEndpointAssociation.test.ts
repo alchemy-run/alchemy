@@ -63,7 +63,6 @@ test.provider.skipIf(!runLifecycle)(
           });
           const endpoint = yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
             location: "us-central1-a",
-            description: "association endpoint",
             labels: { env: "test" },
           });
           const association = yield* GCP.NetworkSecurity.FirewallEndpointAssociation("Inspect", {
@@ -101,7 +100,6 @@ test.provider.skipIf(!runLifecycle)(
           const endpoint = yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
             firewallEndpointId: created.endpoint.firewallEndpointId,
             location: "us-central1-a",
-            description: "association endpoint",
             labels: { env: "test" },
           });
           const association = yield* GCP.NetworkSecurity.FirewallEndpointAssociation("Inspect", {

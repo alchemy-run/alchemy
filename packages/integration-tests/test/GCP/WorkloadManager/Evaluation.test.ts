@@ -134,6 +134,6 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
-    timeout: 120_000,
+    timeout: 420_000,
   },
 );

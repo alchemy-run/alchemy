@@ -212,7 +212,6 @@ export const ProbeTlsInspectionPolicy = Effect.gen(function* () {
 /** A Cloud NGFW endpoint, and its association with a network of its own. */
 export const ProbeFirewallEndpoint = GCP.NetworkSecurity.FirewallEndpoint("ProbeFirewallEndpoint", {
   location: "us-central1-a",
-  description: "alchemy probe",
 });
 export const ProbeFirewallAssociation = Effect.gen(function* () {
   const vpc = yield* GCP.Compute.Network("ProbeNgfwVpc", { autoCreateSubnetworks: false });

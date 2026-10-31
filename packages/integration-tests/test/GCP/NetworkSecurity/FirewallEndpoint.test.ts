@@ -58,7 +58,6 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
             location: "us-central1-a",
-            description: "firewall endpoint a",
             labels: { env: "test" },
           });
         }),
@@ -67,7 +66,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/firewallEndpoints/");
       expect(created.firewallEndpointId).toEqual(expect.any(String));
       expect(created.location).toEqual("us-central1-a");
-      expect(created.description).toEqual("firewall endpoint a");
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.createTime).toEqual(expect.any(String));
 
@@ -75,22 +73,21 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.description).toEqual("firewall endpoint a");
       expect(fetched.labels?.env).toEqual("test");
       expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
         true,
       );
 
-      const endpoint = (description: string) =>
+      const endpoint = (jumboFramesEnabled: boolean) =>
         GCP.NetworkSecurity.FirewallEndpoint("Ngfw", {
           firewallEndpointId: created.firewallEndpointId,
           location: "us-central1-a",
-          description,
+          jumboFramesEnabled,
           labels: { env: "prod", role: "ngfw" },
         });
 
       // Labels update in place.
-      const updated = yield* stack.deploy(endpoint("firewall endpoint a"));
+      const updated = yield* stack.deploy(endpoint(false));
       expect(updated.name).toEqual(created.name);
       expect(updated.labels).toMatchObject({ env: "prod", role: "ngfw" });
 
@@ -100,9 +97,12 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ngfw");
 
-      // The description is immutable: changing it replaces the endpoint.
-      const redescribe = yield* stack.plan(endpoint("firewall endpoint b"));
-      expect(redescribe.resources.Ngfw?.action).toEqual("replace");
+      const unchanged = yield* stack.plan(endpoint(false));
+      expect(unchanged.resources.Ngfw?.action).toEqual("noop");
+
+      // Jumbo frames are fixed at create: changing them replaces the endpoint.
+      const jumbo = yield* stack.plan(endpoint(true));
+      expect(jumbo.resources.Ngfw?.action).toEqual("replace");
 
       yield* stack.destroy();
 
