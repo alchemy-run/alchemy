@@ -146,7 +146,7 @@ export const makeDurableObjectState = (c: ActorContextLike): DurableObjectStateS
     get: <T>(key: string) =>
       query<{ value: string }>(c, `SELECT value FROM ${KV_TABLE} WHERE key = ?`, key).pipe(
         Effect.flatMap((rows) =>
-          rows[0] === undefined ? Effect.succeed(undefined) : decode<T>(rows[0].value),
+          rows[0] === undefined ? Effect.undefined : decode<T>(rows[0].value),
         ),
       ),
     put: (key, value) =>

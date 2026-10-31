@@ -34,7 +34,7 @@ export interface ControlPlaneProps {
  * A single-instance Rivet control plane on a Docker swarm, as a
  * `Rivet.Cluster` Layer: the engine as a one-replica swarm service with
  * file-system storage on a named volume, a generated admin token, an overlay
- * network that Worker services join, and a namespace for the stage. The
+ * network that pools' nodes join, and a namespace for the stage. The
  * Docker engine must be in swarm mode (`Docker.Swarm`, or `docker swarm
  * init`).
  *
@@ -43,7 +43,7 @@ export interface ControlPlaneProps {
  * planes run three or more instances.
  *
  * ### Running a local control plane
- * **Example:** A control plane for local Workers
+ * **Example:** A control plane for local Durable Objects
  * ```typescript
  * export const Cluster = RivetDocker.ControlPlane("Rivet");
  * ```

@@ -1,15 +1,14 @@
 {
   "name": "@alchemy.run/rivet",
   "version": "2.0.0-beta.84",
-  "description": "Workers and Durable Objects on Rivet 3 control planes, hosted on any cloud, for Alchemy.",
+  "description": "Durable Objects on Rivet 3 control planes, with nodes hosted on any cloud, for Alchemy.",
   "keywords": [
     "actors",
     "alchemy",
     "durable-objects",
     "effect",
     "infrastructure-as-code",
-    "rivet",
-    "workers"
+    "rivet"
   ],
   "homepage": "https://alchemy.run",
   "bugs": {
@@ -66,6 +65,7 @@
   "dependencies": {
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/rivet": "workspace:*",
+    "@effect/platform-bun": "catalog:",
     "rivetkit": "3.0.0-preview.4"
   },
   "devDependencies": {

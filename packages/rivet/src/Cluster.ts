@@ -17,7 +17,7 @@ export type ClusterNetwork = {
   readonly name: Input<string>;
 };
 
-/** What every Worker and host needs to reach a Rivet control plane. */
+/** What pools and clients need to reach a Rivet control plane. */
 export interface ClusterShape {
   /**
    * The control plane's API URL, used while deploying (pools, namespaces)
@@ -25,8 +25,8 @@ export interface ClusterShape {
    */
   readonly endpoint: Input<string>;
   /**
-   * The URL nodes connect to, when it differs from {@link endpoint} — a
-   * private address inside {@link network}.
+   * The URL runtimes connect to — nodes and `Rivet.Client` callers — when it
+   * differs from {@link endpoint}: a private address inside {@link network}.
    */
   readonly nodeEndpoint?: Input<string> | undefined;
   /** The network nodes must join to reach {@link nodeEndpoint}. */
@@ -38,9 +38,9 @@ export interface ClusterShape {
 }
 
 /**
- * The Rivet control plane a Worker's nodes join. Provided by a control plane
- * constructor (`Rivet.ControlPlane`, `RivetDocker.ControlPlane`, …) and
- * required by every host Layer.
+ * The Rivet control plane a pool's nodes join and `Rivet.Client` calls.
+ * Provided by a control plane constructor (`Rivet.ControlPlane`,
+ * `RivetDocker.ControlPlane`, …) and required by every pool Layer.
  */
 export class Cluster extends Context.Service<Cluster, ClusterShape>()("Rivet.Cluster") {}
 
@@ -81,7 +81,7 @@ export const ControlPlane = (
     Effect.gen(function* () {
       const token = Config.isConfig(props.token) ? yield* props.token : props.token;
       if (globalThis.__ALCHEMY_RUNTIME__ || props.namespace !== undefined) {
-        // At runtime a Worker reads its endpoint and namespace from its own
+        // At runtime a node or client reads its endpoint and namespace from its own
         // environment; the cluster is only consulted while deploying.
         return { endpoint: props.endpoint, token, namespace: props.namespace ?? "default" };
       }

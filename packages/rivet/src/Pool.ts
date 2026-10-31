@@ -52,15 +52,40 @@ export interface PoolAttributes {
   actorEvictionDelay: number;
   actorEvictionPeriod: number;
   actorEvictionRate: number;
+  /** The Durable Object classes the pool's nodes host, sorted by name. */
+  durableObjects: PoolDurableObject[];
+  /** Environment values the hosted classes need, merged. */
+  env: Record<string, unknown>;
 }
 
-export interface Pool extends Resource<"Rivet.Pool", PoolProps, PoolAttributes> {}
+/** A Durable Object class a pool's nodes are built with. */
+export interface PoolDurableObject {
+  /** The actor name: the class's logical id. */
+  name: string;
+  /** The module that exports the class. */
+  module: string;
+  /** The export of {@link module} that holds it. */
+  handler: string;
+}
+
+/** Data the Durable Objects a pool hosts bind onto it. */
+export interface PoolBindingContract {
+  durableObjects?: PoolDurableObject[];
+  env?: Record<string, unknown>;
+}
+
+export interface Pool extends Resource<
+  "Rivet.Pool",
+  PoolProps,
+  PoolAttributes,
+  PoolBindingContract
+> {}
 
 /**
  * A node pool on a Rivet control plane. Nodes that connect with the pool's
  * name host its actors; the control plane rejects nodes whose pool does not
- * exist. A `Rivet.Worker` creates its own pool, so declare one directly only
- * for nodes Alchemy does not deploy.
+ * exist. Pool Layers (`RivetDocker.Pool`, …) create one for the nodes they
+ * run, so declare one directly only for nodes Alchemy does not deploy.
  *
  * ### Creating a pool
  * **Example:** A pool in a namespace
@@ -110,6 +135,22 @@ const tagsOf = (pool: Rivet.pools.Pool): Record<string, string> | undefined => {
   return typeof tags === "object" && tags !== null ? (tags as Record<string, string>) : undefined;
 };
 
+/** Merge what each hosted class bound: one entry per class, sorted for stable bundles. */
+const hostedOf = (
+  bindings: ReadonlyArray<PoolBindingContract>,
+): Pick<PoolAttributes, "durableObjects" | "env"> => {
+  const durableObjects = new Map<string, PoolDurableObject>();
+  const env: Record<string, unknown> = {};
+  for (const binding of bindings) {
+    for (const object of binding.durableObjects ?? []) durableObjects.set(object.name, object);
+    Object.assign(env, binding.env);
+  }
+  return {
+    durableObjects: [...durableObjects.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    env,
+  };
+};
+
 export const PoolProvider = () =>
   Provider.effect(
     Pool,
@@ -125,7 +166,9 @@ export const PoolProvider = () =>
         connection: ConnectionProps,
         namespace: string,
         pool: Rivet.pools.Pool,
+        hosted: Pick<PoolAttributes, "durableObjects" | "env">,
       ): PoolAttributes => ({
+        ...hosted,
         name: pool.name,
         namespace,
         endpoint: connection.endpoint,
@@ -155,12 +198,16 @@ export const PoolProvider = () =>
           const namespace = output?.namespace ?? olds.namespace;
           const pool = yield* observe(olds, namespace, name);
           if (pool === undefined) return undefined;
-          const attrs = toAttrs(olds, namespace, pool);
+          const attrs = toAttrs(olds, namespace, pool, {
+            durableObjects: output?.durableObjects ?? [],
+            env: output?.env ?? {},
+          });
           const tags = yield* createInternalTags(id);
           return hasTags(tags, tagsOf(pool)) ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const name = output?.name ?? (yield* poolName(id, news.name));
+          const hosted = hostedOf(bindings.map((binding) => binding.data));
           const tags = yield* createInternalTags(id);
           const desired = {
             drain_on_version_upgrade: news.drainOnVersionUpgrade ?? false,
@@ -181,7 +228,7 @@ export const PoolProvider = () =>
             observed.actor_eviction_period === desired.actor_eviction_period &&
             observed.actor_eviction_rate === desired.actor_eviction_rate &&
             hasTags(tags, tagsOf(observed));
-          if (inSync) return toAttrs(news, news.namespace, observed);
+          if (inSync) return toAttrs(news, news.namespace, observed, hosted);
 
           yield* session.note(
             observed === undefined ? `Creating pool ${name}...` : `Updating pool ${name}...`,
@@ -199,10 +246,10 @@ export const PoolProvider = () =>
           if (pool === undefined) {
             return yield* new PoolVanished({ message: `Rivet pool ${name} vanished after upsert` });
           }
-          return toAttrs(news, news.namespace, pool);
+          return toAttrs(news, news.namespace, pool, hosted);
         }),
         delete: Effect.fn(function* ({ output, olds, session }) {
-          // A Worker's nodes are stopped before its pool is deleted, but the
+          // A pool's nodes are stopped before the pool is deleted, but the
           // control plane only drops them once they disconnect: retry while
           // they drain.
           yield* Rivet.pools.deletePool({ pool: output.name, namespace: output.namespace }).pipe(

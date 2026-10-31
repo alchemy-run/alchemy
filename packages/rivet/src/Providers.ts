@@ -2,9 +2,9 @@ import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import { DurableObject, DurableObjectProvider } from "./DurableObject.ts";
 import { Namespace, NamespaceProvider } from "./Namespace.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
-import { Worker, WorkerProvider } from "./Worker.ts";
 
 /** Service tag bundling every Rivet provider. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Rivet") {}
@@ -22,9 +22,14 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Namespace, Pool, Random, Worker])).pipe(
+  Layer.effect(Providers, Provider.collection([DurableObject, Namespace, Pool, Random])).pipe(
     Layer.provide(
-      Layer.mergeAll(NamespaceProvider(), PoolProvider(), RandomProvider(), WorkerProvider()),
+      Layer.mergeAll(
+        DurableObjectProvider(),
+        NamespaceProvider(),
+        PoolProvider(),
+        RandomProvider(),
+      ),
     ),
     Layer.provide(FetchHttpClient.layer),
   );

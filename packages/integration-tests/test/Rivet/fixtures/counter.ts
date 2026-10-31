@@ -7,13 +7,14 @@ import {
   CounterBoom,
   type CounterShape,
 } from "../../Cloudflare/Workers/conformance/counter-shape.ts";
+import { Default } from "./cluster.ts";
 
-export class Counter extends Rivet.DurableObject<Counter, CounterShape>()("Counter") {}
-
-export const CounterLive = Counter.make(
+export default class Counter extends Rivet.DurableObject<Counter>()(
+  "Counter",
+  { main: import.meta.url },
   Effect.gen(function* () {
-    const state = yield* Rivet.DurableObjectState;
     return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
       return {
         // ── KV ──────────────────────────────────────────────────
         increment: () =>
@@ -84,5 +85,5 @@ export const CounterLive = Counter.make(
         boom: () => Effect.fail(new CounterBoom({ reason: "expected" })),
       } satisfies CounterShape;
     });
-  }),
-);
+  }).pipe(Effect.provide(Default)),
+) {}

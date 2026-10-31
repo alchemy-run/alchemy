@@ -10833,6 +10833,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
       rivetkit:
         specifier: 3.0.0-preview.4
         version: 3.0.0-preview.4(d493a3e012606eb87f0fa69fe77abd6c)

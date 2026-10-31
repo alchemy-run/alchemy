@@ -1,26 +1,23 @@
 /**
- * The node side of a `Rivet.Worker`: host each Durable Object class the
- * Worker exports as a RivetKit actor, and give the Worker's code a
- * `WorkerEnvironment` whose entries address actors through the control
- * plane's gateway.
+ * The node side of a pool: host each `Rivet.DurableObject` class the node
+ * was built with as a RivetKit actor.
  *
- * RivetKit is imported lazily: it loads a native addon, and this module is
- * part of every Worker bundle and of the deploy-time program.
+ * RivetKit is imported lazily: it loads a native addon.
  *
  * @internal
  */
-import type { BaseRuntimeContext } from "alchemy/RuntimeContext";
 import type { DurableObjectExport } from "alchemy/Workers/DurableObject";
 import {
   makeDurableObjectInstance,
   type DurableObjectInstance,
 } from "alchemy/Workers/DurableObjectBridge";
-import { WorkerEnvironment, type WorkerBuild } from "alchemy/Workers/Worker";
+import type { WorkerBuild } from "alchemy/Workers/Worker";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
   DurableObjectState,
@@ -30,48 +27,8 @@ import {
   type ActorContextLike,
 } from "../DurableObjectState.ts";
 
-/** Read a RivetKit setting the host put in the node's environment. */
+/** Read a RivetKit setting the pool put in the node's environment. */
 const env = (name: string): string | undefined => process.env[name];
-
-/** One RivetKit client per node, shared by every namespace. */
-let client: Promise<Record<string, { getOrCreate: Function }>> | undefined;
-const getClient = () =>
-  (client ??= import("rivetkit/client").then(
-    ({ createClient }) =>
-      createClient({
-        endpoint: env("RIVET_ENDPOINT"),
-        token: env("RIVET_TOKEN"),
-        namespace: env("RIVET_NAMESPACE"),
-      } as never) as unknown as Record<string, { getOrCreate: Function }>,
-  ));
-
-/**
- * The Worker's runtime environment: every Durable Object name resolves to a
- * namespace whose stubs fetch the actor through the gateway. The actor runs
- * in this Worker's own pool.
- */
-export const makeWorkerEnvironment = () =>
-  Context.make(
-    WorkerEnvironment,
-    new Proxy({} as Record<string, unknown>, {
-      get: (_target, name) =>
-        typeof name !== "string"
-          ? undefined
-          : {
-              getByName: (key: string) => ({
-                fetch: async (input: Request | string | URL, init?: RequestInit) => {
-                  const actors = await getClient();
-                  const handle = actors[name]!.getOrCreate([key], {
-                    poolName: env("RIVET_POOL"),
-                  }) as {
-                    fetch: (input: Request | string | URL, init?: RequestInit) => Promise<Response>;
-                  };
-                  return handle.fetch(input, init);
-                },
-              }),
-            },
-    }),
-  );
 
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
 const handleRequest = (instance: DurableObjectInstance, request: Request) =>
@@ -95,26 +52,28 @@ const handleRequest = (instance: DurableObjectInstance, request: Request) =>
   );
 
 /**
- * Host every exported Durable Object class as a RivetKit actor and connect
- * this node to the control plane. Runs for the life of the node.
+ * Host every Durable Object class as a RivetKit actor and connect this node
+ * to the control plane. Runs for the life of the node.
  */
-export const runDurableObjects = (
-  durableObjects: ReadonlyMap<string, DurableObjectExport>,
-  runtime: BaseRuntimeContext & { readonly exports: unknown },
-) =>
+export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObject>) =>
   Effect.gen(function* () {
-    if (durableObjects.size === 0) return yield* Effect.never;
-    const context = yield* Effect.context<never>();
+    if (durableObjects.length === 0) return yield* Effect.never;
     const { actor, setup } = yield* Effect.promise(() => import("rivetkit"));
     const { db } = yield* Effect.promise(() => import("rivetkit/db"));
 
     const use: Record<string, unknown> = {};
-    for (const [name, exported] of durableObjects) {
+    for (const hosted of durableObjects) {
+      const name = hosted.name;
       const build: WorkerBuild<DurableObjectExport, unknown> = {
-        // The node program's context: every service the Worker's Effect built.
-        context: context as Context.Context<any>,
-        runtimeContext: runtime,
-        export: exported,
+        // The services the class phase ran with.
+        context: hosted.context as Context.Context<any>,
+        runtimeContext: hosted.runtime,
+        // The class phase has already run: its result is the instance constructor.
+        export: {
+          kind: "durableObject",
+          constructor: Effect.succeed(hosted.instance),
+          services: hosted.context,
+        },
         shape: () => ({}),
         telemetry: () => undefined,
       };
@@ -163,6 +122,8 @@ export const runDurableObjects = (
     } as never) as { startAndWait(): Promise<void>; shutdown(): Promise<void> };
 
     yield* Effect.promise(() => registry.startAndWait());
-    yield* Effect.logInfo(`Rivet node connected (${durableObjects.size} Durable Object classes)`);
+    yield* Effect.logInfo(
+      `Rivet node connected: ${durableObjects.map((hosted) => hosted.name).join(", ")}`,
+    );
     return yield* Effect.never.pipe(Effect.ensuring(Effect.promise(() => registry.shutdown())));
   });
