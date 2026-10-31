@@ -346,7 +346,7 @@ More: [Api](https://alchemy.run/domain/api).
 
 `toMcp(CustomerApi)` from `@alchemy.run/domain/Ai` gives an agent each call that returns once as an MCP tool; `toToolkit` gives the same tools to an in-app agent. See [hosting.md](hosting.md#mcp).
 
-`toCLI(CustomerApi)` from `@alchemy.run/domain/Cli` runs each call that returns once from a terminal, over the deployed Api's HTTP protocol. See [hosting.md](hosting.md#cli).
+`toCli(CustomerApi)` from `@alchemy.run/domain/Cli` runs each call that returns once from a terminal, over the deployed Api's HTTP protocol. See [hosting.md](hosting.md#cli).
 
 ## Model
 

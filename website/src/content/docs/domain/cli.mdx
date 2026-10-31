@@ -3,13 +3,13 @@ title: CLI
 description: Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
 ---
 
-An Api's typed client works from Effect code. A person at a terminal, a shell script or a coding agent wants a command line instead. `toCLI` from `@alchemy.run/domain/Cli` builds an [Effect CLI](https://effect.website) command from the Api you already have. It calls the deployed Api over its HTTP protocol, so the server runs the same middleware and checks as for every other client.
+An Api's typed client works from Effect code. A person at a terminal, a shell script or a coding agent wants a command line instead. `toCli` from `@alchemy.run/domain/Cli` builds an [Effect CLI](https://effect.website) command from the Api you already have. It calls the deployed Api over its HTTP protocol, so the server runs the same middleware and checks as for every other client.
 
 ## Build the command
 
 ```typescript title="packages/cli/src/bank.ts"
 import * as Domain from "@alchemy.run/domain";
-import { toCLI } from "@alchemy.run/domain/Cli";
+import { toCli } from "@alchemy.run/domain/Cli";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import * as Command from "effect/cli/Command";
 import * as Config from "effect/Config";
@@ -19,7 +19,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
-const bank = toCLI(CustomerApi, {
+const bank = toCli(CustomerApi, {
   name: "bank",
   // The session middleware runs on the server; the CLI sends its token.
   headers: Config.redacted("BANK_TOKEN").pipe(
@@ -38,7 +38,7 @@ Command.run(bank, { version: "1.0.0" }).pipe(
 );
 ```
 
-`toCLI` is its own module, so an app that builds no CLI never loads `effect/cli`.
+`toCli` is its own module, so an app that builds no CLI never loads `effect/cli`.
 
 ## Send a command
 

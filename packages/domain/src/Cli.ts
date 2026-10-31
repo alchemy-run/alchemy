@@ -23,7 +23,7 @@ import { type Operation, operationsOf } from "./ReadRpcs.ts";
  * `effect/cli`.
  */
 
-/** What {@link toCLI} reads from an Api class. */
+/** What {@link toCli} reads from an Api class. */
 export interface Cliable {
   readonly apiName: string;
   readonly serves: ReadonlyArray<Servable>;
@@ -50,7 +50,7 @@ export class CallRejected extends Data.TaggedError("CallRejected")<{
   override readonly [Runtime.errorReported] = false;
 }
 
-/** How {@link toCLI} builds the command line. */
+/** How {@link toCli} builds the command line. */
 export interface Options<E = never, R = never> {
   /** The root command: the name a person types. Default: the Api's name in kebab-case. */
   readonly name?: string;
@@ -417,7 +417,7 @@ const commandOf = <E, R>(
  *
  * **Example:** A CLI for an Api
  * ```typescript
- * import { toCLI } from "@alchemy.run/domain/Cli";
+ * import { toCli } from "@alchemy.run/domain/Cli";
  * import * as Domain from "@alchemy.run/domain";
  * import { BunRuntime, BunServices } from "@effect/platform-bun";
  * import * as Command from "effect/cli/Command";
@@ -427,7 +427,7 @@ const commandOf = <E, R>(
  * import * as Redacted from "effect/Redacted";
  * import { CustomerApi } from "./CustomerApi.ts";
  *
- * const bank = toCLI(CustomerApi, {
+ * const bank = toCli(CustomerApi, {
  *   name: "bank",
  *   headers: Config.redacted("BANK_TOKEN").pipe(
  *     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
@@ -444,7 +444,7 @@ const commandOf = <E, R>(
  * // $ bank account-summary get --key a-1
  * ```
  */
-export const toCLI = <A extends Cliable, E = never, R = never>(
+export const toCli = <A extends Cliable, E = never, R = never>(
   api: A,
   options: Options<E, R> = {},
 ): Command.Command<string, unknown, {}, Failure<E>, ClientServices<A> | R> => {
