@@ -23,6 +23,7 @@
     "directory": "packages/rivet"
   },
   "files": [
+    "images",
     "lib",
     "src"
   ],
@@ -64,7 +65,8 @@
   },
   "dependencies": {
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/rivet": "workspace:*"
+    "@distilled.cloud/rivet": "workspace:*",
+    "rivetkit": "3.0.0-preview.4"
   },
   "devDependencies": {
     "@alchemy.run/docker": "workspace:*",

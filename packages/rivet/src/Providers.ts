@@ -4,6 +4,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { Namespace, NamespaceProvider } from "./Namespace.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
+import { Worker, WorkerProvider } from "./Worker.ts";
 
 /** Service tag bundling every Rivet provider. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Rivet") {}
@@ -21,7 +22,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Namespace, Pool, Random])).pipe(
-    Layer.provide(Layer.mergeAll(NamespaceProvider(), PoolProvider(), RandomProvider())),
+  Layer.effect(Providers, Provider.collection([Namespace, Pool, Random, Worker])).pipe(
+    Layer.provide(
+      Layer.mergeAll(NamespaceProvider(), PoolProvider(), RandomProvider(), WorkerProvider()),
+    ),
     Layer.provide(FetchHttpClient.layer),
   );
