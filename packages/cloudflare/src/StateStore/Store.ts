@@ -62,21 +62,23 @@ export default class Store extends DurableObject<Store>()(
           const framed = Buffer.from(entry, "base64");
           const counter = framed.subarray(0, NONCE_BYTES);
           const ciphertext = framed.subarray(NONCE_BYTES);
-          let pt;
           try {
-            pt = await crypto.subtle.decrypt(
+            const pt = await crypto.subtle.decrypt(
               { name: "AES-CTR", counter, length: 64 },
               cryptoKey,
               ciphertext,
             );
+            return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
           } catch (error) {
-            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
-            // So, we catch a decryption error here and return undefined instead.
-            // The engine should reconcile, hopefully, but users may lose some data
+            // In 2.0.0-beta.45 we rotated encryption keys unnecessarily, so
+            // entries written under the previous key exist. AES-CTR is
+            // unauthenticated: the wrong key doesn't fail `decrypt`, it yields
+            // random bytes that fail `JSON.parse`. Either way the entry is
+            // unreadable; return undefined so the engine reconciles the
+            // resource (users may lose some data) instead of the deploy dying.
             console.error("Error decrypting entry. Returning undefined instead.", error);
             return undefined;
           }
-          return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
         }).pipe(Effect.orDie);
 
       return {

@@ -348,6 +348,11 @@ test.provider(
       const secrets = yield* observeSecrets(accountId, workerName);
       expect(secrets.key).toHaveLength(1);
       expect(secrets.token).toEqual(token);
+      // `a` is still encrypted under the lost key. AES-CTR decrypts it to
+      // random bytes rather than failing, so it reads as absent instead of
+      // failing the request on `JSON.parse`.
+      expect(yield* restarted.get({ stack: "no-key", stage: "test", fqn: "a" })).toBeUndefined();
+      expect(yield* restarted.getReplacedResources({ stack: "no-key", stage: "test" })).toEqual([]);
       yield* restarted.set({ stack: "no-key", stage: "test", fqn: "b", value: record("b") });
       expect(yield* restarted.get({ stack: "no-key", stage: "test", fqn: "b" })).toEqual(
         record("b"),
