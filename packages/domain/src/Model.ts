@@ -20,6 +20,7 @@ import {
   type Delivery,
   Platform,
   type PolicyStore,
+  type ProjectionKit,
   type ProjectionStore,
   type StreamEntry,
   type StreamMeta,
@@ -466,9 +467,20 @@ const build = <A, E, R>(
         implementations as Context.Context<unknown>,
         projection as Context.Key<unknown, Projection.Implementation<unknown>>,
       );
+    const policyImplementationOf = (policy: Policy.Any) =>
+      Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        policy as Context.Key<unknown, Policy.Implementation<unknown>>,
+      );
     for (const projection of definitions.projections) {
       const version = implementationOf(projection).options.version;
       if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
+    }
+    for (const policy of definitions.policies) {
+      const { replay, version } = policyImplementationOf(policy).options;
+      if (!replay) continue;
+      kernel.setReplay(policy.policyName);
+      if (version) kernel.setVersion(`policy:${policy.policyName}`, version);
     }
     for (const projection of definitions.projections) {
       const implementation = implementationOf(projection);
@@ -523,13 +535,25 @@ const build = <A, E, R>(
       );
     }
     for (const policy of definitions.policies) {
-      const handler = Context.getUnsafe(
-        implementations as Context.Context<unknown>,
-        policy as Context.Key<unknown, Policy.Handler<unknown>>,
-      );
+      const implementation = policyImplementationOf(policy);
+      const kit = kernel.policyKit(policy, implementation.handle);
+      const target = `policy:${policy.policyName}`;
+      // A policy that replays catches up like a projection, one trigger at a time per key.
+      const replay: ProjectionKit | undefined = implementation.options.replay
+        ? {
+            name: policy.policyName,
+            kind: "policy",
+            options: {},
+            generation: kernel.generationOf("policy", policy.policyName),
+            singleSource: kernel.singleSource(target),
+            history: kernel.history,
+            run: (_key, batch) =>
+              Effect.forEach(batch, ({ delivery }) => kit.run(delivery), { discard: true }),
+          }
+        : undefined;
       policyStores.set(
         policy.policyName,
-        yield* platform.policy(policy, kernel.policyKit(policy, handler)),
+        yield* platform.policy(policy, replay ? { ...kit, replay } : kit),
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.

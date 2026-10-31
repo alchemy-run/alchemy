@@ -204,14 +204,14 @@ Removing a projection deletes its code with it, so nothing runs to clean up afte
 
 A projection's effects stay in its own store. That's what makes it safe to replay: run it again over the same inputs, and the only thing that happens is the same rows are written again.
 
-A policy is the opposite. It acts on the world, through commands and external systems, so it handles each new event once and never replays. When you need both, split the work: the projection writes the store, and a policy on the same events sends the commands.
+A policy is the opposite. It acts on the world, through commands and external systems, so it handles each new event once, and replays the history only when it [opts in](/domain/policy#act-on-the-history-too). When you need both, split the work: the projection writes the store, and a policy on the same events sends the commands.
 
 <DAG
   nodes={[
     { id: "event", label: "MoneyWithdrawn", type: "Account a-1", kind: "event" },
     { id: "ledger", label: "Ledger", type: "replayable", kind: "projection" },
     { id: "table", label: "ledger table", type: "your store" },
-    { id: "review", label: "FraudReview", type: "never replays", kind: "policy" },
+    { id: "review", label: "FraudReview", type: "acts once", kind: "policy" },
     { id: "freeze", label: "FreezeAccount", type: "acts on the world", kind: "command" },
   ]}
   edges={[

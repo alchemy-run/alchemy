@@ -179,8 +179,14 @@ export interface Kernel {
    * it, from the history. Set every version before the platform starts.
    */
   readonly setVersion: (consumer: string, version: number) => void;
+  /**
+   * Make a policy replay: it becomes a consumer that catches up like a
+   * projection (a target, with a generation from `policy:Name`'s version), and
+   * its handler runs on history. Set it before the platform starts.
+   */
+  readonly setReplay: (policy: string) => void;
   /** A consumer's generation: its version plus those of the views it reads. */
-  readonly generationOf: (kind: "view" | "projection", name: string) => number;
+  readonly generationOf: (kind: "view" | "projection" | "policy", name: string) => number;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
   readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
@@ -612,15 +618,20 @@ const build = (
    * A consumer's generation: its own version plus the generations of the
    * views it reads, so rebuilding a view rebuilds everything built on it.
    */
+  /** Policies that replay: consumers that catch up, like projections (see `setReplay`). */
+  const replaying = new Set<string>();
   const generationOf = (kind: "view" | "projection" | "policy", name: string): number => {
-    if (kind === "policy") return 0;
+    // A policy that doesn't replay has no history, and nothing to rebuild.
+    if (kind === "policy" && !replaying.has(name)) return 0;
     const id = `${kind}:${name}`;
     const known = generations.get(id);
     if (known !== undefined) return known;
     const from =
       kind === "view"
         ? (sources.get(name) as { readonly view?: View.Any } | undefined)?.view?.definition.from
-        : projectionByName.get(name)?.definition.from;
+        : kind === "policy"
+          ? fromList(policyByName.get(name)?.definition.from ?? [])
+          : projectionByName.get(name)?.definition.from;
     const generation =
       (versions.get(id) ?? 0) +
       viewSources(from ?? []).reduce((sum, view) => sum + generationOf("view", view), 0);
@@ -664,7 +675,8 @@ const build = (
     const out = new Set<string>();
     for (const list of subscribers.get(source)?.values() ?? []) {
       for (const subscriber of list) {
-        if (subscriber.kind !== "policy") out.add(CatchUp.targetId(targetOf(subscriber)));
+        if (subscriber.kind !== "policy" || replaying.has(subscriber.name))
+          out.add(CatchUp.targetId(targetOf(subscriber)));
       }
     }
     return [...out].sort();
@@ -701,7 +713,9 @@ const build = (
     const known =
       kind === "view"
         ? definitions.views.some((view) => view.viewName === name)
-        : definitions.projections.some((projection) => projection.projectionName === name);
+        : kind === "policy"
+          ? replaying.has(name)
+          : definitions.projections.some((projection) => projection.projectionName === name);
     if (!known) return undefined;
     const sources = new Set<string>();
     for (const [source, byTag] of subscribers) {
@@ -1278,8 +1292,8 @@ const build = (
     return {
       name: policy.policyName,
       run: (delivery) => {
-        // Seeded history is the past; policies only react to what happens now.
-        if (delivery.history) return Effect.void;
+        // History is the past: only a policy that opts into replay acts on it.
+        if (delivery.history && !replaying.has(policy.policyName)) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
         const source = Key.refOf(keyOfSource(upstream), envelope.id);
@@ -1297,7 +1311,15 @@ const build = (
           (route) => {
             let n = 0;
             const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
-            return handler({ key, route, source, event, envelope, state }).pipe(
+            return handler({
+              key,
+              route,
+              source,
+              event,
+              envelope,
+              state,
+              history: delivery.history === true,
+            }).pipe(
               Effect.provideContext(
                 Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
                   Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
@@ -1416,6 +1438,9 @@ const build = (
             targetOf({ kind: "projection", name: projection.projectionName, route: () => [] }),
           ),
         ),
+        ...[...replaying].map((name) =>
+          CatchUp.targetId(targetOf({ kind: "policy", name, route: () => [] })),
+        ),
       ].sort();
     },
     singleSource,
@@ -1424,6 +1449,10 @@ const build = (
     history,
     setVersion: (consumer, version) => {
       versions.set(consumer, version);
+      generations.clear();
+    },
+    setReplay: (policy) => {
+      replaying.add(policy);
       generations.clear();
     },
     generationOf,

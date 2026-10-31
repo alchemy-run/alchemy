@@ -5,7 +5,7 @@ description: How a deploy backfills new views and projections on Cloudflare, how
 
 import BackfillChart from "../../../components/charts/BackfillChart.astro";
 
-When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how, how long it takes, measured on Cloudflare, and what to keep in mind as a Domain grows.
+When a deploy adds a view, a projection or a [policy that replays](/domain/policy#act-on-the-history-too), or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how, how long it takes, measured on Cloudflare, and what to keep in mind as a Domain grows.
 
 ## The deploy waits for the history
 

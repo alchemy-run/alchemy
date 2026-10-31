@@ -149,7 +149,7 @@ Add a view or a projection to a model that already has events, and it receives t
 
 Each key of the new consumer pulls the history from every instance that feeds it and applies those events in the order they were recorded, by timestamp. A summary per account sees its account's events in order, and a single dashboard fed by every account sees all of them in order, as if it had been there from the start. Events recorded while it catches up wait their turn, then arrive live.
 
-Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
+Policies don't receive history unless they opt in. They act on new events only, so adding a policy doesn't act on the past again. A policy that should catch up on the past sets [`replay`](/domain/policy#act-on-the-history-too).
 
 ## Rebuild a view from the history
 
@@ -191,7 +191,7 @@ A [view](/domain/view) folds events into state that the model stores and serves:
 
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
-A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
+A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and replays the history only if you opt in.
 
 ## Declare the model
 

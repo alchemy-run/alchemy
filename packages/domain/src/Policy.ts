@@ -28,6 +28,12 @@ export interface Trigger<F, E, Key extends Key.Any = View.SourceKey<SourcesOf<F>
   readonly envelope: Aggregate.Envelope<Key.IdOf<View.SourceKey<SourcesOf<F>>>>;
   /** For a view source: the view's state after the event. */
   readonly state: View.SourceState<SourcesOf<F>>;
+  /**
+   * The event was recorded before this policy (or this version of it) was
+   * deployed, and reaches it as history. Only a policy that opts into
+   * `replay` ever sees one.
+   */
+  readonly history: boolean;
 }
 
 /**
@@ -37,6 +43,26 @@ export interface Trigger<F, E, Key extends Key.Any = View.SourceKey<SourcesOf<F>
 export interface Options {
   /** Retry a failed run on this schedule before leaving it to the platform's redelivery. */
   readonly retry?: Schedule.Schedule<unknown, unknown>;
+  /**
+   * Also act on the events recorded before the policy was deployed, as a new
+   * view receives them: each key in the order they were recorded, then live.
+   * Off by default: most policies must not act on the past. Triggers carry
+   * `history`, and the commands it sends keep their ids derived from the
+   * event, so a command sent before is not sent again.
+   * @default false
+   */
+  readonly replay?: boolean;
+  /**
+   * With `replay`: bump it to act on the whole history again on the next deploy.
+   * Commands sent before keep their ids, so they are not sent twice.
+   */
+  readonly version?: number;
+}
+
+/** A policy's Layer value: its handler and how it runs. */
+export interface Implementation<T> {
+  readonly handle: Handler<T>;
+  readonly options: Options;
 }
 
 /**
@@ -128,6 +154,9 @@ export interface PolicyKey<Name extends string> {
  * work. Delivery is at least once; the commands a policy sends get ids
  * derived from the event, so a second run sends the same commands.
  *
+ * A policy acts on events that happen after it's deployed. One that should
+ * also act on the events recorded before it opts into `replay`.
+ *
  * ### Reacting to an aggregate
  * **Example:** Open an account for every new customer
  * ```typescript
@@ -177,6 +206,25 @@ export interface PolicyKey<Name extends string> {
  * );
  * ```
  *
+ * ### Acting on the history
+ * **Example:** Open the missing accounts of customers registered before the policy
+ * ```typescript
+ * export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+ *   Effect.gen(function* () {
+ *     const accounts = yield* Account;
+ *     const mail = yield* Mailer;
+ *     return Effect.fn(function* ({ source, history }) {
+ *       yield* accounts
+ *         .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+ *         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+ *       // Welcome new customers only, not every customer since the start.
+ *       if (!history) yield* mail.welcome(source.id);
+ *     });
+ *   }),
+ *   { replay: true },
+ * );
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -188,7 +236,9 @@ export const make = <
   name: Name,
   definition: Definition<F, On, Key>,
 ): PolicyClass<Name, F, On, Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
-  const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
+  const Tag = Context.Service<PolicyKey<Name>, Implementation<unknown>>()(
+    `alchemy/Domain/Policy/${name}`,
+  );
   return class extends Tag {
     static readonly kind = "Policy" as const;
     static readonly policyName: Name = name;
@@ -200,19 +250,18 @@ export const make = <
     ): Layer.Layer<Identifier<Self>, E, R> {
       const retry = options.retry;
       return Layer.effect(
-        this as unknown as Context.Key<Identifier<Self>, Handler<TriggerOf<Self>>>,
-        retry
-          ? Effect.map(
-              build,
-              (handle): Handler<TriggerOf<Self>> =>
-                (trigger) =>
-                  handle(trigger).pipe(
-                    Effect.catchDefect((defect) => Effect.fail(defect)),
-                    Effect.retry(retry),
-                    Effect.orDie,
-                  ),
-            )
-          : build,
+        this as unknown as Context.Key<Identifier<Self>, Implementation<TriggerOf<Self>>>,
+        Effect.map(build, (handle): Implementation<TriggerOf<Self>> => ({
+          handle: retry
+            ? (trigger) =>
+                handle(trigger).pipe(
+                  Effect.catchDefect((defect) => Effect.fail(defect)),
+                  Effect.retry(retry),
+                  Effect.orDie,
+                )
+            : handle,
+          options,
+        })),
       );
     }
   } as unknown as PolicyClass<
@@ -234,7 +283,7 @@ export interface PolicyClass<
 > extends Context.ServiceClass<
   PolicyKey<Name>,
   string,
-  Handler<Trigger<F, Aggregate.InstanceOf<On[number]>, Key>>
+  Implementation<Trigger<F, Aggregate.InstanceOf<On[number]>, Key>>
 > {
   readonly kind: "Policy";
   readonly policyName: Name;

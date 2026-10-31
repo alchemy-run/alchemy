@@ -70,11 +70,11 @@ export class Note extends Domain.Command("Note", {
 /** A second aggregate, for a view that comes to read it too. */
 export class Journal extends Domain.Aggregate("Journal", {
   id: Schema.String,
-  state: Schema.Struct({}),
-  initial: {},
+  state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
+  initial: { notes: [] },
   commands: [Note],
   decide: { Note: (_, cmd) => [new Noted({ note: cmd.note })] },
-  evolve: { Noted: (s) => s },
+  evolve: { Noted: (s, e) => ({ notes: [...s.notes, e.note] }) },
 }) {}
 
 /** The timeline, now reading the journal too: the same view, at the same version unless bumped. */
@@ -94,4 +94,13 @@ export class WideTimeline extends Domain.View("Timeline", {
 export class Widened extends Domain.Model("Ledger", {
   aggregates: [Account, Journal],
   views: [Deposits, WideTimeline],
+}) {}
+
+/** Notes every deposit in the account's journal: a policy that replays the history. */
+export class Mirror extends Domain.Policy("Mirror", { from: [Account], on: [Deposited] }) {}
+
+/** A deploy that adds the replaying policy. */
+export class Mirrored extends Domain.Model("Ledger", {
+  aggregates: [Account, Journal],
+  policies: [Mirror],
 }) {}

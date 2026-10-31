@@ -16,6 +16,7 @@ import BenchV2Short from "./fixtures/bench/v2-short.ts";
 import BenchV2 from "./fixtures/bench/v2.ts";
 import BenchV3 from "./fixtures/bench/v3.ts";
 import LedgerV1 from "./fixtures/catch-up/v1.ts";
+import LedgerV2Mirror from "./fixtures/catch-up/v2-mirror.ts";
 import LedgerV2WideBumped from "./fixtures/catch-up/v2-wide-bumped.ts";
 import LedgerV2Wide from "./fixtures/catch-up/v2-wide.ts";
 import LedgerV2 from "./fixtures/catch-up/v2.ts";
@@ -273,6 +274,49 @@ describe.sequential("a deploy and its backfill", () => {
           entries: Array<string>;
         } | null;
         expect([...(timeline?.entries ?? [])].sort()).toEqual(["a-1:10", "a-2:5"]);
+        yield* stack.destroy();
+      }),
+    { timeout: 900_000 },
+  );
+
+  test.provider(
+    "a policy that replays acts on the history the deploy found, then on new events",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const ledger = (worker: typeof LedgerV1 | typeof LedgerV2Mirror) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* worker };
+            }),
+          );
+        const { worker } = yield* ledger(LedgerV1);
+        const url = worker.url!.replace(/\/+$/, "");
+        yield* serving(url, "v1");
+        yield* call(url, "POST", "/deposit/a-1/10");
+        yield* call(url, "POST", "/deposit/a-1/20");
+        yield* call(url, "POST", "/deposit/a-2/5");
+
+        // The deploy waits for the policy's backfill: it has noted every earlier deposit.
+        yield* ledger(LedgerV2Mirror);
+        yield* serving(url, "v2-mirror");
+        const notes = (account: string) =>
+          call(url, "GET", `/journal/${account}`).pipe(
+            Effect.map((body) => (JSON.parse(body) as { notes: Array<string> }).notes),
+          );
+        expect(yield* notes("a-1")).toEqual(["past 10", "past 20"]);
+        expect(yield* notes("a-2")).toEqual(["past 5"]);
+
+        // A new deposit is acted on live, after the history.
+        yield* call(url, "POST", "/deposit/a-1/30");
+        const after = yield* notes("a-1").pipe(
+          Effect.filterOrFail(
+            (all) => all.length >= 3,
+            (all) => new NotYet({ status: 200, body: JSON.stringify(all) }),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+        );
+        expect(after).toEqual(["past 10", "past 20", "new 30"]);
         yield* stack.destroy();
       }),
     { timeout: 900_000 },

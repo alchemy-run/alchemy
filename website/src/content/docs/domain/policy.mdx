@@ -180,6 +180,36 @@ export const WelcomeLive = Welcome.toLayer(
 );
 ```
 
+## Act on the history too
+
+A policy acts on events that happen after it's deployed. That's almost always right: adding a fraud review shouldn't review every withdrawal since the start. When a rule should also catch up on the past, such as opening the main account of customers who registered before the policy existed, opt into `replay` on its Layer:
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    const mail = yield* Mailer;
+    return Effect.fn(function* ({ source, history }) {
+      yield* accounts
+        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+      if (!history) yield* mail.welcome(source.id);
+    });
+  }),
+  { replay: true },
+);
+```
+
+On the next deploy the policy receives the events recorded before it, the same way a [new view does](/domain/model#consumers-added-later-receive-the-history): each key in the order they were recorded, paced to what the platform takes, then the new ones live. On Cloudflare the deploy waits until it has acted on the history.
+
+`history` is `true` for an event from before the deploy. Use it to skip what only makes sense now, like the welcome email above.
+
+Replay is safe to repeat because of the command ids. A command the policy sent for an event before keeps its id when the event is replayed, so the aggregate returns the stored receipt rather than deciding again. Bumping `version` replays the whole history again on the next deploy, and only the commands that were never sent run.
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+{ replay: true, version: 1 },
+```
+
 ## React to a view
 
 A policy can listen to a view as well as an aggregate. That lets it react to patterns no single event shows.

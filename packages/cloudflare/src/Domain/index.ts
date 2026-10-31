@@ -160,8 +160,9 @@ const declare = CloudflareDurableObject as unknown as (
  * rollout, and the previous generation's are left as they were (a shadow
  * rebuild).
  */
-const consumerClass = (kind: "view" | "projection", name: string, generation: number) =>
-  `${name}${kind === "view" ? "View" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
+const consumerClass = (kind: "view" | "projection" | "policy", name: string, generation: number) =>
+  // A policy that replays: apart from `${name}Policy`, the class of one that doesn't.
+  `${name}${kind === "view" ? "View" : kind === "policy" ? "ReplayPolicy" : "Projection"}${generation > 0 ? `V${generation}` : ""}`;
 
 /**
  * The class of a consumer generation's run: its root, relays and scanners. A
@@ -1311,7 +1312,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           return true;
         });
       const target = targetId({
-        kind: "projection",
+        kind: kit.kind ?? "projection",
         name: kit.name,
         ...(kit.generation > 0 ? { generation: kit.generation } : {}),
       });
@@ -1781,6 +1782,27 @@ const durableObjectPlatform = (
         );
       });
 
+      /** A projection, or a policy that replays (see `PolicyKit.replay`): keys, and a run class. */
+      const hostProjection = (kit: ProjectionKit) =>
+        inInit(
+          Effect.gen(function* () {
+            const cls = consumerClass(kit.kind ?? "projection", kit.name, kit.generation);
+            const namespace = yield* declareIn(cls, projectionObject(kit, net, consumerPlans));
+            consumers.set(cls, namespace);
+            consumers.set(
+              runClass(cls),
+              yield* declareIn(runClass(cls), projectionObject(kit, net, consumerPlans)),
+            );
+            return {
+              receive: (delivery: Delivery) =>
+                unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
+              checkpoints: (key: string) =>
+                unwrapDefects<Readonly<Record<string, number>>>(
+                  namespace.getByName(key).checkpoints(),
+                ),
+            };
+          }),
+        );
       return Platform.of({
         aggregate: (aggregate, kit) =>
           inInit(
@@ -1913,26 +1935,7 @@ const durableObjectPlatform = (
               };
             }),
           ),
-        projection: (projection, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const cls = consumerClass("projection", projection.projectionName, kit.generation);
-              const namespace = yield* declareIn(cls, projectionObject(kit, net, consumerPlans));
-              consumers.set(cls, namespace);
-              consumers.set(
-                runClass(cls),
-                yield* declareIn(runClass(cls), projectionObject(kit, net, consumerPlans)),
-              );
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
-                checkpoints: (key) =>
-                  unwrapDefects<Readonly<Record<string, number>>>(
-                    namespace.getByName(key).checkpoints(),
-                  ),
-              };
-            }),
-          ),
+        projection: (_projection, kit) => hostProjection(kit),
         stream: (stream, kit) =>
           inInit(
             Effect.gen(function* () {
@@ -2007,15 +2010,20 @@ const durableObjectPlatform = (
             ),
           ),
         policy: (policy, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(`${policy.policyName}Policy`, policyObject(kit));
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
-              };
-            }),
-          ),
+          kit.replay
+            ? hostProjection(kit.replay)
+            : inInit(
+                Effect.gen(function* () {
+                  const namespace = yield* declareIn(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit),
+                  );
+                  return {
+                    receive: (delivery) =>
+                      unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
+                  };
+                }),
+              ),
       });
     }),
   );

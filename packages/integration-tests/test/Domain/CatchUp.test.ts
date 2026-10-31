@@ -33,11 +33,11 @@ class Log extends Domain.Command("Log", {
 }) {}
 class Journal extends Domain.Aggregate("Journal", {
   id: Schema.String,
-  state: Schema.Struct({}),
-  initial: {},
+  state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
+  initial: { notes: [] },
   commands: [Log],
   decide: { Log: (_, cmd) => [new Logged({ note: cmd.note })] },
-  evolve: { Logged: (s) => s },
+  evolve: { Logged: (s, e) => ({ notes: [...s.notes, e.note] }) },
 }) {}
 
 // ---------------------------------------------------------------- consumers added later
@@ -62,6 +62,26 @@ const OnDepositLive = OnDeposit.toLayer(
     });
   }),
 );
+
+/**
+ * A policy that notes every deposit in the account's journal, history included:
+ * `Reactions` counts the triggers it saw as history.
+ */
+class Mirror extends Domain.Policy("Mirror", { from: [Account], on: [Deposited] }) {}
+const mirrorLayer = (version?: number) =>
+  Mirror.toLayer(
+    Effect.gen(function* () {
+      const journals = yield* Journal;
+      const reactions = yield* Reactions;
+      return Effect.fn(function* ({ source, event, history }) {
+        if (history) yield* Ref.update(reactions, (n) => n + 1);
+        yield* journals
+          .send(Journal.ref(`j-${source.id}`), new Log({ note: `deposit ${event.amount}` }))
+          .pipe(Effect.orDie);
+      });
+    }),
+    { replay: true, ...(version === undefined ? {} : { version }) },
+  );
 
 /** A store outside the model: what one projection key received, in order. */
 class Feed extends Context.Service<Feed, Ref.Ref<ReadonlyArray<string>>>()("Test/Feed") {}
@@ -167,6 +187,10 @@ class Redefined extends Domain.Model("Bank", {
 class WithLedger extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   projections: [Ledger],
+}) {}
+class WithMirror extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  policies: [Mirror],
 }) {}
 class WithTimeline extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
@@ -567,5 +591,55 @@ describe("Domain catch-up", () => {
         "start g0 after none",
       ]);
     }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live(
+    "a policy that replays acts on the history once, then on new events, and a version bump sends no command twice",
+    () =>
+      Effect.gen(function* () {
+        const bank = platform();
+        yield* bank.deploy(
+          Before,
+          Layer.empty,
+          Effect.all([deposit("a-1", 1), deposit("a-1", 2), deposit("a-2", 3)]),
+        );
+        const notes = Effect.fn(function* (id: string) {
+          const journals = yield* Journal;
+          return (yield* journals.state(Journal.ref(`j-${id}`))).notes;
+        });
+        const replayed = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(),
+          bank.settle.pipe(
+            Effect.andThen(
+              Effect.all([notes("a-1"), notes("a-2"), Effect.flatMap(Reactions, Ref.get)]),
+            ),
+          ),
+        );
+        expect(replayed).toEqual([["deposit 1", "deposit 2"], ["deposit 3"], 3]);
+
+        // A new deposit is no history.
+        const live = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(),
+          deposit("a-1", 4).pipe(
+            Effect.andThen(bank.settle),
+            Effect.andThen(Effect.all([notes("a-1"), Effect.flatMap(Reactions, Ref.get)])),
+          ),
+        );
+        expect(live).toEqual([["deposit 1", "deposit 2", "deposit 4"], 3]);
+
+        // Bumped: it acts on all four deposits again, and every command it sends was sent before.
+        const again = yield* bank.deploy(
+          WithMirror,
+          mirrorLayer(1),
+          bank.settle.pipe(
+            Effect.andThen(
+              Effect.all([notes("a-1"), notes("a-2"), Effect.flatMap(Reactions, Ref.get)]),
+            ),
+          ),
+        );
+        expect(again).toEqual([["deposit 1", "deposit 2", "deposit 4"], ["deposit 3"], 7]);
+      }).pipe(Effect.provide(platform().services)),
   );
 });

@@ -16,6 +16,7 @@ import {
   emptyStreamMeta,
   Platform,
   type Json,
+  type PolicyKit,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -23,6 +24,7 @@ import {
   type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
+import type * as Projection from "./Projection.ts";
 
 /**
  * Options for {@link make}.
@@ -403,6 +405,35 @@ export const make = (
     deaths,
     commits,
   };
+
+  /** A policy that acts on new events only: run each delivery in order per key. */
+  const policyHost = (kit: PolicyKit) =>
+    Effect.sync(() => {
+      const locks = stored(`policy:${kit.name}`, () => new Map<string, Semaphore.Semaphore>());
+      const lockFor = (key: string) => {
+        let found = locks.get(key);
+        if (!found) locks.set(key, (found = Semaphore.makeUnsafe(1)));
+        return found;
+      };
+      return {
+        receive: (delivery: Delivery) =>
+          Effect.suspend(() => {
+            running++;
+            return lockFor(delivery.key)
+              .withPermits(1)(kit.run(delivery))
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.sync(() => failures.push(cause)).pipe(
+                    Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
+                  ),
+                ),
+                Effect.ensuring(Effect.sync(() => running--)),
+                Effect.forkDetach,
+                Effect.asVoid,
+              );
+          }),
+      };
+    });
 
   const platform = Platform.of({
     aggregate: (_aggregate, kit) =>
@@ -797,6 +828,8 @@ export const make = (
 
     projection: (_projection, kit) =>
       Effect.sync(() => {
+        // A projection, or a policy that replays, hosted the same way (see `PolicyKit.replay`).
+        const kind = kit.kind ?? "projection";
         interface Partition {
           readonly log: Array<Accepted>;
           processed: number;
@@ -805,11 +838,14 @@ export const make = (
           timer: boolean;
           readonly lock: Semaphore.Semaphore;
         }
-        const stash = stored(`projection:${kit.name}`, () => ({
-          /** The generation the stored logs were built by. */
-          generation: 0,
-          partitions: new Map<string, Partition>(),
-        }));
+        const stash = stored(
+          `${kind === "projection" ? "projection" : "replay"}:${kit.name}`,
+          () => ({
+            /** The generation the stored logs were built by. */
+            generation: 0,
+            partitions: new Map<string, Partition>(),
+          }),
+        );
         const { partitions } = stash;
         // Rebuilt (a new generation): start every key's log over; the history is replayed to it.
         if (stash.generation < kit.generation) {
@@ -895,7 +931,7 @@ export const make = (
               process(delivery.key, false).pipe(
                 Effect.catchCause((cause) =>
                   Effect.sync(() => failures.push(cause)).pipe(
-                    Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
+                    Effect.andThen(Effect.logError(`${kind} ${kit.name} failed`, cause)),
                   ),
                 ),
                 Effect.ensuring(Effect.sync(() => running--)),
@@ -903,7 +939,7 @@ export const make = (
             ).pipe(Effect.asVoid);
           });
         const target = targetId({
-          kind: "projection",
+          kind,
           name: kit.name,
           ...(kit.generation > 0 ? { generation: kit.generation } : {}),
         });
@@ -930,10 +966,10 @@ export const make = (
           );
           return role;
         });
-        consumerRoles.set(`projection:${kit.name}`, consumer);
-        if (kit.lifecycle) lifecycles.set(`projection:${kit.name}`, kit.lifecycle);
-        else lifecycles.delete(`projection:${kit.name}`);
-        consumerRoutes.set(`projection:${kit.name}`, (target, ref, rows) =>
+        consumerRoles.set(`${kind}:${kit.name}`, consumer);
+        if (kit.lifecycle) lifecycles.set(`${kind}:${kit.name}`, kit.lifecycle);
+        else lifecycles.delete(`${kind}:${kit.name}`);
+        consumerRoutes.set(`${kind}:${kit.name}`, (target, ref, rows) =>
           kit.history(target, ref.source, ref.id, rows),
         );
         return {
@@ -1034,33 +1070,10 @@ export const make = (
         };
       }),
 
-    policy: (_policy, kit) =>
-      Effect.sync(() => {
-        const locks = stored(`policy:${kit.name}`, () => new Map<string, Semaphore.Semaphore>());
-        const lockFor = (key: string) => {
-          let found = locks.get(key);
-          if (!found) locks.set(key, (found = Semaphore.makeUnsafe(1)));
-          return found;
-        };
-        return {
-          receive: (delivery) =>
-            Effect.suspend(() => {
-              running++;
-              return lockFor(delivery.key)
-                .withPermits(1)(kit.run(delivery))
-                .pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.sync(() => failures.push(cause)).pipe(
-                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                    ),
-                  ),
-                  Effect.ensuring(Effect.sync(() => running--)),
-                  Effect.forkDetach,
-                  Effect.asVoid,
-                );
-            }),
-        };
-      }),
+    policy: (policy, kit) =>
+      kit.replay
+        ? platform.projection(policy as unknown as Projection.Any, kit.replay)
+        : policyHost(kit),
 
     // A deploy that adds consumers starts their runs.
     start: (targets, plans) =>
