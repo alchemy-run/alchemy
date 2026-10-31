@@ -1454,6 +1454,58 @@ it.effect(
 );
 
 it.effect(
+  "the JSON renderer logs messages as records and prints nothing",
+  () => {
+    const records: Array<LogRecord> = [];
+    const logger = Logger.make<unknown, void>((options) => {
+      records.push(recordOf(options));
+    });
+    const stdout = new CaptureStream();
+    const service = makeNonInteractive({
+      // SAFETY: CaptureStream implements the writable stream surface consumed here.
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      json: true,
+    });
+    return Effect.gen(function* () {
+      yield* service.output.info({ message: "Tailing", detail: "local" });
+      yield* service.output.warning("Drift detected");
+      yield* service.output.print(stackOutputsView({ url: "https://example.com" }));
+      yield* service.task({ label: "Logging in" }, Effect.void);
+      expect(stdout.output).toBe("");
+      expect(
+        records.map(({ level, kind, attributes, data }) => ({ level, kind, attributes, data })),
+      ).toEqual([
+        {
+          level: "info",
+          kind: "log",
+          attributes: { detail: "local" },
+          data: { message: "Tailing", cause: null },
+        },
+        {
+          level: "warn",
+          kind: "log",
+          attributes: {},
+          data: { message: "Drift detected", cause: null },
+        },
+        {
+          level: "info",
+          kind: "log",
+          attributes: {},
+          data: { message: "Logging in", cause: null },
+        },
+        {
+          level: "info",
+          kind: "log",
+          attributes: {},
+          data: { message: "Logging in", cause: null },
+        },
+      ]);
+    }).pipe(Effect.provide(Logger.layer([logger])));
+  },
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
   "logs chunked resource stdout and stderr as tagged records",
   () => {
     const records: Array<LogRecord> = [];
