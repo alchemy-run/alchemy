@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
@@ -19,7 +18,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { Servable } from "./Api.ts";
 import { DefinitionError } from "./internal.ts";
-import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
+import { type Operation, operationsOf, outsideClient } from "./ReadRpcs.ts";
 
 /**
  * What {@link toHttpApi} reads from an Api class: what it serves, its RPCs,
@@ -32,41 +31,6 @@ export interface Publishable {
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
 }
-
-/** One call an Api serves: what it belongs to, the client method, and its RPC tag. */
-interface Operation {
-  /** A command's tag, or a view's, stream's or aggregate's name. */
-  readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
-  readonly operation: string;
-  /** The RPC tag the server answers to (`Deposit`, `Balance.get`). */
-  readonly rpc: string;
-  /** Whether the call answers with a stream of values (`watch`, `events`). */
-  readonly stream: boolean;
-}
-
-/** Every call an Api serves, in the order it serves them. */
-const operationsOf = (api: Publishable): ReadonlyArray<Operation> =>
-  api.serves.flatMap((served): ReadonlyArray<Operation> => {
-    if (served.kind === "Command") {
-      return [{ name: served.tag, operation: "send", rpc: served.rpc._tag, stream: false }];
-    }
-    const name = nameOf(served);
-    return Object.entries(readRpcs(served)).flatMap(([call, rpc]) => {
-      if (rpc === undefined) return [];
-      // A stream's `get` RPC is its client's `peek`.
-      const operation =
-        (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
-      return [
-        {
-          name,
-          operation,
-          rpc: rpc._tag,
-          stream: RpcSchema.isStreamSchema((rpc as Rpc.AnyWithProps).successSchema),
-        },
-      ];
-    });
-  });
 
 /**
  * What serving the HTTP API needs: the hosted model and the Layers of the
@@ -249,21 +213,25 @@ const endpointOf = (
   const error = errors.length === 0 ? undefined : errors;
   const endpoint =
     operation.operation === "send"
-      ? HttpApiEndpoint.post(operation.rpc, `/${operation.name}`, {
+      ? HttpApiEndpoint.post(operation.rpc._tag, `/${operation.name}`, {
           payload: rpc.payloadSchema,
           success: rpc.successSchema,
           error,
         })
       : operation.stream
-        ? HttpApiEndpoint.get(operation.rpc, `/${operation.name}/:key/${operation.operation}`, {
-            params: { key: fields.key! },
-            // `events` resumes after a cursor; `watch` takes nothing but the key.
-            ...(fields.after ? { query: { after: fields.after } } : {}),
-            success: sseOf(rpc, errors),
-            error,
-          })
+        ? HttpApiEndpoint.get(
+            operation.rpc._tag,
+            `/${operation.name}/:key/${operation.operation}`,
+            {
+              params: { key: fields.key! },
+              // `events` resumes after a cursor; `watch` takes nothing but the key.
+              ...(fields.after ? { query: { after: fields.after } } : {}),
+              success: sseOf(rpc, errors),
+              error,
+            },
+          )
         : operation.operation === "list"
-          ? HttpApiEndpoint.get(operation.rpc, `/${operation.name}/:key/list`, {
+          ? HttpApiEndpoint.get(operation.rpc._tag, `/${operation.name}/:key/list`, {
               params: { key: fields.key! },
               query: {
                 order: fields.order!,
@@ -274,7 +242,7 @@ const endpointOf = (
               error,
             })
           : HttpApiEndpoint.get(
-              operation.rpc,
+              operation.rpc._tag,
               operation.operation === "snapshot"
                 ? `/${operation.name}/:key/snapshot`
                 : `/${operation.name}/:key`,
@@ -349,7 +317,7 @@ export const toHttpApi = <A extends Publishable>(
   api: A,
 ): HttpApiSurface<A["apiName"], Requirements<A>> => {
   const name = api.apiName;
-  const calls = operationsOf(api);
+  const calls = operationsOf(api.serves);
   // A failure without a status of its own is a refused request, not a server fault.
   const withStatus = (failure: Schema.Top): Schema.Top =>
     resolveStatus(failure.ast) === undefined
@@ -362,7 +330,7 @@ export const toHttpApi = <A extends Publishable>(
     HttpApiEndpoint.Top
   >;
   for (const operation of calls) {
-    const rpc = api.group.requests.get(operation.rpc) as Rpc.AnyWithProps;
+    const { rpc } = operation;
     const errors = failuresOf(rpc).map(withStatus);
     const endpoint = endpointOf(operation, rpc, errors);
     const declared = errors.length === 0 ? undefined : Schema.is(Schema.Union(errors));
@@ -379,16 +347,13 @@ export const toHttpApi = <A extends Publishable>(
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
-      // Without the client half of any middleware: a credential the server
-      // holds for its own calls must never replace the HTTP caller's headers.
-      const client = api.clientInProcess.pipe(
-        Effect.updateContext(Context.omit(...clientHalves)),
-      ) as Effect.Effect<Client, never, Scope.Scope>;
+      // Without the client half of any middleware (see `outsideClient`).
+      const client = outsideClient(api) as Effect.Effect<Client, never, Scope.Scope>;
       for (const { operation, isDeclared } of published) {
         // Only the endpoint's declared failures are public; anything else is a defect.
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
           Effect.catchIf(effect, (error) => !isDeclared(error), Effect.die);
-        handlers = handlers.handle(operation.rpc, (request: DecodedRequest) =>
+        handlers = handlers.handle(operation.rpc._tag, (request: DecodedRequest) =>
           operation.stream
             ? live(client, operation, request).pipe(
                 declaredOnly,
@@ -400,13 +365,6 @@ export const toHttpApi = <A extends Publishable>(
       return handlers;
     });
   };
-
-  // The keys `RpcMiddleware.layerClient` provides a middleware's client half under.
-  const clientHalves = [
-    ...new Set(
-      [...api.group.requests.values()].flatMap((rpc) => [...(rpc as Rpc.AnyWithProps).middlewares]),
-    ),
-  ].map((tag) => ({ key: `${tag.key}/Client` }) as unknown as Context.Key<never, unknown>);
 
   const httpApi = HttpApi.make(name).add(group as never);
   return {

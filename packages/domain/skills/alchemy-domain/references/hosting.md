@@ -147,6 +147,36 @@ const AppLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(BankHttp.layerFo
 
 More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).
 
+## MCP
+
+`toMcp` from `@alchemy.run/domain/Ai` serves each call of an Api that returns once as an MCP tool, named `<api>_<name>_<operation>`:
+
+```ts
+import * as DomainAi from "@alchemy.run/domain/Ai";
+import { McpProtocol, McpServer } from "effect/ai";
+
+// packages/server/src/BankMcp.ts
+export const BankMcp = DomainAi.toMcp(AgentApi).pipe(
+  Layer.provide(
+    McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] }),
+  ),
+  Layer.provide(BankLive),
+);
+```
+
+On a Worker, use `McpServer.layerHttpRequestScoped` with `McpProtocol.v2026_07_28`. Each call carries the MCP request's headers to the Api's middleware, so an MCP client signs in like any other client, and a rejection comes back as the tool's typed failure.
+
+`toToolkit` gives the same tools to an agent in the app, acting for the headers you give it:
+
+```ts
+const { toolkit, layer } = DomainAi.toToolkit(AgentApi, {
+  headers: Effect.map(CurrentSession, (s) => ({ authorization: `Bearer ${s.token}` })),
+});
+const answer = LanguageModel.generateText({ prompt, toolkit }).pipe(Effect.provide(layer));
+```
+
+More: [MCP](https://alchemy.run/domain/mcp).
+
 ## Deploying
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.

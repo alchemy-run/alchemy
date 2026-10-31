@@ -1641,14 +1641,27 @@ export const LiveWorkerProvider = () =>
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
           const ourExisting = existingRules.filter(isOurs);
+          // Compare the redirect target too: a changed canonical `name`
+          // keeps each rule's description and match expression, so those
+          // alone would skip the PUT and leave the old target in place.
+          // Fields are compared one by one because the read fills unset
+          // fields with `null`.
+          const existingFromValue = (rule: (typeof existingRules)[number]) =>
+            rule.action === "redirect" ? rule.actionParameters?.fromValue : undefined;
           const converged =
             ourExisting.length === ourDesired.length &&
             ourDesired.every((rule) =>
-              ourExisting.some(
-                (existing) =>
+              ourExisting.some((existing) => {
+                const fromValue = existingFromValue(existing);
+                const desiredFromValue = rule.actionParameters.fromValue;
+                return (
                   existing.description === rule.description &&
-                  existing.expression === rule.expression,
-              ),
+                  existing.expression === rule.expression &&
+                  fromValue?.targetUrl?.expression === desiredFromValue.targetUrl.expression &&
+                  fromValue?.statusCode === desiredFromValue.statusCode &&
+                  fromValue?.preserveQueryString === desiredFromValue.preserveQueryString
+                );
+              }),
             );
           if (converged) continue;
           // Pass foreign rules through untouched (minus the read-only

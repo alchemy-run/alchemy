@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
@@ -22,6 +23,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
+import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -111,8 +113,11 @@ export const makeDurableObjectBridge =
             const bind = (f: any) => (typeof f === "function" ? f.bind(target) : f);
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return (...args: unknown[]) =>
-              this.#execute(
+            return (...callArgs: unknown[]) => {
+              // A stub appends the caller's trace context; one from an older
+              // deploy doesn't, and its call starts a trace of its own.
+              const [args, parent] = takeRpcTraceContext(callArgs);
+              return this.#execute(
                 (instance) =>
                   Effect.suspend(() => {
                     if (!Object.hasOwn(instance, prop)) {
@@ -136,9 +141,12 @@ export const makeDurableObjectBridge =
                         `Durable Object RPC member "${prop}" must return an Effect or a Stream`,
                       ),
                     );
-                  }),
+                  }).pipe((effect) =>
+                    Option.isSome(parent) ? Effect.withParentSpan(effect, parent.value) : effect,
+                  ),
                 handleRpcExit,
               );
+            };
           },
         });
       }
