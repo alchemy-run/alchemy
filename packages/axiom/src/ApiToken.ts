@@ -130,7 +130,8 @@ export const ApiTokenProvider = () =>
           }
           return {
             ...result,
-            token: Redacted.make(result.token),
+            // Distilled marks the field sensitive, so it may already be Redacted.
+            token: Redacted.isRedacted(result.token) ? result.token : Redacted.make(result.token),
           };
         }),
         delete: Effect.fn(function* ({ output }) {
