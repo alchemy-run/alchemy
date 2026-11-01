@@ -597,6 +597,9 @@ catalogs:
     picomatch:
       specifier: ^4.0.7
       version: 4.0.7
+    portless:
+      specifier: file:vendor/portless-0.15.13.tgz
+      version: file:vendor/portless-0.15.13.tgz
     postal-mime:
       specifier: ^2.4.3
       version: 2.7.5
@@ -10205,6 +10208,9 @@ importers:
       '@alchemy.run/planetscale':
         specifier: workspace:*
         version: link:../planetscale
+      '@alchemy.run/portless':
+        specifier: workspace:*
+        version: link:../portless
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../prisma
@@ -10702,6 +10708,28 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/portless:
+    dependencies:
+      portless:
+        specifier: 'catalog:'
+        version: file:vendor/portless-0.15.13.tgz
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -25518,6 +25546,13 @@ packages:
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
+
+  portless@file:vendor/portless-0.15.13.tgz:
+    resolution: {integrity: sha512-eTuzMEnOQTiPIVbYiAxWWu7X2LmfPG8ZPTv5dypDi0F+VxYlinGXO3OeIlej/v/rSW9C+xIv5ovyd00RH1Ig7g==, tarball: file:vendor/portless-0.15.13.tgz}
+    version: 0.15.13
+    engines: {node: '>=24'}
+    os: [darwin, linux, win32]
+    hasBin: true
 
   postal-mime@2.7.5:
     resolution: {integrity: sha512-GNEXKvWFQnbgO5NlrGzVa0FmWzBZ24PersAWErttSg1Hjpf0ATxTwS5DOMGaOpTG6bUh5cTr7xi0jAD942wCJA==}
@@ -46722,6 +46757,8 @@ snapshots:
       playwright-core: 1.64.0
 
   pluralize@8.0.0: {}
+
+  portless@file:vendor/portless-0.15.13.tgz: {}
 
   postal-mime@2.7.5: {}
 
