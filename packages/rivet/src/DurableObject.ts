@@ -321,7 +321,6 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * ```
  *
  * @resource
- * @product Rivet
  */
 export const DurableObject: DurableObjectClass = (() =>
   (id: string, props?: unknown, impl?: unknown) =>

@@ -1,0 +1,78 @@
+---
+title: Docker
+description: Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
+---
+
+Run Rivet on a Docker swarm. Use it on your machine while you build, or on any server with Docker.
+
+```typescript
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.ControlPlane("Rivet");
+
+export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/docker`, and turn swarm mode on with `docker swarm init`.
+
+## The control plane
+
+One engine runs as a swarm service on `localhost:6420`, with its data on a Docker volume.
+
+```typescript
+export const Cluster = RivetDocker.ControlPlane("Rivet", { port: 16420 });
+```
+
+Change `port` if 6420 is taken. One engine keeps its data on one disk, so use Docker for development, not production.
+
+## The pool
+
+```typescript
+export const Default = RivetDocker.Pool("Default", { replicas: 2 }).pipe(Layer.provide(Cluster));
+```
+
+Each deploy builds a node image with every class on the pool.
+
+## Call it from a container
+
+Callers reach the control plane on its Docker network. Join it from a `Docker.Service`:
+
+```typescript
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    return {
+      main: import.meta.url,
+      port: 3000,
+      ports: [{ external: 3000, internal: 3000 }],
+      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
+    };
+  }).pipe(Effect.provide(Cluster)),
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+The [tutorial](/rivet/tutorial/part-1) builds this.
+
+## Use another Docker engine
+
+```typescript
+export const Cluster = RivetDocker.ControlPlane("Rivet", { context: "my-server" });
+```
+
+`context` takes a Docker context name. See [Docker](/docker).
+
+## Reference
+
+- [Docker ControlPlane](/providers/rivet/docker#controlplane)
+- [Docker Pool](/providers/rivet/docker#pool)

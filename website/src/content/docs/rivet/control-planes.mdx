@@ -1,0 +1,83 @@
+---
+title: Control planes
+description: What a Rivet control plane does, and how to run one on any cloud or connect to one you have.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A control plane keeps every Durable Object's data and routes every call. It decides which node runs each instance, and wakes a sleeping instance when it's called.
+
+<DAG
+  nodes={[
+    { id: "Caller", type: "Worker, Lambda, …" },
+    { id: "Control plane", tone: "accent" },
+    { id: "Pool", type: "nodes" },
+  ]}
+  edges={[
+    { from: "Caller", to: "Control plane", label: "call by name" },
+    { from: "Control plane", to: "Pool", label: "runs on" },
+  ]}
+/>
+
+## Run one
+
+A control plane is a Layer. Each cloud has one:
+
+```typescript
+import * as RivetAWS from "@alchemy.run/rivet/AWS";
+
+export const Cluster = RivetAWS.Ec2ControlPlane("Rivet");
+```
+
+It creates the machines, disks, storage and load balancer the control plane needs, and a namespace for your stage.
+
+## Give it to a pool
+
+Pools join a control plane through `Layer.provide`:
+
+```typescript
+export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Every pool you give `Cluster` shares one control plane, and so do the Durable Objects on those pools.
+
+## Swap it
+
+Every control plane gives pools the same thing, so you can change clouds without touching your Durable Objects:
+
+```typescript
+export const Cluster = RivetDocker.ControlPlane("Rivet");
+export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
+export const Cluster = RivetFly.ControlPlane("Rivet");
+```
+
+## Size it
+
+Production control planes run three or more engines. Most take `instances`:
+
+```typescript
+export const Cluster = RivetAWS.Ec2ControlPlane("Rivet", {
+  instances: 3,
+  instanceType: "t3.medium",
+});
+```
+
+Each engine gets its own disk. Data also goes to object storage the engines share, so losing one engine loses nothing.
+
+## Use one you already run
+
+Point `Rivet.ControlPlane` at its address and admin token:
+
+```typescript
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+```
+
+Or use [Rivet Cloud](/rivet/rivet-cloud).
+
+## Where next
+
+- [Pools](/rivet/pools)
+- Each cloud's options: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner)

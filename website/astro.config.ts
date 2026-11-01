@@ -49,6 +49,7 @@ function providersSidebarEntry() {
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
+      { label: "Rivet", link: "/rivet" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -1829,6 +1830,41 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
+          label: "Rivet",
+          items: [
+            { label: "Overview", link: "/rivet" },
+            { label: "Setup", link: "/rivet/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "rivet/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Durable Objects", link: "/rivet/durable-objects" },
+                { label: "Storage", link: "/rivet/storage" },
+                { label: "Calling Durable Objects", link: "/rivet/calling" },
+                { label: "Control planes", link: "/rivet/control-planes" },
+                { label: "Pools", link: "/rivet/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/rivet/docker" },
+                { label: "AWS", link: "/rivet/aws" },
+                { label: "GCP", link: "/rivet/gcp" },
+                { label: "Kubernetes", link: "/rivet/kubernetes" },
+                { label: "Fly", link: "/rivet/fly" },
+                { label: "Hetzner", link: "/rivet/hetzner" },
+                { label: "Railway", link: "/rivet/railway" },
+                { label: "Rivet Cloud", link: "/rivet/rivet-cloud" },
+              ],
+            },
+            providerApiReferenceEntry("Rivet"),
           ],
         },
         {

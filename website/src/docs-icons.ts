@@ -67,6 +67,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Stripe: c("stripe"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
+  Rivet: l("boxes"),
   Drizzle: b("drizzle"),
   SQL: l("database"),
   Command: l("square-terminal"),
@@ -115,6 +116,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Security: l("shield-check"),
   "Consistency patterns": l("git-merge"),
   Hosting: l("server"),
+  Platforms: l("cloud"),
   Testing: l("flask-conical"),
   Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.
@@ -133,6 +135,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Axiom: c("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
+  Rivet: l("boxes"),
   Drizzle: b("drizzle"),
   "Prisma ORM": b("prisma"),
   SQL: l("database"),

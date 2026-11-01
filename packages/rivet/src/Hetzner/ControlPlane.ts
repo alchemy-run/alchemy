@@ -138,8 +138,8 @@ const plain = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(v
  *     bucket: "my-rivet-data",
  *     endpoint: "https://nbg1.your-objectstorage.com",
  *     region: "nbg1",
- *     accessKeyId: Config.string("HETZNER_S3_ACCESS_KEY_ID"),
- *     secretAccessKey: Config.redacted("HETZNER_S3_SECRET_ACCESS_KEY"),
+ *     accessKeyId: Config.String("HETZNER_S3_ACCESS_KEY_ID"),
+ *     secretAccessKey: Config.Redacted("HETZNER_S3_SECRET_ACCESS_KEY"),
  *   },
  * });
  * ```
@@ -178,7 +178,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
       const storage =
         props.objectStorage === undefined
           ? [["RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH", `${DATA_PATH}/objects`] as const]
-          : objectStorageEnvironment(props.objectStorage);
+          : yield* objectStorageEnvironment(props.objectStorage);
       const environment = Output.all(
         token.text,
         ...storage.map(([, value]) =>

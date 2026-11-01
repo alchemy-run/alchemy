@@ -101,6 +101,9 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Kubernetes", "kubernetes", "Containers", "deployments · jobs · manifests · helm", [
     "/providers/kubernetes",
   ]),
+  hub("Rivet", "rivet", "Containers", "durable objects · control planes · pools", [
+    "/providers/rivet",
+  ]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
     "/providers/git",
   ]),

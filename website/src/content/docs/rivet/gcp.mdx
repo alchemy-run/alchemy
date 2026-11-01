@@ -1,0 +1,77 @@
+---
+title: GCP
+description: Run a Rivet control plane on Compute Engine, and pools of nodes on Cloud Run or Compute Engine.
+---
+
+Run Rivet in your Google Cloud project. The control plane runs on Compute Engine. Nodes run on a Cloud Run worker pool or on Compute Engine.
+
+```typescript
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetGCP.ComputeControlPlane("Rivet");
+
+export const Default = RivetGCP.WorkerPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
+
+## The control plane
+
+You get three instances across zones. Each has a persistent disk, they share a Cloud Storage bucket, and a network load balancer is the endpoint.
+
+```typescript
+export const Cluster = RivetGCP.ComputeControlPlane("Rivet", {
+  instances: 3,
+  machineType: "e2-standard-2",
+  diskSize: 20,
+});
+```
+
+## On Cloud Run
+
+`WorkerPool` runs nodes on a Cloud Run worker pool:
+
+```typescript
+export const Default = RivetGCP.WorkerPool("Default", {
+  replicas: 2,
+  cpu: "1",
+  memory: "1Gi",
+}).pipe(Layer.provide(Cluster));
+```
+
+## On Compute Engine
+
+`ComputePool` runs one instance per node:
+
+```typescript
+export const Default = RivetGCP.ComputePool("Default", {
+  replicas: 2,
+  machineType: "e2-small",
+}).pipe(Layer.provide(Cluster));
+```
+
+Each deploy updates running nodes in place.
+
+## Call it from Cloud Run
+
+```typescript
+export default class Api extends GCP.Run.Service<Api>()(
+  "Api",
+  { main: import.meta.url, invokerIamDisabled: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+## Reference
+
+- [ComputeControlPlane](/providers/rivet/gcp#computecontrolplane)
+- [WorkerPool](/providers/rivet/gcp#workerpool), [ComputePool](/providers/rivet/gcp#computepool)

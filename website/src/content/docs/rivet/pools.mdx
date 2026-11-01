@@ -1,0 +1,83 @@
+---
+title: Pools
+description: How a Rivet pool decides where Durable Objects run, and how to share or split pools.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A pool is a group of nodes that run your Durable Objects. You choose a pool for each class. The control plane places each instance on one of the pool's nodes.
+
+## Create one
+
+A pool is a Layer, given a control plane:
+
+```typescript
+export const Default = RivetHetzner.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+## Put a class on it
+
+```typescript
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // ...
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+The pool's nodes load `main` and run the class.
+
+## Share a pool
+
+Give two classes the same pool and they run on the same nodes:
+
+<DAG
+  nodes={[
+    { id: "Room", type: "Durable Object" },
+    { id: "Greeter", type: "Durable Object" },
+    { id: "Default", type: "pool", tone: "accent" },
+    { id: "Cluster", type: "control plane" },
+  ]}
+  edges={[
+    { from: "Room", to: "Default" },
+    { from: "Greeter", to: "Default" },
+    { from: "Default", to: "Cluster" },
+  ]}
+/>
+
+Each deploy builds one program for the pool with every class it hosts.
+
+## Split them
+
+A class with different needs gets its own pool:
+
+```typescript
+export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
+export const Heavy = RivetAWS.EcsPool("Heavy", { cpu: 2048, memory: 4096 }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+## Scale it
+
+```typescript
+export const Default = RivetDocker.Pool("Default", { replicas: 3 }).pipe(Layer.provide(Cluster));
+```
+
+More nodes run more instances at once. One instance still runs on one node.
+
+## Run it on another cloud
+
+A pool works with any control plane it can reach. Nodes only connect out, so they need no public address:
+
+```typescript
+export const Cluster = RivetHetzner.ControlPlane("Rivet");
+export const Default = RivetRailway.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+## Where next
+
+- [Control planes](/rivet/control-planes)
+- [Pool reference](/providers/rivet/pool)

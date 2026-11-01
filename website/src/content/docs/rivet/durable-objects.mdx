@@ -1,0 +1,113 @@
+---
+title: Durable Objects
+description: How a Rivet Durable Object is written — its two phases, its instances, and where its code lives.
+---
+
+A Durable Object is a class with many instances. You address each instance by name. Every instance keeps its own data and handles one call at a time, so two calls to the same instance never race.
+
+## A class and its instances
+
+```typescript
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {
+        hello: () => Effect.succeed("hi"),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`"Room"` names the class. `main` points at the file that exports it, so the pool can load the same code.
+
+## Two phases
+
+The implementation is an Effect that returns another Effect.
+
+The outer Effect is the **Construction phase**. It runs once on each node, before any instance exists. Resolve bindings to other resources here:
+
+```typescript
+Effect.gen(function* () {
+  const counters = yield* Counter;
+  return Effect.gen(function* () {
+    // ...
+  });
+});
+```
+
+The inner Effect runs once per instance, the first time something calls it. Read the instance's state and return its methods:
+
+```typescript
+return Effect.gen(function* () {
+  const state = yield* Rivet.DurableObjectState;
+  return {
+    name: () => Effect.succeed(state.id.name),
+  };
+});
+```
+
+`state.id.name` is the name the caller used.
+
+## Methods
+
+Every function you return, except `fetch` and `alarm`, is a method callers can run:
+
+```typescript
+return {
+  rename: (to: string) => state.storage.put("title", to),
+  title: () => state.storage.get<string>("title"),
+};
+```
+
+Arguments and results travel as JSON, so use strings, numbers, booleans, arrays and plain objects. A method can also return a `Stream` or fail with a tagged error. See [Calling Durable Objects](/rivet/calling).
+
+## `fetch` and `alarm`
+
+Return `fetch` to handle HTTP requests sent to the instance. Return `alarm` to run code when the instance's alarm comes due:
+
+```typescript
+return {
+  fetch: Effect.succeed(HttpServerResponse.text("hello")),
+  alarm: () => state.storage.deleteAll(),
+};
+```
+
+See [Storage](/rivet/storage) for alarms.
+
+## The pool
+
+`Effect.provide(Default)` decides where the class runs. Any pool works, on any cloud. See [Pools](/rivet/pools).
+
+## Declare it apart from its code
+
+Callers import the class to call it. To keep the implementation out of their bundle, declare the class on its own, with the shape of its methods:
+
+```typescript
+// src/room.ts
+export class Room extends Rivet.DurableObject<Room, RoomShape>()("Room") {}
+```
+
+Then implement it in another file with `make`:
+
+```typescript
+// src/room-live.ts
+export const RoomLive = Room.make(
+  { main: import.meta.url, handler: "RoomLive" },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return { hello: () => Effect.succeed("hi") };
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+`handler` names the export, so the pool loads `RoomLive`. Provide `RoomLive` once, in your Stack.
+
+## Where next
+
+- [Storage](/rivet/storage)
+- [Calling Durable Objects](/rivet/calling)
+- [DurableObject reference](/providers/rivet/durableobject)

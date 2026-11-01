@@ -1,0 +1,106 @@
+---
+title: Calling Durable Objects
+description: Call a Rivet Durable Object from any runtime by name — RPC methods, streams, typed errors and fetch.
+---
+
+Any runtime can call a Durable Object: a Cloudflare Worker, a Lambda, a container, or another Durable Object. Calls go through the control plane over HTTP, so the caller needs no route to the pool.
+
+## Get the class
+
+```typescript
+Effect.gen(function* () {
+  const rooms = yield* Room;
+  return {
+    fetch: Effect.gen(function* () {
+      // ...
+    }),
+  };
+});
+```
+
+Yield it in the caller's Construction phase. Alchemy gives the caller the control plane's address and a token for it.
+
+## Pick an instance by name
+
+```typescript
+const lobby = rooms.getByName("lobby");
+```
+
+The first call to a name creates its instance. Later calls reach the same one, wherever it runs.
+
+## Call a method
+
+```typescript
+const visitors = yield* lobby.join();
+```
+
+Methods return Effects, typed from the class.
+
+## Stream results
+
+A method that returns a `Stream` streams to the caller as values arrive:
+
+```typescript
+// in the Durable Object
+tick: (n: number) => Stream.range(1, n).pipe(Stream.schedule(Schedule.spaced("1 second"))),
+```
+
+```typescript
+// in the caller
+yield* lobby.tick(5).pipe(Stream.runForEach((n) => Effect.log(n)));
+```
+
+## Typed errors
+
+Define a tagged error:
+
+```typescript
+export class RoomFull extends Data.TaggedError("RoomFull")<{ readonly limit: number }> {}
+```
+
+Fail with it in a method:
+
+```typescript
+join: () => Effect.fail(new RoomFull({ limit: 50 })),
+```
+
+The caller catches it by its tag:
+
+```typescript
+yield* lobby.join().pipe(
+  Effect.catchTag("RoomFull", (error) => Effect.log(`full at ${error.limit}`)),
+);
+```
+
+## Forward a request
+
+If the class returns a `fetch` handler, forward an HTTP request to an instance:
+
+```typescript
+const request = yield* HttpServerRequest.HttpServerRequest;
+return yield* lobby.fetch(request);
+```
+
+## From another Durable Object
+
+A Durable Object calls another one the same way. Yield it in the outer Effect:
+
+```typescript
+export default class Greeter extends Rivet.DurableObject<Greeter>()(
+  "Greeter",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.gen(function* () {
+      return {
+        greet: (name: string) => rooms.getByName(name).join(),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+## Where next
+
+- [Declare a class apart from its code](/rivet/durable-objects#declare-it-apart-from-its-code), so callers don't bundle it
+- [Control planes](/rivet/control-planes)

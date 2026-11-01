@@ -1,0 +1,68 @@
+---
+title: Kubernetes
+description: Run a Rivet control plane and pools of nodes on any Kubernetes cluster — EKS, GKE, kind or your own.
+---
+
+Run Rivet on any Kubernetes cluster. The control plane is a StatefulSet. Each pool is a Deployment.
+
+```typescript
+import * as RivetKubernetes from "@alchemy.run/rivet/Kubernetes";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetKubernetes.ControlPlane("Rivet", { cluster: Eks });
+
+export const Default = RivetKubernetes.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/kubernetes`. `cluster` takes a cluster resource or a kubeconfig. See [Connecting to a cluster](/kubernetes/clusters/connecting).
+
+## The control plane
+
+One engine keeps its data on its volume:
+
+```typescript
+export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+  cluster: Eks,
+  diskSize: "20Gi",
+});
+```
+
+More engines share object storage, so `objectStorage` is required:
+
+```typescript
+export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+  cluster: Eks,
+  instances: 3,
+  objectStorage: { kind: "s3", bucket: "my-rivet-data", region: "us-west-2" },
+});
+```
+
+`kind: "gcs"` uses a Cloud Storage bucket instead. The bucket must be reachable over HTTPS.
+
+## Expose it
+
+By default the control plane gets a `LoadBalancer` Service. On a cluster without load balancers, use a node port:
+
+```typescript
+export const Cluster = RivetKubernetes.ControlPlane("Rivet", {
+  cluster: Kind,
+  expose: { type: "NodePort", nodePort: 30642, endpoint: "http://localhost:16450" },
+});
+```
+
+Or use `{ type: "ClusterIP", endpoint }` behind your own ingress.
+
+## The pool
+
+```typescript
+export const Default = RivetKubernetes.Pool("Default", { replicas: 3 }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+The pool runs on the control plane's cluster unless you pass `cluster`.
+
+## Reference
+
+- [Kubernetes ControlPlane](/providers/rivet/kubernetes#controlplane)
+- [Kubernetes Pool](/providers/rivet/kubernetes#pool)

@@ -1,0 +1,73 @@
+---
+title: Rivet
+description: Run Durable Objects on Rivet, on your own cloud, and call them from any runtime.
+---
+
+Rivet runs Durable Objects outside Cloudflare. Each instance has a name, its own storage, a SQL database and an alarm, and handles one call at a time.
+
+You run Rivet yourself. A **control plane** stores every instance's data and routes calls. A **pool** of nodes runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner.
+
+New here? [Set up Rivet](/rivet/setup), then [build the tutorial](/rivet/tutorial/part-1).
+
+## Write a Durable Object
+
+```typescript
+// src/counter.ts
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
+export default class Counter extends Rivet.DurableObject<Counter>()(
+  "Counter",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        increment: () =>
+          Effect.gen(function* () {
+            const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+            yield* state.storage.put("count", count);
+            return count;
+          }),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+It has the same shape as a [Cloudflare Durable Object](/cloudflare/compute/durable-objects). See [Durable Objects](/rivet/durable-objects).
+
+## Choose where it runs
+
+`Default` is a pool. Give it a control plane:
+
+```typescript
+// src/cluster.ts
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.ControlPlane("Rivet");
+
+export const Default = RivetDocker.Pool("Default").pipe(Layer.provide(Cluster));
+```
+
+Swap these two lines to move to another cloud. Your Durable Objects don't change. See [Control planes](/rivet/control-planes) and [Pools](/rivet/pools).
+
+## Call it from anywhere
+
+`yield* Counter` works in a Cloudflare Worker, a Lambda, a container, or another Durable Object:
+
+```typescript
+const counters = yield* Counter;
+const count = yield* counters.getByName("visits").increment();
+```
+
+See [Calling Durable Objects](/rivet/calling).
+
+## Where next
+
+- [Setup](/rivet/setup)
+- [Tutorial](/rivet/tutorial/part-1): chat rooms on your machine, then on Hetzner
+- [Storage](/rivet/storage): key-value, SQL and alarms
+- Platforms: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway), [Rivet Cloud](/rivet/rivet-cloud)

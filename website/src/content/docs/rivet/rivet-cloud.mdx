@@ -1,0 +1,52 @@
+---
+title: Rivet Cloud
+description: Use Rivet Cloud as the control plane, and run your pools of nodes on any cloud.
+---
+
+[Rivet Cloud](https://rivet.dev) runs the control plane for you. You still run the nodes, in a pool on any cloud.
+
+```typescript
+import * as RivetAWS from "@alchemy.run/rivet/AWS";
+import * as RivetCloud from "@alchemy.run/rivet/Cloud";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetCloud.ControlPlane();
+
+export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
+```
+
+## Connect
+
+Create a namespace in the Rivet dashboard. It shows your cluster's endpoint and a token. Set them before you deploy:
+
+```sh
+RIVET_ENDPOINT=https://my-cluster-api.onrivet.dev
+RIVET_NAMESPACE=my-namespace
+RIVET_TOKEN=...
+```
+
+`RivetCloud.ControlPlane()` reads them when you deploy.
+
+## Pass them in code
+
+```typescript
+export const Cluster = RivetCloud.ControlPlane({
+  endpoint: "https://my-cluster-api.onrivet.dev",
+  namespace: "my-namespace",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+```
+
+The endpoint can also carry both, as `https://my-namespace:token@my-cluster-api.onrivet.dev`.
+
+## Pick a pool
+
+Any pool works, because nodes connect out to Rivet Cloud. See [Pools](/rivet/pools).
+
+## Your own control plane
+
+To connect to a control plane you already run, use `Rivet.ControlPlane`. See [Control planes](/rivet/control-planes#use-one-you-already-run).
+
+## Reference
+
+- [Cloud ControlPlane](/providers/rivet/cloud#controlplane)

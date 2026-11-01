@@ -1,0 +1,98 @@
+---
+title: Storage
+description: Key-value storage, SQL and alarms for each Rivet Durable Object instance.
+---
+
+Every instance has its own SQLite database. You use it three ways: as a key-value store, with SQL, and through one alarm. Get it from `Rivet.DurableObjectState`:
+
+```typescript
+const state = yield* Rivet.DurableObjectState;
+```
+
+## Keys and values
+
+```typescript
+yield* state.storage.put("visitors", 3);
+const visitors = yield* state.storage.get<number>("visitors");
+```
+
+`get` returns `undefined` for a key you never set. Values can be any plain data.
+
+```typescript
+const existed = yield* state.storage.delete("visitors");
+```
+
+## List keys
+
+```typescript
+const drafts = yield* state.storage.list<string>({ prefix: "draft:" });
+for (const [key, value] of drafts) {
+  // ...
+}
+```
+
+`list` returns a `Map` in key order. Narrow it with `start`, `end` and `limit`, or set `reverse: true`.
+
+```typescript
+yield* state.storage.deleteAll();
+```
+
+`deleteAll` removes every key. Your SQL tables stay.
+
+## SQL
+
+```typescript
+const rows = yield* state.storage.sql.exec<{ author: string }>(
+  "SELECT author FROM messages WHERE text LIKE ?",
+  "%hello%",
+);
+const authors = yield* rows.toArray();
+```
+
+`exec` returns a cursor. `toArray` returns every row, and `one` returns the only row or fails.
+
+Run statements that return nothing through `toArray` too:
+
+```typescript
+yield* (yield* state.storage.sql.exec("DELETE FROM messages")).toArray();
+```
+
+## Create tables once
+
+The instance's inner Effect runs before its first call, so create tables there:
+
+```typescript
+return Effect.gen(function* () {
+  const state = yield* Rivet.DurableObjectState;
+  yield* (yield* state.storage.sql.exec(
+    "CREATE TABLE IF NOT EXISTS messages (author TEXT, text TEXT)",
+  )).toArray();
+  return {
+    // ...
+  };
+});
+```
+
+## Alarms
+
+Each instance has one alarm. Set it to a time in milliseconds:
+
+```typescript
+const now = yield* Effect.sync(() => Date.now());
+yield* state.storage.setAlarm(now + 60_000);
+```
+
+When it comes due, Rivet calls the instance's `alarm`:
+
+```typescript
+return {
+  alarm: () => state.storage.deleteAll(),
+};
+```
+
+Setting the alarm again moves it. `getAlarm` returns when it fires, or `null`. `deleteAlarm` cancels it.
+
+## Where next
+
+- [Part 2 of the tutorial](/rivet/tutorial/part-2) stores messages in SQL
+- [Part 3](/rivet/tutorial/part-3) clears idle rooms with an alarm

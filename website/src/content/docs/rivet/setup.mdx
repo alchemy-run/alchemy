@@ -1,0 +1,67 @@
+---
+title: Setup
+description: Install the Rivet provider and get Docker ready to run Rivet on your machine.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Rivet needs no account. You run the control plane yourself, so set up the cloud you want to run it on.
+
+## Add the provider
+
+Install `@alchemy.run/rivet`:
+
+<PackageManagers add="@alchemy.run/rivet" />
+
+Then add `Rivet.providers()` next to your cloud's providers:
+
+```typescript
+// alchemy.run.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+
+providers: Layer.mergeAll(Docker.providers(), Rivet.providers()),
+```
+
+## Install the package for your cloud
+
+Each cloud has its own entry point, and needs that cloud's provider package:
+
+| Import | Install |
+|---|---|
+| `@alchemy.run/rivet/Docker` | `@alchemy.run/docker` |
+| `@alchemy.run/rivet/AWS` | `@alchemy.run/aws` |
+| `@alchemy.run/rivet/GCP` | `@alchemy.run/gcp` |
+| `@alchemy.run/rivet/Kubernetes` | `@alchemy.run/kubernetes` |
+| `@alchemy.run/rivet/Fly` | `@alchemy.run/fly` |
+| `@alchemy.run/rivet/Hetzner` | `@alchemy.run/hetzner` |
+| `@alchemy.run/rivet/Railway` | `@alchemy.run/railway` |
+
+Then follow that cloud's setup, for example [AWS setup](/aws/setup) or [Hetzner setup](/hetzner/setup).
+
+## Run Rivet on your machine
+
+The Docker control plane runs on a Docker swarm. Turn swarm mode on once:
+
+```sh
+docker swarm init
+```
+
+Run `docker info --format '{{.Swarm.LocalNodeState}}'` to check. It prints `active`.
+
+## Use Rivet Cloud
+
+To use [Rivet Cloud](https://rivet.dev) instead of running your own control plane, set these before you deploy:
+
+```sh
+RIVET_ENDPOINT=https://my-cluster-api.onrivet.dev
+RIVET_NAMESPACE=my-namespace
+RIVET_TOKEN=...
+```
+
+See [Rivet Cloud](/rivet/rivet-cloud).
+
+## Next steps
+
+- [Build the tutorial](/rivet/tutorial/part-1)
+- [Rivet overview](/rivet)

@@ -15,7 +15,7 @@ export interface PoolOptions extends PoolSettings {
    */
   project?: Railway.ServiceProps["project"];
   /**
-   * Railway region of the nodes (`us-east4-eqdc4a`, `europe-west4-drams3a`, …).
+   * Railway region of the nodes, such as `us-west2`.
    * @default the workspace's default region
    */
   region?: string;

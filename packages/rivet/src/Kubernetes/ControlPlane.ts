@@ -106,13 +106,15 @@ export class LoadBalancerNotReady extends Data.TaggedError("RivetKubernetes.Load
 /** The engine environment for the chosen object storage. */
 const storageEnvironment = (storage: ObjectStorage | undefined) =>
   storage === undefined
-    ? [
+    ? Effect.succeed([
         {
           name: "RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH",
           value: `${DATA_PATH}/objects` as unknown,
         },
-      ]
-    : objectStorageEnvironment(storage).map(([name, value]) => ({ name, value }));
+      ])
+    : objectStorageEnvironment(storage).pipe(
+        Effect.map((entries) => entries.map(([name, value]) => ({ name, value }))),
+      );
 
 /**
  * A Rivet control plane on Kubernetes, as a `Rivet.Cluster` Layer: a
@@ -163,6 +165,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps) =>
           }),
         );
       }
+      const storageEnv = yield* storageEnvironment(props.objectStorage);
       const cluster = Effect.isEffect(props.cluster) ? yield* props.cluster : props.cluster;
       const k8sNamespace = props.namespace ?? "default";
       const name = props.name ?? (yield* stackDnsLabel(id, 40));
@@ -229,7 +232,7 @@ export const ControlPlane = (id: string, props: ControlPlaneProps) =>
                         value: `$(POD_IP):${PEER_PORT}`,
                       },
                       { name: "RIVET__TELEMETRY__ENABLED", value: "false" },
-                      ...storageEnvironment(props.objectStorage),
+                      ...storageEnv,
                     ],
                     volumeMounts: [{ name: "data", mountPath: DATA_PATH }],
                     readinessProbe: {
