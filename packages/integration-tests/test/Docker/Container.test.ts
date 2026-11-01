@@ -816,6 +816,42 @@ describe(
       }),
     );
 
+    test.provider("limits memory and hardens the runtime", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const deploy = (memory: string) =>
+          stack.deploy(
+            Docker.Container("hardened-container", {
+              ...sleeper,
+              memory,
+              memorySwap: memory,
+              readOnly: true,
+              noNewPrivileges: true,
+              user: "1234:1234",
+            }),
+          );
+
+        const first = yield* deploy("64m");
+        const info = yield* docker.container.inspect(first.name);
+        expect(info.HostConfig.Memory).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.MemorySwap).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.ReadonlyRootfs).toBe(true);
+        expect(info.HostConfig.SecurityOpt).toContain("no-new-privileges");
+        expect(info.Config.User).toBe("1234:1234");
+        expect(yield* exec(first.name, "id", "-u")).toBe("1234");
+        expect(yield* exec(first.name, "grep", "NoNewPrivs", "/proc/self/status")).toMatch(
+          /NoNewPrivs:\s+1/,
+        );
+        const denied = yield* exec(first.name, "touch", "/tmp/alchemy-write").pipe(Effect.flip);
+        expect(denied.message).toContain("Read-only file system");
+
+        const same = yield* deploy("64m");
+        expect(same.id).toBe(first.id);
+        const replaced = yield* deploy("128m");
+        expect(replaced.id).not.toBe(first.id);
+      }),
+    );
+
     const invalidOptions: Array<[string, Partial<Docker.ContainerProps>]> = [
       [
         "ports",
@@ -837,6 +873,7 @@ describe(
           ],
         },
       ],
+      ["memorySwap without memory", { memorySwap: "1g" }],
     ];
     for (const [name, props] of invalidOptions) {
       test.provider(`rejects ${name} that cannot be combined before calling Docker`, (stack) =>
