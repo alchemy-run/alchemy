@@ -387,7 +387,7 @@ export type Instance = Resource<
  *       { matchers: ['severity="critical"'], groupBy: ["alertname"] },
  *       (notification) => Effect.log(notification.status, notification.groupLabels),
  *     );
- *     return { fetch: HttpServerResponse.text("ok") };
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
  *   }).pipe(Effect.provide(Stackit.Observability.AlertEventSourceLive)),
  * ) {}
  * ```
