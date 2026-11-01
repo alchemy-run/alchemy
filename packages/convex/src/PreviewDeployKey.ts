@@ -127,11 +127,14 @@ export const PreviewDeployKeyProvider = () =>
           if (olds === undefined) return undefined;
           const name = yield* keyName(id, olds.name);
           const projectId = olds.project.projectId;
-          const key = findStoredKey(yield* list(projectId), name);
+          const keys = yield* list(projectId);
+          const key = findStoredKey(keys, name);
           // During a replace this is the key being replaced. The engine deletes it
           // by name afterwards, so the new key must get a name of its own.
           if (key?.name === previous?.name) return undefined;
-          return key && Unowned(yield* toAttrs(key, projectId, Redacted.make("")));
+          if (key === undefined) return undefined;
+          const attrs = yield* toAttrs(key, projectId, Redacted.make(""));
+          return Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const projectId = news.project.projectId;
@@ -167,7 +170,8 @@ export const PreviewDeployKeyProvider = () =>
           );
 
           // Convex renames a repeated key, so read back what it stored.
-          const created = findStoredKey(yield* list(projectId), name);
+          const stored = yield* list(projectId);
+          const created = findStoredKey(stored, name);
           if (created === undefined) {
             return yield* new PreviewDeployKeyNotListed({
               message: `Preview key ${name} was created but is missing from the listing`,

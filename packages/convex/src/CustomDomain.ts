@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { team } from "./Credentials.ts";
 import type { DeploymentAttributes } from "./Deployment.ts";
+import { createOnce } from "./internal/retry.ts";
 import { assertTeam } from "./internal/team.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -124,11 +125,13 @@ export const CustomDomainProvider = () =>
         // Ensure. There's nothing mutable beyond the identity.
         if (existing === undefined) {
           yield* session.note(`Adding domain ${domain}...`);
-          yield* convex.createCustomDomain({
-            deployment_name: deploymentName,
-            domain,
-            requestDestination: destination,
-          });
+          yield* createOnce(
+            convex.createCustomDomain({
+              deployment_name: deploymentName,
+              domain,
+              requestDestination: destination,
+            }),
+          );
         }
         const item = existing ?? (yield* find(deploymentName, domain, destination));
         return yield* toAttrs(deploymentName, domain, destination, item);

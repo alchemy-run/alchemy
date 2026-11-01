@@ -146,11 +146,14 @@ export const DeployKeyProvider = () =>
           if (olds === undefined) return undefined;
           const name = yield* keyName(id, olds.name);
           const deploymentName = olds.deployment.deploymentName;
-          const key = findStoredKey(yield* list(deploymentName), name);
+          const keys = yield* list(deploymentName);
+          const key = findStoredKey(keys, name);
           // During a replace this is the key being replaced. The engine deletes it
           // by name afterwards, so the new key must get a name of its own.
           if (key?.name === previous?.name) return undefined;
-          return key && Unowned(yield* toAttrs(key, deploymentName, Redacted.make(NO_VALUE)));
+          if (key === undefined) return undefined;
+          const attrs = yield* toAttrs(key, deploymentName, Redacted.make(NO_VALUE));
+          return Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const deploymentName = news.deployment.deploymentName;

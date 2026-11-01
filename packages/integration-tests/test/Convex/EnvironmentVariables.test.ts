@@ -10,7 +10,8 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { testName } from "./support.ts";
+import * as Schedule from "effect/Schedule";
+import { onDeployment, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 const options = { timeout: 180_000 };
@@ -121,6 +122,41 @@ test.provider(
 
       const destroyed = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isSuccess(destroyed)).toBe(true);
+    }),
+  options,
+);
+
+test.provider(
+  "removing variables falls back to the team token when the key is revoked",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("env-revoked");
+      const { deployment, key } = yield* stack.deploy(app(name, { A: "1" }));
+      yield* convex.deleteDeployKey({ deployment_name: deployment.deploymentName, id: key.name });
+
+      // The deployment takes up to half a minute to notice a revoked key.
+      const rejected = yield* variables(deployment.url, key.value).pipe(
+        Effect.as(false),
+        Effect.catchTag("Unauthorized", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (done) => done,
+          times: 30,
+        }),
+      );
+      expect(rejected).toBe(true);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Convex.Project("App", { name }).pipe(RemovalPolicy.destroy());
+          yield* Convex.Deployment("Deployment", { project, type: "preview" });
+        }),
+      );
+      const left = yield* onDeployment(deployment.url, deployments.listEnvironmentVariables({}));
+      expect(left.environmentVariables).toEqual({});
+
+      yield* stack.destroy();
     }),
   options,
 );

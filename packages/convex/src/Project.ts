@@ -131,7 +131,8 @@ export const ProjectProvider = () =>
             return project && toAttrs(project);
           }
           const name = yield* projectName(id, olds?.name);
-          const found = yield* findByName(yield* team, name);
+          const teamId = yield* team;
+          const found = yield* findByName(teamId, name);
           const tag = yield* tagFor(id);
           const ours = found.find((project) => project.tags?.includes(tag));
           if (ours) return toAttrs(ours);
@@ -143,17 +144,24 @@ export const ProjectProvider = () =>
           const tags = [...new Set([...(news.tags ?? []), tag])].toSorted();
 
           // Observe
+          const teamId = yield* team;
           let project =
             output !== undefined
               ? yield* byId(output.projectId)
-              : (yield* findByName(yield* team, name))[0];
+              : (yield* findByName(teamId, name))[0];
+
+          // A 404 may mean another team's project, and creating here would leave
+          // the original behind with a twin beside it.
+          if (project === undefined && output !== undefined) {
+            yield* assertTeam(output.teamId, `project ${output.name}`);
+          }
 
           // Ensure. A duplicate name makes a second project rather than
           // failing, so the read above is the only guard.
           if (project === undefined) {
             yield* session.note(`Creating project ${name}...`);
             const created = yield* createOnce(
-              convex.createProject({ team_id: yield* team, projectName: name, tags }),
+              convex.createProject({ team_id: teamId, projectName: name, tags }),
             );
             project = yield* convex.getProject({ project_id: created.projectId });
           }
@@ -188,9 +196,8 @@ export const ProjectProvider = () =>
         }),
         // Only projects carrying an ownership tag, so nuke can't reach the rest of a team.
         list: Effect.fn(function* () {
-          const items = yield* Stream.runCollect(
-            convex.listProjects.items({ team_id: yield* team }),
-          );
+          const teamId = yield* team;
+          const items = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId }));
           return Array.from(items)
             .filter((project) => project.tags?.some(isOwnershipTag))
             .map(toAttrs);

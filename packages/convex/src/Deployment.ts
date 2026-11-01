@@ -310,6 +310,11 @@ export const DeploymentProvider = () =>
             (output !== undefined ? yield* byName(output.deploymentName) : undefined) ??
             (yield* observe(projectId, target.reference));
 
+          // A 404 may mean another team's deployment.
+          if (deployment === undefined && output !== undefined) {
+            yield* assertTeam(output.teamId, `deployment ${output.deploymentName}`);
+          }
+
           if (deployment === undefined && output !== undefined && news.type !== "preview") {
             return yield* new DeploymentVanished({
               deploymentName: output.deploymentName,
@@ -388,9 +393,8 @@ export const DeploymentProvider = () =>
         }),
         // Only deployments in projects carrying an ownership tag.
         list: Effect.fn(function* () {
-          const projects = yield* Stream.runCollect(
-            convex.listProjects.items({ team_id: yield* team }),
-          );
+          const teamId = yield* team;
+          const projects = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId }));
           const owned = Array.from(projects).filter((project) =>
             project.tags?.some(isOwnershipTag),
           );

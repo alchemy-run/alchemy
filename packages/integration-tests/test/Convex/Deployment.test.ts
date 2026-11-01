@@ -289,6 +289,42 @@ test.provider(
   options,
 );
 
+test.provider(
+  "a preview isn't recreated when the token can't see its team",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("deployment-team-deploy");
+      const { deployment, project } = yield* stack.deploy(app(name, { type: "preview" }));
+
+      const setAttrs = (attrs: Record<string, unknown>) =>
+        Effect.gen(function* () {
+          const state = yield* yield* State;
+          const address = { stack: stack.name, stage: stack.stage, fqn: "Deployment" };
+          const stored = yield* state.get(address);
+          if (!stored || isActionState(stored) || !("attr" in stored) || !stored.attr) {
+            return yield* Effect.die(new Error("Expected a deployment row with attributes"));
+          }
+          yield* state.set({
+            ...address,
+            value: { ...stored, attr: { ...stored.attr, ...attrs } },
+          });
+        }).pipe(Effect.provide(stack.state));
+
+      yield* setAttrs({ teamId: 1, deploymentName: "no-such-deployment-0" });
+      const refused = yield* stack
+        .deploy(app(name, { type: "preview", reference: "somewhere-else" }))
+        .pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      expect(yield* missing(deployment.deploymentName)).toBe(false);
+
+      yield* setAttrs({ teamId: project.teamId, deploymentName: deployment.deploymentName });
+      yield* stack.destroy();
+      expect(yield* projectsNamed(name)).toEqual([]);
+    }),
+  options,
+);
+
 test.provider("types a missing deployment", () =>
   Effect.gen(function* () {
     const error = yield* convex

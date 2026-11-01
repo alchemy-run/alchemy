@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { DeploymentAttributes } from "./Deployment.ts";
 import { GONE, onDeployment } from "./internal/deployment.ts";
+import { createOnce } from "./internal/retry.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface UsageLimitProps {
@@ -137,7 +138,10 @@ export const UsageLimitProvider = () =>
         // Ensure
         if (current === undefined) {
           yield* session.note(`Creating ${news.metric} limit...`);
-          const { usageLimit } = yield* onDeployment(url, deployment.createUsageLimit(desired));
+          const { usageLimit } = yield* onDeployment(
+            url,
+            createOnce(deployment.createUsageLimit(desired)),
+          );
           return toAttrs(url, usageLimit);
         }
 

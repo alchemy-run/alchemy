@@ -220,6 +220,41 @@ test.provider(
   options,
 );
 
+test.provider(
+  "a deploy fails rather than making a twin when the token can't see the project",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("project-team-deploy");
+      const project = yield* stack.deploy(App({ name }));
+
+      const setAttrs = (attrs: Record<string, unknown>) =>
+        Effect.gen(function* () {
+          const state = yield* yield* State;
+          const address = { stack: stack.name, stage: stack.stage, fqn: "App" };
+          const stored = yield* state.get(address);
+          if (!stored || isActionState(stored) || !("attr" in stored) || !stored.attr) {
+            return yield* Effect.die(new Error("Expected a project row with attributes"));
+          }
+          yield* state.set({
+            ...address,
+            value: { ...stored, attr: { ...stored.attr, ...attrs } },
+          });
+        }).pipe(Effect.provide(stack.state));
+
+      // Another team's project answers 404, exactly like one that was deleted.
+      yield* setAttrs({ teamId: 1, projectId: 1 });
+      const refused = yield* stack.deploy(App({ name, tags: ["changed"] })).pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      expect(yield* projectsNamed(name)).toHaveLength(1);
+
+      yield* setAttrs({ teamId: project.teamId, projectId: project.projectId });
+      yield* stack.destroy();
+      expect(yield* projectsNamed(name)).toEqual([]);
+    }),
+  options,
+);
+
 test.provider("types a missing project", () =>
   Effect.gen(function* () {
     const error = yield* convex.getProject({ project_id: 1 }).pipe(Effect.flip);

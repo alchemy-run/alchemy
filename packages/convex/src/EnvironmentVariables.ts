@@ -5,7 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { fromDeployment } from "./Credentials.ts";
-import { GONE } from "./internal/deployment.ts";
+import { GONE, onDeployment } from "./internal/deployment.ts";
 import { envChanges, envHash } from "./internal/env.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -89,10 +89,15 @@ export const EnvironmentVariablesProvider = () =>
       delete: Effect.fn(function* ({ olds, output, session }) {
         const changes = output.managed.map((name) => ({ name, value: null }));
         if (changes.length === 0) return;
-        yield* deployment.updateEnvironmentVariables({ changes }).pipe(
+        const update = deployment.updateEnvironmentVariables({ changes });
+        yield* update.pipe(
           on(olds.url, olds.token),
-          // A deployment that has gone took its variables with it, and its URL
-          // and keys with them.
+          // The deploy key may have been revoked. The team token can still
+          // clean up, and if it's refused too, the delete fails.
+          Effect.catchTag(["Unauthorized", "MalformedAccessToken"], () =>
+            onDeployment(olds.url, update),
+          ),
+          // A deployment that has gone took its variables with it.
           Effect.catchTag(GONE, () => Effect.void),
           // Convex won't remove a variable the pushed auth config reads. That
           // can't block a destroy, and the deployment usually goes next.

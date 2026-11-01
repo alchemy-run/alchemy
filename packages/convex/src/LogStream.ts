@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { DeploymentAttributes } from "./Deployment.ts";
 import { GONE, onDeployment } from "./internal/deployment.ts";
+import { createOnce } from "./internal/retry.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface LogStreamProps {
@@ -119,7 +120,7 @@ export const LogStreamProvider = () =>
           yield* session.note(`Creating ${type} log stream...`);
           const created = yield* onDeployment(
             url,
-            deployment.createLogStream({ body: news.config }),
+            createOnce(deployment.createLogStream({ body: news.config })),
           );
           return {
             logStreamId: created.id,

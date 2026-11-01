@@ -9,13 +9,8 @@ export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R
   });
 
 /**
- * The failures a Deployment API call gets once its deployment has gone: the
- * URL stops resolving, and its keys go with it. A delete treats these as done.
+ * What a Deployment API call gets once its deployment has gone: a 404, whatever
+ * the token. A live deployment answers 401 to a revoked key, so an auth failure
+ * must fail the delete rather than drop the state row and leave the data.
  */
-export const GONE = [
-  "NotFound",
-  "Unauthorized",
-  "MalformedAccessToken",
-  "BadDeployKey",
-  "HttpClientError",
-] as const;
+export const GONE = ["NotFound"] as const;

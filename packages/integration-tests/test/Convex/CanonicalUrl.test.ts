@@ -1,9 +1,11 @@
 import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as convex from "@distilled.cloud/convex/convex";
 import * as deployments from "@distilled.cloud/convex/deployment";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { onDeployment, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
@@ -38,6 +40,21 @@ test.provider(
       expect((yield* read).convexSiteUrl).toBe(original);
 
       yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "delete tolerates a deployment that is already gone",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("canonical-gone");
+      const { deployment } = yield* stack.deploy(app(name, "https://one.alchemy-convex.invalid"));
+      yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
+
+      const destroyed = yield* stack.destroy().pipe(Effect.result);
+      expect(Result.isSuccess(destroyed)).toBe(true);
     }),
   { timeout: 180_000 },
 );
