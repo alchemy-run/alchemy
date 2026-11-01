@@ -24,7 +24,7 @@ test.provider(
         "--format",
         "{{json .SecurityOptions}}",
       ]);
-      const apparmorProfile = securityOptions.includes("name=apparmor")
+      const appArmorProfile = securityOptions.includes("name=apparmor")
         ? "docker-default"
         : undefined;
       const name = "alchemy-test-container-advanced-runtime";
@@ -33,13 +33,13 @@ test.provider(
           name,
           image: "alpine:3.22",
           seccompProfile: "builtin",
-          apparmorProfile,
-          userns: "host",
+          appArmorProfile,
+          userNamespace: "host",
           groupAdd: ["1234"],
           ulimits: { nofile: { soft: 1024, hard: 2048 } },
           logDriver: "json-file",
           logOptions: { "max-file": maxFile, "max-size": "1m" },
-          oomScoreAdj: 200,
+          oomScoreAdjustment: 200,
           stopSignal: "SIGINT",
           start: false,
         });
@@ -48,8 +48,8 @@ test.provider(
       yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
       const info = yield* docker.container.inspect(name);
       expect(info.HostConfig.SecurityOpt).toContain("seccomp=builtin");
-      if (apparmorProfile !== undefined) {
-        expect(info.AppArmorProfile).toBe(apparmorProfile);
+      if (appArmorProfile !== undefined) {
+        expect(info.AppArmorProfile).toBe(appArmorProfile);
       }
       expect(info.HostConfig.UsernsMode).toBe("host");
       expect(info.HostConfig.GroupAdd).toContain("1234");
@@ -134,7 +134,7 @@ test.provider(
           memoryReservation: "128m",
           cpus: 0.5,
           pidsLimit,
-          readOnlyRootFs: true,
+          readOnlyRootFilesystem: true,
           capDrop: ["ALL"],
           noNewPrivileges: true,
           init: true,
@@ -191,7 +191,7 @@ test.provider(
         command: ["sleep", "120"],
         memory: "64m",
         memorySwap: "64m",
-        readOnlyRootFs: true,
+        readOnlyRootFilesystem: true,
         capDrop: ["ALL"],
         noNewPrivileges: true,
         init: true,
@@ -324,8 +324,8 @@ test.provider(
         },
         {
           id: "empty-apparmor-profile",
-          props: { apparmorProfile: "" },
-          reason: "apparmorProfile cannot be empty",
+          props: { appArmorProfile: "" },
+          reason: "appArmorProfile cannot be empty",
         },
         {
           id: "invalid-supplementary-group",
@@ -344,8 +344,8 @@ test.provider(
         },
         {
           id: "invalid-oom-score",
-          props: { oomScoreAdj: 1001 },
-          reason: "oomScoreAdj must be an integer",
+          props: { oomScoreAdjustment: 1001 },
+          reason: "oomScoreAdjustment must be an integer",
         },
       ];
       for (const { id, props, reason } of invalid) {

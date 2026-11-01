@@ -168,7 +168,7 @@ services.
 const worker = yield* Docker.Container("restricted-worker", {
   image: "alpine:3.22",
   command: ["sleep", "3600"],
-  readOnlyRootFs: true,
+  readOnlyRootFilesystem: true,
   capDrop: ["ALL"],
   noNewPrivileges: true,
   user: "1000:1000",
@@ -178,7 +178,7 @@ const worker = yield* Docker.Container("restricted-worker", {
 });
 ```
 
-`readOnlyRootFs` is Alchemy's name for Docker's `--read-only`:
+`readOnlyRootFilesystem` is Alchemy's name for Docker's `--read-only`:
 writeable directories must be mounted separately. The `tmpfs`
 above provides ephemeral scratch space; use a named `Volume` for
 data that must survive replacement. `capDrop: ["ALL"]` removes
@@ -193,21 +193,21 @@ capabilities and filesystem access your image actually requires.
 const worker = yield* Docker.Container("profiled-worker", {
   image: "alpine:3.22",
   seccompProfile: "./security/worker-seccomp.json",
-  apparmorProfile: "worker-profile",
+  appArmorProfile: "worker-profile",
 });
 ```
 
 `seccompProfile` points to a JSON file on the machine running
 Alchemy's Docker CLI. Alchemy hashes its **contents**, so editing
 the file recreates the container even when its path stays the
-same. `apparmorProfile` names an AppArmor policy that must already
+same. `appArmorProfile` names an AppArmor policy that must already
 be loaded on the Docker host; its availability is host-dependent.
 Docker's default confinement applies when you leave these settings
 unset. Avoid `"unconfined"` unless disabling a policy is intentional.
 
 You can also provide `groupAdd: ["2000"]` for supplementary groups
 and `ulimits: { nofile: { soft: 1024, hard: 4096 } }` for per-process
-limits. `userns` selects a user-namespace mode; `userns: "host"`
+limits. `userNamespace` selects a user-namespace mode; `userNamespace: "host"`
 **opts out of** daemon user remapping rather than strengthening
 isolation.
 
@@ -218,14 +218,14 @@ const worker = yield* Docker.Container("logged-worker", {
   image: "alpine:3.22",
   logDriver: "local",
   logOptions: { "max-size": "10m", "max-file": "3" },
-  oomScoreAdj: 200,
+  oomScoreAdjustment: 200,
   stopSignal: "SIGTERM",
   stopTimeout: "15 seconds",
 });
 ```
 
 `logDriver` and `logOptions` configure Docker-managed logging;
-supported options depend on the selected driver. `oomScoreAdj`
+supported options depend on the selected driver. `oomScoreAdjustment`
 adjusts Linux's preference for choosing a process under memory
 pressure; it does **not** disable the OOM killer. `stopSignal`
 selects the graceful-stop signal, and `stopTimeout` sets the

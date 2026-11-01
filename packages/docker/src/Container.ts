@@ -83,7 +83,7 @@ export interface ContainerProps {
   /** Maximum number of processes and threads in the container. */
   pidsLimit?: number;
   /** Mount the container's root filesystem read-only. Writable paths need a volume or tmpfs. */
-  readOnlyRootFs?: boolean;
+  readOnlyRootFilesystem?: boolean;
   /** Prevent processes from gaining additional privileges through exec. */
   noNewPrivileges?: boolean;
   /** Run Docker's init process to forward signals and reap child processes. */
@@ -100,9 +100,9 @@ export interface ContainerProps {
    * Name of a preloaded AppArmor profile, e.g. `"docker-default"`.
    * Requires AppArmor support on the target host. `"unconfined"` disables it.
    */
-  apparmorProfile?: string;
+  appArmorProfile?: string;
   /** Docker user-namespace mode. `"host"` opts out of daemon user remapping. */
-  userns?: string;
+  userNamespace?: string;
   /** Supplementary Linux group names or numeric GIDs. */
   groupAdd?: string[];
   /** Per-process resource limits. `-1` represents unlimited. */
@@ -112,7 +112,7 @@ export interface ContainerProps {
   /** Driver-specific settings, such as `{ "max-size": "10m", "max-file": "3" }`. */
   logOptions?: Record<string, string>;
   /** Relative OOM score adjustment on Linux, from -1000 to 1000. */
-  oomScoreAdj?: number;
+  oomScoreAdjustment?: number;
   /** Stop signal, e.g. `"SIGTERM"` or `"SIGINT"`. */
   stopSignal?: string;
   /** Writable in-memory mounts, including size and POSIX mode controls. */
@@ -354,7 +354,7 @@ export interface Container extends Resource<
  *   memoryReservation: "256m",
  *   cpus: 0.5,
  *   pidsLimit: 128,
- *   readOnlyRootFs: true,
+ *   readOnlyRootFilesystem: true,
  *   capDrop: ["ALL"],
  *   noNewPrivileges: true,
  *   init: true,
@@ -368,12 +368,12 @@ export interface Container extends Resource<
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   seccompProfile: "./security/api-seccomp.json", // client-side JSON; edits roll the container
- *   apparmorProfile: "my-loaded-profile",          // must already be loaded on the host
+ *   appArmorProfile: "my-loaded-profile",          // must already be loaded on the host
  *   groupAdd: ["1000"],
  *   ulimits: { nofile: { soft: 1024, hard: 4096 } },
  *   logDriver: "local",
  *   logOptions: { "max-size": "10m", "max-file": "3" },
- *   oomScoreAdj: 200,
+ *   oomScoreAdjustment: 200,
  *   stopSignal: "SIGTERM",
  * });
  * ```
@@ -755,16 +755,18 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         : {}),
       ...(news.cpus !== undefined ? { cpus: news.cpus } : {}),
       ...(news.pidsLimit !== undefined ? { "pids-limit": news.pidsLimit } : {}),
-      ...(news.readOnlyRootFs ? { "read-only": true } : {}),
+      ...(news.readOnlyRootFilesystem ? { "read-only": true } : {}),
       ...(normalizeSecurityOptions(news) ? { "security-opt": normalizeSecurityOptions(news) } : {}),
-      ...(news.userns !== undefined ? { userns: news.userns } : {}),
+      ...(news.userNamespace !== undefined ? { userns: news.userNamespace } : {}),
       ...(news.groupAdd?.length ? { "group-add": normalizeGroups(news.groupAdd) } : {}),
       ...(Object.keys(news.ulimits ?? {}).length ? { ulimit: normalizeUlimits(news.ulimits) } : {}),
       ...(news.logDriver !== undefined ? { "log-driver": news.logDriver } : {}),
       ...(Object.keys(news.logOptions ?? {}).length
         ? { "log-opt": normalizeLogOptions(news.logOptions) }
         : {}),
-      ...(news.oomScoreAdj !== undefined ? { "oom-score-adj": news.oomScoreAdj } : {}),
+      ...(news.oomScoreAdjustment !== undefined
+        ? { "oom-score-adj": news.oomScoreAdjustment }
+        : {}),
       ...(news.stopSignal !== undefined ? { "stop-signal": news.stopSignal } : {}),
       ...(news.init ? { init: true } : {}),
       ...(news.user !== undefined ? { user: news.user } : {}),
@@ -831,7 +833,7 @@ const normalizeSecurityOptions = (props: ContainerProps): string[] | undefined =
   const options = [
     ...(props.noNewPrivileges ? ["no-new-privileges"] : []),
     ...(props.seccompProfile ? [`seccomp=${props.seccompProfile}`] : []),
-    ...(props.apparmorProfile ? [`apparmor=${props.apparmorProfile}`] : []),
+    ...(props.appArmorProfile ? [`apparmor=${props.appArmorProfile}`] : []),
   ];
   return options.length ? options : undefined;
 };
@@ -867,16 +869,16 @@ const hasHardeningOptions = (props: ContainerProps): boolean =>
   props.memoryReservation !== undefined ||
   props.cpus !== undefined ||
   props.pidsLimit !== undefined ||
-  props.readOnlyRootFs === true ||
+  props.readOnlyRootFilesystem === true ||
   props.noNewPrivileges === true ||
   props.seccompProfile !== undefined ||
-  props.apparmorProfile !== undefined ||
-  props.userns !== undefined ||
+  props.appArmorProfile !== undefined ||
+  props.userNamespace !== undefined ||
   (props.groupAdd?.length ?? 0) > 0 ||
   Object.keys(props.ulimits ?? {}).length > 0 ||
   props.logDriver !== undefined ||
   Object.keys(props.logOptions ?? {}).length > 0 ||
-  props.oomScoreAdj !== undefined ||
+  props.oomScoreAdjustment !== undefined ||
   props.stopSignal !== undefined ||
   props.init === true ||
   props.user !== undefined ||
@@ -908,8 +910,8 @@ const validateContainerOptions = (news: ContainerProps) => {
     "memoryReservation",
     "user",
     "seccompProfile",
-    "apparmorProfile",
-    "userns",
+    "appArmorProfile",
+    "userNamespace",
     "logDriver",
     "stopSignal",
   ] as const) {
@@ -961,12 +963,14 @@ const validateContainerOptions = (news: ContainerProps) => {
     }
   }
   if (
-    news.oomScoreAdj !== undefined &&
-    (!Number.isInteger(news.oomScoreAdj) || news.oomScoreAdj < -1000 || news.oomScoreAdj > 1000)
+    news.oomScoreAdjustment !== undefined &&
+    (!Number.isInteger(news.oomScoreAdjustment) ||
+      news.oomScoreAdjustment < -1000 ||
+      news.oomScoreAdjustment > 1000)
   ) {
     return Effect.fail(
       new InvalidContainerOptions({
-        message: "Docker.Container oomScoreAdj must be an integer from -1000 to 1000",
+        message: "Docker.Container oomScoreAdjustment must be an integer from -1000 to 1000",
       }),
     );
   }

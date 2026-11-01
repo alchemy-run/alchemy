@@ -99,7 +99,7 @@ export class Docker extends Context.Service<
         "pids-limit"?: number | undefined;
         /** Mount the root filesystem read-only. */
         "read-only"?: boolean | undefined;
-        /** Disable privilege escalation through exec. */
+        /** Security options such as `no-new-privileges` and seccomp/AppArmor profiles. */
         "security-opt"?: Array<string> | undefined;
         /** Per-container user namespace; "host" disables daemon user remapping. */
         userns?: string | undefined;
