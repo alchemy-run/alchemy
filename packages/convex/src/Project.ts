@@ -1,4 +1,4 @@
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -128,7 +128,7 @@ export type Project = Resource<"Convex.Project", ProjectProps, ProjectAttributes
  */
 export const Project = Resource<Project>("Convex.Project", { defaultRemovalPolicy: "retain" });
 
-const toAttrs = (project: convex.ProjectResponse): ProjectAttributes => ({
+const toAttrs = (project: management.ProjectResponse): ProjectAttributes => ({
   projectId: project.id,
   name: project.name,
   slug: project.slug,
@@ -139,13 +139,13 @@ const toAttrs = (project: convex.ProjectResponse): ProjectAttributes => ({
 
 /** Every project in the team with exactly this name, because Convex allows duplicates. */
 const findByName = Effect.fn(function* (teamId: number, name: string) {
-  const items = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId, q: name }));
+  const items = yield* Stream.runCollect(management.listProjects.items({ teamId, q: name }));
   return Array.from(items).filter((item) => item.name === name);
 });
 
 const byId = (projectId: number) =>
-  convex
-    .getProject({ project_id: projectId })
+  management
+    .getProject({ projectId })
     .pipe(Effect.catchTag("ProjectNotFound", () => Effect.undefined));
 
 export const ProjectProvider = () =>
@@ -204,9 +204,9 @@ export const ProjectProvider = () =>
           if (project === undefined) {
             yield* session.note(`Creating project ${name}...`);
             const created = yield* createOnce(
-              convex.createProject({ team_id: teamId, projectName: name, tags }),
+              management.createProject({ teamId, projectName: name, tags }),
             );
-            project = yield* convex.getProject({ project_id: created.projectId });
+            project = yield* management.getProject({ projectId: created.projectId });
           }
 
           // Sync. `tags` replaces the whole list.
@@ -219,15 +219,15 @@ export const ProjectProvider = () =>
           };
           if (Object.keys(patch).length > 0) {
             yield* session.note(`Updating project ${name}...`);
-            yield* convex.updateProject({ project_id: project.id, ...patch });
-            project = yield* convex.getProject({ project_id: project.id });
+            yield* management.updateProject({ projectId: project.id, ...patch });
+            project = yield* management.getProject({ projectId: project.id });
           }
           return toAttrs(project);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* assertTeam(output.teamId, `project ${output.name}`);
-          const prod = yield* convex
-            .listDeployments({ project_id: output.projectId, deploymentType: "prod" })
+          const prod = yield* management
+            .listDeployments({ projectId: output.projectId, deploymentType: "prod" })
             .pipe(Effect.catchTag("ProjectNotFound", () => Effect.succeed([])));
           if (prod.length > 0) {
             return yield* new ProjectHasProductionDeployment({
@@ -235,14 +235,14 @@ export const ProjectProvider = () =>
               message: `Project ${output.name} still has a prod deployment (${prod[0]!.name}). Delete it first.`,
             });
           }
-          yield* convex
-            .deleteProject({ project_id: output.projectId })
+          yield* management
+            .deleteProject({ projectId: output.projectId })
             .pipe(Effect.catchTag("ProjectNotFound", () => Effect.void));
         }),
         // Only projects carrying an ownership tag, so nuke can't reach the rest of a team.
         list: Effect.fn(function* () {
           const teamId = yield* team;
-          const items = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId }));
+          const items = yield* Stream.runCollect(management.listProjects.items({ teamId }));
           return Array.from(items)
             .filter((project) => project.tags?.some(isOwnershipTag))
             .map(toAttrs);

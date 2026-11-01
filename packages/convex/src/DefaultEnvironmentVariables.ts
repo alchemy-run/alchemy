@@ -1,4 +1,4 @@
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -100,8 +100,8 @@ export const DefaultEnvironmentVariablesProvider = () =>
         );
 
         // Observe the project, never `olds`: someone may have changed a value.
-        const { items } = yield* convex.listDefaultEnvironmentVariables({
-          project_id: projectId,
+        const { items } = yield* management.listDefaultEnvironmentVariables({
+          projectId,
         });
         const observed = new Map(
           items.flatMap((item) =>
@@ -120,7 +120,7 @@ export const DefaultEnvironmentVariablesProvider = () =>
         ];
         if (changes.length > 0) {
           yield* session.note(`Updating ${changes.length} default variables...`);
-          yield* convex.updateDefaultEnvironmentVariables({ project_id: projectId, changes });
+          yield* management.updateDefaultEnvironmentVariables({ projectId, changes });
         }
         return {
           projectId,
@@ -133,9 +133,9 @@ export const DefaultEnvironmentVariablesProvider = () =>
       delete: Effect.fn(function* ({ output }) {
         yield* assertTeam(output.teamId, `defaults of project ${output.projectId}`);
         if (output.managed.length === 0) return;
-        yield* convex
+        yield* management
           .updateDefaultEnvironmentVariables({
-            project_id: output.projectId,
+            projectId: output.projectId,
             changes: output.managed.map((key) => ({ ...split(key), value: null })),
           })
           .pipe(Effect.catchTag("ProjectNotFound", () => Effect.void));

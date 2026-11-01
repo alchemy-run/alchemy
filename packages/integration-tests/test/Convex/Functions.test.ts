@@ -3,7 +3,7 @@ import { pushCommand } from "@alchemy.run/convex/Functions";
 import { findConvexCli } from "@alchemy.run/convex/internal/cli";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
@@ -150,7 +150,7 @@ test.provider(
       const name = yield* testName("functions-expired");
       const rootDir = yield* scratchApp("functions-expired");
       const first = yield* stack.deploy(app(name, rootDir));
-      yield* convex.deleteDeployment({ deployment_name: first.deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: first.deployment.deploymentName });
 
       const second = yield* stack.deploy(app(name, rootDir));
       expect(second.deployment.url).not.toBe(first.deployment.url);

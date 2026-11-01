@@ -4,8 +4,8 @@ import { EnvironmentVariables } from "@alchemy.run/convex/EnvironmentVariables";
 import { envChanges, envHash } from "@alchemy.run/convex/internal/env";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
 import * as deployments from "@distilled.cloud/convex/deployment";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -118,7 +118,7 @@ test.provider(
       yield* stack.destroy();
       const name = yield* testName("env-gone");
       const { deployment } = yield* stack.deploy(app(name, { A: "1" }));
-      yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: deployment.deploymentName });
 
       const destroyed = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isSuccess(destroyed)).toBe(true);
@@ -133,7 +133,10 @@ test.provider(
       yield* stack.destroy();
       const name = yield* testName("env-revoked");
       const { deployment, key } = yield* stack.deploy(app(name, { A: "1" }));
-      yield* convex.deleteDeployKey({ deployment_name: deployment.deploymentName, id: key.name });
+      yield* management.deleteDeployKey({
+        deploymentName: deployment.deploymentName,
+        id: key.name,
+      });
 
       // The deployment takes up to half a minute to notice a revoked key.
       const rejected = yield* variables(deployment.url, key.value).pipe(

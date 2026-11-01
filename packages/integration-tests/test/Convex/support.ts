@@ -1,7 +1,7 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 import { Credentials, fromDeployment, team } from "@alchemy.run/convex/Credentials";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -20,7 +20,7 @@ export const testName = (suffix: string) =>
 /** The projects with exactly this name. */
 export const projectsNamed = Effect.fn(function* (name: string) {
   const teamId = yield* team;
-  const items = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId, q: name }));
+  const items = yield* Stream.runCollect(management.listProjects.items({ teamId, q: name }));
   return Array.from(items).filter((project) => project.name === name);
 });
 

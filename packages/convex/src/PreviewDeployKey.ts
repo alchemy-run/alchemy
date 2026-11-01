@@ -1,4 +1,4 @@
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -76,7 +76,7 @@ export type PreviewDeployKey = Resource<
 export const PreviewDeployKey = Resource<PreviewDeployKey>("Convex.PreviewDeployKey");
 
 const toAttrs = Effect.fn(function* (
-  key: convex.PlatformDeployKeyResponse,
+  key: management.PlatformDeployKeyResponse,
   projectId: number,
   value: Redacted.Redacted<string>,
 ) {
@@ -100,10 +100,10 @@ export const PreviewDeployKeyProvider = () =>
           : createPhysicalName({ id, lowercase: true, maxLength: 64, delimiter: "-" });
 
       const list = (projectId: number) =>
-        convex.listPreviewDeployKeys({ project_id: projectId }).pipe(
+        management.listPreviewDeployKeys({ projectId }).pipe(
           Effect.map((response) => response.items),
           Effect.catchTag("ProjectNotFound", () =>
-            Effect.succeed([] as readonly convex.PlatformDeployKeyResponse[]),
+            Effect.succeed([] as readonly management.PlatformDeployKeyResponse[]),
           ),
         );
 
@@ -156,14 +156,14 @@ export const PreviewDeployKeyProvider = () =>
           const stale = output?.name;
           if (stale !== undefined && keys.some((item) => item.name === stale)) {
             yield* session.note(`Rotating preview key ${stale}, because its value is unknown...`);
-            yield* convex
-              .deletePreviewDeployKey({ project_id: projectId, id: stale })
+            yield* management
+              .deletePreviewDeployKey({ projectId, id: stale })
               .pipe(Effect.catchTag("PreviewDeployKeyNotFound", () => Effect.void));
           }
           yield* session.note(`Creating preview key ${name}...`);
           const { previewDeployKey } = yield* createOnce(
-            convex.createPreviewDeployKey({
-              project_id: projectId,
+            management.createPreviewDeployKey({
+              projectId,
               name,
               expiresAt: news.expiresAt,
             }),
@@ -183,8 +183,8 @@ export const PreviewDeployKeyProvider = () =>
         list: () => Effect.succeed([]),
         delete: Effect.fn(function* ({ output }) {
           yield* assertTeam(output.teamId, `preview key ${output.name}`);
-          yield* convex
-            .deletePreviewDeployKey({ project_id: output.projectId, id: output.name })
+          yield* management
+            .deletePreviewDeployKey({ projectId: output.projectId, id: output.name })
             .pipe(
               Effect.catchTag(["PreviewDeployKeyNotFound", "ProjectNotFound"], () => Effect.void),
             );

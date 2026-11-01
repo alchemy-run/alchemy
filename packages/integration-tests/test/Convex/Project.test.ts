@@ -2,7 +2,7 @@ import * as Convex from "@alchemy.run/convex";
 import { team } from "@alchemy.run/convex/Credentials";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { isActionState, State } from "alchemy/State/State";
@@ -25,9 +25,9 @@ test.provider(
 
       const project = yield* stack.deploy(App({ name }));
       expect(project.name).toBe(name);
-      expect(yield* convex.listDeployments({ project_id: project.projectId })).toEqual([]);
+      expect(yield* management.listDeployments({ projectId: project.projectId })).toEqual([]);
 
-      const observed = yield* convex.getProject({ project_id: project.projectId });
+      const observed = yield* management.getProject({ projectId: project.projectId });
       expect(observed.tags?.some((tag) => tag.startsWith("alchemy-"))).toBe(true);
 
       yield* stack.destroy();
@@ -77,7 +77,7 @@ test.provider(
       const after = yield* stack.deploy(App({ name: renamed, tags: ["two"] }));
       expect(after.projectId).toBe(before.projectId);
 
-      const observed = yield* convex.getProject({ project_id: after.projectId });
+      const observed = yield* management.getProject({ projectId: after.projectId });
       expect(observed.name).toBe(renamed);
       expect(observed.tags).toContain("two");
       expect(observed.tags).not.toContain("one");
@@ -113,8 +113,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = yield* testName("project-unowned");
-      const foreign = yield* convex.createProject({
-        team_id: yield* team,
+      const foreign = yield* management.createProject({
+        teamId: yield* team,
         projectName: name,
       });
 
@@ -142,10 +142,10 @@ test.provider(
       const project = yield* stack.deploy(Convex.Project("App", { name }));
       yield* stack.destroy();
 
-      const observed = yield* convex.getProject({ project_id: project.projectId });
+      const observed = yield* management.getProject({ projectId: project.projectId });
       expect(observed.name).toBe(name);
 
-      yield* convex.deleteProject({ project_id: project.projectId });
+      yield* management.deleteProject({ projectId: project.projectId });
       expect(yield* projectsNamed(name)).toEqual([]);
     }),
   options,
@@ -159,13 +159,16 @@ test.provider(
       const name = yield* testName("project-prod");
 
       const project = yield* stack.deploy(App({ name }));
-      const prod = yield* convex.createDeployment({ project_id: project.projectId, type: "prod" });
+      const prod = yield* management.createDeployment({
+        projectId: project.projectId,
+        type: "prod",
+      });
 
       const refused = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
       expect(yield* projectsNamed(name)).toHaveLength(1);
 
-      yield* convex.deleteDeployment({ deployment_name: prod.name });
+      yield* management.deleteDeployment({ deploymentName: prod.name });
       yield* stack.destroy();
       expect(yield* projectsNamed(name)).toEqual([]);
     }),
@@ -272,7 +275,7 @@ test.provider(
 
 test.provider("types a missing project", () =>
   Effect.gen(function* () {
-    const error = yield* convex.getProject({ project_id: 1 }).pipe(Effect.flip);
+    const error = yield* management.getProject({ projectId: 1 }).pipe(Effect.flip);
     expect(error._tag).toBe("ProjectNotFound");
   }),
 );

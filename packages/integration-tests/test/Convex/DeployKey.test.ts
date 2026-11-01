@@ -3,8 +3,8 @@ import { fromDeployment } from "@alchemy.run/convex/Credentials";
 import { findStoredKey } from "@alchemy.run/convex/internal/keys";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
 import * as deployments from "@distilled.cloud/convex/deployment";
+import * as management from "@distilled.cloud/convex/management";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
@@ -95,8 +95,8 @@ provider(
       const name = yield* start(stack, "key-adopt");
       const keyName = `${name}-adopted`;
       const base = yield* stack.deploy(app(name, { name: `${keyName}-base` }));
-      const { deployKey: foreign } = yield* convex.createDeployKey({
-        deployment_name: base.deployment.deploymentName,
+      const { deployKey: foreign } = yield* management.createDeployKey({
+        deploymentName: base.deployment.deploymentName,
         name: keyName,
       });
 
@@ -188,7 +188,7 @@ provider(
       const keyName = `${name}-repeat`;
       const first = yield* stack.deploy(app(name, { name: `${keyName}-base` }));
       const deploymentName = first.deployment.deploymentName;
-      yield* convex.createDeployKey({ deployment_name: deploymentName, name: keyName });
+      yield* management.createDeployKey({ deploymentName, name: keyName });
 
       const withKey = (keep: boolean) =>
         Effect.gen(function* () {
@@ -200,9 +200,7 @@ provider(
       yield* stack.deploy(withKey(true));
       yield* stack.deploy(withKey(false));
 
-      const names = (yield* convex.listDeployKeys({ deployment_name: deploymentName })).map(
-        (key) => key.name,
-      );
+      const names = (yield* management.listDeployKeys({ deploymentName })).map((key) => key.name);
       expect(
         names.filter((stored) => stored.startsWith(keyName) && !stored.endsWith("-base")),
       ).toEqual([]);
@@ -217,7 +215,7 @@ provider(
     Effect.gen(function* () {
       const name = yield* start(stack, "key-gone");
       const { deployment } = yield* stack.deploy(app(name));
-      yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: deployment.deploymentName });
 
       const destroyed = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isSuccess(destroyed)).toBe(true);

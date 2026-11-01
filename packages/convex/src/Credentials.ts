@@ -1,5 +1,5 @@
-import * as convex from "@distilled.cloud/convex/convex";
 import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/convex/Credentials";
+import * as management from "@distilled.cloud/convex/management";
 import type { ConfigError } from "@distilled.cloud/core/errors";
 import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
@@ -40,7 +40,7 @@ export const team = Effect.gen(function* () {
 
 /** Decide which team to use from `GET /token_details` and an optional override. */
 export const teamFromDetails = Effect.fn(function* (
-  details: convex.GetTokenDetailsResponse,
+  details: management.GetTokenDetailsResponse,
   override?: string,
 ) {
   if (details.type !== "teamToken") {
@@ -73,7 +73,7 @@ const make = (
     const team = yield* resolve.pipe(
       Effect.orDie,
       Effect.flatMap((creds) =>
-        convex.getTokenDetails({}).pipe(
+        management.getTokenDetails({}).pipe(
           Effect.flatMap((details) => teamFromDetails(details, creds.teamId)),
           Effect.provideService(Credentials, credentials),
           Effect.provideService(HttpClient.HttpClient, http),

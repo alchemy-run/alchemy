@@ -74,7 +74,7 @@ export const DataSyncHttp = Layer.effect(
       return {
         sync: (request) => deploymentApi.startDataSync(request).pipe(on),
         list: () => deploymentApi.listActiveSyncs({}).pipe(on),
-        get: (syncId) => deploymentApi.getActiveSync({ sync_id: syncId }).pipe(on),
+        get: (syncId) => deploymentApi.getActiveSync({ syncId }).pipe(on),
       } satisfies DataSyncClient;
     }),
   ),

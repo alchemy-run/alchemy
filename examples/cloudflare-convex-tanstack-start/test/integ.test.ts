@@ -3,7 +3,7 @@ import { expect } from "bun:test";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex";
 import * as Test from "@alchemy.run/test/Bun";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import * as Alchemy from "alchemy";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
@@ -42,10 +42,10 @@ test.provider("both keys exist on Convex", () =>
   Effect.gen(function* () {
     const { projectId, deploymentName, deployKeyName, previewKeyName } = yield* stack;
 
-    const deployKeys = yield* convex.listDeployKeys({ deployment_name: deploymentName });
+    const deployKeys = yield* management.listDeployKeys({ deploymentName });
     expect(deployKeys.map((key) => key.name)).toContain(deployKeyName);
 
-    const previewKeys = yield* convex.listPreviewDeployKeys({ project_id: projectId });
+    const previewKeys = yield* management.listPreviewDeployKeys({ projectId });
     expect(previewKeys.items.map((key) => key.name)).toContain(previewKeyName);
   }),
 );

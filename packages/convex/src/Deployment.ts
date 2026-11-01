@@ -1,5 +1,5 @@
-import * as convex from "@distilled.cloud/convex/convex";
 import * as deploymentApi from "@distilled.cloud/convex/deployment";
+import * as management from "@distilled.cloud/convex/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -218,13 +218,13 @@ export type Deployment = Resource<
  */
 export const Deployment = Resource<Deployment>("Convex.Deployment");
 
-type CloudDeployment = convex.PlatformDeploymentResponseCase0;
+type CloudDeployment = management.PlatformDeploymentResponseCase0;
 
-const cloudOnly = (deployment: convex.PlatformDeploymentResponse) =>
+const cloudOnly = (deployment: management.PlatformDeploymentResponse) =>
   deployment.kind === "cloud" ? deployment : undefined;
 
 /** The arguments for `create_deployment`, without the project. */
-type CreateArgs = Omit<convex.CreateDeploymentRequest, "project_id">;
+type CreateArgs = Omit<management.CreateDeploymentRequest, "projectId">;
 
 interface Target {
   /** What to send to `create_deployment`. */
@@ -275,11 +275,9 @@ const targetOf = Effect.fn(function* (id: string, props: DeploymentProps) {
 });
 
 const observe = (projectId: number, reference: string | undefined) =>
-  convex
+  management
     .getProjectDeployment(
-      reference === undefined
-        ? { project_id: projectId, defaultProd: true }
-        : { project_id: projectId, reference },
+      reference === undefined ? { projectId, defaultProd: true } : { projectId, reference },
     )
     .pipe(
       Effect.map(cloudOnly),
@@ -287,7 +285,7 @@ const observe = (projectId: number, reference: string | undefined) =>
     );
 
 const byName = (name: string) =>
-  convex.getDeployment({ deployment_name: name }).pipe(
+  management.getDeployment({ deploymentName: name }).pipe(
     Effect.map(cloudOnly),
     Effect.catchTag("DeploymentNotFound", () => Effect.undefined),
   );
@@ -393,7 +391,7 @@ export const DeploymentProvider = () =>
           if (deployment === undefined) {
             yield* session.note(`Creating ${news.type} deployment...`);
             const created = yield* createOnce(
-              convex.createDeployment({ project_id: projectId, ...target.create }),
+              management.createDeployment({ projectId, ...target.create }),
             );
             deployment = cloudOnly(created);
             if (deployment === undefined) {
@@ -407,8 +405,8 @@ export const DeploymentProvider = () =>
           if (deployment.projectId !== projectId) {
             yield* session.note(`Transferring deployment ${deployment.name}...`);
             const name = deployment.name;
-            yield* convex.transferDeployment({
-              deployment_name: name,
+            yield* management.transferDeployment({
+              deploymentName: name,
               destinationProjectId: projectId,
             });
             deployment = (yield* byName(name)) ?? deployment;
@@ -431,7 +429,7 @@ export const DeploymentProvider = () =>
           if (Object.keys(patch).length > 0) {
             yield* session.note(`Updating deployment ${deployment.name}...`);
             const name = deployment.name;
-            yield* convex.updateDeployment({ deployment_name: name, ...patch });
+            yield* management.updateDeployment({ deploymentName: name, ...patch });
             deployment = (yield* byName(name)) ?? deployment;
           }
           // Nothing reports whether a deployment is paused, so both calls run
@@ -453,20 +451,20 @@ export const DeploymentProvider = () =>
             });
           }
           yield* assertTeam(output.teamId, `deployment ${output.deploymentName}`);
-          yield* convex
-            .deleteDeployment({ deployment_name: output.deploymentName })
+          yield* management
+            .deleteDeployment({ deploymentName: output.deploymentName })
             .pipe(Effect.catchTag("DeploymentNotFound", () => Effect.void));
         }),
         // Only deployments in projects carrying an ownership tag.
         list: Effect.fn(function* () {
           const teamId = yield* team;
-          const projects = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId }));
+          const projects = yield* Stream.runCollect(management.listProjects.items({ teamId }));
           const owned = Array.from(projects).filter((project) =>
             project.tags?.some(isOwnershipTag),
           );
           const found = yield* Effect.forEach(
             owned,
-            (project) => convex.listDeployments({ project_id: project.id }),
+            (project) => management.listDeployments({ projectId: project.id }),
             { concurrency: 4 },
           );
           return yield* Effect.forEach(

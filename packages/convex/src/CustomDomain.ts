@@ -1,4 +1,4 @@
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -68,7 +68,7 @@ export type CustomDomain = Resource<
 export const CustomDomain = Resource<CustomDomain>("Convex.CustomDomain");
 
 const find = Effect.fn(function* (deploymentName: string, domain: string, destination: string) {
-  const { domains } = yield* convex.listCustomDomains({ deployment_name: deploymentName });
+  const { domains } = yield* management.listCustomDomains({ deploymentName });
   return domains.find((item) => item.domain === domain && item.requestDestination === destination);
 });
 
@@ -76,7 +76,7 @@ const toAttrs = Effect.fn(function* (
   deploymentName: string,
   domain: string,
   requestDestination: string,
-  item: convex.PlatformCustomDomainResponse | undefined,
+  item: management.PlatformCustomDomainResponse | undefined,
 ) {
   return {
     deploymentName,
@@ -126,8 +126,8 @@ export const CustomDomainProvider = () =>
         if (existing === undefined) {
           yield* session.note(`Adding domain ${domain}...`);
           yield* createOnce(
-            convex.createCustomDomain({
-              deployment_name: deploymentName,
+            management.createCustomDomain({
+              deploymentName,
               domain,
               requestDestination: destination,
             }),
@@ -140,9 +140,9 @@ export const CustomDomainProvider = () =>
       list: () => Effect.succeed([]),
       delete: Effect.fn(function* ({ output }) {
         yield* assertTeam(output.teamId, `domain ${output.domain}`);
-        yield* convex
+        yield* management
           .deleteCustomDomain({
-            deployment_name: output.deploymentName,
+            deploymentName: output.deploymentName,
             domain: output.domain,
             requestDestination: output.requestDestination,
           })

@@ -1,8 +1,8 @@
 import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
 import * as deployments from "@distilled.cloud/convex/deployment";
+import * as management from "@distilled.cloud/convex/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
@@ -100,7 +100,7 @@ test.provider(
       yield* stack.destroy();
       const name = yield* testName("limit-gone");
       const { deployment } = yield* stack.deploy(app(name, { ...limit, limit: 1 }));
-      yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: deployment.deploymentName });
 
       const destroyed = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isSuccess(destroyed)).toBe(true);

@@ -3,8 +3,8 @@ import { DeploymentProtected } from "@alchemy.run/convex/Deployment";
 import { previewIdentifier, previewReference } from "@alchemy.run/convex/internal/references";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
 import * as deployments from "@distilled.cloud/convex/deployment";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
@@ -22,7 +22,7 @@ const app = (name: string, props: Omit<Convex.DeploymentProps, "project">) =>
   });
 
 const missing = (name: string) =>
-  convex.getDeployment({ deployment_name: name }).pipe(
+  management.getDeployment({ deploymentName: name }).pipe(
     Effect.as(false),
     Effect.catchTag("DeploymentNotFound", () => Effect.succeed(true)),
   );
@@ -55,8 +55,8 @@ test.provider(
       const first = yield* stack.deploy(
         Convex.Project("App", { name }).pipe(RemovalPolicy.destroy()),
       );
-      const existing = yield* convex.createDeployment({
-        project_id: first.projectId,
+      const existing = yield* management.createDeployment({
+        projectId: first.projectId,
         type: "preview",
         reference: previewIdentifier(stack.stage),
       });
@@ -81,7 +81,7 @@ test.provider(
       yield* stack.destroy();
       const name = yield* testName("deployment-vanish");
       const first = yield* stack.deploy(app(name, { type: "preview" }));
-      yield* convex.deleteDeployment({ deployment_name: first.deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: first.deployment.deploymentName });
 
       const second = yield* stack.deploy(app(name, { type: "preview" }));
       expect(second.deployment.deploymentName).not.toBe(first.deployment.deploymentName);
@@ -172,13 +172,13 @@ test.provider(
       const name = yield* testName("deployment-vanished-prod");
       const props = { type: "prod", deletionProtection: false } as const;
       const { deployment } = yield* stack.deploy(app(name, props));
-      yield* convex.deleteDeployment({ deployment_name: deployment.deploymentName });
+      yield* management.deleteDeployment({ deploymentName: deployment.deploymentName });
 
       const redeploy = yield* stack
         .deploy(app(name, { ...props, isDefault: true }))
         .pipe(Effect.result);
       expect(Result.isFailure(redeploy)).toBe(true);
-      expect(yield* convex.listDeployments({ project_id: deployment.projectId })).toEqual([]);
+      expect(yield* management.listDeployments({ projectId: deployment.projectId })).toEqual([]);
 
       yield* stack.destroy();
       expect(yield* projectsNamed(name)).toEqual([]);
@@ -213,8 +213,8 @@ test.provider(
       expect(after.deployment.deploymentName).toBe(before.deployment.deploymentName);
       expect(after.deployment.projectId).toBe(after.b.projectId);
 
-      const live = yield* convex.getDeployment({
-        deployment_name: after.deployment.deploymentName,
+      const live = yield* management.getDeployment({
+        deploymentName: after.deployment.deploymentName,
       });
       expect(live.projectId).toBe(after.b.projectId);
       const env = yield* onDeployment(
@@ -327,8 +327,8 @@ test.provider(
 
 test.provider("types a missing deployment", () =>
   Effect.gen(function* () {
-    const error = yield* convex
-      .getDeployment({ deployment_name: "no-such-deployment-0" })
+    const error = yield* management
+      .getDeployment({ deploymentName: "no-such-deployment-0" })
       .pipe(Effect.flip);
     expect(error._tag).toBe("DeploymentNotFound");
   }),

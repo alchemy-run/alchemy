@@ -1,7 +1,7 @@
 import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -40,8 +40,8 @@ provider(
       expect(result.code).toBe(0);
       expect(result.output).not.toContain(Redacted.value(key.value));
 
-      const previews = yield* convex.listDeployments({
-        project_id: project.projectId,
+      const previews = yield* management.listDeployments({
+        projectId: project.projectId,
         deploymentType: "preview",
       });
       expect(
@@ -79,16 +79,16 @@ provider(
         }),
       );
       expect(
-        (yield* convex.listPreviewDeployKeys({ project_id: project.projectId })).items.map(
+        (yield* management.listPreviewDeployKeys({ projectId: project.projectId })).items.map(
           (k) => k.name,
         ),
       ).toEqual([key.name]);
 
       yield* stack.destroy();
       expect(
-        (yield* convex.listPreviewDeployKeys({ project_id: project.projectId })).items,
+        (yield* management.listPreviewDeployKeys({ projectId: project.projectId })).items,
       ).toEqual([]);
-      yield* convex.deleteProject({ project_id: project.projectId });
+      yield* management.deleteProject({ projectId: project.projectId });
     }),
   options,
 );
@@ -113,8 +113,8 @@ provider(
       const second = yield* stack.deploy(named(4_102_444_800_000));
       expect(Redacted.value(second.key.value)).not.toBe(Redacted.value(first.key.value));
 
-      const { items } = yield* convex.listPreviewDeployKeys({
-        project_id: first.project.projectId,
+      const { items } = yield* management.listPreviewDeployKeys({
+        projectId: first.project.projectId,
       });
       expect(items.map((item) => item.name)).toEqual([second.key.name]);
       yield* stack.destroy();

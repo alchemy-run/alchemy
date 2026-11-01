@@ -1,4 +1,4 @@
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -90,7 +90,7 @@ export const DeployKey = Resource<DeployKey>("Convex.DeployKey");
 const NO_VALUE = "";
 
 const toAttrs = Effect.fn(function* (
-  key: convex.PlatformDeployKeyResponse,
+  key: management.PlatformDeployKeyResponse,
   deploymentName: string,
   value: Redacted.Redacted<string>,
 ) {
@@ -115,11 +115,11 @@ export const DeployKeyProvider = () =>
           : createPhysicalName({ id, lowercase: true, maxLength: 64, delimiter: "-" });
 
       const list = (deploymentName: string) =>
-        convex
-          .listDeployKeys({ deployment_name: deploymentName })
+        management
+          .listDeployKeys({ deploymentName })
           .pipe(
             Effect.catchTag("DeploymentNotFound", () =>
-              Effect.succeed([] as readonly convex.PlatformDeployKeyResponse[]),
+              Effect.succeed([] as readonly management.PlatformDeployKeyResponse[]),
             ),
           );
 
@@ -175,26 +175,23 @@ export const DeployKeyProvider = () =>
           const stale = output?.name;
           if (stale !== undefined && keys.some((item) => item.name === stale)) {
             yield* session.note(`Rotating deploy key ${stale}, because its value is unknown...`);
-            yield* convex
-              .deleteDeployKey({ deployment_name: deploymentName, id: stale })
+            yield* management
+              .deleteDeployKey({ deploymentName, id: stale })
               .pipe(Effect.catchTag("DeployKeyNotFound", () => Effect.void));
           }
           yield* session.note(`Creating deploy key ${name}...`);
           const { deployKey } = yield* createOnce(
-            convex.createDeployKey({
-              deployment_name: deploymentName,
+            management.createDeployKey({
+              deploymentName,
               name,
               allowedActions:
-                news.allowedActions as convex.CreateDeployKeyRequest["allowedActions"],
+                news.allowedActions as management.CreateDeployKeyRequest["allowedActions"],
               expiresAt: news.expiresAt,
             }),
           );
 
           // Convex renames a repeated key, so read back what it stored.
-          const created = findStoredKey(
-            yield* convex.listDeployKeys({ deployment_name: deploymentName }),
-            name,
-          );
+          const created = findStoredKey(yield* management.listDeployKeys({ deploymentName }), name);
           if (created === undefined) {
             return yield* new DeployKeyNotListed({
               message: `Deploy key ${name} was created but is missing from the listing`,
@@ -206,8 +203,8 @@ export const DeployKeyProvider = () =>
         list: () => Effect.succeed([]),
         delete: Effect.fn(function* ({ output }) {
           yield* assertTeam(output.teamId, `deploy key ${output.name}`);
-          yield* convex
-            .deleteDeployKey({ deployment_name: output.deploymentName, id: output.name })
+          yield* management
+            .deleteDeployKey({ deploymentName: output.deploymentName, id: output.name })
             .pipe(Effect.catchTag(["DeployKeyNotFound", "DeploymentNotFound"], () => Effect.void));
         }),
       };

@@ -1,7 +1,7 @@
 import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -49,7 +49,7 @@ test.provider.skipIf(!pro)(
       const name = yield* testName("domain-sync");
       const first = yield* stack.deploy(app(name, "one.alchemy-convex.invalid"));
       const list = () =>
-        convex.listCustomDomains({ deployment_name: first.deployment.deploymentName });
+        management.listCustomDomains({ deploymentName: first.deployment.deploymentName });
       expect((yield* list()).domains.map((item) => item.domain)).toEqual([
         "one.alchemy-convex.invalid",
       ]);

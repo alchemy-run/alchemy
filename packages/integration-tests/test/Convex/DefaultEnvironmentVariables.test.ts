@@ -1,7 +1,7 @@
 import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as convex from "@distilled.cloud/convex/convex";
+import * as management from "@distilled.cloud/convex/management";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -21,8 +21,8 @@ const app = (
   });
 
 const defaults = (projectId: number) =>
-  convex
-    .listDefaultEnvironmentVariables({ project_id: projectId })
+  management
+    .listDefaultEnvironmentVariables({ projectId })
     .pipe(
       Effect.map((response) =>
         Object.fromEntries(
@@ -45,8 +45,8 @@ test.provider(
       const project = yield* stack.deploy(app(name, { A: "1", B: Redacted.make("2") }));
       expect(yield* defaults(project.projectId)).toEqual({ A: ["1", ALL], B: ["2", ALL] });
 
-      yield* convex.updateDefaultEnvironmentVariables({
-        project_id: project.projectId,
+      yield* management.updateDefaultEnvironmentVariables({
+        projectId: project.projectId,
         changes: [{ name: "HAND", deploymentType: "dev", value: "kept" }],
       });
 
