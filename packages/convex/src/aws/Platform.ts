@@ -352,6 +352,7 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
  * you set it to `false` and deploy.
  *
  * @see https://github.com/convex/convex-backend/tree/main/self-hosted
+ *
  * @resource
  * @product Self-hosted
  */

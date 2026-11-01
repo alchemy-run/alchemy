@@ -1388,6 +1388,14 @@ export default defineConfig({
               label: "Observability",
               items: [{ label: "Log streams", link: "/convex/observability/log-streams" }],
             },
+            {
+              label: "Self-hosted",
+              items: [
+                { label: "Backend", link: "/convex/self-hosted/backend" },
+                { label: "Platform", link: "/convex/self-hosted/platform" },
+                { label: "Two AWS accounts", link: "/convex/self-hosted/two-accounts" },
+              ],
+            },
             providerResourcesEntry("Convex"),
           ],
         },

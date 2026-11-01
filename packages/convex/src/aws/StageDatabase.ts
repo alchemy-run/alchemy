@@ -73,6 +73,7 @@ export type StageDatabase = Resource<
  * machine, so it never lands in a stage's state.
  *
  * @internal
+ *
  * @resource
  * @product StageDatabase
  */

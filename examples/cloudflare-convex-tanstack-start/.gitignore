@@ -1,0 +1,8 @@
+node_modules
+.alchemy
+.tanstack
+.nitro
+.output
+dist
+apps/web/src/routeTree.gen.ts
+packages/backend/convex/_generated

@@ -188,11 +188,62 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * yield* Convex.Functions("Functions", { backend, rootDir: "." });
  * ```
  *
+ * ### Choosing a database
+ * **Example:** A server you already run
+ * ```typescript
+ * const backend = yield* Convex.Backend("Backend", {
+ *   image,
+ *   domain,
+ *   db: { engine: "mysql", url: yield* Config.redacted("DATABASE_URL") },
+ * });
+ * ```
+ *
+ * **Example:** A file on EFS, for development
+ * ```typescript
+ * const backend = yield* Convex.Backend("Backend", {
+ *   image,
+ *   domain,
+ *   db: { engine: "sqlite" },
+ * });
+ * ```
+ *
+ * ### Using another DNS host
+ * **Example:** Records on Cloudflare
+ * ```typescript
+ * const backend = yield* Convex.Backend("Backend", {
+ *   image,
+ *   db,
+ *   domain: {
+ *     cloud: "cloud.example.com",
+ *     site: "site.example.com",
+ *     dns: Cloudflare.DNS.Adapter(),
+ *   },
+ * });
+ * ```
+ *
  * ### Sharing a platform
  * **Example:** One stage on a shared `Convex.Platform`
  * ```typescript
  * const { convex } = yield* Platform;
  * const backend = yield* Convex.Backend("Backend", { platform: convex, image });
+ * ```
+ *
+ * ### Removing a Backend
+ * :::caution
+ * `deletionProtection` keeps a created database and buckets with objects, not
+ * the running backend. A refused destroy has already removed the service and
+ * hosts. Deploying again restores them with a new instance secret and admin
+ * key. To remove the data, set it to `false`, deploy, then destroy.
+ * :::
+ *
+ * **Example:** Allow destroy
+ * ```typescript
+ * const backend = yield* Convex.Backend("Backend", {
+ *   image,
+ *   domain,
+ *   db,
+ *   deletionProtection: false,
+ * });
  * ```
  *
  * ### Safety

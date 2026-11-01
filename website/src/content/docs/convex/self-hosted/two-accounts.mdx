@@ -1,0 +1,69 @@
+---
+title: Two AWS accounts
+description: Keep production in its own account and share a development account between every other stage.
+---
+
+Run production in its own account and everything else in a development account, from the same code.
+
+| | Production account | Development account |
+| --- | --- | --- |
+| Platform stage | `prod` | `dev` |
+| App stages | `prod` | `alice`, `pr-42`, `staging` |
+| Domain | `example.com` | `dev.example.com` |
+| Convex API | `cloud.example.com` | `alice-cloud.dev.example.com` |
+| HTTP actions | `site.example.com` | `alice-site.dev.example.com` |
+
+Deploying one platform per account keeps a stage from reaching production, because the two share no network, database or role.
+
+## Delegate the development domain
+
+The domain's zone usually lives in one account, so the development account needs a zone of its own for `dev.example.com`. Do this once, in the development account:
+
+```sh
+aws route53 create-hosted-zone --name dev.example.com --caller-reference dev-zone --profile admin-dev
+```
+
+Note its four name servers, then add an `NS` record for `dev.example.com` holding them in the `example.com` zone, in the account that owns it.
+
+The certificate validates over DNS, so this delegation has to exist before the first platform deploy.
+
+## Bootstrap each account
+
+Each account needs Alchemy's assets bucket once, because the platform's database runner is a Lambda:
+
+```sh
+alchemy provider aws bootstrap --aws-profile admin-dev --region eu-central-1
+```
+
+## Deploy the platforms
+
+```sh
+CONVEX_DOMAIN=dev.example.com alchemy deploy stacks/platform.ts --stage dev --profile dev --yes
+```
+
+```sh
+CONVEX_DOMAIN=example.com alchemy deploy stacks/platform.ts --stage prod --profile production --yes
+```
+
+The account comes from the Alchemy profile, which you set with `--profile` or `ALCHEMY_PROFILE`. `AWS_PROFILE` has no effect on a deploy, and with neither set, Alchemy uses its `default` profile.
+
+The platform and app stacks must use the same state store. `AWS.state()` keeps state per account, which is what you want here.
+
+## Point a stage at its platform
+
+```typescript
+const { convex } = yield* Platform.stage[stage === "prod" ? "prod" : "dev"]!;
+const backend = yield* Convex.Backend("Backend", { platform: convex, image });
+```
+
+Only plain values cross stacks. The database master password stays in SSM and only its parameter name crosses, so it never lands in a stage's state.
+
+## Deploy a stage
+
+```sh
+alchemy deploy --stage alice --profile dev --yes
+```
+
+```sh
+alchemy deploy --stage prod --profile production --yes
+```
