@@ -380,7 +380,7 @@ export default { name: ${JSON.stringify(name)}, devTrust: Effect.succeed(Effect.
     const ingressSource = (provider: string, type: string, host: string) =>
       `import * as Effect from "effect/Effect";
 const origin = (target) => "http://" + target.label + ".${host}.test";
-const adapter = { origin: (target) => Effect.succeed(origin(target)), attach: (target) => Effect.succeed(origin(target)) };
+const adapter = { attach: (target) => Effect.succeed(origin(target)) };
 export default { name: ${JSON.stringify(provider)}, ingress: { ${JSON.stringify(type)}: Effect.succeed({ make: () => Effect.succeed(adapter) }) } };`;
 
     it.effect(
@@ -401,7 +401,8 @@ export default { name: ${JSON.stringify(provider)}, ingress: { ${JSON.stringify(
             label: "api",
             type: "T",
           };
-          expect(yield* adapter.origin(target)).toBe("http://api.two.test");
+          const origin = yield* adapter.attach(target, new URL("http://localhost:1"));
+          expect(origin).toBe("http://api.two.test");
         }).pipe(
           Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)),
           Effect.scoped,
@@ -463,10 +464,11 @@ export default { name: ${JSON.stringify(provider)}, ingress: { ${JSON.stringify(
             label: "api",
             type: "T",
           };
+          const listener = new URL("http://localhost:1");
           const services = Layer.merge(PlatformServices, FetchHttpClient.layer);
           const contributed = yield* inDirectory(
             root,
-            Ingress.origin({ type: "router" }, target).pipe(Effect.provide(services)),
+            Ingress.route({ type: "router" }, target, listener).pipe(Effect.provide(services)),
           );
           expect(contributed).toBe("http://api.contributed.test");
 
@@ -474,14 +476,13 @@ export default { name: ${JSON.stringify(provider)}, ingress: { ${JSON.stringify(
             router: {
               make: () =>
                 Effect.succeed({
-                  origin: () => Effect.succeed("http://overridden.test"),
                   attach: () => Effect.succeed("http://overridden.test"),
                 }),
             },
           });
           const overridden = yield* inDirectory(
             root,
-            Ingress.origin({ type: "router" }, target).pipe(
+            Ingress.route({ type: "router" }, target, listener).pipe(
               Effect.provide(Layer.merge(services, override)),
             ),
           );
