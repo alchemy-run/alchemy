@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as Portless from "@alchemy.run/portless";
 import { LanUnavailable } from "@alchemy.run/portless";
 import * as Lan from "@alchemy.run/portless/internal/Lan";
@@ -18,15 +17,6 @@ import * as TestProxy from "./fixtures/TestProxy.ts";
 
 const server = pathe.resolve(import.meta.dirname, "fixtures/server.mjs");
 const pinned = { PORTLESS_LAN_IP: "127.0.0.1" };
-
-/** Portless publishes `.local` names with a tool of the platform; without it LAN mode never starts. */
-const mdnsTool = { darwin: ["dns-sd", "-h"], linux: ["avahi-publish-address", "--help"] }[
-  process.platform as "darwin" | "linux"
-];
-const hasMdnsTool =
-  mdnsTool !== undefined &&
-  (spawnSync(mdnsTool[0]!, mdnsTool.slice(1)).error as NodeJS.ErrnoException | undefined)?.code !==
-    "ENOENT";
 
 const tagOf = (error: unknown) =>
   typeof error === "object" && error !== null && "_tag" in error
@@ -59,7 +49,7 @@ const lan = TestProxy.make(pinned, { lan: true });
 const serving = Test.make({ providers: lan.providers(), dev: true, stage: "dev_alice" });
 serving.afterAll(lan.stop);
 
-serving.test.provider.skipIf(!hasMdnsTool)(
+serving.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   "Proxy in LAN mode names services under .local and serves them beyond loopback",
   (stack) =>
     Effect.gen(function* () {
@@ -175,7 +165,7 @@ loopbackRunning.test.provider(
 const noLan = TestProxy.make(pinned);
 const lanRunning = Test.make({ providers: noLan.providers(), dev: true, stage: "dev_alice" });
 const lanStarted = lanRunning.beforeAll(
-  hasMdnsTool
+  TestProxy.hasMdnsTool
     ? Effect.gen(function* () {
         const stateDirectory = yield* noLan.stateDirectory;
         const port = yield* noLan.port;
@@ -191,7 +181,7 @@ const lanStarted = lanRunning.beforeAll(
 );
 lanRunning.afterAll(noLan.stop);
 
-lanRunning.test.provider.skipIf(!hasMdnsTool)(
+lanRunning.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   "Proxy without LAN mode rejects a running LAN proxy, and never touches it",
   (stack) =>
     Effect.gen(function* () {
@@ -213,7 +203,7 @@ lanRunning.test.provider.skipIf(!hasMdnsTool)(
 const sameLan = TestProxy.make(pinned, { lan: true });
 const lanReused = Test.make({ providers: sameLan.providers(), dev: true, stage: "dev_alice" });
 const sameStarted = lanReused.beforeAll(
-  hasMdnsTool
+  TestProxy.hasMdnsTool
     ? Effect.gen(function* () {
         const stateDirectory = yield* sameLan.stateDirectory;
         const port = yield* sameLan.port;
@@ -229,7 +219,7 @@ const sameStarted = lanReused.beforeAll(
 );
 lanReused.afterAll(sameLan.stop);
 
-lanReused.test.provider.skipIf(!hasMdnsTool)(
+lanReused.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   "Proxy in LAN mode reuses a running LAN proxy",
   (stack) =>
     Effect.gen(function* () {
