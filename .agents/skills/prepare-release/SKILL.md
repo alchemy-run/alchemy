@@ -149,7 +149,7 @@ service is the unit of ownership). Classify each:
 | Provider bug | wrong reconcile/diff/delete, leak, crash | `packages/alchemy/src/…` (alchemy PR) |
 | Untyped error | `Unknown*Error`, out-of-union status error, wrong schema | distilled patch (distilled PR) |
 | Emulator bug | only fails under floci | `submodules/floci` (floci PR) |
-| Test bug | non-deterministic name, unbounded wait, missing propagation retry | the test (alchemy PR) |
+| Test bug | non-deterministic or hard-coded name, unbounded wait, missing propagation retry | the test (alchemy PR) |
 | Platform/entitlement | plan-gated, slow async provisioning, beta API | skipIf-gate on the typed tag + exact error, keep an ungated probe |
 | Flake | passes alone, fails under load | re-run alone and on main first |
 
@@ -204,9 +204,13 @@ contract — include every item:
    - Cloudflare: `cd submodules/distilled/packages/cloudflare && bun scripts/generate.ts --resource <svc> && pnpm exec oxfmt src/services/<svc>.ts`
    - AWS: `cd submodules/distilled/packages/aws && bun scripts/generate.ts --sdk <svc>`
    Tests resolve distilled from `src/`, so there's nothing to rebuild or wait for.
-9. Test rules: start and end with `stack.destroy()`, deterministic names
-   (engine-generated or derived from `stack.stage`), out-of-band verification
-   through distilled, no mocks.
+9. Test rules: start and end with `stack.destroy()`, out-of-band verification
+   through distilled, no mocks. Names: let the resource generate the physical
+   name. Only a test about explicitly provided names passes one, and it is
+   derived from `stack.stage` so it is isolated to the user running the test.
+   Never `Date.now()`, UUIDs or random values in a name: every run is
+   deterministic and leaves no orphans. Fix any hard-coded name you find in
+   the suites you touch.
 10. Done means: its **full** tag passes, and distilled list/describe calls show
     zero orphans from its service.
 11. Structured result: `{ service, tag, testsPassed, testCommand, rootCause,
