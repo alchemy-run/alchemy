@@ -203,8 +203,7 @@ A local resource that listens on a port advertises `http://localhost:<port>`.
 A user who routes dev traffic through a router (a local HTTPS proxy, a
 tunnel) wants the resource's `url` to be the router's address instead. The
 resource takes an `ingress` in its `dev` props, and its local provider asks
-the router's **ingress adapter** for the address and routes it to the
-listener.
+the router's **ingress adapter** to route a name to the listener.
 
 The prop is an `IngressConfig`, which is plain data (`{ type, options }`).
 It crosses the sidecar's RPC boundary and persists in state, and a function
@@ -228,16 +227,6 @@ names, so a resource that builds another one inside itself (a site composite
 builds its server as `"Build"`) sets `name` for the user, to its own id, when
 the user gave an `ingress` and no `name`.
 
-### Ask for the origin before the listener exists
-
-```typescript
-const origin = yield* Ingress.origin(news.dev.ingress, target);
-```
-
-The origin is a function of the target and the adapter's options, so a
-provider that needs the address early (a pre-create, a resource that binds
-to its own URL) has it before anything listens.
-
 ### Route the listener
 
 ```typescript
@@ -254,6 +243,11 @@ start: Effect.fn(function* ({ news }) {
 closes, which for `start` is the instance scope. Keep the raw listener in an
 attribute (`localUrl`) for everything that dials the resource from inside
 the dev session, such as service bindings and emulated routers.
+
+There is no call for the origin without a listener, because a router that
+names a route when it makes it (a quick tunnel) has no name to give before
+then. Code that needs a router's name earlier uses that router's own
+function.
 
 `route` fails with `IngressAdapterNotFound` when no installed package
 contributes the adapter, and with `IngressError` when the adapter can't make
@@ -290,7 +284,6 @@ import type { IngressFactory } from "alchemy/Local/Ingress";
 export const factory: IngressFactory = {
   make: (options) =>
     Effect.succeed({
-      origin: (target) => Effect.succeed(hostFor(options, target)),
       attach: (target, listener) =>
         Effect.acquireRelease(
           addRoute(hostFor(options, target), listener),
@@ -312,8 +305,8 @@ export const Ingress = (
 // dev: { ingress: { ...Ingress(), name: "api" } }
 ```
 
-`attach` keeps its route in the `Scope` and returns the same origin as
-`origin`. It follows three rules:
+`attach` keeps its route in the `Scope` and returns the origin it answers at.
+It follows three rules:
 
 - Attaching the same `fqn` and listener again changes nothing.
 - Attaching an `fqn` to a new listener replaces its route.
