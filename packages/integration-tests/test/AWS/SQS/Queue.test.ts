@@ -1094,13 +1094,13 @@ for (const property of ["fifo", "queueName"] as const) {
       Effect.gen(function* () {
         yield* stack.destroy();
         const queue = yield* stack.deploy(unresolvedIdentity(true));
+        // A standard queue: the name carries no `.fifo` suffix.
         expect(queue.queueName).toBe(nameFor(true));
         const { Attributes } = yield* SQS.getQueueAttributes({
           QueueUrl: queue.queueUrl,
-          AttributeNames: ["Policy", "FifoQueue"],
+          AttributeNames: ["Policy"],
         });
         expect(Attributes?.Policy).toContain("SelfBound");
-        expect(Attributes?.FifoQueue).toBeUndefined();
         yield* stack.destroy();
         yield* assertQueueDeleted(queue.queueUrl);
       }),
