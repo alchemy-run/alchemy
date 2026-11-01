@@ -23,7 +23,14 @@ const TraceExport = Schema.fromJsonString(
       Schema.Struct({
         scopeSpans: Schema.Array(
           Schema.Struct({
-            spans: Schema.Array(Schema.Struct({ traceId: Schema.String, name: Schema.String })),
+            spans: Schema.Array(
+              Schema.Struct({
+                traceId: Schema.String,
+                spanId: Schema.String,
+                parentSpanId: Schema.optional(Schema.String),
+                name: Schema.String,
+              }),
+            ),
           }),
         ),
       }),
@@ -35,35 +42,20 @@ const TraceExport = Schema.fromJsonString(
  * The batches carrying the test's own spans, with those spans' names. Local
  * tools probe every port they see listening (T3 Code sends `GET /` to the
  * Worker), and the Worker exports those requests too. The test's spans are
- * its client trace plus the DO RPC events, which start their own trace and
- * only the test's `/rpc` route triggers; anything else is a probe's.
+ * its client trace, which the DO RPC events continue; anything else is a
+ * probe's.
  */
 const ownBatches = (batches: OtlpCollector["requests"], traceId: string) =>
   Effect.forEach(batches, (batch) =>
     Schema.decodeUnknownEffect(TraceExport)(batch.body).pipe(
-      Effect.map(({ resourceSpans }) => ({
-        batch,
-        spans: resourceSpans.flatMap((resource) =>
-          resource.scopeSpans.flatMap((scope) => scope.spans),
-        ),
-      })),
+      Effect.map(({ resourceSpans }) => {
+        const records = resourceSpans
+          .flatMap((resource) => resource.scopeSpans.flatMap((scope) => scope.spans))
+          .filter((span) => span.traceId === traceId);
+        return { batch, records, spans: records.map((span) => span.name) };
+      }),
     ),
-  ).pipe(
-    Effect.map((decoded) => {
-      const traces = new Set([
-        traceId,
-        ...decoded.flatMap(({ spans }) =>
-          spans.filter((span) => span.name === "otel-event-flush.rpc").map((span) => span.traceId),
-        ),
-      ]);
-      return decoded
-        .map(({ batch, spans }) => ({
-          batch,
-          spans: spans.filter((span) => traces.has(span.traceId)).map((span) => span.name),
-        }))
-        .filter(({ spans }) => spans.length > 0);
-    }),
-  );
+  ).pipe(Effect.map((decoded) => decoded.filter(({ spans }) => spans.length > 0)));
 
 test.provider(
   "delivers Worker and Durable Object OTLP batches without delaying the Worker response",
@@ -142,6 +134,14 @@ test.provider(
         }),
       );
       const batches = yield* own;
+      // The DO RPC event continues the caller's trace, parented on the
+      // Worker span that made the call, as the DO fetch event does.
+      const spans = batches.flatMap(({ records }) => records);
+      const rpcSpan = spans.find((span) => span.name === "otel-event-flush.rpc");
+      expect(rpcSpan?.traceId).toBe(trace.traceId);
+      expect(spans.find((span) => span.spanId === rpcSpan?.parentSpanId)?.name).toBe(
+        "otel-event-flush.worker",
+      );
       expect(batches).toHaveLength(4);
       expect(batches.every(({ batch }) => batch.completed && !batch.aborted)).toBe(true);
       for (const [name, count] of [

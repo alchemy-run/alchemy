@@ -138,6 +138,8 @@ const response = yield* HttpClient.get(`${url}/health`).pipe(
 );
 ```
 
+A Cloudflare Durable Object that stayed busy through a redeploy can answer with the old code for up to 5 minutes. Deploy test stages with `codeUpdateStrategy: { mode: "immediate" }`, or address a new object in each test. See [Tests can see the old code](/cloudflare/compute/code-updates#tests-can-see-the-old-code).
+
 ## Poll async effects
 
 Queues drain, workflows complete, and crons fire asynchronously — poll with a bounded declarative schedule, never a deadline loop:

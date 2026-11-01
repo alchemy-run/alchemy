@@ -1,6 +1,11 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 import * as Rpc from "effect/rpc/Rpc";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
+import type { Servable } from "./Api.ts";
 import type * as Event from "./Event.ts";
 import { FilterJson } from "./Filter.ts";
 import * as Key from "./Key.ts";
@@ -61,14 +66,15 @@ export interface ReadRpcs {
   readonly snapshot?: Rpc.Any;
 }
 
-export const contractOf = (entry: Readable): Read.AnyContract => {
-  if (entry.kind === "View" || entry.kind === "Stream") return entry.definition;
-  const read = entry.definition.read;
-  if (!read) {
-    throw new Error(`${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`);
-  }
-  return read;
-};
+/**
+ * The read contract an entry's RPCs are built from. An aggregate without
+ * `read` gets an empty one so an Api still builds its schemas; serving that
+ * Api dies with a DefinitionError instead (see `handlersOf` in Api.ts).
+ */
+export const contractOf = (entry: Readable): Read.AnyContract =>
+  entry.kind === "View" || entry.kind === "Stream"
+    ? entry.definition
+    : (entry.definition.read ?? {});
 
 const rpcCache = new WeakMap<object, ReadRpcs>();
 
@@ -239,4 +245,57 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   }
   rpcCache.set(entry, rpcs);
   return rpcs;
+};
+
+/** One call an Api serves, as the HTTP and AI surfaces publish it. */
+export interface Operation {
+  /** The command, view, stream or aggregate it belongs to. */
+  readonly served: Servable;
+  /** A command's tag, or a view's, stream's or aggregate's name. */
+  readonly name: string;
+  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
+  readonly operation: string;
+  readonly rpc: Rpc.AnyWithProps;
+  /** Whether the call answers with a stream of values (`watch`, `events`). */
+  readonly stream: boolean;
+}
+
+/** Every call an Api serves, in the order it serves them. */
+export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Operation> =>
+  serves.flatMap((served): ReadonlyArray<Operation> => {
+    if (served.kind === "Command") {
+      const rpc = served.rpc as Rpc.AnyWithProps;
+      return [{ served, name: served.tag, operation: "send", rpc, stream: false }];
+    }
+    const name = nameOf(served);
+    return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
+      if (read === undefined) return [];
+      const rpc = read as Rpc.AnyWithProps;
+      // A stream's `get` RPC is its client's `peek`.
+      const operation =
+        (call as keyof ReadRpcs) === "get" && served.kind === "Stream" ? "peek" : call;
+      return [
+        { served, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) },
+      ];
+    });
+  });
+
+/**
+ * An Api's in-process client for a caller from outside the app, such as an
+ * HTTP request or an MCP client. It runs no middleware's client half (what
+ * `RpcMiddleware.layerClient` provides): a credential the server holds for
+ * its own calls must never replace the caller's headers.
+ */
+export const outsideClient = <A, R>(api: {
+  readonly group: RpcGroup.RpcGroup<Rpc.Any>;
+  readonly clientInProcess: Effect.Effect<A, never, R>;
+}): Effect.Effect<A, never, R> => {
+  const middleware = new Set(
+    [...api.group.requests.values()].flatMap((rpc) => [...(rpc as Rpc.AnyWithProps).middlewares]),
+  );
+  // The keys `RpcMiddleware.layerClient` provides a middleware's client half under.
+  const halves = [...middleware].map(
+    (tag) => ({ key: `${tag.key}/Client` }) as unknown as Context.Key<never, unknown>,
+  );
+  return api.clientInProcess.pipe(Effect.updateContext(Context.omit(...halves)));
 };

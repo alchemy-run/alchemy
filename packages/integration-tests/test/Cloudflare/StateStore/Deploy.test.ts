@@ -598,6 +598,8 @@ const installOldAlchemy = Effect.gen(function* () {
         `@alchemy.run/cloudflare@${OLD_ALCHEMY}`,
         "effect@4.0.7",
         "@effect/platform-node@4.0.7",
+        // platform-node asks for `^4.0.7`, and 4.1 needs effect 4.1.
+        "@effect/platform-node-shared@4.0.7",
         "@effect/platform-bun@4.0.7",
       ],
       { cwd: oldAlchemyDir, stdout: "pipe", stderr: "pipe" },

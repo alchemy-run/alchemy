@@ -165,11 +165,11 @@ failing services ∪ leaking services.
 
 ## 6. Fix fleet
 
-Spawn one subagent per service on the worklist, in parallel. In T3 Code use
-`delegate_task` (`isolation: "shared"`, `mode: "async"`) so each fixer is a
-subagent thread nested under this one and reports back here when it finishes;
-never `t3_thread_launch`, whose detached top-level threads lose the grouping
-and never notify the coordinator. Run ~12 at once (
+Launch one agent per service on the worklist, in parallel. In T3 Code each
+fixer is a detached top-level thread from `t3_thread_launch` with
+`workspaceStrategy: { type: "existing_worktree", worktreePath: <this worktree> }`,
+never a `delegate_task` subagent thread. Collect each result with
+`t3_thread_wait` + `t3_thread_read`. Run ~12 at once (
 account-singleton services like CloudTrail, Config, SecurityHub, GuardDuty,
 ControlTower and IdentityCenter run as one sequential chain). Agents work in
 this worktree and **commit but don't push**; they touch only their service's
@@ -205,8 +205,8 @@ contract — include every item:
     notes }`.
 
 While agents run, watch for stalls: a transcript that hasn't been written for
-~5 minutes with no child test process is stalled — `task_cancel` it and
-re-dispatch with a new `delegate_task`.
+~5 minutes with no child test process is stalled — `t3_thread_interrupt` it
+and re-dispatch with a new `t3_thread_launch`.
 
 When results come in, review each diff yourself before accepting it. Reject
 any that catch a catch-all error, widen a cast, add `Effect.orDie` to a

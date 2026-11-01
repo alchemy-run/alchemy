@@ -461,6 +461,8 @@ export type WorkflowInstanceSubscribeOptions = runtime.WorkflowInstanceSubscribe
 export interface WorkflowHandle<Input = unknown, Result = unknown> {
   Type: TypeId;
   name: string;
+  /** Account-global physical Workflow name, for a resource that starts runs through the API. */
+  workflowName: Output.Output<string> | string;
   /**
    * Start a workflow instance. Pass payload through `params`; omit `id` to let
    * Cloudflare generate an instance ID.
@@ -1101,6 +1103,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       const self: WorkflowHandle<any, any> = {
         Type: TypeId,
         name,
+        workflowName: props?.workflowName ?? workflow.workflowName,
         create: (options?: WorkflowInstanceCreateOptions<any>) =>
           Effect.tryPromise(() => binding.create(options)).pipe(
             Effect.map(wrapInstance),

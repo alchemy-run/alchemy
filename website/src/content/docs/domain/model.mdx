@@ -143,6 +143,38 @@ And a client that has just deposited reads the summary at that receipt, so it se
 return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
 ```
 
+## Consumers added later receive the history
+
+Add a view or a projection to a model that already has events, and it receives those events first. You deploy, and it builds itself from the history, with no command and no script to run.
+
+Each key of the new consumer pulls the history from every instance that feeds it and applies those events in the order they were recorded, by timestamp. A summary per account sees its account's events in order, and a single dashboard fed by every account sees all of them in order, as if it had been there from the start. Events recorded while it catches up wait their turn, then arrive live.
+
+Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
+
+## Rebuild a view from the history
+
+A view's state is derived, so it can always be built again. When its `evolve` or routing changes what it should hold, or its state was lost, bump its version on the model's Layer:
+
+```typescript title="src/Bank.live.ts"
+Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
+```
+
+On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
+
+Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
+
+## Know when the history has arrived
+
+Until a new or rebuilt view has received the history, its answers cover only part of it. `history` says whether it's complete:
+
+```typescript title="src/summaryStatus.ts"
+const { complete } = yield* summaries.history;
+```
+
+A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`.
+
+On Cloudflare the deploy itself waits until the history is complete. See [History at scale](/domain/backfill) for how long that takes and what it costs.
+
 ## Order and partitions
 
 Every consumer works the same way underneath. At commit, each event is routed to a key of each consumer that wants it: by default its source instance, or whatever the consumer's `key` and `keyOf` say. Each key has an ordered input log, and its inputs are handled one at a time, or a batch at a time for a projection. Keys run in parallel.
@@ -224,7 +256,7 @@ it("the model is well defined", () => {
 });
 ```
 
-Each problem is a `Domain.DefinitionError` with a message that names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
 ## Run it
 
@@ -283,6 +315,17 @@ That rule keeps each model free to change. A support tool built on another model
     { from: "api", to: "bank" },
   ]}
 />
+
+## Give each model its own data
+
+Each model owns its data. Two models can use the same aggregate definition, and each still gets its own instances:
+
+```typescript
+class Billing extends Domain.Model("Billing", { aggregates: [Account], views: [Ledger] }) {}
+class Audit extends Domain.Model("Audit", { aggregates: [Account], views: [Owners] }) {}
+```
+
+Account `a-1` in Billing and account `a-1` in Audit are different instances, with their own events. `Ledger` only hears Billing's accounts, and `Owners` only hears Audit's. Every platform keeps them apart, even on the same Worker; see [Cloudflare: Host several models in one Worker](/domain/cloudflare#host-several-models-in-one-worker). Give every model its own name: hosting two models with the same name on one platform fails.
 
 ## Read the rest of the manual
 

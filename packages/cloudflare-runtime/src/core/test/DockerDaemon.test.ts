@@ -1,12 +1,9 @@
-import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Docker, DockerLive } from "../Docker.ts";
-
-const docker = (...args: string[]) =>
-  Effect.sync(() => execFileSync(process.env.DOCKER_BIN ?? "docker", args, { encoding: "utf8" }));
+import { docker } from "./helpers/docker.ts";
 
 it.live(
   "pulls an unprepared image again after a failed container create",

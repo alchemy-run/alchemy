@@ -599,6 +599,10 @@ export default defineConfig({
                   label: "WebSockets",
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
+                {
+                  label: "Code updates",
+                  link: "/cloudflare/compute/code-updates",
+                },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
                 {
                   label: "Container lifecycle",
@@ -1608,6 +1612,10 @@ export default defineConfig({
               ],
             },
             {
+              label: "Agents",
+              items: [{ label: "MCP", link: "/domain/mcp" }],
+            },
+            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1626,7 +1634,10 @@ export default defineConfig({
               label: "Hosting",
               items: [
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "History at scale", link: "/domain/backfill" },
                 { label: "In memory", link: "/domain/in-memory" },
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },

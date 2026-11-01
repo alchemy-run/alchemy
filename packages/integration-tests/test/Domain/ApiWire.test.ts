@@ -95,7 +95,12 @@ class Bank extends Domain.Model("Bank", {
   policies: [BookDeposits],
 }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Ship, Wallet, Ledger, Bookings, Parcel) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Deposit", "Ship"],
+  views: ["Bookings"],
+  aggregates: ["Wallet", "Ledger", "Parcel"],
+}) {}
 
 const Hosted = Bank.layer(BookDepositsLive).pipe(Layer.provide(InMemory));
 

@@ -755,6 +755,7 @@
       },
       "./Basin/internal/*": null,
       "./R2/internal/*": null,
+      "./Workers/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

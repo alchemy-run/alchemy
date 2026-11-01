@@ -11,9 +11,11 @@ import {
   type WhenStep,
 } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
@@ -654,7 +656,10 @@ describe("Domain Story", () => {
 
   it.live("an Api exposes a command; its middleware provides the context", () =>
     Effect.gen(function* () {
-      class CounterApi extends Domain.Api("CounterApi", ResetCounter) {}
+      class CounterApi extends Domain.Api("CounterApi", {
+        model: Counters,
+        commands: ["ResetCounter"],
+      }) {}
       const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
@@ -692,7 +697,12 @@ describe("Domain Story", () => {
 
   it.live("an Api exposes views and aggregates; validate judges every read", () =>
     Effect.gen(function* () {
-      class CounterApi extends Domain.Api("CounterApi", ResetCounter, Totals, Counter) {}
+      class CounterApi extends Domain.Api("CounterApi", {
+        model: Counters,
+        commands: ["ResetCounter"],
+        views: ["Totals"],
+        aggregates: ["Counter"],
+      }) {}
       const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       const sam = { headers: Headers.fromInput({ "x-operator": "sam" }) };
@@ -867,6 +877,25 @@ describe("Domain Story", () => {
       ),
     ),
   );
+
+  it.effect("a view that emits an event it does not declare fails with a DefinitionError", () => {
+    class Loud extends Domain.View("Loud", {
+      from: [Counter],
+      key: Counter,
+      events: [Logged],
+      emit: { Incremented: () => new Capped() as never },
+    }) {}
+    class Louds extends Domain.Model("Louds", { aggregates: [Counter], views: [Loud] }) {}
+    return Story.make(Louds)(Story.when(c1, new Increment({ by: 1 }))).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure._tag).toBe("StoryFailure");
+        expect(failure.reason).toContain(
+          "DefinitionError: Loud emitted 'Capped', which it does not declare in events",
+        );
+      }),
+    );
+  });
 
   it.effect("a failed policy is marked on the step that ran it", () => {
     class Boom extends Domain.Policy("Boom", { from: Counter, on: [Capped] }) {}

@@ -192,9 +192,10 @@ remove any a contributor committed.
   on the new head to finish (`gh pr checks <n>`). When one fails, read its log
   (`gh run view <id> --log-failed`), fix the cause, push, and wait again.
   Don't end your turn while a local suite is still running: wait on it with
-  `t3_background_wait`, since ending the turn is your report. A delegated
-  thread can't watch CI, so once the push is done, hand back with the checks'
-  state; the coordinator watches the PR and sends you the log if one fails.
+  `t3_background_wait`, since ending the turn is your report. To wait on CI,
+  `watch_pull_request` the PR after the push and end the turn; you're woken
+  when its checks finish. Ask to merge only once they pass, then
+  `unwatch_pull_request`.
 - Make sure CI actually runs. First-time contributors' runs sit at
   `action_required` and pushes don't start them. Read the whole diff first:
   approve the runs (`gh run approve <id>`) only when it doesn't touch
