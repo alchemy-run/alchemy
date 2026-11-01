@@ -251,6 +251,15 @@ export class ApplyExpr<A, B, Req = never> extends BaseExpr<B, Req> {
   [inspect](): string {
     return `${this.expr[inspect]()}.map(${this.f.toString()})`;
   }
+
+  // Bind the upstream and apply `f` where it is read. A binding keyed by this
+  // expression would embed `f.toString()`, which differs between the deploy
+  // and a minified runtime bundle, so the runtime would find nothing.
+  override asEffect(): any {
+    return Effect.map(this.expr.asEffect() as Effect.Effect<Accessor<A>>, (accessor) =>
+      Effect.map(accessor, this.f),
+    );
+  }
 }
 
 export const mapEffect =
@@ -373,6 +382,14 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
   [inspect](): string {
     return `all(${this.outs.map((out) => out[inspect]()).join(", ")})`;
+  }
+
+  // Bind each member on its own (see `ApplyExpr.asEffect`).
+  override asEffect(): any {
+    return Effect.map(
+      Effect.all(this.outs.map((out) => out.asEffect() as Effect.Effect<Accessor<unknown>>)),
+      (accessors) => Effect.all(accessors),
+    );
   }
 }
 
