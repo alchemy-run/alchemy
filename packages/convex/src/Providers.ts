@@ -5,6 +5,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { ConvexAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
+import { Project, ProjectProvider } from "./Project.ts";
 
 /**
  * Service tag bundling all Convex providers, auth and credentials. Use
@@ -25,7 +26,8 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([])).pipe(
+  Layer.effect(Providers, Provider.collection([Project])).pipe(
+    Layer.provide(Layer.mergeAll(ProjectProvider())),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(ConvexAuth),
