@@ -1014,10 +1014,7 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
   // Target first, then the dependent: a ref that already resolves from state,
   // so the later assertions isolate ordering and freshness from the
   // same-deploy create case.
-  const deployInPhases = (
-    stack: { deploy: <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.Effect<A, any, any> },
-    shared: TestResourceProps,
-  ) =>
+  const deployInPhases = (stack: Test.ScratchStack, shared: TestResourceProps) =>
     Effect.gen(function* () {
       yield* stack.deploy(program(shared, false));
       return yield* stack.deploy(program(shared));
