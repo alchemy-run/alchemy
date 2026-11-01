@@ -19,11 +19,63 @@ import {
   ObservabilityCredentialProvider as AlbObservabilityCredentialProvider,
 } from "./ALB/ObservabilityCredential.ts";
 import { StackitAuth } from "./AuthProvider.ts";
+// ── Automation imports ──
+import { VolumeAutomation, VolumeAutomationProvider } from "./Automation/VolumeAutomation.ts";
 // ── CDN imports ──
 import { CustomDomain, CustomDomainProvider } from "./CDN/CustomDomain.ts";
 import { Distribution, DistributionProvider } from "./CDN/Distribution.ts";
 // ── Certificates imports ──
 import { Certificate, CertificateProvider } from "./Certificates/Certificate.ts";
+// ── CloudFoundry imports ──
+import {
+  App as CloudFoundryApp,
+  AppProvider as CloudFoundryAppProvider,
+} from "./CloudFoundry/App.ts";
+import {
+  Organization as CloudFoundryOrganization,
+  OrganizationProvider as CloudFoundryOrganizationProvider,
+} from "./CloudFoundry/Organization.ts";
+import {
+  OrganizationManager as CloudFoundryOrganizationManager,
+  OrganizationManagerProvider as CloudFoundryOrganizationManagerProvider,
+} from "./CloudFoundry/OrganizationManager.ts";
+import {
+  OrganizationRole as CloudFoundryOrganizationRole,
+  OrganizationRoleProvider as CloudFoundryOrganizationRoleProvider,
+} from "./CloudFoundry/OrganizationRole.ts";
+import {
+  Route as CloudFoundryRoute,
+  RouteProvider as CloudFoundryRouteProvider,
+} from "./CloudFoundry/Route.ts";
+import {
+  ServiceInstance as CloudFoundryServiceInstance,
+  ServiceInstanceProvider as CloudFoundryServiceInstanceProvider,
+} from "./CloudFoundry/ServiceInstance.ts";
+import {
+  Space as CloudFoundrySpace,
+  SpaceProvider as CloudFoundrySpaceProvider,
+} from "./CloudFoundry/Space.ts";
+import {
+  SpaceRole as CloudFoundrySpaceRole,
+  SpaceRoleProvider as CloudFoundrySpaceRoleProvider,
+} from "./CloudFoundry/SpaceRole.ts";
+// ── ContainerApplications imports ──
+import {
+  Application as ContainerApplicationsApplication,
+  ApplicationProvider as ContainerApplicationsApplicationProvider,
+} from "./ContainerApplications/Application.ts";
+import {
+  Environment as ContainerApplicationsEnvironment,
+  EnvironmentProvider as ContainerApplicationsEnvironmentProvider,
+} from "./ContainerApplications/Environment.ts";
+import {
+  EnvironmentRegistry as ContainerApplicationsEnvironmentRegistry,
+  EnvironmentRegistryProvider as ContainerApplicationsEnvironmentRegistryProvider,
+} from "./ContainerApplications/EnvironmentRegistry.ts";
+import {
+  EnvironmentSecret as ContainerApplicationsEnvironmentSecret,
+  EnvironmentSecretProvider as ContainerApplicationsEnvironmentSecretProvider,
+} from "./ContainerApplications/EnvironmentSecret.ts";
 // ── ContainerRegistry imports ──
 import {
   Project as ContainerRegistryProject,
@@ -40,6 +92,19 @@ import {
   InstanceProvider as DremioInstanceProvider,
 } from "./Dremio/Instance.ts";
 import { User as DremioUser, UserProvider as DremioUserProvider } from "./Dremio/User.ts";
+// ── EdgeCloud imports ──
+import {
+  Instance as EdgeCloudInstance,
+  InstanceProvider as EdgeCloudInstanceProvider,
+} from "./EdgeCloud/Instance.ts";
+import {
+  Kubeconfig as EdgeCloudKubeconfig,
+  KubeconfigProvider as EdgeCloudKubeconfigProvider,
+} from "./EdgeCloud/Kubeconfig.ts";
+import {
+  Token as EdgeCloudToken,
+  TokenProvider as EdgeCloudTokenProvider,
+} from "./EdgeCloud/Token.ts";
 import { environmentFromAuthProvider } from "./Environment.ts";
 // ── FileStorage imports ──
 import { ProjectLock, ProjectLockProvider } from "./FileStorage/ProjectLock.ts";
@@ -53,6 +118,21 @@ import { ShareExportPolicy, ShareExportPolicyProvider } from "./FileStorage/Shar
 // ── Functions imports ──
 import { Function as FunctionsFunction, FunctionProvider } from "./Functions/Function.ts";
 import { PullCredential, PullCredentialProvider } from "./Functions/PullCredential.ts";
+// ── Git imports ──
+import {
+  AuthenticationSource as GitAuthenticationSource,
+  AuthenticationSourceProvider as GitAuthenticationSourceProvider,
+} from "./Git/AuthenticationSource.ts";
+import {
+  Instance as GitInstance,
+  InstanceProvider as GitInstanceProvider,
+} from "./Git/Instance.ts";
+import {
+  Repository as GitRepository,
+  RepositoryProvider as GitRepositoryProvider,
+} from "./Git/Repository.ts";
+import { Runner as GitRunner, RunnerProvider as GitRunnerProvider } from "./Git/Runner.ts";
+import { User as GitUser, UserProvider as GitUserProvider } from "./Git/User.ts";
 // ── IaaS imports ──
 import { AffinityGroup, AffinityGroupProvider } from "./IaaS/AffinityGroup.ts";
 import { Backup, BackupProvider } from "./IaaS/Backup.ts";
@@ -82,6 +162,7 @@ import {
   ServerServiceAccountAttachment,
   ServerServiceAccountAttachmentProvider,
 } from "./IaaS/ServerServiceAccountAttachment.ts";
+import { Service as IaaSService, ServiceProvider as IaaSServiceProvider } from "./IaaS/Service.ts";
 import { Snapshot, SnapshotProvider } from "./IaaS/Snapshot.ts";
 import { Volume, VolumeProvider } from "./IaaS/Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./IaaS/VolumeAttachment.ts";
@@ -144,6 +225,20 @@ import {
   Instance as MariaDBInstance,
   InstanceProvider as MariaDBInstanceProvider,
 } from "./MariaDB/Instance.ts";
+// ── ModelExperiments imports ──
+import {
+  Instance as ModelExperimentsInstance,
+  InstanceProvider as ModelExperimentsInstanceProvider,
+} from "./ModelExperiments/Instance.ts";
+import {
+  Token as ModelExperimentsToken,
+  TokenProvider as ModelExperimentsTokenProvider,
+} from "./ModelExperiments/Token.ts";
+// ── ModelServing imports ──
+import {
+  Token as ModelServingToken,
+  TokenProvider as ModelServingTokenProvider,
+} from "./ModelServing/Token.ts";
 // ── MongoDBFlex imports ──
 import {
   Instance as MongoDBFlexInstance,
@@ -301,6 +396,28 @@ import {
   User as SecretsManagerUser,
   UserProvider as SecretsManagerUserProvider,
 } from "./SecretsManager/User.ts";
+// ── ServerBackup imports ──
+import {
+  Backup as ServerBackupBackup,
+  BackupProvider as ServerBackupBackupProvider,
+} from "./ServerBackup/Backup.ts";
+import {
+  Enablement as ServerBackupEnablement,
+  EnablementProvider as ServerBackupEnablementProvider,
+} from "./ServerBackup/Enablement.ts";
+import {
+  Schedule as ServerBackupSchedule,
+  ScheduleProvider as ServerBackupScheduleProvider,
+} from "./ServerBackup/Schedule.ts";
+// ── ServerUpdate imports ──
+import {
+  Enablement as ServerUpdateEnablement,
+  EnablementProvider as ServerUpdateEnablementProvider,
+} from "./ServerUpdate/Enablement.ts";
+import {
+  Schedule as ServerUpdateSchedule,
+  ScheduleProvider as ServerUpdateScheduleProvider,
+} from "./ServerUpdate/Schedule.ts";
 // ── ServiceEnablement imports ──
 import { Service, ServiceProvider } from "./ServiceEnablement/Service.ts";
 // ── SKE imports ──
@@ -334,6 +451,11 @@ import {
   Router as TelemetryRouter,
   RouterProvider as TelemetryRouterProvider,
 } from "./Telemetry/Router.ts";
+// ── UnifiedFirewall imports ──
+import {
+  Rule as UnifiedFirewallRule,
+  RuleProvider as UnifiedFirewallRuleProvider,
+} from "./UnifiedFirewall/Rule.ts";
 // ── Valkey imports ──
 import {
   Credential as ValkeyCredential,
@@ -343,6 +465,20 @@ import {
   Instance as ValkeyInstance,
   InstanceProvider as ValkeyInstanceProvider,
 } from "./Valkey/Instance.ts";
+// ── VPN imports ──
+import {
+  BGPFilter as VpnBGPFilter,
+  BGPFilterProvider as VpnBGPFilterProvider,
+} from "./VPN/BGPFilter.ts";
+import {
+  BGPFilterRule as VpnBGPFilterRule,
+  BGPFilterRuleProvider as VpnBGPFilterRuleProvider,
+} from "./VPN/BGPFilterRule.ts";
+import {
+  Connection as VpnConnection,
+  ConnectionProvider as VpnConnectionProvider,
+} from "./VPN/Connection.ts";
+import { Gateway as VpnGateway, GatewayProvider as VpnGatewayProvider } from "./VPN/Gateway.ts";
 // ── WAF imports ──
 import {
   Configuration as WafConfiguration,
@@ -416,6 +552,7 @@ const iaasResources = [
   ServerNetworkInterfaceAttachment,
   ServerSecurityGroupAttachment,
   ServerServiceAccountAttachment,
+  IaaSService,
   Snapshot,
   Volume,
   VolumeAttachment,
@@ -442,6 +579,7 @@ const iaasProviders = () =>
     ServerNetworkInterfaceAttachmentProvider(),
     ServerSecurityGroupAttachmentProvider(),
     ServerServiceAccountAttachmentProvider(),
+    IaaSServiceProvider(),
     SnapshotProvider(),
     VolumeProvider(),
     VolumeAttachmentProvider(),
@@ -463,6 +601,21 @@ const functionsProviders = () =>
 
 const skeResources = [Cluster, Kubeconfig];
 const skeProviders = () => Layer.mergeAll(Layer.empty, ClusterProvider(), KubeconfigProvider());
+
+const containerApplicationsResources = [
+  ContainerApplicationsApplication,
+  ContainerApplicationsEnvironment,
+  ContainerApplicationsEnvironmentRegistry,
+  ContainerApplicationsEnvironmentSecret,
+];
+const containerApplicationsProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    ContainerApplicationsApplicationProvider(),
+    ContainerApplicationsEnvironmentProvider(),
+    ContainerApplicationsEnvironmentRegistryProvider(),
+    ContainerApplicationsEnvironmentSecretProvider(),
+  );
 
 const containerRegistryResources = [ContainerRegistryProject, RobotAccount];
 const containerRegistryProviders = () =>
@@ -555,6 +708,35 @@ const wafProviders = () =>
     WafCustomRuleGroupProvider(),
     WafManagedRuleSetProvider(),
   );
+
+const serverBackupResources = [ServerBackupBackup, ServerBackupEnablement, ServerBackupSchedule];
+const serverBackupProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    ServerBackupBackupProvider(),
+    ServerBackupEnablementProvider(),
+    ServerBackupScheduleProvider(),
+  );
+
+const serverUpdateResources = [ServerUpdateEnablement, ServerUpdateSchedule];
+const serverUpdateProviders = () =>
+  Layer.mergeAll(Layer.empty, ServerUpdateEnablementProvider(), ServerUpdateScheduleProvider());
+
+const vpnResources = [VpnGateway, VpnConnection, VpnBGPFilter, VpnBGPFilterRule];
+const vpnProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    VpnGatewayProvider(),
+    VpnConnectionProvider(),
+    VpnBGPFilterProvider(),
+    VpnBGPFilterRuleProvider(),
+  );
+
+const automationResources = [VolumeAutomation];
+const automationProviders = () => Layer.mergeAll(Layer.empty, VolumeAutomationProvider());
+
+const unifiedFirewallResources = [UnifiedFirewallRule];
+const unifiedFirewallProviders = () => Layer.mergeAll(Layer.empty, UnifiedFirewallRuleProvider());
 
 const ipListsResources = [IPList];
 const ipListsProviders = () => Layer.mergeAll(Layer.empty, IPListProvider());
@@ -651,6 +833,13 @@ const logMeResources = [LogMeInstance, LogMeCredential];
 const logMeProviders = () =>
   Layer.mergeAll(Layer.empty, LogMeInstanceProvider(), LogMeCredentialProvider());
 
+const modelServingResources = [ModelServingToken];
+const modelServingProviders = () => Layer.mergeAll(Layer.empty, ModelServingTokenProvider());
+
+const modelExperimentsResources = [ModelExperimentsInstance, ModelExperimentsToken];
+const modelExperimentsProviders = () =>
+  Layer.mergeAll(Layer.empty, ModelExperimentsInstanceProvider(), ModelExperimentsTokenProvider());
+
 const logsResources = [LogsAccessPolicy, LogsAccessToken, LogsInstance];
 const logsProviders = () =>
   Layer.mergeAll(
@@ -658,6 +847,29 @@ const logsProviders = () =>
     LogsAccessPolicyProvider(),
     LogsAccessTokenProvider(),
     LogsInstanceProvider(),
+  );
+
+const cloudFoundryResources = [
+  CloudFoundryApp,
+  CloudFoundryOrganization,
+  CloudFoundryOrganizationManager,
+  CloudFoundryOrganizationRole,
+  CloudFoundryRoute,
+  CloudFoundryServiceInstance,
+  CloudFoundrySpace,
+  CloudFoundrySpaceRole,
+];
+const cloudFoundryProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    CloudFoundryAppProvider(),
+    CloudFoundryOrganizationManagerProvider(),
+    CloudFoundryOrganizationProvider(),
+    CloudFoundryOrganizationRoleProvider(),
+    CloudFoundryRouteProvider(),
+    CloudFoundryServiceInstanceProvider(),
+    CloudFoundrySpaceProvider(),
+    CloudFoundrySpaceRoleProvider(),
   );
 
 const workflowsResources = [WorkflowsInstance];
@@ -674,6 +886,17 @@ const websiteProviders = () =>
     CachePurgeProvider(),
     ServerImageProvider(),
     WebsiteServerProvider(),
+  );
+
+const gitResources = [GitAuthenticationSource, GitInstance, GitRepository, GitRunner, GitUser];
+const gitProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    GitAuthenticationSourceProvider(),
+    GitInstanceProvider(),
+    GitRepositoryProvider(),
+    GitRunnerProvider(),
+    GitUserProvider(),
   );
 
 const fileStorageResources = [
@@ -693,20 +916,33 @@ const fileStorageProviders = () =>
     ShareExportPolicyProvider(),
   );
 
+const edgeCloudResources = [EdgeCloudInstance, EdgeCloudKubeconfig, EdgeCloudToken];
+const edgeCloudProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    EdgeCloudInstanceProvider(),
+    EdgeCloudKubeconfigProvider(),
+    EdgeCloudTokenProvider(),
+  );
+
 const makeProviders = () =>
   Layer.effect(
     Providers,
     Provider.collection([
       ...websiteResources,
       ...fileStorageResources,
+      ...gitResources,
       ...intakeResources,
       ...telemetryRouterResources,
       ...dremioResources,
+      ...edgeCloudResources,
       ...workflowsResources,
       ...openSearchResources,
       ...logMeResources,
       ...observabilityResources,
       ...logsResources,
+      ...modelServingResources,
+      ...modelExperimentsResources,
       ...telemetryLinkResources,
       ...cdnResources,
       ...certificatesResources,
@@ -715,6 +951,7 @@ const makeProviders = () =>
       ...resourceManagerResources,
       ...iamResources,
       ...iaasResources,
+      ...containerApplicationsResources,
       ...containerRegistryResources,
       ...functionsResources,
       ...skeResources,
@@ -726,26 +963,36 @@ const makeProviders = () =>
       ...mariaDBResources,
       ...valkeyResources,
       ...rabbitmqResources,
+      ...cloudFoundryResources,
       ...pubsubResources,
       ...mongoDBFlexResources,
       ...loadBalancerResources,
       ...albResources,
       ...wafResources,
+      ...vpnResources,
       ...ipListsResources,
+      ...serverBackupResources,
+      ...serverUpdateResources,
+      ...automationResources,
+      ...unifiedFirewallResources,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
         websiteProviders(),
         fileStorageProviders(),
+        gitProviders(),
         intakeProviders(),
         telemetryRouterProviders(),
         dremioProviders(),
+        edgeCloudProviders(),
         workflowsProviders(),
         openSearchProviders(),
         logMeProviders(),
         observabilityProviders(),
         logsProviders(),
+        modelServingProviders(),
+        modelExperimentsProviders(),
         telemetryLinkProviders(),
         cdnProviders(),
         certificatesProviders(),
@@ -754,6 +1001,7 @@ const makeProviders = () =>
         resourceManagerProviders(),
         iamProviders(),
         iaasProviders(),
+        containerApplicationsProviders(),
         containerRegistryProviders(),
         functionsProviders(),
         skeProviders(),
@@ -765,12 +1013,18 @@ const makeProviders = () =>
         mariaDBProviders(),
         valkeyProviders(),
         rabbitmqProviders(),
+        cloudFoundryProviders(),
         pubsubProviders(),
         mongoDBFlexProviders(),
         loadBalancerProviders(),
         albProviders(),
         wafProviders(),
+        vpnProviders(),
         ipListsProviders(),
+        serverBackupProviders(),
+        serverUpdateProviders(),
+        automationProviders(),
+        unifiedFirewallProviders(),
       ),
     ),
     // The `stackit-ske` Kubernetes cluster adapter is provideMerged (not just

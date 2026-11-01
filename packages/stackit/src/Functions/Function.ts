@@ -1,7 +1,4 @@
-import {
-  makeContainerImageSource,
-  type ImageRegistryTarget,
-} from "@alchemy.run/docker/ImageSource";
+import { makeContainerImageSource } from "@alchemy.run/docker/ImageSource";
 import * as functions from "@distilled.cloud/stackit/functions";
 import { Unowned } from "alchemy/AdoptPolicy";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -11,13 +8,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource, ResourceBinding } from "alchemy/Resource";
-import {
-  createContainerRuntimeContext,
-  type HostRuntimeContext,
-  type ServerHost,
-} from "alchemy/Runtime/Process";
-import { packEnvValue } from "alchemy/RuntimeContext";
-import { Stack } from "alchemy/Stack";
+import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -26,7 +17,13 @@ import { StackitEnvironment } from "../Environment.ts";
 import { findOwnedByName, readGeneration } from "../IaaS/internal.ts";
 import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
-import { pushedDigestReference } from "../internal/pushImage.ts";
+import {
+  createRawEnvRuntimeContext,
+  hostEnv,
+  hostEnvVariable,
+  hostImageSource,
+  pushHostImage,
+} from "../internal/serverHost.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
   desiredGenerationLabels,
@@ -43,7 +40,6 @@ import {
   DEFAULT_KEEP_REVISIONS,
   DELETE_TIMEOUT,
   FUNCTION_NAME_MAX_LENGTH,
-  FUNCTION_PLATFORM,
   FUNCTION_PORT,
   FUNCTIONS_SERVICE_ID,
   getFunctionOrUndefined,
@@ -215,26 +211,6 @@ export type Function<Env extends Record<string, any> = Record<string, any>> = Re
 export type FunctionServices = ServerHost;
 export type FunctionShape = Main<FunctionServices>;
 export type FunctionRuntimeContext = HostRuntimeContext;
-
-/**
- * Keep values as they are until `reconcile` turns them into revision variables,
- * so a `Redacted` stays `Redacted` in the host's props and state. The stock
- * context packs them into plain strings here, which would put a service account
- * key in state as plain text. `get` still reads what `packEnvValue` writes.
- */
-const createFunctionRuntimeContext =
-  (type: string) =>
-  (id: string): FunctionRuntimeContext => {
-    const base = createContainerRuntimeContext(type)(id);
-    return Object.assign(base, {
-      set: (bindingId: string, output: unknown) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          base.env[key] = output;
-          return key;
-        }),
-    });
-  };
 
 /**
  * A STACKIT Function: an OCI image STACKIT runs and serves at its own URL. Each
@@ -558,7 +534,7 @@ export const Function: Platform<
       | Effect.Effect<InputProps<FunctionProps<Env>>, never, PropsReq>,
   ): Effect.Effect<Function<Env>, never, Providers | PropsReq>;
 } = Platform("Stackit.Functions.Function", {
-  createRuntimeContext: createFunctionRuntimeContext("Stackit.Functions.Function"),
+  createRuntimeContext: createRawEnvRuntimeContext("Stackit.Functions.Function"),
 });
 
 /** The function declares neither `main` nor `image`. */
@@ -592,60 +568,18 @@ export class FunctionIdMissing extends Data.TaggedError("Stackit.Functions.Funct
   readonly message: string;
 }> {}
 
-/**
- * Generated entry of an effectful Function: only `@alchemy.run/stackit/Bootstrap`
- * and the user's `main`. The runtime flag is raised before `main` evaluates, hence
- * the dynamic import.
- */
-const effectEntry =
-  (handler: string) =>
-  (importPath: string): string =>
-    `
-import { bootstrap } from "@alchemy.run/stackit/Bootstrap";
-
-globalThis.__ALCHEMY_RUNTIME__ = true;
-const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
-
-await bootstrap(entrypoint);
-`;
-
-/**
- * Generated entry of an async Function: a thin server with no Effect in it, which
- * hands each request to the handler with `process.env` as its second argument.
- */
-const asyncEntry =
-  (handler: string) =>
-  (importPath: string): string =>
-    `
-const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
-const handler = typeof entrypoint === "function" ? entrypoint : entrypoint?.fetch;
-if (typeof handler !== "function") {
-  throw new Error(${JSON.stringify(`The ${handler} export of a Stackit.Functions.Function must be a function or have a fetch method`)});
-}
-Bun.serve({
-  hostname: "0.0.0.0",
-  port: Number(process.env.PORT ?? ${String(FUNCTION_PORT)}),
-  fetch: (request) => handler(request, process.env),
-});
-`;
-
 const toName = (id: string, name: string | undefined) =>
   name !== undefined
     ? Effect.succeed(name)
     : createPhysicalName({ id, lowercase: true, maxLength: FUNCTION_NAME_MAX_LENGTH });
 
-const imageSourceOf = (news: FunctionProps, main: string) => ({
-  source: { main, handler: news.handler, image: news.image, build: news.build },
-  port: FUNCTION_PORT,
-  platform: FUNCTION_PLATFORM,
-  // Both forms get a generated entry: the async one is the thin server above,
-  // so the image source must not treat `main` as already serving requests.
-  isExternal: false,
-  bootstrap:
-    news.isExternal === true
-      ? asyncEntry(news.handler ?? "default")
-      : effectEntry(news.handler ?? "default"),
-});
+const imageSourceOf = (news: FunctionProps, main: string) =>
+  hostImageSource({
+    props: news,
+    main,
+    port: FUNCTION_PORT,
+    resourceType: "Stackit.Functions.Function",
+  });
 
 /**
  * Resolve the reference the revision runs. Built images are pushed and pinned by
@@ -681,71 +615,24 @@ const resolveImage = Effect.fn(function* (args: {
       message: `${id}: \`main\` builds an image, so it needs \`registry\` to push it to`,
     });
   }
-  const images = yield* makeContainerImageSource;
-  const source = imageSourceOf(news, news.main);
-  const codeHash = yield* images.hash(source);
-  if (output?.codeHash === codeHash && output?.image?.startsWith(`${registry.repository}@`)) {
-    return { image: output.image, codeHash };
-  }
-  const target: ImageRegistryTarget = {
-    repositoryUri: Effect.succeed(registry.repository),
-    // The digest comes from the push output, so the push always runs.
-    hasTag: () => Effect.succeed(false),
-    credentials: Effect.succeed(
-      registry.username !== undefined && registry.password !== undefined
-        ? {
-            server: registry.repository.split("/")[0]!,
-            username: registry.username,
-            password: registry.password,
-          }
-        : undefined,
-    ),
-  };
-  const resolved = yield* images.resolve({ id, session, ...source }, target);
-  const image = yield* pushedDigestReference({ id, imageUri: resolved.imageUri, registry });
-  return { image, codeHash: resolved.codeHash };
+  return yield* pushHostImage({
+    id,
+    source: imageSourceOf(news, news.main),
+    registry,
+    deployed: output,
+    session,
+  });
 });
 
-/** A value as a revision variable: raw for a plain process, packed for `Config`. */
-const variableValue = (value: unknown, external: boolean): string => {
-  if (!external) return packEnvValue(value);
-  const raw = Redacted.isRedacted(value) ? Redacted.value(value) : value;
-  return typeof raw === "string" ? raw : JSON.stringify(raw);
-};
-
-/**
- * The desired variables: binding env, Alchemy's runtime env, then the user's.
- * Only the `env` of a binding applies: a host with no STACKIT identity can't take
- * grants, and `StackitBindings.Bind` puts them on a created service account.
- */
+/** The desired variables, in a stable order. */
 const desiredVariables = Effect.fn(function* (
   news: FunctionProps,
   bindings: ReadonlyArray<ResourceBinding<HostBinding>>,
 ) {
   const external = news.isExternal === true || news.main === undefined;
-  const stack = yield* Stack;
-  const env: Record<string, unknown> = {
-    ...Object.assign(
-      {},
-      ...bindings
-        // A binding being removed no longer contributes.
-        .filter(
-          (binding: ResourceBinding<HostBinding> & { action?: string }) =>
-            binding.action !== "delete",
-        )
-        .map((binding) => binding.data?.env),
-    ),
-    ...(external
-      ? {}
-      : {
-          ALCHEMY_STACK_NAME: stack.name,
-          ALCHEMY_STAGE: stack.stage,
-          ALCHEMY_PHASE: "runtime",
-        }),
-    ...news.env,
-  };
+  const env = yield* hostEnv(news, bindings, external);
   const variables = Object.entries(env).flatMap(([name, value]) =>
-    value === undefined ? [] : [{ name, value: variableValue(value, external) }],
+    value === undefined ? [] : [{ name, value: hostEnvVariable(name, value, external) }],
   );
   return variables.sort((left, right) => left.name.localeCompare(right.name));
 });

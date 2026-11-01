@@ -1,6 +1,7 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
@@ -21,6 +22,13 @@ export interface ServerServiceAccountAttachmentProps extends ProjectScopedProps 
    * it replaces the attachment.
    */
   serviceAccountEmail: string;
+  /**
+   * Fail straight away when the server has another account attached, rather
+   * than trying to attach this one. A binding that needs the server to run as
+   * this account sets it, because a program there can't be given a second one.
+   * @default false
+   */
+  exclusive?: boolean;
   /**
    * Project of the server. Defaults to the profile's project. Changing it
    * replaces the attachment.
@@ -52,6 +60,16 @@ export type ServerServiceAccountAttachment = Resource<
   Providers
 >;
 
+/** The server has another service account attached, and holds one at a time. */
+export class ServerServiceAccountTaken extends Data.TaggedError(
+  "Stackit.IaaS.ServerServiceAccountTaken",
+)<{
+  readonly serverId: string;
+  readonly serviceAccountEmail: string;
+  readonly attached: string;
+  readonly message: string;
+}> {}
+
 /**
  * Attaches a STACKIT service account to a server, so software on the
  * server can obtain tokens for that account from the metadata service
@@ -61,7 +79,8 @@ export type ServerServiceAccountAttachment = Resource<
  * nothing to update. STACKIT allows one service account per server.
  * Attachments carry no labels; Alchemy tracks them by the pair in state,
  * and a deploy without state takes over an existing attachment of the same
- * pair.
+ * pair. A server that already holds another account fails the deploy with
+ * `Stackit.IaaS.ServerServiceAccountTaken`, which names it.
  *
  * ### Giving a server an identity
  * **Example:** Attach a service account to a server
@@ -101,6 +120,24 @@ const isAttached = (scope: ProjectScope, serverId: string, serviceAccountEmail: 
   iaas.listServerServiceAccounts({ ...scope, serverId }).pipe(
     Effect.map(({ items }) => items.includes(serviceAccountEmail)),
     Effect.catchTag("NotFound", () => Effect.succeed(false)),
+  );
+
+/** Another account on the server, as a typed failure; nothing when there is none. */
+const failIfTaken = (scope: ProjectScope, ids: { serverId: string; serviceAccountEmail: string }) =>
+  iaas.listServerServiceAccounts({ ...scope, serverId: ids.serverId }).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed({ items: [] as string[] })),
+    Effect.flatMap(({ items }) => {
+      const attached = items.find((email) => email !== ids.serviceAccountEmail);
+      return attached === undefined
+        ? Effect.void
+        : Effect.fail(
+            new ServerServiceAccountTaken({
+              ...ids,
+              attached,
+              message: `Server ${ids.serverId} already has service account ${attached} attached, and holds one at a time, so ${ids.serviceAccountEmail} can't be. Remove the other attachment. A binding on a program running on this server attaches its own account, and can't share the server with one you attach.`,
+            }),
+          );
+    }),
   );
 
 const toAttrs = (
@@ -152,15 +189,22 @@ export const ServerServiceAccountAttachmentProvider = () =>
       const scope = yield* resolveProjectScope(news, output);
       const ids = { serverId: news.serverId, serviceAccountEmail: news.serviceAccountEmail };
 
-      // Observe, then ensure. `Conflict` while the server is busy.
+      // Observe, then ensure. `Conflict` while the server is busy, or, after the retries, because
+      // another attachment won a race to the server's one place, which is worth naming.
       if (!(yield* isAttached(scope, ids.serverId, ids.serviceAccountEmail))) {
+        if (news.exclusive === true) yield* failIfTaken(scope, ids);
         yield* iaas
           .addServiceAccountToServer({
             ...scope,
             serverId: ids.serverId,
             serviceAccountMail: ids.serviceAccountEmail,
           })
-          .pipe(Effect.retry(conflictRetry));
+          .pipe(
+            Effect.retry(conflictRetry),
+            Effect.catchTag("Conflict", (error) =>
+              failIfTaken(scope, ids).pipe(Effect.andThen(Effect.fail(error))),
+            ),
+          );
         yield* waitFor({
           resource: `STACKIT service account ${ids.serviceAccountEmail} on server ${ids.serverId}`,
           read: isAttached(scope, ids.serverId, ids.serviceAccountEmail),

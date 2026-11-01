@@ -8,9 +8,10 @@ import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
 import { StackitEnvironment } from "../Environment.ts";
 import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
-import { waitFor, waitUntilGone } from "../internal/wait.ts";
+import { childrenLeftAfterSettling, waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listServerBackupObjects } from "../ServerBackup/internal.ts";
 import {
   conflictRetry,
   findOwnedByName,
@@ -27,6 +28,17 @@ import {
 /** The create response of a server carried no id. */
 export class ServerIdMissing extends Data.TaggedError("Stackit.IaaS.ServerIdMissing")<{
   readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+/**
+ * The server still has backups or backup schedules, which a delete would make unreachable: the
+ * Server Backup API only reaches them through their server.
+ */
+export class ServerHasBackups extends Data.TaggedError("Stackit.IaaS.ServerHasBackups")<{
+  readonly serverId: string;
+  readonly schedules: ReadonlyArray<string>;
+  readonly backups: ReadonlyArray<string>;
   readonly message: string;
 }> {}
 
@@ -128,6 +140,15 @@ export interface ServerProps extends ProjectScopedProps {
    * `active`.
    */
   desiredStatus?: ServerDesiredStatus;
+  /**
+   * Allow deleting the server, and with it replacing it, while STACKIT Server Backup still holds
+   * backups or schedules for it. They can't be reached once the server is gone. Without this, such
+   * a delete stops with `Stackit.IaaS.ServerHasBackups`. Deploy it before the change that replaces
+   * the server: an old server keeps the props it was deployed with.
+   *
+   * @default false
+   */
+  forceDestroy?: boolean;
   /**
    * Project of the server. Defaults to the profile's project. Changing it
    * replaces the server.
@@ -309,8 +330,18 @@ export type Server = Resource<
  * volume is deleted with it unless `bootVolume.deleteOnTermination` is
  * `false`; keep data on a separate `Volume` attached with `VolumeAttachment`.
  *
+ * STACKIT Server Backup only reaches a backup through its server, so a delete of
+ * a server that still has backups or backup schedules stops with
+ * `Stackit.IaaS.ServerHasBackups`. A destroy deletes the stack's own first, so
+ * only what the stack doesn't hold can stop it. A replacement that deletes the
+ * old server first would lose them all, so its plan fails before anything
+ * changes. To go ahead, deploy `forceDestroy: true` on its own, then make the
+ * change.
+ *
  * Power actions that are not a state (reboot, rescue, console access) are
  * not resource properties; they are runtime operations on the server.
+ *
+ * To run your own program on a server, deploy a `Stackit.IaaS.Service` on it.
  *
  * @resource
  * @product STACKIT Compute Engine
@@ -447,6 +478,22 @@ const toBootVolume = (
         deleteOnTermination: bootVolume.deleteOnTermination ?? bootVolume.source.type !== "volume",
       };
 
+/** Refuse a delete that would strand what Server Backup holds. Nothing else lists it. */
+const notEmptyError = (
+  target: { projectId: string; region: string; serverId: string },
+  objects: { schedules: ReadonlyArray<{ name: string }>; backups: ReadonlyArray<{ name: string }> },
+  remedy: string,
+) => {
+  const schedules = objects.schedules.map(({ name }) => name);
+  const backups = objects.backups.map(({ name }) => name);
+  return new ServerHasBackups({
+    serverId: target.serverId,
+    schedules,
+    backups,
+    message: `Server ${target.serverId} has backup schedules (${schedules.join(", ") || "none"}) and backups (${backups.join(", ") || "none"}), which can't be reached once it is deleted. ${remedy}`,
+  });
+};
+
 /** Canonical key of the create-only aspects of a server's props. */
 const createOnlyKey = (props: ServerProps) =>
   JSON.stringify([
@@ -535,9 +582,25 @@ export const ServerProvider = () =>
       if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
       if (olds !== undefined) {
         if (createOnlyKey(resolved) === createOnlyKey(olds)) return undefined;
-        return reusesExclusiveDevice(resolved, olds)
-          ? ({ action: "replace", deleteFirst: true } as const)
-          : ({ action: "replace" } as const);
+        if (!reusesExclusiveDevice(resolved, olds)) return { action: "replace" } as const;
+        // The old server goes first, before the schedules and backups of this stack: refuse
+        // here, where nothing has happened yet. `olds` because the old server's delete sees them.
+        if (olds.forceDestroy !== true) {
+          const target = {
+            projectId: output.projectId,
+            region: output.region,
+            serverId: output.serverId,
+          };
+          const objects = yield* listServerBackupObjects(target);
+          if (objects.schedules.length > 0 || objects.backups.length > 0) {
+            return yield* notEmptyError(
+              target,
+              objects,
+              "This change deletes the old server first, so nothing was changed. Move them first, or deploy forceDestroy: true on the server on its own, then make this change.",
+            );
+          }
+        }
+        return { action: "replace", deleteFirst: true } as const;
       }
       // Adopted without previous props: compare what the server reports.
       if (resolved.imageId !== undefined && resolved.imageId !== output.imageId) {
@@ -678,8 +741,31 @@ export const ServerProvider = () =>
       return toAttrs({ ...final, id: serverId }, scope, name);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ olds, output, force }) {
       const scope = { projectId: output.projectId, region: output.region };
+      const target = { ...scope, serverId: output.serverId };
+      // The stack's own schedules and backups are deleted and awaited before this. What's left
+      // can't be reached once the server is gone, so that takes an opt-in: the prop, or nuke.
+      if (olds?.forceDestroy !== true && force !== true) {
+        const left = yield* childrenLeftAfterSettling(
+          listServerBackupObjects(target).pipe(
+            Effect.map(({ schedules, backups }) => [
+              ...schedules.map(({ name }) => ({ kind: "schedule" as const, name })),
+              ...backups.map(({ name }) => ({ kind: "backup" as const, name })),
+            ]),
+          ),
+        );
+        if (left.length > 0) {
+          return yield* notEmptyError(
+            target,
+            {
+              schedules: left.filter((object) => object.kind === "schedule"),
+              backups: left.filter((object) => object.kind === "backup"),
+            },
+            "The server was not deleted. Delete them first, or deploy forceDestroy: true on the server to allow this. A server already being replaced keeps the props it was deployed with, so only deleting them by hand finishes that replacement.",
+          );
+        }
+      }
       yield* iaas
         .deleteServer({ ...scope, serverId: output.serverId })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));

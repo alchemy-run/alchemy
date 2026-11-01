@@ -8,6 +8,7 @@ export * from "./Server.ts";
 export * from "./ServerNetworkInterfaceAttachment.ts";
 export * from "./ServerSecurityGroupAttachment.ts";
 export * from "./ServerServiceAccountAttachment.ts";
+export * from "./Service.ts";
 export * from "./Snapshot.ts";
 export * from "./Volume.ts";
 export * from "./VolumeAttachment.ts";

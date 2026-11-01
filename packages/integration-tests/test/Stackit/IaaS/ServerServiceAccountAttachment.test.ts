@@ -68,3 +68,54 @@ test.provider.skipIf(slow)(
     }).pipe(logLevel),
   options,
 );
+
+test.provider.skipIf(slow)(
+  "an exclusive attachment names the account already on the server, and doesn't wait on it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
+      const imageId = yield* ubuntuImageId(projectId, region);
+      yield* stack.destroy();
+
+      const program = (exclusive: boolean) =>
+        Effect.gen(function* () {
+          const network = yield* Stackit.IaaS.Network("SaTakenNetwork", {
+            ipv4: { prefix: "10.231.46.0/24" },
+          });
+          const first = yield* Stackit.IAM.ServiceAccount("SaTakenFirst", {});
+          const second = yield* Stackit.IAM.ServiceAccount("SaTakenSecond", {});
+          const server = yield* Stackit.IaaS.Server("SaTakenServer", {
+            machineType: MACHINE_TYPE,
+            bootVolume: { size: 10, source: { type: "image", id: imageId } },
+            networking: { networkId: network.networkId },
+          });
+          yield* Stackit.IaaS.ServerServiceAccountAttachment("SaTakenFirstAttachment", {
+            serverId: server.serverId,
+            serviceAccountEmail: first.email,
+          });
+          if (exclusive) {
+            yield* Stackit.IaaS.ServerServiceAccountAttachment("SaTakenSecondAttachment", {
+              serverId: server.serverId,
+              serviceAccountEmail: second.email,
+              exclusive,
+            });
+          }
+          return { server, first, second };
+        });
+
+      const created = yield* stack.deploy(program(false));
+      const refused = yield* stack.deploy(program(true)).pipe(Effect.flip);
+      expect(refused).toMatchObject({
+        _tag: "Stackit.IaaS.ServerServiceAccountTaken",
+        serverId: created.server.serverId,
+        attached: created.first.email,
+        serviceAccountEmail: created.second.email,
+      });
+      expect(yield* serverAccounts(projectId, region, created.server.serverId)).toEqual([
+        created.first.email,
+      ]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  options,
+);

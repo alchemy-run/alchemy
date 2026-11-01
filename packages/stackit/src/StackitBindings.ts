@@ -1,5 +1,6 @@
 import {
   Credentials,
+  fromServerMetadata,
   fromServiceAccountKey,
   parseServiceAccountKey,
 } from "@distilled.cloud/stackit/Credentials";
@@ -17,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import { StackitEnvironment } from "./Environment.ts";
+import { ServerServiceAccountAttachment } from "./IaaS/ServerServiceAccountAttachment.ts";
 import { CustomRole } from "./IAM/CustomRole.ts";
 import { type AuthorizationResourceType, Membership } from "./IAM/Membership.ts";
 import { ServiceAccount } from "./IAM/ServiceAccount.ts";
@@ -25,9 +27,10 @@ import { ServiceAccountKey } from "./IAM/ServiceAccountKey.ts";
 /**
  * How a STACKIT binding reaches STACKIT from its host:
  *
- * - the host runs as a STACKIT service account: grants go on that identity,
- *   and calls use its credentials. No host does yet (see
- *   {@link runsAsServiceAccount});
+ * - the host runs as a STACKIT service account (a `Stackit.IaaS.Service`, see
+ *   {@link runsAsServiceAccount}): Alchemy creates one service account per
+ *   server and attaches it, the grants go on it, and calls use the tokens the
+ *   server's metadata API hands out. No key is created;
  * - any other host (a Cloudflare Worker, a Lambda, a Cloud Run service):
  *   Alchemy creates a `Stackit.IAM.ServiceAccount` and `ServiceAccountKey`,
  *   gives the account one `Stackit.IAM.Membership` per grant, and binds the
@@ -178,11 +181,18 @@ const KEY_ENV = {
 } as const;
 
 /**
- * Host types that run as a STACKIT service account and accept
- * {@link HostBinding}. Empty until the first native runtime ships; that runtime
- * adds its type here and applies {@link serviceAccountHostBundle}.
+ * Env var naming the service account attached to a host's server. Only {@link Bind}
+ * sets it, on a host that runs as a service account. Reading it from the Output of
+ * the attachment also orders the attachment before the host.
  */
-const SERVICE_ACCOUNT_HOSTS: ReadonlySet<string> = /*@__PURE__*/ new Set<string>();
+const ATTACHED_ACCOUNT_ENV = "ALCHEMY_STACKIT_ATTACHED_SERVICE_ACCOUNT";
+
+/**
+ * Host types that run on a server and take its attached service account. Each one
+ * has a `server` prop holding a `Stackit.IaaS.Server`, and its bundler applies
+ * {@link serviceAccountHostBundle}.
+ */
+const SERVICE_ACCOUNT_HOSTS: ReadonlySet<string> = /*@__PURE__*/ new Set(["Stackit.IaaS.Service"]);
 
 /**
  * Whether a host runs its code as a STACKIT service account. Deploy-time only.
@@ -190,18 +200,13 @@ const SERVICE_ACCOUNT_HOSTS: ReadonlySet<string> = /*@__PURE__*/ new Set<string>
 export const runsAsServiceAccount = (host: ResourceLike): boolean =>
   SERVICE_ACCOUNT_HOSTS.has(host.Type);
 
-/** Label a grant `Allow(<host>, <label>)`, as `host.bind` records it. */
-const allow = (label: TemplateStringsArray): TemplateStringsArray => {
-  const strings = ["Allow(", `, ${label[0]}`, ...label.slice(1)];
-  strings[strings.length - 1] += ")";
-  // A built array has no `TemplateStringsArray` brand the compiler accepts.
-  return Object.assign(strings, { raw: strings }) as unknown as TemplateStringsArray;
-};
-
-/** `ResourceLike` doesn't declare a resource's `bind`; native hosts have one. */
-type BindTarget = {
-  bind: (...args: unknown[]) => (data: unknown) => Effect.Effect<void>;
-};
+/** The server of a host {@link runsAsServiceAccount} accepts. Deploy-time only. */
+const serverOf = (host: ResourceLike) =>
+  host.Props?.server as ResourceLike & {
+    readonly serverId: Output.Output<string>;
+    readonly projectId: Output.Output<string>;
+    readonly region: Output.Output<string>;
+  };
 
 const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.literal(value));
 
@@ -263,14 +268,16 @@ export type BindHost = (
  * call it from the returned function, behind a literal
  * `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler drops it.
  *
- * - a host that runs as a service account takes the binding through its
- *   {@link HostBinding} contract, labelled `Allow(<host>, <label>)`;
- * - any other host gets a service account and key. The account takes one
- *   membership per grant and the key is bound into the host's env.
+ * - a host that runs on a server gets its server's service account, attached to
+ *   the server. A server holds one account, so its hosts share the account and
+ *   each other's grants;
+ * - any other host gets a service account and key. The key is bound into the
+ *   host's env.
  *
- * Grants are deduplicated by host, role and scope, so bindings sharing a role
- * share a membership and removing one of them can't revoke the other's access.
- * Custom roles are deduplicated by scope and permissions across the stack.
+ * Either way the account takes one membership per grant. Grants are deduplicated
+ * by account, role and scope, so bindings sharing a role share a membership and
+ * removing one of them can't revoke the other's access. Custom roles are
+ * deduplicated by scope and permissions across the stack.
  *
  * ```ts
  * Effect.gen(function* () {
@@ -293,31 +300,31 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
   const StackitServiceAccountKey = yield* ServiceAccountKey;
   const StackitMembership = yield* Membership;
   const StackitCustomRole = yield* CustomRole;
+  const StackitAttachment = yield* ServerServiceAccountAttachment;
 
-  return (label: TemplateStringsArray, ...args: unknown[]) =>
+  return (_label: TemplateStringsArray, ..._args: unknown[]) =>
     Effect.fn(function* (data: HostBinding) {
       const host = yield* Binding.Host;
       if (host === undefined) return;
 
-      if (runsAsServiceAccount(host)) {
-        return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
-      }
-
-      const account = yield* StackitServiceAccount(`${host.LogicalId}ServiceAccount`, {});
+      const server = runsAsServiceAccount(host) ? serverOf(host) : undefined;
+      // Named after what the account belongs to, so hosts on one server share it.
+      const owner = server?.LogicalId ?? host.LogicalId;
+      const account = yield* StackitServiceAccount(
+        `${owner}ServiceAccount`,
+        server === undefined ? {} : { projectId: server.projectId },
+      );
       const defaultProjectId = yield* profileProjectId;
 
       for (const grant of data.grants ?? []) {
         const scope = scopeKey(grant, defaultProjectId);
         if ("role" in grant) {
-          yield* StackitMembership(
-            `${host.LogicalId}Grant${pascalCase(grant.role)}${shortHash(scope)}`,
-            {
-              subject: account.email,
-              role: grant.role,
-              resourceType: grant.resourceType,
-              resourceId: grant.resourceId,
-            },
-          );
+          yield* StackitMembership(`${owner}Grant${pascalCase(grant.role)}${shortHash(scope)}`, {
+            subject: account.email,
+            role: grant.role,
+            resourceType: grant.resourceType,
+            resourceId: grant.resourceId,
+          });
           continue;
         }
         const permissions = [...new Set(grant.permissions)].sort();
@@ -328,7 +335,7 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
           resourceType: grant.resourceType,
           resourceId: grant.resourceId,
         });
-        yield* StackitMembership(`${host.LogicalId}GrantCustom${hash}`, {
+        yield* StackitMembership(`${owner}GrantCustom${hash}`, {
           subject: account.email,
           role: role.name,
           resourceType: grant.resourceType,
@@ -336,21 +343,33 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         });
       }
 
-      const key = yield* StackitServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
-        serviceAccountEmail: account.email,
-        projectId: account.projectId,
-      });
       const runtime = (yield* CurrentRuntimeContext)!;
-      yield* runtime.set(KEY_ENV.keyJson, key.keyJson);
-      yield* runtime.set(
-        KEY_ENV.region,
-        Output.fromEffect(
-          StackitEnvironment.current.pipe(
-            Effect.map((env) => env.region),
-            Effect.orDie,
-          ),
-        ) as Output.Output<string>,
-      );
+      if (server !== undefined) {
+        const attachment = yield* StackitAttachment(`${owner}ServiceAccountAttachment`, {
+          serverId: server.serverId,
+          serviceAccountEmail: account.email,
+          projectId: server.projectId,
+          region: server.region,
+          exclusive: true,
+        });
+        yield* runtime.set(ATTACHED_ACCOUNT_ENV, attachment.serviceAccountEmail);
+        yield* runtime.set(KEY_ENV.region, server.region);
+      } else {
+        const key = yield* StackitServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
+          serviceAccountEmail: account.email,
+          projectId: account.projectId,
+        });
+        yield* runtime.set(KEY_ENV.keyJson, key.keyJson);
+        yield* runtime.set(
+          KEY_ENV.region,
+          Output.fromEffect(
+            StackitEnvironment.current.pipe(
+              Effect.map((env) => env.region),
+              Effect.orDie,
+            ),
+          ) as Output.Output<string>,
+        );
+      }
       for (const [name, value] of Object.entries(data.env ?? {})) {
         yield* runtime.set(name, toOutput(value));
       }
@@ -361,8 +380,8 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
  * The service account {@link Bind} creates for the current host, for a service that
  * lists who may use a resource by address instead of through a role (Pub/Sub's
  * publishers and subscribers). Yield it while the layer is built, then run the inner
- * Effect behind the `__ALCHEMY_RUNTIME__` guard. `undefined` when there is no host, or
- * the host runs as an account of its own, and in a host bundle.
+ * Effect behind the `__ALCHEMY_RUNTIME__` guard. `undefined` when there is no host, and
+ * in a host bundle.
  */
 export const HostServiceAccount: Effect.Effect<Effect.Effect<ServiceAccount | undefined>> =
   Effect.gen(function* () {
@@ -370,7 +389,13 @@ export const HostServiceAccount: Effect.Effect<Effect.Effect<ServiceAccount | un
     const StackitServiceAccount = yield* ServiceAccount;
     return Effect.gen(function* () {
       const host = yield* Binding.Host;
-      if (host === undefined || runsAsServiceAccount(host)) return undefined;
+      if (host === undefined) return undefined;
+      if (runsAsServiceAccount(host)) {
+        const server = serverOf(host);
+        return yield* StackitServiceAccount(`${server.LogicalId}ServiceAccount`, {
+          projectId: server.projectId,
+        });
+      }
       return yield* StackitServiceAccount(`${host.LogicalId}ServiceAccount`, {});
     });
   });
@@ -391,11 +416,23 @@ const credentialsFromKey = (keyJson: string, region: string | undefined) =>
     Effect.catchTag("ConfigError", (error) => Effect.succeed(Effect.fail(error))),
   );
 
+/** The `Credentials` service of the service account attached to this server. */
+const credentialsFromServer = (
+  serviceAccountEmail: string | undefined,
+  region: string | undefined,
+) =>
+  Layer.build(
+    fromServerMetadata({ serviceAccountEmail, region }).pipe(Layer.provide(FetchHttpClient.layer)),
+  ).pipe(
+    Effect.scoped,
+    Effect.map((context) => Context.get(context, Credentials)),
+  );
+
 /**
  * Resolve a distilled operation with the host's STACKIT credentials, once when
- * the binding's layer is built: with the key {@link Bind} created for this host
- * if there is one, as-is otherwise (the host's own service account, or the
- * deployer).
+ * the binding's layer is built: on a server, with the attached service account's
+ * tokens; else with the key {@link Bind} created for this host if there is one,
+ * and as-is otherwise (the deployer).
  *
  * Calls go to the region the stack deployed from, which decides the host of
  * region-hosted APIs (`functions`, `secrets_manager`, ...). APIs with a
@@ -403,10 +440,19 @@ const credentialsFromKey = (keyJson: string, region: string | undefined) =>
  */
 export const withCredentials: <Op>(operation: Effect.Effect<Op, never, any>) => Effect.Effect<Op> =
   Effect.fn(function* <Op>(operation: Effect.Effect<Op, never, any>) {
-    // A host running as a service account signs with its own credentials.
-    if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "Stackit.IAM.ServiceAccount")
-      return yield* operation as Effect.Effect<Op>;
     const runtime = yield* CurrentRuntimeContext;
+    // A host running as a service account signs with its server's tokens. The
+    // define is only set in such a host's bundle, so the key path drops out of it.
+    if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "Stackit.IAM.ServiceAccount") {
+      const account = yield* runtime?.get<string>(ATTACHED_ACCOUNT_ENV) ?? Effect.undefined;
+      const region = yield* runtime?.get<string>(KEY_ENV.region) ?? Effect.undefined;
+      const credentials = yield* credentialsFromServer(account, region);
+      return yield* (operation as Effect.Effect<Op>).pipe(
+        Effect.provide(
+          Layer.mergeAll(Layer.succeed(Credentials, credentials), FetchHttpClient.layer),
+        ),
+      );
+    }
     const keyJson =
       globalThis.__ALCHEMY_RUNTIME__ && runtime !== undefined
         ? yield* runtime.get<string | Redacted.Redacted<string>>(KEY_ENV.keyJson)

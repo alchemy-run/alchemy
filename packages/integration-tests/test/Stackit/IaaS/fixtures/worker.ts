@@ -59,9 +59,8 @@ export const DataBackup = Data.pipe(
 );
 
 /**
- * A Cloudflare Worker using the IaaS bindings. STACKIT has no native host yet, so
- * the bindings grant on the service account Alchemy creates for the Worker. One
- * route per binding; each answers `{ ok, result | error }` so a failure surfaces
+ * A Cloudflare Worker using the IaaS bindings: a foreign host, so the bindings grant
+ * on the service account Alchemy creates for the Worker. One route per binding; each answers `{ ok, result | error }` so a failure surfaces
  * the STACKIT error in the test.
  */
 export default class IaasBindingsWorker extends Cloudflare.Worker<IaasBindingsWorker>()(
