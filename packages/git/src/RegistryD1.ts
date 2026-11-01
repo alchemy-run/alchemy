@@ -38,6 +38,7 @@ import type { QueryDatabaseClient } from "@alchemy.run/cloudflare/D1";
  */
 import type * as runtime from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
@@ -69,7 +70,7 @@ const d1 = <A>(
   effect: Effect.Effect<A, never, RuntimeContext>,
 ): Effect.Effect<A, StoreError, RuntimeContext> =>
   Effect.catchCause(effect, (cause) =>
-    Effect.fail(StoreError.make({ reason: `registry ${what}: ${cause}` })),
+    Effect.fail(StoreError.make({ reason: `registry ${what}: ${Cause.pretty(cause)}` })),
   );
 
 /**

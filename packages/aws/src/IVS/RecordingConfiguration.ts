@@ -209,7 +209,7 @@ export const RecordingConfigurationProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getRecordingConfiguration({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.recordingConfiguration;
       });

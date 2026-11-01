@@ -9,6 +9,18 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class WebExperienceInvalidProps extends Data.TaggedError("WebExperienceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class WebExperienceUnexpectedResponse extends Data.TaggedError(
+  "WebExperienceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type WebExperienceStatus = qbusiness.WebExperienceStatus;
 
 export interface WebExperienceProps {
@@ -128,7 +140,7 @@ export const WebExperience = Resource<WebExperience>("AWS.QBusiness.WebExperienc
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +152,7 @@ interface WebExperienceState {
 const readWebExperienceById = Effect.fn(function* (applicationId: string, webExperienceId: string) {
   const described = yield* qbusiness
     .getWebExperience({ applicationId, webExperienceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.webExperienceArn;
   if (arn === undefined) return undefined;
@@ -202,7 +214,7 @@ const waitForWebExperienceSettled = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getWebExperience({ applicationId, webExperienceId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new WebExperienceNotReady({
@@ -260,7 +272,9 @@ export const WebExperienceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness WebExperience requires props"));
+            return yield* new WebExperienceInvalidProps({
+              message: "QBusiness WebExperience requires props",
+            });
           }
           const applicationId = news.applicationId;
           const internalTags = yield* createInternalTags(id);
@@ -291,17 +305,17 @@ export const WebExperienceProvider = () =>
               })),
             });
             if (!created.webExperienceId) {
-              return yield* Effect.fail(
-                new Error(`CreateWebExperience for '${id}' returned no webExperienceId`),
-              );
+              return yield* new WebExperienceUnexpectedResponse({
+                message: `CreateWebExperience for '${id}' returned no webExperienceId`,
+              });
             }
             yield* session.note(`Creating web experience (${created.webExperienceId})...`);
             yield* waitForWebExperienceSettled(applicationId, created.webExperienceId, "SETTLED");
             state = yield* readWebExperienceById(applicationId, created.webExperienceId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created web experience for '${id}'`),
-              );
+              return yield* new WebExperienceUnexpectedResponse({
+                message: `failed to read created web experience for '${id}'`,
+              });
             }
           }
 
@@ -363,9 +377,9 @@ export const WebExperienceProvider = () =>
 
           const final = yield* readWebExperienceById(applicationId, state.attrs.webExperienceId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled web experience for '${id}'`),
-            );
+            return yield* new WebExperienceUnexpectedResponse({
+              message: `failed to read reconciled web experience for '${id}'`,
+            });
           }
           return final.attrs;
         }),

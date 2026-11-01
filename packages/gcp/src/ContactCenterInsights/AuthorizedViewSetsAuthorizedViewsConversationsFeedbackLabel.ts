@@ -128,7 +128,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel =
 export class AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const qaOf = (
@@ -164,10 +164,10 @@ const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAllAt = (parent: string, project: string) =>
   cci.listAllFeedbackLabelsProjectsLocations.pages({ parent, pageSize: 100 }).pipe(
@@ -252,7 +252,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

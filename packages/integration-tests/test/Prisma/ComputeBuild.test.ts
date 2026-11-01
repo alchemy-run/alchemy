@@ -5,7 +5,7 @@ import {
   runComputeAutoBuild,
   runComputeStaticBuild,
 } from "@alchemy.run/prisma/ComputeBuild";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { findAvailablePort } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";

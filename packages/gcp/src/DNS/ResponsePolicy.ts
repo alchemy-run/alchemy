@@ -198,7 +198,7 @@ const toAttrs = (policy: dns.ResponsePolicy, project: string) => ({
 const getByName = (project: string, responsePolicyName: string) =>
   dns
     .getResponsePolicies({ project, responsePolicy: responsePolicyName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRules = (project: string, responsePolicyName: string) =>
   Effect.gen(function* () {

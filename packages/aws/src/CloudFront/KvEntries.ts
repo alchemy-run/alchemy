@@ -20,7 +20,12 @@ export interface KvEntriesProps {
   namespace: string;
   /** Map of key → value entries to manage. */
   entries: Record<string, Input<string>>;
-  /** Whether to delete keys under this namespace that are not in `entries`. @default false */
+  /**
+   * Whether to delete keys under this namespace that are not in `entries`.
+   * With `purge`, deleting this resource clears the whole namespace; without
+   * it, only the keys in `entries` are removed.
+   * @default false
+   */
   purge?: boolean;
 }
 
@@ -195,6 +200,44 @@ export const KvEntriesProvider = () =>
         }
       });
 
+      const remove = Effect.fn(function* (
+        store: string,
+        namespace: string,
+        entries: ResolvedEntries,
+      ) {
+        const allKeys = yield* collectAllKeys(store);
+        const prefix = `${namespace}:`;
+        const deletes: kvs.DeleteKeyRequestListItem[] = [];
+        for (const item of allKeys) {
+          if (!item.Key.startsWith(prefix)) continue;
+          if (!(item.Key.slice(prefix.length) in entries)) continue;
+          deletes.push({ Key: item.Key });
+        }
+        if (deletes.length > 0) {
+          yield* batchUpdateKeys(store, undefined, [], deletes);
+        }
+      });
+
+      /**
+       * The live values of a namespace's keys: every key under it with
+       * `purge` (the namespace is owned), otherwise only `managed` keys.
+       */
+      const observeEntries = Effect.fn(function* (
+        store: string,
+        namespace: string,
+        managed: Record<string, unknown>,
+        owned: boolean,
+      ) {
+        const prefix = `${namespace}:`;
+        const entries: Record<string, string> = {};
+        for (const item of yield* collectAllKeys(store)) {
+          if (!item.Key.startsWith(prefix)) continue;
+          const key = item.Key.slice(prefix.length);
+          if (owned || key in managed) entries[key] = item.Value;
+        }
+        return entries;
+      });
+
       return {
         // Non-listable: a KvEntries resource is a logical group of key/value
         // data keyed entirely by its parent store ARN + namespace (both chosen
@@ -202,24 +245,31 @@ export const KvEntriesProvider = () =>
         // and the entries are managed content rather than nuke-able infra.
         list: () => Effect.succeed([]),
         read: withKvsRegionFn(
-          Effect.fn(function* ({ output }) {
-            return output;
+          Effect.fn(function* ({ olds, output }) {
+            if (output === undefined) return undefined;
+            // The entries are the managed state: report their live values
+            // so drift sees edits, deletions and (with purge) extra keys.
+            const entries = yield* retryForKvsReadiness(
+              observeEntries(output.store, output.namespace, output.entries, olds?.purge ?? false),
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+            if (entries === undefined) return undefined;
+            return { ...output, entries };
           }),
         ),
         reconcile: withKvsRegionFn(
-          Effect.fn(function* ({ news, output }) {
+          Effect.fn(function* ({ news }) {
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
                 const entries = resolveEntries(news.entries);
 
-                // Observe — diff against the prior persisted entries so
-                // we only `Put` keys whose values actually changed. When
-                // the store identity changes (or there's no prior
-                // output), treat every key as new.
-                const priorEntries =
-                  output && output.store === news.store
-                    ? resolveEntries(output.entries)
-                    : undefined;
+                // Observe — diff against the live entries so we only `Put`
+                // keys whose values actually differ.
+                const priorEntries = yield* observeEntries(
+                  news.store,
+                  news.namespace,
+                  entries,
+                  false,
+                );
 
                 // Sync entries — push the changed keys.
                 yield* upload(news.store, news.namespace, entries, priorEntries);
@@ -241,11 +291,16 @@ export const KvEntriesProvider = () =>
           }),
         ),
         delete: withKvsRegionFn(
-          Effect.fn(function* ({ output }) {
+          Effect.fn(function* ({ olds, output }) {
             if (!output.store) return;
-            yield* retryForKvsReadiness(purge(output.store, output.namespace, undefined)).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            // Without `purge` the namespace may hold keys this resource
+            // doesn't own (e.g. a Router's `routes` table), so only remove
+            // the entries it wrote.
+            yield* retryForKvsReadiness(
+              olds.purge
+                ? purge(output.store, output.namespace, undefined)
+                : remove(output.store, output.namespace, resolveEntries(output.entries)),
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }),
         ),
       };

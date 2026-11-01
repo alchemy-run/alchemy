@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { packageWebsiteArtifact, stageWebsiteArtifact } from "@alchemy.run/neon/Website/Artifact";
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

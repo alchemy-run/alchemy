@@ -46,6 +46,16 @@ export const buildHostRedirectInjection = ({
 
 const CLOUDFRONT_FUNCTION_SAFE_HEADER_LIMIT = 10240 - 512;
 
+/**
+ * The viewer-request router shared by every site. Requests resolve to an S3
+ * file, an asset route, the custom 404 page, the image optimizer, or the
+ * server, in that order. When the site has a server, only GET and HEAD look
+ * in S3: the bucket grants CloudFront read-only access, so any other method
+ * (a form POST to a prerendered page, say) must reach the server.
+ *
+ * Comments belong here rather than in the string, which ships inside the
+ * CloudFront Function and counts toward its 10 KB size limit.
+ */
 export const CF_ROUTER_INJECTION = `
 async function routeSite(kvNamespace, metadata) {
   if (metadata.redirect && metadata.redirect.hosts.indexOf(event.request.headers.host.value) !== -1) {
@@ -56,37 +66,39 @@ async function routeSite(kvNamespace, metadata) {
     ? event.request.uri.replace(metadata.base, "")
     : event.request.uri;
 
-  try {
-    var u = decodeURIComponent(baselessUri);
-    var postfixes = u.endsWith("/")
-      ? ["index.html"]
-      : ["", ".html", "/index.html"];
-    var v = await Promise.any(postfixes.map(function(p) { return cf.kvs().get(kvNamespace + ":" + u + p).then(function() { return p; }); }));
-    event.request.uri = metadata.s3.dir + event.request.uri + v;
-    setS3Origin(metadata.s3.domain);
-    return;
-  } catch (e) {}
+  if (!metadata.servers || event.request.method === "GET" || event.request.method === "HEAD") {
+    try {
+      var u = decodeURIComponent(baselessUri);
+      var postfixes = u.endsWith("/")
+        ? ["index.html"]
+        : ["", ".html", "/index.html"];
+      var v = await Promise.any(postfixes.map(function(p) { return cf.kvs().get(kvNamespace + ":" + u + p).then(function() { return p; }); }));
+      event.request.uri = metadata.s3.dir + event.request.uri + v;
+      setS3Origin(metadata.s3.domain);
+      return;
+    } catch (e) {}
 
-  if (metadata.s3 && metadata.s3.routes) {
-    for (var i=0, l=metadata.s3.routes.length; i<l; i++) {
-      var route = metadata.s3.routes[i];
-      if (baselessUri.startsWith(route)) {
-        event.request.uri = metadata.s3.dir + event.request.uri;
-        if (event.request.uri.endsWith("/")) {
-          event.request.uri += "index.html";
-        } else if (!event.request.uri.split("/").pop().includes(".")) {
-          event.request.uri += "/index.html";
+    if (metadata.s3 && metadata.s3.routes) {
+      for (var i=0, l=metadata.s3.routes.length; i<l; i++) {
+        var route = metadata.s3.routes[i];
+        if (baselessUri.startsWith(route)) {
+          event.request.uri = metadata.s3.dir + event.request.uri;
+          if (event.request.uri.endsWith("/")) {
+            event.request.uri += "index.html";
+          } else if (!event.request.uri.split("/").pop().includes(".")) {
+            event.request.uri += "/index.html";
+          }
+          setS3Origin(metadata.s3.domain);
+          return;
         }
-        setS3Origin(metadata.s3.domain);
-        return;
       }
     }
-  }
 
-  if (metadata.custom404 && !metadata.errorResponseCode) {
-    event.request.uri = metadata.s3.dir + (metadata.base ? metadata.base : "") + metadata.custom404;
-    setS3Origin(metadata.s3.domain);
-    return;
+    if (metadata.custom404 && !metadata.errorResponseCode) {
+      event.request.uri = metadata.s3.dir + (metadata.base ? metadata.base : "") + metadata.custom404;
+      setS3Origin(metadata.s3.domain);
+      return;
+    }
   }
 
   if (metadata.s3 && !metadata.servers) {

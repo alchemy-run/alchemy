@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -10,6 +11,16 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { extractValue } from "./common.ts";
+
+export class PublicKeyConflict extends Data.TaggedError("PublicKeyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class PublicKeyUnexpectedResponse extends Data.TaggedError("PublicKeyUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PublicKeyProps {
   /**
@@ -93,7 +104,7 @@ export const PublicKeyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getPublicKeyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.undefined));
         if (!config?.PublicKeyConfig) return undefined;
         return { config: config.PublicKeyConfig, etag: config.ETag };
       });
@@ -226,16 +237,18 @@ export const PublicKeyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Public key '${name}' already exists but could not be recovered`,
-                            ),
+                            new PublicKeyConflict({
+                              message: `Public key '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.PublicKey?.Id) {
-              return yield* Effect.fail(new Error("createPublicKey returned no identifier"));
+              return yield* new PublicKeyUnexpectedResponse({
+                message: "createPublicKey returned no identifier",
+              });
             }
             yield* session.note(created.PublicKey.Id);
             return toAttrs(created.PublicKey.Id, created.PublicKey.PublicKeyConfig, created.ETag);
@@ -256,7 +269,9 @@ export const PublicKeyProvider = () =>
             ),
           });
           if (!updated.PublicKey?.Id) {
-            return yield* Effect.fail(new Error("updatePublicKey returned no identifier"));
+            return yield* new PublicKeyUnexpectedResponse({
+              message: "updatePublicKey returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(updated.PublicKey.Id, updated.PublicKey.PublicKeyConfig, updated.ETag);

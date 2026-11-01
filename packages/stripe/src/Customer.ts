@@ -153,7 +153,7 @@ const isMissingCustomer = isMissingStripeResource;
 const getById = (customer: string) =>
   GetCustomer({ customer }).pipe(
     Effect.map(asCustomer),
-    Effect.catchIf(isMissingCustomer, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingCustomer, () => Effect.undefined),
   );
 
 const listAllCustomers = Effect.fn(function* () {

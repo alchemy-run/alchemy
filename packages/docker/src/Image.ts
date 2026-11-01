@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type * as Redacted from "effect/Redacted";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -30,8 +31,18 @@ export interface DockerBuildOptions {
   dockerfile?: string;
   /** Target platform, e.g. `"linux/amd64"`. */
   platform?: string;
-  /** Docker build arguments. */
+  /**
+   * Docker build arguments (`--build-arg`). Never pass secrets here: build
+   * args are visible in the image history. Use {@link secrets} instead.
+   */
   args?: Record<string, string>;
+  /**
+   * BuildKit secrets, keyed by id. Mount one in a `RUN` step with
+   * `--mount=type=secret,id=<id>` and read it from `/run/secrets/<id>`, or
+   * add `env=<NAME>` to expose it as an environment variable for that step.
+   * A secret never enters the image, its build history, or `docker`'s argv.
+   */
+  secrets?: Record<string, Redacted.Redacted<string>>;
   /** Multi-stage build target. */
   target?: string;
   /** Cache sources passed as `--cache-from`. */
@@ -117,6 +128,23 @@ export interface Image extends Resource<
  * });
  * ```
  *
+ * ### Build Secrets
+ * **Example:** Install from a private npm registry
+ * ```typescript
+ * // Dockerfile:
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   build: {
+ *     context: "./app",
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ * });
+ * ```
+ *
+ * The secret is mounted only into the `RUN` step that asks for it; it never
+ * lands in an image layer or the build history.
+ *
  * ### Registry Push
  * **Example:** Push with Redacted credentials
  * ```typescript
@@ -192,6 +220,7 @@ export const ImageProvider = () =>
           platform: props.build.platform,
           target: props.build.target,
           "build-arg": props.build.args,
+          secrets: props.build.secrets,
           "cache-from": props.build.cacheFrom,
           "cache-to": props.build.cacheTo,
           args: props.build.options,

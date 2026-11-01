@@ -7,7 +7,7 @@ sidebar:
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@distilled.cloud/aws @effect/atom-react @effect/sql-pg drizzle-orm effect pg`;
+export const deps = `@distilled.cloud/aws @effect/atom-react @effect/sql-pg drizzle-orm effect`;
 export const devDeps = `@alchemy.run/frontend-frameworks`;
 
 [TanStack Start](/aws/frontend/tanstack-start) · [Effect RPC](/aws/apis/effect-rpc) · [Drizzle + DSQL](/aws/data/drizzle-dsql)
@@ -107,7 +107,6 @@ export default class Backend extends AWS.Lambda.Function<Backend>()(
   {
     main: import.meta.url,
     functionUrl: true,
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const db = yield* connectDatabase;

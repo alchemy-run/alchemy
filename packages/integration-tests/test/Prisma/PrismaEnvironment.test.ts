@@ -1,10 +1,10 @@
 import { PrismaAuth } from "@alchemy.run/prisma/AuthProvider";
 import { PrismaEnvironment, fromProfile } from "@alchemy.run/prisma/PrismaEnvironment";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
-import * as CliKit from "alchemy/Cli/CliKit";
+import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -27,7 +27,7 @@ const testLayer = (config: Record<string, string>, options: { storedToken?: stri
     ),
     Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
     Layer.provideMerge(NodeServices.layer),
-    Layer.provideMerge(CliKit.layer({ input: false })),
+    Layer.provideMerge(Interaction.layerNonInteractive()),
   );
 };
 

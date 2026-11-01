@@ -142,13 +142,13 @@ export const HyperparameterTuningJob = Resource<HyperparameterTuningJob>(
 export class HyperparameterTuningJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.HyperparameterTuningJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class HyperparameterTuningJobStillExists extends Data.TaggedError(
   "GCP.AIPlatform.HyperparameterTuningJobStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -175,7 +175,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsHyperparameterTuningJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string, filter?: string) =>
   aiplatform.listProjectsLocationsHyperparameterTuningJobs
@@ -199,7 +199,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new HyperparameterTuningJobStillExists({ name }),
+      () => new HyperparameterTuningJobStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -297,13 +297,13 @@ export const HyperparameterTuningJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(env.project, location, desiredLabels));
       }
 
       if (current === undefined || current.name === undefined) {
         return yield* new HyperparameterTuningJobNotResolved({
-          name: output?.name ?? `${location}/hyperparameterTuningJobs`,
+          resourceName: output?.name ?? `${location}/hyperparameterTuningJobs`,
         });
       }
 
@@ -335,7 +335,7 @@ export const HyperparameterTuningJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

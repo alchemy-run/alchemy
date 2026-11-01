@@ -87,7 +87,7 @@ export type Keyvaluemap = Resource<
 export const Keyvaluemap = Resource<Keyvaluemap>("GCP.Apigee.Keyvaluemap");
 
 export class KeyvaluemapNotResolved extends Data.TaggedError("GCP.Apigee.KeyvaluemapNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, mapId: string) =>
@@ -110,14 +110,14 @@ const toAttrs = (map: apigee.GoogleCloudApigeeV1KeyValueMap, organization: strin
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemaps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
     })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee
@@ -204,7 +204,7 @@ export const KeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyvaluemapNotResolved({ name });
+        return yield* new KeyvaluemapNotResolved({ resourceName: name });
       }
 
       const currentName = current.name?.includes("/") ? current.name : name;

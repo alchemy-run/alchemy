@@ -146,7 +146,7 @@ export const EmailContactProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         return yield* contacts.getEmailContact({ arn }).pipe(
           Effect.map((r) => r.emailContact),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -207,7 +207,7 @@ export const EmailContactProvider = () =>
                 emailAddress: news.emailAddress,
                 tags: news.tags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             live = created ? yield* getByArn(created.arn) : yield* findByAddress(news.emailAddress);
           }
           const arn = live!.arn;

@@ -62,9 +62,7 @@ const tokenWorkspaces = Query.fn(() =>
 export const resolveWorkspace = Effect.fn(function* () {
   const fromMe = yield* meWorkspaces().pipe(
     Effect.map((me) => (me.workspace.id !== null ? me.workspace : me.workspaces[0])),
-    Effect.catchTag(["RailwayForbidden", "RailwayUnauthenticated"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["RailwayForbidden", "RailwayUnauthenticated"], () => Effect.undefined),
   );
   if (fromMe?.id != null && fromMe.id.length > 0) {
     return { id: fromMe.id, name: fromMe.name ?? "" } satisfies RailwayWorkspace;

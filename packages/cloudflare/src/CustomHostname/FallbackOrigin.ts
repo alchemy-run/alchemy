@@ -113,7 +113,7 @@ export const FallbackOriginProvider = () =>
             }),
             // Zones without Cloudflare for SaaS entitlement reject the
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag(["SaasAccessNotGranted", "Forbidden"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["SaasAccessNotGranted", "Forbidden"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -203,5 +203,5 @@ const observeFallbackOrigin = (zoneId: string) =>
       origin: r.origin ?? undefined,
       status: r.status ?? undefined,
     })),
-    Effect.catchTag("FallbackOriginNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("FallbackOriginNotFound", () => Effect.undefined),
   );

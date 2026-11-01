@@ -190,11 +190,11 @@ export const VariantsProvider = () =>
           cache.getVariant({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Setting never configured on this zone — nothing to enumerate.
-            Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)),
+            Effect.catchTag("VariantsNotConfigured", () => Effect.undefined),
             // Plan-gated zones reject the setting (`Forbidden`, code 1135
             // "not available for your plan type") or the route entirely
             // (`InvalidRoute`); skip them.
-            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -218,9 +218,9 @@ export const VariantsProvider = () =>
       const observed = yield* cache.getVariant({ zoneId }).pipe(
         // The setting has never been written (or was deleted) — gone.
         Effect.catchTags({
-          VariantsNotConfigured: () => Effect.succeed(undefined),
+          VariantsNotConfigured: () => Effect.undefined,
           // Zone deleted out-of-band — the setting is gone with it.
-          InvalidRoute: () => Effect.succeed(undefined),
+          InvalidRoute: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return undefined;
@@ -236,7 +236,7 @@ export const VariantsProvider = () =>
       // 1. Observe — the setting may not exist yet (typed 404).
       const observed = yield* cache
         .getVariant({ zoneId })
-        .pipe(Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("VariantsNotConfigured", () => Effect.undefined));
 
       // 2. Sync — PATCH both creates and replaces the full value, so a
       //    single upsert call converges missing and divergent states.

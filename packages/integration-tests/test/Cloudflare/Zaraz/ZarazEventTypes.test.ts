@@ -6,7 +6,7 @@ import {
   type Track,
   type WebApi,
 } from "@alchemy.run/cloudflare/Zaraz";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 
 const checkZarazEventTypes = () => {
   const zaraz = Config.events<{

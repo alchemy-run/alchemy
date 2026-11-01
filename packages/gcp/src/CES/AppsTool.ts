@@ -167,7 +167,7 @@ export type AppsTool = Resource<
 export const AppsTool = Resource<AppsTool>("GCP.CES.AppsTool");
 
 export class AppsToolNotResolved extends Data.TaggedError("GCP.CES.AppsToolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, toolId: string) => `${app}/tools/${toolId}`;
@@ -251,10 +251,10 @@ const toAttrs = (tool: ces.Tool, project: string, region: string, appHint?: stri
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsTools({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -324,7 +324,7 @@ export const AppsToolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsToolNotResolved({ name });
+        return yield* new AppsToolNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

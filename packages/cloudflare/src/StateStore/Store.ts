@@ -153,9 +153,7 @@ export default class Store extends DurableObject<Store>()(
           storage
             .get<string>(resourceKey(stage, fqn))
             .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
-              ),
+              Effect.flatMap((entry) => (entry == null ? Effect.undefined : decryptEntry(entry))),
             ),
 
         /**
@@ -203,9 +201,7 @@ export default class Store extends DurableObject<Store>()(
           storage
             .get<string>(stackOutputKey(stage))
             .pipe(
-              Effect.flatMap((entry) =>
-                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
-              ),
+              Effect.flatMap((entry) => (entry == null ? Effect.undefined : decryptEntry(entry))),
             ),
 
         /**

@@ -101,7 +101,7 @@ export const ResourcePolicyProvider = () =>
       const getPolicy = Effect.fn(function* (resourceArn: string) {
         const policy = yield* osis.getResourcePolicy({ ResourceArn: resourceArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return policy === undefined || canonicalJson(policy) === "{}" ? undefined : policy;
       });

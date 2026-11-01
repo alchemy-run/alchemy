@@ -252,7 +252,7 @@ const createPrimaryIpName = (id: string, name: string | undefined, existing?: st
 const getById = (id: number) =>
   Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>

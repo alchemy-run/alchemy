@@ -100,7 +100,7 @@ export const NotifierProvider = () =>
           // by re-creating.
           const observed = output?.id
             ? yield* get({ id: output.id }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -128,7 +128,7 @@ export const NotifierProvider = () =>
               ...current,
               id: current.id ?? output.id,
             })),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

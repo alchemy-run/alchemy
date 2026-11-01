@@ -1,4 +1,5 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -74,7 +75,25 @@ export interface EventBusProps {
    * Tags to assign to the event bus.
    */
   tags?: Record<string, string>;
+
+  /**
+   * AWS region to create the event bus in. Defaults to the stack's region.
+   * Set it to place the secondary bus of a global {@link Endpoint} in its
+   * failover region. Changing the region replaces the event bus.
+   */
+  region?: string;
 }
+
+/** The region segment of an event bus ARN. */
+const regionOfEventBusArn = (arn: string) => arn.split(":")[3];
+
+/** Run EventBridge calls in `region`, or the ambient region when omitted. */
+const inRegion =
+  (region: string | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    region === undefined
+      ? effect
+      : effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(region as RegionID)));
 
 /**
  * An Amazon EventBridge event bus for receiving and routing events.
@@ -92,6 +111,14 @@ export interface EventBusProps {
  *   deadLetterConfig: {
  *     Arn: yield* dlq.queueArn,
  *   },
+ * });
+ * ```
+ *
+ * **Example:** Event Bus in Another Region
+ * ```typescript
+ * const secondary = yield* EventBus("SecondaryBus", {
+ *   name: "orders",
+ *   region: "us-east-2",
  * });
  * ```
  *
@@ -147,28 +174,37 @@ export const EventBusProvider = () =>
           if ((olds.eventSourceName ?? "") !== (news.eventSourceName ?? "")) {
             return { action: "replace" } as const;
           }
+          const { region } = yield* AWSEnvironment.current;
+          if ((olds.region ?? region) !== (news.region ?? region)) {
+            return { action: "replace" } as const;
+          }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
-          const described = yield* eventbridge
-            .describeEventBus({
-              Name: eventBusName,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          const region = output ? regionOfEventBusArn(output.eventBusArn) : olds?.region;
+          return yield* inRegion(region)(
+            Effect.gen(function* () {
+              const described = yield* eventbridge
+                .describeEventBus({
+                  Name: eventBusName,
+                })
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          if (!described?.Arn || !described.Name) {
-            return undefined;
-          }
+              if (!described?.Arn || !described.Name) {
+                return undefined;
+              }
 
-          const { Tags } = yield* eventbridge.listTagsForResource({
-            ResourceARN: described.Arn,
-          });
-          const attrs = {
-            eventBusName: described.Name,
-            eventBusArn: described.Arn as EventBusArn,
-            description: described.Description,
-          };
-          return (yield* hasAlchemyTags(id, Tags ?? [])) ? attrs : Unowned(attrs);
+              const { Tags } = yield* eventbridge.listTagsForResource({
+                ResourceARN: described.Arn,
+              });
+              const attrs = {
+                eventBusName: described.Name,
+                eventBusArn: described.Arn as EventBusArn,
+                description: described.Description,
+              };
+              return (yield* hasAlchemyTags(id, Tags ?? [])) ? attrs : Unowned(attrs);
+            }),
+          );
         }),
         list: () =>
           Effect.gen(function* () {
@@ -201,187 +237,197 @@ export const EventBusProvider = () =>
             return attrs;
           }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const { accountId, region } = yield* AWSEnvironment.current;
-          const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, news));
-          const eventBusArn = (output?.eventBusArn ??
-            `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
-          const internalTags = yield* createInternalTags(id);
-          const desiredTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
+          return yield* inRegion(news.region)(
+            Effect.gen(function* () {
+              const env = yield* AWSEnvironment.current;
+              const { accountId } = env;
+              const region = news.region ?? env.region;
+              const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, news));
+              const eventBusArn = (output?.eventBusArn ??
+                `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
+              const internalTags = yield* createInternalTags(id);
+              const desiredTags = {
+                ...internalTags,
+                ...(news.tags as Record<string, string> | undefined),
+              };
 
-          // Observe — fetch live cloud state. We don't trust `output`
-          // blindly: a bus deleted out of band shows up as missing and we
-          // recreate. Foreign-tagged buses have already been screened by
-          // `read` upstream.
-          let described = yield* eventbridge
-            .describeEventBus({
-              Name: eventBusName,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              // Observe — fetch live cloud state. We don't trust `output`
+              // blindly: a bus deleted out of band shows up as missing and we
+              // recreate. Foreign-tagged buses have already been screened by
+              // `read` upstream.
+              let described = yield* eventbridge
+                .describeEventBus({
+                  Name: eventBusName,
+                })
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // Ensure — create the bus if missing. Tolerate
-          // `ResourceAlreadyExistsException` as a race with a peer
-          // reconciler: re-read and continue with the sync path.
-          if (!described?.Arn) {
-            yield* eventbridge
-              .createEventBus({
+              // Ensure — create the bus if missing. Tolerate
+              // `ResourceAlreadyExistsException` as a race with a peer
+              // reconciler: re-read and continue with the sync path.
+              if (!described?.Arn) {
+                yield* eventbridge
+                  .createEventBus({
+                    Name: eventBusName,
+                    EventSourceName: news.eventSourceName,
+                    Description: news.description,
+                    KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
+                    DeadLetterConfig: news.deadLetterConfig
+                      ? { Arn: news.deadLetterConfig.Arn as string | undefined }
+                      : undefined,
+                    LogConfig: news.logConfig,
+                    Tags: createTagsList(desiredTags),
+                  })
+                  .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+
+                described = yield* eventbridge
+                  .describeEventBus({
+                    Name: eventBusName,
+                  })
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+              }
+
+              // Sync mutable bus configuration — `updateEventBus` overwrites
+              // `description`, KMS key, DLQ, and log config in one shot, so we
+              // call it unconditionally (idempotent for matching values).
+              yield* eventbridge.updateEventBus({
                 Name: eventBusName,
-                EventSourceName: news.eventSourceName,
                 Description: news.description,
                 KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
                 DeadLetterConfig: news.deadLetterConfig
                   ? { Arn: news.deadLetterConfig.Arn as string | undefined }
                   : undefined,
                 LogConfig: news.logConfig,
-                Tags: createTagsList(desiredTags),
-              })
-              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+              });
 
-            described = yield* eventbridge
-              .describeEventBus({
-                Name: eventBusName,
-              })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
-          }
+              // Sync tags — diff observed cloud tags against desired. Adoption
+              // may bring us a bus with its own tag set; diffing against the
+              // freshly-fetched tags lets the reconciler converge regardless.
+              const observedTagsList = yield* eventbridge
+                .listTagsForResource({
+                  ResourceARN: eventBusArn,
+                })
+                .pipe(Effect.map((r) => r.Tags ?? []));
+              const observedTags: Record<string, string> = {};
+              for (const tag of observedTagsList) {
+                if (tag.Key && tag.Value !== undefined) {
+                  observedTags[tag.Key] = tag.Value;
+                }
+              }
+              const { removed, upsert } = diffTags(observedTags, desiredTags);
 
-          // Sync mutable bus configuration — `updateEventBus` overwrites
-          // `description`, KMS key, DLQ, and log config in one shot, so we
-          // call it unconditionally (idempotent for matching values).
-          yield* eventbridge.updateEventBus({
-            Name: eventBusName,
-            Description: news.description,
-            KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
-            DeadLetterConfig: news.deadLetterConfig
-              ? { Arn: news.deadLetterConfig.Arn as string | undefined }
-              : undefined,
-            LogConfig: news.logConfig,
-          });
+              if (removed.length > 0) {
+                yield* eventbridge.untagResource({
+                  ResourceARN: eventBusArn,
+                  TagKeys: removed,
+                });
+              }
 
-          // Sync tags — diff observed cloud tags against desired. Adoption
-          // may bring us a bus with its own tag set; diffing against the
-          // freshly-fetched tags lets the reconciler converge regardless.
-          const observedTagsList = yield* eventbridge
-            .listTagsForResource({
-              ResourceARN: eventBusArn,
-            })
-            .pipe(Effect.map((r) => r.Tags ?? []));
-          const observedTags: Record<string, string> = {};
-          for (const tag of observedTagsList) {
-            if (tag.Key && tag.Value !== undefined) {
-              observedTags[tag.Key] = tag.Value;
-            }
-          }
-          const { removed, upsert } = diffTags(observedTags, desiredTags);
+              if (upsert.length > 0) {
+                yield* eventbridge.tagResource({
+                  ResourceARN: eventBusArn,
+                  Tags: upsert,
+                });
+              }
 
-          if (removed.length > 0) {
-            yield* eventbridge.untagResource({
-              ResourceARN: eventBusArn,
-              TagKeys: removed,
-            });
-          }
-
-          if (upsert.length > 0) {
-            yield* eventbridge.tagResource({
-              ResourceARN: eventBusArn,
-              Tags: upsert,
-            });
-          }
-
-          yield* session.note(eventBusArn);
-          return {
-            eventBusName,
-            eventBusArn,
-            description: news.description,
-          };
+              yield* session.note(eventBusArn);
+              return {
+                eventBusName,
+                eventBusArn,
+                description: news.description,
+              };
+            }),
+          );
         }),
         delete: Effect.fn(function* ({ olds = {}, output }) {
-          const eventBusName = output.eventBusName;
+          return yield* inRegion(regionOfEventBusArn(output.eventBusArn))(
+            Effect.gen(function* () {
+              const eventBusName = output.eventBusName;
 
-          // Rules the engine knows about are deleted first (they depend on
-          // the bus), but AWS-managed rules can linger: deleting an archive
-          // removes its hidden archival rule *asynchronously*, sometimes
-          // minutes later, during which deleteEventBus keeps failing with
-          // EventBusHasRules. Sweep remaining rules with Force (required for
-          // managed rules) instead of waiting out AWS's async cleanup:
-          // AWS-managed rules (`ManagedBy` set) are always swept; rules
-          // created out-of-band by the user are only swept when
-          // `forceDestroy` is enabled.
-          yield* Effect.gen(function* () {
-            let nextToken: string | undefined;
-            do {
-              const page = yield* eventbridge.listRules({
-                EventBusName: eventBusName,
-                NextToken: nextToken,
-              });
-              for (const rule of page.Rules ?? []) {
-                if (!rule.Name) continue;
-                if (!rule.ManagedBy && !olds.forceDestroy) continue;
-                const targets = yield* eventbridge
-                  .listTargetsByRule({
-                    Rule: rule.Name,
+              // Rules the engine knows about are deleted first (they depend on
+              // the bus), but AWS-managed rules can linger: deleting an archive
+              // removes its hidden archival rule *asynchronously*, sometimes
+              // minutes later, during which deleteEventBus keeps failing with
+              // EventBusHasRules. Sweep remaining rules with Force (required for
+              // managed rules) instead of waiting out AWS's async cleanup:
+              // AWS-managed rules (`ManagedBy` set) are always swept; rules
+              // created out-of-band by the user are only swept when
+              // `forceDestroy` is enabled.
+              yield* Effect.gen(function* () {
+                let nextToken: string | undefined;
+                do {
+                  const page = yield* eventbridge.listRules({
                     EventBusName: eventBusName,
-                  })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed({ Targets: [] }),
-                    ),
-                  );
-                const targetIds = (targets.Targets ?? []).map((t) => t.Id);
-                if (targetIds.length > 0) {
-                  yield* eventbridge
-                    .removeTargets({
-                      Rule: rule.Name,
-                      EventBusName: eventBusName,
-                      Ids: targetIds,
-                      Force: true,
-                    })
-                    .pipe(
-                      Effect.catchTag(
-                        ["ResourceNotFoundException", "ManagedRuleException"],
-                        () => Effect.void,
-                      ),
-                    );
-                }
-                yield* eventbridge
-                  .deleteRule({
-                    Name: rule.Name,
-                    EventBusName: eventBusName,
-                    Force: true,
-                  })
-                  .pipe(
-                    Effect.catchTag(
-                      ["ResourceNotFoundException", "ManagedRuleException"],
-                      () => Effect.void,
-                    ),
-                  );
-              }
-              nextToken = page.NextToken;
-            } while (nextToken);
-          }).pipe(
-            // Bus already gone (or vanishes mid-sweep) — nothing to sweep.
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                    NextToken: nextToken,
+                  });
+                  for (const rule of page.Rules ?? []) {
+                    if (!rule.Name) continue;
+                    if (!rule.ManagedBy && !olds.forceDestroy) continue;
+                    const targets = yield* eventbridge
+                      .listTargetsByRule({
+                        Rule: rule.Name,
+                        EventBusName: eventBusName,
+                      })
+                      .pipe(
+                        Effect.catchTag("ResourceNotFoundException", () =>
+                          Effect.succeed({ Targets: [] }),
+                        ),
+                      );
+                    const targetIds = (targets.Targets ?? []).map((t) => t.Id);
+                    if (targetIds.length > 0) {
+                      yield* eventbridge
+                        .removeTargets({
+                          Rule: rule.Name,
+                          EventBusName: eventBusName,
+                          Ids: targetIds,
+                          Force: true,
+                        })
+                        .pipe(
+                          Effect.catchTag(
+                            ["ResourceNotFoundException", "ManagedRuleException"],
+                            () => Effect.void,
+                          ),
+                        );
+                    }
+                    yield* eventbridge
+                      .deleteRule({
+                        Name: rule.Name,
+                        EventBusName: eventBusName,
+                        Force: true,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          ["ResourceNotFoundException", "ManagedRuleException"],
+                          () => Effect.void,
+                        ),
+                      );
+                  }
+                  nextToken = page.NextToken;
+                } while (nextToken);
+              }).pipe(
+                // Bus already gone (or vanishes mid-sweep) — nothing to sweep.
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+
+              // The sweep and EventBridge's own bookkeeping are eventually
+              // consistent — a just-deleted rule can still count against the bus
+              // for a few seconds. Retry the typed dependency violation on a
+              // bounded schedule.
+              yield* eventbridge
+                .deleteEventBus({
+                  Name: eventBusName,
+                })
+                .pipe(
+                  Effect.retry({
+                    while: (e): boolean => e._tag === "EventBusHasRules",
+                    schedule: Schedule.spaced("3 seconds"),
+                    times: 10,
+                  }),
+                  // Bus already gone (deleted out-of-band, or a previous
+                  // destroy partially succeeded) — delete is idempotent.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+                );
+            }),
           );
-
-          // The sweep and EventBridge's own bookkeeping are eventually
-          // consistent — a just-deleted rule can still count against the bus
-          // for a few seconds. Retry the typed dependency violation on a
-          // bounded schedule.
-          yield* eventbridge
-            .deleteEventBus({
-              Name: eventBusName,
-            })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean => e._tag === "EventBusHasRules",
-                schedule: Schedule.spaced("3 seconds"),
-                times: 10,
-              }),
-              // Bus already gone (deleted out-of-band, or a previous
-              // destroy partially succeeded) — delete is idempotent.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
         }),
       };
     }),

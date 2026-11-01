@@ -142,7 +142,7 @@ export type Product = Resource<
 export const Product = Resource<Product>("GCP.Vision.Product");
 
 export class ProductNotResolved extends Data.TaggedError("GCP.Vision.ProductNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (product: vision.Product, project: string) => {
@@ -228,7 +228,7 @@ export const ProductProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductNotResolved({
-          name: name || productNameOf(env.project, location, productId),
+          resourceName: name || productNameOf(env.project, location, productId),
         });
       }
 

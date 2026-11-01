@@ -367,7 +367,7 @@ const toAttrs = (manager: compute.InstanceGroupManager, project: string) => {
 const getByName = (project: string, zone: string, instanceGroupManager: string) =>
   compute
     .getInstanceGroupManagers({ project, zone, instanceGroupManager })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitGone = (project: string, zone: string, managerName: string) =>
   getByName(project, zone, managerName).pipe(
@@ -395,7 +395,7 @@ const waitPresent = (project: string, zone: string, managerName: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.InstanceGroupManagerNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.InstanceGroupManagerNotResolved", () => Effect.undefined),
   );
 
 const runOp = <E, R>(
@@ -422,7 +422,7 @@ const syncNamedPorts = (
     if (instanceGroup.length === 0) return;
     const group = yield* compute
       .getInstanceGroups({ project, zone, instanceGroup })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (group === undefined) return;
     if (samePorts(fromApiPorts(group.namedPorts), namedPorts)) return;
     yield* runOp(
@@ -562,7 +562,7 @@ export const InstanceGroupManagerProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -676,7 +676,7 @@ export const InstanceGroupManagerProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

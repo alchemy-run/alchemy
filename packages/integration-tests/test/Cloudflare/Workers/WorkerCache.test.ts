@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -420,5 +420,31 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
+  },
+);
+
+// Cloudflare rejects an `exports` cache override naming an export the script
+// doesn't have (code 10375); the deploy fails with that typed tag.
+test.provider(
+  "entrypoints naming an unknown export fails with UnknownWorkerEntrypoint",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Cloudflare.Worker("UnknownEntrypointWorker", {
+            script: cachedScript,
+            entrypoints: { Missing: { cache: { enabled: true } } },
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnknownWorkerEntrypoint", code: 10375 });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
   },
 );

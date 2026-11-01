@@ -102,7 +102,7 @@ export const PolicyStoreProvider = () =>
       const observe = Effect.fn(function* (policyStoreId: string) {
         return yield* avp
           .getPolicyStore({ policyStoreId, tags: true })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return PolicyStore.Provider.of({

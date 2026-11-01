@@ -448,7 +448,7 @@ const toInsertBody = (
 const getByName = (project: string, region: string, vpnTunnel: string) =>
   compute
     .getVpnTunnels({ project, region, vpnTunnel })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireTunnel = (project: string, region: string, vpnTunnelName: string) =>
   getByName(project, region, vpnTunnelName).pipe(

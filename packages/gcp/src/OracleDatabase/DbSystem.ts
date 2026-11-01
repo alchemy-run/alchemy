@@ -208,7 +208,7 @@ export type DbSystem = Resource<
 export const DbSystem = Resource<DbSystem>("GCP.OracleDatabase.DbSystem");
 
 const mergedProperties = (news: DbSystemProps): DbSystemPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   shape: news.shape ?? news.properties?.shape,
   sshPublicKeys: news.sshPublicKeys ?? news.properties?.sshPublicKeys,
   computeCount: news.computeCount ?? news.properties?.computeCount,
@@ -298,7 +298,7 @@ const toAttrs = (system: oracle.DbSystem, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsDbSystems({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listSystems = (project: string, region: string) => {
@@ -376,7 +376,7 @@ export const DbSystemProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -385,7 +385,7 @@ export const DbSystemProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -404,7 +404,7 @@ export const DbSystemProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -292,7 +292,7 @@ export const makeLocalSearchClient = (auth: SearchAuth, ref: InstanceRef): Query
       withRef((r) =>
         aisearch.searchNamespaceInstance({
           accountId: auth.accountId,
-          name: r.name,
+          namespace: r.name,
           id: r.id,
           ...("query" in params && params.query !== undefined
             ? { query: params.query }
@@ -304,7 +304,7 @@ export const makeLocalSearchClient = (auth: SearchAuth, ref: InstanceRef): Query
       withRef((r) =>
         aisearch.chatCompletionsNamespaceInstance({
           accountId: auth.accountId,
-          name: r.name,
+          namespace: r.name,
           id: r.id,
           messages: mapMessages(params.messages),
           aiSearchOptions: mapOptions(params.ai_search_options),
@@ -314,7 +314,7 @@ export const makeLocalSearchClient = (auth: SearchAuth, ref: InstanceRef): Query
       withRef((r) =>
         aisearch.readNamespaceInstance({
           accountId: auth.accountId,
-          name: r.name,
+          namespace: r.name,
           id: r.id,
         }),
       ).pipe(Effect.map(mapInfo)),
@@ -322,7 +322,7 @@ export const makeLocalSearchClient = (auth: SearchAuth, ref: InstanceRef): Query
       withRef((r) =>
         aisearch.statsNamespaceInstance({
           accountId: auth.accountId,
-          name: r.name,
+          namespace: r.name,
           id: r.id,
         }),
       ).pipe(Effect.map(mapStats)),
@@ -351,7 +351,7 @@ export const makeLocalSearchNamespaceClient = (
         Stream.runCollect(
           aisearch.listNamespaceInstances.pages({
             accountId: auth.accountId,
-            name,
+            namespace: name,
             perPage: params?.per_page,
             orderBy: params?.order_by,
             orderByDirection: params?.order_by_direction,

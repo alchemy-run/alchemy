@@ -1,5 +1,5 @@
 import { Retry } from "@distilled.cloud/prisma";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProviders, AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStore, ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
@@ -54,7 +54,7 @@ const standaloneManagementApiLayer = () =>
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         // The Prisma-scoped upload client (node transport) rides the
         // providers' output so artifact uploads can reach it at op time.
         PrismaUploadClientLive,

@@ -1,8 +1,8 @@
 import { Docker, DockerLive, dockerLive } from "@alchemy.run/docker";
 import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
 import { classifyDockerRegistryError } from "@alchemy.run/docker/RegistryError";
+import { assert, expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, expect, layer } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -400,6 +400,48 @@ describe("Docker.image", (it) => {
         });
         const out = yield* docker.run(["run", "--rm", tag, "cat", "/out.txt"]);
         expect(out.stdout.trim()).toBe("from-arg");
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
+  it.effect(
+    "passes --secret through the environment and keeps it out of the image",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const docker = yield* Docker;
+        const tag = "alchemy-docker-test:secret";
+        const value = "alchemy-build-secret-value";
+        yield* Effect.addFinalizer(() =>
+          docker.image.remove(tag, true).pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+            Effect.ignore,
+          ),
+        );
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-build-" });
+        const ctx = path.join(root, "ctx");
+        yield* docker.materialize({
+          context: ctx,
+          dockerfile: [
+            "FROM alpine:3.19",
+            // `PATH` as an id proves the value does not ride in a variable of
+            // that name: shadowing it would break `docker` itself.
+            "RUN --mount=type=secret,id=PATH,required=true " +
+              "wc -c < /run/secrets/PATH > /length.txt",
+            "",
+          ].join("\n"),
+          files: [],
+        });
+        yield* docker.image.build({
+          tag,
+          context: ctx,
+          secrets: { PATH: Redacted.make(value) },
+        });
+        const out = yield* docker.run(["run", "--rm", tag, "cat", "/length.txt"]);
+        expect(out.stdout.trim()).toBe(String(value.length));
+        const history = yield* docker.run(["image", "history", "--no-trunc", tag]);
+        expect(history.stdout).not.toContain(value);
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );

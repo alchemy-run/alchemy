@@ -46,6 +46,14 @@ export const TokenValue = Random("StateStoreAuthTokenValue");
 export const AuthTokenSecretName = "AlchemyStateStoreToken" as const;
 
 /**
+ * The Worker env bindings the runtime reads the two secrets through: each
+ * `Secret` resource's logical ID. `Deploy.ts` uploads bindings under these
+ * names, so they must not change while stores are deployed.
+ */
+export const AuthTokenBinding = AuthTokenSecretName;
+export const EncryptionKeyBinding = "StateStoreEncryptionKey" as const;
+
+/**
  * The bearer token used to authenticate every request to the state
  * store worker. The value comes from {@link TokenValue} and lives in
  * the account-wide Cloudflare Secrets Store so it can be bound into
@@ -54,7 +62,7 @@ export const AuthTokenSecretName = "AlchemyStateStoreToken" as const;
 export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* TokenValue;
-  return yield* Secret.Secret(AuthTokenSecretName, {
+  return yield* Secret.Secret(AuthTokenBinding, {
     name: stateStoreSecretName(AuthTokenSecretName, yield* StateStoreName),
     store,
     value: random.text,
@@ -82,7 +90,7 @@ export const EncryptionKeySecretName = "AlchemyStateStoreEncryptionKey" as const
 export const EncryptionKey = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* EncryptionKeyValue;
-  return yield* Secret.Secret("StateStoreEncryptionKey", {
+  return yield* Secret.Secret(EncryptionKeyBinding, {
     name: stateStoreSecretName(EncryptionKeySecretName, yield* StateStoreName),
     store,
     value: random.text,

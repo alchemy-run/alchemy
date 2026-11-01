@@ -105,7 +105,12 @@ export const toRuntimeBinding = Effect.fn(function* (
         uniqueKey: b.namespaceId ?? encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "flagship":
-      return Flagship.remote(b.name, b.appId);
+      // A `dev:` id belongs to a locally-emulated app (the local Flag
+      // provider seeds its definitions into the simulator); a real id is a
+      // live app the dev worker proxies to (`Alchemy.remote()`).
+      return isLocalId(b.appId)
+        ? Flagship.local({ binding: b.name, appId: b.appId })
+        : Flagship.remote(b.name, b.appId);
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
     case "images":

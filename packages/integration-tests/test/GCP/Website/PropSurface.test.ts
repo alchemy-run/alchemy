@@ -1,5 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 /**
  * Compile-time pins for GCP.Website prop surfaces: the shared Cloud Run

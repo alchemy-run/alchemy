@@ -1,12 +1,12 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import type { Connection } from "@alchemy.run/kubernetes/Connection";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import { describe, expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";

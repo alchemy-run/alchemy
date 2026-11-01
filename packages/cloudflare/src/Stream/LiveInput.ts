@@ -273,7 +273,7 @@ export const LiveInputProvider = () =>
 const getLiveInput = (accountId: string, liveInputId: string) =>
   stream
     .getLiveInput({ accountId, liveInputIdentifier: liveInputId })
-    .pipe(Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("LiveInputNotFound", () => Effect.undefined));
 
 const toAttributes = (
   input:

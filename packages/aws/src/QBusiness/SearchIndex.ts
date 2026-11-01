@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class QBusinessSearchIndexInvalidProps extends Data.TaggedError(
+  "QBusinessSearchIndexInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QBusinessSearchIndexUnexpectedResponse extends Data.TaggedError(
+  "QBusinessSearchIndexUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type IndexStatus = qbusiness.IndexStatus;
 export type IndexType = qbusiness.IndexType;
 
@@ -128,7 +142,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +154,7 @@ interface IndexState {
 const readIndexById = Effect.fn(function* (applicationId: string, indexId: string) {
   const described = yield* qbusiness
     .getIndex({ applicationId, indexId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.indexArn;
   if (arn === undefined) return undefined;
@@ -209,7 +223,7 @@ const waitForIndexStatus = (applicationId: string, indexId: string, target: "ACT
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getIndex({ applicationId, indexId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new IndexNotReady({ indexId, status: described.status });
@@ -259,7 +273,9 @@ export const IndexProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness Index requires props"));
+            return yield* new QBusinessSearchIndexInvalidProps({
+              message: "QBusiness Index requires props",
+            });
           }
           const applicationId = news.applicationId;
           const displayName = yield* createDisplayName(id, news);
@@ -286,15 +302,17 @@ export const IndexProvider = () =>
               })),
             });
             if (!created.indexId) {
-              return yield* Effect.fail(
-                new Error(`CreateIndex for '${displayName}' returned no indexId`),
-              );
+              return yield* new QBusinessSearchIndexUnexpectedResponse({
+                message: `CreateIndex for '${displayName}' returned no indexId`,
+              });
             }
             yield* session.note(`Creating index ${displayName} (${created.indexId})...`);
             yield* waitForIndexStatus(applicationId, created.indexId, "ACTIVE");
             state = yield* readIndexById(applicationId, created.indexId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created index ${displayName}`));
+              return yield* new QBusinessSearchIndexUnexpectedResponse({
+                message: `failed to read created index ${displayName}`,
+              });
             }
           }
 
@@ -342,7 +360,9 @@ export const IndexProvider = () =>
 
           const final = yield* readIndexById(applicationId, state.attrs.indexId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled index ${displayName}`));
+            return yield* new QBusinessSearchIndexUnexpectedResponse({
+              message: `failed to read reconciled index ${displayName}`,
+            });
           }
           return final.attrs;
         }),

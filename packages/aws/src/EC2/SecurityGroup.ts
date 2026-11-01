@@ -16,18 +16,27 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./defaultVpcScope.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import {
   declaredSecurityGroupRuleIds,
+  persistedSecurityGroupRuleIds,
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
   resolveSecurityGroupRules,
   securityGroupRuleKey,
 } from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class SecurityGroupUnexpectedResponse extends Data.TaggedError(
+  "SecurityGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type SecurityGroupId<ID extends string = string> = `sg-${ID}`;
 export const SecurityGroupId = <ID extends string>(id: ID): ID & SecurityGroupId<ID> =>
@@ -184,6 +193,12 @@ export interface SecurityGroup extends Resource<
       description?: string;
       isEgress: true;
     }>;
+
+    /**
+     * Tags on the security group, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -464,7 +479,13 @@ export const SecurityGroupProvider = () =>
         ec2.describeSecurityGroups({ GroupIds: [groupId] }).pipe(
           Effect.map((r) => r.SecurityGroups?.[0]),
           Effect.flatMap((sg) =>
-            sg ? Effect.succeed(sg) : Effect.fail(new Error(`Security Group ${groupId} not found`)),
+            sg
+              ? Effect.succeed(sg)
+              : Effect.fail(
+                  new SecurityGroupUnexpectedResponse({
+                    message: `Security Group ${groupId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -502,6 +523,7 @@ export const SecurityGroupProvider = () =>
           description: sg.Description!,
           vpcId: sg.VpcId as VpcId,
           ownerId: sg.OwnerId!,
+          tags: tagListRecord(sg.Tags),
           ingressRules: rules
             .filter((r) => !r.IsEgress)
             .map((r) => ({
@@ -683,12 +705,18 @@ export const SecurityGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const sg = output
             ? yield* describeSecurityGroup(output.groupId).pipe(
-                Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
               )
             : yield* findOwnedGroup(id, yield* createGroupName(id, olds?.groupName), olds?.vpcId);
           if (!sg?.GroupId) return undefined;
+          // Rules declared as separate SecurityGroupRule resources are theirs,
+          // not the group's (reconcile leaves them out of its attributes too).
+          const owned = yield* persistedSecurityGroupRuleIds(sg.GroupId);
           const rules = yield* describeSecurityGroupRules(sg.GroupId);
-          return yield* toAttrs(sg, rules);
+          return yield* toAttrs(
+            sg,
+            rules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!)),
+          );
         }),
 
         list: () =>
@@ -741,7 +769,7 @@ export const SecurityGroupProvider = () =>
 
           if (output) {
             const group = yield* describeSecurityGroup(output.groupId).pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
             );
             if (group === undefined) return { action: "update", stables: [] };
             const owned = yield* declaredSecurityGroupRuleIds(output.groupId);
@@ -890,7 +918,10 @@ export const SecurityGroupProvider = () =>
           if (!matches(finalRules)) {
             return yield* new SecurityGroupRulesNotSettled({ groupId });
           }
-          return yield* toAttrs(finalSg, finalRules);
+          return yield* toAttrs(
+            finalSg,
+            finalRules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!)),
+          );
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

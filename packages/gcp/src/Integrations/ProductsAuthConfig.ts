@@ -145,7 +145,7 @@ export const ProductsAuthConfig = Resource<ProductsAuthConfig>(
 export class ProductsAuthConfigNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsAuthConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_CREDENTIAL_TYPE: CredentialType = "USERNAME_AND_PASSWORD";
@@ -180,10 +180,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations
         .getProjectsLocationsProductsAuthConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsAuthConfigs.pages({ parent, pageSize: 100 }).pipe(
@@ -201,7 +201,7 @@ const findOwned = (parent: string, id: string) =>
     Stream.filterEffect((config) => ownedByAlchemy(id, config.description)),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const ProductsAuthConfigProvider = () =>
@@ -296,7 +296,7 @@ export const ProductsAuthConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsAuthConfigNotResolved({ name });
+        return yield* new ProductsAuthConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -282,7 +282,7 @@ const narrowCustom = (
 const observeProfile = (accountId: string, profileId: string) =>
   zeroTrust.getDlpProfileCustom({ accountId, profileId }).pipe(
     Effect.map(narrowCustom),
-    Effect.catchTag("DlpProfileNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DlpProfileNotFound", () => Effect.undefined),
   );
 
 const createProfileName = (id: string, name: string | undefined) =>

@@ -189,9 +189,7 @@ export const authSettingsMatch = (observed: object, desired: object) =>
   );
 
 const observeAuth = (scope: { projectId: string; branchId: string }) =>
-  Neon.getNeonAuth(authRequest(scope)).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
+  Neon.getNeonAuth(authRequest(scope)).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const attributes = Effect.fn(function* (
   scope: { projectId: string; branchId: string },

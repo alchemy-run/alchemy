@@ -145,7 +145,7 @@ export const relay = <R = never>(
         );
         return response.status >= 200 && response.status < 300;
       }).pipe(Effect.orElseSucceed(() => false));
-    const delivered = yield* Effect.all(targets.map(forward), { concurrency: "unbounded" });
+    const delivered = yield* Effect.forEach(targets, forward, { concurrency: "unbounded" });
     return delivered.some(Boolean)
       ? json(200, {})
       : json(502, { error: "No destination accepted the batch" });

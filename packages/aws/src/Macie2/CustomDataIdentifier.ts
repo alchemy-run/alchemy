@@ -148,8 +148,8 @@ export const CustomDataIdentifierProvider = () =>
           // as gone.
           Effect.map((d) => (d.deleted ? undefined : d)),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            AccessDeniedException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
 

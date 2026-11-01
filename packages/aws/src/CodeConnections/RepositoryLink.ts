@@ -99,7 +99,7 @@ export const RepositoryLinkProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const response = yield* codeconnections
           .getRepositoryLink({ RepositoryLinkId: id })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.RepositoryLinkInfo;
       });
 

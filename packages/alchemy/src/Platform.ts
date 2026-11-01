@@ -15,9 +15,11 @@ import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { Dependencies } from "./Dependencies.ts";
+import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
+import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -32,6 +34,7 @@ import {
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 
@@ -336,8 +339,8 @@ export const Platform = <
               isExternal: true,
             };
       };
-      const evaluate = () =>
-        (!isTag
+      const register = () =>
+        !isTag
           ? // this is a non-tagged resource yielded without providing an implementation
             // e.g.
             // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
@@ -376,20 +379,39 @@ export const Platform = <
                   ),
                 onSome: Effect.succeed,
               }),
-            )
-        ).pipe(
-          Effect.tap((resource) =>
-            hooks.onCreate
-              ? Effect.flatMap(
-                  // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
-                  // handing it to the hook so `onCreate` always sees the
-                  // plain props object — the second call site (in
-                  // `cls.make`) already does this.
-                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                  (resolved) => hooks.onCreate!(resource as R, resolved),
-                )
-              : Effect.void,
+            );
+      // Whether this `yield*` registers the resource. The stack holds one
+      // resource per FQN and every later `yield*` returns it. Outside a
+      // stack (at runtime) nothing registers, so the hook runs as before.
+      const isFirstRegistration = Effect.flatMap(
+        Effect.serviceOption(StackContext),
+        Option.match({
+          onNone: () => Effect.succeed(true),
+          onSome: (stack) =>
+            Effect.map(CurrentNamespace, (namespace) => !(toFqn(namespace, id) in stack.resources)),
+        }),
+      );
+      const evaluate = () =>
+        Effect.flatMap(isFirstRegistration, (firstRegistration) =>
+          register().pipe(
+            Effect.tap((resource) =>
+              // Run the hook only for the `yield*` that registered the
+              // resource. The hook yields the resource's `env`, so re-running
+              // it on every `yield*` lets two Workers whose `env` entries
+              // yield each other recurse forever (#2672). The resource is
+              // registered before the hook runs, so a cycle back to it stops.
+              hooks.onCreate && firstRegistration
+                ? Effect.flatMap(
+                    // `props` may itself be an Effect (e.g. when wrapped by
+                    // `Cloudflare.Website.Vite` via `Effect.map`); resolve it
+                    // before handing it to the hook so `onCreate` always sees
+                    // the plain props object — the second call site (in
+                    // `cls.make`) already does this.
+                    Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                  )
+                : Effect.void,
+            ),
           ),
         );
       return Object.assign(
@@ -524,10 +546,17 @@ export const Platform = <
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<Redacted.Redacted<string>>(key);
+                            const value = yield* ctx.get<unknown>(key);
                             if (value) {
+                              // `get` JSON-decodes unbound env values (`"true"` →
+                              // `true`), but a `Value` node holds the raw string the
+                              // `Config` schema parses.
                               return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value) ? Redacted.value(value) : value,
+                                Redacted.isRedacted(value)
+                                  ? String(Redacted.value(value))
+                                  : typeof value === "string"
+                                    ? value
+                                    : JSON.stringify(value),
                               );
                             }
                           }

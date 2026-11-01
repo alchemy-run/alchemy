@@ -15,7 +15,6 @@ import type { ArtifactStore } from "./Artifacts.ts";
 import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
-import type { CliKit } from "./Cli/CliKit/CliKit.ts";
 import type { Interaction } from "./Interaction.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
@@ -87,8 +86,8 @@ export type HostServices =
 /** What auth layers and state stores run under: the host's services and the auth registry. */
 export type ContributionServices = HostServices | AuthProviders;
 
-/** What a CLI command runs under: the host's services and the terminal. */
-export type CliServices = HostServices | CliKit;
+/** What a CLI command runs under: the host's services, `Interaction` included. */
+export type CliServices = HostServices;
 
 /** A provider's own failure: any tagged error with a message for the user. */
 export type ContributionFailure = { readonly _tag: string; readonly message: string };
@@ -223,7 +222,7 @@ const Manifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   alchemy: Schema.optional(
-    Schema.Struct({ contributes: Schema.optional(Schema.Array(Schema.String)) }),
+    Schema.Struct({ contributes: Schema.String.pipe(Schema.Array, Schema.optional) }),
   ),
 });
 
@@ -280,6 +279,31 @@ const candidatePackages = Effect.fn(function* (dir: string) {
     if (parent === current) return names;
     current = parent;
   }
+});
+
+/** The root `package.json` name of alchemy's own monorepo. */
+const MONOREPO_NAME = "@alchemy.run/monorepo";
+
+/**
+ * The `package.json` of every sibling package when alchemy runs from its own
+ * monorepo checkout (`packages/alchemy` under a root named
+ * {@link MONOREPO_NAME}). Empty for every installed copy of alchemy.
+ */
+const monorepoManifests = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const own = path.dirname(yield* path.fromFileUrl(new URL("../package.json", import.meta.url)));
+  const packages = path.dirname(own);
+  const root = yield* readManifest(path.join(path.dirname(packages), "package.json")).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
+  if (root?.name !== MONOREPO_NAME) return [];
+  const files: string[] = [];
+  for (const entry of yield* fs.readDirectory(packages)) {
+    const file = path.join(packages, entry, "package.json");
+    if (path.join(packages, entry) !== own && (yield* fs.exists(file))) files.push(file);
+  }
+  return files.sort();
 });
 
 /** The npm scope of alchemy's own provider packages. */
@@ -408,12 +432,10 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
   // The project's packages that declare providers, before alchemy's own: the
   // first provider with a name wins, so a provider that moved into its own
   // package replaces the copy still inside alchemy.
-  const dependencies = [...(yield* candidatePackages(cwd))].filter((name) => name !== own?.name);
-  for (const name of dependencies) {
-    const file = yield* findDependencyManifest(cwd, name);
-    if (file === undefined) continue;
+  const declare = Effect.fn(function* (file: string, fallback = false) {
     const manifest = yield* readManifest(file);
     for (const specifier of manifest?.alchemy?.contributes ?? []) {
+      if (fallback && declared.has(specifier)) continue;
       declared.set(specifier, {
         specifier,
         manifest: {
@@ -425,6 +447,18 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
         },
       });
     }
+  });
+  const dependencies = [...(yield* candidatePackages(cwd))].filter((name) => name !== own?.name);
+  for (const name of dependencies) {
+    const file = yield* findDependencyManifest(cwd, name);
+    if (file !== undefined) yield* declare(file);
+  }
+  // Developing alchemy itself: every package in the monorepo, so the CLI sees
+  // all providers without the root installing them. Installed copies win.
+  for (const file of yield* monorepoManifests) {
+    yield* declare(file, true).pipe(
+      Effect.catch((error) => Effect.logDebug(`Skipping ${file}: ${error.message}`)),
+    );
   }
   // alchemy's own: the providers that still live in this package.
   for (const specifier of own?.alchemy?.contributes ?? []) declared.set(specifier, { specifier });

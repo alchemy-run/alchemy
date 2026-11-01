@@ -175,7 +175,7 @@ export type Binding = Resource<
 export const Binding = Resource<Binding>("GCP.AgentRegistry.Binding");
 
 export class BindingNotResolved extends Data.TaggedError("GCP.AgentRegistry.BindingNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const COLLECTION = "bindings";
@@ -236,10 +236,10 @@ const toAttrs = (item: registry.Binding, project: string, location: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : registry
         .getProjectsLocationsBindings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const displayNameOf = (news: BindingProps, bindingId: string) =>
   (news.displayName ?? bindingId).slice(0, MAX_DISPLAY_NAME_LENGTH);
@@ -315,7 +315,7 @@ export const BindingProvider = () =>
               authProviderBinding,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (code 6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -329,7 +329,7 @@ export const BindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BindingNotResolved({ name });
+        return yield* new BindingNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -376,7 +376,7 @@ export const BindingProvider = () =>
       if (!output.name) return;
       const deleted = yield* retryTransient(
         registry.deleteProjectsLocationsBindings({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForDeleteOperation(deleted);
       }

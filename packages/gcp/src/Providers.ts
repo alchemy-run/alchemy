@@ -1529,6 +1529,11 @@ import {
   ServiceAccountKey as IamServiceAccountKey,
   ServiceAccountKeyProvider as IamServiceAccountKeyProvider,
 } from "./IAM/ServiceAccountKey.ts";
+import { WorkloadIdentityPool, WorkloadIdentityPoolProvider } from "./IAM/WorkloadIdentityPool.ts";
+import {
+  WorkloadIdentityProvider,
+  WorkloadIdentityProviderProvider,
+} from "./IAM/WorkloadIdentityProvider.ts";
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
@@ -2143,6 +2148,10 @@ import {
 } from "./Retail/CatalogsServingConfig.ts";
 import { PredictHttp as RetailPredictHttp } from "./Retail/PredictHttp.ts";
 import { SearchHttp as RetailSearchHttp } from "./Retail/SearchHttp.ts";
+import {
+  Container as RunContainer,
+  ContainerProvider as RunContainerProvider,
+} from "./Run/Container.ts";
 import { GetServiceHttp } from "./Run/GetServiceHttp.ts";
 import { GetWorkerPoolHttp } from "./Run/GetWorkerPoolHttp.ts";
 import { Job as CloudRunJob, JobProvider as CloudRunJobProvider } from "./Run/Job.ts";
@@ -2808,6 +2817,7 @@ const makeProviders = () =>
           Queue,
           Job,
           CloudRunJob,
+          RunContainer,
           Service,
           WebsiteServer,
           WorkerPool,
@@ -3588,6 +3598,8 @@ const makeProviders = () =>
           JobTemplate,
           IamServiceAccount,
           IamServiceAccountKey,
+          WorkloadIdentityPool,
+          WorkloadIdentityProvider,
           ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -3673,6 +3685,7 @@ const makeProviders = () =>
           QueueProvider(),
           JobProvider(),
           CloudRunJobProvider(),
+          RunContainerProvider(),
           ServiceProvider(),
           WebsiteServerProvider(),
           WorkerPoolProvider(),
@@ -4710,6 +4723,8 @@ const makeProviders = () =>
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
                 IamServiceAccountKeyProvider(),
+                WorkloadIdentityPoolProvider(),
+                WorkloadIdentityProviderProvider(),
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),

@@ -117,7 +117,7 @@ export type Appgroup = Resource<
 export const Appgroup = Resource<Appgroup>("GCP.Apigee.Appgroup");
 
 export class AppgroupNotResolved extends Data.TaggedError("GCP.Apigee.AppgroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, appgroupId: string) =>
@@ -150,7 +150,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroups({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const AppgroupProvider = () =>
   Provider.succeed(Appgroup, {
@@ -248,7 +248,7 @@ export const AppgroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppgroupNotResolved({ name });
+        return yield* new AppgroupNotResolved({ resourceName: name });
       }
 
       const needsUpdate =

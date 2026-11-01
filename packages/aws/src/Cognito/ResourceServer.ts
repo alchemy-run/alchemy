@@ -119,7 +119,7 @@ export const ResourceServerProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ResourceServer),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

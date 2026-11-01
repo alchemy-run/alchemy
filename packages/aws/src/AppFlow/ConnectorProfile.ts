@@ -2,9 +2,17 @@ import * as appflow from "@distilled.cloud/aws/appflow";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ConnectorProfileUnexpectedResponse extends Data.TaggedError(
+  "ConnectorProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConnectorProfileProps {
   /**
@@ -158,9 +166,9 @@ export const ConnectorProfileProvider = () =>
           }
           live = yield* observe(name);
           if (live === undefined || live.connectorProfileArn === undefined) {
-            return yield* Effect.fail(
-              new Error(`Connector profile '${name}' was not found after reconcile`),
-            );
+            return yield* new ConnectorProfileUnexpectedResponse({
+              message: `Connector profile '${name}' was not found after reconcile`,
+            });
           }
 
           yield* session.note(name);

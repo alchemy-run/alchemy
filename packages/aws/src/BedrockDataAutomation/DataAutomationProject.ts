@@ -192,7 +192,7 @@ export const DataAutomationProjectProvider = () =>
       ) {
         return yield* bda.getDataAutomationProject({ projectArn, projectStage }).pipe(
           Effect.map((r) => r.project),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

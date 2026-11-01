@@ -109,7 +109,7 @@ export const PresetProvider = () =>
       const getPreset = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getPreset({ Name: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.Preset;
       });
 

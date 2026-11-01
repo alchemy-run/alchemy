@@ -286,24 +286,22 @@ const collectPages = <Page, Item, E, R>(
 
 export const getTenant = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : jobs
-        .getProjectsTenants({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : jobs.getProjectsTenants({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getCompany = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : jobs
         .getProjectsTenantsCompanies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getJob = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : jobs
         .getProjectsTenantsJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listTenants = (project: string) =>
   collectPages(

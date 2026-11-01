@@ -279,7 +279,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, networkAttachment: string) =>
   compute
     .getNetworkAttachments({ project, region, networkAttachment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, networkAttachmentName: string) =>
   getByName(project, region, networkAttachmentName).pipe(

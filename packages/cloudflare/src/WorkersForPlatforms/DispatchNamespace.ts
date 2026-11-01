@@ -233,7 +233,7 @@ export const DispatchNamespaceProvider = () =>
 const getNamespace = (accountId: string, name: string) =>
   wfp
     .getDispatchNamespace({ accountId, dispatchNamespace: name })
-    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.undefined));
 
 const toAttributes = (
   ns: wfp.GetDispatchNamespaceResponse | wfp.CreateDispatchNamespaceResponse,

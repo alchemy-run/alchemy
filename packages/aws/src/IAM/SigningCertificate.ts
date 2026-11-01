@@ -137,7 +137,7 @@ export const SigningCertificateProvider = () =>
             Effect.map((r) =>
               r.Certificates.find((entry) => entry.CertificateId === output.certificateId),
             ),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           )
         : undefined;
 

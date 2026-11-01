@@ -181,7 +181,7 @@ const toAttributes = (
 const describeAccelerator = Effect.fn(function* (acceleratorArn: string) {
   return yield* withGaRegion(ga.describeAccelerator({ AcceleratorArn: acceleratorArn })).pipe(
     Effect.map((r) => r.Accelerator),
-    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.undefined),
   );
 });
 
@@ -190,7 +190,7 @@ const describeFlowLogs = Effect.fn(function* (acceleratorArn: string) {
     ga.describeAcceleratorAttributes({ AcceleratorArn: acceleratorArn }),
   ).pipe(
     Effect.map((r) => r.AcceleratorAttributes),
-    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.undefined),
   );
 });
 

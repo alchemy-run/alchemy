@@ -304,7 +304,7 @@ const getById = (promotionCode: string) =>
   GetPromotionCode({
     promotion_code: promotionCode,
     expand: ["promotion.coupon"],
-  }).pipe(Effect.catchIf(isResourceMissing, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isResourceMissing, () => Effect.undefined));
 
 const findByCode = (code: string) =>
   Effect.gen(function* () {

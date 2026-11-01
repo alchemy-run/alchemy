@@ -7,11 +7,17 @@ import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { initialCwd } from "alchemy/Util/Node";
 import { loadFrontendCore } from "alchemy/Website/FrontendCore";
 import { packSiteExtraFiles } from "alchemy/Website/packExtraFiles";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { createComputeArchive } from "../ComputeArchive.ts";
+
+export class ArtifactOperationFailed extends Data.TaggedError("ArtifactOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Resolved framework output to stage after Website.Server has built it. */
 export interface WebsiteArtifactProps {
@@ -68,7 +74,12 @@ const nextExcluded = (relative: string) =>
   /^\.next\/(?:cache|standalone|types|diagnostics|dev)(?:\/|$)/.test(relative) ||
   /^\.next\/trace(?:-|$)/.test(relative);
 
-const fail = (message: string) => Effect.fail(new Error(message));
+export class WebsiteTraceError extends Data.TaggedError("WebsiteTraceError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+const fail = (message: string) => Effect.fail(new ArtifactOperationFailed({ message }));
 
 /**
  * Stage real build files and NFT's reachable runtime graph without relocating
@@ -218,10 +229,11 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
               }),
             ),
           catch: (cause) =>
-            new Error(
-              "Failed to trace website runtime dependencies. Install @vercel/nft in the deployment workspace.",
-              { cause },
-            ),
+            new WebsiteTraceError({
+              message:
+                "Failed to trace website runtime dependencies. Install @vercel/nft in the deployment workspace.",
+              cause,
+            }),
         }).pipe(Effect.timeout("90 seconds"));
   if (trace !== undefined) {
     for (const file of trace.fileList) {

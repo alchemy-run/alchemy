@@ -129,7 +129,7 @@ export const ReferenceStoreProvider = () =>
           if (output?.referenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getReferenceStore({ id: output.referenceStoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -164,9 +164,7 @@ export const ReferenceStoreProvider = () =>
               ? undefined
               : yield* omics
                   .getReferenceStore({ id: output.referenceStoreId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE — create if missing. The store name is not a unique key, so
           // there is no AlreadyExists race to tolerate here.

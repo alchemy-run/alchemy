@@ -116,6 +116,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: NonNullable<WorkerWiring["hyperdrives"]>;
     readonly queueConsumers: Effect.Effect<NonNullable<WorkerWiring["queueConsumers"]>>;
     readonly assets: WorkerWiring["assets"] | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      RuntimeWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   /**
    * The host's runtime stack (a `Context.Context<RuntimeServices>`) — the
@@ -648,7 +657,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const [assets, input] = yield* Effect.all([
         output.clientDirectory !== undefined
           ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx))
-          : Effect.succeed(undefined),
+          : Effect.undefined,
         hashInputTree(root, options, ctx.dotAlchemy),
       ]);
       return {
@@ -691,6 +700,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
+            ...ctx.worker.options,
             name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

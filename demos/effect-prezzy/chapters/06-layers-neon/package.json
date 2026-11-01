@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@alchemy.run/neon": "workspace:*",
-    "@alchemy.run/sql": "workspace:*"
+    "@alchemy.run/sql": "workspace:*",
+    "@alchemy.run/test": "workspace:*"
   }
 }

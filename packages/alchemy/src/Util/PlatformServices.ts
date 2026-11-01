@@ -1,4 +1,5 @@
-import type { Crypto } from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type { Input as DurationInput } from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
@@ -47,9 +48,13 @@ export const platformLayer = <A, E, R>(constructors: {
     }),
   );
 
+// effect 4.1 dropped crypto from the platform `*Services` bundles.
+const WebCryptoServices = Layer.mergeAll(SecureRandom.layerWebCrypto, Digest.layerWebCrypto);
+
 export type PlatformServices =
   | ChildProcessSpawner
-  | Crypto
+  | Digest.Digest
+  | SecureRandom.SecureRandom
   | FileSystem
   | Path
   | Stdio
@@ -63,7 +68,11 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
       importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunServices")),
       importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunSocket")),
     ]);
-    return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
+    return Layer.mergeAll(
+      BunServices.layer,
+      BunSocket.layerWebSocketConstructor,
+      WebCryptoServices,
+    );
   },
   node: async () => {
     const [NodeServices, NodeSocket] = await Promise.all([
@@ -73,7 +82,11 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
       ),
       importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeSocket")),
     ]);
-    return Layer.merge(NodeServices.layer, NodeSocket.layerWebSocketConstructor);
+    return Layer.mergeAll(
+      NodeServices.layer,
+      NodeSocket.layerWebSocketConstructor,
+      WebCryptoServices,
+    );
   },
 });
 

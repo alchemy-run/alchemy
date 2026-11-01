@@ -9,7 +9,12 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { cleanMap, databaseArn, retryWhileConcurrentModification } from "./internal.ts";
+import {
+  cleanMap,
+  databaseArn,
+  deleteGlueDatabase,
+  retryWhileConcurrentModification,
+} from "./internal.ts";
 
 export interface DatabaseProps {
   /**
@@ -52,6 +57,16 @@ export interface Database extends Resource<
     databaseArn: string;
     /** The AWS account ID of the Data Catalog the database lives in. */
     catalogId: string;
+    /**
+     * Description, location and parameters (including the ownership
+     * markers), as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    configuration?: {
+      description?: string;
+      locationUri?: string;
+      parameters: Record<string, string>;
+    };
   },
   {},
   Providers
@@ -85,6 +100,16 @@ export interface Database extends Resource<
  */
 export const Database = Resource<Database>("AWS.Glue.Database");
 
+/**
+ * The settings `read` and `reconcile` both report, so a converged database
+ * reads unchanged.
+ */
+const observeDatabaseConfiguration = (db: glue.Database) => ({
+  description: db.Description || undefined,
+  locationUri: db.LocationUri || undefined,
+  parameters: cleanMap(db.Parameters),
+});
+
 export const DatabaseProvider = () =>
   Provider.effect(
     Database,
@@ -101,7 +126,7 @@ export const DatabaseProvider = () =>
       const observe = Effect.fn(function* (name: string, catalogId: string | undefined) {
         return yield* glue.getDatabase({ Name: name, CatalogId: catalogId }).pipe(
           Effect.map((r) => r.Database),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -131,6 +156,7 @@ export const DatabaseProvider = () =>
             databaseName: db.Name,
             databaseArn: databaseArn(region, db.CatalogId ?? catalogId, db.Name),
             catalogId: db.CatalogId ?? catalogId,
+            configuration: observeDatabaseConfiguration(db),
           };
           // Glue databases are not ARN-taggable — ownership markers live in
           // the database Parameters map.
@@ -194,19 +220,12 @@ export const DatabaseProvider = () =>
             databaseName: name,
             databaseArn: databaseArn(region, db?.CatalogId ?? catalogId, name),
             catalogId: db?.CatalogId ?? catalogId,
+            configuration: db && observeDatabaseConfiguration(db),
           };
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* glue
-            .deleteDatabase({
-              Name: output.databaseName,
-              CatalogId: output.catalogId,
-            })
-            .pipe(
-              retryWhileConcurrentModification,
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+          yield* deleteGlueDatabase(output.databaseName, output.catalogId);
         }),
       });
     }),

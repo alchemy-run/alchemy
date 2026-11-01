@@ -117,7 +117,7 @@ export const PlacementGroup = Resource<PlacementGroup>("Hetzner.PlacementGroup")
 
 export class PlacementGroupNotResolved extends Data.TaggedError(
   "Hetzner.PlacementGroupNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const DEFAULT_TYPE: PlacementGroupType = "spread";
 
@@ -142,7 +142,7 @@ const toAttrs = (group: GetPlacementGroupResponsePlacementGroup) => ({
 const getById = (id: number) =>
   Hetzner.placementGroups.getPlacementGroup({ id }).pipe(
     Effect.map(({ placement_group }) => placement_group),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -231,7 +231,7 @@ export const PlacementGroupProvider = () =>
       if (current === undefined) {
         const created = yield* Hetzner.placementGroups
           .createPlacementGroup({ name, type, labels: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created?.action != null) {
           yield* waitForAction(created.action.id);
         }
@@ -239,7 +239,7 @@ export const PlacementGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PlacementGroupNotResolved({ name });
+        return yield* new PlacementGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

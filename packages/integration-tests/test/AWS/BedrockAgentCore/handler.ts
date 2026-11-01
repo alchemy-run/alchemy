@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import path from "pathe";
 
@@ -106,14 +107,22 @@ export default AgentCoreTestFunction.make(
       yield* deleteMemoryRecord({
         memoryRecordId: first.memoryRecordId,
       });
+      // A just-created record can briefly come back as a failed delete.
       const batchDeleted = yield* batchDeleteMemoryRecords({
         records: [{ memoryRecordId: second.memoryRecordId }],
-      });
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (result) => result.successfulRecords.length > 0,
+          times: 10,
+        }),
+      );
       return yield* HttpServerResponse.json({
         created: created.successfulRecords.length,
         fetchedRecordId: fetched.memoryRecord.memoryRecordId,
         updated: updated.successfulRecords.length,
         batchDeleted: batchDeleted.successfulRecords.length,
+        batchDeleteFailures: batchDeleted.failedRecords,
       });
     });
 

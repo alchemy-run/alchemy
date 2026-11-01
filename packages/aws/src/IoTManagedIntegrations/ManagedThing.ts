@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord, unwrapSensitive } from "./internal.ts";
+
+export class ManagedThingUnexpectedResponse extends Data.TaggedError(
+  "ManagedThingUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ManagedThingProps {
   /**
@@ -141,7 +149,7 @@ export const ManagedThingProvider = () =>
       const observeById = (identifier: string) =>
         mi
           .getManagedThing({ Identifier: identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Recover an existing managed thing by display name when no Id is
       // cached (e.g. after a state persistence failure).
@@ -163,9 +171,9 @@ export const ManagedThingProvider = () =>
           thing.Name === undefined ||
           thing.Role === undefined
         ) {
-          return yield* Effect.fail(
-            new Error("managed thing response is missing Id, Arn, Name, or Role"),
-          );
+          return yield* new ManagedThingUnexpectedResponse({
+            message: "managed thing response is missing Id, Arn, Name, or Role",
+          });
         }
         return {
           managedThingId: thing.Id,
@@ -230,13 +238,15 @@ export const ManagedThingProvider = () =>
               Tags: desiredTags,
             });
             if (created.Id === undefined) {
-              return yield* Effect.fail(new Error(`failed to create managed thing '${name}'`));
+              return yield* new ManagedThingUnexpectedResponse({
+                message: `failed to create managed thing '${name}'`,
+              });
             }
             thing = yield* observeById(created.Id);
             if (thing === undefined) {
-              return yield* Effect.fail(
-                new Error(`managed thing '${created.Id}' vanished after create`),
-              );
+              return yield* new ManagedThingUnexpectedResponse({
+                message: `managed thing '${created.Id}' vanished after create`,
+              });
             }
           } else if (thing.Id !== undefined) {
             // Sync mutable, observable fields — apply only the delta.
@@ -275,9 +285,9 @@ export const ManagedThingProvider = () =>
               });
               thing = yield* observeById(thing.Id);
               if (thing === undefined) {
-                return yield* Effect.fail(
-                  new Error(`managed thing '${name}' vanished during update`),
-                );
+                return yield* new ManagedThingUnexpectedResponse({
+                  message: `managed thing '${name}' vanished during update`,
+                });
               }
             }
           }

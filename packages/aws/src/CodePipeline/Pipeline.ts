@@ -274,7 +274,7 @@ export const PipelineProvider = () =>
       const getPipeline = Effect.fn(function* (name: string) {
         return yield* codepipeline
           .getPipeline({ name })
-          .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("PipelineNotFoundException", () => Effect.undefined));
       });
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {

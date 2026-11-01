@@ -148,7 +148,7 @@ export const ResponsePlanProvider = () =>
       const getPlan = (arn: string) =>
         incidents
           .getResponsePlan({ arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observe = Effect.fn(function* (name: string, arn: string | undefined) {
         if (arn !== undefined) {

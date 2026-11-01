@@ -48,7 +48,7 @@ export const deleteUnprotectedDatabase = Effect.fn(function* (
 ) {
   const live = yield* ps
     .getDatabase({ organization, database })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (!live) return;
   if (live.deletion_protected) {
     return yield* new PlanetscaleDeletionProtected({

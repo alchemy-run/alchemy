@@ -235,7 +235,7 @@ const resourceRefOf = (value: string | undefined) => {
 const getByName = (project: string, address: string) =>
   compute
     .getGlobalAddresses({ project, address })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (project: string, addressName: string) =>
   getByName(project, addressName).pipe(

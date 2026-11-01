@@ -364,7 +364,7 @@ export const CanaryProvider = () =>
       const getCanaryOrUndefined = Effect.fn(function* (canaryName: string) {
         return yield* synthetics.getCanary({ Name: canaryName }).pipe(
           Effect.map((r) => r.Canary),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -711,7 +711,7 @@ export const CanaryProvider = () =>
         for (let attempt = 0; attempt < 30; attempt++) {
           const remaining = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }

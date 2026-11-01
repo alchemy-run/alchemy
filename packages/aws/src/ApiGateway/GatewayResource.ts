@@ -179,7 +179,7 @@ export const ResourceProvider = () =>
               restApiId: output.restApiId,
               resourceId: output.resourceId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!r?.id) return undefined;
           return {
             resourceId: r.id,
@@ -204,7 +204,7 @@ export const ResourceProvider = () =>
                   restApiId,
                   resourceId: output.resourceId,
                 })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create the resource if missing.

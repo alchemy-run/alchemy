@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,13 @@ import {
   retryWhileMailManagerConflict,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class AddressListUnexpectedResponse extends Data.TaggedError(
+  "AddressListUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AddressListProps {
   /**
@@ -90,7 +98,7 @@ export const AddressListProvider = () =>
       const getById = (addressListId: string) =>
         mm
           .getAddressList({ AddressListId: addressListId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Address lists have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -177,16 +185,16 @@ export const AddressListProvider = () =>
                 AddressListName: name,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             list =
               created !== undefined
                 ? yield* getById(created.AddressListId)
                 : yield* observe(undefined, name);
           }
           if (list === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager address list '${name}' not found after create`),
-            );
+            return yield* new AddressListUnexpectedResponse({
+              message: `Mail Manager address list '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC TAGS — the only mutable aspect; diffed against observed

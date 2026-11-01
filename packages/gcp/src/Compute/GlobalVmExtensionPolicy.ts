@@ -269,7 +269,7 @@ const needsUpdate = (
 const getByName = (project: string, globalVmExtensionPolicy: string) =>
   compute
     .getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, policyName: string) =>
   getByName(project, policyName).pipe(
@@ -340,7 +340,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, policyName);
       }
@@ -383,7 +383,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
               schedule: Schedule.spaced("2 seconds"),
               times: 8,
             }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void

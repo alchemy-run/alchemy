@@ -1,6 +1,3 @@
-import * as EffectContext from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type * as Event from "./Event.ts";
@@ -46,9 +43,10 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   : undefined;
 
 /** What a client sends: the target, an optional idempotency key, and the input. */
-export type PayloadFields<Target extends TargetSchema, F extends Fields> = F & {
+export type PayloadFields<Target extends TargetSchema, F extends Fields> = {
   readonly target: Target;
   readonly commandId: Schema.optional<typeof Schema.String>;
+  readonly input: Schema.Struct<F>;
 };
 
 /** What a client receives: the reply and the position of the committed events. */
@@ -187,7 +185,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  *
  * **Example:** An idempotent send through an Api
  * ```typescript
- * const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId });
+ * const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId });
  * ```
  *
  * @primitive
@@ -238,9 +236,9 @@ export const make = <
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
     payload: {
-      ...options.input,
       target: options.target,
       commandId: Schema.optional(Schema.String),
+      input: Schema.Struct(options.input ?? {}),
     },
     success: Schema.Struct({
       reply: options.reply ? Schema.Struct(options.reply) : Schema.Void,

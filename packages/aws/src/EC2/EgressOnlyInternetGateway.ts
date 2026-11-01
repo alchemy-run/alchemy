@@ -13,6 +13,13 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class EgressOnlyInternetGatewayUnexpectedResponse extends Data.TaggedError(
+  "EgressOnlyInternetGatewayUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type EgressOnlyInternetGatewayId<ID extends string = string> = `eigw-${ID}`;
 export const EgressOnlyInternetGatewayId = <ID extends string>(
   id: ID,
@@ -160,7 +167,11 @@ export const EgressOnlyInternetGatewayProvider = () =>
             Effect.flatMap((gw) =>
               gw
                 ? Effect.succeed(gw)
-                : Effect.fail(new Error(`Egress-Only Internet Gateway ${eigwId} not found`)),
+                : Effect.fail(
+                    new EgressOnlyInternetGatewayUnexpectedResponse({
+                      message: `Egress-Only Internet Gateway ${eigwId} not found`,
+                    }),
+                  ),
             ),
           );
 

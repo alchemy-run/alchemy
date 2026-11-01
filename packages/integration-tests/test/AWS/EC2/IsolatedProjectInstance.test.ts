@@ -1,5 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

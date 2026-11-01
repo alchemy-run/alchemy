@@ -222,7 +222,7 @@ own stateful instance:
 ```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -349,7 +349,7 @@ Add the test:
 ```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
@@ -749,6 +749,8 @@ Guides that build on Durable Objects:
 
 - [Accept WebSockets](/cloudflare/compute/hibernatable-websockets) —
   WebSocket connections that survive hibernation.
+- [Code updates](/cloudflare/compute/code-updates) — when running
+  objects pick up new code after a deploy, and how to test it.
 - [Bind to another Worker's Durable Object](/cloudflare/compute/cross-worker-durable-object)
   — one Worker hosts the DO, others get a typed stub; also covers
   moving the host to a different Worker with the data intact.

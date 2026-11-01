@@ -475,7 +475,7 @@ const getConfiguration = (
           "BucketNotFound",
           "QueueNotFound",
         ],
-        () => Effect.succeed(undefined),
+        () => Effect.undefined,
       ),
     );
 

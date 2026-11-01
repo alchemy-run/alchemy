@@ -87,7 +87,7 @@ export type SshKey = Resource<
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
 export class SshKeyNotResolved extends Data.TaggedError("Hetzner.SshKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -119,7 +119,7 @@ const fingerprintOf = (publicKey: string) =>
 const getById = (id: number) =>
   Hetzner.sshKeys.getSshKey({ id }).pipe(
     Effect.map(({ ssh_key }) => ssh_key),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -203,7 +203,7 @@ export const SshKeyProvider = () =>
             public_key: news.publicKey,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created?.ssh_key ??
           (yield* observe({
@@ -214,7 +214,7 @@ export const SshKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SshKeyNotResolved({ name });
+        return yield* new SshKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

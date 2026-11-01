@@ -247,6 +247,28 @@ export const diffMigrations = (options: {
 }): Effect.Effect<boolean, MigrationError, FileSystem.FileSystem | Path.Path> =>
   classifyMigrationHistory(options).pipe(Effect.map((change) => change.kind !== "none"));
 
+/** The attributes every SQL database resource with `migrations` exposes. */
+export interface MigrationAttributes {
+  /** Directory of the applied SQL migrations. */
+  migrationsDir: string | undefined;
+  /** Migration bookkeeping table. */
+  migrationsTable: string | undefined;
+  /** Applied migration content hashes. */
+  migrationsHashes: Record<string, string>;
+}
+
+/**
+ * Carry migration attributes from prior state (`read`, `list`), defaulting
+ * to none recorded.
+ */
+export const migrationAttributesOf = (
+  prior: Partial<MigrationAttributes> | undefined,
+): MigrationAttributes => ({
+  migrationsDir: prior?.migrationsDir,
+  migrationsTable: prior?.migrationsTable,
+  migrationsHashes: prior?.migrationsHashes ?? {},
+});
+
 /**
  * The migration attributes every SQL database resource persists, threaded
  * uniformly: the run's results when migrations ran, otherwise the prior
@@ -262,11 +284,7 @@ export const migrationsAttrs = (options: {
         migrationsHashes: Record<string, string>;
       }
     | undefined;
-}): {
-  migrationsDir: string | undefined;
-  migrationsTable: string | undefined;
-  migrationsHashes: Record<string, string>;
-} => ({
+}): MigrationAttributes => ({
   migrationsDir: options.input?.dir,
   migrationsTable: options.run?.resolved.table ?? options.output?.migrationsTable,
   migrationsHashes: options.run?.hashes ?? options.output?.migrationsHashes ?? {},

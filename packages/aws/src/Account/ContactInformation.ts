@@ -125,7 +125,7 @@ export const ContactInformationProvider = () =>
           Effect.map((r) =>
             r.ContactInformation ? toAttributes(r.ContactInformation) : undefined,
           ),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {

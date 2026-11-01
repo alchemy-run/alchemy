@@ -191,7 +191,7 @@ export const IndicatorFeedProvider = () =>
             ),
             // A feed may vanish between list and get, or the account may
             // lack access to an individual feed — skip either case.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -347,7 +347,7 @@ type ObservedFeed = intel.GetIndicatorFeedResponse;
 const getFeed = (accountId: string, feedId: number) =>
   intel.getIndicatorFeed({ accountId, feedId }).pipe(
     Effect.map((f): ObservedFeed | undefined => f),
-    Effect.catchTag("IndicatorFeedNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("IndicatorFeedNotFound", () => Effect.undefined),
   );
 
 /**

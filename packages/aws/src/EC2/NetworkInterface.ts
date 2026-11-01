@@ -16,6 +16,13 @@ import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class NetworkInterfaceUnexpectedResponse extends Data.TaggedError(
+  "NetworkInterfaceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type NetworkInterfaceId<ID extends string = string> = `eni-${ID}`;
 export const NetworkInterfaceId = <ID extends string>(id: ID): ID & NetworkInterfaceId<ID> =>
   `eni-${id}` as ID & NetworkInterfaceId<ID>;
@@ -403,7 +410,9 @@ const waitForNetworkInterface = (networkInterfaceId: string, session?: ScopedPla
     });
     const eni = result.NetworkInterfaces?.[0];
     if (!eni) {
-      return yield* Effect.fail(new Error(`Network interface ${networkInterfaceId} not found`));
+      return yield* new NetworkInterfaceUnexpectedResponse({
+        message: `Network interface ${networkInterfaceId} not found`,
+      });
     }
     if (eni.Status === "available" || eni.Status === "in-use") {
       return eni;

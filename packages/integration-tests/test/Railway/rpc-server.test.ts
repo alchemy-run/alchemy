@@ -1,7 +1,7 @@
 import { bindFunction } from "@alchemy.run/railway/Bind";
 import { serveRailwayRpc } from "@alchemy.run/railway/rpc-server";
 import { RPC_PATH_PREFIX, RPC_TOKEN_ENV, RPC_TOKEN_HEADER } from "@alchemy.run/railway/rpc-token";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { safeHttpEffect } from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as HttpEffect from "effect/http/HttpEffect";

@@ -98,7 +98,7 @@ export const QaQuestionTag = Resource<QaQuestionTag>("GCP.ContactCenterInsights.
 export class QaQuestionTagNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaQuestionTagNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, qaQuestionTagId: string) =>
@@ -121,10 +121,10 @@ const toAttrs = (tag: cci.GoogleCloudContactcenterinsightsV1QaQuestionTag, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaQuestionTags({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsQaQuestionTags({ parent }).pipe(
@@ -141,7 +141,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Effect.map((page) =>
       (page.qaQuestionTags ?? []).find((tag) => tag.displayName === displayName),
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const waitAndGet = (name: string, operation: cci.GoogleLongrunningOperation) =>
@@ -239,7 +239,7 @@ export const QaQuestionTagProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaQuestionTagNotResolved({ name });
+        return yield* new QaQuestionTagNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -268,7 +268,7 @@ export const QaQuestionTagProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cci
         .deleteProjectsLocationsQaQuestionTags({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined && (operation.name ?? "").length > 0) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

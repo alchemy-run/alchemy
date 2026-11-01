@@ -252,13 +252,13 @@ export const PolicyBasedRoute = Resource<PolicyBasedRoute>(
 export class PolicyBasedRouteNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class PolicyBasedRouteStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -480,12 +480,14 @@ const toBody = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsGlobalPolicyBasedRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route ? Effect.succeed(route) : Effect.fail(new PolicyBasedRouteNotResolved({ name })),
+      route
+        ? Effect.succeed(route)
+        : Effect.fail(new PolicyBasedRouteNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
@@ -497,7 +499,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route === undefined ? Effect.void : Effect.fail(new PolicyBasedRouteStillExists({ name })),
+      route === undefined
+        ? Effect.void
+        : Effect.fail(new PolicyBasedRouteStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
@@ -516,7 +520,7 @@ const removeRoute = (name: string) =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
     if (operation !== undefined) {
       yield* waitForOperation(operation, { notFoundOk: true });
@@ -699,7 +703,7 @@ export const PolicyBasedRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -708,7 +712,7 @@ export const PolicyBasedRouteProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PolicyBasedRouteNotResolved({ name });
+        return yield* new PolicyBasedRouteNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

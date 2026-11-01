@@ -1,18 +1,8 @@
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
-import * as Effect from "effect/Effect";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Layer from "effect/Layer";
-import * as Match from "effect/Match";
-import {
-  AXIOM_AUTH_PROVIDER_NAME,
-  type AxiomAuthConfig,
-  type AxiomResolvedCredentials,
-} from "./AuthProvider.ts";
+import { AXIOM_AUTH_PROVIDER_NAME, type AxiomResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -28,41 +18,9 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<AxiomAuthConfig, AxiomResolvedCredentials>(
-        AXIOM_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) =>
-              Match.value(creds).pipe(
-                Match.when({ type: "apiToken" }, (c) => ({
-                  apiKey: c.apiToken,
-                  apiBaseUrl: c.apiBaseUrl,
-                  orgId: c.orgId,
-                })),
-                Match.when({ type: "pat" }, (c) => ({
-                  apiKey: c.apiToken,
-                  apiBaseUrl: c.apiBaseUrl,
-                  orgId: c.orgId,
-                })),
-                Match.exhaustive,
-              ),
-            ),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve Axiom credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(AXIOM_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<AxiomResolvedCredentials, ConfigError>()(AXIOM_AUTH_PROVIDER_NAME, (creds) => ({
+      apiKey: creds.apiToken,
+      apiBaseUrl: creds.apiBaseUrl,
+      orgId: creds.orgId,
+    })),
   );

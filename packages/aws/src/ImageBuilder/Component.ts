@@ -16,6 +16,11 @@ import {
   toTagRecord,
 } from "./internal.ts";
 
+export class ComponentUnexpectedResponse extends Data.TaggedError("ComponentUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * A Component must define its document inline (`data`) or point at an S3
  * object (`uri`) — exactly one of the two.
@@ -177,15 +182,15 @@ export const ComponentProvider = () =>
       const getComponent = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getComponent({ componentBuildVersionArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.component;
       });
 
       const toAttrs = Effect.fn(function* (component: imagebuilder.Component) {
         if (!component.arn || !component.name || !component.version) {
-          return yield* Effect.fail(
-            new Error("Image Builder component is missing its ARN, name, or version"),
-          );
+          return yield* new ComponentUnexpectedResponse({
+            message: "Image Builder component is missing its ARN, name, or version",
+          });
         }
         return {
           componentName: component.name,
@@ -281,15 +286,15 @@ export const ComponentProvider = () =>
               clientToken,
             });
             if (!created.componentBuildVersionArn) {
-              return yield* Effect.fail(
-                new Error("CreateComponent returned no componentBuildVersionArn"),
-              );
+              return yield* new ComponentUnexpectedResponse({
+                message: "CreateComponent returned no componentBuildVersionArn",
+              });
             }
             observed = yield* getComponent(created.componentBuildVersionArn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder component '${name}' is not readable`),
-              );
+              return yield* new ComponentUnexpectedResponse({
+                message: `created Image Builder component '${name}' is not readable`,
+              });
             }
           }
 

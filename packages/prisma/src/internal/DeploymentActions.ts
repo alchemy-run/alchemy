@@ -7,7 +7,7 @@ const startConflictIsIdempotent = (deploymentId: string, error: Conflict) =>
   observeDeployment(deploymentId).pipe(
     Effect.flatMap((deployment) =>
       deployment.status === "running" || deployment.status === "provisioning"
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : Effect.fail(error),
     ),
     Effect.catchTag("NotFound", () => Effect.fail(error)),

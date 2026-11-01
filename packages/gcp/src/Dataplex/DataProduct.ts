@@ -167,7 +167,7 @@ const toAttrs = (product: dataplex.GoogleCloudDataplexV1DataProduct, project: st
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsDataProducts({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listProducts = (project: string, region: string) => {
@@ -261,7 +261,7 @@ export const DataProductProvider = () =>
               accessApprovalConfig: news.accessApprovalConfig,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -269,7 +269,7 @@ export const DataProductProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -338,7 +338,7 @@ export const DataProductProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

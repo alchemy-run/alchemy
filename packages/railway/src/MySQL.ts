@@ -391,7 +391,7 @@ export const MySQL: typeof MySQLResource = Object.assign(
 export const mysql = MySQL;
 
 export class MySQLNotCreated extends Data.TaggedError("Railway.MySQLNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -406,7 +406,7 @@ export class MySQLDeployFailed extends Data.TaggedError("Railway.MySQLDeployFail
 }> {}
 
 export class MySQLVolumeNotCreated extends Data.TaggedError("Railway.MySQLVolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   serviceId: string;
 }> {}
 
@@ -604,13 +604,13 @@ const toAttrs = (input: {
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readServiceInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -627,7 +627,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -984,12 +984,12 @@ export const MySQLProvider = () =>
       if (current === undefined) {
         const created = yield* serviceCreate({
           input: { projectId, environmentId, name, source: { image: sourceImage }, variables },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new MySQLNotCreated({ name, projectId });
+        return yield* new MySQLNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {
@@ -1063,7 +1063,10 @@ export const MySQLProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new MySQLVolumeNotCreated({ name: volumeName, serviceId: current.id });
+        return yield* new MySQLVolumeNotCreated({
+          resourceName: volumeName,
+          serviceId: current.id,
+        });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1089,7 +1092,7 @@ export const MySQLProvider = () =>
       if (wantPublic && proxy === undefined) {
         const created = yield* tcpProxyCreate({
           input: { applicationPort: MYSQL_PORT, environmentId, serviceId: current.id },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created

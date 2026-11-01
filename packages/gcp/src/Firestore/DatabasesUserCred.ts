@@ -113,11 +113,11 @@ export type DatabasesUserCred = Resource<
 export const DatabasesUserCred = Resource<DatabasesUserCred>("GCP.Firestore.DatabasesUserCred");
 
 export class UserCredNotResolved extends Data.TaggedError("GCP.Firestore.UserCredNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class UserCredStillExists extends Data.TaggedError("GCP.Firestore.UserCredStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (databaseName: string, userCredsId: string) =>
@@ -149,7 +149,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesUserCreds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesUserCreds({ parent }).pipe(
@@ -163,7 +163,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (creds) => creds === undefined,
-      () => new UserCredStillExists({ name }),
+      () => new UserCredStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.UserCredStillExists",
@@ -260,7 +260,7 @@ export const DatabasesUserCredProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new UserCredNotResolved({ name });
+        return yield* new UserCredNotResolved({ resourceName: name });
       }
 
       current = yield* syncEnabled(current.name ?? name, disabled, current);

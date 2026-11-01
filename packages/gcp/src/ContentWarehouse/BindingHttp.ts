@@ -41,7 +41,7 @@ const makeNamedHttpBinding = <
       ) {
         const resourceName = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: resourceName,
         } as I);
       });

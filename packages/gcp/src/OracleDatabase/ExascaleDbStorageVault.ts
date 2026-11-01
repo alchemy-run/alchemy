@@ -146,10 +146,10 @@ export const ExascaleDbStorageVault = Resource<ExascaleDbStorageVault>(
 const mergedProperties = (
   news: ExascaleDbStorageVaultProps,
 ): ExascaleDbStorageVaultPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   description: news.description ?? news.properties?.description,
   exascaleDbStorageDetails: {
-    ...(news.properties?.exascaleDbStorageDetails ?? {}),
+    ...news.properties?.exascaleDbStorageDetails,
     totalSizeGbs: news.totalSizeGbs ?? news.properties?.exascaleDbStorageDetails?.totalSizeGbs,
   },
 });
@@ -203,7 +203,7 @@ const toAttrs = (vault: oracle.ExascaleDbStorageVault, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsExascaleDbStorageVaults({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listVaults = (project: string, region: string) => {
@@ -295,7 +295,7 @@ export const ExascaleDbStorageVaultProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -304,7 +304,7 @@ export const ExascaleDbStorageVaultProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -323,7 +323,7 @@ export const ExascaleDbStorageVaultProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

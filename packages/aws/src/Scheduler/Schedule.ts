@@ -4,10 +4,18 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule_ from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class SchedulerScheduleUnexpectedResponse extends Data.TaggedError(
+  "SchedulerScheduleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * EventBridge Scheduler validates that the target's execution role is
@@ -120,12 +128,49 @@ export interface Schedule extends Resource<
      * Current state of the schedule (`ENABLED` or `DISABLED`).
      */
     state: string | undefined;
+    /**
+     * The schedule definition (expression, timezone, dates, target,
+     * flexible window, KMS key, completion action), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: ScheduleConfiguration;
   },
   never,
   Providers
 > {}
 
 export const Schedule = Resource<Schedule>("AWS.Scheduler.Schedule");
+
+/** The managed configuration of a schedule, as observed. */
+export interface ScheduleConfiguration {
+  scheduleExpression?: string;
+  scheduleExpressionTimezone?: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+  kmsKeyArn?: string;
+  target?: scheduler.Target;
+  flexibleTimeWindow?: scheduler.FlexibleTimeWindow;
+  actionAfterCompletion?: string;
+}
+
+/**
+ * The configuration `read` and `reconcile` both report, so a converged
+ * schedule reads unchanged.
+ */
+const observeScheduleConfiguration = (
+  described: scheduler.GetScheduleOutput,
+): ScheduleConfiguration => ({
+  scheduleExpression: described.ScheduleExpression,
+  scheduleExpressionTimezone: described.ScheduleExpressionTimezone,
+  startDate: described.StartDate?.toISOString(),
+  endDate: described.EndDate?.toISOString(),
+  description: described.Description || undefined,
+  kmsKeyArn: described.KmsKeyArn,
+  target: described.Target,
+  flexibleTimeWindow: described.FlexibleTimeWindow,
+  actionAfterCompletion: described.ActionAfterCompletion,
+});
 
 export const ScheduleProvider = () =>
   Provider.effect(
@@ -155,7 +200,7 @@ export const ScheduleProvider = () =>
               Name: scheduleName,
               GroupName: groupName !== "default" ? groupName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -166,6 +211,7 @@ export const ScheduleProvider = () =>
             scheduleName: described.Name,
             groupName: described.GroupName ?? groupName,
             state: described.State,
+            configuration: observeScheduleConfiguration(described),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -194,7 +240,7 @@ export const ScheduleProvider = () =>
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // Ensure — create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
@@ -214,13 +260,13 @@ export const ScheduleProvider = () =>
               );
             observed = yield* scheduler
               .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
 
           if (!observed?.Arn) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created Schedule '${scheduleName}'`),
-            );
+            return yield* new SchedulerScheduleUnexpectedResponse({
+              message: `Failed to read created Schedule '${scheduleName}'`,
+            });
           }
 
           const scheduleArn = observed.Arn;
@@ -239,11 +285,16 @@ export const ScheduleProvider = () =>
 
           yield* session.note(scheduleArn);
 
+          const final = yield* scheduler.getSchedule({
+            Name: scheduleName,
+            GroupName: groupNameParam,
+          });
           return {
             scheduleArn,
             scheduleName,
             groupName,
-            state: news.state ?? observed.State,
+            state: final.State,
+            configuration: observeScheduleConfiguration(final),
           };
         }),
         list: () =>
@@ -284,7 +335,7 @@ export const ScheduleProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
               },
               { concurrency: 10 },

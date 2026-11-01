@@ -3,7 +3,7 @@ import { make as makeVinext } from "@alchemy.run/frontend-frameworks/vinext/node
 import { make as makeVite } from "@alchemy.run/frontend-frameworks/vite";
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
 import { stageWebsiteArtifact } from "@alchemy.run/prisma/Website/Artifact";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { findAvailablePort } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";

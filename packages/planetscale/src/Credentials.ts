@@ -4,19 +4,13 @@ import {
   Credentials,
   DEFAULT_API_BASE_URL,
 } from "@distilled.cloud/planetscale/Credentials";
-import * as CredentialsCache from "alchemy/Auth/CredentialsCache";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import {
   PLANETSCALE_AUTH_PROVIDER_NAME,
-  type PlanetscaleAuthConfig,
   type PlanetscaleResolvedCredentials,
 } from "./AuthProvider.ts";
 
@@ -69,32 +63,13 @@ export const fromAuthProvider = () =>
       const apiBaseUrl = yield* Config.String("PLANETSCALE_API_BASE_URL").pipe(
         Config.withDefault(DEFAULT_API_BASE_URL),
       );
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<
-        PlanetscaleAuthConfig,
-        PlanetscaleResolvedCredentials
-      >(PLANETSCALE_AUTH_PROVIDER_NAME).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          Effect.mapError(resolve, (e) =>
-            ConfigError.make({
-              message: `Failed to resolve Planetscale credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${e.message}`,
-            }),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-
       // Cache until shortly before the OAuth token expires (service tokens
       // never expire) so a long `alchemy dev` session re-resolves — and
       // thereby refreshes — the token instead of keeping the first, by then
-      // dead, resolution forever. The cache wraps `resolve` (not the mapped
-      // client config) because the mapping drops the `expires` timestamp.
-      const cached = yield* CredentialsCache.cacheUntilExpiry(resolve, (creds) =>
-        creds.type === "oauth" ? creds.expires : undefined,
-      );
-      return cached.pipe(
-        Effect.map((creds): PlanetscaleClientConfig =>
+      // dead, resolution forever.
+      return yield* lazyCredentials<PlanetscaleResolvedCredentials, ConfigError>()(
+        PLANETSCALE_AUTH_PROVIDER_NAME,
+        (creds): PlanetscaleClientConfig =>
           creds.type === "oauth"
             ? {
                 type: "oauth",
@@ -109,8 +84,9 @@ export const fromAuthProvider = () =>
                 organization: creds.organization,
                 apiBaseUrl,
               },
-        ),
-        orDieCredentialsUnavailable(PLANETSCALE_AUTH_PROVIDER_NAME),
+        {
+          expiresAt: (creds) => (creds.type === "oauth" ? creds.expires : undefined),
+        },
       );
     }),
   );

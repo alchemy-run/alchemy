@@ -105,7 +105,7 @@ export const SchemaMappingProvider = () =>
       const getByName = Effect.fn(function* (schemaName: string) {
         return yield* entityresolution
           .getSchemaMapping({ schemaName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

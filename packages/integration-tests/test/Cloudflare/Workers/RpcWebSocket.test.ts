@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as RpcWebSocketClient from "@alchemy.run/cloudflare/Workers/RpcWebSocketClient";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import type { Done, TimeoutError } from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";

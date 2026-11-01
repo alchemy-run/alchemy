@@ -1,7 +1,6 @@
 import { exec } from "alchemy/Util/exec";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -19,13 +18,20 @@ const generateCommand = Command.make(
   Effect.fn(function* ({ config, watch }) {
     if (!watch) {
       const result = yield* generate(config);
-      yield* Console.log(`Generated ${result.files.length} files in ${result.directory}`);
+      yield* Effect.logInfo(`Generated ${result.files.length} files in ${result.directory}`);
       return;
     }
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const loaded = yield* loadGeneratorConfig(config);
-    const bin = yield* path.fromFileUrl(new URL("../../bin/cli.js", import.meta.url));
+    // alchemy's own CLI, found through module resolution so it works from the
+    // workspace and from an installed project alike.
+    const manifest = yield* Effect.sync(() => import.meta.resolve("alchemy/package.json"));
+    const bin = path.join(
+      path.dirname(yield* path.fromFileUrl(new URL(manifest))),
+      "bin",
+      "cli.js",
+    );
     const run = Effect.gen(function* () {
       const result = yield* exec(
         ChildProcess.make(process.execPath, [
@@ -40,13 +46,13 @@ const generateCommand = Command.make(
       );
       if (result.exitCode !== 0)
         return yield* new CliError({ message: `${result.stdout}\n${result.stderr}` });
-      yield* Console.log(result.stdout);
+      yield* Effect.logInfo(result.stdout);
     }).pipe(
       Effect.scoped,
-      Effect.catch((error) => Console.error(error)),
+      Effect.catch((error) => Effect.logError(error)),
     );
     yield* run;
-    yield* Console.log(`Watching ${loaded.directory}; each generation uses a fresh process.`);
+    yield* Effect.logInfo(`Watching ${loaded.directory}; each generation uses a fresh process.`);
     yield* fs.watch(loaded.directory, { recursive: true }).pipe(
       Stream.filter((event) => {
         const file = path.resolve(loaded.directory, event.path);

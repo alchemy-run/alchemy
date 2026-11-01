@@ -3,6 +3,8 @@
  * upstream `alchemy` repo so we can offer typed permission-group names without
  * a network round-trip on every token create/update.
  *
+ * Refreshed from `GET /accounts/{account_id}/tokens/permission_groups`.
+ *
  * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
  */
 
@@ -27,15 +29,16 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
-    id: "4dc8917b4b40457d88d3035d5dadb054",
-    name: "AI Gateway Read",
-    description: "Grants access to reading AI Gateways",
+    id: "9ac97d58e2634cfcbd4f2481e849f3dd",
+    name: "AI Gateway Metadata Read",
+    description:
+      "Grants read access to AI Gateway configuration without access to provider config secrets",
     scopes: ["com.cloudflare.api.account"],
   },
   {
-    id: "9e9b428a0bcd46fd80e580b46a69963c",
-    name: "AI Search Index Engine",
-    description: "Grants access to run AI Search Index Engine",
+    id: "4dc8917b4b40457d88d3035d5dadb054",
+    name: "AI Gateway Read",
+    description: "Grants access to reading AI Gateways",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -51,6 +54,55 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "9e9b428a0bcd46fd80e580b46a69963c",
+    name: "AI Search Index Engine",
+    description: "Grants access to run AI Search Index Engine",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f48d3d7bd62949f68395ce02f1545f0d",
+    name: "AI Search Metadata Read",
+    description:
+      "Grants read access to AI Search configuration and metadata without access to search results or indexed content.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "01aab63d6e064d7a8160339985d2db19",
+    name: "AI Search Read",
+    description: "Grants access to reading data from AI Search",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "e5e805d0a90441b58e8c7a41aa1cf85e",
+    name: "AI Search Run",
+    description: "Grants access to run AI Search",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "384a77ea7c2e47d898715dc6a064f3f4",
+    name: "AI Search Write",
+    description: "Grants access to reading and writing data from AI Search",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "2dd44e425a914fb98f8d1ddbbcd66915",
+    name: "Access: Apps Read",
+    description: "Can read Cloudflare Access applications",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "969eb865330a4d68b215b0cc8fba64ea",
+    name: "Access: Apps Revoke",
+    description: "Can revoke Cloudflare Access application tokens",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "ad7a6f88896d498f98eb30592abfbbf4",
+    name: "Access: Apps Write",
+    description: "Can read and edit Cloudflare Access applications",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "eb258a38ea634c86a0c89da6b27cb6b6",
     name: "Access: Apps and Policies Read",
     description: "Grants read access to Cloudflare Access zone resources",
@@ -59,7 +111,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "7ea222f6d5064cfa89ea366d7c1fee89",
     name: "Access: Apps and Policies Read",
-    description: "Grants read access to Cloudflare Access applications and policies",
+    description: "Can read Cloudflare Access applications and policies",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -71,7 +123,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "6c9d1cfcfc6840a987d1b5bfb880a841",
     name: "Access: Apps and Policies Revoke",
-    description: "Grants ability to revoke Cloudflare Access application tokens",
+    description: "Can revoke Cloudflare Access application tokens",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -83,121 +135,230 @@ export const PERMISSION_GROUPS = [
   {
     id: "1e13c5124ca64b72b1969a67e8829049",
     name: "Access: Apps and Policies Write",
-    description: "Grants write access to Cloudflare Access applications and policies",
+    description: "Can read and edit Cloudflare Access applications and policies",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "b05b28e839c54467a7d6cba5d3abb5a3",
     name: "Access: Audit Logs Read",
-    description: "Grants read access to Cloudflare Access audit logs",
+    description: "Can read Cloudflare Access audit logs",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "08e61dabe81a422dab0dea6fdef1a98a",
     name: "Access: Custom Pages Read",
-    description: "Grants read access to Cloudflare Access Custom Pages",
+    description: "Can read Cloudflare Access Custom Pages",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "4e5fd8ac327b4a358e48c66fcbeb856d",
     name: "Access: Custom Pages Write",
-    description: "Grants write access to Cloudflare Access Custom Pages",
+    description: "Can read and edit Cloudflare Access Custom Pages",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "0f4841f80adb4bada5a09493300e7f8d",
     name: "Access: Device Posture Read",
-    description: "Grants read access to Cloudflare Access Device Posture",
+    description: "Can read Cloudflare Access Device Posture",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "2fc1072ee6b743828db668fcb3f9dee7",
     name: "Access: Device Posture Write",
-    description: "Grants write access to Cloudflare Access Device Posture",
+    description: "Can read and edit Cloudflare Access Device Posture",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "abe9cecdf3234d5da2a8d7a6adc9aebf",
+    name: "Access: Groups Read",
+    description: "Can read Cloudflare Access group resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f2f1e4d555854b8593912806eb459691",
+    name: "Access: Groups Write",
+    description: "Can read and edit Cloudflare Access group resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "ece1dd423dd94b849d07145d5cfd866d",
+    name: "Access: Identity Provider SCIM Population Read",
+    description:
+      "Read-only access to SCIM populations for a specific Access Identity Provider integration.",
+    scopes: ["com.cloudflare.edge.access.identity-provider"],
+  },
+  {
+    id: "9c35051ed89842839a637f81448d8c7c",
+    name: "Access: Identity Providers Read",
+    description: "Can read Cloudflare Access identity provider resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "5541aee5804a4850aa6d77351cc4a610",
+    name: "Access: Identity Providers Write",
+    description: "Can read and edit Cloudflare Access identity provider resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "0974adb35b73411a84ebcc8e91cc29eb",
+    name: "Access: Keys Read",
+    description: "Can read Cloudflare Access keys",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "e7e40392e132414fb68890c3328bdc6a",
+    name: "Access: Keys Write",
+    description: "Can read and edit Cloudflare Access keys",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "4f3196a5c95747b6ad82e34e1d0a694f",
     name: "Access: Mutual TLS Certificates Read",
-    description: "Grants read access to Cloudflare Access mTLS certificates",
+    description: "Can read Cloudflare Access mTLS certificates",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "29d3afbfd4054af9accdd1118815ed05",
     name: "Access: Mutual TLS Certificates Write",
-    description: "Grants write access to Cloudflare Access mTLS certificates",
+    description: "Can read and edit Cloudflare Access mTLS certificates",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "b219cc392cc843cfab473cf3abd06c5b",
+    name: "Access: Organizations Read",
+    description: "Can read Cloudflare Access organization resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "14fb1ba9b3924f91bd8e1a256d0a42f5",
+    name: "Access: Organizations Revoke",
+    description: "Can revoke user sessions of organizations",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "aed5acd922ae4fa68560cf0094e3e517",
+    name: "Access: Organizations Write",
+    description: "Can read and edit Cloudflare Access organization resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "26bc23f853634eb4bff59983b9064fde",
     name: "Access: Organizations, Identity Providers, and Groups Read",
-    description: "Grants read access to Cloudflare Access account resources",
+    description: "Can read Cloudflare Access account resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "7121a0c7e9ed46e3829f9cca2bb572aa",
     name: "Access: Organizations, Identity Providers, and Groups Revoke",
-    description: "Grants ability to revoke user sessions to Cloudflare Access account resources",
+    description: "Can revoke user sessions to Cloudflare Access account resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "bfe0d8686a584fa680f4c53b5eb0de6d",
     name: "Access: Organizations, Identity Providers, and Groups Write",
-    description: "Grants write access to Cloudflare Access account resources",
+    description: "Can read and edit Cloudflare Access account resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "84b9a6a947474555aeb43a82300ce145",
+    name: "Access: Policies Read",
+    description: "Can read Cloudflare Access policies",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "e9e3e5ccdebf43dbb1c9576fe74dfaab",
+    name: "Access: Policies Write",
+    description: "Can read and edit Cloudflare Access policies",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "b8b7514ce5364cd8ac0455f3eb16eb5f",
     name: "Access: Policy Test Read",
-    description: "Grants read access to Cloudflare Access Policy Tests",
+    description: "Can read Cloudflare Access Policy Tests",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "6d23f290472f4e6fad5c4398c057c356",
     name: "Access: Policy Test Write",
-    description: "Grants full access to Cloudflare Access Policy Tests",
+    description: "Can read and edit Cloudflare Access Policy Tests",
     scopes: ["com.cloudflare.api.account"],
   },
   {
-    id: "de99c87e48d642ce8c985d027905b475",
-    name: "Access: Population Read",
-    description: "Grants read access to Cloudflare Access Populations",
+    id: "796da9664bba4f03b2fc934b5ee86091",
+    name: "Access: SAML Certificates Read",
+    description: "Can read Cloudflare Access SAML certificates",
     scopes: ["com.cloudflare.api.account"],
   },
   {
-    id: "bc783549a3a741aaa10556faf8b485bb",
-    name: "Access: Population Write",
-    description: "Grants write access to Cloudflare Access Populations",
+    id: "5286f5b44cba457fa75b22f94716b8dd",
+    name: "Access: SAML Certificates Write",
+    description: "Can read and edit Cloudflare Access SAML certificates",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "e985ca9351db460faebbe8681c48e560",
-    name: "Access: SCIM logs read",
-    description: "Grants read access to SCIM audit logs",
+    name: "Access: SCIM Logs Read",
+    description: "Can read SCIM audit logs",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "de99c87e48d642ce8c985d027905b475",
+    name: "Access: SCIM Population Read",
+    description: "Can read Cloudflare Access SCIM Populations",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "bc783549a3a741aaa10556faf8b485bb",
+    name: "Access: SCIM Population Write",
+    description: "Can read and edit Cloudflare Access SCIM Populations",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "99ff99e4e30247a99d3777a8c4c18541",
     name: "Access: SSH Auditing Read",
-    description: "Grants read access to Cloudflare Access SSH certificate authorities (CAs)",
+    description: "Can read Cloudflare Access SSH certificate authorities (CAs)",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "d30c9ad8b5224e7cb8d41bcb4757effc",
     name: "Access: SSH Auditing Write",
-    description: "Grants write access to Cloudflare Access SSH certificate authorities (CAs)",
+    description: "Can read and edit Cloudflare Access SSH certificate authorities (CAs)",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "91f7ce32fa614d73b7e1fc8f0e78582b",
     name: "Access: Service Tokens Read",
-    description: "Grants read access to Cloudflare Access Service Tokens",
+    description: "Can read Cloudflare Access Service Tokens",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "a1c0fec57cf94af79479a6d827fa518c",
     name: "Access: Service Tokens Write",
-    description: "Grants write access to Cloudflare Access Service Tokens",
+    description: "Can read and edit Cloudflare Access Service Tokens",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f6f99815bf8f4f7abffe6bc73873a5b9",
+    name: "Access: Tags Read",
+    description: "Can read Cloudflare Access tags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "d320e35958c845c89e69098a4ea38f64",
+    name: "Access: Tags Write",
+    description: "Can read and edit Cloudflare Access tags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "7a3629ac278d41adbfac30094a94f778",
+    name: "Access: Users Read",
+    description: "Can read Cloudflare Access user resources",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "d376dac8822b439a991b795c87789e6f",
+    name: "Access: Users Write",
+    description: "Can read and edit Cloudflare Access user resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -227,9 +388,39 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "1d9f8b86d5d84ce497fc64a620be96e5",
+    name: "Account Abuse Protection PII Read",
+    description: "Grants read access to Account Abuse Protection PII data",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "b89a480218d04ceb98b4fe57ca29dc1f",
     name: "Account Analytics Read",
     description: "Grants read access to analytics",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "d2211ced11a34102bd128dd5b3910a7c",
+    name: "Account Custom Asset Read",
+    description: "Grants read access to account custom assets",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "6d7d15b1d1404e22ac442de7061d02a6",
+    name: "Account Custom Asset Write",
+    description: "Grants write access to account custom assets",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "c549844593894d73b03ed3c17b2af00c",
+    name: "Account Custom Error Rules Read",
+    description: "Grants read access to account custom error rules",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "ba9adcdbea5940dd84aa692e77e8eaf6",
+    name: "Account Custom Error Rules Write",
+    description: "Grants write access to account custom error rules",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -305,6 +496,18 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "188050337e3b4ede82ccf6fb9c2e5849",
+    name: "Account Security Insights Partner Integrations Read",
+    description: "Grants read access to Security Insights partner integration assets and settings",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "872b99515f8c4dcfbeeab17659cb6711",
+    name: "Account Security Insights Partner Integrations Write",
+    description: "Grants write access to Security Insights partner integration assets and settings",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "c1fde68c7bcc44588cbb6ddbc16d6480",
     name: "Account Settings Read",
     description:
@@ -361,6 +564,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "5b1d209212064a84aae4fb68e3908333",
+    name: "Agent Memory Write",
+    description: "Grants write access to Agent Memory",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "151803815e4f47de854c2fb7f8284d57",
     name: "Agents Gateway Read",
     description: "Grants access to reading Agents Gateway",
@@ -401,6 +610,18 @@ export const PERMISSION_GROUPS = [
     name: "Apps Write",
     description: "Grants full access to Cloudflare Apps",
     scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "71b0df4c5b6c4d3196f4428d7a6580ea",
+    name: "Artifacts Read",
+    description: "Grants read access to Artifacts",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f9e1ba803b8d4d52b4d4184825b07a28",
+    name: "Artifacts Write",
+    description: "Grants read and write access to Artifacts",
+    scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "d7887c7a417e4cf2a69f1d01c1a1dc3b",
@@ -460,14 +681,14 @@ export const PERMISSION_GROUPS = [
   },
   {
     id: "374b03fa229f4eb6b011bb1cd7f235ee",
-    name: "Browser Rendering Read",
-    description: "Grants read access to Browser Rendering API",
+    name: "Browser Run Read",
+    description: "Grants read access to Browser Run API",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "adddda876faa4a0590f1b23a038976e4",
-    name: "Browser Rendering Write",
-    description: "Grants write access to Browser Rendering API",
+    name: "Browser Run Write",
+    description: "Grants write access to Browser Run API",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -561,6 +782,25 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "d53395fae6e94699ae103cb9c98fa4f4",
+    name: "Cloud Workload Security Deployment",
+    description:
+      "Grants deployment targets access to deployment bundles and metrics ingestion in an account.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "cfcbe618502b47378b5f93927ece1add",
+    name: "Cloud Workload Security Read",
+    description: "Grants read access to Cloud Workload Security resources.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "3142a1c737b1429491c8d419a3a1192d",
+    name: "Cloud Workload Security Write",
+    description: "Grants read and write access to Cloud Workload Security resources.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "65ec50cbde3d4c838bbe7500024d5745",
     name: "Cloudchamber Read",
     description: "Grants read access to Cloudchamber deployments",
@@ -585,12 +825,6 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
-    id: "3a1e1ef09dd34271bb44fc4c6a419952",
-    name: "Cloudflare DEX",
-    description: "Grants access to Cloudflare DEX",
-    scopes: ["com.cloudflare.api.account"],
-  },
-  {
     id: "3b376e0aa52c41cbb6afc9cab945afa8",
     name: "Cloudflare DEX Read",
     description: "Grants read access to Cloudflare DEX",
@@ -600,6 +834,12 @@ export const PERMISSION_GROUPS = [
     id: "92c8dcd551cc42a6a57a54e8f8d3f3e3",
     name: "Cloudflare DEX Write",
     description: "Grants full access to Cloudflare DEX",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "6ea8c8cf5ec54b5e9dbde5cdb4905e64",
+    name: "Cloudflare One Connector Monitoring: cloudflared",
+    description: "Grants access to stream logs from cloudflared connectors",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -696,20 +936,20 @@ export const PERMISSION_GROUPS = [
     id: "77efc2c0724d4c4eb94bfd9656247130",
     name: "Connectivity Directory Admin",
     description:
-      "Can view, edit, create, and delete Connectivity Directory Services, including the ability to create Services that bind to Cloudflare Tunnel",
+      "Can view, edit, create, and delete Connectivity Directory Services and Networks, including the ability to create Services that bind to Cloudflare Tunnel",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "95fa65ba51fd49c4a6ac4c8c78ebac93",
     name: "Connectivity Directory Bind",
     description:
-      "Can read, list, and bind to Connectivity Directory services, as well as read and list Cloudflare Tunnels",
+      "Can read, list, and bind to Connectivity Directory services and networks, as well as read and list Cloudflare Tunnels",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "8764961c1edb4274be129d630b0b2671",
     name: "Connectivity Directory Read",
-    description: "Can view Connectivity Directory services and Cloudflare Tunnels",
+    description: "Can view Connectivity Directory services, networks, and Cloudflare Tunnels",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -749,6 +989,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "5b4da8a35efa4fe8be684070183cdb32",
+    name: "D1 Metadata Read",
+    description: "Grants read access to D1 configuration",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "192192df92ee43ac90f2aeeffce67e35",
     name: "D1 Read",
     description: "Grants read access to D1 configuration and SQL queries",
@@ -782,6 +1028,20 @@ export const PERMISSION_GROUPS = [
     id: "d44ed14bcc4340b194d3824d60edad3f",
     name: "DDoS Protection Write",
     description: "Grants write access to DDoS protection",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "04e557c45f60434c88a23b9f7c8169af",
+    name: "DLS: Read",
+    description:
+      "Grants read access to Data Localization Suite regions, BYOIP prefix bindings, and regional hostnames",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "7e252e992042421c8f2cdef3ada208c9",
+    name: "DLS: Write",
+    description:
+      "Grants write access to BYOIP prefix bindings and regional hostnames, and read access to Data Localization Suite regions",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -881,6 +1141,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "4eeea447c0b34f34b33b2481f4187e7e",
+    name: "Email Routing Account Rules Read",
+    description: "Grants read access to account-level Email Routing rules\n",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "5272e56105d04b5897466995b9bd4643",
     name: "Email Routing Addresses Read",
     description: "Grants read access to Email Routing target addresses\n",
@@ -905,6 +1171,18 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "da5bb637b72a4a29886c23489398b770",
+    name: "Email Routing Suppressions Read",
+    description: "Grants read access to Email Routing target suppression\n",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "b714141b1e1941cebb38c017036262a6",
+    name: "Email Routing Suppressions Write",
+    description: "Grants full access to Email Routing target suppressions\n",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "1047880d37b649b49db4a504a245896f",
     name: "Email Security DMARC Reports Read",
     description: "Grants read access to Email Security dmarc reports\n",
@@ -926,6 +1204,18 @@ export const PERMISSION_GROUPS = [
     id: "5df633d6b41c42bcaf5b4a62b9d14b64",
     name: "Email Sending Write",
     description: "Grants access to reading and writing data from Email Sending",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "23b43337688744f7b87905848733e335",
+    name: "Field Extractors Read",
+    description: "Grants read access to account field extractors",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "041d31cb33014bc4b9137077d8db4f71",
+    name: "Field Extractors Write",
+    description: "Grants read and edit access to account field extractors",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -953,6 +1243,48 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "81d2b1ae7db44622ab35e8db58ed4e9a",
+    name: "Flagship App Bind",
+    description: "Grants permission to bind a Flagship app to Cloudflare Workers.",
+    scopes: ["com.cloudflare.api.account.flagship.app"],
+  },
+  {
+    id: "f5292409995b4c8680bff98766de9700",
+    name: "Flagship App Evaluate",
+    description: "Grants access to evaluating flags in a single Flagship app.",
+    scopes: ["com.cloudflare.api.account.flagship.app"],
+  },
+  {
+    id: "cb72dad981a0413297280680d1cde7b1",
+    name: "Flagship App Read",
+    description: "Grants read and evaluation access to a single Flagship app.",
+    scopes: ["com.cloudflare.api.account.flagship.app"],
+  },
+  {
+    id: "1655653ee7614c058595583987ff1e59",
+    name: "Flagship App Write",
+    description: "Grants read, update, delete, and evaluate access to a single Flagship app.",
+    scopes: ["com.cloudflare.api.account.flagship.app"],
+  },
+  {
+    id: "51cceea6f2d048deab6c6e7afa734727",
+    name: "Flagship Evaluate",
+    description: "Grants access to evaluating Flagship flags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "fa4f07d72d5546aabb6bec9a4a399045",
+    name: "Flagship Read",
+    description: "Grants access to reading Flagship flags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "521a41dc78f94eaba5e643528846cb7b",
+    name: "Flagship Write",
+    description: "Grants access to reading and editing Flagship flags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "0d24e472a9654642a97df736e8b0d980",
     name: "Fraud Detection Read",
     description: "Grants read access to Fraud Detection",
@@ -963,6 +1295,30 @@ export const PERMISSION_GROUPS = [
     name: "Fraud Detection Write",
     description: "Grants write access to Fraud Detection",
     scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "76ade66d66184468b2ae2c037e995ac4",
+    name: "Fraud Events Write",
+    description: "Grants write access to submit fraud detection events via the API",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "a9846a16265d4c9aa9729043886269fd",
+    name: "Fraud Feedback Read",
+    description: "Grants read access to fraud detection feedback",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "c5bac3bbefb34feca30204c8d082c444",
+    name: "Fraud Feedback Write",
+    description: "Grants write access to submit fraud detection feedback",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "b071dbca5f0a412e96ab95749da01a7c",
+    name: "Granular Workers Scripts Read",
+    description: "Grants read access to a single Cloudflare Worker resource.",
+    scopes: ["com.cloudflare.edge.worker.script"],
   },
   {
     id: "6b60a5a87cae475da7e76e77e4209dd5",
@@ -1049,6 +1405,13 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "8fdee1402d214c6383671bc8367e3bff",
+    name: "Images Metadata Read",
+    description:
+      "Grants read access to Images metadata and configuration without access to image content",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "0cf6473ad41449e7b7b743d14fc20c60",
     name: "Images Read",
     description: "Grants read access to Images",
@@ -1059,6 +1422,93 @@ export const PERMISSION_GROUPS = [
     name: "Images Write",
     description: "Grants write access to upload Images",
     scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "2b6a25981e554979888aeeed4464018a",
+    name: "Individual Access App Admin",
+    description:
+      "Full management of a single Cloudflare Access application, including its inline policies.",
+    scopes: ["com.cloudflare.edge.access.app"],
+  },
+  {
+    id: "4f4a0bf6ca324ffe9e317d56766cc71e",
+    name: "Individual Access App Read",
+    description: "Read-only access to a single Cloudflare Access application.",
+    scopes: ["com.cloudflare.edge.access.app"],
+  },
+  {
+    id: "a39642c1bf1f457597d2aea92253a7d0",
+    name: "Individual Access Identity Provider Admin",
+    description: "Full management of a single Cloudflare Access identity provider.",
+    scopes: ["com.cloudflare.edge.access.identity-provider"],
+  },
+  {
+    id: "ff4ecfee05524c75bdbf84276e5a317a",
+    name: "Individual Access Identity Provider Read",
+    description: "Read-only access to a single Cloudflare Access identity provider.",
+    scopes: ["com.cloudflare.edge.access.identity-provider"],
+  },
+  {
+    id: "360fb4d810d849b9862f5de3c300c774",
+    name: "Individual Access Policy Admin",
+    description: "Full management of a single reusable Cloudflare Access policy.",
+    scopes: ["com.cloudflare.edge.access.policy"],
+  },
+  {
+    id: "73a3aa61a83f4131af9c49e9622731b7",
+    name: "Individual Access Policy Read",
+    description: "Read-only access to a single reusable Cloudflare Access policy.",
+    scopes: ["com.cloudflare.edge.access.policy"],
+  },
+  {
+    id: "7e8ef08a461d417396aa632d7ac0bc7c",
+    name: "Individual Access SCIM Population Admin",
+    description: "Full management of a single Cloudflare Access SCIM population.",
+    scopes: ["com.cloudflare.edge.access.population"],
+  },
+  {
+    id: "e8260eddbc534f509a204df4f9cdf340",
+    name: "Individual Access SCIM Population Read",
+    description: "Read-only access to a single Cloudflare Access SCIM population.",
+    scopes: ["com.cloudflare.edge.access.population"],
+  },
+  {
+    id: "2cbb0cec95924130b0fd758f19b11ba4",
+    name: "Individual Access Service Token Admin",
+    description: "Full management of a single Cloudflare Access service token.",
+    scopes: ["com.cloudflare.edge.access.service-token"],
+  },
+  {
+    id: "45904771facc4b33b32a6f738fcd1adc",
+    name: "Individual Access Service Token Read",
+    description: "Read-only access to a single Cloudflare Access service token.",
+    scopes: ["com.cloudflare.edge.access.service-token"],
+  },
+  {
+    id: "1ef41180fdf74cf7b67415d2708167ac",
+    name: "Individual Workers Admin",
+    description:
+      "Full access to a single Worker, including content, versions, deployments, previews, and delete.",
+    scopes: ["com.cloudflare.edge.worker.script"],
+  },
+  {
+    id: "1b68681d11f443a4979c6d08c3211f13",
+    name: "Individual Workers Content Read-Only",
+    description: "Grants read access to a single Cloudflare Worker resource.",
+    scopes: ["com.cloudflare.edge.worker.script"],
+  },
+  {
+    id: "7e79ec33834341f28dd431ab73884400",
+    name: "Individual Workers Editor",
+    description: "Grants write access to a single Cloudflare Worker resource.",
+    scopes: ["com.cloudflare.edge.worker.script"],
+  },
+  {
+    id: "afa629b86102452b8b744a5485b870e1",
+    name: "Individual Workers Metadata Read-Only",
+    description:
+      "View metadata and settings for a single Worker without access to script source content.",
+    scopes: ["com.cloudflare.edge.worker.script"],
   },
   {
     id: "c6f97eeee13345db8cc00af0953a42de",
@@ -1081,25 +1531,25 @@ export const PERMISSION_GROUPS = [
   {
     id: "9159aeca78b949818ec1556aa42ffd2e",
     name: "K2 Config Read",
-    description: "Grants read access to K2 streams",
+    description: "Grants access to view K2 stream configurations.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "0a50f569ebae4364a205dfc3137dbc5f",
     name: "K2 Config Write",
-    description: "Grants write access to K2 streams",
+    description: "Grants access to manage K2 stream configurations.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "3a6cae593f454607a4db52e67a45b19f",
     name: "K2 Consume",
-    description: "Grants access to manage subscriptions and consume records from K2 streams",
+    description: "Grants access to consume records from K2 streams.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "47b72b140c694f90bfcd21b7da1e8a06",
     name: "K2 Produce",
-    description: "Grants access to produce records to K2 streams",
+    description: "Grants access to produce records to K2 streams.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1277,6 +1727,57 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "93af812fefe54babbd711913b8c1653c",
+    name: "Messaging Bind",
+    description: "Grants permission to bind Messaging namespaces to Cloudflare Workers.",
+    scopes: ["com.cloudflare.api.account.messaging"],
+  },
+  {
+    id: "31c1f5a4efb2413d9684b22790180dc1",
+    name: "Messaging Edit",
+    description:
+      "Grants full read and write access to Messaging configuration and message content, plus permission to send and receive messages.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "5920c1f149f24adfa4629e44b3873f32",
+    name: "Messaging Metadata Read",
+    description:
+      "Grants read access to Messaging configuration and metadata without access to message content or session data.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f3145562cdc84fb5ad1452e752083151",
+    name: "Messaging Read",
+    description: "Grants read access to Messaging configuration and message content.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "42fae5a23ce84d7a896ac12ef509dafa",
+    name: "MoQ Read",
+    description: "Grants read access to MoQ relay configuration",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "2f912625599b434a8df3e4e02d64c7b4",
+    name: "MoQ Write",
+    description: "Grants read/write access to MoQ relay configuration and access to MoQ Bench",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "9903141175024a20a4aced2a7cbf6a2c",
+    name: "Network Quality Read",
+    description: "Grants read access to Network Quality API.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "15e7cd45787d49cc876260fd61b1ec3d",
+    name: "Network Quality Write",
+    description:
+      "Grants access to manage Network Quality and issue Network Quality authorization tokens.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "ce18edbdcebf465e9d6d1d2fc80ffd42",
     name: "Notifications Read",
     description: "Grants read access to notifications",
@@ -1286,6 +1787,18 @@ export const PERMISSION_GROUPS = [
     id: "c3c847c5802d4ce3ba00e3e97b3c8555",
     name: "Notifications Write",
     description: "Grants write access to Notifications",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "0b7793327a1a417681e4d49ee233e184",
+    name: "OAuth Client Read",
+    description: "Allows reading of OAuth clients",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "50fc2f43318f40e4855a35d8de5bf643",
+    name: "OAuth Client Write",
+    description: "Allows writing of OAuth clients",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1331,6 +1844,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "968749a9f34041cf88ad0e29c86e6f96",
+    name: "Pages Metadata Read",
+    description: "Grants read access to Cloudflare Pages metadata and configuration",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "e247aedd66bd41cc9193af0213416666",
     name: "Pages Read",
     description: "Grants read access to Cloudflare Pages",
@@ -1341,6 +1860,18 @@ export const PERMISSION_GROUPS = [
     name: "Pages Write",
     description: "Grants write access to Cloudflare Pages",
     scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "69a7c8a8d0794770be19af6fa020d8e9",
+    name: "Payments Gateway Read",
+    description: "Grants read access to Payment Required rules",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "5e875a9694a340c6bfba2e88a0a59a42",
+    name: "Payments Gateway Write",
+    description: "Grants write access to Payment Required rules",
+    scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "14b9cf2f410f4c0c9a16bb10a81c0e0b",
@@ -1361,6 +1892,18 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "de5cf65aae2140d6ba2e272db44e4fc1",
+    name: "Precursor Read",
+    description: "Grants read access to Precursor",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "4b79f5066b1d408b832ef4407f686c5b",
+    name: "Precursor Write",
+    description: "Grants write access to Precursor",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
     id: "fd7f886c75a244389e892c4c3c068292",
     name: "Pubsub Configuration Read",
     description: "Grants read access to Pubsub Configurations\n",
@@ -1370,6 +1913,12 @@ export const PERMISSION_GROUPS = [
     id: "910b6ecca1c5411bb894e787362d1312",
     name: "Pubsub Configuration Write",
     description: "Grants full access to Pubsub Configurations\n",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "1354ed31bab640c19eb70c0caf669b79",
+    name: "Queues Metadata Read",
+    description: "Grants read access to Cloudflare Queues configuration",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1393,7 +1942,8 @@ export const PERMISSION_GROUPS = [
   {
     id: "de62b15d79cc4d8d9c7b443c656eadbd",
     name: "Realtime",
-    description: "Grants access to Realtime configuration excluding sensitive data",
+    description:
+      "Grants read and write access to Realtime SFU, TURN, and RealtimeKit configuration",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1403,9 +1953,51 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "b0568182c2d546f998c2ea17999e3334",
+    name: "Realtime Read",
+    description: "Grants read access to Realtime SFU, TURN, and RealtimeKit configuration",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "136d0be1ddc64eaf8516fa6994abfad4",
+    name: "Registrar Domains Admin",
+    description: "Grants admin access to Cloudflare Registrar domains",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "9bb90620717647a39679e1d951f140d6",
     name: "Registrar Domains Read",
     description: "Grants read access to Cloudflare Registrar domains",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "a649bfc3532148768b854e294a544425",
+    name: "Registrar Sandbox Domains Admin",
+    description: "Grants admin access to Cloudflare Registrar Sandbox domains",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "2e0d8adc461d4cf78651efa2dfbb237c",
+    name: "Registrar Sandbox Domains Read",
+    description: "Grants read access to Cloudflare Registrar Sandbox domains",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "b9588b65fdc04d5f9170816e2fef96e2",
+    name: "Resource Library Read",
+    description: "Grants access to reading resource library applications",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "ecbbebe25a014fa793d5226d6218303c",
+    name: "Resource Library Write",
+    description: "Grants access to reading and editing resource library",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "e9f973896a184b1ca9d6a85a44efe55b",
+    name: "Resource Sharing Read",
+    description: "Grants access to reading resource shares",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1511,6 +2103,13 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "b4b22eebb66c447e9f2804d04261fc6f",
+    name: "Stream Metadata Read",
+    description:
+      "Grants read access to Cloudflare Stream metadata, excluding sensitive content such as caption files and live input secrets",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "de21485a24744b76a004aa153898f7fe",
     name: "Stream Read",
     description: "Grants read access to Cloudflare Stream",
@@ -1520,6 +2119,18 @@ export const PERMISSION_GROUPS = [
     id: "714f9c13a5684c2885a793f5edb36f59",
     name: "Stream Write",
     description: "Grants write access to Cloudflare Stream",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "18ac4526dc844013a799d8406a0ebb12",
+    name: "Tag Read",
+    description: "Grants access to reading resource tags",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "0224cdb141684f0f9760ed0be83b6766",
+    name: "Tag Write",
+    description: "Grants access to reading and editing resource tags",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1607,6 +2218,52 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "12336472d64047e6b21280f317c1e858",
+    name: "Websearch Metadata Read",
+    description:
+      "Grants read access to Cloudflare Websearch configuration and metadata without access to search results.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "4b881829a08043ae9cd371901e74f8b0",
+    name: "Websearch Read",
+    description: "Grants access to reading data from Cloudflare Websearch",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "839a02e413024d06a4e7d8c56d4470d7",
+    name: "Websearch Run",
+    description: "Grants access to run Cloudflare Websearch queries",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "498908ea4bf740ad9e81e1449c7f110e",
+    name: "Websearch Write",
+    description: "Grants access to reading and writing data from Cloudflare Websearch",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f6397108533b40a89671f96b1973b986",
+    name: "Workers AI Custom Models Read",
+    description:
+      "Grants read access to custom Workers AI models owned by the account, including versions, configurations, and deployments.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "f276760d165b450bb2ae3b49fad2022c",
+    name: "Workers AI Custom Models Write",
+    description:
+      "Grants read and write access to custom Workers AI models owned by the account, including versions, configurations, and deployments.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "c3149113b86a4aebafe59e5bac3b6690",
+    name: "Workers AI Metadata Read",
+    description:
+      "Grants read-only access to Workers AI metadata (model catalog, finetune list, tasks, authors) without access to inference or mutation endpoints.",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "a92d2450e05d4e7bb7d0a64968f83d11",
     name: "Workers AI Read",
     description: "Grants access to invoke Workers AI models",
@@ -1616,6 +2273,13 @@ export const PERMISSION_GROUPS = [
     id: "bacc64e0f6c34fc0883a1223f938a104",
     name: "Workers AI Write",
     description: "Grants access to invoke Workers AI models and edit assets",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "98d78cd2433d4c3687191bc0244ef948",
+    name: "Workers Admin",
+    description:
+      "Full create, read, update, and delete access to all Workers resources. Previously named Workers Scripts Write.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1643,6 +2307,25 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "3517fad527464d8bbba2c2a9a6eefaa9",
+    name: "Workers Content Read-Only",
+    description: "Grants read access to Cloudflare Workers scripts",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "d7ba8d4dce414197a3efab21b2f87eb8",
+    name: "Workers Editor",
+    description:
+      "Read, update, and deploy Workers. Includes script content,\nsettings, versions, deployments, and previews. Cannot create\nor delete Workers — use Workers Admin for that. Routes and\nobservability require separate per-feature token roles.\n",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "96800ebd1a004f5b92266eed9e3dcf13",
+    name: "Workers KV Storage Metadata Read",
+    description: "Grants read access to Workers KV configuration and analytics",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "8b47d2786a534c08a1f94ee8f9f599ef",
     name: "Workers KV Storage Read",
     description: "Grants read access to Cloudflare Workers KV Storage",
@@ -1652,6 +2335,13 @@ export const PERMISSION_GROUPS = [
     id: "f7f0eda5697f475c90846e879bab8666",
     name: "Workers KV Storage Write",
     description: "Grants write access to Cloudflare Workers KV Storage",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "da1261c3d38544a4bba805b22566f8b6",
+    name: "Workers Metadata Read-Only",
+    description:
+      "View Workers metadata, settings, and observability without access to script source content.",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1703,6 +2393,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.edge.r2.bucket"],
   },
   {
+    id: "dc1beb502339482da2515d6e146ca1ac",
+    name: "Workers R2 Storage Metadata Read",
+    description: "Grants read access to Cloudflare Workers R2 Storage metadata",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "b4992e1108244f5d8bfbd5744320c2e1",
     name: "Workers R2 Storage Read",
     description: "Grants read access to Cloudflare R2 Storage",
@@ -1717,13 +2413,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "2072033d694d415a936eaeb94e6405b8",
     name: "Workers Routes Read",
-    description: "Grants read access to Cloudflare Workers and Workers KV Storage",
+    description: "Grants read access for configuring Worker domains and routes",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "28f4b596e7d643029c524985477ae49a",
     name: "Workers Routes Write",
-    description: "Grants write access to Cloudflare Workers and Workers KV Storage",
+    description: "Grants read and write access for configuring Worker domains and routes",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
@@ -1743,6 +2439,12 @@ export const PERMISSION_GROUPS = [
     name: "Workers Tail Read",
     description: "Grants `wrangler tail` read permissions",
     scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "7be86e6d99394878b4c8753de0be5e6a",
+    name: "Workers Websearch Bind",
+    description: "Grants permission to bind Websearch to Cloudflare Workers.",
+    scopes: ["com.cloudflare.api.account.websearch"],
   },
   {
     id: "cdeb15b336e640a2965df8c65052f1e0",
@@ -1802,8 +2504,20 @@ export const PERMISSION_GROUPS = [
     id: "a1a6298e52584c8fb6313760a30c681e",
     name: "Zero Trust: Seats Write",
     description:
-      "Grants write access to the Zero Trust seats your organization can use (and be billed for)",
+      "Can read and edit the Zero Trust seats your organization can use (and be billed for)",
     scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "2a69899475004f5dbe8a99c5244ab23d",
+    name: "Zone Custom Asset Read",
+    description: "Grants read access to zone custom assets",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "f6a7a748dad644ba9792d3f1d0204cc2",
+    name: "Zone Custom Asset Write",
+    description: "Grants write access to zone custom assets",
+    scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "0a6cfe8cd3ed445e918579e2fb13087b",
@@ -1818,9 +2532,39 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
+    id: "69ca0c60ffc24f5386ccb38885112c44",
+    name: "Zone Observability Read",
+    description: "Grants read access to Cloudflare Zone Observability",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "6a70cfea8fe441a2b0caf820f8ade62d",
+    name: "Zone Observability Write",
+    description: "Grants read and write access to Cloudflare Zone Observability",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
     id: "c8fed203ed3043cba015a93ad1616f1f",
     name: "Zone Read",
     description: "Grants read access to zone management",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "9858d41ad0164b57b7b8cd1a1b37b1b0",
+    name: "Zone Security Center Insights Read",
+    description: "Grants read access to Zone Security Center Insights",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "86cdbc42964b47fcbe848cd250ef2464",
+    name: "Zone Security Center Insights Write",
+    description: "Grants write access to Zone Security Center Insights",
+    scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "9fb7a64f8fdc41fdabaa6ed81c466798",
+    name: "Zone Security Insights Partner Assets Read",
+    description: "Grants read access to Security Insights partner-discovered assets for a zone",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
@@ -1876,6 +2620,46 @@ export const PERMISSION_GROUPS = [
     name: "Zone Write",
     description: "Grants write access to zone management",
     scopes: ["com.cloudflare.api.account.zone"],
+  },
+  // No longer listed by Cloudflare's permission-groups API; kept so existing
+  // configs that reference them keep resolving.
+  {
+    id: "3a1e1ef09dd34271bb44fc4c6a419952",
+    name: "Cloudflare DEX",
+    description: "Grants access to Cloudflare DEX",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  // Former names of groups Cloudflare has since renamed, kept so existing
+  // configs that reference them by name keep resolving.
+  {
+    id: "de99c87e48d642ce8c985d027905b475",
+    name: "Access: Population Read",
+    description: "Can read Cloudflare Access SCIM Populations",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "bc783549a3a741aaa10556faf8b485bb",
+    name: "Access: Population Write",
+    description: "Can read and edit Cloudflare Access SCIM Populations",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "e985ca9351db460faebbe8681c48e560",
+    name: "Access: SCIM logs read",
+    description: "Can read SCIM audit logs",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "374b03fa229f4eb6b011bb1cd7f235ee",
+    name: "Browser Rendering Read",
+    description: "Grants read access to Browser Run API",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "adddda876faa4a0590f1b23a038976e4",
+    name: "Browser Rendering Write",
+    description: "Grants write access to Browser Run API",
+    scopes: ["com.cloudflare.api.account"],
   },
 ] as const;
 

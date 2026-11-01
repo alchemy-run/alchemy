@@ -45,14 +45,21 @@ class Span extends Tracer.NativeSpan {
 
   override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
     super.end(endTime, exit);
-    this.cloudflareSpan?.setAttribute(
-      "effect.exit",
-      Exit.isSuccess(exit)
-        ? "success"
-        : Cause.hasInterruptsOnly(exit.cause)
-          ? "interrupted"
-          : "failure",
-    );
+    const outcome = Exit.isSuccess(exit)
+      ? "success"
+      : Cause.hasInterruptsOnly(exit.cause)
+        ? "interrupted"
+        : "failure";
+    this.cloudflareSpan?.setAttribute("effect.exit", outcome);
+    // Only a failure (or defect) is an error. Success and pure interruption
+    // stay `unset`: `ok` is final in Cloudflare, so the tracer never claims
+    // it, and a cancellation is not an application error.
+    if (Exit.isFailure(exit) && outcome === "failure") {
+      this.cloudflareSpan?.setStatus({
+        code: "error",
+        message: Cause.prettyErrors(exit.cause)[0]?.message,
+      });
+    }
     this.cloudflareSpan?.end();
   }
 }
@@ -60,8 +67,9 @@ class Span extends Tracer.NativeSpan {
 /**
  * Per-event Tracer Layer. Cloudflare owns sampling and export; scalar
  * attributes are forwarded; events, links, and non-scalars stay
- * Effect-local. Completion is recorded as `effect.exit`. Effect trace/span
- * IDs are independent of Cloudflare's opaque IDs.
+ * Effect-local. Completion is recorded as `effect.exit`, and a failure also
+ * sets the span status to `error`. Effect trace/span IDs are independent
+ * of Cloudflare's opaque IDs.
  */
 export const layer: Layer.Layer<never> = Layer.effect(
   Tracer.Tracer,

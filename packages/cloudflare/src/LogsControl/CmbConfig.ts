@@ -163,7 +163,7 @@ export const CmbConfigProvider = () =>
       // there is nothing to delete; re-delete after a crashed run is a
       // no-op.
       const observed = yield* getCmbConfig(output.accountId).pipe(
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return;
       yield* logs
@@ -184,9 +184,7 @@ const getCmbConfig = (accountId: string) =>
     ),
     // Accounts without the Compliance/CMB entitlement get
     // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
-    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () => Effect.undefined),
   );
 
 const toAttributes = (

@@ -38,7 +38,7 @@ export const getDefaultVpcScope = ec2
  */
 export const getDefaultVpcDefaultSecurityGroupId = (vpcId: string | undefined) =>
   vpcId === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ec2
         .describeSecurityGroups({
           Filters: [

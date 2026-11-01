@@ -86,7 +86,7 @@ export const ApplicationProvider = () =>
       const readApplication = Effect.fn(function* (applicationId: string) {
         return yield* appconfig
           .getApplication({ ApplicationId: applicationId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

@@ -258,7 +258,7 @@ const toAttrs = (proxy: compute.TargetHttpsProxy, project: string) => {
 const getByName = (project: string, region: string, targetHttpsProxy: string) =>
   compute
     .getRegionTargetHttpsProxies({ project, region, targetHttpsProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RegionTargetHttpsProxyProvider = () =>
   Provider.succeed(RegionTargetHttpsProxy, {
@@ -379,7 +379,7 @@ export const RegionTargetHttpsProxyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, region, targetHttpsProxyName);
       }
@@ -495,7 +495,7 @@ export const RegionTargetHttpsProxyProvider = () =>
           region,
           targetHttpsProxy: output.targetHttpsProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

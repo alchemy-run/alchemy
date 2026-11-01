@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
@@ -45,6 +45,101 @@ it(
       const duration = `${stdout}\n${stderr}`.match(/queued exclusive \((\d+)ms\)/);
       expect(duration).not.toBeNull();
       expect(Number(duration![1])).toBeLessThan(250);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "a waiting exclusive test runs before later tests take the lock",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-exclusive-"));
+    try {
+      await writeFile(
+        resolve(root, "exclusive.test.ts"),
+        `
+        import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+        describe.concurrent("exclusive", () => {
+          let laterStarted = false;
+          it("holder", async () => {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          });
+          it("waiting exclusive", () => {
+            expect(laterStarted).toBe(false);
+          }, { exclusive: true });
+          it("later", async () => {
+            laterStarted = true;
+            await new Promise(resolve => setTimeout(resolve, 300));
+          });
+        });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("3 passed");
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "exclusive labels serialize holders of the same label and nothing else",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-labels-"));
+    try {
+      await writeFile(
+        resolve(root, "labels.test.ts"),
+        `
+        import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        describe.concurrent("labels", () => {
+          let activeA = 0;
+          const holdA = async () => {
+            activeA++;
+            expect(activeA).toBe(1);
+            await sleep(200);
+            activeA--;
+          };
+          it("a1", holdA, { exclusive: "a" });
+          it("a2", holdA, { exclusive: "a" });
+          it("b", async () => {
+            await sleep(50);
+            expect(activeA).toBe(1);
+          }, { exclusive: "b" });
+          it("unlabeled", async () => {
+            await sleep(50);
+            expect(activeA).toBe(1);
+          });
+        });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("4 passed");
+      expect(exitCode).toBe(0);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

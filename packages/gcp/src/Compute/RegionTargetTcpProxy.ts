@@ -229,7 +229,7 @@ const toAttrs = (proxy: compute.TargetTcpProxy, project: string) => {
 const getByName = (project: string, region: string, targetTcpProxy: string) =>
   compute
     .getRegionTargetTcpProxies({ project, region, targetTcpProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (project: string, region: string, targetTcpProxyName: string) =>
   getByName(project, region, targetTcpProxyName).pipe(
@@ -379,7 +379,7 @@ export const RegionTargetTcpProxyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
       };
 
@@ -437,7 +437,7 @@ export const RegionTargetTcpProxyProvider = () =>
           region,
           targetTcpProxy: output.targetTcpProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

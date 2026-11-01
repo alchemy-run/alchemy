@@ -136,7 +136,7 @@ export const SyncConfigurationProvider = () =>
             SyncType: syncType,
             ResourceName: resourceName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.SyncConfiguration;
       });
 

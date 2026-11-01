@@ -13,7 +13,7 @@ import {
 } from "../Workers/Worker.ts";
 
 export interface ViteProps<Bindings extends WorkerBindingProps = {}>
-  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
+  extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "rules">, ViteOptions {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -123,10 +123,12 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * **Example:** Foldkit
- * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
- * single call deploys them — the Foldkit Vite plugin in the app's own
- * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
- * `single-page-application` not-found handling so deep links boot the app:
+ * [Foldkit](https://foldkit.dev) apps are Vite projects, so a single call
+ * deploys them — the Foldkit Vite plugin in the app's own `vite.config.ts`
+ * composes with the injected Cloudflare plugin, and with `ssr.build` set
+ * there its `fetch` handler is the server bundle this resource deploys,
+ * exactly as TanStack Start's is. A client-only Foldkit app wants
+ * `single-page-application` not-found handling so deep links boot it:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Foldkit", {
  *   assets: {
@@ -134,8 +136,9 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
- * default already applied.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
+ * derives asset routing from Foldkit's completed build metadata. It also
+ * supplies SPA fallback for client-only apps.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
@@ -173,6 +176,28 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```typescript
  * const docs = yield* Cloudflare.Website.Vite("Docs", {
  *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
+ * });
+ * ```
+ *
+ * ### Proxying to a Local Backend in Dev
+ * Under `alchemy dev`, Vite's `server.proxy` runs in front of the Worker.
+ * Paths it matches go to its target, WebSockets included with
+ * `ws: true`, and every other path goes to the Worker. HTTP paths in
+ * `assets.runWorkerFirst` reach the Worker before the proxy, as they do
+ * with `@cloudflare/vite-plugin`. `server.proxy` only applies in dev; the
+ * deployed Worker serves every path.
+ *
+ * **Example:** vite.config.ts
+ * ```typescript
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   server: {
+ *     proxy: {
+ *       "/api": "http://localhost:3000",
+ *       "/socket": { target: "http://localhost:3000", ws: true },
+ *     },
+ *   },
  * });
  * ```
  *

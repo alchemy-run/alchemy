@@ -15,6 +15,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@types/bun": "catalog:"
   }
 }

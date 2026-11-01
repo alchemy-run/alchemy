@@ -277,7 +277,7 @@ const toAttrs = (policy: dns.Policy, project: string) => ({
 const getByName = (project: string, policyName: string) =>
   dns
     .getPolicies({ project, policy: policyName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const alternativeNameServerConfig = (
   servers: PolicyAlternativeNameServer[],

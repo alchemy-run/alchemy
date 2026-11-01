@@ -5,9 +5,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EndpointConfigInvalidProps extends Data.TaggedError("EndpointConfigInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EndpointConfigUnexpectedResponse extends Data.TaggedError(
+  "EndpointConfigUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EndpointConfigProps {
   /**
@@ -130,7 +143,7 @@ const createConfigName = (id: string, props: { endpointConfigName?: string | und
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -141,7 +154,7 @@ const fetchConfigTags = Effect.fn(function* (arn: string) {
 const readEndpointConfig = Effect.fn(function* (name: string) {
   const described = yield* sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.undefined));
   if (!described) return undefined;
   return {
     endpointConfigName: described.EndpointConfigName,
@@ -207,7 +220,9 @@ export const EndpointConfigProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker EndpointConfig requires props"));
+            return yield* new EndpointConfigInvalidProps({
+              message: "SageMaker EndpointConfig requires props",
+            });
           }
           const name = output?.endpointConfigName ?? (yield* createConfigName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -238,9 +253,9 @@ export const EndpointConfigProvider = () =>
               .pipe(Effect.catchTag("EndpointConfigAlreadyExists", () => Effect.void));
             attrs = yield* readEndpointConfig(name);
             if (attrs === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created endpoint config ${name}`),
-              );
+              return yield* new EndpointConfigUnexpectedResponse({
+                message: `failed to read created endpoint config ${name}`,
+              });
             }
           }
 

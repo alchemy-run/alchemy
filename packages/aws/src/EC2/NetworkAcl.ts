@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -11,6 +12,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class NetworkAclUnexpectedResponse extends Data.TaggedError("NetworkAclUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type NetworkAclId<ID extends string = string> = `acl-${ID}`;
 export const NetworkAclId = <ID extends string>(id: ID): ID & NetworkAclId<ID> =>
@@ -172,7 +178,11 @@ export const NetworkAclProvider = () =>
           Effect.flatMap((acl) =>
             acl
               ? Effect.succeed(acl)
-              : Effect.fail(new Error(`Network ACL ${networkAclId} not found`)),
+              : Effect.fail(
+                  new NetworkAclUnexpectedResponse({
+                    message: `Network ACL ${networkAclId} not found`,
+                  }),
+                ),
           ),
         );
 

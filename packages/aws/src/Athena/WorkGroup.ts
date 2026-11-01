@@ -154,7 +154,7 @@ export const WorkGroupProvider = () =>
       const getOne = (name: string) =>
         athena.getWorkGroup({ WorkGroup: name }).pipe(
           Effect.map((res) => res.WorkGroup),
-          Effect.catchTag("WorkGroupNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("WorkGroupNotFound", () => Effect.undefined),
         );
 
       const fetchTags = (arn: string) =>

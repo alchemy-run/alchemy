@@ -160,7 +160,7 @@ const toAttrs = (
 const getByName = (project: string, crossSiteNetwork: string) =>
   compute
     .getCrossSiteNetworks({ project, crossSiteNetwork })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, crossSiteNetworkName: string) =>
   getByName(project, crossSiteNetworkName).pipe(
@@ -248,7 +248,7 @@ export const CrossSiteNetworkProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, crossSiteNetworkName);
       }
@@ -295,7 +295,7 @@ export const CrossSiteNetworkProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

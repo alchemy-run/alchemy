@@ -480,6 +480,8 @@ export const updateIamMembership = (options: {
         error._tag === "Conflict" ||
         // Cloud Storage reports a stale etag as 412, not 409.
         error._tag === "IamPolicyEtagMismatch" ||
+        // A just-created service account the policy service can't see yet.
+        error._tag === "IamMemberNotFound" ||
         (error._tag === "BadRequest" && /does not exist/i.test(error.message ?? "")),
       // ~60s total: long enough for a new service account to propagate.
       times: 6,
@@ -494,7 +496,7 @@ export const updateIamMembership = (options: {
     Effect.flatMap((policy) =>
       rewrite(policy, member, add, remove, options.condition) === undefined
         ? Effect.void
-        : Effect.fail(new IamPolicyNotConverged({ name: options.name })),
+        : Effect.fail(new IamPolicyNotConverged({ resourceName: options.name })),
     ),
   );
   return write.pipe(
@@ -509,7 +511,7 @@ export const updateIamMembership = (options: {
 
 /** A written IAM policy did not read back with the change applied. */
 export class IamPolicyNotConverged extends Data.TaggedError("GCP.IamPolicyNotConverged")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /**

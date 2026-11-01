@@ -81,7 +81,13 @@ export const makeWrite = ({
           const { contentLength, ...r2Options } = options ?? {};
           const rawStream = getRawStream(value);
           if (rawStream) {
-            return raw.put(key, rawStream as any, r2Options);
+            // Keep explicit length validation without routing native chunks
+            // through Effect. Without a hint, R2 uses the native stream's length.
+            const readable =
+              contentLength === undefined
+                ? rawStream
+                : rawStream.pipeThrough(new FixedLengthStream(contentLength));
+            return raw.put(key, readable as any, r2Options);
           } else if (!contentLength) {
             throw new Error("Content length is required");
           }

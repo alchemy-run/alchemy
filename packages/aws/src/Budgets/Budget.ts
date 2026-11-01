@@ -457,7 +457,7 @@ export const BudgetProvider = () =>
           const name = output?.budgetName ?? (yield* createName(id, olds ?? {}));
           const found = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!found?.Budget) return undefined;
           return {
             budgetName: name,
@@ -482,7 +482,7 @@ export const BudgetProvider = () =>
             .describeBudget({ AccountId: accountId, BudgetName: name })
             .pipe(
               Effect.map((r) => r.Budget),
-              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFoundException", () => Effect.undefined),
             );
 
           if (!live) {

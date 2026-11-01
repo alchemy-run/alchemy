@@ -5,9 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class QAppInvalidProps extends Data.TaggedError("QAppInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QAppUnexpectedResponse extends Data.TaggedError("QAppUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AppStatus = qapps.AppStatus;
 export type AppRequiredCapability = qapps.AppRequiredCapability;
@@ -177,7 +188,7 @@ const createTitle = (id: string, props: { title?: string | undefined }) =>
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qapps
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;
@@ -193,7 +204,7 @@ interface QAppState {
 const readQAppById = Effect.fn(function* (instanceId: string, appId: string) {
   const observed = yield* qapps
     .getQApp({ instanceId, appId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!observed || observed.status === "DELETED") return undefined;
   const state: QAppState = {
     observed,
@@ -282,7 +293,7 @@ export const QAppProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QApps QApp requires props"));
+            return yield* new QAppInvalidProps({ message: "QApps QApp requires props" });
           }
           const title = yield* createTitle(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -309,7 +320,9 @@ export const QAppProvider = () =>
             yield* session.note(`Created Q App ${title} (${created.appId})`);
             state = yield* readQAppById(news.instanceId, created.appId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created Q App ${title}`));
+              return yield* new QAppUnexpectedResponse({
+                message: `failed to read created Q App ${title}`,
+              });
             }
           }
 
@@ -352,7 +365,9 @@ export const QAppProvider = () =>
 
           const final = yield* readQAppById(news.instanceId, state.attrs.appId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled Q App ${title}`));
+            return yield* new QAppUnexpectedResponse({
+              message: `failed to read reconciled Q App ${title}`,
+            });
           }
           return final.attrs;
         }),

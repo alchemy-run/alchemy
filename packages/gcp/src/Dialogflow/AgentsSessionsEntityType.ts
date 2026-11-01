@@ -131,7 +131,7 @@ export const AgentsSessionsEntityType = Resource<AgentsSessionsEntityType>(
 export class AgentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsSessionsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ENTITY_TYPE = "sys.color";
@@ -190,10 +190,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsSessionsEntityTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, agent: string) =>
   dialogflow.listProjectsLocationsAgentsSessionsEntityTypes.pages({ parent, pageSize: 100 }).pipe(
@@ -288,7 +288,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsSessionsEntityTypeNotResolved({ name });
+        return yield* new AgentsSessionsEntityTypeNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

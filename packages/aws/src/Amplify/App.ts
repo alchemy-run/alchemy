@@ -176,7 +176,7 @@ export const AppProvider = () =>
             schedule: Schedule.exponential("2 seconds"),
             times: 3,
           }),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       // Find an app we own (matching physical name + internal Alchemy tags).

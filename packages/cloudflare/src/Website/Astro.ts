@@ -1,6 +1,7 @@
 import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
+import { resolveAstroSettings } from "alchemy/Website/AstroOutput";
 import * as Effect from "effect/Effect";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
@@ -15,13 +16,29 @@ import {
 
 export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Astro project root directory.
    * Defaults to the current working directory (`process.cwd()`).
    */
   rootDir?: string;
+  /**
+   * A custom Worker entry that wraps Astro's handler and adds exports of its
+   * own (Durable Object classes, a `scheduled` handler, ...). Import the Astro
+   * handler from `@alchemy.run/frontend-frameworks/astro/entrypoints/server`
+   * and re-export or extend its `default`:
+   *
+   * ```ts
+   * import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+   * export { MyDurableObject } from "./do.ts";
+   * export default { ...handler, scheduled: async () => {} };
+   * ```
+   *
+   * A relative path resolves against {@link rootDir}; a bare specifier resolves
+   * as a package import. When unset, Astro's server entrypoint is deployed.
+   */
+  main?: string;
   /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file under `rootDir` is hashed, plus the
@@ -70,9 +87,9 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
      * code runs at request time). `"server"` renders pages on demand in
      * the Worker; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every page
-     * at build time and deploys assets-only. Supersedes a file-level
-     * `output`.
-     * @default "server"
+     * at build time and deploys assets-only. Overrides the `output` in
+     * your `astro.config.*`; leave it unset to use the file's value.
+     * @default the config file's `output`, else `"server"`
      */
     output?: "server" | "static";
     /** Source directory (astro's `srcDir`). */
@@ -100,7 +117,7 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
 // the outer props Effect; pass-through properties can remain deferred Inputs.
 type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
   AstroProps<Bindings>,
-  "sessionKVBindingName" | "astro" | "env"
+  "sessionKVBindingName" | "astro" | "env" | "rootDir" | "config"
 >;
 
 /**
@@ -137,11 +154,12 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * ```
  *
  * ### Static Sites
- * With `astro: { output: "static" }` every page is prerendered at build
- * time and the deploy is **assets-only**: no server bundle is uploaded —
+ * When your `astro.config.*` or `astro: { output: "static" }` declares
+ * `output: "static"`, every page is prerendered at build time and the
+ * deploy is **assets-only**: no server bundle is uploaded —
  * Cloudflare's asset layer answers every request (serve the built
  * `404.html` via `assets: { notFoundHandling: "404-page" }`). Session
- * provisioning is skipped for declared-static sites since no Worker
+ * provisioning is skipped for static sites since no Worker
  * code runs at request time.
  *
  * **Example:** Fully static Astro site
@@ -197,6 +215,55 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * });
  * ```
  *
+ * ### Route Caching
+ * Astro's route cache works with Workers Cache. Set the cache provider to
+ * `cacheCloudflare()` and Workers Cache is turned on for the Worker. Pages
+ * then go to the edge cache with the rules you give in `routeRules` or
+ * `Astro.cache.set()`. A response with no cache rule is not cached. Set
+ * `cache` on the site to override the Worker cache settings.
+ *
+ * **Example:** Caching a route at the edge
+ * ```typescript
+ * // astro.config.mjs
+ * import { defineConfig } from "astro/config";
+ * import { cacheCloudflare } from "@alchemy.run/frontend-frameworks/astro/cache";
+ *
+ * export default defineConfig({
+ *   cache: { provider: cacheCloudflare() },
+ *   routeRules: { "/insights": { maxAge: 600, swr: 86400 } },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // alchemy.run.ts
+ * const site = yield* Cloudflare.Website.Astro("Website");
+ * ```
+ *
+ * ### Custom Worker Entry
+ * By default the deployed Worker entry is Astro's server entrypoint.
+ * When the Worker must export more than Astro's fetch handler — Durable
+ * Object classes, a `scheduled` handler — point `main` at your own module
+ * that wraps Astro's handler (imported from
+ * `@alchemy.run/frontend-frameworks/astro/entrypoints/server`) and
+ * re-exports the extras.
+ *
+ * **Example:** Custom entry hosting a Durable Object
+ * ```typescript
+ * // src/worker-entry.ts
+ * // import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+ * // export class Counter extends DurableObject { ... }
+ * // export default { ...handler, scheduled: async () => { ... } };
+ *
+ * const site = yield* Cloudflare.Website.Astro("Website", {
+ *   main: "src/worker-entry.ts",
+ *   env: {
+ *     COUNTER: Cloudflare.DurableObject("Counter", {
+ *       className: "Counter",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
@@ -218,9 +285,10 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * in the config file fails the build. The `astro` prop is a
  * deploy-time override bag merged OVER the file (values here win) for
  * settings that vary per stage or derive from other resources'
- * Outputs, which a config file cannot consume. `output` defaults to
- * `"server"` — astro's zero-config `"static"` default would prerender
- * every page inside workerd, where the Worker's bindings don't exist.
+ * Outputs, which a config file cannot consume. `output` comes from the
+ * prop, then the config file, then defaults to `"server"` — astro's
+ * zero-config `"static"` default would prerender every page inside
+ * workerd, where the Worker's bindings don't exist.
  * Use `config` to point at an alternate config file (relative to
  * `rootDir`).
  *
@@ -288,27 +356,36 @@ export const Astro: {
         id,
         Effect.gen(function* () {
           const props = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // The prop wins, then the config file's `output`, then
+          // `"server"`: astro's own zero-config default is `"static"`,
+          // which would prerender every page at build time inside workerd
+          // — where the Worker's bindings don't exist.
+          const { output, workerCache } = yield* resolveAstroSettings({
+            rootDir: props.rootDir,
+            config: props.config,
+            output: props.astro?.output,
+          });
           const session = props.sessionKVBindingName;
           const sessionBindingName = typeof session === "string" ? session : "SESSION";
           let env: WorkerBindingProps | undefined = props.env;
           // Auto-provision the KV namespace backing Astro's session API
           // unless the user opted out (`sessionKVBindingName: false`) or
           // already bound their own namespace under the session name.
-          // A declared `output: "static"` site is assets-only — no Worker
+          // An `output: "static"` site is assets-only — no Worker
           // script runs at request time, so a session namespace could never
           // be read; skip provisioning it. Resource creation is deduped by
           // logical id, so re-evaluating this props effect is safe.
-          if (
-            session !== false &&
-            props.astro?.output !== "static" &&
-            env?.[sessionBindingName] === undefined
-          ) {
+          if (session !== false && output !== "static" && env?.[sessionBindingName] === undefined) {
             const sessions = yield* Namespace(`${id}Session`);
             env = { ...env, [sessionBindingName]: sessions };
           }
           return {
             ...props,
             env,
+            // Astro's Cloudflare cache provider caches responses in Workers
+            // Cache, so turn it on for the Worker unless `cache` is set.
+            cache:
+              props.cache ?? (workerCache && output !== "static" ? { enabled: true } : undefined),
             // Astro's vendored server runtime is built against Node APIs
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit
@@ -320,6 +397,7 @@ export const Astro: {
               rootDir: props.rootDir,
               options: {
                 rootDir: props.rootDir,
+                main: props.main,
                 memo: props.memo,
                 // Passed through verbatim (including `false`) so the
                 // source provider can skip its session-driver wiring on
@@ -327,12 +405,8 @@ export const Astro: {
                 sessionKVBindingName: props.sessionKVBindingName,
                 prerenderEnvironment: props.prerenderEnvironment,
                 // The `astro` bag is the deploy-time overlay merged OVER
-                // the natively-loaded `astro.config.*`. Server output is
-                // the documented default: astro's own zero-config default
-                // is `"static"`, which would prerender every page at
-                // build time inside workerd — where the Worker's bindings
-                // don't exist.
-                astro: { ...props.astro, output: props.astro?.output ?? "server" },
+                // the natively-loaded `astro.config.*`.
+                astro: { ...props.astro, output },
                 config: props.config,
               },
             },

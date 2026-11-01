@@ -206,6 +206,9 @@ export const Vinext: {
         id,
         Effect.gen(function* () {
           const props = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // `main` is the source provider's entry; the Worker rejects its own
+          // `main` beside `source`.
+          const { main, ...workerProps } = props;
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
           // Do not bind VINEXT_KV_CACHE in user `env`.
@@ -216,7 +219,7 @@ export const Vinext: {
             CF_VERSION_METADATA: props.env?.CF_VERSION_METADATA ?? VersionMetadata(),
           };
           return {
-            ...props,
+            ...workerProps,
             env,
             cache: { enabled: true, ...props.cache },
             compatibility: {
@@ -232,12 +235,12 @@ export const Vinext: {
               provider: "@alchemy.run/frontend-frameworks/vinext/source",
               devMode: "server",
               runtime: "node",
-              rootDir: props?.rootDir,
+              rootDir: props.rootDir,
               options: {
-                main: props?.main ?? DEFAULT_WORKER_ENTRY,
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-                viteEnvironments: props?.viteEnvironments ?? { entry: "rsc", children: ["ssr"] },
+                main: main ?? DEFAULT_WORKER_ENTRY,
+                rootDir: props.rootDir,
+                memo: props.memo,
+                viteEnvironments: props.viteEnvironments ?? { entry: "rsc", children: ["ssr"] },
               },
             },
           };

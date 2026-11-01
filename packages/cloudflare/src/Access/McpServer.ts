@@ -341,7 +341,7 @@ export const McpServerProvider = () =>
         // A failed create can leave props with an invalid ID but no output.
         // That generation cannot exist; let destroy recover the saved state.
         Effect.catchTag("McpServerInvalidId", (error) =>
-          output === undefined ? Effect.succeed(undefined) : Effect.fail(error),
+          output === undefined ? Effect.undefined : Effect.fail(error),
         ),
       );
       if (!observed) return undefined;
@@ -455,7 +455,7 @@ type ObservedServer = zeroTrust.ReadAccessAiControlMcpServerResponse;
 const observeServer = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpServer({ accountId, id })
-    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.undefined));
 
 const createServerId = (id: string, serverId: string | undefined) =>
   Effect.gen(function* () {

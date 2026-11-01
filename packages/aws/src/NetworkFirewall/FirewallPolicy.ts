@@ -122,7 +122,7 @@ export const FirewallPolicyProvider = () =>
               (meta) =>
                 nfw.describeFirewallPolicy({ FirewallPolicyArn: meta.Arn }).pipe(
                   Effect.map((r) => toAttrs(r.FirewallPolicyResponse)),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
@@ -133,7 +133,7 @@ export const FirewallPolicyProvider = () =>
           const name = output?.firewallPolicyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.FirewallPolicyResponse);
           const tags = nfwTagsToRecord(found.FirewallPolicyResponse.Tags);
@@ -160,7 +160,7 @@ export const FirewallPolicyProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {

@@ -191,10 +191,10 @@ export const toPrivateConnectionAttrs = (
 
 export const getPrivateConnectionByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsPrivateConnections({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listPrivateConnections = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -307,14 +307,14 @@ export const PrivateConnectionProvider = () =>
               pscInterfaceConfig: news.pscInterfaceConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // VPC peering takes 5-10 minutes.
         yield* settleOperation(created);
         current = yield* waitUntilExists(getPrivateConnectionByName(name), name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toPrivateConnectionAttrs(current, env.project, env.region);
@@ -332,7 +332,7 @@ export const PrivateConnectionProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getPrivateConnectionByName(output.name), output.name, {

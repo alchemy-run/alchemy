@@ -12,7 +12,7 @@ import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE, SOCKET_USER_ENTRY } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
-import type { BindingHook, PluginContext } from "../../PluginContext.ts";
+import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -25,6 +25,7 @@ import {
   LOOPBACK_TARGET_STREAM,
   PATH_STREAM_PUBLIC_URL,
   PATH_STREAM_VIDEO,
+  PATH_STREAM_VIDEO_LEGACY,
   SERVICE_STREAM,
   SERVICE_STREAM_STORAGE,
   STREAM_BINDING_ENTRYPOINT,
@@ -61,8 +62,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (
-      url.pathname === ${JSON.stringify(PATH_STREAM_VIDEO)} ||
-      url.pathname.startsWith(${JSON.stringify(`${PATH_STREAM_VIDEO}/`)})
+      ${JSON.stringify([PATH_STREAM_VIDEO, PATH_STREAM_VIDEO_LEGACY])}.some(
+        (prefix) => url.pathname === prefix || url.pathname.startsWith(prefix + "/"),
+      )
     ) {
       return await env.STREAM.fetch(request);
     }
@@ -131,7 +133,8 @@ export const StreamLive = Layer.effect(
     });
 
     return Stream.of(
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        const { worker } = yield* PluginContext;
         let used = false;
         let loopbackService: WorkerdConfig.ServiceDesignator | undefined;
 
@@ -153,7 +156,9 @@ export const StreamLive = Layer.effect(
             Effect.sync(() => {
               if (!used) return;
               const port = ports[SOCKET_USER_ENTRY];
-              if (port !== undefined) {
+              if (worker.publicUrl !== undefined) {
+                entryUrl = worker.publicUrl;
+              } else if (port !== undefined) {
                 entryUrl = `http://127.0.0.1:${port}`;
               }
             }),

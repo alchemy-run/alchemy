@@ -1,5 +1,5 @@
 import { PrismaApiError, type PrismaManagementClient } from "@alchemy.run/prisma/Client";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import {
   startDeploymentIdempotent,

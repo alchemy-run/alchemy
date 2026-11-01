@@ -245,7 +245,7 @@ const ProviderLive = () =>
           }
           const bucket = yield* getBucket({ bucketId }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           return bucket ? attrsFrom(bucket) : undefined;
         }),
@@ -256,7 +256,7 @@ const ProviderLive = () =>
           let observed: ObservedBucket | undefined = bucketId
             ? yield* getBucket({ bucketId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!observed) {
@@ -337,7 +337,7 @@ const ProviderLive = () =>
             bucketId: output.bucketId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!bucket) return;
           if (bucket.project.id !== output.projectId) {

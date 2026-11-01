@@ -1,6 +1,8 @@
 import type { Rpc } from "@cloudflare/workers-types";
 import type { Input } from "alchemy/Input";
+import { isResourceOfType } from "alchemy/Resource";
 import type { Worker } from "./Worker.ts";
+import { WorkerTypeId } from "./WorkerRuntime.ts";
 
 type WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
 const WorkerEntrypointTypeId: WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
@@ -184,8 +186,10 @@ export const WorkerEntrypoint: WorkerEntrypointFunction = (
   entrypointOrOptions?: string | WorkerEntrypointOptions,
 ) => {
   // A Worker resource carries its `Type`; a bare name or options object
-  // names an entrypoint of this Worker.
-  const targetsWorker = typeof workerOrEntrypoint === "object" && "Type" in workerOrEntrypoint;
+  // names an entrypoint of this Worker. A `Worker.ref(...)` is a callable
+  // Output proxy (`typeof` is "function"), so match on `Type` rather than
+  // on the value's shape.
+  const targetsWorker = isResourceOfType(workerOrEntrypoint, WorkerTypeId);
   const worker = targetsWorker ? (workerOrEntrypoint as Worker) : undefined;
   const entrypoint = targetsWorker
     ? entrypointOrOptions

@@ -15,6 +15,7 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
  * layers are public.
  */
 import * as Output from "alchemy/Output";
+import type { SourceError } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -56,7 +57,7 @@ export type OpenSearchSend = (
   request: OpenSearchHttpRequest,
 ) => Effect.Effect<
   { status: number; body: unknown },
-  OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
+  OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
 >;
 
 const refreshParam = (refresh: RefreshOption | undefined): Record<string, string | undefined> =>

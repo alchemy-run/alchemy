@@ -104,27 +104,36 @@ is needed.
 ## `state bootstrap`
 
 ```sh
-alchemy state bootstrap --backend <name> [options]
+alchemy state bootstrap [--backend <name>] [options]
 ```
 
-Provision a provider's state store, or adopt it when it already exists.
+Provision a state store, or adopt it when it already exists.
 Idempotent. You normally don't need it: the first deploy that uses the
 store provisions it. Run it to provision ahead of time (for example
 before CI uses the store), or to repair an interrupted bootstrap.
 
-- `cloudflare`: deploys the state-store Worker with its Secrets Store
-  and auth-token secret. An existing Worker is adopted and its
-  credentials (`~/.alchemy/profiles/<profile>/state-stores/cloudflare.json`)
-  are refreshed. A partial failure resumes from the leftover local state.
+Without `--backend` it provisions the store your entrypoint
+(`alchemy.run.ts`, or `--config`) configures, with every option it sets,
+such as a custom Worker or bucket name, a pinned account or a domain.
+With `--backend` it provisions a provider's default store, or the one
+`--name` names.
+
+- `cloudflare`: deploys the state-store Worker and creates its auth
+  token and encryption key in the account's Secrets Store when they are
+  missing. Existing secrets are never changed. An existing Worker is
+  adopted and its credentials
+  (`~/.alchemy/profiles/<profile>/state-stores/cloudflare.json`) are
+  refreshed.
 - `aws`: creates the state bucket with versioning, encryption, a public
   access block and owner-enforced ownership, or converges an existing one
   to those settings.
 
 | Option    | Description                                                                                                   |
 | --------- | ------------------------------------------------------------------------------------------------------------- |
-| `--force` | `cloudflare`: redeploy the Worker even when it exists, still reconciling its resources in place               |
+| `--force` | `cloudflare`: redeploy the Worker even when it exists, keeping its secrets (with `--backend`)                  |
 
 ```sh
+alchemy state bootstrap
 alchemy state bootstrap --backend cloudflare
 alchemy state bootstrap --backend cloudflare --profile staging --force
 alchemy state bootstrap --backend aws --name team-a

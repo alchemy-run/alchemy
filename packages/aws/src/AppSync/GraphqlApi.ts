@@ -420,7 +420,7 @@ export const GraphqlApiProvider = () =>
       const getApiSafe = (apiId: string) =>
         appsync.getGraphqlApi({ apiId }).pipe(
           Effect.map((response) => response.graphqlApi),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       /** Find an API by exact name (fallback when no apiId is cached). */
@@ -477,7 +477,7 @@ export const GraphqlApiProvider = () =>
       const syncCache = Effect.fn(function* (apiId: string, desired: ApiCacheConfig | undefined) {
         const observed = yield* appsync.getApiCache({ apiId }).pipe(
           Effect.map((response) => response.apiCache),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
         if (desired === undefined) {
           if (observed !== undefined) {

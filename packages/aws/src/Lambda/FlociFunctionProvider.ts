@@ -187,9 +187,7 @@ export const FlociFunctionProvider = () =>
               enrolledAttrs = current;
             }
             lastHash = result.identityHash;
-            yield* Effect.logInfo(
-              `[alchemy dev] ${functionName}: code swapped in ${Date.now() - startedAt}ms`,
-            );
+            yield* Effect.logInfo(`code swapped in ${Date.now() - startedAt}ms`);
           });
 
           if (props.bundle === false) {
@@ -205,11 +203,7 @@ export const FlociFunctionProvider = () =>
                   startedAt = Date.now();
                   const result = yield* bundler.prebuiltCode(realMain);
                   yield* swap(result);
-                }).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
-                  ),
-                ),
+                }).pipe(Effect.catchCause((cause) => Effect.logWarning(`code swap failed`, cause))),
               ),
             );
           } else {
@@ -225,9 +219,7 @@ export const FlociFunctionProvider = () =>
                       return;
                     }
                     case "Error": {
-                      yield* Effect.logWarning(
-                        `[alchemy dev] ${functionName}: rebuild failed: ${event.error.message}`,
-                      );
+                      yield* Effect.logWarning(`rebuild failed: ${event.error.message}`);
                       return;
                     }
                     case "Success": {
@@ -235,11 +227,7 @@ export const FlociFunctionProvider = () =>
                       yield* swap(result);
                     }
                   }
-                }).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
-                  ),
-                ),
+                }).pipe(Effect.catchCause((cause) => Effect.logWarning(`code swap failed`, cause))),
               ),
             );
           }

@@ -100,7 +100,7 @@ export const Domain = Resource<Domain>("GCP.GmailPostmasterTools.Domain");
 export class DomainNotResolved extends Data.TaggedError(
   "GCP.GmailPostmasterTools.DomainNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (domain: gmailpostmastertools.Domain, project: string, fallbackId?: string) => {
@@ -165,7 +165,7 @@ export const DomainProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DomainNotResolved({ name });
+        return yield* new DomainNotResolved({ resourceName: name });
       }
 
       const resourceName = current.name ?? name;

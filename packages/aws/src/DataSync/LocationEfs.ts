@@ -116,7 +116,7 @@ export const LocationEfsProvider = () =>
       const describe = Effect.fn(function* (locationArn: string) {
         return yield* datasync
           .describeLocationEfs({ LocationArn: locationArn })
-          .pipe(Effect.catchTag("LocationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LocationNotFound", () => Effect.undefined));
       });
 
       return LocationEfs.Provider.of({

@@ -126,10 +126,10 @@ export const FindingsFilterProvider = () =>
       const getFilter = (id: string) =>
         macie2.getFindingsFilter({ id }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // Macie disabled ⇒ the filter is unreachable (and disabling deletes
             // all Macie configuration), so report it as gone.
-            AccessDeniedException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
 

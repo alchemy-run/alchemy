@@ -32,8 +32,14 @@ export const inFleetWiseRegion = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R | Region> =>
   Effect.gen(function* () {
-    const ambient = yield* yield* Region;
-    return FLEETWISE_REGIONS.has(ambient)
+    // No region configured falls back to the home region. This runs when a
+    // binding captures its client, which cannot fail, so a ConfigProvider
+    // that cannot read its source stays a defect here.
+    const ambient = yield* (yield* Region).pipe(
+      Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
+      Effect.orDie,
+    );
+    return ambient !== undefined && FLEETWISE_REGIONS.has(ambient)
       ? yield* effect
       : yield* effect.pipe(Effect.provideService(Region, Effect.succeed(FLEETWISE_HOME_REGION)));
   });

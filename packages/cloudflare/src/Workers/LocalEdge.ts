@@ -98,7 +98,7 @@ ${routeMatcherSource()}
 // The registry proxy answers 503 with this message while the target
 // script has not registered yet (it is still starting). Wait for it, like
 // a request to the Worker's own dev URL does.
-const NOT_REGISTERED = /^Worker ".*" not found\. Make sure the worker is running locally\.$/;
+const NOT_REGISTERED = /^Worker ".*" not found. Make sure the worker is running locally.$/;
 async function forward(target, request) {
   const deadline = Date.now() + ${TARGET_WAIT_MS};
   for (let delay = 50; ; delay = Math.min(delay * 2, 1000)) {

@@ -1,9 +1,9 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as zones from "@distilled.cloud/hetzner/zones";
-import { expect } from "alchemy-test";
 import { Action } from "alchemy/Action";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";

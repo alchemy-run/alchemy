@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, TEST_ATTESTATION, TEST_POD, TEST_RESOURCE_URI } from "./common.ts";
 import BinaryAuthorizationBindingsHost, {
   GkePolicy,
@@ -64,7 +64,7 @@ const attestorRolesOf = (attestor: string, account: string) =>
       ),
     );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BinaryAuthorization Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:binaryauthorization", "provider:gcp:run", "live"],

@@ -144,7 +144,7 @@ export const AnalyzerProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* aa.getAnalyzer({ analyzerName: name }).pipe(
           Effect.map((r) => r.analyzer),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

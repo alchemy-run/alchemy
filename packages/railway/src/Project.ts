@@ -153,7 +153,7 @@ export type Project = Resource<
 export const Project = Resource<Project>("Railway.Project");
 
 export class ProjectNotCreated extends Data.TaggedError("Railway.ProjectNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** Workspace id from a get-by-id or list-node Project payload. */
@@ -222,7 +222,7 @@ const readProject = Query.fn((id: string) => projectFields(Railway.project({ id 
 const getById = (projectId: string) =>
   readProject(projectId).pipe(
     Effect.map((project) => (isGone(project) ? undefined : project)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const currentWorkspaceId = Effect.fn(function* () {
@@ -362,12 +362,12 @@ export const ProjectProvider = () =>
           ...(props.defaultEnvironmentName !== undefined
             ? { defaultEnvironmentName: props.defaultEnvironmentName }
             : {}),
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(workspaceId, name));
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new ProjectNotCreated({ name });
+        return yield* new ProjectNotCreated({ resourceName: name });
       }
 
       const nameChanged = current.name !== name;

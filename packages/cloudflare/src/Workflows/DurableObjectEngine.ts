@@ -9,6 +9,7 @@ import {
   makeCurrentActivity,
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
+import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -22,7 +23,10 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import {
+  DurableObject as CloudflareDurableObject,
+  type DurableObjectJurisdiction,
+} from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";
 
@@ -54,8 +58,11 @@ import type { Worker } from "../Workers/Worker.ts";
  *   idempotencyKey: ({ userId }) => userId,
  * });
  *
- * const SendWelcomeLive = Workflows.layer(SendWelcome, ({ userId }) =>
- *   Activity.make({ name: "send", execute: Effect.log(`welcome, ${userId}`) }),
+ * const SendWelcomeLive = Workflows.layer(
+ *   SendWelcome,
+ *   Effect.fn(function* ({ userId }) {
+ *     yield* Activity.make({ name: "send", execute: Effect.log(`welcome, ${userId}`) });
+ *   }),
  * );
  *
  * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
@@ -71,17 +78,64 @@ import type { Worker } from "../Workers/Worker.ts";
  *     };
  *   }).pipe(
  *     Effect.provide(
- *       SendWelcomeLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine)),
+ *       SendWelcomeLive.pipe(
+ *         Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()),
+ *       ),
  *     ),
  *   ),
  * ) {}
+ * ```
+ *
+ * ### Running executions in a jurisdiction
+ * **Example:** Every execution in the EU
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { SendWelcomeLive } from "./SendWelcome.ts";
+ *
+ * const WorkflowsLive = SendWelcomeLive.pipe(
+ *   Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine({ jurisdiction: "eu" })),
+ * );
  * ```
  *
  * @layer
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
+export function layerDurableObjectEngine({
+  jurisdiction,
+}: DurableObjectEngineOptions = {}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
+  // The same options return the same Layer, so providing it in several places
+  // builds one engine.
+  let engine = engines.get(jurisdiction);
+  if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));
+  return engine;
+}
+
+/** Options for {@link layerDurableObjectEngine}. */
+export interface DurableObjectEngineOptions {
+  /**
+   * Create and store every workflow execution object only inside this
+   * jurisdiction, e.g. `"eu"`. An execution in a jurisdiction is a different
+   * object from the one with the same name outside it, so setting this does
+   * not move executions that already exist.
+   *
+   * Enforced when deployed, not emulated in `alchemy dev` (local workerd does
+   * not implement jurisdictions).
+   *
+   * @default undefined (no jurisdiction restriction)
+   */
+  readonly jurisdiction?: DurableObjectJurisdiction;
+}
+
+const engines = new Map<
+  DurableObjectJurisdiction | undefined,
+  Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker>
+>();
+
+const makeEngine = (
+  jurisdiction: DurableObjectJurisdiction | undefined,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
@@ -105,10 +159,13 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
           Effect.gen(function* () {
             if (namespaces.has(workflow._tag)) return;
             const namespace = yield* declare(
-              `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+              `${workflowClassName(workflow)}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
-            namespaces.set(workflow._tag, namespace);
+            namespaces.set(
+              workflow._tag,
+              jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+            );
           }),
 
         execute: (workflow, options) =>
@@ -128,7 +185,7 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
             );
             if (options.discard) return undefined;
             return result === null
-              ? new Workflow.Suspended({})
+              ? Workflow.Suspended.make({})
               : yield* decodeResult(workflow as AnyWorkflow, result);
           }) as Effect.Effect<any>,
 
@@ -140,7 +197,7 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
               readonly result: string | null;
             }>(stub.poll());
             if (!polled.started) return Option.none();
-            if (polled.result === null) return Option.some(new Workflow.Suspended({}));
+            if (polled.result === null) return Option.some(Workflow.Suspended.make({}));
             return Option.some(yield* decodeResult(workflow as AnyWorkflow, polled.result));
           }),
 
@@ -409,7 +466,7 @@ const executionObject = (registration: Registration) =>
             if (row.interrupted !== 1) return Effect.void;
             instance.interrupted = true;
             instance.suspended = false;
-            return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
+            return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
           }),
           Workflow.intoResult,
           Effect.provide(
@@ -520,7 +577,7 @@ const call = <A = void>(effect: Effect.Effect<unknown, unknown>): Effect.Effect<
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.catch((error) => Effect.die(error)),
+    Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
         ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
@@ -534,6 +591,7 @@ interface Stub {
 
 interface Namespace {
   readonly getByName: (name: string) => Stub;
+  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
 }
 
 type ObjectImpl = Effect.Effect<
@@ -547,6 +605,17 @@ type ObjectImpl = Effect.Effect<
  * `Cloudflare.DurableObject` is typed for single-stage implementations, so it
  * is re-typed here for the two-stage form it runs.
  */
+/**
+ * The class name a workflow's runs are stored under: its `StorageName`, which
+ * may be dotted like a Domain model's `Billing.OpenAccount`, or else its name.
+ */
+const workflowClassName = (workflow: Workflow.Any) => {
+  const storageName = Context.getOrUndefined(workflow.annotations, StorageName);
+  return storageName === undefined
+    ? workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")
+    : storageName.replace(/[^A-Za-z0-9_.]/g, "_");
+};
+
 const declare = CloudflareDurableObject as unknown as (
   name: string,
   impl: ObjectImpl,

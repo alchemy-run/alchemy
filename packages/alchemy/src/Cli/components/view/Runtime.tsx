@@ -1,27 +1,28 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
-import { stripVTControlCharacters } from "node:util";
-import { AnsiText, Box, render, renderToString, Static, useTitle } from "@alchemy.run/sigil";
+import { AnsiText, Box, render, Static, useTitle } from "@alchemy.run/sigil";
 import { useSyncExternalStore } from "@alchemy.run/sigil/react";
-import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import type { ReactNode } from "react";
-import { NonInteractiveTerminal, TerminalCancelled } from "../../../Interaction.ts";
-import { setNativeProgress } from "../../../Util/Terminal.ts";
-import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
+import {
+  type BrowserLoginOptions,
+  type Interaction,
+  type NonInteractiveTerminal,
+  openUrl,
+  type SessionOptions,
+  TerminalCancelled,
+  taskFromProgress,
+} from "../../../Interaction.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
-  RenderOptions,
   Screen,
-  MenuOptions,
-  CliKitCapabilities,
-  CliKitOptions,
-  InteractionError,
+  TerminalCapabilities,
+  TerminalOptions,
   LiveViewHandle,
   LiveViewOptions,
   View,
@@ -31,19 +32,17 @@ import { Spinner, Status } from "../ui/Feedback.tsx";
 import { useTerminalInput } from "../ui/Interactive.tsx";
 import { LiveStore, useLiveStore } from "../ui/Live.tsx";
 import { CancelledPrompt } from "../ui/Transcript.tsx";
-import { Text } from "../ui/Typography.tsx";
+import { formatView, normalizeView } from "./Format.tsx";
 import {
   confirmScreen,
-  cycleSelectScreen,
-  awaitExternalScreen,
-  menuScreen,
+  browserLoginScreen,
   multiSelectScreen,
   passwordScreen,
   selectScreen,
   textScreen,
 } from "./Prompts.tsx";
 
-const InApplication = Context.Reference<boolean>("Alchemy::CliKit/InApplication", {
+const InSession = Context.Reference<boolean>("Alchemy::Interaction/InSession", {
   defaultValue: () => false,
 });
 
@@ -58,54 +57,6 @@ interface Item {
   readonly placement?: LiveViewOptions["placement"];
 }
 
-const normalizeView = (view: View): View => {
-  if (typeof view === "string" || typeof view === "number" || typeof view === "bigint") {
-    return <Text>{String(view)}</Text>;
-  }
-  // Contract: an array of primitives renders as ONE Text line with the
-  // elements concatenated (no separator) — matching how React renders
-  // adjacent text children. Callers wanting separators must join themselves.
-  if (
-    Array.isArray(view) &&
-    view.every(
-      (item) =>
-        item === null ||
-        item === undefined ||
-        typeof item === "boolean" ||
-        typeof item === "string" ||
-        typeof item === "number" ||
-        typeof item === "bigint",
-    )
-  ) {
-    return (
-      <Text>
-        {view
-          .filter((item) => item !== null && item !== undefined && typeof item !== "boolean")
-          .map(String)
-          .join("")}
-      </Text>
-    );
-  }
-  return view;
-};
-
-const formatStaticView = (
-  view: ReactNode,
-  options: RenderOptions,
-  capabilities: CliKitCapabilities,
-): string => {
-  const colors = options.colors ?? capabilities.colors;
-  // The renderer and the components must agree on the width: components size
-  // themselves from the environment's `columns`, so an explicit render width
-  // has to flow into the capabilities too, not only into renderToString.
-  const columns = options.columns ?? capabilities.columns;
-  const output = renderToString(
-    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>{view}</CliEnvironment>,
-    { columns, colorProfile: colors ? "truecolor" : "none" },
-  ).replace(/[\s\n]+$/, "");
-  return colors ? output : stripVTControlCharacters(output);
-};
-
 interface StoreState {
   readonly staticItems: Item[];
   readonly transcript: ReadonlyArray<Item>;
@@ -115,7 +66,7 @@ interface StoreState {
 
 /**
  * The single external store the React root syncs from. It only tracks WHICH
- * blocks are mounted and in what region (static scrollback, in-application
+ * blocks are mounted and in what region (static scrollback, in-session
  * transcript, live region, active prompt) — block content never changes
  * after mount, so there is no update surface here.
  */
@@ -284,15 +235,15 @@ function ProgressView({ store }: ProgressViewProps) {
   );
 }
 
-export interface CliKitRuntime {
-  readonly service: CliKit["Service"];
+export interface SigilRuntime {
+  readonly service: Interaction["Service"];
   readonly dispose: () => Promise<void>;
 }
 
 export const makeRuntime = (
-  options: CliKitOptions,
-  capabilities: CliKitCapabilities,
-): CliKitRuntime => {
+  options: TerminalOptions,
+  capabilities: TerminalCapabilities,
+): SigilRuntime => {
   const stdin = options.stdin ?? process.stdin;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
@@ -316,12 +267,12 @@ export const makeRuntime = (
   // Lifecycle state. `mounted` and `unmounting` deliberately overlap: during
   // teardown the instance stays in `mounted` until re-validation passes, so
   // prints/live views racing the drain still see a live renderer (and can
-  // abort the teardown). `applicationMounted` is an orthogonal axis — an
-  // `app()` region pins the renderer regardless of store idleness — and
+  // abort the teardown). `sessionMounted` is an orthogonal axis — an
+  // `session()` region pins the renderer regardless of store idleness — and
   // `disposed` is a terminal one-way latch.
   let mounted: Mounted | undefined;
   let unmounting: Promise<void> | undefined;
-  let applicationMounted = false;
+  let sessionMounted = false;
   let disposed = false;
   /**
    * Fails the active interaction when a screen component throws during
@@ -337,7 +288,7 @@ export const makeRuntime = (
    */
   const failRenderer = (error: unknown) => {
     if (failActive !== undefined) failActive(error);
-    else stderr.write(`CliKit renderer error: ${String(error)}\n`);
+    else stderr.write(`Sigil renderer error: ${String(error)}\n`);
   };
 
   const mount = async (alternateScreen = false): Promise<void> => {
@@ -485,7 +436,7 @@ export const makeRuntime = (
         // Re-validate: a prompt or live view may have re-armed the renderer
         // while the frame flushed. Their output would be destroyed by the
         // teardown, so leave the instance mounted for them instead.
-        if (!force && (applicationMounted || !store.idle)) return;
+        if (!force && (sessionMounted || !store.idle)) return;
         // A captured chunk that arrived DURING the drain may have parked a
         // partial line and armed a flush timer. Flush and disarm now —
         // otherwise the timer fires after `clearStatic()` below and the
@@ -519,30 +470,24 @@ export const makeRuntime = (
 
   const releaseIfIdle = () =>
     Effect.suspend(() =>
-      applicationMounted || !store.idle ? Effect.void : Effect.promise(() => unmount()),
+      sessionMounted || !store.idle ? Effect.void : Effect.promise(() => unmount()),
     );
 
-  const formatView = (view: View, renderOptions: RenderOptions = {}) =>
-    formatStaticView(normalizeView(view), renderOptions, {
-      ...capabilities,
-      // Re-read the width at render time — the boot-time snapshot goes stale
-      // the moment the user resizes the terminal.
-      columns: stdout.columns ?? capabilities.columns,
-    });
-
-  const renderView = (view: View, renderOptions: RenderOptions = {}) =>
-    Effect.sync(() => formatView(view, renderOptions));
-
-  const print = (view: View, renderOptions: RenderOptions = {}) =>
+  const print = (view: View) =>
     Effect.gen(function* () {
-      const inApplication = yield* InApplication;
+      const inSession = yield* InSession;
       view = normalizeView(view);
-      if (inApplication) {
+      if (inSession) {
         yield* Effect.sync(() => store.append(view));
       } else if (mounted !== undefined) {
         yield* Effect.sync(() => store.appendStatic(view));
       } else {
-        const output = yield* renderView(view, renderOptions);
+        const output = formatView(view, {
+          ...capabilities,
+          // Re-read the width at render time — the boot-time snapshot goes
+          // stale the moment the user resizes the terminal.
+          columns: stdout.columns ?? capabilities.columns,
+        });
         if (output !== "") yield* Effect.sync(() => stdout.write(`${output}\n`));
       }
     });
@@ -561,17 +506,9 @@ export const makeRuntime = (
       );
     };
 
-  const run = <Value,>(screen: Screen<Value>) => {
-    if (!capabilities.input) {
-      return Effect.fail(
-        new NonInteractiveTerminal({
-          operation: screen.name,
-          message: `Cannot run ${screen.name} without an interactive terminal. Provide the equivalent command flags instead.`,
-        }),
-      );
-    }
-    return Effect.gen(function* () {
-      const inApplication = yield* InApplication;
+  const run = <Value,>(screen: Screen<Value>) =>
+    Effect.gen(function* () {
+      const inSession = yield* InSession;
       const interaction = promptGate.withPermits(1)(
         Effect.gen(function* () {
           let completedView: View | undefined;
@@ -583,7 +520,7 @@ export const makeRuntime = (
               failActive = undefined;
               store.deactivate();
               if (resultView !== undefined) {
-                if (inApplication) store.append(normalizeView(resultView));
+                if (inSession) store.append(normalizeView(resultView));
                 else completedView = resultView;
               }
               resume(result);
@@ -623,7 +560,7 @@ export const makeRuntime = (
           }).pipe(
             Effect.ensuring(
               Effect.suspend(() =>
-                inApplication
+                inSession
                   ? Effect.void
                   : releaseIfIdle().pipe(
                       Effect.andThen(
@@ -635,82 +572,58 @@ export const makeRuntime = (
           );
         }),
       );
-      return yield* inApplication ? interaction : rendererGate.withPermits(1)(interaction);
-    });
-  };
-
-  const menu = <Value,>(options: MenuOptions<Value>): Effect.Effect<Value, InteractionError> =>
-    Effect.gen(function* () {
-      if (yield* InApplication) yield* Effect.sync(() => store.clear());
-      return yield* run(menuScreen(options));
+      return yield* inSession ? interaction : rendererGate.withPermits(1)(interaction);
     });
 
-  const app = <A, E, R>(
+  // A session owns the renderer when invoked standalone. Nested, it reuses
+  // the outer renderer and clears the prompts it showed when it settles, so
+  // nested profile/OAuth flows suspend cleanly. Prompt serialization remains
+  // centralized in `run`.
+  const session = <A, E, R>(
     effect: Effect.Effect<A, E, R>,
+    sessionOptions: SessionOptions = {},
   ): Effect.Effect<A, E | NonInteractiveTerminal, R> =>
-    !capabilities.input
-      ? Effect.fail(
-          new NonInteractiveTerminal({
-            operation: "application",
-            message:
-              "Cannot run a CLI application without terminal input. Provide the equivalent command flags instead.",
+    Effect.gen(function* () {
+      if (yield* InSession) {
+        return yield* effect.pipe(Effect.ensuring(Effect.sync(() => store.clearTranscript())));
+      }
+      const alternate = sessionOptions.alternate === true && capabilities.alternateScreen;
+      return yield* rendererGate.withPermits(1)(
+        Effect.acquireUseRelease(
+          Effect.promise(async () => {
+            sessionMounted = true;
+            store.clear();
+            // Sigil cannot change `alternateScreen` on a live instance: if
+            // an inline renderer (say an earlier progress row) is still
+            // mounted with the wrong presentation, remount with the
+            // requested one instead of silently ignoring it.
+            if (mounted !== undefined && mounted.alternate !== alternate) {
+              await unmount(true);
+            }
+            await mount(alternate);
           }),
-        )
-      : Effect.gen(function* () {
-          if (yield* InApplication) return yield* effect;
-          const presentation = yield* ApplicationPresentation;
-          const alternate = presentation === "alternate" && capabilities.alternateScreen;
-          return yield* rendererGate.withPermits(1)(
-            Effect.acquireUseRelease(
-              Effect.promise(async () => {
-                applicationMounted = true;
-                store.clear();
-                // Sigil cannot change `alternateScreen` on a live instance: if
-                // an inline renderer (say an earlier progress row) is still
-                // mounted with the wrong presentation, remount with the
-                // requested one instead of silently ignoring it.
-                if (mounted !== undefined && mounted.alternate !== alternate) {
-                  await unmount(true);
-                }
-                await mount(alternate);
-              }),
-              () => effect.pipe(Effect.provideService(InApplication, true)),
-              () =>
-                Effect.promise(async () => {
-                  applicationMounted = false;
-                  store.clear();
-                  // Let the empty frame replace the application, then erase
-                  // that frame explicitly. Unmount can now restore terminal
-                  // modes without leaving the empty frame's newline behind.
-                  const current = mounted;
-                  if (current !== undefined) {
-                    await current.sigil.waitUntilRenderFlush();
-                    current.sigil.clear();
-                  }
-                  await unmount();
-                }),
-            ),
-          );
-        });
-
-  // A wizard owns the renderer when invoked standalone and reuses the
-  // current application renderer when nested. Prompt serialization remains
-  // centralized in `run`, so nested profile/OAuth flows suspend cleanly.
-  const wizard = <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | NonInteractiveTerminal, R> =>
-    Effect.gen(function* () {
-      if (!(yield* InApplication)) return yield* app(effect);
-      return yield* effect.pipe(Effect.ensuring(Effect.sync(() => store.clearTranscript())));
+          () => effect.pipe(Effect.provideService(InSession, true)),
+          () =>
+            Effect.promise(async () => {
+              sessionMounted = false;
+              store.clear();
+              // Let the empty frame replace the session, then erase
+              // that frame explicitly. Unmount can now restore terminal
+              // modes without leaving the empty frame's newline behind.
+              const current = mounted;
+              if (current !== undefined) {
+                await current.sigil.waitUntilRenderFlush();
+                current.sigil.clear();
+              }
+              await unmount();
+            }),
+        ),
+      );
     });
 
   const makeLive = (initial: View, options: LiveViewOptions = {}): Effect.Effect<LiveViewHandle> =>
     Effect.gen(function* () {
-      if (!capabilities.input) {
-        yield* print(initial);
-        return { close: Effect.void };
-      }
-      const inApplication = yield* InApplication;
+      const inSession = yield* InSession;
       const key = store.alloc();
       let closed = false;
       yield* Effect.sync(() => store.addLive(key, normalizeView(initial), options.placement));
@@ -720,9 +633,9 @@ export const makeRuntime = (
           if (closed) return Effect.void;
           closed = true;
           // removeLive/completeLive no-op when the row was already cleared
-          // by a menu loop or application boundary.
+          // by a session boundary.
           if (options.persistOnClose)
-            store.completeLive(key, inApplication ? "transcript" : "staticItems");
+            store.completeLive(key, inSession ? "transcript" : "staticItems");
           else store.removeLive(key);
           return Effect.promise(waitForRender).pipe(Effect.andThen(releaseIfIdle()));
         }),
@@ -747,34 +660,7 @@ export const makeRuntime = (
    */
   const makeProgress = (initial: ProgressOptions): Effect.Effect<ProgressHandle> =>
     Effect.gen(function* () {
-      const dynamic = capabilities.input && ((yield* InApplication) || stdout.isTTY === true);
-      if (!dynamic) {
-        let current = initial;
-        let closed = false;
-        yield* print(
-          <Status variant="info" detail={initial.detail}>
-            {initial.label}
-          </Status>,
-        );
-        const settle = (variant: "success" | "error", message?: string) =>
-          Effect.suspend(() => {
-            if (closed) return Effect.void;
-            closed = true;
-            return print(<Status variant={variant}>{message ?? current.label}</Status>);
-          });
-        return {
-          update: (next) =>
-            Effect.sync(() => {
-              if (!closed) current = next;
-            }),
-          succeed: (message) => settle("success", message),
-          fail: (message) => settle("error", message),
-          close: Effect.sync(() => {
-            closed = true;
-          }),
-        } satisfies ProgressHandle;
-      }
-      const inApplication = yield* InApplication;
+      const inSession = yield* InSession;
       const progressStore = new LiveStore<ProgressState>({ options: initial });
       const key = store.alloc();
       yield* Effect.sync(() => store.addLive(key, <ProgressView store={progressStore} />));
@@ -785,8 +671,8 @@ export const makeRuntime = (
           if (settled) return Effect.void;
           settled = true;
           // completeLive/removeLive no-op when the row was already cleared
-          // by a menu loop or application boundary.
-          if (persist) store.completeLive(key, inApplication ? "transcript" : "staticItems");
+          // by a session boundary.
+          if (persist) store.completeLive(key, inSession ? "transcript" : "staticItems");
           else store.removeLive(key);
           return Effect.promise(waitForRender).pipe(Effect.andThen(releaseIfIdle()));
         });
@@ -811,19 +697,45 @@ export const makeRuntime = (
   const progress = (initial: ProgressOptions): Effect.Effect<ProgressHandle, never, Scope.Scope> =>
     Effect.acquireRelease(makeProgress(initial), (handle) => handle.close);
 
-  const service: CliKit["Service"] = {
-    terminal: capabilities,
-    nativeProgress: {
-      set: (state, value) =>
-        Effect.sync(() => {
-          if (mounted !== undefined) mounted.sigil.setProgress(state, value);
-          else setNativeProgress(state, value, stdout);
+  /**
+   * The login screen races `waitFor`: the poll or callback normally wins,
+   * the screen only settles first when the user cancels or pastes a code.
+   */
+  const browserLogin = <A, E, R, E2 = never, R2 = never>(
+    login: BrowserLoginOptions<A, E, R, E2, R2>,
+  ) =>
+    Effect.gen(function* () {
+      const services = yield* Effect.context<ChildProcessSpawner>();
+      // Invoked later by the screen's keyboard handler, outside this fiber.
+      const reopen = () => Effect.runPromiseWith(services)(openUrl(login.url));
+      const openFailed = yield* Effect.isFailure(openUrl(login.url));
+      const manual = login.manualCode;
+      const screen = run(
+        browserLoginScreen({
+          message: `${login.provider} authorization`,
+          waitingLabel:
+            login.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)…",
+          url: login.url,
+          code: login.code,
+          openFailed,
+          onOpen: reopen,
+          allowManualInput: manual !== undefined,
+          inputLabel: manual?.label ?? "Paste the authorization code or callback URL",
+          placeholder: manual?.placeholder,
+          validate: manual?.validate,
         }),
-    },
+      ).pipe(
+        Effect.flatMap((code): Effect.Effect<A, E2, R2> =>
+          manual === undefined ? Effect.never : manual.exchange(code),
+        ),
+      );
+      return yield* Effect.raceFirst(login.waitFor, screen);
+    });
+
+  const service: Interaction["Service"] = {
+    terminal: capabilities,
     output: {
       print,
-      format: formatView,
-      render: renderView,
       info: log("info"),
       success: log("success"),
       warning: log("warning"),
@@ -835,31 +747,13 @@ export const makeRuntime = (
       confirm: (confirmOptions) => run(confirmScreen(confirmOptions)),
       select: (selectOptions) => run(selectScreen(selectOptions)),
       multiSelect: (selectOptions) => run(multiSelectScreen(selectOptions)),
-      cycle: (selectOptions) => run(cycleSelectScreen(selectOptions)),
-      awaitExternal: (externalOptions) => run(awaitExternalScreen(externalOptions)),
-      menu,
-      custom: run,
+      screen: run,
     },
-    wizard,
-    application: app,
-    live: { progress, open: live },
-    task: (taskOptions, effect) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const handle = yield* progress(taskOptions);
-          return yield* effect.pipe(
-            Effect.onExit((exit) =>
-              Exit.isSuccess(exit)
-                ? handle.succeed()
-                : // Interruption (Ctrl+C) is not a failure — remove the row
-                  // instead of painting a red error status.
-                  Cause.hasInterruptsOnly(exit.cause)
-                  ? handle.close
-                  : handle.fail(),
-            ),
-          );
-        }),
-      ),
+    browserLogin,
+    live,
+    progress,
+    task: taskFromProgress(progress),
+    session,
   };
 
   return {

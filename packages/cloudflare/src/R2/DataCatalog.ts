@@ -405,7 +405,7 @@ const catalogConsistencySchedule = Schedule.max([Schedule.exponential(100), Sche
 const getCatalog = (accountId: string, bucketName: string) =>
   rdc
     .getR2DataCatalog({ accountId, bucketName })
-    .pipe(Effect.catchTag(["WarehouseNotFound", "NoSuchBucket"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["WarehouseNotFound", "NoSuchBucket"], () => Effect.undefined));
 
 const toAttributes = (
   catalog: rdc.GetR2DataCatalogResponse,

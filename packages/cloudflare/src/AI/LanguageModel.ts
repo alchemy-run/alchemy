@@ -175,6 +175,11 @@ interface WorkersAiInputs {
 // ---------------------------------------------------------------------------
 
 const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
+  // Keep older Workers and no_nodejs_compat deployments working without a
+  // Node import. The native web API encodes only this view's byte range.
+  const toBase64 = (bytes as Uint8Array & { toBase64?: () => string }).toBase64;
+  if (typeof toBase64 === "function") return toBase64.call(bytes);
+
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -269,6 +274,42 @@ const toToolMessage = (
 // Tools / tool_choice
 // ---------------------------------------------------------------------------
 
+type PreparedToolSchema = {
+  readonly schema: Tool.Any["parametersSchema"];
+  readonly ast: Tool.Any["parametersSchema"]["ast"];
+  readonly json: ReturnType<typeof Tool.getJsonSchema>;
+};
+
+// Tools and Effect schemas expose immutable update methods. Still check both
+// identities: JavaScript callers can replace a tool's schema in place. Dynamic
+// JSON schemas remain caller-owned and may change without an identity change.
+const preparedToolSchemas = new WeakMap<Tool.Any, PreparedToolSchema>();
+
+const prepareTool = (tool: Tool.Any): WorkersAiToolDef => {
+  let parameters: ReturnType<typeof Tool.getJsonSchema>;
+  if (Tool.isDynamic(tool) && tool.jsonSchema !== undefined) {
+    parameters = Tool.getJsonSchema(tool);
+  } else {
+    const schema = tool.parametersSchema;
+    let cached = preparedToolSchemas.get(tool);
+    if (cached === undefined || cached.schema !== schema || cached.ast !== schema.ast) {
+      cached = { schema, ast: schema.ast, json: Tool.getJsonSchema(tool) };
+      preparedToolSchemas.set(tool, cached);
+    }
+    // Each request previously owned its compiled schema. Keep that isolation
+    // if the runtime client mutates request input, without recompiling it.
+    parameters = structuredClone(cached.json);
+  }
+  return {
+    type: "function",
+    function: {
+      name: tool.name,
+      description: Tool.getDescription(tool),
+      parameters,
+    },
+  };
+};
+
 const prepareTools = (
   tools: ReadonlyArray<Tool.Any>,
   toolChoice: AiLanguageModel.ProviderOptions["toolChoice"],
@@ -277,36 +318,23 @@ const prepareTools = (
   tool_choice?: WorkersAiToolChoice;
 } => {
   if (tools.length === 0) return {};
-  const mapped: ReadonlyArray<WorkersAiToolDef> = tools.map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: Tool.getDescription(tool),
-      parameters: Tool.getJsonSchema(tool),
-    },
-  }));
-
-  if (toolChoice === "auto" || toolChoice == null) {
-    return { tools: mapped, tool_choice: "auto" };
-  }
-  if (toolChoice === "none") return { tools: mapped, tool_choice: "none" };
-  if (toolChoice === "required") {
-    return { tools: mapped, tool_choice: "required" };
-  }
-  if (typeof toolChoice === "object" && "tool" in toolChoice) {
+  if (toolChoice != null && typeof toolChoice === "object" && "tool" in toolChoice) {
     return {
-      tools: mapped.filter((t) => t.function.name === toolChoice.tool),
+      tools: tools.filter((tool) => tool.name === toolChoice.tool).map(prepareTool),
       tool_choice: "required",
     };
   }
-  if (typeof toolChoice === "object" && "oneOf" in toolChoice) {
+  if (toolChoice != null && typeof toolChoice === "object" && "oneOf" in toolChoice) {
     const allowed = new Set(toolChoice.oneOf);
     return {
-      tools: mapped.filter((t) => allowed.has(t.function.name)),
+      tools: tools.filter((tool) => allowed.has(tool.name)).map(prepareTool),
       tool_choice: toolChoice.mode === "required" ? "required" : "auto",
     };
   }
-  return { tools: mapped, tool_choice: "auto" };
+  return {
+    tools: tools.map(prepareTool),
+    tool_choice: toolChoice === "none" || toolChoice === "required" ? toolChoice : "auto",
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -593,8 +621,9 @@ const decodeResponse = (raw: Record<string, unknown>): DecodedResponse => {
 
 const nativeTextOf = (raw: unknown): string | undefined => {
   if (raw == null) return undefined;
-  if (typeof raw === "object") return JSON.stringify(raw);
-  const text = String(raw);
+  // Workers AI responses are JSON-decoded, so JSON.stringify matches
+  // String() for every scalar and serializes objects/arrays.
+  const text = typeof raw === "string" ? raw : JSON.stringify(raw);
   return text.length > 0 ? text : undefined;
 };
 
@@ -898,7 +927,7 @@ const handleNativeText = (
 ): Effect.Effect<StreamState> => {
   const native = chunk.response;
   if (native == null || native === "") return Effect.succeed(state);
-  const text = typeof native === "object" ? JSON.stringify(native) : String(native);
+  const text = typeof native === "string" ? native : JSON.stringify(native);
   if (text.length === 0) return Effect.succeed(state);
   // Some models (e.g. `@cf/meta/llama-3.3-70b`) mirror every text fragment
   // in both the native `response` field and the OpenAI-compatible delta of

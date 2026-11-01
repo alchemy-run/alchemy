@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { unwrapRedacted } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import type * as Redacted from "effect/Redacted";
@@ -66,11 +67,13 @@ export interface OAuthClientConfig {
    */
   clientId: string;
   /**
-   * OAuth client secret. Cloudflare masks this field on read, so it
+   * OAuth client secret. Pass a `Redacted` value (e.g.
+   * `yield* Config.Redacted("GITHUB_CLIENT_SECRET")`) to keep it out of
+   * plan output and state. Cloudflare masks this field on read, so it
    * diffs against the previously declared props rather than observed
    * cloud state.
    */
-  clientSecret: string;
+  clientSecret: string | Redacted.Redacted<string>;
 }
 
 /**
@@ -546,6 +549,17 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
+ * **Example:** GitHub with the client secret from config
+ * ```typescript
+ * const github = yield* Cloudflare.Access.IdentityProvider("GitHub", {
+ *   type: "github",
+ *   config: {
+ *     clientId: "my-client-id",
+ *     clientSecret: yield* Config.Redacted("GITHUB_CLIENT_SECRET"),
+ *   },
+ * });
+ * ```
+ *
  * **Example:** Microsoft Entra ID (Azure AD)
  * ```typescript
  * const entra = yield* Cloudflare.Access.IdentityProvider("Entra", {
@@ -749,7 +763,7 @@ export const IdentityProviderProvider = () =>
         const created = yield* createIdp(zoneId, accountId, {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: unwrapRedacted(news.config ?? {}),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
@@ -762,14 +776,15 @@ export const IdentityProviderProvider = () =>
       //    declared props because Cloudflare masks secrets on read.
       const dirty =
         observed.name !== name ||
-        JSON.stringify(news.config ?? {}) !== JSON.stringify(olds?.config ?? null) ||
+        JSON.stringify(unwrapRedacted(news.config ?? {})) !==
+          JSON.stringify(unwrapRedacted(olds?.config ?? null)) ||
         samlCertificateSetIdOf(news) !== samlCertificateSetIdOf(olds) ||
         (news.scimConfig !== undefined && !sameScim(observed.scimConfig, news.scimConfig));
       if (dirty) {
         const updated = yield* updateIdp(zoneId, accountId, observed.id ?? "", {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: unwrapRedacted(news.config ?? {}),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });

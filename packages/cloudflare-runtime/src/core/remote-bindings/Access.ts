@@ -39,7 +39,7 @@ export const layer = Layer.effect(
     });
     const login = (domain: string) =>
       ChildProcess.make("cloudflared", ["access", "login", domain]).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((process) => Stream.runCollect(process.stdout)),
         Effect.mapError((error) =>
           SystemError.make({
@@ -66,7 +66,7 @@ export const layer = Layer.effect(
       );
 
     const getEnv = (name: string) =>
-      Config.String(name).pipe(Effect.catchTag("ConfigError", () => Effect.succeed(undefined)));
+      Config.String(name).pipe(Effect.catchTag("ConfigError", () => Effect.undefined));
 
     return Access.of({
       getAccessHeaders: Effect.fn(function* (domain) {

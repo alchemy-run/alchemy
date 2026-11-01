@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,13 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class TrafficPolicyUnexpectedResponse extends Data.TaggedError(
+  "TrafficPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface TrafficPolicyProps {
   /**
@@ -112,7 +120,7 @@ export const TrafficPolicyProvider = () =>
       const getById = (trafficPolicyId: string) =>
         mm
           .getTrafficPolicy({ TrafficPolicyId: trafficPolicyId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listTrafficPolicies.pages({}).pipe(
@@ -139,11 +147,9 @@ export const TrafficPolicyProvider = () =>
 
       const toAttrs = Effect.fn(function* (policy: mm.GetTrafficPolicyResponse) {
         if (policy.TrafficPolicyArn === undefined) {
-          return yield* Effect.fail(
-            new Error(
-              `Mail Manager traffic policy '${policy.TrafficPolicyId}' returned without an ARN`,
-            ),
-          );
+          return yield* new TrafficPolicyUnexpectedResponse({
+            message: `Mail Manager traffic policy '${policy.TrafficPolicyId}' returned without an ARN`,
+          });
         }
         return {
           trafficPolicyId: policy.TrafficPolicyId,
@@ -206,16 +212,16 @@ export const TrafficPolicyProvider = () =>
                 MaxMessageSizeBytes: news.maxMessageSizeBytes,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             policy =
               created !== undefined
                 ? yield* getById(created.TrafficPolicyId)
                 : yield* observe(undefined, name);
           }
           if (policy === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager traffic policy '${name}' not found after create`),
-            );
+            return yield* new TrafficPolicyUnexpectedResponse({
+              message: `Mail Manager traffic policy '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED state against desired; apply only the

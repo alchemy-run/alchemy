@@ -66,7 +66,7 @@ export class HyperdriveConfigLookupNotFound extends Data.TaggedError(
   "HyperdriveConfigLookupNotFound",
 )<{
   message: string;
-  name: string;
+  configName: string;
   accountId: string;
 }> {}
 
@@ -155,7 +155,7 @@ export const lookup = (id: string, props: ConnectionLookupProps): ConnectionLook
       if (!match) {
         return yield* Effect.die(
           new HyperdriveConfigLookupNotFound({
-            name: props.name,
+            configName: props.name,
             accountId,
             message: `Hyperdrive configuration "${props.name}" not found in account ${accountId}`,
           }),

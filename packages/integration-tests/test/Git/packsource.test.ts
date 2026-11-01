@@ -17,7 +17,7 @@ import * as Zlib from "@alchemy.run/git/Protocol/Zlib";
 import { makeObjectStore } from "@alchemy.run/git/Store/ObjectStore";
 import { blobRandomAccess, sliceRandomAccess } from "@alchemy.run/git/Store/PackSource";
 import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

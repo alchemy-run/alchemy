@@ -5,11 +5,31 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class MWAAEnvironmentNotReady extends Data.TaggedError("MWAAEnvironmentNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MWAAEnvironmentOperationFailed extends Data.TaggedError(
+  "MWAAEnvironmentOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MWAAEnvironmentUnexpectedResponse extends Data.TaggedError(
+  "MWAAEnvironmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Per-module CloudWatch logging configuration for an MWAA {@link Environment}.
@@ -345,7 +365,7 @@ export const EnvironmentProvider = () =>
       const readEnvironment = Effect.fn(function* (name: string) {
         const response = yield* mwaa
           .getEnvironment({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Environment;
       });
 
@@ -366,23 +386,27 @@ export const EnvironmentProvider = () =>
       const waitForAvailable = Effect.fn(function* (name: string) {
         const policy = Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]);
         return yield* readEnvironment(name).pipe(
-          Effect.flatMap((env) => {
-            if (!env?.Arn) {
-              return Effect.fail(new Error(`Environment '${name}' not found`));
-            }
-            const status = env.Status ?? "CREATING";
-            if (FAILED_STATES.has(status)) {
-              return Effect.fail(
-                new Error(`Environment '${name}' reached terminal state '${status}'`),
-              );
-            }
-            if (status !== "AVAILABLE") {
-              return Effect.fail(
-                new Error(`Environment '${name}' not available (status: ${status})`),
-              );
-            }
-            return Effect.succeed(env);
-          }),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (env) {
+              if (!env?.Arn) {
+                return yield* new MWAAEnvironmentNotReady({
+                  message: `Environment '${name}' not found`,
+                });
+              }
+              const status = env.Status ?? "CREATING";
+              if (FAILED_STATES.has(status)) {
+                return yield* new MWAAEnvironmentOperationFailed({
+                  message: `Environment '${name}' reached terminal state '${status}'`,
+                });
+              }
+              if (status !== "AVAILABLE") {
+                return yield* new MWAAEnvironmentNotReady({
+                  message: `Environment '${name}' not available (status: ${status})`,
+                });
+              }
+              return env;
+            }),
+          ),
           Effect.retry({
             while: (e) => e instanceof Error && !e.message.includes("terminal state"),
             schedule: policy,
@@ -392,7 +416,9 @@ export const EnvironmentProvider = () =>
 
       const toAttrs = Effect.fn(function* (env: mwaa.Environment) {
         if (!env.Name || !env.Arn) {
-          return yield* Effect.fail(new Error(`Environment '${env.Name}' is missing its ARN`));
+          return yield* new MWAAEnvironmentUnexpectedResponse({
+            message: `Environment '${env.Name}' is missing its ARN`,
+          });
         }
         return {
           environmentName: env.Name,
@@ -666,17 +692,19 @@ export const EnvironmentProvider = () =>
           // DependencyViolation. Deletion typically takes 20-30 minutes;
           // budget ~45 min (90 * 30s). DELETE_FAILED stops immediately.
           yield* readEnvironment(name).pipe(
-            Effect.flatMap((env) => {
-              if (env === undefined || env.Status === "DELETED") return Effect.void;
-              if (env.Status === "DELETE_FAILED") {
-                return Effect.fail(
-                  new Error(`Environment '${name}' reached terminal state 'DELETE_FAILED'`),
-                );
-              }
-              return Effect.fail(
-                new Error(`Environment '${name}' still deleting (status: ${env.Status})`),
-              );
-            }),
+            Effect.flatMap(
+              Effect.fnUntraced(function* (env) {
+                if (env === undefined || env.Status === "DELETED") return;
+                if (env.Status === "DELETE_FAILED") {
+                  return yield* new MWAAEnvironmentOperationFailed({
+                    message: `Environment '${name}' reached terminal state 'DELETE_FAILED'`,
+                  });
+                }
+                return yield* new MWAAEnvironmentNotReady({
+                  message: `Environment '${name}' still deleting (status: ${env.Status})`,
+                });
+              }),
+            ),
             Effect.retry({
               while: (e) => e instanceof Error && !e.message.includes("terminal state"),
               schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]),

@@ -308,7 +308,7 @@ export const LocalClusterProvider = () =>
           detached: false,
           extendEnv: true,
         }).pipe(
-          spawner.spawn,
+          (command) => spawner.spawn(command),
           Effect.flatMap((child) =>
             Effect.all(
               {

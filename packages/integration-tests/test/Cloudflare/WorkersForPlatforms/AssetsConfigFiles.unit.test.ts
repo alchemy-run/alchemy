@@ -2,13 +2,13 @@ import {
   mergeAssetsConfigFiles,
   readAssetsConfigFiles,
 } from "@alchemy.run/cloudflare/Workers/Assets";
+import { expect, layer } from "@alchemy.run/test";
 import {
   putDispatchNamespaceScript,
   type PutDispatchNamespaceScriptRequest,
 } from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { buildRequest } from "@distilled.cloud/core/protocol-http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 
@@ -35,11 +35,13 @@ layer(NodeServices.layer)("dispatch asset configuration serialization", (it) => 
               },
             },
           };
-          const request = buildRequest({
-            input,
-            inputAst: putDispatchNamespaceScript.input.ast,
-            baseUrl: "https://api.cloudflare.com/client/v4",
-          });
+          const request = Effect.runSync(
+            buildRequest({
+              input,
+              inputAst: putDispatchNamespaceScript.input.ast,
+              baseUrl: "https://api.cloudflare.com/client/v4",
+            }),
+          );
           const form = (request.body as { formData: FormData }).formData;
           expect(JSON.parse(form.get("metadata") as string)).toEqual({
             main_module: "index.js",

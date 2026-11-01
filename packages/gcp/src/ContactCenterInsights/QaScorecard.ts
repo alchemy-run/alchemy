@@ -110,7 +110,7 @@ export const QaScorecard = Resource<QaScorecard>("GCP.ContactCenterInsights.QaSc
 export class QaScorecardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, qaScorecardId: string) =>
@@ -135,10 +135,10 @@ const toAttrs = (card: cci.GoogleCloudContactcenterinsightsV1QaScorecard, projec
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaScorecards({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsQaScorecards.pages({ parent, pageSize: 100 }).pipe(
@@ -221,7 +221,7 @@ export const QaScorecardProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaScorecardNotResolved({ name });
+        return yield* new QaScorecardNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

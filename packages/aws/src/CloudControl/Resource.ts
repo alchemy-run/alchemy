@@ -220,7 +220,7 @@ export const CloudControlResourceProvider = () =>
       const getResource = Effect.fn(function* (typeName: string, identifier: string) {
         return yield* cloudcontrol.getResource({ TypeName: typeName, Identifier: identifier }).pipe(
           Effect.map((r) => r.ResourceDescription),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -303,7 +303,7 @@ export const CloudControlResourceProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.ProgressEvent),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (deleted?.RequestToken !== undefined) {
             yield* waitForRequest(deleted.RequestToken, output.typeName).pipe(

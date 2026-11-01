@@ -103,7 +103,7 @@ export type BackupRun = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: true,
+ *   backup: { enabled: true },
  * });
  * const backup = yield* GCP.SQL.BackupRun("Nightly", {
  *   instance: instance.instanceName,
@@ -177,7 +177,7 @@ const toAttrs = (run: sqladmin.BackupRun, project: string, instance: string) => 
 
 const getById = (project: string, instance: string, backupRunId: string) =>
   backupRunId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : sqladmin
         .getBackupRuns({
           project,
@@ -185,7 +185,7 @@ const getById = (project: string, instance: string, backupRunId: string) =>
           id: backupRunId,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           recoverIfInstanceMissing(project, instance, () => undefined),
         );
 
@@ -369,9 +369,7 @@ export const BackupRunProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", (error) =>
               findByOwnership(env.project, instance, ownership).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(undefined) : Effect.fail(error),
-                ),
+                Effect.flatMap((existing) => (existing ? Effect.undefined : Effect.fail(error))),
               ),
             ),
             Effect.retry({

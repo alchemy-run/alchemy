@@ -13,6 +13,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { StreamArn } from "./Stream.ts";
 
+export class StreamConsumerUnexpectedResponse extends Data.TaggedError(
+  "StreamConsumerUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ConsumerName = string;
 
 export type ConsumerArn = string;
@@ -138,7 +145,7 @@ const readConsumer = Effect.fn(function* ({
       ConsumerName: consumerName,
       ConsumerARN: consumerArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   if (!response) {
     return undefined;
@@ -182,10 +189,11 @@ const adoptExistingConsumer = Effect.fn(function* (streamArn: string, consumerNa
     }),
     Effect.catchTag("ConsumerRegistryNotConsistent", () =>
       Effect.fail(
-        new Error(
-          `consumer ${consumerName} exists but could not be read after ` +
+        new StreamConsumerUnexpectedResponse({
+          message:
+            `consumer ${consumerName} exists but could not be read after ` +
             `~10s of registry-consistency retries`,
-        ),
+        }),
       ),
     ),
   );
@@ -312,7 +320,9 @@ export const StreamConsumerProvider = () =>
           consumerName,
         });
         if (state === undefined) {
-          return yield* Effect.fail(new Error(`failed to read created consumer ${consumerName}`));
+          return yield* new StreamConsumerUnexpectedResponse({
+            message: `failed to read created consumer ${consumerName}`,
+          });
         }
       }
 
@@ -346,7 +356,9 @@ export const StreamConsumerProvider = () =>
         consumerArn: state.consumerArn,
       });
       if (!final) {
-        return yield* Effect.fail(new Error(`failed to read reconciled consumer ${consumerName}`));
+        return yield* new StreamConsumerUnexpectedResponse({
+          message: `failed to read reconciled consumer ${consumerName}`,
+        });
       }
 
       yield* session.note(final.consumerArn);
@@ -410,7 +422,7 @@ export const StreamConsumerProvider = () =>
               tags: toTagRecord(tagsResponse.Tags),
             })),
             // A consumer may be deregistered between list and tag fetch.
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

@@ -3,10 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { sameStringSet } from "./internal.ts";
+
+export class DAXSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "DAXSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SubnetGroupProps {
   /**
@@ -87,7 +95,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeSubnetGroups({ SubnetGroupNames: [name] })
-          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.SubnetGroups?.[0];
       });
 
@@ -141,9 +149,9 @@ export const SubnetGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`DAX subnet group '${name}' not found after create`),
-            );
+            return yield* new DAXSubnetGroupUnexpectedResponse({
+              message: `DAX subnet group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — apply description / subnet delta from OBSERVED state.

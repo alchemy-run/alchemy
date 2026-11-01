@@ -5,7 +5,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Credentials } from "../Credentials.ts";
 import type { Providers } from "../Providers.ts";
@@ -84,7 +83,7 @@ export const KvRoutesUpdateProvider = () =>
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
           .getKey({ KvsARN: store, Key: fullKey })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
         if (!res) {
           return { routes: [] as string[], chunkNum: 1 };
@@ -231,7 +230,17 @@ export const KvRoutesUpdateProvider = () =>
         list: () => Effect.succeed([]),
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
-            return output;
+            if (output === undefined) return undefined;
+            // The managed state is one entry in the route table: report the
+            // update missing when the entry is gone so drift re-adds it.
+            const { routes } = yield* retryForKvsReadiness(
+              getRoutes(output.store, `${output.namespace}:${output.key}`),
+            ).pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({ routes: [] as string[] }),
+              ),
+            );
+            return routes.includes(output.entry) ? output : undefined;
           }),
         ),
         reconcile: withKvsRegionFn(

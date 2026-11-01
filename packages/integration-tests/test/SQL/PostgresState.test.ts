@@ -1,6 +1,6 @@
 import { makePostgresState, type PostgresStateOptions } from "@alchemy.run/sql/PostgresState";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as PgClient from "@effect/sql-pg/PgClient";
-import { describe, expect, it } from "alchemy-test";
 import { StateStoreError, type StateService } from "alchemy/State/State";
 import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";
@@ -247,6 +247,7 @@ const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
   const client = SqlClient.make({
     acquirer,
     compiler: PgClient.makeCompiler(),
+    driver: "pg",
     spanAttributes: [],
   }).pipe(Effect.provide(Reactivity.layer));
 

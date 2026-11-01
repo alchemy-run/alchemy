@@ -2,8 +2,9 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import { Screen, type ScreenController } from "../../../Interaction.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import {
   ChoiceGroup,
   Box,

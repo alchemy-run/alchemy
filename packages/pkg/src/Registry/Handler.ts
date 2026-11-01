@@ -119,7 +119,9 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
     data.status !== "in_progress" ||
     (data.run_attempt !== undefined && data.run_attempt !== ref.attempt)
   ) {
-    return yield* RunNotInProgress.make({ message: "run is not in progress" });
+    return yield* RunNotInProgress.make({
+      message: `run is not in progress: GitHub reports run ${ref.runId} as ${data.status}, attempt ${data.run_attempt ?? "unknown"}; the request is from attempt ${ref.attempt}`,
+    });
   }
   if (data.event !== "push" && data.event !== "pull_request") {
     return yield* BadRequest.make({
@@ -189,7 +191,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+  const manifest = yield* Schema.decodeEffect(ManifestJson)(manifestText).pipe(
     Effect.mapError((e) => BadRequest.make({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's

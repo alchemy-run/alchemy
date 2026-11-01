@@ -37,9 +37,12 @@ export interface ViteProps extends Omit<
   "env" | "timeout"
 > {
   /**
-   * Environment variables for the production build. Vite inlines
-   * `VITE_*` variables into the client bundle (`import.meta.env`), so
-   * values can come from other resources' `Output`s.
+   * Environment variables for the Vite process: the production build on
+   * deploy, and the dev server under `alchemy dev`. Values can come from
+   * other resources' `Output`s, and every entry is readable from
+   * `process.env` in `vite.config.*` (e.g. a dev `server.proxy` target).
+   * Only `VITE_*` variables reach the client bundle (`import.meta.env`).
+   * Changing a value restarts the dev server.
    */
   env?: Record<string, any>;
   /**
@@ -190,6 +193,16 @@ export const viteFrameworkOptions = (
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
  * // dev server (HMR included); no bucket or distribution is created.
  * const site = yield* AWS.Website.Vite("Web");
+ * ```
+ *
+ * **Example:** Dev Proxy to Another Resource
+ * ```typescript
+ * // `env` reaches the dev server's process, so vite.config.ts can read
+ * // a value resolved from another resource:
+ * //   server: { proxy: { "/api": process.env.API_URL! } }
+ * const site = yield* AWS.Website.Vite("Web", {
+ *   env: { API_URL: api.functionUrl },
+ * });
  * ```
  *
  * @resource

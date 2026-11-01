@@ -3,9 +3,9 @@ import { AllowList } from "@alchemy.run/aws/Macie2/AllowList";
 import { CustomDataIdentifier } from "@alchemy.run/aws/Macie2/CustomDataIdentifier";
 import { FindingsFilter } from "@alchemy.run/aws/Macie2/FindingsFilter";
 import { Session } from "@alchemy.run/aws/Macie2/Session";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as macie2 from "@distilled.cloud/aws/macie2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeMacie2TestLease } from "./TestLease.ts";
 

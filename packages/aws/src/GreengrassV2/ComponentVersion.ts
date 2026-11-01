@@ -180,7 +180,7 @@ export const ComponentVersionProvider = () =>
       const observeComponent = (arn: string) =>
         greengrassv2
           .describeComponent({ arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       return ComponentVersion.Provider.of({
         stables: ["arn", "componentName", "componentVersion"],
@@ -264,8 +264,9 @@ export const ComponentVersionProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                Effect.catchTag(["ConflictException", "RequestAlreadyInProgressException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ConflictException", "RequestAlreadyInProgressException"],
+                  () => Effect.undefined,
                 ),
               );
             // Wait until the cloud marks the version DEPLOYABLE (bounded ~30s;

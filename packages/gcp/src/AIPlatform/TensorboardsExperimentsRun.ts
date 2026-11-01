@@ -101,7 +101,7 @@ export const TensorboardsExperimentsRun = Resource<TensorboardsExperimentsRun>(
 export class TensorboardsExperimentsRunNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentsRunNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -128,10 +128,10 @@ const toAttrs = (run: aiplatform.GoogleCloudAiplatformV1TensorboardRun, project:
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboardsExperimentsRuns({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listTensorboards = (project: string, location: string) =>
   aiplatform.listProjectsLocationsTensorboards
@@ -241,7 +241,7 @@ export const TensorboardsExperimentsRunProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TensorboardsExperimentsRunNotResolved({ name });
+        return yield* new TensorboardsExperimentsRunNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -279,7 +279,7 @@ export const TensorboardsExperimentsRunProvider = () =>
         .deleteProjectsLocationsTensorboardsExperimentsRuns({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

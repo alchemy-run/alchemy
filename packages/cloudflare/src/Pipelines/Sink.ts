@@ -572,8 +572,8 @@ const getSink = (accountId: string, sinkId: string) =>
   pipelines.getSink({ accountId, sinkId }).pipe(
     Effect.map((s): ObservedSink | undefined => s),
     Effect.catchTags({
-      SinkNotFound: () => Effect.succeed(undefined),
-      InvalidSinkId: () => Effect.succeed(undefined),
+      SinkNotFound: () => Effect.undefined,
+      InvalidSinkId: () => Effect.undefined,
     }),
   );
 

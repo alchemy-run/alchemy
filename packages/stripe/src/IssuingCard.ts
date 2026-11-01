@@ -418,11 +418,11 @@ const isIssuingUnavailable = (error: StripeOpError): boolean =>
 const getById = (card: string) =>
   GetIssuingCard({ card }).pipe(
     Effect.map((live) => (live.status === "canceled" ? undefined : live)),
-    Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingCard, () => Effect.undefined),
   );
 
 const getByIdAny = (card: string) =>
-  GetIssuingCard({ card }).pipe(Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)));
+  GetIssuingCard({ card }).pipe(Effect.catchIf(isMissingCard, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: "active" | "inactive") {
   const cards: StripeIssuingCard[] = [];

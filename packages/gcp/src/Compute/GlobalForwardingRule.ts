@@ -405,7 +405,7 @@ const toInsertBody = (
 const getByName = (project: string, forwardingRule: string) =>
   compute
     .getGlobalForwardingRules({ project, forwardingRule })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, forwardingRuleName: string) =>
   getByName(project, forwardingRuleName).pipe(
@@ -590,9 +590,7 @@ export const GlobalForwardingRuleProvider = () =>
         current = created ?? undefined;
         if (current === undefined) {
           current = yield* awaitResource(env.project, forwardingRuleName).pipe(
-            Effect.catchTag("GCP.Compute.GlobalForwardingRulePending", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.Compute.GlobalForwardingRulePending", () => Effect.undefined),
           );
         }
       }

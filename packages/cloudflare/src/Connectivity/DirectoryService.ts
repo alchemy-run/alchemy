@@ -414,7 +414,7 @@ const createServiceName = (id: string, name: string | undefined) =>
 const getService = (accountId: string, serviceId: string) =>
   connectivity
     .getDirectoryService({ accountId, serviceId })
-    .pipe(Effect.catchTag("VpcServiceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("VpcServiceNotFound", () => Effect.undefined));
 
 /**
  * Find a directory service by its (account-unique) name.

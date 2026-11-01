@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,13 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class IngressPointUnexpectedResponse extends Data.TaggedError(
+  "IngressPointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface IngressPointProps {
   /**
@@ -141,7 +149,7 @@ export const IngressPointProvider = () =>
       const getById = (ingressPointId: string) =>
         mm
           .getIngressPoint({ IngressPointId: ingressPointId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listIngressPoints.pages({}).pipe(
@@ -176,11 +184,9 @@ export const IngressPointProvider = () =>
 
       const toAttrs = Effect.fn(function* (ingress: mm.GetIngressPointResponse) {
         if (ingress.IngressPointArn === undefined) {
-          return yield* Effect.fail(
-            new Error(
-              `Mail Manager ingress point '${ingress.IngressPointId}' returned without an ARN`,
-            ),
-          );
+          return yield* new IngressPointUnexpectedResponse({
+            message: `Mail Manager ingress point '${ingress.IngressPointId}' returned without an ARN`,
+          });
         }
         return {
           ingressPointId: ingress.IngressPointId,
@@ -267,16 +273,16 @@ export const IngressPointProvider = () =>
                 TlsPolicy: news.tlsPolicy,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             ingress =
               created !== undefined
                 ? yield* getById(created.IngressPointId)
                 : yield* observe(undefined, name);
           }
           if (ingress === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager ingress point '${name}' not found after create`),
-            );
+            return yield* new IngressPointUnexpectedResponse({
+              message: `Mail Manager ingress point '${name}' not found after create`,
+            });
           }
 
           // Provisioning is asynchronous — settle before mutating.

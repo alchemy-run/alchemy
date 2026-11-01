@@ -1,6 +1,8 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -10,7 +12,8 @@ import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
-import { dedupeBindings } from "@/Diff";
+import { dedupeBindings, isResolved } from "@/Diff";
+import { onEvent, type Event } from "@/Events.ts";
 import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -19,7 +22,6 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Progress, type ProgressEvent } from "@/Report.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
@@ -31,7 +33,6 @@ import {
   type ResourceState,
   type ResourceStatus,
 } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { hashInput } from "@/Util/sha256";
 import {
   AliasedWidget,
@@ -48,6 +49,8 @@ import {
   OverrideStablesResource,
   ProbeBinding,
   Queue,
+  ResourceFailure,
+  StaticStablesResource,
   TestLayers,
   TestResource,
   TestResourceHooks,
@@ -592,7 +595,7 @@ test(
 );
 
 test(
-  "reports each diffed resource and action through the ambient Progress reporter",
+  "reports each diffed resource and action as events",
   Effect.gen(function* () {
     yield* seed({
       A: {
@@ -610,7 +613,7 @@ test(
       },
     });
     const Announce = Action("Announce", (_: { table: string }) => Effect.succeed(1));
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     yield* Effect.gen(function* () {
       const target = yield* BindingTarget("A", { name: "target" });
       yield* target.bind("TestBinding", { env: { FEATURE_FLAG: "on" } });
@@ -618,7 +621,7 @@ test(
       yield* Announce({ table: "users" });
     }).pipe(
       makePlan,
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -626,40 +629,40 @@ test(
     );
 
     // Phase markers land before any node event: state loads, then diffing.
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    expect(events[0]).toMatchObject({ _tag: "plan.phase", phase: "loading-state" });
-    expect(events[1]).toMatchObject({ _tag: "plan.phase", phase: "computing-plan" });
+    expect(events[0]).toMatchObject({ type: "plan.phase", phase: "loading-state" });
+    expect(events[1]).toMatchObject({ type: "plan.phase", phase: "computing-plan" });
 
     // Each resource diff announces its start before the planned completion.
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.started")
+        .filter((event) => event.type === "plan.resource.started")
         .map(({ logicalId }) => logicalId)
         .sort(),
     ).toEqual(["A", "MyQueue"]);
 
     const nodes = events.filter(
-      (event) => event._tag === "plan.resource.completed" || event._tag === "plan.action.completed",
+      (event) => event.type === "plan.resource.completed" || event.type === "plan.action.completed",
     );
     const byId = Object.fromEntries(nodes.map((event) => [event.logicalId, event]));
     // resource rows carry their binding rows across the wire
     expect(byId.A).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "update",
       bindings: [{ sid: "TestBinding", action: "create" }],
       total: 2,
     });
     expect(byId.MyQueue).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       action: "create",
       bindings: [],
       total: 2,
     });
     // stack actions get their own events
     expect(byId.Announce).toMatchObject({
-      _tag: "plan.action.completed",
+      type: "plan.action.completed",
       actionType: "Announce",
       action: "run",
       completed: 1,
@@ -667,7 +670,7 @@ test(
     });
     expect(
       events
-        .filter((event) => event._tag === "plan.resource.completed")
+        .filter((event) => event.type === "plan.resource.completed")
         .map(({ completed }) => completed)
         .sort(),
     ).toEqual([1, 2]);
@@ -676,7 +679,7 @@ test(
 );
 
 test(
-  "destroy plans report deletions through the ambient Progress reporter",
+  "destroy plans report deletions as events",
   Effect.gen(function* () {
     yield* seed({
       MyBucket: {
@@ -693,10 +696,10 @@ test(
         downstream: [],
       },
     });
-    const events: Array<ProgressEvent> = [];
+    const events: Array<Event> = [];
     const { name, stage } = yield* resolveStackId;
     const plan = yield* Plan.destroy({ name, stage }).pipe(
-      Effect.provideService(Progress, (event) =>
+      onEvent((event) =>
         Effect.sync(() => {
           events.push(event);
         }),
@@ -705,13 +708,13 @@ test(
     );
 
     expect(plan.deletions.MyBucket).toMatchObject({ action: "delete" });
-    expect(events.filter((event) => event._tag === "plan.phase").map(({ phase }) => phase)).toEqual(
+    expect(events.filter((event) => event.type === "plan.phase").map(({ phase }) => phase)).toEqual(
       ["loading-state", "computing-plan"],
     );
-    const nodes = events.filter((event) => event._tag === "plan.resource.completed");
+    const nodes = events.filter((event) => event.type === "plan.resource.completed");
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({
-      _tag: "plan.resource.completed",
+      type: "plan.resource.completed",
       fqn: "MyBucket",
       logicalId: "MyBucket",
       resourceType: "Test.Bucket",
@@ -3241,6 +3244,416 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
       expect(plan.resources.FreshBucket!.action).toBe("create");
     }),
   );
+
+  // A replacement targets a new physical identity. Plan never probes it (its
+  // props may still resolve during apply); it hands apply the effective
+  // adoption policy as `deferredAdoption` so the probe runs before mutation.
+  const replaceable = (fqn: string, overrides?: Partial<ResourceState>): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created",
+      props: { replaceString: "old" },
+      attr: { ...ownedAttrs, replaceString: "old" },
+      downstream: [],
+      bindings: [],
+      ...overrides,
+    }) as ResourceState;
+
+  const trackedReads = () => {
+    const reads: string[] = [];
+    const readHook = (id: string) =>
+      Effect.sync(() => {
+        reads.push(id);
+        return undefined;
+      });
+    return { reads, readHook };
+  };
+
+  const policies = [
+    { global: undefined, scoped: undefined, adopt: false },
+    { global: true, scoped: undefined, adopt: true },
+    { global: false, scoped: true, adopt: true },
+    { global: true, scoped: false, adopt: false },
+  ] as const;
+  for (const { global, scoped, adopt: expected } of policies) {
+    test(
+      `a replacement defers admission to apply (global=${global}, scoped=${scoped})`,
+      Effect.gen(function* () {
+        yield* seed({ R: replaceable("R") });
+        const { reads, readHook } = trackedReads();
+        const plan = yield* makeAdoptPlan(
+          Effect.gen(function* () {
+            const r = TestResource("R", { replaceString: "new" });
+            yield* scoped === undefined ? r : r.pipe(adopt(scoped));
+          }),
+          { adopt: global, readHook },
+        );
+        expect(reads).toEqual([]);
+        expect(plan.resources.R).toMatchObject({
+          action: "replace",
+          deferredAdoption: { adopt: expected },
+        });
+      }),
+    );
+  }
+
+  test(
+    "updates and noops never defer admission",
+    Effect.gen(function* () {
+      yield* seed({
+        Updated: replaceable("Updated", { props: { string: "a" } }),
+        Unchanged: replaceable("Unchanged", { props: { string: "a" } }),
+      });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Updated", { string: "b" });
+          yield* TestResource("Unchanged", { string: "a" });
+        }),
+        {},
+      );
+      expect(plan.resources.Updated!.action).toBe("update");
+      expect(plan.resources.Unchanged!.action).toBe("noop");
+      expect((plan.resources.Updated as any).deferredAdoption).toBeUndefined();
+      expect((plan.resources.Unchanged as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a replacement of a provider without `read` has nothing to admit",
+    Effect.gen(function* () {
+      yield* seed({
+        R: replaceable("R", {
+          resourceType: "Test.StaticStablesResource",
+          attr: { string: "s", tags: {}, stableId: "id", stableArn: "arn", replaceString: "old" },
+        }),
+      });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* StaticStablesResource("R", { replaceString: "new" });
+        }),
+        {},
+      );
+      expect(plan.resources.R!.action).toBe("replace");
+      expect((plan.resources.R as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a replacement of a reused FQN never probes its predecessor's identity",
+    Effect.gen(function* () {
+      yield* seed({ R: replaceable("R", { adoptionBlocked: "migrated-fqn" }) });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("R", { replaceString: "new" });
+        }),
+        { adopt: true },
+      );
+      expect(plan.resources.R).toMatchObject({
+        action: "replace",
+        adoptionBlocked: "migrated-fqn",
+      });
+      expect((plan.resources.R as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+});
+
+// A delete-first replacement in a cycle deletes its previous generation before
+// precreate. While its identity is unresolved, ownership cannot be checked
+// first, so plan refuses it unless adoption is allowed.
+describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
+  interface Cyclic extends Resource<
+    "Test.CyclicDeleteFirst",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Cyclic = Resource<Cyclic>("Test.CyclicDeleteFirst");
+  /** `Cyclic` without `read`: it has no ownership to check. */
+  interface Unread extends Resource<
+    "Test.CyclicDeleteFirstUnread",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Unread = Resource<Unread>("Test.CyclicDeleteFirstUnread");
+  /** `Cyclic` with `observe`: it checks ownership before precreate. */
+  interface Observed extends Resource<
+    "Test.CyclicDeleteFirstObserved",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Observed = Resource<Observed>("Test.CyclicDeleteFirstObserved");
+  class Knobs extends Context.Service<
+    Knobs,
+    {
+      /** The diff's action for a changed name. */
+      action: "replace" | "update";
+      deleteFirst: boolean;
+      /** Reconcile fails after precreate, leaving a `replacing` row with attrs. */
+      crash: boolean;
+      reads: string[];
+    }
+  >()("CyclicDeleteFirstKnobs") {}
+  const diff = Effect.fn(function* ({
+    olds,
+    news,
+  }: {
+    olds: { name: string };
+    news: Input<{ name: string }>;
+  }) {
+    if (isResolved(news) && olds.name === news.name) return undefined;
+    const knobs = yield* Knobs;
+    return knobs.action === "update"
+      ? ({ action: "update" } as const)
+      : ({ action: "replace", deleteFirst: knobs.deleteFirst } as const);
+  });
+  const precreate = Effect.fn(function* ({ news }: { news: InputProps<{ name: string }> }) {
+    return { name: typeof news.name === "string" ? news.name : "pending" };
+  });
+  const reconcile = Effect.fn(function* ({ news }: { news: { name: string } }) {
+    if ((yield* Knobs).crash) return yield* new ResourceFailure();
+    return { name: news.name };
+  });
+  const providers = Layer.mergeAll(
+    Provider.succeed(Cyclic, {
+      diff,
+      read: Effect.fn(function* ({ olds }) {
+        (yield* Knobs).reads.push(String(olds?.name));
+        return undefined;
+      }),
+      precreate,
+      reconcile,
+      delete: () => Effect.void,
+    }),
+    Provider.succeed(Unread, { diff, precreate, reconcile, delete: () => Effect.void }),
+    Provider.succeed(Observed, {
+      diff,
+      read: () => Effect.succeed(undefined),
+      observe: () => Effect.succeed(undefined),
+      precreate,
+      reconcile,
+      delete: () => Effect.void,
+    }),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Knobs,
+        Effect.sync(() => ({
+          action: "replace" as const,
+          deleteFirst: false,
+          crash: false,
+          reads: [] as string[],
+        })),
+      ),
+    ),
+  );
+  const { test } = Test.make({
+    providers: Layer.mergeAll(providers, TestLayers()),
+    state: freshState,
+  });
+
+  /**
+   * `Subject`'s name comes from `Name`, which is updated in the same deploy.
+   * In a cycle, `Name` is a peer bound back to `Subject`, so the name is
+   * still unresolved when `Subject` precreates; with `outside`, or outside a
+   * cycle, `Name` is an ordinary upstream.
+   */
+  const subject = (
+    name: string,
+    opts: {
+      cycle?: boolean;
+      outside?: boolean;
+      resolved?: boolean;
+      unread?: boolean;
+      observed?: boolean;
+      adopt?: boolean;
+    } = {},
+  ) =>
+    Effect.gen(function* () {
+      const cycle = opts.cycle ?? true;
+      const peer =
+        cycle && !opts.outside ? yield* BindingTarget("Name", { string: name }) : undefined;
+      const source = peer ?? (yield* TestResource("Name", { string: name }));
+      const props = { name: opts.resolved ? name : source.string };
+      const scoped = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
+      const resource = opts.unread
+        ? yield* scoped(Unread("Subject", props))
+        : opts.observed
+          ? yield* scoped(Observed("Subject", props))
+          : yield* scoped(Cyclic("Subject", props));
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      if (peer) yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
+      return resource;
+    });
+
+  const setup = Effect.fn(function* (
+    stack: Test.ScratchStack,
+    opts?: { unread?: boolean; observed?: boolean },
+  ) {
+    const knobs = yield* Knobs;
+    yield* stack.destroy();
+    Object.assign(knobs, { action: "replace", deleteFirst: false, crash: false });
+    yield* stack.deploy(subject("old", opts));
+    knobs.deleteFirst = true;
+    knobs.reads.length = 0;
+    return knobs;
+  });
+
+  const refusing = [
+    { global: undefined, scoped: undefined },
+    { global: true, scoped: false },
+  ] as const;
+  for (const { global, scoped } of refusing) {
+    test.provider(
+      `refuses an unresolved cyclic delete-first replacement (global=${global}, scoped=${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const knobs = yield* setup(stack);
+          const error = yield* stack
+            .plan(subject("fresh", { adopt: scoped }))
+            .pipe(
+              global === undefined
+                ? (effect) => effect
+                : Effect.provideService(AdoptPolicy, global),
+              Effect.flip,
+            );
+          expect(error).toMatchObject({
+            _tag: "UnverifiableReplacement",
+            resourceType: "Test.CyclicDeleteFirst",
+            logicalId: "Subject",
+          });
+          expect(knobs.reads).toEqual([]);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  const admitting = [
+    { global: true, scoped: undefined },
+    { global: false, scoped: true },
+  ] as const;
+  for (const { global, scoped } of admitting) {
+    test.provider(
+      `adoption lets an unresolved cyclic delete-first replacement through (global=${global}, scoped=${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* setup(stack);
+          const plan = yield* stack
+            .plan(subject("fresh", { adopt: scoped }))
+            .pipe(Effect.provideService(AdoptPolicy, global));
+          expect(plan.resources.Subject).toMatchObject({
+            action: "replace",
+            deleteFirst: true,
+            deferredAdoption: { adopt: true },
+          });
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  const unaffected = [
+    {
+      label: "a create-first replacement",
+      prepare: (knobs: Knobs["Service"]) => (knobs.deleteFirst = false),
+      program: subject("fresh"),
+      deleteFirst: false,
+    },
+    {
+      label: "a resolved name, admitted in apply before the delete",
+      prepare: () => {},
+      program: subject("fresh", { resolved: true }),
+      deleteFirst: true,
+    },
+    {
+      label: "a name from outside the cycle, admitted in apply before the delete",
+      prepare: () => {},
+      program: subject("fresh", { outside: true }),
+      deleteFirst: true,
+    },
+    {
+      label: "a replacement outside a cycle, which deletes after its upstreams resolve",
+      prepare: () => {},
+      program: subject("fresh", { cycle: false }),
+      deleteFirst: true,
+    },
+  ];
+  for (const { label, prepare, program, deleteFirst } of unaffected) {
+    test.provider(`plans ${label}`, (stack) =>
+      Effect.gen(function* () {
+        prepare(yield* setup(stack));
+        const plan = yield* stack.plan(program);
+        expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst });
+        yield* stack.destroy();
+      }),
+    );
+  }
+
+  test.provider(
+    "plans a provider with `observe`, which checks ownership before the delete",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* setup(stack, { observed: true });
+        const plan = yield* stack.plan(subject("fresh", { observed: true }));
+        expect(plan.resources.Subject).toMatchObject({
+          action: "replace",
+          deleteFirst: true,
+          deferredAdoption: { adopt: false },
+        });
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("plans a provider without `read`, which has no ownership to check", (stack) =>
+    Effect.gen(function* () {
+      yield* setup(stack, { unread: true });
+      const plan = yield* stack.plan(subject("fresh", { unread: true }));
+      expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst: true });
+      expect((plan.resources.Subject as any).deferredAdoption).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  );
+
+  /** Leaves `Subject` mid-replacement, holding its precreated identity. */
+  const interrupted = Effect.fn(function* (stack: Test.ScratchStack) {
+    const knobs = yield* setup(stack);
+    knobs.crash = true;
+    yield* stack
+      .deploy(subject("fresh").pipe(adopt(true)))
+      .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+    knobs.crash = false;
+    return knobs;
+  });
+
+  test.provider("resumes a replacement that already holds its precreated identity", (stack) =>
+    Effect.gen(function* () {
+      const knobs = yield* interrupted(stack);
+      knobs.action = "update";
+      // `Name` changes again, so the identity is unresolved at plan time.
+      const plan = yield* stack.plan(subject("again"));
+      expect(plan.resources.Subject).toMatchObject({
+        action: "replace",
+        state: { status: "replacing", attr: { name: "pending" } },
+      });
+      expect((plan.resources.Subject as any).restart).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("refuses restarting a replacement onto an unresolved identity", (stack) =>
+    Effect.gen(function* () {
+      yield* interrupted(stack);
+      const error = yield* stack.plan(subject("again")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnverifiableReplacement" });
+      yield* stack.destroy();
+    }),
+  );
 });
 
 describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
@@ -3645,6 +4058,84 @@ describe("read is never handed unresolved persisted props", { tags: ["unit", "lo
       ).pipe(Effect.provide(layer));
       expect(reads).toContain("Half");
       expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+
+  // `propsIncomplete`: Apply stripped unresolved props from this attr-less
+  // checkpoint, so the remaining props can identify a different resource.
+  const incomplete = (fqn: string, props: Record<string, unknown>): ResourceState => ({
+    ...creatingWithUnresolvedProps(fqn),
+    props,
+    propsIncomplete: true,
+  });
+
+  test(
+    "an incomplete creating row skips the read probe and defers admission to apply",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "create",
+        props: { string: "resolved" },
+        deferredAdoption: { adopt: false },
+      });
+    }),
+  );
+
+  test(
+    "an incomplete creating row carries a scoped adopt(true) into deferred admission",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved" }).pipe(adopt(true));
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "create",
+        deferredAdoption: { adopt: true },
+      });
+    }),
+  );
+
+  test(
+    "an incomplete creating row still diffs: an immutable change plans a replacement",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { replaceString: "old" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { replaceString: "new" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "replace",
+        props: { replaceString: "new" },
+        state: { status: "creating", propsIncomplete: true },
+      });
+    }),
+  );
+
+  test(
+    "destroy of an incomplete creating row hands apply the marker without probing",
+    Effect.gen(function* () {
+      yield* seed({ Zombie: incomplete("Zombie", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.deletions.Zombie).toMatchObject({
+        action: "delete",
+        state: { status: "creating", attr: undefined, propsIncomplete: true },
+      });
     }),
   );
 });

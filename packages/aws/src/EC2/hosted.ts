@@ -11,6 +11,7 @@ import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runti
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
@@ -18,6 +19,16 @@ import { Assets } from "../Assets.ts";
 import { roleHostBundle } from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+
+export class EC2HostedInvalidProps extends Data.TaggedError("EC2HostedInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EC2HostedConflict extends Data.TaggedError("EC2HostedConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Binding contract accepted by EC2-hosted runtimes: environment variables and
@@ -28,6 +39,35 @@ export interface Ec2HostedBinding {
   env?: Record<string, any>;
   /** IAM policy statements attached to the instance profile role. */
   policyStatements?: PolicyStatement[];
+}
+
+/**
+ * Instance Metadata Service (IMDS) options for launched instances. Unset
+ * fields keep the AMI / account defaults.
+ */
+export interface InstanceMetadataOptions {
+  /**
+   * `required` enforces IMDSv2 (session tokens); `optional` also allows
+   * IMDSv1.
+   */
+  httpTokens?: "required" | "optional";
+  /**
+   * Maximum hops for the IMDS PUT response, 1-64. `1` keeps containers on
+   * the host from reaching the instance role's credentials.
+   */
+  httpPutResponseHopLimit?: number;
+  /**
+   * Whether the metadata endpoint is reachable at all.
+   */
+  httpEndpoint?: "enabled" | "disabled";
+  /**
+   * Whether the IPv6 metadata endpoint is enabled.
+   */
+  httpProtocolIpv6?: "enabled" | "disabled";
+  /**
+   * Whether instance tags are readable from the metadata service.
+   */
+  instanceMetadataTags?: "enabled" | "disabled";
 }
 
 /**
@@ -57,6 +97,8 @@ export interface Ec2HostedProps extends PlatformProps {
   availabilityZone?: string;
   /** Tags applied to the instance. */
   tags?: Record<string, string>;
+  /** Instance Metadata Service options applied at launch. */
+  metadataOptions?: InstanceMetadataOptions;
   /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
   /** Named export of the handler within `main`. */
@@ -156,9 +198,9 @@ export const createEc2HostedSupport = ({
 
   const bundleProgram = Effect.fn(function* (id: string, props: Ec2HostedProps) {
     if (!props.main) {
-      return yield* Effect.fail(
-        new Error(`${resourceType} '${id}' requires 'main' when bundling a hosted process`),
-      );
+      return yield* new EC2HostedInvalidProps({
+        message: `${resourceType} '${id}' requires 'main' when bundling a hosted process`,
+      });
     }
 
     const handler = props.handler ?? "default";
@@ -399,7 +441,10 @@ systemctl enable --now ${unitName}.service
           iam.getRole({ RoleName: roleName }).pipe(
             Effect.filterOrFail(
               (existing) => hasTags(tags, existing.Role?.Tags),
-              () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+              () =>
+                new EC2HostedConflict({
+                  message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                }),
             ),
           ),
         ),
@@ -561,11 +606,9 @@ systemctl enable --now ${unitName}.service
     }
 
     if (news.instanceProfileName && (news.roleManagedPolicyArns?.length ?? 0) > 0) {
-      return yield* Effect.fail(
-        new Error(
-          `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
-        ),
-      );
+      return yield* new EC2HostedInvalidProps({
+        message: `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
+      });
     }
 
     const { region } = yield* AWSEnvironment.current;
@@ -604,11 +647,9 @@ systemctl enable --now ${unitName}.service
       });
       const role = profile.InstanceProfile.Roles?.[0];
       if (!role?.RoleName) {
-        return yield* Effect.fail(
-          new Error(
-            `Instance profile '${news.instanceProfileName}' must have a role attached for host mode`,
-          ),
-        );
+        return yield* new EC2HostedInvalidProps({
+          message: `Instance profile '${news.instanceProfileName}' must have a role attached for host mode`,
+        });
       }
       roleName = role.RoleName;
       roleArn = role.Arn;
@@ -785,6 +826,7 @@ systemctl enable --now ${unitName}.service
       | "privateIpAddress"
       | "availabilityZone"
       | "tags"
+      | "metadataOptions"
     >,
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -819,6 +861,15 @@ systemctl enable --now ${unitName}.service
           ? network.groups
           : undefined,
       PrivateIpAddress: network.usePrimaryNetworkInterface ? undefined : news.privateIpAddress,
+      MetadataOptions: news.metadataOptions
+        ? {
+            HttpTokens: news.metadataOptions.httpTokens,
+            HttpPutResponseHopLimit: news.metadataOptions.httpPutResponseHopLimit,
+            HttpEndpoint: news.metadataOptions.httpEndpoint,
+            HttpProtocolIpv6: news.metadataOptions.httpProtocolIpv6,
+            InstanceMetadataTags: news.metadataOptions.instanceMetadataTags,
+          }
+        : undefined,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [

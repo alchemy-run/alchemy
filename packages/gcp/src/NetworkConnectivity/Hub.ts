@@ -174,16 +174,16 @@ export type Hub = Resource<
 export const Hub = Resource<Hub>("GCP.NetworkConnectivity.Hub");
 
 export class HubNotResolved extends Data.TaggedError("GCP.NetworkConnectivity.HubNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class HubFailed extends Data.TaggedError("GCP.NetworkConnectivity.HubFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class HubStillExists extends Data.TaggedError("GCP.NetworkConnectivity.HubStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -281,7 +281,7 @@ const toAttrs = (hub: networkconnectivity.Hub, project: string) => {
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsGlobalHubs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
@@ -295,15 +295,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (hub): hub is networkconnectivity.Hub => hub !== undefined,
-      () => new HubNotResolved({ name }),
+      () => new HubNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (hub) => hub.state !== "FAILED" && hub.state !== "OBSOLETE",
-      (hub) => new HubFailed({ name, state: hub.state }),
+      (hub) => new HubFailed({ resourceName: name, state: hub.state }),
     ),
     Effect.filterOrFail(
       (hub) => !isPendingState(hub.state),
-      () => new HubNotResolved({ name }),
+      () => new HubNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.HubNotResolved",
@@ -315,7 +315,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((hub) =>
-      hub === undefined ? Effect.void : Effect.fail(new HubStillExists({ name })),
+      hub === undefined ? Effect.void : Effect.fail(new HubStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.HubStillExists",
@@ -404,7 +404,7 @@ export const HubProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -413,7 +413,7 @@ export const HubProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new HubNotResolved({ name });
+        return yield* new HubNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -468,7 +468,7 @@ export const HubProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

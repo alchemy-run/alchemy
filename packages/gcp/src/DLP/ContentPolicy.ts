@@ -155,7 +155,7 @@ export type ContentPolicy = Resource<
 export const ContentPolicy = Resource<ContentPolicy>("GCP.DLP.ContentPolicy");
 
 export class ContentPolicyNotResolved extends Data.TaggedError("GCP.DLP.ContentPolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, contentPolicyId: string) =>
@@ -184,10 +184,10 @@ const toAttrs = (policy: dlp.GooglePrivacyDlpV2ContentPolicy, project: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsContentPolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ContentPolicyProvider = () =>
   Provider.succeed(ContentPolicy, {
@@ -291,7 +291,7 @@ export const ContentPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ContentPolicyNotResolved({ name });
+        return yield* new ContentPolicyNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

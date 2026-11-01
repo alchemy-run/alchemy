@@ -192,7 +192,7 @@ export const TunnelProvider = () =>
                 "cloudflare") as "cloudflare" | "local",
               token: Redacted.make(token),
             })),
-            Effect.catchTag("TunnelTokenNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("TunnelTokenNotFound", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -310,7 +310,7 @@ export const TunnelProvider = () =>
           accountId: output.accountId,
           tunnelId: output.tunnelId,
         })
-        .pipe(Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("TunnelNotFound", () => Effect.undefined));
       if (observed === undefined || observed.deletedAt != null) return;
       // Delete — sibling route/config deletions propagate asynchronously and
       // Cloudflare transiently rejects the tunnel delete while they drain.

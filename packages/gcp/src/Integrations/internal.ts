@@ -68,7 +68,10 @@ export const listTemplates = (parent: string) =>
   collectPages(
     integrations.listProjectsLocationsTemplates.pages({
       parent,
-      pageSize: 1000,
+      // A page of 200+ makes Integrations scan a template the project can't
+      // see and fail the whole list with 400 "Template ... is not visible to
+      // the current project"; 100 lists normally.
+      pageSize: 100,
     }),
     (page) => page.templates,
   ).pipe(

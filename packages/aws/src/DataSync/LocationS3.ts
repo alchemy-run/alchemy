@@ -111,7 +111,7 @@ export const LocationS3Provider = () =>
       const describe = Effect.fn(function* (locationArn: string) {
         return yield* datasync
           .describeLocationS3({ LocationArn: locationArn })
-          .pipe(Effect.catchTag("LocationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LocationNotFound", () => Effect.undefined));
       });
 
       return LocationS3.Provider.of({

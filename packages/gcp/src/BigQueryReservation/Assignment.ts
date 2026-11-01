@@ -147,7 +147,7 @@ export const Assignment = Resource<Assignment>("GCP.BigQueryReservation.Assignme
 export class AssignmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.AssignmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_JOB_TYPE = "QUERY";
@@ -231,7 +231,7 @@ const listAt = (parent: string) =>
         );
 
 const getByName = (name: string) => {
-  if (name.length === 0) return Effect.succeed(undefined);
+  if (name.length === 0) return Effect.undefined;
   const parent = parseName(name).reservation;
   return listAt(parent).pipe(
     Effect.map((assignments) => assignments.find((item) => item.name === name)),
@@ -368,7 +368,7 @@ export const AssignmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AssignmentNotResolved({ name });
+        return yield* new AssignmentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -24,6 +24,21 @@
     "test/Prisma/ORM/fixtures/psl/migrations",
     "test/Prisma/ORM/fixtures/variants/prisma.config.ts",
     "test/Prisma/ORM/fixtures/variants/migrations",
+    // Resolves its `@playground/*` packages only once the test installs
+    // them into the cloned fixture's `node_modules`.
+    "test/Cloudflare/Website/vite-module-resolution-fixture",
+    // The plugin's playground sources, typed against workers-types globals.
+    "test/Cloudflare/Website/vite-node-compat-fixture",
+    // Imports the Prisma client the test generates into the cloned fixture.
+    "test/Cloudflare/Website/vite-prisma-fixture",
+    // Imports the route types `react-router typegen` generates.
+    "test/Cloudflare/Website/vite-react-router-fixture",
+    // C3 templates, typed by their own tsconfigs and `wrangler types`.
+    "test/Cloudflare/Website/vite-react-template-fixture",
+    "test/Cloudflare/Website/vite-vue-template-fixture",
+    "test/Cloudflare/Website/vite-tanstack-start-template-fixture",
+    "test/Cloudflare/Website/vite-redwood-template-fixture",
+    "test/Cloudflare/Website/vite-vike-template-fixture",
     // Nuxt fixtures: server routes use nitro's auto-imported globals, which
     // only type-check against the `.nuxt/` types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",
@@ -50,7 +65,10 @@
     // `.react-router/types` typegen output (gitignored) that a build or dev
     // run produces, and the `.tsx` files use React's JSX runtime rather than
     // this package's default `@opentui/solid` jsxImportSource.
-    "test/AWS/Website/fixtures/react-router-app"
+    "test/AWS/Website/fixtures/react-router-app",
+    // Foldkit mode overlays are copied over a clone of the SSR fixture;
+    // their imports resolve only inside that clone.
+    "test/Website/fixtures/foldkit-modes"
   ],
   "compilerOptions": {
     "composite": true,

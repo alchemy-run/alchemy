@@ -130,7 +130,7 @@ export const SecurityConfigurationProvider = () =>
       const readConfiguration = Effect.fn(function* (name: string) {
         return yield* emr
           .describeSecurityConfiguration({ Name: name })
-          .pipe(Effect.catchTag("SecurityConfigurationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SecurityConfigurationNotFound", () => Effect.undefined));
       });
 
       const toAttrs = (name: string, document: string) => ({

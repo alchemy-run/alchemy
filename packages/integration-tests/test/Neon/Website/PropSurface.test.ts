@@ -1,5 +1,5 @@
 import * as Website from "@alchemy.run/neon/Website";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 
 const constructors = [
   "Vite",

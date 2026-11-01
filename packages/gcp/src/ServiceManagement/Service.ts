@@ -206,9 +206,7 @@ export const ServiceProvider = () =>
               producerProjectId,
             },
           })
-          .pipe(
-            Effect.catchTag(["Conflict", "ServiceSoftDeleted"], () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag(["Conflict", "ServiceSoftDeleted"], () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
           current = yield* waitUntilExists(serviceName);
@@ -250,7 +248,7 @@ export const ServiceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)),
+          Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

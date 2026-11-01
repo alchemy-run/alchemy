@@ -1,20 +1,16 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/prisma";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import { ProfileStore } from "alchemy/Auth/Profile";
-import * as Context from "effect/Context";
+import { deferUntilFirstUse, lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PrismaEnvironment, fromProfile } from "../PrismaEnvironment.ts";
+import { PRISMA_AUTH_PROVIDER_NAME, type PrismaResolvedCredentials } from "../AuthProvider.ts";
+import { PrismaEnvironment } from "../PrismaEnvironment.ts";
+import { resolveBaseUrl } from "./BaseUrl.ts";
 
 export { Credentials } from "@distilled.cloud/prisma";
 
-const toConfigError = (cause: unknown) =>
-  ConfigError.make({
-    message: `Failed to resolve Prisma credentials: ${
-      (cause as { message?: string })?.message ?? String(cause)
-    }`,
-  });
+const toConfigError = (cause: { readonly message: string }) =>
+  ConfigError.make({ message: `Invalid Prisma Management API URL: ${cause.message}` });
 
 /**
  * Bridge an already-resolved {@link PrismaEnvironment} into the distilled
@@ -38,36 +34,21 @@ export const fromEnvironment = () =>
  *
  * The `Credentials` service holds an *effect*, so nothing is resolved until
  * the first API operation runs. That keeps `alchemy dev` — which only
- * exercises local providers — from ever needing a Prisma token, matching the
- * deferred behavior of the client layer this replaces.
+ * exercises local providers — from ever needing a Prisma token.
  */
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const scope = yield* Effect.scope;
-      const authProviders = yield* AuthProviders;
-      const profile = yield* ProfileStore;
-      const environment = Layer.buildWithScope(
-        fromProfile().pipe(
-          Layer.provide(
-            Layer.mergeAll(
-              Layer.succeed(AuthProviders, authProviders),
-              Layer.succeed(ProfileStore, profile),
-            ),
-          ),
-        ),
-        scope,
-      ).pipe(Effect.map((context) => Context.get(context, PrismaEnvironment)));
-
-      return yield* Effect.cached(
-        environment.pipe(
-          Effect.map((env) => ({
-            apiToken: env.serviceToken,
-            apiBaseUrl: env.baseUrl,
-          })),
-          Effect.mapError(toConfigError),
-        ),
+      const credentials = yield* lazyCredentials<PrismaResolvedCredentials, ConfigError>()(
+        PRISMA_AUTH_PROVIDER_NAME,
+        (creds) => creds.serviceToken,
       );
+      const baseUrl = yield* resolveBaseUrl.pipe(
+        Effect.mapError(toConfigError),
+        deferUntilFirstUse,
+        Effect.flatMap(Effect.cached),
+      );
+      return Effect.all({ apiToken: credentials, apiBaseUrl: baseUrl });
     }),
   );

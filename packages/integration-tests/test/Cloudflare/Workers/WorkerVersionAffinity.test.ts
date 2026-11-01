@@ -2,10 +2,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { WorkerVersionConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -49,7 +49,7 @@ const resolveZone = Effect.gen(function* () {
 const listAffinityRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? [])
     .flatMap((rule) => {
       if (!(rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:affinity`)) {

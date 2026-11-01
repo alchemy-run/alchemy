@@ -93,7 +93,7 @@ export const ScheduleProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeSchedule({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Schedule.Provider.of({
@@ -172,7 +172,7 @@ export const ScheduleProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* retryWhileConflict(databrew.deleteSchedule({ Name: output.scheduleName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

@@ -55,6 +55,10 @@ import * as Devices from "./Devices/index.ts";
 import * as Diagnostics from "./Diagnostics/index.ts";
 import * as Dlp from "./Dlp/index.ts";
 import * as Dns from "./DNS/index.ts";
+import {
+  Backfill as DomainBackfill,
+  BackfillProvider as DomainBackfillProvider,
+} from "./Domain/Backfill.ts";
 import * as Email from "./Email/index.ts";
 import * as Firewall from "./Firewall/index.ts";
 import * as Flagship from "./Flagship/index.ts";
@@ -169,6 +173,7 @@ export const providers = () =>
       AI.SearchNamespace,
       AI.SearchToken,
       AI.SecuritySettings,
+      Alerting.CustomAlert,
       Alerting.NotificationPolicy,
       Alerting.NotificationWebhook,
       Alerting.Silence,
@@ -226,8 +231,11 @@ export const providers = () =>
       Dns.Dnssec,
       Dns.Firewall,
       Dns.Record,
+      Dns.RecordList,
+      Dns.Records,
       Dns.View,
       Dns.ZoneDnsSettings,
+      DomainBackfill,
       Dns.ZoneTransferAcl,
       Dns.ZoneTransferIncoming,
       Dns.ZoneTransferOutgoing,
@@ -237,9 +245,11 @@ export const providers = () =>
       Email.AllowPolicy,
       Email.BlockSender,
       Email.CatchAll,
+      Email.DmarcReports,
       Email.Domain,
       Email.ImpersonationRegistryEntry,
       Email.Routing,
+      Email.RoutingSubdomain,
       Email.Rule,
       Email.SendingSubdomain,
       Email.TrustedDomain,
@@ -382,6 +392,7 @@ export const providers = () =>
       Web3.Hostname,
       Web3.HostnameContentList,
       Workers.AccountSetting,
+      Workers.IssueAutomation,
       Workers.ObservabilityDestination,
       Workers.Subdomain,
       Workers.Worker,
@@ -425,6 +436,7 @@ export const providers = () =>
         AI.SearchNamespaceProvider(),
         AI.SearchTokenProvider(),
         AI.SecuritySettingsProvider(),
+        Alerting.CustomAlertProvider(),
         Alerting.NotificationPolicyProvider(),
         Alerting.NotificationWebhookProvider(),
         Alerting.SilenceProvider(),
@@ -486,6 +498,8 @@ export const providers = () =>
           Dns.DnssecProvider(),
           Dns.FirewallProvider(),
           Dns.RecordProvider(),
+          Dns.RecordListProvider(),
+          Dns.RecordsProvider(),
           Dns.ViewProvider(),
           Dns.ZoneDnsSettingsProvider(),
           Dns.ZoneTransferAclProvider(),
@@ -497,9 +511,11 @@ export const providers = () =>
           Email.AllowPolicyProvider(),
           Email.BlockSenderProvider(),
           Email.CatchAllProvider(),
+          Email.DmarcReportsProvider(),
           Email.DomainProvider(),
           Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
+          Email.RoutingSubdomainProvider(),
           Email.RuleProvider(),
           Email.SendingSubdomainProvider(),
           Email.TrustedDomainProvider(),
@@ -641,12 +657,14 @@ export const providers = () =>
           Web3.HostnameContentListProvider(),
           Web3.HostnameProvider(),
           Workers.AccountSettingProvider(),
+          Workers.IssueAutomationProvider(),
           Workers.ObservabilityDestinationProvider(),
           Workers.SubdomainProvider(),
           Workers.WorkerProvider(),
           Workers.WorkerRouteProvider(),
           WorkersForPlatforms.DispatchNamespaceProvider(),
           Workflows.WorkflowProvider(),
+          DomainBackfillProvider(),
           Zaraz.ConfigProvider(),
           Zone.CustomNameserversProvider(),
           Zone.HoldProvider(),
@@ -664,11 +682,13 @@ export const providers = () =>
         Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
+        // `domain.dns: Cloudflare.DNS.Adapter()` on any platform's custom domain.
+        Dns.AdapterLive,
       ),
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
     Layer.provideMerge(GetIdentityProviderHttp),
-    Layer.provide(DockerLive),
+    Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually

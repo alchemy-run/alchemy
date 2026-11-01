@@ -100,7 +100,7 @@ const toAttrs = (folder: storage.Folder, bucketName: string) => ({
 const getByName = (bucketName: string, folderName: string) =>
   storage
     .getFolders({ bucket: bucketName, folder: folderName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(

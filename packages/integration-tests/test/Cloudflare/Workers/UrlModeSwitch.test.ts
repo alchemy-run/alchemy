@@ -6,10 +6,10 @@
  * the deployed workers.dev / custom-domain URL.
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { inDev } from "../../test.resources.ts";
 

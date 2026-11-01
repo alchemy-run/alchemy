@@ -208,7 +208,7 @@ const toAttrs = (
 const getByName = (project: string, publicDelegatedPrefix: string) =>
   compute
     .getGlobalPublicDelegatedPrefixes({ project, publicDelegatedPrefix })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, prefixName: string) =>
   getByName(project, prefixName).pipe(
@@ -311,7 +311,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, prefixName);
       }
@@ -357,7 +357,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

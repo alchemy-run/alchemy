@@ -117,8 +117,8 @@ export const ProjectProvider = () =>
           .getProject({ domainIdentifier: domainId, identifier: projectId })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -126,8 +126,8 @@ export const ProjectProvider = () =>
       const findByName = Effect.fn(function* (domainId: string, name: string) {
         const found = yield* datazone.listProjects({ domainIdentifier: domainId, name }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            AccessDeniedException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
         const summary = (found?.items ?? []).find(

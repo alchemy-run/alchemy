@@ -2,8 +2,10 @@ import * as NodeNet from "node:net";
 import * as NodeOs from "node:os";
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import * as SemVer from "effect/SemVer";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;
@@ -19,14 +21,12 @@ export const MAX_PORT = 65535;
  * bind) when supported, fall back to an ephemeral-port probe otherwise.
  */
 export const viteSupportsPortZero = (version: string | null | undefined): boolean => {
-  if (typeof version !== "string") return false;
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (!match) return false;
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
-  return major > 8 || (major === 8 && (minor > 2 || (minor === 2 && patch >= 1)));
+  const parsed =
+    typeof version === "string" ? Result.getOrUndefined(SemVer.parse(version)) : undefined;
+  return parsed !== undefined && SemVer.isGreaterThanOrEqualTo(parsed, VITE_PORT_ZERO);
 };
+
+const VITE_PORT_ZERO = SemVer.parseUnsafe("8.2.1");
 
 /**
  * Upper bound on how many candidate ports `find` scans past the requested
@@ -222,7 +222,7 @@ export const make = (options: PortsOptions) =>
           socket.destroy();
           resume(effect);
         };
-        socket.once("connect", () => settle(Effect.fail(addressInUseError(port))));
+        socket.once("connect", () => addressInUseError(port).pipe(Effect.fail, settle));
         socket.once("error", () => settle(Effect.succeed(port)));
         socket.once("timeout", () => settle(Effect.succeed(port)));
         return Effect.sync(() => socket.destroy());

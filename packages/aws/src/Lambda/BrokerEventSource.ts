@@ -75,7 +75,7 @@ export const BrokerEventSource = Layer.effect(
             });
 
             yield* Mapping(`${broker.LogicalId}-EventSource`, {
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               eventSourceArn: broker.brokerArn,
               queues: props.queues,
               sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.credentialsSecretArn }],

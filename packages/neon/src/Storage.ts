@@ -61,11 +61,11 @@ export const makeStorageClient = Effect.fn(function* (config: StorageConfig, buc
   return {
     get: (key: string) =>
       provide(S3.getObject({ Bucket: bucket, Key: key })).pipe(
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
       ),
     head: (key: string) =>
       provide(S3.headObject({ Bucket: bucket, Key: key })).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       ),
     list: (
       options: {

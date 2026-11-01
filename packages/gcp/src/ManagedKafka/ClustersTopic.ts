@@ -122,7 +122,7 @@ export const ClustersTopic = Resource<ClustersTopic>("GCP.ManagedKafka.ClustersT
 export class ClustersTopicNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ClustersTopicNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const clusterOf = (cluster: string, project: string, location: string) =>
@@ -240,7 +240,7 @@ export const ClustersTopicProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClustersTopicNotResolved({ name });
+        return yield* new ClustersTopicNotResolved({ resourceName: name });
       }
 
       const partitionsChanged =

@@ -1,7 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 /**
  * Durable Object journal for `WaitUntil.test.ts`.
@@ -64,6 +72,12 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
   }),
 ) {}
 
+const BackgroundApi = HttpApi.make("BackgroundApi").add(
+  HttpApiGroup.make("Background").add(
+    HttpApiEndpoint.get("bg", "/api/bg", { success: Schema.String }),
+  ),
+);
+
 /**
  * Fixture worker for `WaitUntil.test.ts`.
  *
@@ -95,11 +109,40 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
       }),
     );
 
+    // HttpApi routes built once, in init (#2173): `HttpApiBuilder.group`
+    // captures the init context and re-provides it over each handler, so
+    // `waitUntil` must still reach the live per-event context.
+    const api = yield* HttpRouter.toHttpEffect(
+      HttpApiBuilder.layer(BackgroundApi).pipe(
+        Layer.provide(
+          HttpApiBuilder.group(BackgroundApi, "Background", (handlers) =>
+            handlers.handle("bg", () =>
+              Effect.gen(function* () {
+                yield* Cloudflare.waitUntil(
+                  Effect.sleep("100 millis").pipe(
+                    Effect.andThen(
+                      journals.getByName("default").record("from-http-api-wait-until"),
+                    ),
+                  ),
+                );
+                return "bg-api-scheduled";
+              }),
+            ),
+          ),
+        ),
+        Layer.provide(Http.Platform),
+      ),
+    );
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         const journal = journals.getByName("default");
+
+        if (url.pathname.startsWith("/api/")) {
+          return yield* api;
+        }
 
         if (url.pathname === "/bg-many") {
           const journal = journals.getByName("parallel");

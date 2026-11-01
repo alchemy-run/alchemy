@@ -141,7 +141,7 @@ const toAttrs = (ip: CloudFloatingIp): FloatingIpAssignment["Attributes"] | unde
 const getById = (id: number) =>
   Hetzner.floatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const refresh = (id: number) =>

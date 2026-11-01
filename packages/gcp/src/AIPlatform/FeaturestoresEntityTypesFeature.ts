@@ -130,13 +130,13 @@ export const FeaturestoresEntityTypesFeature = Resource<FeaturestoresEntityTypes
 export class FeaturestoresEntityTypesFeatureNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoresEntityTypesFeatureStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_VALUE_TYPE = "STRING";
@@ -171,7 +171,7 @@ const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeaturestoresEntityTypesFeatures({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listFeatures = (parent: string) =>
   aiplatform.listProjectsLocationsFeaturestoresEntityTypesFeatures
@@ -206,7 +206,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature): feature is aiplatform.GoogleCloudAiplatformV1Feature => feature !== undefined,
-      () => new FeaturestoresEntityTypesFeatureNotResolved({ name }),
+      () => new FeaturestoresEntityTypesFeatureNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
@@ -219,7 +219,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature) => feature === undefined,
-      () => new FeaturestoresEntityTypesFeatureStillExists({ name }),
+      () => new FeaturestoresEntityTypesFeatureStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -326,7 +326,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
               versionColumnName: news.versionColumnName,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -335,7 +335,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
 
       if (current === undefined) {
         return yield* new FeaturestoresEntityTypesFeatureNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -379,7 +379,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

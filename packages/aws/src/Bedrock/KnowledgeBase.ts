@@ -156,7 +156,7 @@ export const KnowledgeBaseProvider = () =>
       const getKbOrUndefined = Effect.fn(function* (knowledgeBaseId: string) {
         return yield* bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(
           Effect.map((r) => r.knowledgeBase),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -179,7 +179,7 @@ export const KnowledgeBaseProvider = () =>
       const waitForSettled = Effect.fn(function* (knowledgeBaseId: string) {
         return yield* bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(
           Effect.map((r) => r.knowledgeBase),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
             until: (kb) => kb === undefined || !KB_TRANSIENT.has(kb.status),

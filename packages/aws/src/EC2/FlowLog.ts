@@ -206,7 +206,7 @@ export const FlowLogProvider = () =>
       const describeFlowLog = (flowLogId: string) =>
         ec2.describeFlowLogs({ FlowLogIds: [flowLogId] }).pipe(
           Effect.map((r) => r.FlowLogs?.[0]),
-          Effect.catchTag("InvalidFlowLogId.NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidFlowLogId.NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (fl: ec2.FlowLog) =>

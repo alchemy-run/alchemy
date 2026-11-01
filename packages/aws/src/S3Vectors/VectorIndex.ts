@@ -116,7 +116,7 @@ export const IndexProvider = () =>
       const observe = (vectorBucketName: string, indexName: string) =>
         s3vectors.getIndex({ vectorBucketName, indexName }).pipe(
           Effect.map((r) => r.index),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (resourceArn: string) =>

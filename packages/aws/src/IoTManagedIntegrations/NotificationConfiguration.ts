@@ -4,11 +4,19 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord } from "./internal.ts";
+
+export class IoTManagedIntegrationsNotificationConfigurationUnexpectedResponse extends Data.TaggedError(
+  "IoTManagedIntegrationsNotificationConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface NotificationConfigurationProps {
   /**
@@ -95,7 +103,7 @@ export const NotificationConfigurationProvider = () =>
       const observe = (eventType: mi.EventType) =>
         mi
           .getNotificationConfiguration({ EventType: eventType })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // GetNotificationConfiguration does not return an ARN; the tag APIs
       // need one, so construct it from the ambient account/region (same
@@ -109,11 +117,9 @@ export const NotificationConfigurationProvider = () =>
         configuration: mi.GetNotificationConfigurationResponse,
       ) {
         if (configuration.EventType === undefined || configuration.DestinationName === undefined) {
-          return yield* Effect.fail(
-            new Error(
-              "notification configuration response is missing EventType or DestinationName",
-            ),
-          );
+          return yield* new IoTManagedIntegrationsNotificationConfigurationUnexpectedResponse({
+            message: "notification configuration response is missing EventType or DestinationName",
+          });
         }
         return {
           eventType: configuration.EventType,
@@ -158,9 +164,9 @@ export const NotificationConfigurationProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             configuration = yield* observe(news.eventType);
             if (configuration === undefined) {
-              return yield* Effect.fail(
-                new Error(`notification configuration '${news.eventType}' vanished after create`),
-              );
+              return yield* new IoTManagedIntegrationsNotificationConfigurationUnexpectedResponse({
+                message: `notification configuration '${news.eventType}' vanished after create`,
+              });
             }
           }
 

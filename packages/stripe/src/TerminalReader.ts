@@ -202,7 +202,7 @@ const isMissingReader = isMissingStripeResource;
 const getById = (reader: string) =>
   GetTerminalReader({ reader }).pipe(
     Effect.map(asReader),
-    Effect.catchIf(isMissingReader, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingReader, () => Effect.undefined),
   );
 
 const listAllReaders = Effect.fn(function* () {

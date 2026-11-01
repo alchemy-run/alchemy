@@ -65,7 +65,7 @@ export const BucketEventSource = Layer.effect(
             ];
             yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
               action: "lambda:InvokeFunction",
-              functionName: func.functionName,
+              functionName: Lambda.qualifiedNameOf(func),
               principal: "s3.amazonaws.com",
               sourceArn: bucket.bucketArn,
             });
@@ -73,7 +73,7 @@ export const BucketEventSource = Layer.effect(
               notificationConfiguration: {
                 LambdaFunctionConfigurations: [
                   {
-                    LambdaFunctionArn: func.functionArn,
+                    LambdaFunctionArn: Lambda.qualifiedArnOf(func),
                     Events,
                     ...(filterRules.length > 0
                       ? { Filter: { Key: { FilterRules: filterRules } } }

@@ -6,7 +6,7 @@ import {
   INIT_PATH,
   REQUEST_EXPORT_TYPES_EVENT,
 } from "./constants.shared.ts";
-import { stripInternalEnv, type Env } from "./env.worker.ts";
+import { getEntryEnvironment, stripInternalEnv, type Env } from "./env.worker.ts";
 
 declare global {
   // This global variable is accessed by `@vitejs/plugin-rsc`
@@ -77,8 +77,8 @@ const runInModuleRunner = <T>(env: Env, callback: () => Promise<T>): Promise<T> 
  */
 export async function getWorkerEntryExport<T>(env: Env, exportName: string): Promise<T> {
   const module = await globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__(
-    env.__DISTILLED_ENVIRONMENT__.environmentName,
-    env.__DISTILLED_ENVIRONMENT__.entryId,
+    getEntryEnvironment().environmentName,
+    getEntryEnvironment().entryId,
   );
 
   const exportValue =
@@ -89,7 +89,7 @@ export async function getWorkerEntryExport<T>(env: Env, exportName: string): Pro
 
   if (!exportValue) {
     throw new Error(
-      `"${env.__DISTILLED_ENVIRONMENT__.entryName}" does not define a "${exportName}" export.`,
+      `"${getEntryEnvironment().entryName}" does not define a "${exportName}" export.`,
     );
   }
 
@@ -146,7 +146,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
    * import runs here rather than being driven from user code.
    */
   private async reportExportTypes(environmentName: string): Promise<void> {
-    const { entryId, exportTypesId } = this.env.__DISTILLED_ENVIRONMENT__;
+    const { entryId, exportTypesId } = getEntryEnvironment();
     let data: unknown;
     try {
       // Both imports run inside this object's IoContext, so they can go
@@ -160,7 +160,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
       // The entry failing to evaluate is reported to the user through the
       // request that triggered it; the dev server keeps its current export
       // types.
-      // oxlint-disable-next-line no-console
       console.error("Failed to determine the Worker entry's export types:", error);
       data = null;
     }
@@ -237,7 +236,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
             await fn(...Object.values(context));
             Object.seal(context[ssrModuleExportsKey]);
           } catch (error) {
-            // oxlint-disable-next-line no-console
             console.error(`[vite-plugin] Failed to evaluate inlined module "${module.id}":`, error);
             throw error;
           }

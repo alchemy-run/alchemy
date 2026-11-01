@@ -90,7 +90,7 @@ export const pollLoginSessionToken = (code: string) =>
         Effect.catchTag("RailwayNotFound", () => Effect.succeed(null)),
       ),
     ),
-    Effect.map((token) => (token != null && token.length > 0 ? token : undefined)),
+    Effect.map((token) => (token != null && Redacted.value(token).length > 0 ? token : undefined)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       while: (token) => token == null,

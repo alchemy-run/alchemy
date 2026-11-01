@@ -297,7 +297,7 @@ const getHostname = (zoneId: string, hostnameId: string) =>
     Effect.map((hostname): ObservedHostname | undefined =>
       hostname.status === "deleting" ? undefined : hostname,
     ),
-    Effect.catchTag("Web3HostnameNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("Web3HostnameNotFound", () => Effect.undefined),
   );
 
 /**

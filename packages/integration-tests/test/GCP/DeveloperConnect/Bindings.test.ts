@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DeveloperConnectBindingsHost, { linkEnabled, Source } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -33,7 +33,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !linkEnabled)(
+describe.skipIf(!linkEnabled)(
   "DeveloperConnect Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:developerconnect", "provider:gcp:run", "live"],

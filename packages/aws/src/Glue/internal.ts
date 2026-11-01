@@ -1,5 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as glue from "@distilled.cloud/aws/glue";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -201,3 +202,41 @@ export const reapGlueLogStreams = (
       ),
     { concurrency: 5, discard: true },
   );
+
+/**
+ * Delete a Glue database, tolerating one that is already gone.
+ *
+ * A database registered under Lake Formation (e.g. one a DataZone
+ * environment provisioned) only grants DROP to the principals LF lists — IAM
+ * admin rights are not enough. A Lake Formation admin may re-open it to IAM
+ * access control, after which the drop succeeds. A caller that is not an LF
+ * admin gets the original denial back.
+ */
+export const deleteGlueDatabase = Effect.fn("AWS.Glue.deleteGlueDatabase")(function* (
+  name: string,
+  catalogId: string | undefined,
+) {
+  const drop = glue.deleteDatabase({ Name: name, CatalogId: catalogId }).pipe(
+    retryWhileConcurrentModification,
+    Effect.catchTag("EntityNotFoundException", () => Effect.void),
+  );
+  yield* drop.pipe(
+    Effect.catchTag("InsufficientLakeFormationPermissions", (error) =>
+      lf
+        .grantPermissions({
+          CatalogId: catalogId,
+          Principal: { DataLakePrincipalIdentifier: "IAM_ALLOWED_PRINCIPALS" },
+          Resource: { Database: { CatalogId: catalogId, Name: name } },
+          Permissions: ["ALL"],
+        })
+        .pipe(
+          retryWhileConcurrentModification,
+          Effect.catchTags({
+            EntityNotFoundException: () => Effect.void,
+            AccessDeniedException: () => Effect.fail(error),
+          }),
+          Effect.andThen(drop),
+        ),
+    ),
+  );
+});

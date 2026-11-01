@@ -163,7 +163,7 @@ export const EventThreatDetectionSettingsCustomModule =
 export class EventThreatDetectionSettingsCustomModuleNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.EventThreatDetectionSettingsCustomModuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, moduleId: string) =>
@@ -190,10 +190,10 @@ const toAttrs = (module: scc.EventThreatDetectionCustomModule, project: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsEventThreatDetectionSettingsCustomModules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listModules = (project: string) =>
   collectPages(
@@ -283,7 +283,7 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         return yield* new EventThreatDetectionSettingsCustomModuleNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 

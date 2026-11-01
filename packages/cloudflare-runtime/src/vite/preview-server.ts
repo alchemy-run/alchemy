@@ -151,21 +151,19 @@ const serve = Effect.fn(function* (
   const modules = yield* Effect.promise(() => readWorkerModules(build));
   const assetsDirectory = options.worker?.assets?.directory ?? build.assetsDirectory;
   return yield* runtime.start({
+    // Everything the caller configured on the Worker reaches workerd; the
+    // fields below are the ones the preview server owns or extends.
+    ...options.worker,
     name: options.worker?.name ?? `vite-preview-${crypto.randomUUID()}`,
     modules,
     proxySharedSecret,
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: options.worker?.bindings ?? [],
-    durableObjectNamespaces: options.worker?.durableObjectNamespaces,
-    hyperdrives: options.worker?.hyperdrives,
-    queueConsumers: options.worker?.queueConsumers,
     assets:
       options.worker?.assets !== undefined || assetsDirectory !== undefined
         ? { ...options.worker?.assets, directory: assetsDirectory }
         : undefined,
-    logging: options.worker?.logging,
-    unsafe: options.worker?.unsafe,
   });
 });
 

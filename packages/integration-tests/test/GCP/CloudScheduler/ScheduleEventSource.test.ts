@@ -1,9 +1,8 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -13,15 +12,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "a Cloud Scheduler job invokes an effect-native Function",
   (stack) =>
     Effect.gen(function* () {

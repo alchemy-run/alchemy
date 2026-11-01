@@ -265,7 +265,7 @@ const createSnippetName = (id: string, name: string | undefined) =>
 const getSnippetOrUndefined = (zoneId: string, snippetName: string) =>
   snippets
     .getSnippet({ zoneId, snippetName })
-    .pipe(Effect.catchTag("SnippetNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("SnippetNotFound", () => Effect.undefined));
 
 const toAttributes = (
   observed: snippets.GetSnippetResponse,

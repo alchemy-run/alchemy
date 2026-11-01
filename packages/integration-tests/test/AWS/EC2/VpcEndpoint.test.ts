@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { RouteTable, Vpc, VpcEndpoint } from "@alchemy.run/aws/EC2";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

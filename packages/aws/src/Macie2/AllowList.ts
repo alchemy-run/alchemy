@@ -101,10 +101,10 @@ export const AllowListProvider = () =>
       const getAllowList = (id: string) =>
         macie2.getAllowList({ id }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // Macie disabled ⇒ the list is unreachable (and disabling deletes
             // all Macie configuration), so report it as gone.
-            AccessDeniedException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
 

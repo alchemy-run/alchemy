@@ -3,7 +3,7 @@ import {
   getToolingCompatibility,
 } from "@alchemy.run/cloudflare/Workers/Compatibility";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 
 describe(

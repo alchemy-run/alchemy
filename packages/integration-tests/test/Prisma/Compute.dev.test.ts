@@ -1,6 +1,6 @@
 import * as Prisma from "@alchemy.run/prisma";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -212,7 +212,7 @@ test.provider(
       "provider:prisma:sourcerepository",
       "local",
     ],
-    exclusive: true,
+    exclusive: "prisma:dev",
   },
 );
 

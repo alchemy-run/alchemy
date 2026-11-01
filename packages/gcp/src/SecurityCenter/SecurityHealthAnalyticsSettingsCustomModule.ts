@@ -204,7 +204,7 @@ export const SecurityHealthAnalyticsSettingsCustomModule =
 export class SecurityHealthAnalyticsSettingsCustomModuleNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.SecurityHealthAnalyticsSettingsCustomModuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, moduleId: string) =>
@@ -255,10 +255,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsSecurityHealthAnalyticsSettingsCustomModules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listModules = (project: string) =>
   collectPages(
@@ -349,7 +349,7 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         return yield* new SecurityHealthAnalyticsSettingsCustomModuleNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 

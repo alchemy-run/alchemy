@@ -174,7 +174,7 @@ export const ProductProvider = () =>
       const observe = Effect.fn(function* (selector: { Id: string } | { Name: string }) {
         return yield* servicecatalog
           .describeProductAsAdmin(selector)
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttributes = (described: servicecatalog.DescribeProductAsAdminOutput) => {
@@ -206,7 +206,7 @@ export const ProductProvider = () =>
                   d.ProductARN === undefined ||
                   d.ProductViewSummary?.Name === undefined
                 ) {
-                  return Effect.succeed(undefined);
+                  return Effect.undefined;
                 }
                 // Hydrate the artifact ID; a product can vanish between
                 // enumeration and hydration, so tolerate NotFound per item.
@@ -217,7 +217,7 @@ export const ProductProvider = () =>
                     productName: d.ProductViewSummary!.Name!,
                     provisioningArtifactId: r.ProvisioningArtifactDetails?.[0]?.Id ?? "",
                   })),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 );
               },
               { concurrency: 5 },

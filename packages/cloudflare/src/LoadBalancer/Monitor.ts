@@ -291,7 +291,7 @@ type ObservedMonitor =
 const getMonitor = (accountId: string, monitorId: string) =>
   loadBalancers
     .getMonitor({ accountId, monitorId })
-    .pipe(Effect.catchTag("MonitorNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("MonitorNotFound", () => Effect.undefined));
 
 /**
  * Find a monitor by exact description. If several monitors carry the same

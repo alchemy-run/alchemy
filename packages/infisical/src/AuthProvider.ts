@@ -197,23 +197,21 @@ const verify = (config: InfisicalAuthConfig) => resolve(config).pipe(Effect.as(c
 const fieldsFor = (method: InfisicalAuthConfig["method"]) =>
   method === "universal-auth" ? universalAuthFields : accessTokenFields;
 
-const chooseMethod = Interaction.accessors.prompt
-  .select({
-    message: "Infisical authentication method",
-    options: [
-      {
-        value: "universal-auth" as const,
-        label: "Machine identity",
-        description: "Client ID and secret; mints a fresh access token on each run",
-      },
-      {
-        value: "access-token" as const,
-        label: "User token",
-        description: "Copied from the dashboard; valid for 10 days",
-      },
-    ],
-  })
-  .pipe(mapPromptCancellation);
+const chooseMethod = Interaction.select({
+  message: "Infisical authentication method",
+  options: [
+    {
+      value: "universal-auth" as const,
+      label: "Machine identity",
+      description: "Client ID and secret; mints a fresh access token on each run",
+    },
+    {
+      value: "access-token" as const,
+      label: "User token",
+      description: "Copied from the dashboard; valid for 10 days",
+    },
+  ],
+}).pipe(mapPromptCancellation);
 
 /**
  * How CI authenticates, decided from the environment: a ready token, or a

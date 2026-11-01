@@ -150,7 +150,7 @@ export const DedicatedIpPoolProvider = () =>
       const getPool = Effect.fn(function* (name: string) {
         return yield* sesv2.getDedicatedIpPool({ PoolName: name }).pipe(
           Effect.map((response) => response.DedicatedIpPool),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 

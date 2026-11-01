@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readElastiCacheTags, sameStringSet, tagsToWire } from "./internal.ts";
+
+export class ElastiCacheSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "ElastiCacheSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SubnetGroupProps {
   /** Name of the subnet group. Generated deterministically when omitted. */
@@ -64,14 +72,14 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeCacheSubnetGroups({ CacheSubnetGroupName: name })
-          .pipe(Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.CacheSubnetGroups?.[0];
       });
       const attrs = Effect.fn(function* (group: elasticache.CacheSubnetGroup) {
         if (!group.CacheSubnetGroupName || !group.ARN) {
-          return yield* Effect.fail(
-            new Error("ElastiCache subnet group is missing its name or ARN"),
-          );
+          return yield* new ElastiCacheSubnetGroupUnexpectedResponse({
+            message: "ElastiCache subnet group is missing its name or ARN",
+          });
         }
         return {
           subnetGroupName: group.CacheSubnetGroupName,
@@ -124,7 +132,9 @@ export const SubnetGroupProvider = () =>
             group = yield* readGroup(name);
           }
           if (!group)
-            return yield* Effect.fail(new Error(`Subnet group '${name}' not found after create`));
+            return yield* new ElastiCacheSubnetGroupUnexpectedResponse({
+              message: `Subnet group '${name}' not found after create`,
+            });
           const observedSubnets = (group.Subnets ?? [])
             .map((subnet) => subnet.SubnetIdentifier)
             .filter((id): id is string => id !== undefined);

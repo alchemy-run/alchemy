@@ -1,5 +1,5 @@
 import { ensureFloci } from "@alchemy.run/aws/Local/Floci";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 for (const mode of ["config", "environment"] as const) {

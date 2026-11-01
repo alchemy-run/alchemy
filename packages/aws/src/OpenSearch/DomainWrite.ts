@@ -1,6 +1,7 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
+import type { SourceError } from "effect/ConfigProvider";
 import type * as Effect from "effect/Effect";
 import type {
   BulkResponse,
@@ -23,7 +24,7 @@ export interface WriteDomainClient {
     options?: IndexDocumentOptions,
   ): Effect.Effect<
     WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
+    OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
   /**
    * Partially update one document (`POST /{index}/_update/{id}`). The body
@@ -36,7 +37,7 @@ export interface WriteDomainClient {
     options?: WriteDocumentOptions,
   ): Effect.Effect<
     WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
+    OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
   /**
    * Delete one document (`DELETE /{index}/_doc/{id}`). Deleting a missing
@@ -48,7 +49,7 @@ export interface WriteDomainClient {
     options?: WriteDocumentOptions,
   ): Effect.Effect<
     WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
+    OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
   /**
    * Bulk-apply index/create/update/delete operations (`POST /_bulk`). Pass
@@ -59,7 +60,7 @@ export interface WriteDomainClient {
     options?: WriteDocumentOptions,
   ): Effect.Effect<
     BulkResponse,
-    OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError
+    OpenSearchApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
   >;
 }
 

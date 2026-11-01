@@ -202,7 +202,7 @@ export type ExadbVmCluster = Resource<
 export const ExadbVmCluster = Resource<ExadbVmCluster>("GCP.OracleDatabase.ExadbVmCluster");
 
 const mergedProperties = (news: ExadbVmClusterProps): ExadbVmClusterPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   nodeCount: news.nodeCount ?? news.properties?.nodeCount,
   gridImageId: news.gridImageId ?? news.properties?.gridImageId,
   hostnamePrefix: news.hostnamePrefix ?? news.properties?.hostnamePrefix,
@@ -289,7 +289,7 @@ const toAttrs = (cluster: oracle.ExadbVmCluster, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsExadbVmClusters({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listClusters = (project: string, region: string) => {
@@ -383,7 +383,7 @@ export const ExadbVmClusterProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -392,7 +392,7 @@ export const ExadbVmClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -444,7 +444,7 @@ export const ExadbVmClusterProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

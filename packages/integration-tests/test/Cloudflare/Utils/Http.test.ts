@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 // bun fetch (keep-alive reuse against a closed connection) once pinned the
 // timeout's interruption and turned a 300s assertion bound into a
 // suite-timeout hang — these three shapes keep that class of bug dead.
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expectUrlContains } from "./Http.ts";

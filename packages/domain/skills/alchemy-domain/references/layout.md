@@ -61,6 +61,8 @@ my-app/
 
 Split a file when it mixes the two sides. For example, `Session.middleware.ts` (the domain declares it) and `Session.ts` (the server implements it).
 
+More: [Project layout: Keep the model in its own package](https://alchemy.run/domain/project-layout#keep-the-model-in-its-own-package).
+
 ## Package manifests
 
 Each package exports its source files by path, so imports name the file they come from:
@@ -134,6 +136,10 @@ export default Alchemy.Stack(
 
 Paths in resource props, such as D1 `migrations` and Website `rootDir`, resolve from the directory `alchemy deploy` runs in: the repo root.
 
+More: [Cloudflare: Deploy it](https://alchemy.run/domain/cloudflare#deploy-it).
+
 ## Several models
 
 Each bounded context is its own domain package (`packages/banking`, `packages/lending`) with its own `*.model.ts`. They talk through policies that call each other's Apis or external system declarations, never by importing each other's aggregates. One server package can host several models; give each its own Worker or merge their layers into one.
+
+More: [Project layout: Add a package per model](https://alchemy.run/domain/project-layout#add-a-package-per-model), [Domain Model: Keep one language per model](https://alchemy.run/domain/model#keep-one-language-per-model).

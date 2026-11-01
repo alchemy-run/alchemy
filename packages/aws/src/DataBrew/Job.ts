@@ -423,7 +423,7 @@ export const JobProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeJob({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Job.Provider.of({
@@ -581,8 +581,9 @@ export const JobProvider = () =>
             (run) =>
               databrew.stopJobRun({ Name: output.jobName, RunId: run.RunId! }).pipe(
                 // Already stopping/stopped (ValidationException) or gone.
-                Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ResourceNotFoundException", "ValidationException"],
+                  () => Effect.undefined,
                 ),
               ),
           );
@@ -603,7 +604,7 @@ export const JobProvider = () =>
           }
           // ConflictException while a job run is still in flight.
           yield* retryWhileConflict(databrew.deleteJob({ Name: output.jobName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

@@ -207,8 +207,13 @@ Binding that runs an Effect or `Stream` in the background, whenever
 something happens on the resource:
 
 ```typescript
-yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
-  Stream.runForEach(records, (record) => Effect.log(record.body)),
+yield* AWS.SQS.consumeQueueMessages(
+  Inbound,
+  Effect.fn(function* (event) {
+    for (const record of event.Records) {
+      yield* Effect.log(record.body);
+    }
+  }),
 );
 ```
 

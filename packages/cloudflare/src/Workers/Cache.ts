@@ -74,9 +74,7 @@ export interface CacheClient {
  * @product Workers
  * @category Workers & Compute
  */
-export const cache = (
-  options?: CacheOptions,
-): Effect.Effect<CacheClient, never, Worker | WorkerExecutionContext> =>
+export const cache = (options?: CacheOptions): Effect.Effect<CacheClient, never, Worker> =>
   Effect.gen(function* () {
     const host = yield* Worker;
     const exec = yield* WorkerExecutionContext;

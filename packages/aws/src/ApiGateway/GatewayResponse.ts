@@ -71,7 +71,7 @@ export const GatewayResponseProvider = () =>
               restApiId: output.restApiId,
               responseType: output.responseType,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!g?.responseType) return undefined;
           return {
             restApiId: output.restApiId,

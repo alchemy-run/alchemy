@@ -95,7 +95,7 @@ export const AttributeGroupProvider = () =>
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getAttributeGroup({ attributeGroup: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Canonical comparison of the observed attribute JSON against the

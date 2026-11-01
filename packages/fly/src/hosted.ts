@@ -30,6 +30,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { buildOnRemoteBuilder } from "./internal/RemoteBuilder.ts";
 import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
 import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
 
@@ -69,16 +70,25 @@ export const MACHINE_PLATFORM = "linux/amd64";
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the Machine image with
-   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
-   * interop turns `Client` into a namespace (`The superclass is not a
-   * constructor`). Same `build.install` shape as Lambda.
+   * `npm install` instead of bundling them. Same `build.install` shape as
+   * Lambda.
    *
    * @example
    * ```typescript
-   * build: { install: ["pg"] }
+   * build: { install: ["sharp"] }
    * ```
    */
   readonly install?: PackageInstall;
+  /**
+   * Build the image on Fly's remote builders (Depot), as `fly deploy` does,
+   * instead of with the local Docker engine. Only the build context is
+   * uploaded; the builder pulls the base image and pushes the result to
+   * `registry.fly.io` next to it. Set `false` to build and push locally.
+   * Either way, the local `docker buildx` client drives the build.
+   *
+   * @default true
+   */
+  readonly remote?: boolean;
 }
 
 export type { ExtraFile };
@@ -488,7 +498,17 @@ export const createFlyHostedSupport = ({
       return { imageRef, codeHash };
     }
 
-    if (!(yield* imageExists(imageRef))) {
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName: input.appName });
+    }
+    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+
+    const materialize = Effect.gen(function* () {
       const realMain = yield* resolveMainPath(input.props.main);
       const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${input.id}-image`);
       const fs = yield* FileSystem.FileSystem;
@@ -524,20 +544,35 @@ export const createFlyHostedSupport = ({
           yield* fs.copy(realMain, dest, { overwrite: true });
         }
       }
+      return contextDir;
+    });
+
+    if (input.props.build?.remote !== false) {
+      const contextDir = yield* materialize;
+      yield* note(`Building ${imageRef} on a Fly remote builder...`);
+      yield* buildOnRemoteBuilder({
+        docker,
+        appName: input.appName,
+        contextDir,
+        imageRef,
+        platform: MACHINE_PLATFORM,
+        registry,
+        note,
+      });
+      yield* note(`Pushed ${imageRef}`);
+      return { imageRef, codeHash };
+    }
+
+    if (!(yield* imageExists(imageRef))) {
+      const contextDir = yield* materialize;
       yield* note(`Building container image ${imageRef}...`);
       yield* docker.image.build({ context: contextDir, tag: imageRef, platform: MACHINE_PLATFORM });
       yield* note(`Built ${imageRef}`);
     }
 
-    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
-    const token = minted.token;
-    if (token === undefined || token.length === 0) {
-      return yield* new DeployTokenMissing({ appName: input.appName });
-    }
-
     yield* note(`Pushing ${imageRef}...`);
     yield* docker.image
-      .push(imageRef, { server: FLY_REGISTRY, username: "x", password: Redacted.make(token) })
+      .push(imageRef, registry)
       .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
     yield* note(`Pushed ${imageRef}`);
     return { imageRef, codeHash };

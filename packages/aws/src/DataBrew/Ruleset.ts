@@ -158,7 +158,7 @@ export const RulesetProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeRuleset({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Ruleset.Provider.of({

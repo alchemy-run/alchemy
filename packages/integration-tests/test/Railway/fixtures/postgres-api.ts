@@ -21,7 +21,6 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
     environment: Partition,
     main: import.meta.url,
     port: POSTGRES_PORT,
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Railway.ConnectPostgres(Db);

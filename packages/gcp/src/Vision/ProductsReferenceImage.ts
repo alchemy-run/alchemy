@@ -141,7 +141,7 @@ export const ProductsReferenceImage = Resource<ProductsReferenceImage>(
 export class ProductsReferenceImageNotResolved extends Data.TaggedError(
   "GCP.Vision.ProductsReferenceImageNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, location: string, parent: string) =>
@@ -240,7 +240,7 @@ export const ProductsReferenceImageProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductsReferenceImageNotResolved({
-          name: name || referenceImageNameOf(parent, referenceImageId),
+          resourceName: name || referenceImageNameOf(parent, referenceImageId),
         });
       }
 

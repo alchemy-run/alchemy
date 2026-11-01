@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { findAvailablePort, nodeLoaderArgs } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Deferred from "effect/Deferred";

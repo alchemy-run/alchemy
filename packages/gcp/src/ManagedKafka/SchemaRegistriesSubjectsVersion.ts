@@ -144,7 +144,7 @@ export const SchemaRegistriesSubjectsVersion = Resource<SchemaRegistriesSubjects
 export class SchemaRegistriesSubjectsVersionNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistriesSubjectsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const registryOf = (value: string, project: string, location: string) =>
@@ -341,7 +341,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
                 references: news.references,
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         const lookedUp = yield* kafka
           .lookupVersionProjectsLocationsSchemaRegistriesSubjects({
@@ -353,7 +353,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
               references: news.references,
             },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         current =
           lookedUp ?? (yield* getSchemaVersion(versionName(parent, news.version ?? "latest")));
         void created;
@@ -361,7 +361,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new SchemaRegistriesSubjectsVersionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

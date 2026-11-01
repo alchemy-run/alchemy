@@ -133,7 +133,7 @@ export const ThreatIntelSetProvider = () =>
             DetectorId: detectorId,
             ThreatIntelSetId: threatIntelSetId,
           })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       // Recover the set id after state loss by matching the deterministic
       // name across the detector's threat intel sets.

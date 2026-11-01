@@ -188,6 +188,17 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
               }),
             );
             return { boots, obsolete: true };
+          case "tags": {
+            const members: Record<string, number> = {};
+            for (const tag of ["user:a", "user:b", "room:all"]) {
+              members[tag] = (yield* state.getWebSockets(tag)).length;
+            }
+            return {
+              tags: yield* state.getTags(socket.ws),
+              members,
+              all: (yield* state.getWebSockets()).length,
+            };
+          }
           case "stats": {
             const value = yield* socket.getAttachment(Attachment);
             return {
@@ -205,7 +216,9 @@ class AttachmentObject extends DurableObject<AttachmentObject>()(
       });
       return {
         fetch: Effect.gen(function* () {
-          const [response] = yield* upgrade();
+          const request = yield* HttpServerRequest;
+          const tags = new URL(request.url, "http://do").searchParams.get("tags");
+          const [response] = yield* upgrade(tags ? { tags: tags.split(",") } : undefined);
           return response;
         }),
         webSocketMessage: Effect.fn(function* (socket: WebSocket, message: string | ArrayBuffer) {
@@ -230,7 +243,7 @@ export default class AttachmentWorker extends Worker<AttachmentWorker>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.url.startsWith("/socket/")) {
-          const name = request.url.split("/").pop()!;
+          const name = request.url.split("?")[0].split("/").pop()!;
           return yield* objects.getByName(name).fetch(request);
         }
         return HttpServerResponse.text("ready");

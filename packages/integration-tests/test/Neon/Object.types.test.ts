@@ -4,7 +4,7 @@ import { ReadBucket } from "@alchemy.run/neon/ReadBucket";
 import { ReadObject } from "@alchemy.run/neon/ReadObject";
 import { WriteBucket } from "@alchemy.run/neon/WriteBucket";
 import { WriteObject } from "@alchemy.run/neon/WriteObject";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

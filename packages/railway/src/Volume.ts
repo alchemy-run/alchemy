@@ -310,7 +310,7 @@ export const Volume: typeof VolumeResource = Object.assign(
 );
 
 export class VolumeNotCreated extends Data.TaggedError("Railway.VolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -387,7 +387,7 @@ const readVolumeInstance = Query.fn((id: string) => volumeFields(Railway.volumeI
 const getByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance): CloudInstance | undefined => (isGone(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -448,7 +448,7 @@ const assertAttachTarget = Effect.fn(function* (input: {
   );
   if (others.length > 0) {
     return yield* new MultipleVolumes({
-      name: input.name,
+      resourceName: input.name,
       paths: others.map((row) => row.mountPath),
       volumeIds: others.map((row) => row.volumeId),
     });
@@ -759,7 +759,7 @@ export const VolumeProvider = () =>
           }
 
           if (current === undefined || isGone(current)) {
-            return yield* new VolumeNotCreated({ name, projectId });
+            return yield* new VolumeNotCreated({ resourceName: name, projectId });
           }
 
           if (current.volume.name !== name) {
@@ -799,7 +799,7 @@ export const VolumeProvider = () =>
       );
 
       if (current === undefined || isGone(current)) {
-        return yield* new VolumeNotCreated({ name, projectId });
+        return yield* new VolumeNotCreated({ resourceName: name, projectId });
       }
 
       return toAttrs(current, { name });

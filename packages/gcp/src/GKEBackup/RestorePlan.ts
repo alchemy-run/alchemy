@@ -334,7 +334,7 @@ const toAttrs = (item: gkebackup.RestorePlan, project: string, region: string) =
 const getByName = (name: string) =>
   gkebackup
     .getProjectsLocationsRestorePlans({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -432,7 +432,7 @@ export const RestorePlanProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -440,7 +440,7 @@ export const RestorePlanProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -450,7 +450,7 @@ export const RestorePlanProvider = () =>
         (item) => item.stateReason,
       );
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -481,7 +481,7 @@ export const RestorePlanProvider = () =>
           (item) => item.stateReason,
         );
         if (current === undefined) {
-          return yield* new ResourceNotResolved({ name });
+          return yield* new ResourceNotResolved({ resourceName: name });
         }
       }
 
@@ -500,7 +500,7 @@ export const RestorePlanProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

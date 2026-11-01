@@ -164,7 +164,7 @@ export const CatalogsControl = Resource<CatalogsControl>("GCP.Retail.CatalogsCon
 export class CatalogsControlNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const defaultSolutionTypes = ["SOLUTION_TYPE_SEARCH"] as const;
@@ -233,10 +233,10 @@ const toBody = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retail
         .getProjectsLocationsCatalogsControls({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CatalogsControlProvider = () =>
   Provider.succeed(CatalogsControl, {
@@ -338,7 +338,7 @@ export const CatalogsControlProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsControlNotResolved({ name });
+        return yield* new CatalogsControlNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

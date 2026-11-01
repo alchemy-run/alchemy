@@ -286,7 +286,7 @@ export type Postgres = Resource<
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 
 export class PostgresNotCreated extends Data.TaggedError("Fly.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   orgSlug: string;
 }> {}
 
@@ -369,7 +369,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 export const getLiveCluster = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) => (isLiveCluster(res.data) ? res.data : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const getClusterResponse = (clusterId: string) =>
@@ -377,7 +377,7 @@ export const getClusterResponse = (clusterId: string) =>
     Effect.map((res): GetClusterResponse | undefined =>
       isLiveCluster(res.data) ? res : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listOrgClusters = (orgSlug: string) =>
@@ -535,7 +535,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
       times: 10,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.undefined),
   );
   if (creds === undefined) {
     return yield* new PostgresCredentialsMissing({ clusterId });
@@ -660,7 +660,7 @@ export const PostgresProvider = () =>
 
       if (current === undefined) {
         if (region === undefined || region.length === 0) {
-          return yield* new PostgresNotCreated({ name, orgSlug });
+          return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
         }
         const created = yield* mpg
           .createCluster({
@@ -674,13 +674,13 @@ export const PostgresProvider = () =>
           })
           .pipe(
             Effect.map((res) => res.data),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = isLiveCluster(created) ? created : yield* findByName(orgSlug, name);
       }
 
       if (current === undefined || current.id === undefined) {
-        return yield* new PostgresNotCreated({ name, orgSlug });
+        return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
       }
       // `current` is reassigned below; the id is stable across the waits.
       const clusterId = current.id;

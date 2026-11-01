@@ -128,7 +128,7 @@ export const CrlProvider = () =>
       const getById = (crlId: string) =>
         rolesanywhere.getCrl({ crlId }).pipe(
           Effect.map((r) => r.crl),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {

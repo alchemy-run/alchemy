@@ -1,9 +1,9 @@
 import * as Planetscale from "@alchemy.run/planetscale";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import { Data, Schedule } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

@@ -6,6 +6,7 @@ import type {
   DurableObjectNamespace as RuntimeDurableObject,
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
+  RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { Artifacts } from "alchemy/Artifacts";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -100,6 +101,12 @@ export interface SourceContext {
    * as the vite arm always has.
    */
   readonly env: Record<string, unknown> | undefined;
+  /**
+   * This Worker's own URL, when it has one and an env entry refers to
+   * it (`Worker.URL`). Only the WorkerProvider knows it — a source that
+   * resolves `env` substitutes it for that entry.
+   */
+  readonly selfUrl: string | undefined;
   /** `props.build` passthrough for rolldown-based sources. */
   readonly extraOptions: Bundle.BundleExtraOptions | undefined;
   /**
@@ -110,6 +117,25 @@ export interface SourceContext {
    */
   readonly assets: WorkerAssetsConfig | undefined;
 }
+
+/**
+ * Runtime settings of a Worker beyond its bindings, Durable Objects,
+ * Hyperdrives, queue consumers and assets: cron triggers, Workflows, tail
+ * consumers, the Cache API, `request.cf`, the zone, Access and the workerd
+ * process overrides.
+ */
+export type DevWorkerOptions = Pick<
+  RuntimeWorker,
+  | "workflows"
+  | "crons"
+  | "tails"
+  | "streamingTails"
+  | "cache"
+  | "cf"
+  | "zone"
+  | "access"
+  | "workerd"
+>;
 
 /**
  * Runtime wiring for local dev, derived by the LocalWorkerProvider.
@@ -126,6 +152,12 @@ export interface DevContext extends SourceContext {
     /** Re-read on each (re)start so late-registered consumers are observed. */
     readonly queueConsumers: Effect.Effect<RuntimeQueueConsumer[]>;
     readonly assets: RuntimeAssets | undefined;
+    /**
+     * The Worker's other runtime settings. A source that runs the Worker in
+     * workerd spreads them whole into its runtime Worker, so a setting added
+     * here reaches every source.
+     */
+    readonly options: DevWorkerOptions;
   };
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;
@@ -329,6 +361,14 @@ export const loadSource = (
   );
 
 /**
+ * Whether a Worker has no code at all — no `main`, `script`, `vite` or
+ * `source` — and only serves its `assets`. Every other Worker resolves a
+ * {@link SourceProvider} with {@link resolveSource}.
+ */
+export const isAssetsOnly = (props: WorkerProps) =>
+  props.main === undefined && props.script === undefined && !props.vite && !props.source;
+
+/**
  * Resolve the {@link SourceProvider} for a Worker from its props. The
  * `source` descriptor (external providers) wins; legacy props map to the
  * built-in providers, preserving the historical precedence exactly:
@@ -380,7 +420,7 @@ export const resolveSource = (
   if (props.bundle === false) {
     return Effect.succeed(makePrebuiltSource({ main: props.main!, rules: props.rules }));
   }
-  return Effect.succeed(makeRolldownSource({ main: props.main! }));
+  return Effect.succeed(makeRolldownSource({ main: props.main!, rules: props.rules }));
 };
 
 /**
@@ -396,6 +436,7 @@ export const makeSourceContext = (params: {
   props: WorkerProps;
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
+  selfUrl?: string;
 }): SourceContext => ({
   dotAlchemy: params.dotAlchemy,
   id: params.id,
@@ -407,6 +448,7 @@ export const makeSourceContext = (params: {
     : { kind: "effect", exports: params.props.exports ?? {} },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
+  selfUrl: params.selfUrl,
   extraOptions: params.props.build,
   assets: params.props.assets,
 });

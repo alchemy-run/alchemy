@@ -192,7 +192,7 @@ const toAttrs = (proxy: compute.TargetGrpcProxy, project: string) => {
 const getByName = (project: string, targetGrpcProxy: string) =>
   compute
     .getTargetGrpcProxies({ project, targetGrpcProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetGrpcProxyProvider = () =>
   Provider.succeed(TargetGrpcProxy, {
@@ -287,7 +287,7 @@ export const TargetGrpcProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, targetGrpcProxyName);
       }
@@ -336,7 +336,7 @@ export const TargetGrpcProxyProvider = () =>
           project: env.project,
           targetGrpcProxy: output.targetGrpcProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

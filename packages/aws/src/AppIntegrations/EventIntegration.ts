@@ -108,7 +108,7 @@ export const EventIntegrationProvider = () =>
       const observe = (name: string) =>
         appintegrations
           .getEventIntegration({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = Effect.fn(function* (live: appintegrations.GetEventIntegrationResponse) {
         if (

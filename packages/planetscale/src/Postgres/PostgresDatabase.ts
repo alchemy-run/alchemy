@@ -200,7 +200,7 @@ export const PostgresDatabaseProvider = () =>
           organization,
           database: databaseName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       if (!data) return undefined;
 
@@ -223,7 +223,7 @@ export const PostgresDatabaseProvider = () =>
           database: data.name,
           branch: defaultBranch,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       const arch = toPostgresClusterArch(branch!.cluster_architecture);
       const clusterSize = branch!.cluster_name;
@@ -276,7 +276,7 @@ export const PostgresDatabaseProvider = () =>
           organization,
           database: observedName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create.
       if (!observed) {
@@ -425,7 +425,7 @@ export const PostgresDatabaseProvider = () =>
                 database: data.name,
                 branch: defaultBranch,
               })
-              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
             const arch = toPostgresClusterArch(branch?.cluster_architecture);
             const clusterSize = branch?.cluster_name ?? "";

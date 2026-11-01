@@ -17,7 +17,7 @@ export const MAX_DISPLAY_NAME = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.FirebaseAppCheck.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -192,17 +192,17 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 
 export const getDebugToken = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaseappcheck
         .getProjectsAppsDebugTokens({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getResourcePolicy = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaseappcheck
         .getProjectsServicesResourcePolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 

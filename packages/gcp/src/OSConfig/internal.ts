@@ -19,11 +19,11 @@ export type OrchestrationScope = osconfig.GoogleCloudOsconfigV2__OrchestrationSc
 export type PolicyOrchestratorBody = osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator;
 
 export class OsconfigNotResolved extends Data.TaggedError("GCP.OSConfig.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OsconfigStillExists extends Data.TaggedError("GCP.OSConfig.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FolderNotResolved extends Data.TaggedError("GCP.OSConfig.FolderNotResolved")<{
@@ -257,7 +257,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new OsconfigNotResolved({ name }),
+      () => new OsconfigNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof OsconfigNotResolved,
@@ -273,7 +273,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new OsconfigStillExists({ name }),
+      () => new OsconfigStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof OsconfigStillExists,
@@ -283,7 +283,7 @@ export const waitUntilGone = <A, E, R>(
     Effect.asVoid,
   );
 
-export const collectOrchestrators = <E extends { readonly _tag: string }>(
+export const collectOrchestrators = (
   pages: Stream.Stream<
     osconfig.GoogleCloudOsconfigV2__ListPolicyOrchestratorsResponse,
     osconfig.NotFound | osconfig.Forbidden | osconfig.ServiceDisabled | osconfig.GcpOpError,
@@ -303,14 +303,14 @@ const ancestryParent = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveFolder = () =>
   Effect.gen(function* () {

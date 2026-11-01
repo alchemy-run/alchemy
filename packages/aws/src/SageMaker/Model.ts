@@ -5,10 +5,21 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ModelInvalidProps extends Data.TaggedError("ModelInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ModelUnexpectedResponse extends Data.TaggedError("ModelUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ModelProps {
   /**
@@ -140,7 +151,7 @@ const fetchModelTags = Effect.fn(function* (arn: string) {
 const readModel = Effect.fn(function* (modelName: string) {
   const described = yield* sagemaker
     .describeModel({ ModelName: modelName })
-    .pipe(Effect.catchTag("ModelNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ModelNotFound", () => Effect.undefined));
   if (!described) return undefined;
   return {
     modelName: described.ModelName,
@@ -209,7 +220,7 @@ export const ModelProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker Model requires props"));
+            return yield* new ModelInvalidProps({ message: "SageMaker Model requires props" });
           }
           const modelName = output?.modelName ?? (yield* createModelName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -237,7 +248,9 @@ export const ModelProvider = () =>
             ).pipe(Effect.catchTag("ModelAlreadyExists", () => Effect.void));
             attrs = yield* readModel(modelName);
             if (attrs === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created model ${modelName}`));
+              return yield* new ModelUnexpectedResponse({
+                message: `failed to read created model ${modelName}`,
+              });
             }
           }
 

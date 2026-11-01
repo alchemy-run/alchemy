@@ -412,7 +412,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
             return output ? attrs : Unowned(attrs);
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -440,7 +440,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           database: databaseName,
           branch: observedBranchName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create. The parent must be ready before
       // the child can fork from it. PostgreSQL short cluster sizes need

@@ -70,9 +70,5 @@ export const LibSQL = <TRelations extends AnyRelations = EmptyRelations, E = nev
       }),
     ),
     (db) =>
-      proxyChain<EffectLibsqlDatabase<TRelations> & { $client: LibsqlClient.LibsqlClient }>(
-        db as Effect.Effect<
-          EffectLibsqlDatabase<TRelations> & { $client: LibsqlClient.LibsqlClient }
-        >,
-      ),
+      proxyChain<EffectLibsqlDatabase<TRelations> & { $client: LibsqlClient.LibsqlClient }>(db),
   );

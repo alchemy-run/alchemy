@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -18,6 +19,11 @@ import {
   syncLexTags,
   waitForBotSettled,
 } from "./internal.ts";
+
+export class BotUnexpectedResponse extends Data.TaggedError("BotUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface BotProps {
   /**
@@ -153,7 +159,7 @@ const createBotName = (id: string, props: { botName?: string | undefined }) =>
 const describeBot = Effect.fn(function* (botId: string) {
   return yield* lexm
     .describeBot({ botId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find a bot by exact name. The physical name embeds app/stage/id. */
@@ -205,7 +211,7 @@ export const BotProvider = () =>
               ids,
               (id) =>
                 Effect.flatMap(describeBot(id), (bot) =>
-                  bot === undefined ? Effect.succeed(undefined) : attributesOf(bot),
+                  bot === undefined ? Effect.undefined : attributesOf(bot),
                 ),
               { concurrency: 5 },
             );
@@ -259,7 +265,9 @@ export const BotProvider = () =>
                 ),
               );
             if (created === undefined) {
-              return yield* Effect.fail(new Error(`failed to create Lex bot ${botName}`));
+              return yield* new BotUnexpectedResponse({
+                message: `failed to create Lex bot ${botName}`,
+              });
             }
             observed = yield* waitForBotSettled(created);
           }

@@ -1,25 +1,13 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  DEFAULT_API_BASE_URL,
-  type Config as TursoClientConfig,
-} from "@distilled.cloud/turso/Credentials";
+import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/turso/Credentials";
 import * as turso from "@distilled.cloud/turso/turso";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import {
-  TURSO_AUTH_PROVIDER_NAME,
-  type TursoAuthConfig,
-  type TursoResolvedCredentials,
-} from "./AuthProvider.ts";
+import { TURSO_AUTH_PROVIDER_NAME, type TursoResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -61,17 +49,19 @@ const discoverOrganization = Effect.gen(function* () {
 });
 
 const make = (
-  resolve: Effect.Effect<TursoResolvedCredentials>,
+  resolve: Effect.Effect<TursoResolvedCredentials, ConfigError>,
 ): Effect.Effect<Context.Context<Credentials | Organization>, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const cached = yield* Effect.cached(resolve);
-    const credentials: Effect.Effect<TursoClientConfig> = Effect.map(cached, (creds) => ({
+    const credentials = Effect.map(resolve, (creds) => ({
       apiKey: creds.apiToken,
       apiBaseUrl: creds.apiBaseUrl,
     }));
-    const organization = yield* Effect.cached(
-      Effect.flatMap(cached, (creds) =>
+    // `Organization` is typed as never failing, so a credentials failure dies
+    // here; the engine still reports it as `CredentialsRequired`.
+    const organization = yield* resolve.pipe(
+      Effect.orDie,
+      Effect.flatMap((creds) =>
         creds.organization !== undefined && creds.organization.length > 0
           ? Effect.succeed(creds.organization)
           : discoverOrganization.pipe(
@@ -80,6 +70,7 @@ const make = (
               orDieCredentialsUnavailable(TURSO_AUTH_PROVIDER_NAME),
             ),
       ),
+      Effect.cached,
     );
     return Context.make(Credentials, credentials).pipe(Context.add(Organization, organization));
   });
@@ -98,18 +89,13 @@ export const fromToken = (input: {
   organization?: string;
   apiBaseUrl?: string;
 }) =>
-  Layer.effectContext(
-    make(
-      Effect.succeed({
-        type: "apiToken",
-        apiToken:
-          typeof input.apiToken === "string" ? Redacted.make(input.apiToken) : input.apiToken,
-        apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
-        organization: input.organization,
-        source: { type: "stored" },
-      }),
-    ),
-  );
+  Effect.succeed<TursoResolvedCredentials>({
+    type: "apiToken",
+    apiToken: typeof input.apiToken === "string" ? Redacted.make(input.apiToken) : input.apiToken,
+    apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    organization: input.organization,
+    source: { type: "stored" },
+  }).pipe(make, Layer.effectContext);
 
 /**
  * Build Turso `Credentials` + `Organization` that resolve through the
@@ -119,21 +105,8 @@ export const fromToken = (input: {
  */
 export const fromAuthProvider = () =>
   Layer.effectContext(
-    Effect.gen(function* () {
-      const resolve = yield* resolveProviderConfig<TursoAuthConfig, TursoResolvedCredentials>(
-        TURSO_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          Effect.mapError(
-            resolve,
-            (e) =>
-              new ConfigError({
-                message: `Failed to resolve Turso credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${e.message}`,
-              }),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* make(resolve.pipe(orDieCredentialsUnavailable(TURSO_AUTH_PROVIDER_NAME)));
-    }),
+    lazyCredentials<TursoResolvedCredentials, ConfigError>()(
+      TURSO_AUTH_PROVIDER_NAME,
+      (creds) => creds,
+    ).pipe(Effect.flatMap(make)),
   );

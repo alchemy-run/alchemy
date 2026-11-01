@@ -115,7 +115,7 @@ export const DataStoresSiteSearchEngineTargetSite = Resource<DataStoresSiteSearc
 export class DataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSiteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const siteSearchEngine = (dataStore: string) => `${dataStore}/siteSearchEngine`;
@@ -145,10 +145,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSiteSearchEngineTargetSites({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string) =>
   discoveryengine.listProjectsLocationsDataStoresSiteSearchEngineTargetSites
@@ -246,7 +246,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
               type,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -255,7 +255,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
 
       if (current === undefined) {
         return yield* new DataStoresSiteSearchEngineTargetSiteNotResolved({
-          name: output?.name ?? `${engine}/targetSites`,
+          resourceName: output?.name ?? `${engine}/targetSites`,
         });
       }
 
@@ -286,7 +286,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
         .deleteProjectsLocationsDataStoresSiteSearchEngineTargetSites({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

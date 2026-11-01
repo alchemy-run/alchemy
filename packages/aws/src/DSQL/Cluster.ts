@@ -11,6 +11,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { runDsqlMigrations } from "./Migrations.ts";
 import { validateDsqlMigrations } from "./MigrationSql.ts";
+
+export class DSQLClusterNotReady extends Data.TaggedError("DSQLClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -152,13 +158,13 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getCluster({ identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dsql
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return Object.fromEntries(
           Object.entries(response?.tags ?? {}).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -182,11 +188,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(identifier).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(new Error(`DSQL cluster '${identifier}' not found`));
+              return Effect.fail(
+                new DSQLClusterNotReady({ message: `DSQL cluster '${identifier}' not found` }),
+              );
             }
             if (!activeStatuses.has(cluster.status)) {
               return Effect.fail(
-                new Error(`DSQL cluster '${identifier}' not active (status: ${cluster.status})`),
+                new DSQLClusterNotReady({
+                  message: `DSQL cluster '${identifier}' not active (status: ${cluster.status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);

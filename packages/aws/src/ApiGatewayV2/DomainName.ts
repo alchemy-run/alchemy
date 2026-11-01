@@ -111,7 +111,7 @@ export const DomainNameProvider = () =>
       const getDomainSafe = (domainName: string) =>
         agw2
           .getDomainName({ DomainName: domainName })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return DomainName.Provider.of({
         stables: ["domainName", "domainNameArn"],

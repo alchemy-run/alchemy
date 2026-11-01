@@ -214,13 +214,13 @@ const toAttrs = (link: dataplex.GoogleCloudDataplexV1EntryLink, project: string)
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryGroupsEntryLinks({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getGroup = (name: string) =>
   dataplex
     .getProjectsLocationsEntryGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupLinks = (locationParent: string, entry: string, project: string) =>
   collectPages(
@@ -380,7 +380,7 @@ export const EntryGroupsEntryLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const aspectsChanged =

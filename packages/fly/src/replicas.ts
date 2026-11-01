@@ -42,7 +42,7 @@ const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 
 export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -115,7 +115,7 @@ export const gone = (machine: FlyMachine | undefined) =>
 export const getMachineById = (appName: string, machineId: string) =>
   machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -137,11 +137,18 @@ const getLeasedMachine = (appName: string, machineId: string) =>
 const getLeasedMachineById = (appName: string, machineId: string) =>
   getLeasedMachine(appName, machineId).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const listMachinesByApp = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
+    // A just-created App can answer 500 "failed to get app: sql: no rows in
+    // result set" until the Machines API sees it; safe to replay a read.
+    Effect.retry({
+      while: (error) => error._tag === "InternalServerError",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 8,
+    }),
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -649,6 +656,13 @@ export const leaseSnapshot = Effect.fn(function* (
         const id = machine.id;
         yield* leases.acquire([id]).pipe(
           Effect.tap(() => Effect.sync(() => leased.add(id))),
+          // A just-created Machine can 404 on the lease API while it already
+          // lists; a Machine that is really gone is dropped by the GET below.
+          Effect.retry({
+            while: (error) => error._tag === "NotFound",
+            schedule: Schedule.spaced("1 second"),
+            times: 5,
+          }),
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }),
@@ -1149,7 +1163,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       );
       const volumeId = volume?.id;
       if (volumeId === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       usedVolumeIds.add(volumeId);
       mounts.push({ volume: volumeId, path: group.disk.path });
@@ -1173,7 +1187,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
         })
-        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
       current =
         created ??
         (yield* listMachinesByApp(input.appName).pipe(
@@ -1186,11 +1200,11 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           ),
         ));
       if (current === undefined || current.id === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       const observed = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!observed || input.configDrifted(observed, { mounts, metadata })) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       current = observed;
     } else if (
@@ -1229,7 +1243,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
             !sameChecks(observed.config?.checks, config.checks) ||
             !sameStopConfig(observed.config?.stop_config, config.stop_config)
           )
-            return yield* new ReplicaNotCreated({ appName: input.appName, name });
+            return yield* new ReplicaNotCreated({ appName: input.appName, resourceName: name });
           return observed;
         }).pipe(
           Effect.retry({

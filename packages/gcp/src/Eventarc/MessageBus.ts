@@ -183,7 +183,7 @@ const toAttrs = (bus: eventarc.MessageBus, project: string, region: string) => {
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsMessageBuses({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MessageBusProvider = () =>
   Provider.succeed(MessageBus, {
@@ -280,7 +280,7 @@ export const MessageBusProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -328,7 +328,7 @@ export const MessageBusProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

@@ -232,9 +232,7 @@ const toAttrs = (rate: StripeTaxRate): TaxRateAttributes => ({
 const isMissingTaxRate = isMissingStripeResource;
 
 const getById = (taxRate: string) =>
-  GetTaxRate({ tax_rate: taxRate }).pipe(
-    Effect.catchIf(isMissingTaxRate, () => Effect.succeed(undefined)),
-  );
+  GetTaxRate({ tax_rate: taxRate }).pipe(Effect.catchIf(isMissingTaxRate, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const rates: StripeTaxRate[] = [];

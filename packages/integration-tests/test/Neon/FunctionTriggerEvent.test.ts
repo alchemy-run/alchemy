@@ -1,5 +1,5 @@
 import { decodeFunctionTriggerEvent } from "@alchemy.run/neon/FunctionTriggerEvent";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 const payload = {

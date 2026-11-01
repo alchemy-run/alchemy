@@ -6,12 +6,25 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags, sameStringSet } from "./internal.ts";
+
+export class MemoryDBClusterNotReady extends Data.TaggedError("MemoryDBClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MemoryDBClusterUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -215,7 +228,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeClusters({ ClusterName: name })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -226,11 +239,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ARN) {
-              return Effect.fail(new Error(`Cluster '${name}' not found`));
+              return Effect.fail(
+                new MemoryDBClusterNotReady({ message: `Cluster '${name}' not found` }),
+              );
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`Cluster '${name}' not available (status: ${cluster.Status})`),
+                new MemoryDBClusterNotReady({
+                  message: `Cluster '${name}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -251,7 +268,9 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`Cluster '${name}' still settling (status: ${cluster.Status})`),
+                new MemoryDBClusterNotReady({
+                  message: `Cluster '${name}' still settling (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -262,7 +281,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: memorydb.Cluster) {
         if (!cluster.Name || !cluster.ARN) {
-          return yield* Effect.fail(new Error(`Cluster '${cluster.Name}' is missing its ARN`));
+          return yield* new MemoryDBClusterUnexpectedResponse({
+            message: `Cluster '${cluster.Name}' is missing its ARN`,
+          });
         }
         return {
           clusterName: cluster.Name,
@@ -498,9 +519,9 @@ export const ClusterProvider = () =>
               cluster === undefined
                 ? Effect.void
                 : Effect.fail(
-                    new Error(
-                      `MemoryDB cluster '${name}' still deleting (status: ${cluster.Status})`,
-                    ),
+                    new MemoryDBClusterNotReady({
+                      message: `MemoryDB cluster '${name}' still deleting (status: ${cluster.Status})`,
+                    }),
                   ),
             ),
             Effect.retry({

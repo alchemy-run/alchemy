@@ -141,7 +141,7 @@ export const VectorBucketProvider = () =>
       const observe = (vectorBucketName: string) =>
         s3vectors.getVectorBucket({ vectorBucketName }).pipe(
           Effect.map((r) => r.vectorBucket),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (resourceArn: string) =>

@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
+
+export class FrameworkUnexpectedResponse extends Data.TaggedError("FrameworkUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A control referenced by a framework control set.
@@ -135,7 +141,7 @@ const toAttributes = (framework: auditmanager.Framework): Framework["Attributes"
 const readFrameworkById = Effect.fn(function* (frameworkId: string) {
   const response = yield* auditmanager
     .getAssessmentFramework({ frameworkId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.framework;
 });
 
@@ -218,9 +224,9 @@ export const FrameworkProvider = () =>
             });
             framework = created.framework;
             if (!framework?.id) {
-              return yield* Effect.fail(
-                new Error(`CreateAssessmentFramework for '${name}' returned no framework`),
-              );
+              return yield* new FrameworkUnexpectedResponse({
+                message: `CreateAssessmentFramework for '${name}' returned no framework`,
+              });
             }
             yield* session.note(`Created framework ${name} (${framework.id})`);
           }

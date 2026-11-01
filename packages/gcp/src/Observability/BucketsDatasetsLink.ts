@@ -147,13 +147,13 @@ export const BucketsDatasetsLink = Resource<BucketsDatasetsLink>(
 export class BucketsDatasetsLinkNotResolved extends Data.TaggedError(
   "GCP.Observability.BucketsDatasetsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketsDatasetsLinkStillExists extends Data.TaggedError(
   "GCP.Observability.BucketsDatasetsLinkStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isValidLinkName = (name: string) => parseLinkName(name) !== undefined;
@@ -199,15 +199,17 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : observability
         .getProjectsLocationsBucketsDatasetsLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link ? Effect.succeed(link) : Effect.fail(new BucketsDatasetsLinkNotResolved({ name })),
+      link
+        ? Effect.succeed(link)
+        : Effect.fail(new BucketsDatasetsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkNotResolved",
@@ -219,7 +221,9 @@ const waitUntilPresent = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link === undefined ? Effect.void : Effect.fail(new BucketsDatasetsLinkStillExists({ name })),
+      link === undefined
+        ? Effect.void
+        : Effect.fail(new BucketsDatasetsLinkStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkStillExists",
@@ -360,7 +364,7 @@ export const BucketsDatasetsLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BucketsDatasetsLinkNotResolved({ name });
+        return yield* new BucketsDatasetsLinkNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

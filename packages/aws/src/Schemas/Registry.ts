@@ -122,7 +122,7 @@ export const RegistryProvider = () =>
       const describe = (registryName: string) =>
         schemas
           .describeRegistry({ RegistryName: registryName })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return Registry.Provider.of({
         stables: ["registryName", "registryArn"],
@@ -204,7 +204,7 @@ export const RegistryProvider = () =>
             .getResourcePolicy({ RegistryName: registryName })
             .pipe(
               Effect.map((r) => (r.Policy ? r.Policy : undefined)),
-              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFoundException", () => Effect.undefined),
             );
           const policyDrifted =
             desiredPolicy === undefined || currentPolicy === undefined

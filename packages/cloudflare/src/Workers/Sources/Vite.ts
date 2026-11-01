@@ -8,15 +8,18 @@ import { hashDirectory, type MemoOptions } from "alchemy/Command/Memo";
 import { findAvailablePort, initialCwd } from "alchemy/Util/Node";
 import { makeResourceLogger } from "alchemy/Util/ResourceOutput";
 import { sha256Object } from "alchemy/Util/sha256";
-import * as ConsoleService from "effect/Console";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as vite from "vite";
+import type { FoldkitBuildMetadata } from "../../Website/FoldkitBuild.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
-import type { ViteOptions } from "../Worker.ts";
+import { resolveViteMain } from "../ViteMain.ts";
+import { isSelfUrl, type ViteOptions } from "../Worker.ts";
+import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
@@ -29,28 +32,28 @@ import { isWorkerLoader } from "../WorkerLoader.ts";
  */
 
 /**
- * Route Vite's logger through the ambient Effect `Console` service instead of
- * its default stdout logger. Under the CLI this is the global console
- * (identical output); under environments that override the Console — e.g.
- * alchemy-test's per-test buffering console — the build output is captured
- * with the test instead of leaking to the terminal.
+ * Route Vite's logger into log records through the services of the Effect
+ * that built it, instead of its default stdout logger: the process that
+ * renders logs shows them (raw or stripped), JSON output carries them, and
+ * alchemy-test's per-test log capture sees them.
  */
-const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
+const makeViteLogger = (context: Context.Context<never>): vite.Logger => {
   const loggedErrors = new WeakSet<object>();
   let hasWarned = false;
+  const log = (effect: Effect.Effect<void>) => Effect.runSyncWith(context)(effect);
   return {
-    info: (msg) => console.log(msg),
+    info: (msg) => log(Effect.logInfo(msg)),
     warn: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      log(Effect.logWarning(msg));
     },
     warnOnce: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      log(Effect.logWarning(msg));
     },
     error: (msg, options) => {
       if (options?.error != null) loggedErrors.add(options.error);
-      console.error(msg);
+      log(Effect.logError(msg));
     },
     clearScreen: () => {},
     hasErrorLogged: (error) => loggedErrors.has(error),
@@ -122,14 +125,14 @@ export const viteDev = (
           }
         : serverOptions;
     return yield* Effect.acquireRelease(
-      ConsoleService.consoleWith((console) =>
+      Effect.flatMap(Effect.context<never>(), (context) =>
         Effect.promise(async () => {
           const devServer = await vite.createServer({
             root: rootDir,
             define: getDefine(env),
             plugins: [cloudflare(pluginOptions)],
             server,
-            customLogger: makeViteLogger(console),
+            customLogger: makeViteLogger(context),
           });
           await devServer.listen();
           return devServer;
@@ -141,6 +144,12 @@ export const viteDev = (
         }),
     );
   });
+
+type ViteBuildOptions = CloudflareVitePluginOptions & Pick<ViteOptions, "framework">;
+
+type ViteWorkerBuildOutput = ViteBuildOutput & {
+  foldkit: FoldkitBuildMetadata | undefined;
+};
 
 /**
  * Run a production Vite build in a child process rooted at the project
@@ -156,7 +165,7 @@ export const viteDev = (
 export const viteBuild = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
-  pluginOptions: CloudflareVitePluginOptions,
+  pluginOptions: ViteBuildOptions,
   fqn: string,
 ) =>
   Effect.gen(function* () {
@@ -170,6 +179,7 @@ export const viteBuild = (
         // `getDefine`); the rest may hold non-serializable values.
         env: Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith("VITE_"))),
         main: pluginOptions.main,
+        framework: pluginOptions.framework,
         compatibilityDate: pluginOptions.compatibilityDate,
         compatibilityFlags: pluginOptions.compatibilityFlags,
         viteEnvironments: pluginOptions.viteEnvironments,
@@ -178,10 +188,11 @@ export const viteBuild = (
     );
     return {
       clientDirectory: result.clientDirectory,
+      foldkit: result.foldkit,
       base: result.base,
       serverBundle: Effect.succeed(result.serverBundle),
       externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
-    } satisfies ViteBuildOutput;
+    } satisfies ViteWorkerBuildOutput;
   });
 
 /**
@@ -193,14 +204,14 @@ export const viteBuild = (
 export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
-  pluginOptions: CloudflareVitePluginOptions,
+  pluginOptions: ViteBuildOptions,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
-    const console = yield* ConsoleService.Console;
-    yield* Effect.promise(async () => {
+    const context = yield* Effect.context<never>();
+    const foldkit = yield* Effect.promise(async () => {
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
@@ -208,7 +219,7 @@ export const viteBuildInProcess = (
           root: rootDir,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
-          customLogger: makeViteLogger(console),
+          customLogger: makeViteLogger(context),
           // Disables the NATIVE rolldown progress reporter ("transforming…",
           // "rendering chunks…", "computing gzip size…"): it prints from
           // Rust straight to fd 1 and cannot be intercepted from JS — vite
@@ -222,9 +233,17 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
+      const readFoldkitMetadata =
+        pluginOptions.framework === "foldkit"
+          ? (await import("../../Website/FoldkitBuild.ts")).foldkitBuildMetadataReader(
+              builder.config.plugins,
+              pluginOptions.main,
+            )
+          : undefined;
       await builder.buildApp();
+      return readFoldkitMetadata?.();
     });
-    return yield* outputPlugin.output;
+    return { ...(yield* outputPlugin.output), foldkit };
   });
 
 // Emulate `vite build` env semantics for `props.env`: only
@@ -267,30 +286,41 @@ async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
  * are unwrapped, env-bound Effects are evaluated, and `WorkerLoader`s
  * (bindings that happen to be Effects) are skipped.
  */
-const resolveViteEnv = (env: Record<string, unknown>) =>
+const resolveViteEnv = (env: Record<string, unknown>, selfUrl: string | undefined) =>
   Effect.gen(function* () {
     return Object.fromEntries(
-      (yield* Effect.all(
-        Object.entries(env).map(
-          Effect.fn(function* ([key, value]) {
-            return [
-              key,
-              typeof value === "string"
-                ? value
-                : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
-                  ? Redacted.value(value)
+      (yield* Effect.forEach(
+        Object.entries(env),
+        Effect.fn(function* ([key, value]) {
+          return [
+            key,
+            typeof value === "string"
+              ? value
+              : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
+                ? Redacted.value(value)
+                : // `Worker.URL` (bare tag or called) — resolved to this
+                  // Worker's own URL. The bare tag is Effect-shaped, so
+                  // check before `Effect.isEffect`.
+                  isSelfUrl(value)
+                  ? selfUrl
                   : // A `WorkerLoader` is a real Effect that also carries
                     // the `~alchemy/Kind` marker — it is a binding, not a
                     // runnable env value. Check it before `Effect.isEffect`
                     // so we don't execute it as an inlined env entry.
                     isWorkerLoader(value)
                     ? undefined
-                    : Effect.isEffect(value)
-                      ? yield* value as any as Effect.Effect<any>
-                      : undefined,
-            ];
-          }),
-        ),
+                    : // A `Cloudflare.Container` declaration is likewise
+                      // Effect-shaped but is a binding (DO namespace +
+                      // ContainerApplication) — yielding it would resolve
+                      // the started-instance tag, which only exists inside
+                      // a Durable Object (#997).
+                      isContainerDecl(value)
+                      ? undefined
+                      : Effect.isEffect(value)
+                        ? yield* value as any as Effect.Effect<any>
+                        : undefined,
+          ];
+        }),
       )).filter(([, value]) => value !== undefined),
     );
   });
@@ -360,26 +390,54 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
-    const env = yield* resolveViteEnv(ctx.env ?? {});
-    const { clientDirectory, serverBundle, externalWorkspaces } = yield* viteBuild(
+    const env = yield* resolveViteEnv(ctx.env ?? {}, ctx.selfUrl);
+    const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } = yield* viteBuild(
       vite.rootDir,
       env,
       {
-        main: vite.main,
+        // A relative `vite.main` is documented to resolve from the Vite
+        // root. The rolldown plugin resolves the worker entry with no
+        // importer (i.e. against `process.cwd()`), which breaks when the
+        // deploy runs from a different directory (e.g. a monorepo infra
+        // package) — absolutize before handing it over (#796).
+        // A package export or virtual module (`vike:server`) goes to Vite
+        // as is.
+        main: vite.main
+          ? yield* resolveViteMain(path.resolve(initialCwd, vite.rootDir ?? "."), vite.main)
+          : undefined,
         compatibilityDate: ctx.compatibility.date,
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: vite.viteEnvironments,
+        framework: vite.framework,
       },
       ctx.fqn,
     );
+    const declaredAssets = ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined;
+    // What the build itself says about its assets, filled in under what
+    // the resource declared: a framework that records which pages it
+    // prerendered knows the routing better than a default would, and the
+    // resource's own `assets` still has the last word.
+    const derivedAssets =
+      clientDirectory && vite.framework === "foldkit"
+        ? yield* Effect.promise(() => import("../../Website/FoldkitBuild.ts")).pipe(
+            Effect.map(({ foldkitAssetsFromManifest }) =>
+              foldkitAssetsFromManifest(foldkit?.manifest),
+            ),
+          )
+        : undefined;
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
           ? readAssets({
-              ...(ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined),
+              ...derivedAssets,
+              ...declaredAssets,
               // `clientDirectory` from the build child is absolute; the
-              // base only matters for the in-process legacy shape.
+              // rootDir only matters as a legacy fallback.
               directory: path.resolve(initialCwd, vite.rootDir ?? ".", clientDirectory),
+              // The resolved Vite `base` is what rewrote the URLs in the
+              // emitted HTML, so it is the only prefix the manifest can
+              // agree with.
+              base,
             })
           : Effect.undefined,
         serverBundle,

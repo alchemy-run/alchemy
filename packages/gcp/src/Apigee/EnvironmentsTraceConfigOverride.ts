@@ -100,7 +100,7 @@ export const EnvironmentsTraceConfigOverride = Resource<EnvironmentsTraceConfigO
 export class EnvironmentsTraceConfigOverrideNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsTraceConfigOverrideNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const traceConfigParent = (organizationId: string, environmentId: string) =>
@@ -234,7 +234,7 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
 
       if (current === undefined || !current.name) {
         return yield* new EnvironmentsTraceConfigOverrideNotResolved({
-          name: `${parent}/overrides`,
+          resourceName: `${parent}/overrides`,
         });
       }
 

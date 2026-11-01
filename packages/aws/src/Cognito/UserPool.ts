@@ -651,7 +651,7 @@ export const UserPoolProvider = () =>
       const describePool = Effect.fn(function* (userPoolId: string) {
         return yield* cip.describeUserPool({ UserPoolId: userPoolId }).pipe(
           Effect.map((r) => r.UserPool),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

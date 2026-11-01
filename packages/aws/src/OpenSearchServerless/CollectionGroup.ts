@@ -254,7 +254,7 @@ export const CollectionGroupProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.createCollectionGroupDetail),
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             detail = created !== undefined ? { ...created } : yield* observeByName(name);
           } else {

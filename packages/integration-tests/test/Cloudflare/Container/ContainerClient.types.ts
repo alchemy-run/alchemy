@@ -135,3 +135,38 @@ export const handleTypes = Effect.gen(function* () {
   const port = yield* distinct.getTcpPort(8080);
   void port;
 });
+
+// Placement constraints accept a compliance jurisdiction and regions within it.
+const euOnly = Cloudflare.Container("EuOnlyTypes", {
+  schedulingPolicy: "durable_object",
+  image: "node:24-slim",
+  constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+});
+
+// Open enums: values Cloudflare adds later need no alchemy release.
+const newerPlacement: Cloudflare.Containers.ContainerApplication.Constraints = {
+  jurisdiction: "apac",
+  regions: ["NEWR"],
+};
+
+export const placements = [euOnly, newerPlacement];
+
+// Network keys are camelCase, like every other prop; the SDK sends them as
+// `assign_ipv4`. The API rejects anything else with `unrecognized key`.
+const privateNetwork = Cloudflare.Container("PrivateNetworkTypes", {
+  image: "node:24-slim",
+  network: { assignIpv4: "none", assignIpv6: "none", mode: "private" },
+});
+
+const wireNameNetwork: Cloudflare.Containers.ContainerApplication.Network = {
+  // @ts-expect-error wire names are not props; write `assignIpv4`.
+  assign_ipv4: "none",
+};
+
+const unknownNetworkKey: Cloudflare.Containers.ContainerApplication.Network = {
+  mode: "private",
+  // @ts-expect-error the API rejects keys it does not know.
+  ttl: 30,
+};
+
+export const networks = [privateNetwork, wireNameNetwork, unknownNetworkKey];

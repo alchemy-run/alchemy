@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class ServiceNetworkUnexpectedResponse extends Data.TaggedError(
+  "ServiceNetworkUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Authorization mode for a service network. `NONE` allows all traffic;
@@ -100,7 +108,7 @@ export const ServiceNetworkProvider = () =>
       const observe = (serviceNetworkIdentifier: string) =>
         vpclattice
           .getServiceNetwork({ serviceNetworkIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listServiceNetworks.pages({}).pipe(
@@ -110,9 +118,7 @@ export const ServiceNetworkProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((s) => s.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -140,7 +146,7 @@ export const ServiceNetworkProvider = () =>
       ) {
         const listed = yield* vpclattice
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (!listed) return false;
         const tags = tagRecord(listed.tags);
         return (
@@ -180,9 +186,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkVpcAssociation({
                     serviceNetworkVpcAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },
@@ -219,9 +223,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkServiceAssociation({
                     serviceNetworkServiceAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },
@@ -258,9 +260,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkResourceAssociation({
                     serviceNetworkResourceAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },
@@ -309,7 +309,9 @@ export const ServiceNetworkProvider = () =>
               .createServiceNetwork({ name, authType: desiredAuthType })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!network?.arn || !network.id) {
-              return yield* Effect.fail(new Error(`Failed to create service network ${name}`));
+              return yield* new ServiceNetworkUnexpectedResponse({
+                message: `Failed to create service network ${name}`,
+              });
             }
           } else if ((network.authType ?? "NONE") !== desiredAuthType) {
             // Sync auth type — the only mutable setting.

@@ -4,9 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class RDSDBClusterParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "RDSDBClusterParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBClusterParameterGroupProps {
   /**
@@ -99,7 +107,7 @@ export const DBClusterParameterGroupProvider = () =>
           .describeDBClusterParameterGroups({
             DBClusterParameterGroupName: name,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBClusterParameterGroups?.[0];
       });
 
@@ -193,9 +201,9 @@ export const DBClusterParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBClusterParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB cluster parameter group '${name}'`),
-              );
+              return yield* new RDSDBClusterParameterGroupUnexpectedResponse({
+                message: `Failed to create DB cluster parameter group '${name}'`,
+              });
             }
           }
 

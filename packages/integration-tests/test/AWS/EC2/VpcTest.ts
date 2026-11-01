@@ -1,4 +1,4 @@
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { makeEc2VpcCapacityLease } from "./VpcCapacity.ts";
 
 /** Test adapter for files that create custom VPCs. */

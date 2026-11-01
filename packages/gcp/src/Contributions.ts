@@ -6,4 +6,13 @@ export default Contributions.make({
     () => import("./AuthProvider.ts"),
     (module) => module.GcpAuth,
   ),
+  stateStores: {
+    gcp: {
+      description: "Cloud Storage state store in the profile's GCP project",
+      load: Contributions.lazy(
+        () => import("./StateStore/Lifecycle.ts"),
+        (module) => module.stateStore,
+      ),
+    },
+  },
 });

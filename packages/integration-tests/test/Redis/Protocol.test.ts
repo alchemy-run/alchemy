@@ -7,7 +7,7 @@ import {
   encodeSimpleString,
   Parser,
 } from "@alchemy.run/redis/Resp";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 

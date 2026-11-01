@@ -3,12 +3,18 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+
+export class RulesetInvalidProps extends Data.TaggedError("RulesetInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type Phase = NonNullable<rulesets.CreateRulesetForZoneRequest["phase"]>;
 export type Rule = NonNullable<rulesets.PutPhasForZoneRequest["rules"]>[number];
@@ -144,7 +150,9 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
       if (zoneId === undefined) {
-        return yield* Effect.fail(new Error("Cloudflare Ruleset: zone id is not resolved"));
+        return yield* new RulesetInvalidProps({
+          message: "Cloudflare Ruleset: zone id is not resolved",
+        });
       }
       const name = yield* createRulesetName(id, news.name ?? output?.name);
       const ruleset = yield* rulesets.putPhasForZone({
@@ -164,7 +172,7 @@ export const RulesetProvider = () =>
           zoneId: output.zoneId,
           rulesetPhase: output.phase ?? olds.phase,
         })
-        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
       if (entrypoint === undefined) return;
       const owned = new Set(output.rules.map((rule) => rule.id));
       yield* Effect.forEach(
@@ -188,7 +196,7 @@ export const RulesetProvider = () =>
         })
         .pipe(
           Effect.map((ruleset) => toRulesetAttributes(zoneId, ruleset)),
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("RulesetNotFound", () => Effect.undefined),
         );
     }),
     // A `Ruleset` is a zone phase entrypoint (kind: "zone"). There is no
@@ -222,9 +230,7 @@ export const RulesetProvider = () =>
                       Effect.map((ruleset) => toRulesetAttributes(zone.id, ruleset)),
                       // Per-item not-found / plan-gated entrypoints are
                       // skipped rather than failing the whole enumeration.
-                      Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag(["RulesetNotFound", "Forbidden"], () => Effect.undefined),
                     ),
                 { concurrency: 10 },
               ),

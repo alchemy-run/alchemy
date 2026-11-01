@@ -11,10 +11,9 @@ import {
   ANSI_RESET,
   ansiFg,
   colorsEnabled,
-  glyphsFor,
-  theme,
   unicodeEnabled,
-} from "../CliKit/index.ts";
+} from "../../Util/Terminal.ts";
+import { glyphsFor, theme } from "../../Util/Theme.ts";
 
 const isTerminalCancelled = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["TerminalCancelled"]) }),

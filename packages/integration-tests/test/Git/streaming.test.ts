@@ -7,7 +7,7 @@
 import { bufferRandomAccess } from "@alchemy.run/git/Protocol/PackParser";
 import { StoreError } from "@alchemy.run/git/Protocol/Store";
 import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 

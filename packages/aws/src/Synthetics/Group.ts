@@ -94,7 +94,7 @@ export const GroupProvider = () =>
       const getGroupOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* synthetics.getGroup({ GroupIdentifier: identifier }).pipe(
           Effect.map((r) => r.Group),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

@@ -1,7 +1,7 @@
 import type { FunctionZipProps } from "@alchemy.run/aws/Lambda/Function";
 import { makeFunctionBundler } from "@alchemy.run/aws/Lambda/FunctionBundle";
+import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { exec } from "alchemy/Util/exec";
 import * as Effect from "effect/Effect";

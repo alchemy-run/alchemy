@@ -89,13 +89,13 @@ export const UserPoolTriggerEventSource = Layer.effect(
           Effect.gen(function* () {
             yield* userPool.bind`AWS.Cognito.UserPoolTrigger(${host}, ${userPool}, ${props.trigger})`(
               {
-                lambdaConfig: { [props.trigger]: host.functionArn },
+                lambdaConfig: { [props.trigger]: Lambda.qualifiedArnOf(host) },
               },
             );
 
             yield* Permission(`${userPool.LogicalId}-${props.trigger}-Permission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "cognito-idp.amazonaws.com",
               sourceArn: userPool.userPoolArn,
             });

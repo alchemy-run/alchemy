@@ -1,7 +1,7 @@
-import * as CliKit from "alchemy/Cli/CliKit";
 import { confirmOrDecline } from "alchemy/Cli/commands/confirm";
 import { envFile, yes } from "alchemy/Cli/commands/flags";
 import { instrumentCommand } from "alchemy/Cli/commands/instrument";
+import * as Interaction from "alchemy/Interaction";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
@@ -27,7 +27,7 @@ const runBootstrap = Effect.fn(function* (args: {
   destroy: boolean;
 }) {
   const { envFile, profile, region, destroy } = args;
-  const prompt = yield* CliKit.CliKit;
+  const prompt = yield* Interaction.Interaction;
   const target = {
     profile,
     region,

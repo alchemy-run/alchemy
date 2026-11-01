@@ -114,7 +114,7 @@ export const DeploymentStrategyProvider = () =>
       const readStrategy = Effect.fn(function* (deploymentStrategyId: string) {
         return yield* appconfig
           .getDeploymentStrategy({ DeploymentStrategyId: deploymentStrategyId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {

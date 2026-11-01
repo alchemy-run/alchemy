@@ -196,7 +196,7 @@ export const MetricDescriptor = Resource<MetricDescriptor>("GCP.Monitoring.Metri
 export class MetricDescriptorNotResolved extends Data.TaggedError(
   "GCP.Monitoring.MetricDescriptorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const METRIC_DESCRIPTORS = "/metricDescriptors/";
@@ -315,20 +315,20 @@ const toBody = (
 const getByName = (name: string) =>
   monitoring
     .getProjectsMetricDescriptors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilSynced = (name: string, desired: { displayName?: string; description: string }) =>
   getByName(name).pipe(
     Effect.flatMap((value) => {
       if (value === undefined) {
-        return Effect.fail(new MetricDescriptorNotResolved({ name }));
+        return Effect.fail(new MetricDescriptorNotResolved({ resourceName: name }));
       }
       const displayOk =
         desired.displayName === undefined || (value.displayName ?? "") === desired.displayName;
       const descriptionOk = (value.description ?? "") === desired.description;
       return displayOk && descriptionOk
         ? Effect.succeed(value)
-        : Effect.fail(new MetricDescriptorNotResolved({ name }));
+        : Effect.fail(new MetricDescriptorNotResolved({ resourceName: name }));
     }),
     // Descriptor writes take up to a minute to become readable.
     Effect.retry({
@@ -454,7 +454,7 @@ export const MetricDescriptorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetricDescriptorNotResolved({ name });
+        return yield* new MetricDescriptorNotResolved({ resourceName: name });
       }
 
       const observedLabels = toLabels(current.labels);

@@ -194,16 +194,16 @@ export type Instance = Resource<
 export const Instance = Resource<Instance>("GCP.Bigtable.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Bigtable.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Bigtable.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Bigtable.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeType = (type: string | undefined) => {
@@ -272,7 +272,9 @@ const toAttrs = (instance: bigtable.Instance, project: string) => {
 const waitUntilExists = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceNotResolved",
@@ -285,13 +287,13 @@ const waitUntilReady = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is bigtable.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_NOT_KNOWN") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_NOT_KNOWN",
         }),
     ),
@@ -307,7 +309,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceStillExists",
@@ -382,7 +386,7 @@ export const InstanceProvider = () =>
               clusters: clusterMap,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -390,7 +394,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "STATE_NOT_KNOWN") !== "READY") {

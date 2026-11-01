@@ -95,7 +95,7 @@ const scheduleCompileCacheFlush = (() => {
  */
 const importedCommonJsNeedsNodeLoader = (() => {
   const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-  return (major === 24 && minor < 18) || major === 25 || (major === 26 && minor < 2);
+  return major < 24 || (major === 24 && minor < 18) || major === 25 || (major === 26 && minor < 2);
 })();
 
 /** Specifiers Node owns outright: builtins, data URLs, remote schemes. */

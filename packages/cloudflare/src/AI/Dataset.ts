@@ -314,7 +314,7 @@ export const DatasetProvider = () =>
 const getDataset = (accountId: string, gatewayId: string, id: string) =>
   aiGateway
     .getDataset({ accountId, gatewayId, id })
-    .pipe(Effect.catchTag("DatasetNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DatasetNotFound", () => Effect.undefined));
 
 /**
  * Find a dataset by exact name. Cloudflare's `name` query is a fuzzy match,
@@ -331,7 +331,7 @@ const findByName = (accountId: string, gatewayId: string, name: string) =>
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),
-    Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayNotFound", () => Effect.undefined),
   );
 
 const createDatasetName = (id: string, name: string | undefined) =>

@@ -136,7 +136,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
             // 403/429 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
-            Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -159,7 +159,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -200,7 +200,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* pqe
         .getOriginPostQuantumEncryption({ zoneId })
-        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

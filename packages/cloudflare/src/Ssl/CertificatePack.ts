@@ -453,7 +453,7 @@ const getPack = (zoneId: string, certificatePackId: string) =>
     Effect.map((pack): ssl.GetCertificatePackResponse | undefined =>
       isTombstone(pack) ? undefined : pack,
     ),
-    Effect.catchTag(["CertificatePackNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["CertificatePackNotFound", "InvalidRoute"], () => Effect.undefined),
   );
 
 /**
@@ -469,7 +469,7 @@ const findByHosts = (zoneId: string, hosts: string[]) =>
         (pack) => pack.type === "advanced" && !isTombstone(pack) && sameHosts(pack.hosts, hosts),
       ),
     ),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 /** Order-insensitive host set comparison. */

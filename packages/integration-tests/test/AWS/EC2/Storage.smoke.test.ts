@@ -10,8 +10,8 @@ import {
   VolumeAttachment,
   Vpc,
 } from "@alchemy.run/aws/EC2";
+import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

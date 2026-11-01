@@ -307,7 +307,7 @@ const DEFAULT_VALIDITY = 5475;
 const getCertificate = (certificateId: string) =>
   originCa.getOriginCaCertificate({ certificateId }).pipe(
     Effect.map((cert) => (cert.revokedAt ? undefined : cert)),
-    Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CertificateNotFound", () => Effect.undefined),
   );
 
 /**

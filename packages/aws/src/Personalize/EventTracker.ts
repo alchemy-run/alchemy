@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readPersonalizeTags, syncPersonalizeTags } from "./internal.ts";
+
+export class EventTrackerNotReady extends Data.TaggedError("EventTrackerNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EventTrackerProps {
   /**
@@ -103,7 +109,7 @@ export const EventTrackerProvider = () =>
       const describe = Effect.fn(function* (eventTrackerArn: string) {
         const response = yield* personalize
           .describeEventTracker({ eventTrackerArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.eventTracker;
       });
 
@@ -116,11 +122,9 @@ export const EventTrackerProvider = () =>
           }),
         );
         if (tracker?.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize event tracker ${eventTrackerArn} did not become ACTIVE (status: ${tracker?.status})`,
-            ),
-          );
+          return yield* new EventTrackerNotReady({
+            message: `Personalize event tracker ${eventTrackerArn} did not become ACTIVE (status: ${tracker?.status})`,
+          });
         }
         return tracker;
       });
@@ -229,11 +233,9 @@ export const EventTrackerProvider = () =>
             }),
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Personalize event tracker ${output.eventTrackerArn} was not deleted (status: ${remaining.status})`,
-              ),
-            );
+            return yield* new EventTrackerNotReady({
+              message: `Personalize event tracker ${output.eventTrackerArn} was not deleted (status: ${remaining.status})`,
+            });
           }
         }),
 

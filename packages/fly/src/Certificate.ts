@@ -314,7 +314,7 @@ const toAttrsFromSummary = (
 const getByHostname = (appName: string, hostname: string) =>
   machines
     .getAppCertificate({ app_name: appName, hostname })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAppCertificates = (appName: string) =>
   Effect.gen(function* () {
@@ -372,7 +372,7 @@ const createAcme = (appName: string, hostname: string) =>
       app_name: appName,
       hostname,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
 const createCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   machines
@@ -382,7 +382,7 @@ const createCustom = (appName: string, hostname: string, fullchain: string, priv
       fullchain,
       private_key: privateKey,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
 const replaceCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   Effect.gen(function* () {
@@ -524,7 +524,7 @@ export const CertificateProvider = () =>
             app_name: appName,
             hostname,
           })
-          .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.undefined));
         if (checked !== undefined) {
           current = checked;
         }

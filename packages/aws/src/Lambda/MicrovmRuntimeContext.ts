@@ -60,15 +60,15 @@ export const makeMicrovmRuntimeContext = (id: string): ProcessContext => {
       })) as unknown as ProcessContext["run"],
     serve,
     exports: Effect.sync(() => ({
-      default: Effect.all(
-        runners.map((eff) =>
+      default: Effect.forEach(
+        runners,
+        (eff) =>
           Effect.forever(
             eff.pipe(
               Effect.tapError((err) => Effect.logError(err)),
               Effect.ignore,
             ),
           ),
-        ),
         { concurrency: "unbounded" },
       ),
     })),

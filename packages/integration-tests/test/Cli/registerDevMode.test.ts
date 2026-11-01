@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -77,7 +77,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
       expect(stderr).toBe("");
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/alchemy=file:.*\/src\/index\.ts/);
-      expect(stdout).toMatch(/sub=file:.*\/alchemy\/src\/AWS\/index\.ts/);
+      expect(stdout).toMatch(/sub=file:.*\/packages\/aws\/src\/S3\/index\.ts/);
       expect(stdout).toContain("tsx=ok");
 
       const repoDir = fileURLToPath(new URL("../../../..", import.meta.url));

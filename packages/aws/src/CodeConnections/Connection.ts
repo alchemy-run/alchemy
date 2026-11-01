@@ -89,7 +89,7 @@ export const ConnectionProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* codeconnections
           .getConnection({ ConnectionArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Connection;
       });
 

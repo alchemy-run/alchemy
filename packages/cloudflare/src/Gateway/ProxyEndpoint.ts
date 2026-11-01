@@ -238,7 +238,7 @@ type ObservedEndpoint = zeroTrust.GetGatewayProxyEndpointResponse;
 const getEndpoint = (accountId: string, proxyEndpointId: string) =>
   zeroTrust.getGatewayProxyEndpoint({ accountId, proxyEndpointId }).pipe(
     Effect.map((e): ObservedEndpoint | undefined => e),
-    Effect.catchTag("ProxyEndpointNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ProxyEndpointNotFound", () => Effect.undefined),
   );
 
 /**

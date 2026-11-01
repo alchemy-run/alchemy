@@ -23,13 +23,13 @@
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:nextjs"

@@ -160,7 +160,10 @@ export const AssetsLive = Layer.effect(
             );
             manifest.push({ pathHash, contentHash });
             assetsReverseMap[bytesToHex(contentHash)] = {
-              filePath: relativeFilepath,
+              // The KV worker requests this from workerd's disk service as a
+              // URL path. Windows separators would land inside one URL
+              // segment, which workerd's disk service rejects.
+              filePath: relativeFilepath.split(path.sep).join("/"),
               contentType: getContentType(filepath),
             };
           }),
@@ -266,6 +269,9 @@ export const AssetsLive = Layer.effect(
               name: "assets:files",
               disk: {
                 path: filesDirectory,
+                // Deploys upload dot-paths such as `.well-known/`. Reads still
+                // go through the manifest, so ignored files stay unreachable.
+                allowDotfiles: true,
               },
             },
             {
@@ -380,6 +386,7 @@ export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
     compatibility_flags: worker.compatibilityFlags,
     html_handling: worker.assets?.htmlHandling,
     not_found_handling: worker.assets?.notFoundHandling,
+    base_path: worker.assets?.basePath,
     headers,
     redirects,
     has_static_routing: !!staticRouting,

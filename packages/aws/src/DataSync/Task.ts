@@ -126,7 +126,7 @@ export const TaskProvider = () =>
       const describe = Effect.fn(function* (taskArn: string) {
         return yield* datasync
           .describeTask({ TaskArn: taskArn })
-          .pipe(Effect.catchTag("TaskNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("TaskNotFound", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {

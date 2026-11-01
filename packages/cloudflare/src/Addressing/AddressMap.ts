@@ -1,11 +1,17 @@
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class AddressMapUnexpectedResponse extends Data.TaggedError("AddressMapUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Addressing.AddressMap" as const;
 type TypeId = typeof TypeId;
@@ -201,12 +207,16 @@ export const AddressMapProvider = () =>
           memberships: desiredMemberships(news),
         });
         if (!created.id) {
-          return yield* Effect.fail(new Error("Cloudflare did not return an Address Map id"));
+          return yield* new AddressMapUnexpectedResponse({
+            message: "Cloudflare did not return an Address Map id",
+          });
         }
         // Re-observe so every sync step diffs against authoritative state.
         observed = yield* getMap(accountId, created.id);
         if (!observed) {
-          return yield* Effect.fail(new Error("Address Map disappeared right after creation"));
+          return yield* new AddressMapUnexpectedResponse({
+            message: "Address Map disappeared right after creation",
+          });
         }
       }
 
@@ -296,7 +306,9 @@ export const AddressMapProvider = () =>
       //    converged cloud state.
       const final = yield* getMap(acct, addressMapId);
       if (!final) {
-        return yield* Effect.fail(new Error("Address Map disappeared during reconcile"));
+        return yield* new AddressMapUnexpectedResponse({
+          message: "Address Map disappeared during reconcile",
+        });
       }
       return toAttributes(final, acct);
     }),
@@ -320,7 +332,7 @@ export const AddressMapProvider = () =>
 const getMap = (accountId: string, addressMapId: string) =>
   addressing
     .getAddressMap({ accountId, addressMapId })
-    .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.undefined));
 
 /** Desired IPs — inputs have been resolved to concrete strings by Plan. */
 const desiredIps = (news: AddressMapProps): string[] => (news.ips ?? []).map((ip) => ip as string);

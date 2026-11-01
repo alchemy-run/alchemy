@@ -112,7 +112,7 @@ export const AnomalyMonitorProvider = () =>
       const getByArn = (monitorArn: string) =>
         pinCe(ce.getAnomalyMonitors({ MonitorArnList: [monitorArn] })).pipe(
           Effect.map((r) => r.AnomalyMonitors[0]),
-          Effect.catchTag("UnknownMonitorException", () => Effect.succeed(undefined)),
+          Effect.catchTag("UnknownMonitorException", () => Effect.undefined),
         );
 
       // Fallback observation when no ARN is cached: scan all monitors for the

@@ -11,7 +11,7 @@ import {
  * the caches' ceilings (DESIGN §21.2, §22.5).
  */
 import { BACKPRESSURE_BYTES, RETAIN_BYTES } from "@alchemy.run/git/Store/StreamingSource";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 const MiB = 1024 * 1024;
 const spilled = Math.ceil((RETAIN_BYTES + BACKPRESSURE_BYTES + STAGE_BATCH_BYTES) / MiB);

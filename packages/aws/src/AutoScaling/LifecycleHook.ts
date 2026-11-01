@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
+
+export class LifecycleHookUnexpectedResponse extends Data.TaggedError(
+  "LifecycleHookUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type LifecycleHookName = string;
 
@@ -195,7 +203,7 @@ export const LifecycleHookProvider = () =>
             // `ValidationError: AutoScalingGroup ... not found` (typed
             // `AutoScalingGroupNotFound` via the auto-scaling patch); treat it
             // as "hook gone" so refresh/read converge instead of failing.
-            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.undefined),
           );
 
       const toAttributes = (hook: autoscaling.LifecycleHook): LifecycleHook["Attributes"] => ({
@@ -283,9 +291,9 @@ export const LifecycleHookProvider = () =>
               hook
                 ? Effect.succeed(hook)
                 : Effect.fail(
-                    new Error(
-                      `Lifecycle hook '${lifecycleHookName}' was not readable after reconcile`,
-                    ),
+                    new LifecycleHookUnexpectedResponse({
+                      message: `Lifecycle hook '${lifecycleHookName}' was not readable after reconcile`,
+                    }),
                   ),
             ),
           );

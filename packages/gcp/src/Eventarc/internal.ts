@@ -15,11 +15,11 @@ import {
 export const MAX_NAME_LENGTH = 63;
 
 export class EventarcNotResolved extends Data.TaggedError("GCP.Eventarc.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EventarcStillExists extends Data.TaggedError("GCP.Eventarc.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type LoggingConfig = {
@@ -236,7 +236,7 @@ export const retryOnTransient = <A, E extends { readonly _tag: string }, R>(
 export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new EventarcNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new EventarcNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof EventarcNotResolved,
@@ -248,7 +248,9 @@ export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R
 export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new EventarcStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new EventarcStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof EventarcStillExists,

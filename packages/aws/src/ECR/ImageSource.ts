@@ -163,8 +163,9 @@ export const makeImageSource = Effect.gen(function* () {
       const described = yield* ecr
         .describeImages({ repositoryName, imageIds: [{ imageTag }] })
         .pipe(
-          Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["ImageNotFoundException", "RepositoryNotFoundException"],
+            () => Effect.undefined,
           ),
         );
       return described?.imageDetails?.[0] !== undefined;

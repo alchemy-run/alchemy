@@ -178,13 +178,13 @@ export const TrainingPipeline = Resource<TrainingPipeline>("GCP.AIPlatform.Train
 export class TrainingPipelineNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TrainingPipelineNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TrainingPipelineStillExists extends Data.TaggedError(
   "GCP.AIPlatform.TrainingPipelineStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, trainingPipelineId: string) =>
@@ -224,7 +224,7 @@ const toAttrs = (pipeline: aiplatform.GoogleCloudAiplatformV1TrainingPipeline, p
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsTrainingPipelines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsTrainingPipelines.pages({ parent, pageSize: 100 }).pipe(
@@ -247,7 +247,9 @@ const findOwned = (id: string, parent: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pipeline) =>
-      pipeline === undefined ? Effect.void : Effect.fail(new TrainingPipelineStillExists({ name })),
+      pipeline === undefined
+        ? Effect.void
+        : Effect.fail(new TrainingPipelineStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.TrainingPipelineStillExists",
@@ -355,7 +357,7 @@ export const TrainingPipelineProvider = () =>
 
       if (current === undefined) {
         return yield* new TrainingPipelineNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -386,7 +388,7 @@ export const TrainingPipelineProvider = () =>
           times: 24,
           schedule: Schedule.spaced("10 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
@@ -401,7 +403,7 @@ export const TrainingPipelineProvider = () =>
               times: 8,
               schedule: Schedule.spaced("3 seconds"),
             }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         if (jobDelete !== undefined) {
           yield* waitForOperation(jobDelete, { notFoundOk: true });

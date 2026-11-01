@@ -9,6 +9,8 @@
  * and run pre-built `image` references (or images pushed by the user's own
  * pipeline).
  */
+
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -27,6 +29,11 @@ import {
   type MintedCredentials,
 } from "./internal/kubeconfig.ts";
 
+export class BuiltinAdaptersInvalidProps extends Data.TaggedError("BuiltinAdaptersInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const toAuthHeaders = (credentials: MintedCredentials): Record<string, string> =>
   credentials.token ? { Authorization: `Bearer ${credentials.token}` } : {};
 
@@ -34,11 +41,12 @@ const requireEndpoint = (connection: Connection) =>
   connection.endpoint !== undefined
     ? Effect.succeed(connection.endpoint)
     : Effect.fail(
-        new Error(
-          `A '${connection.auth.kind}' Kubernetes connection requires an ` +
+        new BuiltinAdaptersInvalidProps({
+          message:
+            `A '${connection.auth.kind}' Kubernetes connection requires an ` +
             "explicit `endpoint` (only kubeconfig-backed and managed-cloud " +
             "connections can discover it)",
-        ),
+        }),
       );
 
 /**

@@ -101,13 +101,13 @@ export const serveRailwayRpc = <Req = never>(
     const text = yield* request.text;
     let args: unknown[] = [];
     if (text.length > 0) {
-      try {
-        args = JSON.parse(text) as unknown[];
-      } catch {
+      const parsed = yield* Effect.result(Effect.try(() => JSON.parse(text) as unknown[]));
+      if (Result.isFailure(parsed)) {
         return HttpServerResponse.text(`Invalid RPC arguments for "${name}"`, {
           status: 400,
         });
       }
+      args = parsed.success;
     }
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);

@@ -88,7 +88,7 @@ export const ThingProvider = () =>
           const thingName = output?.thingName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .describeThing({ thingName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!found) return undefined;
           return {
             thingName,
@@ -108,7 +108,7 @@ export const ThingProvider = () =>
           // 1. OBSERVE — cloud is authoritative; output is only an id cache.
           let live = yield* iot
             .describeThing({ thingName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. ENSURE — create if missing; tolerate an AlreadyExists race.
           if (live === undefined) {

@@ -323,7 +323,7 @@ export const BotManagementProvider = () =>
                 ? undefined
                 : toAttributes(zoneId, observed, pickSettings(observed)),
             ),
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -436,7 +436,7 @@ interface ObservedBotManagement {
 const observe = (zoneId: string) =>
   botManagement
     .getBotManagement({ zoneId })
-    .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 

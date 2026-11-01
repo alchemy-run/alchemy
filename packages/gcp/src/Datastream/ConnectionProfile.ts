@@ -624,10 +624,10 @@ const toAttrs = (profile: ds.ConnectionProfile, project: string, locationHint: s
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsConnectionProfiles({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -758,7 +758,7 @@ export const ConnectionProfileProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((created) => settleOperation(created)),
             // Datastream intermittently fails the create operation with
             // INTERNAL ("an internal error has occurred") under load.
@@ -772,7 +772,7 @@ export const ConnectionProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -932,7 +932,7 @@ export const ConnectionProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)),
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined),
         );
       yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name, {

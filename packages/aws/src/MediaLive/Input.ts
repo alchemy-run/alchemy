@@ -181,7 +181,7 @@ export const InputProvider = () =>
       const getInput = Effect.fn(function* (inputId: string) {
         const input = yield* medialive
           .describeInput({ InputId: inputId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         if (input === undefined || isGone(input.State)) return undefined;
         return yield* ensureIdentified(input, "DescribeInput Id/Arn");
       });
@@ -293,7 +293,15 @@ export const InputProvider = () =>
             const sameStringSet = (
               a: readonly (string | undefined)[],
               b: readonly (string | undefined)[],
-            ) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+            ) => {
+              // Default sort order (UTF-16 code units); `undefined` sorts last
+              // without reaching the comparator.
+              const byCodeUnit = (x: string | undefined, y: string | undefined) =>
+                (x ?? "") < (y ?? "") ? -1 : (x ?? "") > (y ?? "") ? 1 : 0;
+              return (
+                JSON.stringify([...a].sort(byCodeUnit)) === JSON.stringify([...b].sort(byCodeUnit))
+              );
+            };
             const nameDrift = input.Name !== name;
             const roleDrift = news.roleArn !== undefined && input.RoleArn !== news.roleArn;
             const sgDrift = !sameStringSet(

@@ -215,7 +215,7 @@ export const ApplicationProvider = () =>
       const observeById = Effect.fn(function* (applicationId: string) {
         return yield* emr.getApplication({ applicationId }).pipe(
           Effect.map((response) => response.application),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -340,7 +340,7 @@ export const ApplicationProvider = () =>
               })
               .pipe(
                 // a concurrent reconciler already created it — observe instead
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const applicationId =
               created?.applicationId ?? (yield* observeByName(name))?.applicationId;
@@ -423,7 +423,7 @@ export const ApplicationProvider = () =>
             .getApplication({ applicationId: output.applicationId })
             .pipe(
               Effect.map((response) => response.application),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (application === undefined || application.state === "TERMINATED") {
             return;
@@ -435,7 +435,7 @@ export const ApplicationProvider = () =>
             });
           }
           yield* awaitApplicationStopped(application.applicationId).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* emr
             .deleteApplication({ applicationId: output.applicationId })

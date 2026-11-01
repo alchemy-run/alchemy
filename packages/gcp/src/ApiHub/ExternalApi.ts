@@ -173,10 +173,10 @@ const toAttrs = (api: apihub.GoogleCloudApihubV1ExternalApi, project: string, re
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsExternalApis({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsExternalApis.pages({ parent, pageSize: 1000 }).pipe(
@@ -264,7 +264,7 @@ export const ExternalApiProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

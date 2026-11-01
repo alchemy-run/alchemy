@@ -109,7 +109,7 @@ export const EmailTemplateProvider = () =>
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getEmailTemplate({ TemplateName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return EmailTemplate.Provider.of({

@@ -24,5 +24,8 @@
     "alchemy": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
   }
 }

@@ -16,7 +16,6 @@ import {
   locationOf,
   locationParent,
   MAX_VIEW_DISPLAY_NAME_LENGTH,
-  normalizeLocation,
   ownedByAlchemy,
   parentOf,
   parseOwnership,
@@ -111,7 +110,7 @@ export const AuthorizedViewSetsAuthorizedView = Resource<AuthorizedViewSetsAutho
 export class AuthorizedViewSetsAuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, authorizedViewId: string) =>
@@ -135,10 +134,10 @@ const toAttrs = (view: cci.GoogleCloudContactcenterinsightsV1AuthorizedView, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSetsAuthorizedViews({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string, project: string) =>
   cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViews.pages({ parent, pageSize: 100 }).pipe(
@@ -227,7 +226,7 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

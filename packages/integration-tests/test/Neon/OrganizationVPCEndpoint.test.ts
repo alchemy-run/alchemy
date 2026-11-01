@@ -3,11 +3,11 @@ import {
   validateOrganizationVPCEndpoint,
 } from "@alchemy.run/neon/OrganizationVPCEndpoint";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
@@ -98,7 +98,7 @@ test.provider(
           .reconcile({
             ...context,
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
             olds: undefined,
             news: { ...props, regionId: "aws-us-west-2" },
             output: {
@@ -171,7 +171,7 @@ test.provider.skipIf(!enabled || disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );
 
@@ -208,6 +208,6 @@ test.provider.skipIf(!enabled || !disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );

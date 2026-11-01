@@ -5,7 +5,7 @@ import {
   type PolicyDocument,
   type ServiceControlPolicyDocument,
 } from "@alchemy.run/aws/IAM/Policy";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 const document: PolicyDocument = {
   Version: "2012-10-17",

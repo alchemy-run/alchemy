@@ -147,7 +147,7 @@ export const HostnameAssociationProvider = () =>
             }),
             // Zones without the mTLS entitlement reject the route
             // (Forbidden) or aren't routable (InvalidRoute); skip them.
-            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

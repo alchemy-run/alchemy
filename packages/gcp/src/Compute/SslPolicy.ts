@@ -288,7 +288,7 @@ const needsUpdate = (current: compute.SslPolicy, desired: compute.SslPolicy) => 
 const getByName = (project: string, sslPolicy: string) =>
   compute
     .getSslPolicies({ project, sslPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, sslPolicyName: string) =>
   getByName(project, sslPolicyName).pipe(
@@ -353,7 +353,7 @@ export const SslPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, sslPolicyName);
       }
@@ -392,7 +392,7 @@ export const SslPolicyProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

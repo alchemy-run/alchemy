@@ -203,6 +203,7 @@ const tailDeploymentLogsWith = (
             let socketOpened = false;
             const connectionStartByteEnd = latestByteEnd;
             const opened = yield* Deferred.make<void, PrismaLogStreamError>();
+            const context = yield* Effect.context<never>();
 
             const scheduleReconnect = (
               reconnectCursor: string | undefined,
@@ -255,7 +256,7 @@ const tailDeploymentLogsWith = (
 
             socket.on("message", (raw) => {
               if (terminalHandled || stopped) return;
-              const decoded = Effect.runSyncExit(
+              const decoded = Effect.runSyncExitWith(context)(
                 parseDeploymentLogRecord(rawDataToString(raw), new Date()),
               );
               if (!Exit.isSuccess(decoded)) {

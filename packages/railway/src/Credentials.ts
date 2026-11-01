@@ -1,17 +1,8 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, toConfig } from "@distilled.cloud/railway";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
-import * as Effect from "effect/Effect";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Layer from "effect/Layer";
-import {
-  RAILWAY_AUTH_PROVIDER_NAME,
-  type RailwayAuthConfig,
-  type RailwayResolvedCredentials,
-} from "./AuthProvider.ts";
+import { RAILWAY_AUTH_PROVIDER_NAME, type RailwayResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -35,33 +26,13 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<RailwayAuthConfig, RailwayResolvedCredentials>(
-        RAILWAY_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) =>
-              toConfig({
-                token: creds.token,
-                tokenKind: creds.tokenKind,
-                apiBaseUrl: creds.apiBaseUrl,
-              }),
-            ),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve Railway credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(RAILWAY_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<RailwayResolvedCredentials, ConfigError>()(
+      RAILWAY_AUTH_PROVIDER_NAME,
+      (creds) =>
+        toConfig({
+          token: creds.token,
+          tokenKind: creds.tokenKind,
+          apiBaseUrl: creds.apiBaseUrl,
+        }),
+    ),
   );

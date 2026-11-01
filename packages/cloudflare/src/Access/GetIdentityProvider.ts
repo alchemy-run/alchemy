@@ -105,4 +105,4 @@ export const GetIdentityProvider = Binding.Service<GetIdentityProvider>(
  * plan/deploy; safe to call from composition code that is re-executed
  * inside a deployed runtime bundle.
  */
-export const getIdentityProvider = GetIdentityProvider.execute;
+export const getIdentityProvider = GetIdentityProvider.execute.bind(GetIdentityProvider);

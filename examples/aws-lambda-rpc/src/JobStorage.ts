@@ -56,8 +56,8 @@ export const JobStorageDynamoDB = Layer.provideMerge(
           startingPosition: "LATEST",
           batchSize: 10,
         },
-        (stream) =>
-          stream.pipe(
+        Effect.fn(function* (event) {
+          yield* Stream.fromIterable(event.Records).pipe(
             Stream.map((record) => ({
               MessageBody: JSON.stringify({
                 eventName: record.eventName,
@@ -67,8 +67,8 @@ export const JobStorageDynamoDB = Layer.provideMerge(
               }),
             })),
             Stream.run(sink),
-            Effect.orDie,
-          ),
+          );
+        }),
       );
 
       const putJob = (job: Job) =>

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 const { test } = Test.make({ providers: Cloudflare.providers() });

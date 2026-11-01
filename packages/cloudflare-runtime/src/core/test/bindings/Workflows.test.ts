@@ -36,7 +36,12 @@ export class MyWorkflow extends WorkflowEntrypoint {
 }
 export default {
   async fetch(request, env) {
-    const workflow = new URL(request.url).pathname === "/create"
+    const pathname = new URL(request.url).pathname;
+    if (pathname === "/delete") {
+      await (await env.MY_WORKFLOW.get("an-id")).delete();
+      return new Response("deleted");
+    }
+    const workflow = pathname === "/create"
       ? await env.MY_WORKFLOW.create({ id: "an-id" })
       : await env.MY_WORKFLOW.get("an-id");
     return new Response(JSON.stringify(await workflow.status()));
@@ -74,22 +79,24 @@ describe("Workflows binding", () => {
           Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );
 
+        const startWorkflowWorker = startTestWorker({
+          name: "workflows-persist-test",
+          compatibilityDate: "2024-11-20",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT }],
+          workflows: [{ workflowName: "MY_WORKFLOW", className: "MyWorkflow" }],
+          bindings: [
+            Workflows.local({
+              binding: "MY_WORKFLOW",
+              workflowName: "MY_WORKFLOW",
+              className: "MyWorkflow",
+            }),
+          ],
+        });
+
         const runStorageExit = Effect.fn(
           function* (create: boolean) {
-            const worker = yield* startTestWorker({
-              name: "workflows-persist-test",
-              compatibilityDate: "2024-11-20",
-              compatibilityFlags: [],
-              modules: [{ name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT }],
-              workflows: [{ workflowName: "MY_WORKFLOW", className: "MyWorkflow" }],
-              bindings: [
-                Workflows.local({
-                  binding: "MY_WORKFLOW",
-                  workflowName: "MY_WORKFLOW",
-                  className: "MyWorkflow",
-                }),
-              ],
-            });
+            const worker = yield* startWorkflowWorker;
 
             const res = yield* worker.fetch(create ? "/create" : "/");
             expect(res.status).toBe(200);
@@ -110,6 +117,11 @@ describe("Workflows binding", () => {
           (self) => self.pipe(Effect.provide(rumtimeLayerTempDir), Effect.scoped),
         );
 
+        const deleteInstance = Effect.gen(function* () {
+          const worker = yield* startWorkflowWorker;
+          expect(yield* worker.fetchText("/delete")).toBe("deleted");
+        }).pipe(Effect.provide(rumtimeLayerTempDir), Effect.scoped);
+
         const first = yield* runStorageExit(true);
         expect(first).toBe(COMPLETE_STATUS);
 
@@ -119,6 +131,17 @@ describe("Workflows binding", () => {
 
         const second = yield* runStorageExit(false);
         expect(second).toBe(COMPLETE_STATUS);
+
+        // Deleting an instance removes its SQLite files through the engine's
+        // `WORKFLOW_STORAGE` disk binding.
+        const instanceDir = path.join(persistDir, encodeURIComponent("MY_WORKFLOW"));
+        // One `<hex id>.sqlite` per instance, beside the namespace's `metadata.sqlite`.
+        const instanceFiles = fs
+          .readDirectory(instanceDir)
+          .pipe(Effect.map((files) => files.filter((file) => /^[a-f0-9]{64}\.sqlite$/.test(file))));
+        expect(yield* instanceFiles).toHaveLength(1);
+        yield* deleteInstance;
+        expect(yield* instanceFiles).toHaveLength(0);
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },
   );
@@ -170,6 +193,16 @@ export default {
       const instance = await env.LIFECYCLE_WORKFLOW.get(id);
       await instance.restart();
       return Response.json(await instance.status());
+    }
+    if (url.pathname === "/delete-twice") {
+      const instance = await env.LIFECYCLE_WORKFLOW.get(id);
+      await instance.delete();
+      try {
+        await instance.delete();
+        return Response.json({ error: null });
+      } catch (error) {
+        return Response.json({ error: String(error) });
+      }
     }
     if (url.pathname === "/terminate") {
       const instance = await env.LIFECYCLE_WORKFLOW.get(id);
@@ -251,6 +284,33 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
     }),
   );
 
+  // The engine runs on its own compatibility date with the Worker's flags.
+  // `nodejs_compat` is on by default as of the runtime's internal date, where
+  // workerd rejects setting it.
+  it.effect(
+    "runs a Workflow for a Worker that sets nodejs_compat",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "workflows-nodejs-compat-test",
+          compatibilityDate: "2026-03-17",
+          compatibilityFlags: ["nodejs_compat"],
+          modules: [{ name: "main.js", type: "ESModule", content: LIFECYCLE_SCRIPT }],
+          workflows: [{ workflowName: "LIFECYCLE_WORKFLOW", className: "LifecycleWorkflow" }],
+          bindings: [
+            Workflows.local({
+              binding: "LIFECYCLE_WORKFLOW",
+              workflowName: "LIFECYCLE_WORKFLOW",
+              className: "LifecycleWorkflow",
+            }),
+          ],
+        });
+        const created = yield* worker.fetchJson<{ id: string }>("/create?id=nodejs-compat");
+        expect(created.id).toBe("nodejs-compat");
+      }),
+    { timeout: 30_000 },
+  );
+
   it.effect(
     "pause and resume a running workflow",
     () =>
@@ -293,6 +353,27 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
         expect(terminateData).toHaveProperty("status");
 
         yield* pollStatus(worker, id, "terminated");
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "recreates an instance after a rejected repeated deletion",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startLifecycleWorker();
+        const id = "repeated-delete-test";
+
+        yield* worker.fetch(`/create?id=${id}`);
+        yield* pollStatus(worker, id, "complete");
+
+        const deleted = yield* worker.fetchJson<{ error: string | null }>(`/delete-twice?id=${id}`);
+        expect(deleted.error).toContain("instance.not_found");
+
+        const recreated = yield* worker.fetchJson<{ id: string }>(`/create?id=${id}`);
+        expect(recreated.id).toBe(id);
+        const final = yield* pollStatus(worker, id, "complete");
+        expect(final.output).toBe("workflow-complete");
       }),
     { timeout: 30_000 },
   );

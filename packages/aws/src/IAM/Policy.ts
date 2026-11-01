@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
@@ -17,6 +18,11 @@ import {
   stringifyPolicyDocument,
   toTagRecord,
 } from "./common.ts";
+
+export class PolicyConflict extends Data.TaggedError("PolicyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type { IamAction } from "./actions.generated.ts";
 export { stringifyPolicyDocument } from "./common.ts";
@@ -220,7 +226,7 @@ export const PolicyProvider = () =>
       const readPolicy = Effect.fn(function* (policyArn: string) {
         const response = yield* iam
           .getPolicy({ PolicyArn: policyArn })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.Policy;
       });
 
@@ -239,7 +245,7 @@ export const PolicyProvider = () =>
             PolicyArn: policyArn,
             VersionId: versionId,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return parsePolicyDocument(response?.PolicyVersion?.Document);
       });
 
@@ -304,7 +310,7 @@ export const PolicyProvider = () =>
                   // A peer test may delete a policy between `listPolicies` and
                   // hydrating its tags/version — skip the vanished entry rather
                   // than failing the whole enumeration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -389,21 +395,17 @@ export const PolicyProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* readPolicy(policyArn);
                     if (!existing?.Arn) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Policy '${policyName}' already exists but could not be described`,
-                        ),
-                      );
+                      return yield* new PolicyConflict({
+                        message: `Policy '${policyName}' already exists but could not be described`,
+                      });
                     }
                     const existingTags = yield* iam.listPolicyTags({
                       PolicyArn: existing.Arn,
                     });
                     if (!hasTags(desiredTags, existingTags.Tags)) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Policy '${policyName}' already exists and is not managed by alchemy`,
-                        ),
-                      );
+                      return yield* new PolicyConflict({
+                        message: `Policy '${policyName}' already exists and is not managed by alchemy`,
+                      });
                     }
                     return { Policy: existing };
                   }),
@@ -484,7 +486,7 @@ export const PolicyProvider = () =>
             .listPolicyVersions({
               PolicyArn: output.policyArn,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           for (const version of versions?.Versions ?? []) {
             if (!version.IsDefaultVersion && version.VersionId) {
               yield* iam

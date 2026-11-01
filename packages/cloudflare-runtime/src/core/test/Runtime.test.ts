@@ -189,4 +189,166 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
       }),
     { timeout: 30_000 },
   );
+
+  // Miniflare's outbound interceptor: outbound fetches carry `CF-Worker`
+  // with the Worker's zone and drop `CF-Connecting-IP`.
+  it.effect(
+    "outbound fetches carry CF-Worker and drop CF-Connecting-IP",
+    () =>
+      Effect.gen(function* () {
+        const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        const echo = NodeHttp.createServer((req, res) => {
+          seen.push({
+            cfWorker: req.headers["cf-worker"] as string | undefined,
+            connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+          });
+          res.end("ok");
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+        const runtime = yield* Runtime.Runtime;
+        const start = (name: string, zone?: string) =>
+          runtime.start({
+            name,
+            zone,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: `export default {
+  fetch: () => fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } }),
+};`,
+              },
+            ],
+          });
+        const defaultZone = yield* start("outbound-default");
+        yield* Effect.promise(() => fetch(defaultZone).then((r) => r.text()));
+        const customZone = yield* start("outbound-zone", "example.com");
+        yield* Effect.promise(() => fetch(customZone).then((r) => r.text()));
+        expect(seen).toEqual([
+          { cfWorker: "outbound-default.example.com", connectingIp: undefined },
+          { cfWorker: "example.com", connectingIp: undefined },
+        ]);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  // Wrangler's `access.dev`: `ctx.access` carries the simulated audience and
+  // `getIdentity()` the identity; a client can't forge the access blob.
+  it.effect(
+    "simulates Cloudflare Access on ctx.access",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const start = (
+          name: string,
+          access?: { aud?: string; identity?: Record<string, unknown> },
+        ) =>
+          runtime.start({
+            name,
+            access,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: `export default {
+  async fetch(request, env, ctx) {
+    return Response.json({ aud: ctx.access?.aud ?? null, identity: (await ctx.access?.getIdentity()) ?? null });
+  },
+};`,
+              },
+            ],
+          });
+        const forged = { "MF-Access-Blob": JSON.stringify({ app_aud: "forged" }) };
+        const authed = yield* start("access-authed", {
+          aud: "test-aud",
+          identity: { email: "dev@example.com" },
+        });
+        expect(
+          yield* Effect.promise(() => fetch(authed, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: "test-aud", identity: { email: "dev@example.com" } });
+        const anonymous = yield* start("access-anonymous");
+        expect(
+          yield* Effect.promise(() => fetch(anonymous, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: null, identity: null });
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  // Miniflare's `cf.image` mock: the interceptor fetches the origin image and
+  // transforms it with Sharp.
+  it.effect(
+    "transforms cf.image fetches locally with Sharp",
+    () =>
+      Effect.gen(function* () {
+        const { default: sharp } = yield* Effect.promise(() => import("sharp"));
+        const png = yield* Effect.promise(() =>
+          sharp({
+            create: {
+              width: 8,
+              height: 4,
+              channels: 4,
+              background: { r: 255, g: 0, b: 0, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer(),
+        );
+        const via: Array<string | undefined> = [];
+        const origin = NodeHttp.createServer((req, res) => {
+          via.push(req.headers.via as string | undefined);
+          res.setHeader("content-type", "image/png");
+          res.end(png);
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => origin.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(origin.address() as { port: number }).port}/image.png`;
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "cf-image",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: () => fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } }),
+};`,
+            },
+          ],
+        });
+        const response = yield* Effect.promise(() => fetch(url));
+        const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
+        const metadata = yield* Effect.promise(() => sharp(body).metadata());
+        expect({
+          status: response.status,
+          resized: response.headers.get("cf-resized"),
+          size: [metadata.width, metadata.height],
+          via,
+        }).toEqual({
+          status: 200,
+          resized: "internal=ok/m",
+          size: [4, 2],
+          via: ["image-resizing"],
+        });
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
 });

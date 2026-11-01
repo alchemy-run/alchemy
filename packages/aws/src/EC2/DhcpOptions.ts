@@ -178,8 +178,8 @@ export const DhcpOptionsProvider = () =>
         ec2.describeDhcpOptions({ DhcpOptionsIds: [dhcpOptionsId] }).pipe(
           Effect.map((r) => r.DhcpOptions?.[0]),
           Effect.catchTags({
-            "InvalidDhcpOptionID.NotFound": () => Effect.succeed(undefined),
-            "InvalidDhcpOptionsID.NotFound": () => Effect.succeed(undefined),
+            "InvalidDhcpOptionID.NotFound": () => Effect.undefined,
+            "InvalidDhcpOptionsID.NotFound": () => Effect.undefined,
           }),
         );
 

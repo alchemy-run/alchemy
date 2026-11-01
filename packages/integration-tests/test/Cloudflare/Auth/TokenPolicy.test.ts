@@ -3,7 +3,7 @@ import {
   tokenPolicies,
   type PermissionGroup,
 } from "@alchemy.run/cloudflare/Auth/TokenPolicy";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 const group = (id: string, scope: string): PermissionGroup => ({
   id,

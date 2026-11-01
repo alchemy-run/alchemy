@@ -2,11 +2,22 @@ import * as cloudhsm from "@distilled.cloud/aws/cloudhsm-v2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { findClusterById } from "./internal.ts";
+
+export class HsmNotReady extends Data.TaggedError("HsmNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class HsmUnexpectedResponse extends Data.TaggedError("HsmUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface HsmProps {
   /**
@@ -112,10 +123,14 @@ export const HsmProvider = () =>
         return yield* findHsm(clusterId, hsmId).pipe(
           Effect.flatMap((hsm) => {
             if (hsm === undefined) {
-              return Effect.fail(new Error(`HSM '${hsmId}' not found in cluster '${clusterId}'`));
+              return Effect.fail(
+                new HsmNotReady({ message: `HSM '${hsmId}' not found in cluster '${clusterId}'` }),
+              );
             }
             if (hsm.State !== "ACTIVE") {
-              return Effect.fail(new Error(`HSM '${hsmId}' not active (state: ${hsm.State})`));
+              return Effect.fail(
+                new HsmNotReady({ message: `HSM '${hsmId}' not active (state: ${hsm.State})` }),
+              );
             }
             return Effect.succeed(hsm);
           }),
@@ -131,7 +146,11 @@ export const HsmProvider = () =>
           Effect.flatMap((hsm) =>
             hsm === undefined
               ? Effect.void
-              : Effect.fail(new Error(`HSM '${hsmId}' still deleting (state: ${hsm.State})`)),
+              : Effect.fail(
+                  new HsmNotReady({
+                    message: `HSM '${hsmId}' still deleting (state: ${hsm.State})`,
+                  }),
+                ),
           ),
           Effect.retry({ schedule: policy }),
         );
@@ -139,7 +158,9 @@ export const HsmProvider = () =>
 
       const toAttrs = Effect.fn(function* (hsm: cloudhsm.Hsm) {
         if (!hsm.ClusterId) {
-          return yield* Effect.fail(new Error(`HSM '${hsm.HsmId}' is missing its ClusterId`));
+          return yield* new HsmUnexpectedResponse({
+            message: `HSM '${hsm.HsmId}' is missing its ClusterId`,
+          });
         }
         return {
           hsmId: hsm.HsmId,
@@ -198,7 +219,7 @@ export const HsmProvider = () =>
           }
           const hsmId = observed?.HsmId;
           if (!hsmId) {
-            return yield* Effect.fail(new Error("CreateHsm returned no HsmId"));
+            return yield* new HsmUnexpectedResponse({ message: "CreateHsm returned no HsmId" });
           }
 
           // 3. Wait for the HSM to become ACTIVE (nothing else is mutable).

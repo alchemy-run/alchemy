@@ -21,20 +21,20 @@ export const MAX_DISPLAY_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 2048;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.AppHub.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.AppHub.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.AppHub.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.AppHub.ResourceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -321,7 +321,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -336,7 +336,9 @@ export const waitUntilGone = <A, E, R>(
 ): Effect.Effect<void, E | ResourceStillExists, R> =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -360,15 +362,15 @@ export const waitUntilReady = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has((stateOf(value) ?? "").toUpperCase()),
-      (value) => new ResourceFailed({ name, state: stateOf(value) ?? "" }),
+      (value) => new ResourceFailed({ resourceName: name, state: stateOf(value) ?? "" }),
     ),
     Effect.filterOrFail(
       (value) => READY_STATES.has((stateOf(value) ?? "").toUpperCase()),
-      (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
+      (value) => new ResourceNotReady({ resourceName: name, state: stateOf(value) ?? "" }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,

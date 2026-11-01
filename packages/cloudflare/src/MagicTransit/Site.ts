@@ -257,7 +257,7 @@ interface ObservedSite {
 const getSite = (accountId: string, siteId: string) =>
   magicTransit.getSite({ accountId, siteId }).pipe(
     Effect.map((s): ObservedSite | undefined => s),
-    Effect.catchTag("SiteNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SiteNotFound", () => Effect.undefined),
   );
 
 /**

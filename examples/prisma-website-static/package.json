@@ -19,6 +19,7 @@
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/prisma": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@vercel/nft": "catalog:",
     "alchemy": "workspace:*",

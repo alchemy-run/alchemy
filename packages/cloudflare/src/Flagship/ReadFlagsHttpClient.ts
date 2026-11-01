@@ -27,7 +27,7 @@ export interface FlagshipAuth {
   authorize: <A, E>(
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ) => Effect.Effect<A, E>;
-  accountId: string;
+  accountId: Effect.Effect<string>;
 }
 
 /**
@@ -36,7 +36,8 @@ export interface FlagshipAuth {
  */
 const targetingKeyOf = (context: EvaluationContext | undefined): string | undefined => {
   const value = context?.["targetingKey"];
-  return value === undefined ? undefined : String(value);
+  if (value === undefined) return undefined;
+  return typeof value === "string" ? value : JSON.stringify(value);
 };
 
 /**
@@ -55,11 +56,11 @@ export const makeHttpFlagshipClient = (
   appId: Effect.Effect<string>,
 ): ReadFlagsClient => {
   const evaluate = (flagKey: string, context?: EvaluationContext) =>
-    appId.pipe(
-      Effect.flatMap((id) =>
+    Effect.all([appId, auth.accountId]).pipe(
+      Effect.flatMap(([id, accountId]) =>
         auth.authorize(
           flagship.getAppEvaluate({
-            accountId: auth.accountId,
+            accountId,
             appId: id,
             flagKey,
             targetingKey: targetingKeyOf(context),

@@ -155,7 +155,7 @@ export const DataIntegrationProvider = () =>
       const observe = (arnOrId: string) =>
         appintegrations
           .getDataIntegration({ Identifier: arnOrId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       /** Find a data integration ARN by name via list enumeration. */
       const findByName = (name: string) =>
@@ -215,9 +215,7 @@ export const DataIntegrationProvider = () =>
               arns,
               (arn) =>
                 observe(arn).pipe(
-                  Effect.flatMap((live) =>
-                    live === undefined ? Effect.succeed(undefined) : toAttrs(live),
-                  ),
+                  Effect.flatMap((live) => (live === undefined ? Effect.undefined : toAttrs(live))),
                 ),
               { concurrency: 10 },
             );

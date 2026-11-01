@@ -123,7 +123,7 @@ export const PlaybackKeyPairProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getPlaybackKeyPair({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.keyPair;
       });
@@ -233,10 +233,10 @@ export const PlaybackKeyPairProvider = () =>
               Effect.forEach(
                 (summary) =>
                   summary.arn === undefined
-                    ? Effect.succeed(undefined)
+                    ? Effect.undefined
                     : getByArn(summary.arn).pipe(
                         Effect.flatMap((keyPair) =>
-                          keyPair === undefined ? Effect.succeed(undefined) : toAttrs(keyPair),
+                          keyPair === undefined ? Effect.undefined : toAttrs(keyPair),
                         ),
                       ),
                 { concurrency: 5 },

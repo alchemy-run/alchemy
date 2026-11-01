@@ -8,14 +8,14 @@ import {
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -58,7 +58,8 @@ const activeRuleSetName = ses
   .describeActiveReceiptRuleSet({})
   .pipe(Effect.map((response) => response.Metadata?.Name));
 
-// Mutates the account-singleton active receipt rule set: exclusive, and the
+// Mutates the account-singleton active receipt rule set: holds the
+// "aws:ses-account" label, and the
 // previously active set (if any) is captured and restored.
 test.provider.skipIf(GATED)(
   "end-to-end receive: MX -> SES inbound -> receipt rule -> S3 object",
@@ -258,6 +259,6 @@ test.provider.skipIf(GATED)(
       "live",
     ],
     timeout: 900_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

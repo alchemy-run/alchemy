@@ -13,6 +13,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class SageMakerClusterInvalidProps extends Data.TaggedError("SageMakerClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SageMakerClusterUnexpectedResponse extends Data.TaggedError(
+  "SageMakerClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ClusterStatus = sagemaker.ClusterStatus;
 
 /**
@@ -364,12 +376,12 @@ const createClusterName = (id: string, props: { clusterName?: string | undefined
 const describeClusterOrUndefined = (name: string) =>
   sagemaker
     .describeCluster({ ClusterName: name })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 const fetchClusterTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -481,7 +493,7 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
         // full wait budget on a delete that can never finish.
         const nodes = yield* sagemaker
           .listClusterNodes({ ClusterName: name })
-          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
         const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
           node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );
@@ -604,7 +616,9 @@ export const ClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker HyperPod Cluster requires props"));
+            return yield* new SageMakerClusterInvalidProps({
+              message: "SageMaker HyperPod Cluster requires props",
+            });
           }
           const name = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -696,9 +710,9 @@ export const ClusterProvider = () =>
           yield* waitForCluster(name, "InService");
           described = yield* describeClusterOrUndefined(name);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled HyperPod cluster ${name}`),
-            );
+            return yield* new SageMakerClusterUnexpectedResponse({
+              message: `failed to read reconciled HyperPod cluster ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

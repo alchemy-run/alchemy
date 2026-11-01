@@ -105,8 +105,9 @@ export const PreparedStatementProvider = () =>
           })
           .pipe(
             Effect.map((res) => res.PreparedStatement),
-            Effect.catchTag(["ResourceNotFoundException", "WorkGroupNotFound"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "WorkGroupNotFound"],
+              () => Effect.undefined,
             ),
           );
 

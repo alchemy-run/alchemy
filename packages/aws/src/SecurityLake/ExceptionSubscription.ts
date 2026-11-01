@@ -89,7 +89,7 @@ const observeSubscription = securitylake.getDataLakeExceptionSubscription({}).pi
   ),
   Effect.catchTag(
     ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
-    () => Effect.succeed(undefined),
+    () => Effect.undefined,
   ),
 );
 

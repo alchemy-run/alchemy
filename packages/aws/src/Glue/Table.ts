@@ -208,7 +208,7 @@ export const TableProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.Table),
-            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
           );
       });
 

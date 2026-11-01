@@ -1,11 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   cloudRunUrl,
@@ -23,7 +22,7 @@ const fixtureDir = pathe.resolve(
 );
 const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Vocs: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

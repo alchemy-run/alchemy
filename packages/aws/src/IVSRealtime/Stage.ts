@@ -204,7 +204,7 @@ export const StageProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivsrealtime.getStage({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.stage;
       });
@@ -314,7 +314,7 @@ export const StageProvider = () =>
                 (summary) =>
                   getByArn(summary.arn).pipe(
                     Effect.flatMap((stage) =>
-                      stage === undefined ? Effect.succeed(undefined) : toAttrs(stage),
+                      stage === undefined ? Effect.undefined : toAttrs(stage),
                     ),
                   ),
                 { concurrency: 5 },

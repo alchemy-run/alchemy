@@ -240,7 +240,7 @@ interface ObservedConnector {
 const getConnector = (accountId: string, tunnelId: string) =>
   zeroTrust.getTunnelWarpConnector({ accountId, tunnelId }).pipe(
     Effect.map((t): ObservedConnector | undefined => (t.deletedAt ? undefined : t)),
-    Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TunnelNotFound", () => Effect.undefined),
   );
 
 /**

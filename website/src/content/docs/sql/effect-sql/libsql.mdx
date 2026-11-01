@@ -5,11 +5,11 @@ description: Run SQL on a libSQL database, such as Turso, with Effect SQL.
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@effect/sql-libsql`;
+export const deps = `@alchemy.run/sql @effect/sql-libsql`;
 
 `SQL.LibSQL` runs SQL on a libSQL database, such as [Turso](/turso). Queries are Effects, and failures are `SqlError`s.
 
-Install the driver:
+Install `@alchemy.run/sql` and the driver:
 
 <PackageManagers add={deps} />
 

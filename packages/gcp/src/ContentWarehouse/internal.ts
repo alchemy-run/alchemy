@@ -23,13 +23,13 @@ export class ContentwarehouseOperationPending extends Data.TaggedError(
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.ContentWarehouse.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.ContentWarehouse.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -282,7 +282,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContentWarehouse.ResourceNotResolved",
@@ -298,7 +298,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContentWarehouse.ResourceStillExists",
@@ -395,7 +395,7 @@ export const ensureProject = (parent: string) =>
           documentCreatorDefaultRole: "DOCUMENT_ADMIN",
         },
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation !== undefined) {
       yield* waitForOperation(operation);
     }

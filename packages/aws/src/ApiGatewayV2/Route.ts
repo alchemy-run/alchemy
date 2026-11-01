@@ -213,7 +213,7 @@ export const RouteProvider = () =>
       const getRouteSafe = (apiId: string, routeId: string) =>
         agw2
           .getRoute({ ApiId: apiId, RouteId: routeId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       const findRouteByKey = (apiId: string, routeKey: string) =>
         collectAllPages((NextToken) => agw2.getRoutes({ ApiId: apiId, NextToken })).pipe(

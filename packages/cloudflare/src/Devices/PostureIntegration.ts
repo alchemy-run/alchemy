@@ -303,7 +303,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getDevicePostureIntegration({ accountId, integrationId })
-    .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.undefined));
 
 /**
  * Find an integration by exact name.

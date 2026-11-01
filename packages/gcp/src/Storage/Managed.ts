@@ -101,7 +101,7 @@ const getByName = (bucketName: string, managedFolderName: string) =>
       bucket: bucketName,
       managedFolder: managedFolderName,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listManagedFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(

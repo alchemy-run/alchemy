@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class DecoderManifestUnexpectedResponse extends Data.TaggedError(
+  "DecoderManifestUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DecoderManifestProps {
   /**
@@ -138,7 +146,7 @@ export const DecoderManifestProvider = () =>
       const readManifest = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getDecoderManifest({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -146,7 +154,11 @@ export const DecoderManifestProvider = () =>
         return yield* readManifest(name).pipe(
           Effect.flatMap((manifest) =>
             manifest === undefined
-              ? Effect.fail(new Error(`Decoder manifest '${name}' not found`))
+              ? Effect.fail(
+                  new DecoderManifestUnexpectedResponse({
+                    message: `Decoder manifest '${name}' not found`,
+                  }),
+                )
               : Effect.succeed(manifest),
           ),
           retryObservation,

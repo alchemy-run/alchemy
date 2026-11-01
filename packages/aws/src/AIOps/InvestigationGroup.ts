@@ -224,7 +224,7 @@ export const InvestigationGroupProvider = () =>
       const observeByArn = (arn: string) =>
         aiops
           .getInvestigationGroup({ identifier: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // At most one investigation group exists per Region, so scanning the
       // list for our name is a single cheap call.
@@ -413,7 +413,7 @@ export const InvestigationGroupProvider = () =>
               .getInvestigationGroupPolicy({ identifier: arn })
               .pipe(
                 Effect.map((r) => r.policy),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
             if (news.policy.length === 0) {
               if (observedPolicy !== undefined) {

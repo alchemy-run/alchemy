@@ -197,7 +197,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       publicDelegatedPrefix: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, prefixName: string) =>
   getByName(project, region, prefixName).pipe(
@@ -317,7 +317,7 @@ export const PublicDelegatedPrefixProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, prefixName);
       }
 
@@ -360,6 +360,6 @@ export const PublicDelegatedPrefixProvider = () =>
           publicDelegatedPrefix: output.prefixName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

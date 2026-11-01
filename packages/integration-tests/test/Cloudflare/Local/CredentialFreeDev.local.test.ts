@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { LOCAL_ACCOUNT_ID } from "@alchemy.run/cloudflare/LocalAccount";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
 import { Action } from "alchemy/Action";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -33,6 +33,9 @@ const noCredentials = Layer.effect(
 const { test } = Test.make({
   providers: Cloudflare.providers().pipe(Layer.provide(noCredentials)),
   dev: true,
+  // `noCredentials` only reaches this process; the sidecar must not inherit
+  // the shell's Cloudflare credentials either.
+  sidecar: { omitEnv: ["CLOUDFLARE_"] },
   profile: "cloudflare-credential-free-test",
 });
 

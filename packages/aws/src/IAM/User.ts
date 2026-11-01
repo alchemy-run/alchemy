@@ -4,11 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import type { PolicyDocument } from "./Policy.ts";
+
+export class UserConflict extends Data.TaggedError("UserConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface UserProps {
   /**
@@ -105,22 +111,20 @@ export const UserProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const entries = yield* Effect.all(
-          policyNames.map((policyName) =>
-            iam
-              .getUserPolicy({
-                UserName: userName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.map(
-                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
-                ),
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([policyName, undefined] as const),
-                ),
+        const entries = yield* Effect.forEach(policyNames, (policyName) =>
+          iam
+            .getUserPolicy({
+              UserName: userName,
+              PolicyName: policyName,
+            })
+            .pipe(
+              Effect.map(
+                (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
               ),
-          ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed([policyName, undefined] as const),
+              ),
+            ),
         );
         return Object.fromEntries(
           entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
@@ -229,7 +233,7 @@ export const UserProvider = () =>
                   };
                 }).pipe(
                   // A user may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -253,7 +257,7 @@ export const UserProvider = () =>
             .getUser({
               UserName: userName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!response?.User?.Arn) {
             return undefined;
           }
@@ -283,7 +287,7 @@ export const UserProvider = () =>
           // Observe — read the live user (or absence).
           const observedResponse = yield* iam
             .getUser({ UserName: userName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           let observedUser = observedResponse?.User;
 
           // Ensure — create the user when missing. On race, verify
@@ -302,9 +306,9 @@ export const UserProvider = () =>
                     Effect.filterOrFail(
                       (existing) => hasTags(desiredTags, existing.User?.Tags),
                       () =>
-                        new Error(
-                          `User '${userName}' already exists and is not managed by alchemy`,
-                        ),
+                        new UserConflict({
+                          message: `User '${userName}' already exists and is not managed by alchemy`,
+                        }),
                     ),
                   ),
                 ),

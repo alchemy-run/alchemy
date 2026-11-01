@@ -118,7 +118,7 @@ export const ReasoningEnginesSession = Resource<ReasoningEnginesSession>(
 export class ReasoningEnginesSessionNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -147,17 +147,17 @@ const toAttrs = (session: aiplatform.GoogleCloudAiplatformV1Session, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEnginesSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
       session
         ? Effect.succeed(session)
-        : Effect.fail(new ReasoningEnginesSessionNotResolved({ name })),
+        : Effect.fail(new ReasoningEnginesSessionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
@@ -268,7 +268,7 @@ export const ReasoningEnginesSessionProvider = () =>
               sessionState: news.sessionState,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -281,7 +281,7 @@ export const ReasoningEnginesSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReasoningEnginesSessionNotResolved({ name });
+        return yield* new ReasoningEnginesSessionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -325,7 +325,7 @@ export const ReasoningEnginesSessionProvider = () =>
         .deleteProjectsLocationsReasoningEnginesSessions({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

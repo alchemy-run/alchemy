@@ -94,6 +94,11 @@ export interface ScalableTarget extends Resource<
      * Suspension state of dynamic and scheduled scaling activities.
      */
     suspendedState: aas.SuspendedState | undefined;
+    /**
+     * Tags on the scalable target, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -262,8 +267,8 @@ export const ScalableTargetProvider = () =>
           if (identity === undefined) return undefined;
           const found = yield* describe(identity);
           if (!found) return undefined;
-          const attrs = toAttributes(found);
           const tags = found.ScalableTargetARN ? yield* observedTags(found.ScalableTargetARN) : {};
+          const attrs = { ...toAttributes(found), tags };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -329,6 +334,7 @@ export const ScalableTargetProvider = () =>
             maxCapacity: found?.MaxCapacity ?? news.maxCapacity,
             roleArn: found?.RoleARN ?? news.roleArn ?? "",
             suspendedState: found?.SuspendedState ?? news.suspendedState,
+            tags: desiredTags,
           };
         }),
 

@@ -1,8 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { tagRecord } from "alchemy/Tags";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { alchemyLabelKeys, stripInternalLabels } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 63;

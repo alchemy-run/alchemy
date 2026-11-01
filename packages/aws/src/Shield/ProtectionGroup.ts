@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ProtectionGroupUnexpectedResponse extends Data.TaggedError(
+  "ProtectionGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** How Shield Advanced aggregates traffic across a protection group. */
 export type ProtectionGroupAggregation = "SUM" | "MEAN" | "MAX";
@@ -124,9 +132,7 @@ export const ProtectionGroup = Resource<ProtectionGroup>("AWS.Shield.ProtectionG
 const observeGroup = (protectionGroupId: string) =>
   shield.describeProtectionGroup({ ProtectionGroupId: protectionGroupId }).pipe(
     Effect.map((r) => r.ProtectionGroup),
-    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () => Effect.undefined),
   );
 
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
@@ -229,9 +235,9 @@ export const ProtectionGroupProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             group = yield* observeGroup(groupId);
             if (!group?.ProtectionGroupArn) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read Shield protection group ${groupId}`),
-              );
+              return yield* new ProtectionGroupUnexpectedResponse({
+                message: `Failed to create or read Shield protection group ${groupId}`,
+              });
             }
           } else {
             // 3. SYNC settings — diff observed against desired; update only

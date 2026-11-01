@@ -339,16 +339,16 @@ export type Spoke = Resource<
 export const Spoke = Resource<Spoke>("GCP.NetworkConnectivity.Spoke");
 
 export class SpokeNotResolved extends Data.TaggedError("GCP.NetworkConnectivity.SpokeNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SpokeFailed extends Data.TaggedError("GCP.NetworkConnectivity.SpokeFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class SpokeStillExists extends Data.TaggedError("GCP.NetworkConnectivity.SpokeStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -705,7 +705,7 @@ const desiredSpokeBody = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsSpokes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
@@ -725,15 +725,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (spoke): spoke is networkconnectivity.Spoke => spoke !== undefined,
-      () => new SpokeNotResolved({ name }),
+      () => new SpokeNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (spoke) => !isFailedState(spoke),
-      (spoke) => new SpokeFailed({ name, state: spoke.state }),
+      (spoke) => new SpokeFailed({ resourceName: name, state: spoke.state }),
     ),
     Effect.filterOrFail(
       (spoke) => !isPendingState(spoke.state),
-      () => new SpokeNotResolved({ name }),
+      () => new SpokeNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeNotResolved",
@@ -745,7 +745,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((spoke) =>
-      spoke === undefined ? Effect.void : Effect.fail(new SpokeStillExists({ name })),
+      spoke === undefined ? Effect.void : Effect.fail(new SpokeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
@@ -765,7 +765,7 @@ const waitUntilHubDropsSpoke = (hub: string, spokeName: string) =>
         const still = (page.spokes ?? []).some(
           (spoke) => spoke.name === spokeName || resourceKey(spoke.name) === resourceKey(spokeName),
         );
-        return still ? Effect.fail(new SpokeStillExists({ name: spokeName })) : Effect.void;
+        return still ? Effect.fail(new SpokeStillExists({ resourceName: spokeName })) : Effect.void;
       }),
       Effect.retry({
         while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
@@ -785,7 +785,7 @@ const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
       const still = (hubResource.routingVpcs ?? []).some(
         (vpc) => resourceKey(vpc.uri) === networkKey,
       );
-      return still ? Effect.fail(new SpokeStillExists({ name: hub })) : Effect.void;
+      return still ? Effect.fail(new SpokeStillExists({ resourceName: hub })) : Effect.void;
     }),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
@@ -1034,7 +1034,7 @@ export const SpokeProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1043,7 +1043,7 @@ export const SpokeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SpokeNotResolved({ name });
+        return yield* new SpokeNotResolved({ resourceName: name });
       }
 
       const attrs = toAttrs(current, env.project);
@@ -1085,7 +1085,7 @@ export const SpokeProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

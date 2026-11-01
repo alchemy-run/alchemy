@@ -197,7 +197,7 @@ export const SigningProfileProvider = () =>
       const getProfile = (profileName: string) =>
         signer
           .getSigningProfile({ profileName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttributes = (profileName: string, live: signer.GetSigningProfileResponse) => ({
         profileName,

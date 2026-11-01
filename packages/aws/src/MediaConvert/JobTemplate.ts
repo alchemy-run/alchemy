@@ -132,7 +132,7 @@ export const JobTemplateProvider = () =>
       const getJobTemplate = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getJobTemplate({ Name: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.JobTemplate;
       });
 

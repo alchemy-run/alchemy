@@ -660,7 +660,7 @@ type ObservedSubscription =
 const getSubscriptionOrUndefined = (accountId: string, subscriptionId: string) =>
   queues
     .getSubscription({ accountId, subscriptionId })
-    .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.undefined));
 
 /**
  * Find a subscription by exact name. Cloudflare's list endpoint has no

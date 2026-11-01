@@ -2,7 +2,9 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 /**
  * A sibling resource whose output is threaded into the container's `env`,
@@ -69,6 +71,43 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
           return yield* fetch(request);
         }),
       };
+    });
+  }),
+) {}
+
+/**
+ * The echo image capped at one instance, so a second Durable Object's start
+ * finds no container instance to run on.
+ */
+export class CappedContainer extends Cloudflare.Container<CappedContainer>()("CappedContainer", {
+  image: "mendhak/http-https-echo:latest",
+  maxInstances: 1,
+}) {}
+
+/**
+ * Starts the {@link CappedContainer} and reports how it ends within a short
+ * window: the error tag `start` or `monitor` failed with, or `running`.
+ */
+export class CappedContainerObject extends Cloudflare.DurableObject<CappedContainerObject>()(
+  "CappedContainerObject",
+  Effect.gen(function* () {
+    const container = yield* CappedContainer;
+
+    return Effect.succeed({
+      start: Effect.fn("start")(function* () {
+        const started = yield* container.start({ enableInternet: true }).pipe(Effect.result);
+        if (Result.isFailure(started)) return { phase: "start", tag: started.failure._tag };
+        const monitored = yield* container
+          .monitor()
+          .pipe(Effect.timeoutOption("20 seconds"), Effect.result);
+        if (Result.isFailure(monitored))
+          return {
+            phase: "monitor",
+            tag: monitored.failure._tag,
+            detail: String(monitored.failure.cause ?? monitored.failure.message),
+          };
+        return { phase: "monitor", tag: Option.isNone(monitored.success) ? "running" : "exited" };
+      }),
     });
   }),
 ) {}

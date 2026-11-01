@@ -190,7 +190,7 @@ export const PersistentResource = Resource<PersistentResource>("GCP.AIPlatform.P
 export class PersistentResourceNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.PersistentResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -246,14 +246,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsPersistentResources({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (resource): resource is aiplatform.GoogleCloudAiplatformV1PersistentResource =>
         resource !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -266,7 +266,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (resource) => resource === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -298,8 +298,12 @@ export const PersistentResourceProvider = () =>
         olds !== undefined && (news.displayName ?? "") !== (olds.displayName ?? "");
       const labelsChanged =
         olds !== undefined &&
-        JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
-          JSON.stringify(Object.entries(olds.labels ?? {}).sort());
+        JSON.stringify(
+          Object.entries(news.labels ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        ) !==
+          JSON.stringify(
+            Object.entries(olds.labels ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+          );
       // GCP only updates Ray-cluster persistent resources ("Currently we only
       // support the update function on Ray cluster"); any other resource is
       // replaced when its replica counts change.
@@ -407,7 +411,7 @@ export const PersistentResourceProvider = () =>
               resourceRuntimeSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -416,7 +420,7 @@ export const PersistentResourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PersistentResourceNotResolved({ name });
+        return yield* new PersistentResourceNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;
@@ -451,7 +455,7 @@ export const PersistentResourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PersistentResourceNotResolved({ name: observedName });
+        return yield* new PersistentResourceNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),
@@ -468,7 +472,7 @@ export const PersistentResourceProvider = () =>
       );
       const operation = yield* aiplatform
         .deleteProjectsLocationsPersistentResources({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

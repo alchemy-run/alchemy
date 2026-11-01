@@ -256,7 +256,7 @@ const toWebsite = (website: storage.BucketWebsite | undefined): BucketWebsite | 
 const getByName = (bucketName: string) =>
   storage
     .getBuckets({ bucket: bucketName, projection: "full" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyBucket = (bucketName: string) =>
   storage.listObjects.items({ bucket: bucketName, versions: true, maxResults: 1000 }).pipe(

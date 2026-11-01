@@ -516,9 +516,7 @@ const isPlaceholder = (node: tpu.Node) => {
 };
 
 const getByName = (name: string) =>
-  tpu
-    .getProjectsLocationsNodes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  tpu.getProjectsLocationsNodes({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NodeProvider = () =>
   Provider.succeed(Node, {
@@ -645,7 +643,7 @@ export const NodeProvider = () =>
             nodeId,
             body: toNodeBody(news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -653,7 +651,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const state = (current.state ?? "").toUpperCase();
@@ -667,7 +665,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -720,7 +718,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -728,7 +726,7 @@ export const NodeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* tpu.deleteProjectsLocationsNodes({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

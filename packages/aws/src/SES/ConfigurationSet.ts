@@ -126,6 +126,12 @@ export interface ConfigurationSet extends Resource<
   {
     configurationSetName: string;
     configurationSetArn: string;
+    /**
+     * Sending, reputation and delivery options, the declared suppression,
+     * tracking and VDM options, and the tags, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: Record<string, unknown>;
   },
   never,
   Providers
@@ -215,6 +221,45 @@ const sameReasons = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<stri
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
 
+/**
+ * The options reconcile converges, as observed. Options reconcile only
+ * applies when declared are only observed when declared. `read` and
+ * `reconcile` share it so a converged configuration set reads unchanged.
+ */
+const observeConfigurationSetOptions = (
+  observed: sesv2.GetConfigurationSetResponse,
+  props: ConfigurationSetProps | undefined,
+) => ({
+  sendingEnabled: observed.SendingOptions?.SendingEnabled ?? true,
+  reputationMetricsEnabled: observed.ReputationOptions?.ReputationMetricsEnabled ?? false,
+  tlsPolicy: observed.DeliveryOptions?.TlsPolicy ?? "OPTIONAL",
+  maxDeliverySeconds:
+    props?.maxDelivery === undefined ? undefined : observed.DeliveryOptions?.MaxDeliverySeconds,
+  suppressedReasons:
+    props?.suppressedReasons === undefined
+      ? undefined
+      : [...(observed.SuppressionOptions?.SuppressedReasons ?? [])].sort(),
+  tracking:
+    props?.tracking === undefined
+      ? undefined
+      : {
+          customRedirectDomain: observed.TrackingOptions?.CustomRedirectDomain,
+          httpsPolicy:
+            props.tracking.httpsPolicy === undefined
+              ? undefined
+              : observed.TrackingOptions?.HttpsPolicy,
+        },
+  vdm:
+    props?.vdm === undefined
+      ? undefined
+      : {
+          dashboardEngagementMetrics: observed.VdmOptions?.DashboardOptions?.EngagementMetrics,
+          guardianOptimizedSharedDelivery:
+            observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery,
+        },
+  tags: toTagRecord(observed.Tags),
+});
+
 export const ConfigurationSetProvider = () =>
   Provider.effect(
     ConfigurationSet,
@@ -229,7 +274,7 @@ export const ConfigurationSetProvider = () =>
       const getConfigurationSet = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getConfigurationSet({ ConfigurationSetName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return ConfigurationSet.Provider.of({
@@ -255,6 +300,7 @@ export const ConfigurationSetProvider = () =>
           const attrs = {
             configurationSetName: name,
             configurationSetArn: configurationSetArnOf(region, accountId, name),
+            configuration: observeConfigurationSetOptions(found, olds),
           };
           const tags = toTagRecord(found.Tags);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -433,7 +479,15 @@ export const ConfigurationSetProvider = () =>
           }
 
           yield* session.note(configurationSetArn);
-          return { configurationSetName: name, configurationSetArn };
+          const final = yield* sesv2.getConfigurationSet({ ConfigurationSetName: name });
+          return {
+            configurationSetName: name,
+            configurationSetArn,
+            configuration: {
+              ...observeConfigurationSetOptions(final, news),
+              tags: desiredTags,
+            },
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {

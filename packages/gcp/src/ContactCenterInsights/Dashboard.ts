@@ -139,7 +139,7 @@ export const Dashboard = Resource<Dashboard>("GCP.ContactCenterInsights.Dashboar
 export class DashboardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, dashboardId: string) => `${parent}/dashboards/${dashboardId}`;
@@ -187,10 +187,10 @@ const toAttrs = (dashboard: cci.GoogleCloudContactcenterinsightsV1Dashboard, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsDashboards({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsDashboards.pages({ parent, pageSize: 100 }).pipe(
@@ -275,7 +275,7 @@ export const DashboardProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DashboardNotResolved({ name });
+        return yield* new DashboardNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

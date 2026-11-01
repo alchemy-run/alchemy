@@ -459,7 +459,7 @@ type CloudLoadBalancer =
   | ListLoadBalancersResponseLoadBalancersItem;
 
 export class LoadBalancerNotCreated extends Data.TaggedError("Hetzner.LoadBalancerNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const asAlgorithm = (value: string): LoadBalancerAlgorithm =>
@@ -1002,7 +1002,7 @@ const createLoadBalancerName = (id: string, name: string | undefined, existing?:
 const getById = (id: number) =>
   Hetzner.loadBalancers.getLoadBalancer({ id }).pipe(
     Effect.map(({ load_balancer }) => load_balancer),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -1395,7 +1395,7 @@ export const LoadBalancerProvider = () =>
           })
           .pipe(
             Effect.retry(busyRetry),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           if (created.action) {
@@ -1411,7 +1411,7 @@ export const LoadBalancerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LoadBalancerNotCreated({ name });
+        return yield* new LoadBalancerNotCreated({ resourceName: name });
       }
 
       current = yield* syncMetadata({

@@ -1,17 +1,20 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Output from "alchemy/Output";
+import { isResourceOfType } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Endpoint } from "./Endpoint.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 
 /**
  * HTTP implementation of {@link PutEvents}. At deploy time it grants
- * `events:PutEvents` on the bound bus (or the default bus); at runtime it
- * calls the EventBridge API with the host Function's credentials. Provide
- * this layer on the Function using the binding.
+ * `events:PutEvents` on the bound bus (or the default bus, or both buses of a
+ * global endpoint); at runtime it calls the EventBridge API with the host
+ * Function's credentials. Provide this layer on the Function using the
+ * binding.
  */
 export const PutEventsHttp = Layer.effect(
   PutEvents,
@@ -19,7 +22,46 @@ export const PutEventsHttp = Layer.effect(
     const bind = yield* AWSBindings.Bind;
     const putEvents = yield* AWSBindings.withCredentials(eventbridge.putEvents);
 
-    return Effect.fn(function* (bus?: EventBus) {
+    /**
+     * Publish through a global endpoint: requests go to the endpoint's URL
+     * (signed with SigV4A) and EventBridge routes them to the healthy
+     * region's bus. Both buses are granted, since either may receive them.
+     */
+    const bindEndpoint = Effect.fn(function* (endpoint: Endpoint) {
+      const EndpointId = yield* endpoint.endpointId;
+      const EventBusArns = yield* endpoint.eventBusArns;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.EventBridge.PutEvents(${endpoint})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["events:PutEvents"],
+              Resource: endpoint.eventBusArns,
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.EventBridge.PutEvents(${endpoint.LogicalId})`)(function* (
+        request: PutEventsRequest,
+      ) {
+        const endpointId = yield* EndpointId;
+        // Both buses share a name; the endpoint resolves it in whichever
+        // region it routes to.
+        const [primary] = yield* EventBusArns;
+        const eventBusName = primary!.slice(primary!.indexOf(":event-bus/") + ":event-bus/".length);
+        return yield* putEvents({
+          ...request,
+          EndpointId: endpointId,
+          Entries: request.Entries.map((entry) => ({ ...entry, EventBusName: eventBusName })),
+        });
+      });
+    });
+
+    return Effect.fn(function* (target?: EventBus | Endpoint) {
+      if (isResourceOfType(target, "AWS.EventBridge.Endpoint")) {
+        return yield* bindEndpoint(target as Endpoint);
+      }
+      const bus = target as EventBus | undefined;
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{

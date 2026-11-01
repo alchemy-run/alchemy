@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream";
 export interface EchoClient {
   echo: (msg: string) => Effect.Effect<string>;
   processId: () => Effect.Effect<number>;
+  env: (key: string) => Effect.Effect<string | undefined>;
   boom: () => Effect.Effect<never, { _tag: "Boom"; msg: string }>;
   identity: () => Effect.Effect<{ name: string; stage: string }>;
   stats: () => Effect.Effect<{
@@ -103,6 +104,7 @@ export const makeEcho = (blocked = false) =>
       return TestEcho.of({
         echo: (msg) => Effect.succeed(`echo:${msg}`),
         processId: () => Effect.sync(() => process.pid),
+        env: (key) => Effect.sync(() => process.env[key]),
         boom: () => Effect.fail({ _tag: "Boom" as const, msg: "kaboom" }),
         identity: () => Effect.succeed({ name: stack.name, stage: stack.stage }),
         stats: () => Effect.sync(() => ({ active, built, finalized })),

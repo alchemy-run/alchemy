@@ -6,11 +6,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ReplicationSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "ReplicationSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ReplicationSubnetGroupProps {
   /**
@@ -123,7 +131,7 @@ export const ReplicationSubnetGroupProvider = () =>
           .describeReplicationSubnetGroups({
             Filters: [{ Name: "replication-subnet-group-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.ReplicationSubnetGroups?.[0];
       });
 
@@ -179,7 +187,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const tags = yield* iam
             .listRoleTags({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (tags === undefined) return;
           const owned = (tags.Tags ?? []).some(
             (tag) =>
@@ -216,7 +224,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const remaining = yield* iam
             .getRole({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -237,9 +245,9 @@ export const ReplicationSubnetGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: dms.ReplicationSubnetGroup) {
         const identifier = group.ReplicationSubnetGroupIdentifier;
         if (!identifier) {
-          return yield* Effect.fail(
-            new Error("DMS replication subnet group is missing its identifier"),
-          );
+          return yield* new ReplicationSubnetGroupUnexpectedResponse({
+            message: "DMS replication subnet group is missing its identifier",
+          });
         }
         const arn = yield* toArn(identifier);
         return {
@@ -333,9 +341,9 @@ export const ReplicationSubnetGroupProvider = () =>
           }
 
           if (!observed?.ReplicationSubnetGroupIdentifier) {
-            return yield* Effect.fail(
-              new Error(`DMS replication subnet group '${name}' not found after reconcile`),
-            );
+            return yield* new ReplicationSubnetGroupUnexpectedResponse({
+              message: `DMS replication subnet group '${name}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

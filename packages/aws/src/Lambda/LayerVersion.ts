@@ -341,7 +341,7 @@ export const LayerVersionProvider = () =>
         Lambda.getLayerVersion({
           LayerName: layerName,
           VersionNumber: version,
-        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       return {
         // `layerVersionArn`/`version` deliberately are NOT stable: an update

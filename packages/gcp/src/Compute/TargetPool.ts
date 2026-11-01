@@ -292,7 +292,7 @@ const toAttrs = (pool: compute.TargetPool, project: string): TargetPool["Attribu
 const getByName = (project: string, region: string, targetPool: string) =>
   compute
     .getTargetPools({ project, region, targetPool })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const runOp = <E, R>(
   project: string,

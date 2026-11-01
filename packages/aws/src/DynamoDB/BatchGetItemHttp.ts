@@ -44,9 +44,9 @@ export const BatchGetItemHttp = Layer.effect(
         tablesRegion(sortedTables),
       );
 
-      return Effect.fn(`AWS.DynamoDB.BatchGetItem(${sortedTables})`)(function* (
-        request: BatchGetItemRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.BatchGetItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: BatchGetItemRequest) {
         const requestItems = yield* Effect.forEach(
           Object.entries(request.RequestItems),
           ([tableId, keys]) =>

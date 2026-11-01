@@ -144,7 +144,7 @@ export const TableBucketProvider = () =>
           tableBucketId: b.tableBucketId,
           type: b.type,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
@@ -172,7 +172,7 @@ export const TableBucketProvider = () =>
       // the deterministic ARN; the bucket may have been deleted out-of-band.
       let bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b) => b),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing. Tolerate a concurrent create

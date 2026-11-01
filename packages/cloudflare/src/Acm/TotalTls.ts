@@ -142,7 +142,7 @@ export const TotalTlsProvider = () =>
               toAttributes(zoneId, observed, initialStateOf(undefined, observed)),
             ),
             // Zone deleted out-of-band between enumeration and read.
-            Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -165,7 +165,7 @@ export const TotalTlsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* acm.getTotalTl({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -221,7 +221,7 @@ export const TotalTlsProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* acm
         .getTotalTl({ zoneId })
-        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

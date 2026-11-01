@@ -246,6 +246,20 @@ export const LiveDurableObjectApplicationProvider = () =>
         (yield* boundNamespace(className, bindings)) ??
         (output?.durableObjects?.namespaceId ? output.durableObjects : undefined);
       if (!durableObjects) {
+        // An existing Worker gaining this class publishes its old output
+        // first, which has no namespace for it yet. The application stays a
+        // placeholder until the Worker's upload binds the namespace, when
+        // the run reconciles it again; if that never comes, the next
+        // deploy's diff plans the create.
+        if (!isLiveApplication(output?.applicationId)) {
+          return placeholder({
+            applicationId: "",
+            applicationName: name,
+            accountId,
+            className,
+            createdAt: "",
+          });
+        }
         return yield* new ContainerConfigurationError({
           message: `The container application of Durable Object class '${className}' requires a resolved Durable Object namespace. Reconcile its Worker first.`,
         });
@@ -268,7 +282,7 @@ export const LiveDurableObjectApplicationProvider = () =>
       // 1. Observe. The namespace belongs to this stack's Worker, so an
       //    application already attached to it is this class's application.
       let application = yield* getApplication.pipe(
-        Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
       );
 
       // 2. Ensure
@@ -319,7 +333,7 @@ export const LiveDurableObjectApplicationProvider = () =>
           applicationId: output.applicationId,
         }).pipe(
           Effect.map((application) => toAttributes(application, className, output.settings)),
-          Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
         );
       }
       // Generated names identify this instance, so a match is ours.

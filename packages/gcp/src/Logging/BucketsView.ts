@@ -132,7 +132,7 @@ export type BucketsView = Resource<
 export const BucketsView = Resource<BucketsView>("GCP.Logging.BucketsView");
 
 export class BucketsViewNotResolved extends Data.TaggedError("GCP.Logging.BucketsViewNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseViewName = (name: string) => {
@@ -212,7 +212,7 @@ const toAttrs = (view: logging.LogView, project: string, location: string, bucke
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BucketsViewProvider = () =>
   Provider.succeed(BucketsView, {
@@ -315,7 +315,7 @@ export const BucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BucketsViewNotResolved({ name });
+        return yield* new BucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

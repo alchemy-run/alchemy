@@ -1,9 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -140,6 +142,88 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.instance.name);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+    timeout: 3_600_000,
+  },
+);
+
+const MIGRATIONS_PASSWORD = "AlchemyTest1";
+
+/** Applied migration names, read out-of-band through the Data API. */
+const appliedMigrations = (instance: string) =>
+  alloydb
+    .executeSqlProjectsLocationsClustersInstances({
+      instance,
+      body: {
+        database: "postgres",
+        user: "postgres",
+        password: MIGRATIONS_PASSWORD,
+        sqlStatement: "SELECT name FROM __alchemy_migrations ORDER BY id",
+      },
+    })
+    .pipe(
+      Effect.map((response) => {
+        expect(response.metadata?.status).not.toEqual("ERROR");
+        return (response.sqlResults?.[0]?.rows ?? []).map((row) => row.values?.[0]?.value);
+      }),
+    );
+
+test.provider.skipIf(!!process.env.FAST)(
+  "a primary applies migrations over the Data API, then only pending ones",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-alloydb-migrations-" });
+      const add = (name: string, sql: string) => fs.writeFileString(path.join(dir, name), sql);
+      yield* add("0001_users.sql", "CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL);");
+
+      const program = Effect.gen(function* () {
+        const cluster = yield* GCP.AlloyDB.Cluster("MigrationsDb", {
+          location: "us-central1",
+          pscConfig: { pscEnabled: true },
+          initialUser: { user: "postgres", password: MIGRATIONS_PASSWORD },
+          automatedBackupPolicy: { enabled: false },
+          continuousBackupConfig: { enabled: false },
+        });
+        return yield* GCP.AlloyDB.Instance("Primary", {
+          cluster: cluster.name,
+          instanceType: "PRIMARY",
+          machineConfig: { cpuCount: 2 },
+          dataApiAccess: "ENABLED",
+          migrations: dir,
+          migrationsUser: "postgres",
+          migrationsPassword: MIGRATIONS_PASSWORD,
+        });
+      });
+
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(program);
+      expect(created.migrationsTable).toEqual("__alchemy_migrations");
+      expect(Object.keys(created.migrationsHashes)).toEqual(["0001_users.sql"]);
+      expect(yield* appliedMigrations(created.name)).toEqual(["0001_users.sql"]);
+
+      // Nothing changed: the next deploy has nothing to apply.
+      const unchanged = yield* stack.plan(program);
+      expect(unchanged.resources.Primary?.action).toEqual("noop");
+
+      yield* add("0002_posts.sql", "CREATE TABLE posts (id INT PRIMARY KEY, title TEXT NOT NULL);");
+      const pending = yield* stack.plan(program);
+      expect(pending.resources.Primary?.action).toEqual("update");
+
+      const updated = yield* stack.deploy(program);
+      expect(updated.name).toEqual(created.name);
+      expect(Object.keys(updated.migrationsHashes).sort()).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+      expect(yield* appliedMigrations(updated.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.name)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:alloydb", "live"],

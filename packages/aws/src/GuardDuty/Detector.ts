@@ -101,7 +101,7 @@ export const DetectorProvider = () =>
       const getDetector = (detectorId: string) =>
         guardduty
           .getDetector({ DetectorId: detectorId })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       return {
         read: Effect.fn(function* ({ id, output }) {

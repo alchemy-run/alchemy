@@ -3,7 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, diffTags } from "alchemy/Tags";
+import { createInternalTags, diffTags, tagRecord } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -242,7 +242,14 @@ export const LogGroupProvider = () =>
             kmsKeyId: match.kmsKeyId,
             logGroupClass: match.logGroupClass ?? "STANDARD",
             deletionProtectionEnabled: match.deletionProtectionEnabled ?? false,
-            tags: output?.tags ?? {},
+            tags: yield* logs
+              .listTagsForResource({ resourceArn: normalizeLogGroupArn(match.arn) })
+              .pipe(
+                Effect.map((r) => tagRecord(r.tags)),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed({} as Record<string, string>),
+                ),
+              ),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

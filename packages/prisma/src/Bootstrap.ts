@@ -11,7 +11,6 @@ import {
   runProcess,
   stackConstant,
 } from "alchemy/Runtime/Bootstrap";
-import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -36,10 +35,7 @@ export const bootstrap = (entrypoint: unknown, options: PrismaBootstrapOptions):
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const stack = Layer.mergeAll(
-    stackConstant(options.stack.name, options.stack.stage),
-    Layer.succeed(Stage, options.stack.stage),
-  );
+  const stack = stackConstant(options.stack.name, options.stack.stage);
 
   const program = resolveProgram("default").pipe(
     Effect.provide(

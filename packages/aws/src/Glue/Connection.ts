@@ -137,7 +137,7 @@ export const ConnectionProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.Connection),
-            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
           );
       });
 

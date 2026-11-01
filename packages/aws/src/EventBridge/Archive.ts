@@ -155,7 +155,7 @@ export const ArchiveProvider = () =>
           const archiveName = output?.archiveName ?? (yield* createArchiveName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.ArchiveName || !described.ArchiveArn) {
             return undefined;
           }
@@ -202,7 +202,7 @@ export const ArchiveProvider = () =>
           // falls through to create.
           const observed = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ArchiveArn) {
             // Ensure — create the archive; tolerate an AlreadyExists race

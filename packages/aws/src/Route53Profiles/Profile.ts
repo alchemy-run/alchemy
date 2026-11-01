@@ -133,7 +133,7 @@ export const ProfileProvider = () =>
               ? undefined
               : r.Profile,
           ),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const findByName = (name: string) =>

@@ -24,10 +24,13 @@ export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Errors";
 
 export interface RedisProps {
   /**
@@ -222,7 +225,7 @@ export type Redis = Resource<
 export const Redis = Resource<Redis>("Fly.Redis");
 
 export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   errorMessage?: string;
 }> {}
 
@@ -454,7 +457,7 @@ const resolvePlan = (plan: string | undefined, existingId: string | undefined) =
 const resolveOrganization = (orgSlug: string) =>
   addons
     .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
@@ -485,7 +488,7 @@ const waitUntilReady = (id: string, name: string) =>
         if (failedStatus(row.status)) {
           return Effect.fail(
             new RedisNotCreated({
-              name: row.name ?? name,
+              resourceName: row.name ?? name,
               errorMessage: row.errorMessage ?? row.status ?? undefined,
             }),
           );
@@ -522,7 +525,7 @@ const waitUntilGone = (id: string, name: string) =>
 const desiredOptions = (
   props: RedisProps,
   plan: RedisPlan,
-  observed: unknown | undefined,
+  observed: unknown,
 ): Record<string, unknown> => {
   const options = recordOf(observed);
   if (props.eviction !== undefined) options.eviction = props.eviction;
@@ -595,7 +598,7 @@ export const attachRedisSecrets = Effect.fn(function* (
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* addons
         .addOn({ id: row.id })
-        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
       url = unwrapSensitive(detail?.publicUrl);
     }
     if (url === undefined || url.length === 0) {
@@ -735,7 +738,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       if (pendingStatus(current.status)) {
@@ -744,7 +747,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       const observedOptions = recordOf(current.options);

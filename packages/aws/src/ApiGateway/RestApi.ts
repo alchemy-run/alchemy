@@ -377,7 +377,7 @@ export const RestApiProvider = () =>
           if (!output?.restApiId) return undefined;
           const api = yield* ag
             .getRestApi({ restApiId: output.restApiId })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!api?.id) return undefined;
           return snapshotFromApi(api);
         }),
@@ -411,7 +411,7 @@ export const RestApiProvider = () =>
           const observed = output?.restApiId
             ? yield* ag
                 .getRestApi({ restApiId: output.restApiId })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
           // Ensure — create the API when it is missing.
           const observedSnapshot = observed?.id

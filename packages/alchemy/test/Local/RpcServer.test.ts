@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { assert, describe, expect, it } from "alchemy-test";
+import { assert, describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -74,6 +74,8 @@ describe.concurrent("Local.RpcServer", { tags: ["local"] }, () => {
             );
             assert(url, `url not found in output: "${url}"`);
             expect(url).toMatch(/^ws:\/\//);
+            // The sidecar listens on loopback only, under every runtime.
+            expect(new URL(url).hostname).toBe("127.0.0.1");
 
             // Open the parent websocket inside the scope so it stays alive
             // for the duration of the RPC exchange below; closing it later

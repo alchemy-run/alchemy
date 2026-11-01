@@ -235,7 +235,7 @@ export const TrustAnchorProvider = () =>
       const getById = (trustAnchorId: string) =>
         rolesanywhere.getTrustAnchor({ trustAnchorId }).pipe(
           Effect.map((r) => r.trustAnchor),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {
@@ -324,7 +324,7 @@ export const TrustAnchorProvider = () =>
                 trustAnchorId: live.trustAnchorId!,
                 notificationSettingKeys: resetKeys,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             live = reset?.trustAnchor ?? live;
           }
 

@@ -173,7 +173,7 @@ export const SinkProvider = () =>
           const found = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(sinkName);
           if (!found?.Arn) return undefined;
           const attrs = {
@@ -200,7 +200,7 @@ export const SinkProvider = () =>
           let live = output?.sinkArn
             ? yield* oam
                 .getSink({ Identifier: output.sinkArn })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(sinkName);
 
           // ENSURE — create when missing; a ConflictException means a peer
@@ -221,7 +221,7 @@ export const SinkProvider = () =>
             const desired = toPolicyString(desiredPolicy);
             const observed = yield* oam.getSinkPolicy({ SinkIdentifier: sinkArn }).pipe(
               Effect.map((r) => r.Policy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             if (!samePolicy(observed, desired)) {
               yield* retryOamMutation(

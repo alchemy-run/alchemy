@@ -5,7 +5,7 @@
  * namespaces through this component so they look like the same tree.
  */
 import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { Row, Text, useGlyphs } from "../ui/index.ts";
 import { actionStyle, type PlanAction } from "./statusStyle.ts";
 

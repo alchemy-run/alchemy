@@ -65,7 +65,7 @@ export const RegistryPolicyProvider = () =>
     Effect.gen(function* () {
       const readPolicy = ecr
         .getRegistryPolicy({})
-        .pipe(Effect.catchTag("RegistryPolicyNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("RegistryPolicyNotFoundException", () => Effect.undefined));
 
       const toPolicyText = (policy: PolicyDocument | string) =>
         typeof policy === "string" ? policy : stringifyPolicyDocument(policy);

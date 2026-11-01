@@ -92,7 +92,7 @@ export const BotLocale = Resource<BotLocale>("AWS.LexV2.BotLocale");
 const describeLocale = Effect.fn(function* (botId: string, localeId: string) {
   return yield* lexm
     .describeBotLocale({ botId, botVersion: "DRAFT", localeId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 const attributesOf = (locale: lexm.DescribeBotLocaleResponse): BotLocale["Attributes"] => ({

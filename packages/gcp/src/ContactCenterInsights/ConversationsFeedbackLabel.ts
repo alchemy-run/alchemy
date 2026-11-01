@@ -125,7 +125,7 @@ export const ConversationsFeedbackLabel = Resource<ConversationsFeedbackLabel>(
 export class ConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationsFeedbackLabelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedbackLabelId: string) =>
@@ -164,10 +164,10 @@ const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversationsFeedbackLabels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAll = (parent: string, project: string) =>
   cci.listAllFeedbackLabelsProjectsLocations.pages({ parent, pageSize: 100 }).pipe(
@@ -252,7 +252,7 @@ export const ConversationsFeedbackLabelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConversationsFeedbackLabelNotResolved({ name });
+        return yield* new ConversationsFeedbackLabelNotResolved({ resourceName: name });
       }
 
       const labelChanged = (current.label ?? "") !== label;

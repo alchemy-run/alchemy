@@ -2,11 +2,17 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
+
+export class DashboardUnexpectedResponse extends Data.TaggedError("DashboardUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DashboardName = string;
 export type DashboardArn = `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
@@ -223,7 +229,7 @@ export const DashboardProvider = () =>
           .getDashboard({
             DashboardName: dashboardName,
           })
-          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.undefined));
 
         if (!output?.DashboardName) {
           return undefined;
@@ -272,7 +278,9 @@ export const DashboardProvider = () =>
 
           const state = yield* readDashboard(name);
           if (!state) {
-            return yield* Effect.fail(new Error(`failed to read reconciled dashboard '${name}'`));
+            return yield* new DashboardUnexpectedResponse({
+              message: `failed to read reconciled dashboard '${name}'`,
+            });
           }
 
           // Dashboards do not support the generic CloudWatch tagging APIs,

@@ -1,6 +1,6 @@
 import * as Hetzner from "@alchemy.run/hetzner";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
@@ -54,6 +54,6 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );

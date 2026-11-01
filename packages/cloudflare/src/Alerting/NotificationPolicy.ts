@@ -1,13 +1,32 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  createPolicyName,
+  findPolicyByName,
+  narrowPolicy,
+  type ObservedPolicy,
+  boundMechanisms,
+  type NotificationPolicyBinding,
+  observePolicy,
+  type PolicyBody,
+  policyEqualsObserved,
+} from "./internal.ts";
+
+export class NotificationPolicyUnexpectedResponse extends Data.TaggedError(
+  "NotificationPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export type { NotificationPolicyBinding } from "./internal.ts";
 
 const TypeId = "Cloudflare.Alerting.NotificationPolicy" as const;
 type TypeId = typeof TypeId;
@@ -70,10 +89,11 @@ export interface NotificationPolicyProps {
    */
   alertInterval?: string;
   /**
-   * Destinations notified when the policy fires. At least one mechanism
-   * is required.
+   * Destinations notified when the policy fires. At least one destination is
+   * required, either declared here or bound by a runtime that consumes the
+   * policy's notifications (`Cloudflare.Alerting.consumeNotifications`).
    */
-  mechanisms: NotificationPolicyMechanisms;
+  mechanisms?: NotificationPolicyMechanisms;
   /**
    * Optional filters restricting which events trigger the policy. Some
    * alert types require specific filters (`FiltersRequired`).
@@ -102,7 +122,7 @@ export type NotificationPolicy = Resource<
   TypeId,
   NotificationPolicyProps,
   NotificationPolicyAttributes,
-  never,
+  NotificationPolicyBinding,
   Providers
 >;
 
@@ -154,6 +174,39 @@ export type NotificationPolicy = Resource<
  *     healthCheckId: [healthCheckId],
  *     newHealth: ["Unhealthy"],
  *   },
+ * });
+ * ```
+ *
+ * ### Handling notifications in code
+ * **Example:** Run an Effect for each notification
+ * `consumeNotifications` adds a webhook destination at the consuming
+ * runtime, so the policy needs no `mechanisms`.
+ * ```typescript
+ * const policy = yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
+ *   alertType: "universal_ssl_event_type",
+ * });
+ *
+ * // in a Worker's Construction phase, with NotificationEventSourceLive provided
+ * yield* Cloudflare.Alerting.consumeNotifications(policy, (notification) =>
+ *   Effect.log(notification.text),
+ * );
+ * ```
+ *
+ * ### SQL custom alerts <!-- api-prose -->
+ * Alerts on a SQL query (Cloudflare's `custom_analytics` alert type) have
+ * their own resource with typed triggers: `Cloudflare.Alerting.CustomAlert`.
+ *
+ * ### Workers Issues notifications
+ * **Example:** Notify on new Worker issues
+ * ```typescript
+ * const policy = yield* Cloudflare.Alerting.NotificationPolicy("IssuePolicy", {
+ *   alertType: "workers_observability_real_time_issue",
+ *   mechanisms: { email: [{ id: "ops@example.com" }] },
+ * });
+ *
+ * yield* Cloudflare.Workers.IssueAutomation("IssueAlerts", {
+ *   policyId: policy.policyId,
+ *   afterOccurrences: 5,
  * });
  * ```
  *
@@ -227,10 +280,10 @@ export const NotificationPolicyProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPolicyName(id, news.name);
-      const desired = buildPolicyBody(name, news);
+      const desired = buildPolicyBody(name, news, bindings);
 
       // 1. Observe — by cached id first, then by deterministic name.
       let observed: ObservedPolicy | undefined;
@@ -249,9 +302,9 @@ export const NotificationPolicyProvider = () =>
           ...desired,
         });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the created notification policy"),
-          );
+          return yield* new NotificationPolicyUnexpectedResponse({
+            message: "Cloudflare did not return an id for the created notification policy",
+          });
         }
         const fresh = yield* observePolicy(accountId, created.id);
         return toPolicyAttributes(fresh ?? { id: created.id }, accountId);
@@ -283,62 +336,6 @@ export const NotificationPolicyProvider = () =>
     }),
   });
 
-interface ObservedPolicy {
-  readonly id: string;
-  readonly name?: string;
-  readonly alertType?: AlertType;
-  readonly enabled?: boolean;
-  readonly description?: string;
-  readonly alertInterval?: string;
-  readonly mechanisms?: unknown;
-  readonly filters?: unknown;
-  readonly created?: string;
-  readonly modified?: string;
-}
-
-const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
-
-const narrowPolicy = (raw: {
-  id?: string | null;
-  name?: string | null;
-  alertType?: string | null;
-  enabled?: boolean | null;
-  description?: string | null;
-  alertInterval?: string | null;
-  mechanisms?: unknown;
-  filters?: unknown;
-  created?: string | null;
-  modified?: string | null;
-}): ObservedPolicy | undefined =>
-  raw.id == null
-    ? undefined
-    : {
-        id: raw.id,
-        name: undef(raw.name),
-        alertType: undef(raw.alertType) as AlertType | undefined,
-        enabled: undef(raw.enabled),
-        description: undef(raw.description),
-        alertInterval: undef(raw.alertInterval),
-        mechanisms: raw.mechanisms ?? undefined,
-        filters: raw.filters ?? undefined,
-        created: undef(raw.created),
-        modified: undef(raw.modified),
-      };
-
-const observePolicy = (accountId: string, policyId: string) =>
-  alerting.getPolicy({ accountId, policyId }).pipe(
-    Effect.map((p) => narrowPolicy({ ...p, id: p.id ?? policyId })),
-    Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
-  );
-
-const findPolicyByName = (accountId: string, name: string) =>
-  alerting.listPolicies.items({ accountId }).pipe(
-    Stream.filter((p) => p.name === name && p.id != null),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-    Effect.map((p) => (p === undefined ? undefined : narrowPolicy(p))),
-  );
-
 const toPolicyAttributes = (
   observed: ObservedPolicy,
   accountId: string,
@@ -352,22 +349,19 @@ const toPolicyAttributes = (
   modified: observed.modified,
 });
 
-const createPolicyName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
-
-type PolicyBody = Omit<alerting.CreatePolicyRequest, "accountId">;
-
-const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBody => ({
+const buildPolicyBody = (
+  name: string,
+  news: NotificationPolicyProps,
+  bindings: ReadonlyArray<{ data: NotificationPolicyBinding }>,
+): PolicyBody => ({
   name,
   alertType: news.alertType,
   enabled: news.enabled ?? true,
   description: news.description,
   alertInterval: news.alertInterval,
   // `Input<string>` ids are resolved to concrete strings by the engine
-  // before reconcile runs.
-  mechanisms: news.mechanisms as PolicyBody["mechanisms"],
+  // before reconcile runs; bound webhooks extend the declared ones.
+  mechanisms: boundMechanisms(news.mechanisms, bindings),
   filters: news.filters,
 });
 
@@ -377,28 +371,3 @@ const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBod
  * dropped and object keys sorted, since Cloudflare echoes optional fields
  * as `null`.
  */
-const policyEqualsObserved = (desired: PolicyBody, observed: ObservedPolicy): boolean =>
-  desired.name === (observed.name ?? "") &&
-  desired.enabled === (observed.enabled ?? true) &&
-  (desired.description ?? "") === (observed.description ?? "") &&
-  (desired.alertInterval ?? undefined) === observed.alertInterval &&
-  normalizedEquals(desired.mechanisms, observed.mechanisms) &&
-  normalizedEquals(desired.filters, observed.filters);
-
-const normalizedEquals = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
-
-/** Drop null/undefined members and sort object keys for stable comparison. */
-const normalize = (value: unknown): unknown => {
-  if (value === null || value === undefined) return undefined;
-  if (Array.isArray(value)) return value.map(normalize);
-  if (typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      const v = normalize((value as Record<string, unknown>)[key]);
-      if (v !== undefined) out[key] = v;
-    }
-    return Object.keys(out).length === 0 ? undefined : out;
-  }
-  return value;
-};

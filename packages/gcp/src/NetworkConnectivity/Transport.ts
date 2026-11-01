@@ -222,18 +222,18 @@ export const Transport = Resource<Transport>("GCP.NetworkConnectivity.Transport"
 export class TransportNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.TransportNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TransportFailed extends Data.TaggedError("GCP.NetworkConnectivity.TransportFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class TransportStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.TransportStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -357,7 +357,7 @@ const toAttrs = (transport: networkconnectivity.Transport, project: string, regi
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsTransports({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
@@ -369,15 +369,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (transport): transport is networkconnectivity.Transport => transport !== undefined,
-      () => new TransportNotResolved({ name }),
+      () => new TransportNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (transport) => transport.state !== "DEPROVISIONED",
-      (transport) => new TransportFailed({ name, state: transport.state }),
+      (transport) => new TransportFailed({ resourceName: name, state: transport.state }),
     ),
     Effect.filterOrFail(
       (transport) => !isPendingState(transport.state),
-      () => new TransportNotResolved({ name }),
+      () => new TransportNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.TransportNotResolved",
@@ -389,7 +389,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((transport) =>
-      transport === undefined ? Effect.void : Effect.fail(new TransportStillExists({ name })),
+      transport === undefined
+        ? Effect.void
+        : Effect.fail(new TransportStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.TransportStillExists",
@@ -560,7 +562,7 @@ export const TransportProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -569,7 +571,7 @@ export const TransportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TransportNotResolved({ name });
+        return yield* new TransportNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -629,7 +631,7 @@ export const TransportProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

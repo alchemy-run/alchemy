@@ -205,7 +205,7 @@ export const TransferJob = Resource<TransferJob>("GCP.StorageTransfer.TransferJo
 export class TransferJobNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.TransferJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const statusOf = (status: string | undefined) =>
@@ -337,7 +337,7 @@ export const TransferJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TransferJobNotResolved({ name });
+        return yield* new TransferJobNotResolved({ resourceName: name });
       }
 
       if (isDeletedJob(current)) {

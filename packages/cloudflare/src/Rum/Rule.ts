@@ -328,7 +328,7 @@ type ObservedRule = NonNullable<NonNullable<rum.ListRulesResponse["rules"]>>[num
 const listRules = (accountId: string, rulesetId: string) =>
   rum.listRules({ accountId, rulesetId }).pipe(
     Effect.map((response): readonly ObservedRule[] | undefined => response.rules ?? []),
-    Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RulesetNotFound", () => Effect.undefined),
   );
 
 const toRule = (rule: rum.CreateRuleResponse | rum.UpdateRuleResponse): ObservedRule => rule;

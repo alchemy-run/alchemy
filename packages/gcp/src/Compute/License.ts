@@ -289,7 +289,7 @@ const toAttrs = (license: compute.License, project: string): License["Attributes
 const getByName = (project: string, license: string) =>
   compute
     .getLicenses({ project, license })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, licenseName: string) =>
   getByName(project, licenseName).pipe(

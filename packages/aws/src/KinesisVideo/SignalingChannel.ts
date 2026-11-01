@@ -107,7 +107,7 @@ export const SignalingChannelProvider = () =>
       const observeChannel = Effect.fn(function* (channelName: string) {
         return yield* kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
           Effect.map((r) => r.ChannelInfo),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

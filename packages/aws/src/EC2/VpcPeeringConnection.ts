@@ -183,8 +183,8 @@ export const VpcPeeringConnectionProvider = () =>
         ec2.describeVpcPeeringConnections({ VpcPeeringConnectionIds: [pcxId] }).pipe(
           Effect.map((r) => r.VpcPeeringConnections?.[0]),
           Effect.catchTags({
-            "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
-            "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+            "InvalidVpcPeeringConnectionID.NotFound": () => Effect.undefined,
+            "InvalidVpcPeeringConnectionId.NotFound": () => Effect.undefined,
           }),
         );
 
@@ -307,8 +307,8 @@ export const VpcPeeringConnectionProvider = () =>
               yield* ec2.acceptVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
                 // A concurrent reconcile may have accepted it already.
                 Effect.catchTags({
-                  "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
-                  "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+                  "InvalidVpcPeeringConnectionID.NotFound": () => Effect.undefined,
+                  "InvalidVpcPeeringConnectionId.NotFound": () => Effect.undefined,
                 }),
               );
               yield* waitFor(pcxId, "active");

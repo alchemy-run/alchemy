@@ -478,7 +478,7 @@ const toAttrs = ({
 const describeDeliveryStream = Effect.fn(function* (deliveryStreamName: string) {
   const response = yield* firehose
     .describeDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.DeliveryStreamDescription;
 });
 
@@ -498,7 +498,7 @@ const readDeliveryStream = Effect.fn(function* ({
   // means it's gone.
   const tagsResponse = yield* firehose
     .listTagsForDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -940,7 +940,7 @@ export const DeliveryStreamProvider = () =>
             .listTagsForDeliveryStream({
               DeliveryStreamName: deliveryStreamName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {

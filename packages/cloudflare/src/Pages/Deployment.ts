@@ -290,8 +290,8 @@ type ObservedDeployment =
 const getDeployment = (accountId: string, projectName: string, deploymentId: string) =>
   pages.getProjectDeployment({ accountId, projectName, deploymentId }).pipe(
     Effect.catchTags({
-      DeploymentNotFound: () => Effect.succeed(undefined),
-      ProjectNotFound: () => Effect.succeed(undefined),
+      DeploymentNotFound: () => Effect.undefined,
+      ProjectNotFound: () => Effect.undefined,
     }),
   );
 

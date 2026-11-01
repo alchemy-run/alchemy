@@ -161,7 +161,7 @@ export const GoogleTagGatewayProvider = () =>
             }),
             // Zone deleted out-of-band, or the scoped token can't see this
             // zone — skip it rather than failing the whole enumeration.
-            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

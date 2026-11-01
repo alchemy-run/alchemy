@@ -107,7 +107,7 @@ export const ListProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getListsMetadata({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.lists?.find((list) => list.name === name);
       });
 

@@ -1,4 +1,4 @@
-/** Scopes enabled on Alchemy's public Cloudflare OAuth client. */
+/** Scopes requestable from the `cf` CLI's public Cloudflare OAuth client. */
 export const OAUTH_SCOPE_GROUPS = [
   {
     id: "developer-platform",
@@ -30,8 +30,6 @@ export const OAUTH_SCOPE_GROUPS = [
       "mcp-portals.write",
       "messaging.edit",
       "messaging.read",
-      "cfspeed.read",
-      "cfspeed.write",
       "page.read",
       "page.write",
       "pipelines.read",
@@ -52,10 +50,8 @@ export const OAUTH_SCOPE_GROUPS = [
       "workers-ci.write",
       "containers.read",
       "containers.write",
-      "workers-scripts.edit",
       "workers-kv-storage.read",
       "workers-kv-storage.write",
-      "workers-scripts.metadata_read",
       "workers-observability.read",
       "workers-observability-telemetry.write",
       "workers-observability.write",
@@ -71,6 +67,13 @@ export const OAUTH_SCOPE_GROUPS = [
       "workers-scripts.read",
       "workers-scripts.write",
       "workers-tail.read",
+      "d1.metadata_read",
+      "messaging.metadata_read",
+      "pages.metadata_read",
+      "queues.metadata_read",
+      "workers-kv-storage.metadata_read",
+      "workers-r2.metadata_read",
+      "workers-scripts.bind",
     ],
   },
   {
@@ -97,10 +100,12 @@ export const OAUTH_SCOPE_GROUPS = [
       "websearch.read",
       "websearch.run",
       "websearch.write",
-      "ai-model.read",
-      "ai-model.write",
       "ai.read",
       "ai.write",
+      "ai-search.metadata_read",
+      "aig.metadata_read",
+      "websearch.metadata_read",
+      "workers_ai.metadata_read",
     ],
   },
   {
@@ -388,6 +393,8 @@ export const OAUTH_SCOPE_GROUPS = [
       "moq.write",
       "stream.read",
       "stream.write",
+      "images.metadata_read",
+      "stream.metadata_read",
     ],
   },
   {
@@ -434,6 +441,7 @@ export const OAUTH_SCOPE_GROUPS = [
       "account-api-gateway.read",
       "account-custom-asset.read",
       "account-custom-asset.write",
+      "account_api_tokens:create",
       "account-settings.read",
       "account-settings.write",
       "apps.write",
@@ -442,7 +450,6 @@ export const OAUTH_SCOPE_GROUPS = [
       "memberships.write",
       "notifications.read",
       "notifications.write",
-      "scim-provisioning.write",
       "user-details.read",
       "user-details.write",
     ],
@@ -490,8 +497,6 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "mcp-portals.write": "MCP Portals Write",
   "messaging.edit": "Messaging Edit",
   "messaging.read": "Messaging Read",
-  "cfspeed.read": "Network Quality Read",
-  "cfspeed.write": "Network Quality Write",
   "page.read": "Pages Read",
   "page.write": "Pages Write",
   "pipelines.read": "Pipelines Read",
@@ -512,10 +517,8 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "workers-ci.write": "Workers CI Write",
   "containers.read": "Workers Containers Read",
   "containers.write": "Workers Containers Write",
-  "workers-scripts.edit": "Workers Editor",
   "workers-kv-storage.read": "Workers KV Storage Read",
   "workers-kv-storage.write": "Workers KV Storage Write",
-  "workers-scripts.metadata_read": "Workers Metadata Read-Only",
   "workers-observability.read": "Workers Observability Read",
   "workers-observability-telemetry.write": "Workers Observability Telemetry Write",
   "workers-observability.write": "Workers Observability Write",
@@ -551,8 +554,6 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "websearch.read": "Websearch Read",
   "websearch.run": "Websearch Run",
   "websearch.write": "Websearch Write",
-  "ai-model.read": "Workers AI Custom Models Read",
-  "ai-model.write": "Workers AI Custom Models Write",
   "ai.read": "Workers AI Read",
   "ai.write": "Workers AI Write",
   "account-dns-settings.read": "Account DNS Settings Read",
@@ -828,6 +829,7 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "account-api-gateway.read": "Account API Gateway Read",
   "account-custom-asset.read": "Account Custom Asset Read",
   "account-custom-asset.write": "Account Custom Asset Write",
+  "account_api_tokens:create": "Account API Token Provisioning",
   "account-settings.read": "Account Settings Read",
   "account-settings.write": "Account Settings Write",
   "apps.write": "Apps Write",
@@ -836,7 +838,6 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "memberships.write": "Memberships Write",
   "notifications.read": "Notifications Read",
   "notifications.write": "Notifications Write",
-  "scim-provisioning.write": "SCIM Provisioning",
   "user-details.read": "User Details Read",
   "user-details.write": "User Details Write",
   "artifacts.read": "Artifacts Read",
@@ -844,6 +845,19 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "resource-library.read": "Resource Library Read",
   "resource-library.write": "Resource Library Write",
   "resource-sharing.read": "Resource Sharing Read",
+  "ai-search.metadata_read": "AI Search Metadata Read",
+  "aig.metadata_read": "AI Gateway Metadata Read",
+  "d1.metadata_read": "D1 Metadata Read",
+  "images.metadata_read": "Images Metadata Read",
+  "messaging.metadata_read": "Messaging Metadata Read",
+  "pages.metadata_read": "Pages Metadata Read",
+  "queues.metadata_read": "Queues Metadata Read",
+  "stream.metadata_read": "Stream Metadata Read",
+  "websearch.metadata_read": "Websearch Metadata Read",
+  "workers-kv-storage.metadata_read": "Workers KV Storage Metadata Read",
+  "workers-r2.metadata_read": "Workers R2 Storage Metadata Read",
+  "workers-scripts.bind": "Workers Scripts Bind",
+  "workers_ai.metadata_read": "Workers AI Metadata Read",
 };
 
 /** Flat lookup retained for consumers that do not need grouping metadata. */
@@ -851,7 +865,7 @@ export const ALL_SCOPES = Object.fromEntries(
   OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes.map((scope) => [scope, group.label])),
 ) as Readonly<Record<OAuthScopeId, string>>;
 
-/** Every scope available to the public Alchemy OAuth client. */
+/** Every scope available to the `cf` CLI OAuth client. */
 export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> = OAUTH_SCOPE_GROUPS.flatMap(
   (group) => group.scopes,
 );

@@ -194,6 +194,8 @@ export const makeBuildOutputCollector = (
         serverOutputs.set(environment, { root, outDir });
         const prefix = NodePath.relative(distDirectory ?? root, outDir);
         for (const file of Object.values(bundle)) {
+          // Vite's build metadata (`.vite/manifest.json`), not a Worker module.
+          if (file.fileName.startsWith(".vite/")) continue;
           const name = toModuleName(prefix, file.fileName);
           const content = file.type === "chunk" ? file.code : file.source;
           serverModules.set(name, toOutputFile(name, content));

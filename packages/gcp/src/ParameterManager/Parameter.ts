@@ -249,7 +249,7 @@ export const ParameterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ParameterNotResolved({ name });
+        return yield* new ParameterNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

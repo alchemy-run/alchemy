@@ -569,7 +569,7 @@ export const StageProvider = () =>
               restApiId: output.restApiId,
               stageName: output.stageName,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
@@ -621,7 +621,7 @@ export const StageProvider = () =>
           // mutable settings come from the cloud read on every reconcile.
           let observed = yield* ag
             .getStage({ restApiId, stageName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
           // Ensure — create the stage if missing. `createStage` only sets
           // a subset of the configurable surface; the rest is applied via

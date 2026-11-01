@@ -176,7 +176,7 @@ export const VpcEndpointProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.createVpcEndpointDetail),
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const endpointId = created?.id ?? (yield* findByName(name))?.id;
             if (endpointId === undefined) {

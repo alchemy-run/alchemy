@@ -183,7 +183,7 @@ export const SecurityPolicyProvider = () =>
           const name = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* aoss
             .getSecurityPolicy({ type, name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found?.securityPolicyDetail === undefined) {
             return undefined;
           }
@@ -213,7 +213,7 @@ export const SecurityPolicyProvider = () =>
           // 1. OBSERVE
           let detail = yield* aoss.getSecurityPolicy({ type, name }).pipe(
             Effect.map((r) => r.securityPolicyDetail),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
 
           // 2. ENSURE — create if missing; tolerate a concurrent create race

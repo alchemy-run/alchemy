@@ -248,7 +248,7 @@ export const EventDataStoreProvider = () =>
           .pipe(
             Effect.catchTag(
               ["EventDataStoreNotFoundException", "EventDataStoreARNInvalidException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
 
@@ -320,7 +320,7 @@ export const EventDataStoreProvider = () =>
             ? yield* getByArn(output.eventDataStoreArn)
             : yield* findByName(name).pipe(
                 Effect.flatMap((s) =>
-                  s?.EventDataStoreArn ? getByArn(s.EventDataStoreArn) : Effect.succeed(undefined),
+                  s?.EventDataStoreArn ? getByArn(s.EventDataStoreArn) : Effect.undefined,
                 ),
               );
 
@@ -358,9 +358,7 @@ export const EventDataStoreProvider = () =>
                 }).map(([Key, Value]) => ({ Key, Value })),
               })
               .pipe(
-                Effect.catchTag("EventDataStoreAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("EventDataStoreAlreadyExistsException", () => Effect.undefined),
               );
             if (created?.EventDataStoreArn) {
               store = yield* getByArn(created.EventDataStoreArn);

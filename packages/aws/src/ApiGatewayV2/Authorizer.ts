@@ -204,7 +204,7 @@ export const AuthorizerProvider = () =>
       const getAuthorizerSafe = (apiId: string, authorizerId: string) =>
         agw2
           .getAuthorizer({ ApiId: apiId, AuthorizerId: authorizerId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return AuthorizerResource.Provider.of({
         stables: ["apiId", "authorizerId"],

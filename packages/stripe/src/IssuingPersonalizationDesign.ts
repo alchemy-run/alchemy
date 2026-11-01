@@ -336,7 +336,7 @@ const isMissingDesign = isMissingStripeResource;
 const getById = (personalizationDesign: string) =>
   GetIssuingPersonalizationDesign({
     personalization_design: personalizationDesign,
-  }).pipe(Effect.catchIf(isMissingDesign, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isMissingDesign, () => Effect.undefined));
 
 const findByLookupKey = Effect.fn(function* (lookupKey: string) {
   const response = yield* GetIssuingPersonalizationDesigns({

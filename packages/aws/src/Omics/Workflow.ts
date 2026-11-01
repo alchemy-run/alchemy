@@ -188,7 +188,7 @@ export const WorkflowProvider = () =>
           if (output?.workflowId === undefined) return undefined;
           const found = yield* omics
             .getWorkflow({ id: output.workflowId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined || found.id === undefined) return undefined;
           const attrs = {
             workflowId: found.id,
@@ -221,9 +221,7 @@ export const WorkflowProvider = () =>
               ? undefined
               : yield* omics
                   .getWorkflow({ id: output.workflowId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (workflow === undefined || workflow.id === undefined) {
             const created = yield* omics.createWorkflow({

@@ -202,7 +202,7 @@ type ObservedTsig =
 const getTsig = (accountId: string, tsigId: string) =>
   dns
     .getZoneTransferTsig({ accountId, tsigId })
-    .pipe(Effect.catchTag("TsigNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("TsigNotFound", () => Effect.undefined));
 
 /**
  * Find a TSIG by exact name. Names are not unique on Cloudflare's side;

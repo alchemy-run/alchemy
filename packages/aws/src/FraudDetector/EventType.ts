@@ -94,7 +94,7 @@ export const EventTypeProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEventTypes({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.eventTypes?.[0];
       });
 

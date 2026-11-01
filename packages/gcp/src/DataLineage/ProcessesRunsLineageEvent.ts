@@ -153,7 +153,7 @@ export type LineageEvent = ProcessesRunsLineageEvent;
 export class ProcessesRunsLineageEventNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ProcessesRunsLineageEventNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (run: string, lineageEventId: string) =>
@@ -227,17 +227,17 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcessesRunsLineageEvents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getProcess = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcesses({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const identityFingerprint = (news: {
   startTime?: string;
@@ -350,7 +350,7 @@ export const ProcessesRunsLineageEventProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessesRunsLineageEventNotResolved({ name });
+        return yield* new ProcessesRunsLineageEventNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

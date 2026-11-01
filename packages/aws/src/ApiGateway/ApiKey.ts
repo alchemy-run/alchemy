@@ -128,7 +128,7 @@ export const ApiKeyProvider = () =>
           if (!output?.id) return undefined;
           const k = yield* ag
             .getApiKey({ apiKey: output.id, includeValue: false })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!k?.id) return undefined;
           return {
             id: k.id,
@@ -170,7 +170,7 @@ export const ApiKeyProvider = () =>
           let observed = output?.id
             ? yield* ag
                 .getApiKey({ apiKey: output.id, includeValue: false })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
           if (!observed?.id) {
             observed = yield* readByName(id, name);

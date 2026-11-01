@@ -200,7 +200,7 @@ type ObservedAcl =
 const getAcl = (accountId: string, aclId: string) =>
   dns
     .getZoneTransferAcl({ accountId, aclId })
-    .pipe(Effect.catchTag("AclNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AclNotFound", () => Effect.undefined));
 
 /**
  * Find an ACL by exact name. Names are not unique on Cloudflare's side;

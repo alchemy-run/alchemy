@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,16 @@ import {
   retryWhileFarmSettling,
   syncDeadlineTags,
 } from "./internal.ts";
+
+export class BudgetInvalidProps extends Data.TaggedError("BudgetInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class BudgetUnexpectedResponse extends Data.TaggedError("BudgetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type BudgetStatus = deadline.BudgetStatus;
 export type BudgetActionType = deadline.BudgetActionType;
@@ -202,7 +213,7 @@ const readBudgetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getBudget({ farmId, budgetId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const budgetArn = arnOf(`farm/${farmId}/budget/${described.budgetId}`);
   const state: BudgetState = {
@@ -283,7 +294,7 @@ export const BudgetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Budget requires props"));
+            return yield* new BudgetInvalidProps({ message: "AWS.Deadline.Budget requires props" });
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -314,7 +325,9 @@ export const BudgetProvider = () =>
             yield* session.note(`Created budget ${displayName} (${created.budgetId})`);
             state = yield* readBudgetById(farmId, created.budgetId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created budget ${displayName}`));
+              return yield* new BudgetUnexpectedResponse({
+                message: `failed to read created budget ${displayName}`,
+              });
             }
           }
 
@@ -375,7 +388,9 @@ export const BudgetProvider = () =>
           yield* session.note(state.attrs.budgetArn);
           const final = yield* readBudgetById(farmId, state.attrs.budgetId, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled budget ${displayName}`));
+            return yield* new BudgetUnexpectedResponse({
+              message: `failed to read reconciled budget ${displayName}`,
+            });
           }
           return final.attrs;
         }),

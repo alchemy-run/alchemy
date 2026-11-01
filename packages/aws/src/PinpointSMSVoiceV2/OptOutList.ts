@@ -99,7 +99,7 @@ export const OptOutListProvider = () =>
       const getByName = Effect.fn(function* (name: string) {
         const result = yield* smsvoice.describeOptOutLists({ OptOutListNames: [name] }).pipe(
           retrySmsVoiceThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return result?.OptOutLists?.find((l) => l.OptOutListName === name);
       });

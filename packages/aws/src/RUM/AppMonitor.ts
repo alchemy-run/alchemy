@@ -255,7 +255,7 @@ export const AppMonitorProvider = () =>
       const observeMonitor = (name: string) =>
         rum.getAppMonitor({ Name: name }).pipe(
           Effect.map((r) => r.AppMonitor),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return AppMonitor.Provider.of({

@@ -1,4 +1,4 @@
-import * as SigV4 from "@distilled.cloud/aws/SigV4";
+import * as SigV4 from "@distilled.cloud/aws4signer";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";

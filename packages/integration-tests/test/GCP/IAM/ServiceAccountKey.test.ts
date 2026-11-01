@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -11,20 +11,25 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// New keys read inconsistently for a few seconds after create.
+// New keys read inconsistently for a few seconds after create — as 404, or
+// as a 403 "Permission iam.serviceAccountKeys.get is required".
 const getKey = (name: string) =>
   iam.getProjectsServiceAccountsKeys({ name }).pipe(
     Effect.retry({
-      while: (error) => error._tag === "NotFound",
+      while: (error) => error._tag === "NotFound" || error._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),
       times: 8,
     }),
   );
 
-const waitUntilGone = (name: string) =>
+// Once the owning account is deleted too, reading its key is a 403, not a 404.
+const waitUntilGone = (name: string, options?: { accountDeleted?: boolean }) =>
   iam.getProjectsServiceAccountsKeys({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("Forbidden", (error) =>
+      options?.accountDeleted ? Effect.succeed("gone" as const) : Effect.fail(error),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -72,7 +77,7 @@ test.provider(
       expect(yield* waitUntilGone(created.key.name)).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitUntilGone(replaced.key.name)).toEqual("gone");
+      expect(yield* waitUntilGone(replaced.key.name, { accountDeleted: true })).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

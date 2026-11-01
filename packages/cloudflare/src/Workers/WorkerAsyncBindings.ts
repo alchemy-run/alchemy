@@ -251,6 +251,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
                 scriptName: binding.workflowName === undefined ? resource.workerName : undefined,
                 limits: binding.limits,
                 schedules: binding.schedules,
+                jurisdiction: binding.jurisdiction,
               });
           if (workflow) {
             // Host linkage must not block the named identity's adoption probe.
@@ -598,6 +599,7 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
+      storage: binding.storage,
     };
   } else if (isWorkflowLike(binding)) {
     return {

@@ -5,13 +5,13 @@ import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { Progress } from "../../../Alchemist/Progress.ts";
-import * as Profiles from "../../../Alchemist/routes/profile.ts";
+import * as Alchemist from "../../../Alchemist/index.ts";
 import { getEnv } from "../../../Auth/Env.ts";
 import { resolveProfileName } from "../../../Auth/Resolve.ts";
-import * as CliKit from "../../../Cli/CliKit/index.ts";
+import * as Interaction from "../../../Interaction.ts";
 import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
 import { formatElapsed } from "../../Format.ts";
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
@@ -64,8 +64,8 @@ const listCommand = Command.make(
   { envFile },
   instrumentCommand("profile.list")(
     Effect.fn(function* () {
-      const entries = yield* Profiles.list();
-      const cli = yield* CliKit.CliKit;
+      const entries = yield* Alchemist.Profile.list();
+      const cli = yield* Interaction.Interaction;
       if (cli.terminal.input) {
         const { profileListNode } = yield* profileTui;
         yield* cli.output.print(profileListNode(entries));
@@ -93,8 +93,8 @@ const createCommand = Command.make(
     "alchemy.profile": a.name,
   }))(
     Effect.fn(function* ({ name }) {
-      yield* Profiles.create({ name });
-      yield* CliKit.accessors.output.success(
+      yield* Alchemist.Profile.create({ name });
+      yield* Interaction.success(
         `Created profile '${name}'. Run \`alchemy profile edit --profile ${name}\` to connect accounts.`,
       );
     }),
@@ -110,13 +110,11 @@ const renameCommand = Command.make(
   }))(
     Effect.fn(function* ({ name, newName }) {
       if (Option.isSome(newName)) {
-        yield* Profiles.rename({
+        yield* Alchemist.Profile.rename({
           name,
           newName: newName.value.trim(),
         });
-        yield* CliKit.accessors.output.success(
-          `Renamed profile '${name}' to '${newName.value.trim()}'.`,
-        );
+        yield* Interaction.success(`Renamed profile '${name}' to '${newName.value.trim()}'.`);
         return;
       }
       yield* renameProfileFlow(name, undefined);
@@ -196,7 +194,7 @@ const resolveSetValues = Effect.fn(function* (
         try: () => readFileSync(0, "utf8").trim(),
         catch: (cause) =>
           new UserInputError({
-            message: `Could not read stdin for --set ${key}=-: ${cause}`,
+            message: `Could not read stdin for --set ${key}=-: ${cause instanceof Error ? cause.message : String(cause)}`,
           }),
       });
     } else if (raw.startsWith("env:")) {
@@ -261,7 +259,7 @@ const editCommand = Command.make(
       }
       if (configureInput !== undefined) {
         const provider = (add[0] ?? reconfigure[0])!;
-        yield* Profiles.configure({
+        yield* Alchemist.Profile.configure({
           profile: selectedProfile,
           provider,
           entrypoint: main,
@@ -275,22 +273,20 @@ const editCommand = Command.make(
             ]),
           ),
         });
-        yield* CliKit.accessors.output.success(
+        yield* Interaction.success(
           `${add.length === 1 ? "Added" : "Updated"} '${provider}' in profile '${selectedProfile}'.`,
         );
         return;
       }
       if (add.length === 0 && reconfigure.length === 0 && remove.length > 0) {
         for (const provider of remove) {
-          yield* Profiles.removeProvider({
+          yield* Alchemist.Profile.removeProvider({
             profile: selectedProfile,
             provider,
             entrypoint: main,
             envFile: Option.getOrUndefined(envFile),
           });
-          yield* CliKit.accessors.output.success(
-            `Removed '${provider}' from profile '${selectedProfile}'.`,
-          );
+          yield* Interaction.success(`Removed '${provider}' from profile '${selectedProfile}'.`);
         }
         return;
       }
@@ -325,31 +321,35 @@ const refreshCommand = Command.make(
     Effect.fn(function* ({ profile, providers, envFile, main }) {
       const selectedProfile = yield* resolveProfileName(envFile, profile);
       const refreshStarted = new Map<string, number>();
-      yield* Profiles.refresh({
+      yield* Alchemist.Profile.refresh({
         profile: selectedProfile,
         providers,
         entrypoint: main,
         envFile: Option.getOrUndefined(envFile),
       }).pipe(
-        Effect.provideService(Progress, (event) =>
-          event._tag === "provider.refresh.started"
-            ? Clock.currentTimeMillis.pipe(
-                Effect.tap((now) => Effect.sync(() => refreshStarted.set(event.provider, now))),
-                Effect.andThen(CliKit.accessors.output.info(`Refreshing ${event.provider}`)),
-              )
-            : event._tag === "provider.refresh.completed"
-              ? Clock.currentTimeMillis.pipe(
+        Alchemist.onEvent(
+          Match.type<Alchemist.Event>().pipe(
+            Match.discriminators("type")({
+              "provider.refresh.started": (event) =>
+                Clock.currentTimeMillis.pipe(
+                  Effect.tap((now) => Effect.sync(() => refreshStarted.set(event.provider, now))),
+                  Effect.andThen(Interaction.info(`Refreshing ${event.provider}`)),
+                ),
+              "provider.refresh.completed": (event) =>
+                Clock.currentTimeMillis.pipe(
                   Effect.flatMap((now) => {
                     const from = refreshStarted.get(event.provider);
-                    return CliKit.accessors.output.success(
+                    return Interaction.success(
                       `Refreshed ${event.provider}${from === undefined ? "" : ` (${formatElapsed(now - from)})`}`,
                     );
                   }),
-                )
-              : Effect.void,
+                ),
+            }),
+            Match.orElse(() => Effect.void),
+          ),
         ),
       );
-      yield* CliKit.accessors.output.success(`Refreshed profile '${selectedProfile}'.`);
+      yield* Interaction.success(`Refreshed profile '${selectedProfile}'.`);
     }),
   ),
 ).pipe(
@@ -361,14 +361,14 @@ const currentCommand = Command.make(
   { envFile },
   instrumentCommand("profile.current")(
     Effect.fn(function* () {
-      const selected = yield* Profiles.current();
+      const selected = yield* Alchemist.Profile.current();
       const source =
         selected.source === "configuration"
           ? "ALCHEMY_PROFILE"
           : selected.source === "default"
             ? "built-in default"
             : "command line";
-      const cli = yield* CliKit.CliKit;
+      const cli = yield* Interaction.Interaction;
       if (cli.terminal.input) {
         const { currentProfileNode } = yield* profileTui;
         yield* cli.output.print(currentProfileNode(selected.name, source));
@@ -401,7 +401,7 @@ export const profileCommand = Command.make(
   { envFile, main: config },
   instrumentCommand("profile")(
     Effect.fn(function* ({ envFile, main }) {
-      if (!(yield* CliKit.CliKit).terminal.input) {
+      if (!(yield* Interaction.Interaction).terminal.input) {
         // No terminal to drive the hub — show the subcommand help instead,
         // which documents the flag-driven equivalents of every hub action.
         return yield* failWithHelp(["alchemy", "profile"]);

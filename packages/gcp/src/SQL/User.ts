@@ -189,7 +189,7 @@ export type User = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  * });
  * const appUser = yield* GCP.SQL.User("AppUser", {
  *   instance: instance.instanceName,
@@ -352,7 +352,7 @@ const getByName = (project: string, instance: string, userName: string, host: st
       ...(normalizeHost(host) ? { host: normalizeHost(host) } : {}),
     })
     .pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
       recoverIfInstanceMissing(project, instance, () => undefined),
       Effect.flatMap((live) => {
         if (live !== undefined && matchesUser(live, userName, host)) {
@@ -362,7 +362,7 @@ const getByName = (project: string, instance: string, userName: string, host: st
           Effect.map((page) =>
             (page.items ?? []).find((item) => matchesUser(item, userName, host)),
           ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           recoverIfInstanceMissing(project, instance, () => undefined),
         );
       }),

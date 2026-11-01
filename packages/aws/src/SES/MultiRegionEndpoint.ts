@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class MultiRegionEndpointUnexpectedResponse extends Data.TaggedError(
+  "MultiRegionEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The lifecycle status of a multi-region endpoint: `CREATING`, `READY`,
@@ -163,7 +171,7 @@ export const MultiRegionEndpointProvider = () =>
       const getEndpoint = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getMultiRegionEndpoint({ EndpointName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       // getMultiRegionEndpoint does not return tags, so ownership costs a
@@ -267,9 +275,9 @@ export const MultiRegionEndpointProvider = () =>
           }
 
           if (observed === undefined || !observed.EndpointId) {
-            return yield* Effect.fail(
-              new Error(`SES multi-region endpoint ${name} was not found after create`),
-            );
+            return yield* new MultiRegionEndpointUnexpectedResponse({
+              message: `SES multi-region endpoint ${name} was not found after create`,
+            });
           }
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags so an adopted

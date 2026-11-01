@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
+import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { assert, describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -175,7 +175,8 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
             const router = yield* AWS.Website.Router("InlineRouter", {
               routes: {
                 // An Output url, as in the Router JSDoc (`api.functionUrl`).
-                "/api/*": { url: Output.interpolate`${origin.url}`, origin: { protocol: "http" } },
+                // An `http://` url stays on http without an `origin` override.
+                "/api/*": { url: Output.interpolate`${origin.url}` },
                 "/assets/*": { bucket },
               },
             });

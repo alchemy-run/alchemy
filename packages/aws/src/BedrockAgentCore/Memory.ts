@@ -174,7 +174,7 @@ export const MemoryProvider = () =>
       const getMemoryOrUndefined = Effect.fn(function* (memoryId: string) {
         return yield* control.getMemory({ memoryId }).pipe(
           Effect.map((r) => r.memory),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -187,7 +187,7 @@ export const MemoryProvider = () =>
           summaries,
           (s) =>
             s.id === undefined || s.status === "DELETING"
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : getMemoryOrUndefined(s.id),
           { concurrency: 5 },
         );
@@ -222,7 +222,7 @@ export const MemoryProvider = () =>
               summaries,
               (s) =>
                 s.id === undefined || s.status === "DELETING"
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : getMemoryOrUndefined(s.id),
               { concurrency: 5 },
             );
@@ -340,7 +340,7 @@ export const MemoryProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteMemory({ memoryId: output.memoryId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* control.getMemory({ memoryId: output.memoryId }).pipe(
             Effect.map((r) => r.memory.status as string),

@@ -105,6 +105,12 @@ export interface SvelteKitAdapterContext {
          */
         readonly services?: unknown;
         /**
+         * Overrides for the dev platform's workerd process (opaque to the
+         * framework half; the Cloudflare target takes `cloudflare-runtime`
+         * `WorkerdOptions`).
+         */
+        readonly workerd?: unknown;
+        /**
          * Absolute path of kit's static directory (`kit.files.assets`), for
          * a target whose dev platform serves its files (the Cloudflare
          * target's `ASSETS` binding).
@@ -231,6 +237,12 @@ export interface SvelteKitOptions {
          * remote()-lowered bindings; without it the platform is local-only.
          */
         readonly services?: unknown;
+        /**
+         * Overrides for the dev platform's workerd process (opaque to the
+         * framework half; the Cloudflare target takes `cloudflare-runtime`
+         * `WorkerdOptions`).
+         */
+        readonly workerd?: unknown;
       }
     | undefined;
 }
@@ -548,6 +560,7 @@ export const make: (
           env: options?.dev?.env,
           bindings: options?.dev?.bindings,
           services: options?.dev?.services,
+          workerd: options?.dev?.workerd,
           assetsDirectory: NodePath.resolve(
             root,
             (options?.kit?.files as { assets?: string } | undefined)?.assets ?? "static",

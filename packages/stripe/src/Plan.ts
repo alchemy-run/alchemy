@@ -240,7 +240,7 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
 const isMissingPlan = isMissingStripeResource;
 
 const getById = (plan: string) =>
-  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)));
+  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const plans: StripePlan[] = [];

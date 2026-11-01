@@ -228,7 +228,7 @@ const toAttrs = (plan: compute.RolloutPlan, project: string): RolloutPlan["Attri
 const getByName = (project: string, rolloutPlan: string) =>
   compute
     .getRolloutPlans({ project, rolloutPlan })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPlanGone = (project: string, rolloutPlanName: string) =>
   getByName(project, rolloutPlanName).pipe(
@@ -328,7 +328,7 @@ export const RolloutPlanProvider = () =>
             project: env.project,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -363,7 +363,7 @@ export const RolloutPlanProvider = () =>
           rolloutPlan: output.rolloutPlanName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

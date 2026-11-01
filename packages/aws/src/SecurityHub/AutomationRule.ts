@@ -136,8 +136,8 @@ export const AutomationRuleProvider = () =>
         securityhub.batchGetAutomationRules({ AutomationRulesArns: [arn] }).pipe(
           Effect.map((r) => r.Rules?.[0]),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            InvalidAccessException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            InvalidAccessException: () => Effect.undefined,
           }),
         );
 

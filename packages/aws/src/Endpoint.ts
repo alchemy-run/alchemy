@@ -27,4 +27,4 @@ export const fromEnvironment: Layer.Layer<never, never, AWSEnvironment> = Layer.
  * whose service Effect re-enters the in-flight `AWSEnvironment` cache and
  * deadlocks the fiber with no I/O and no timer pending.
  */
-export const none = Layer.succeed(Endpoint.Endpoint, Effect.succeed(undefined));
+export const none = Layer.succeed(Endpoint.Endpoint, Effect.undefined);

@@ -213,9 +213,7 @@ export const waitForOperation = (
   );
 
 export const getInstanceByName = (name: string) =>
-  bigtable
-    .getProjectsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  bigtable.getProjectsInstances({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,

@@ -343,7 +343,7 @@ type ObservedPool =
 const getPool = (accountId: string, poolId: string) =>
   loadBalancers
     .getPool({ accountId, poolId })
-    .pipe(Effect.catchTag("PoolNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PoolNotFound", () => Effect.undefined));
 
 /**
  * Find a pool by exact name. If several pools carry the same name, pick

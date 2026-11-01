@@ -48,9 +48,9 @@ export const TransactGetItemsHttp = Layer.effect(
         tablesRegion(sortedTables),
       );
 
-      return Effect.fn(`AWS.DynamoDB.TransactGetItems(${sortedTables})`)(function* (
-        request: TransactGetItemsRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.TransactGetItems(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: TransactGetItemsRequest) {
         const transactItems = yield* Effect.forEach(request.TransactItems, ({ Get }) =>
           Effect.gen(function* () {
             return {

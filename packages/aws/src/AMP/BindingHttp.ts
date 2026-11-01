@@ -15,6 +15,7 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
  * `*Http` layers are public.
  */
 import { toWireSeconds } from "alchemy/Util/Duration";
+import type { SourceError } from "effect/ConfigProvider";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -46,7 +47,10 @@ export interface AmpHttpRequest {
  */
 export type AmpSend = (
   request: AmpHttpRequest,
-) => Effect.Effect<unknown, PrometheusApiError | Credentials.CredentialsError | SigV4.SigningError>;
+) => Effect.Effect<
+  unknown,
+  PrometheusApiError | Credentials.CredentialsError | SourceError | SigV4.SigningError
+>;
 
 const appendParams = (
   target: URLSearchParams,

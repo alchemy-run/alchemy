@@ -338,6 +338,12 @@ export type Function = Resource<
     maxInstanceCount: number | undefined;
     /** Runtime service account email. */
     serviceAccountEmail: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** Eventarc trigger resource name, if any. */
     trigger: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -484,19 +490,19 @@ export const Function: Platform<Function, FunctionServices, FunctionShape, Funct
 export class FunctionNotResolved extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionStillExists extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionDeployFailed extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionDeployFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
@@ -601,7 +607,11 @@ const toAttrs = (
   fn: cloudfunctions.Cloudfunctions_Function,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";
   const parsed = parseName(name, region);
@@ -634,6 +644,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: fn.serviceConfig?.serviceAccountEmail,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -642,7 +653,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudfunctions
     .getProjectsLocationsFunctions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
   fn.stateMessages
@@ -678,20 +689,20 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (fn): fn is cloudfunctions.Cloudfunctions_Function => fn !== undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state !== "FAILED",
       (fn) =>
         new FunctionDeployFailed({
-          name,
+          resourceName: name,
           state: fn.state ?? "FAILED",
           message: failedMessage(fn),
         }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state === "ACTIVE" || fn.state === undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionNotResolved",
@@ -703,7 +714,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((fn) =>
-      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ name })),
+      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionStillExists",
@@ -831,6 +842,7 @@ export const FunctionProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -952,7 +964,7 @@ export const FunctionProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -961,7 +973,7 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1068,19 +1080,20 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudfunctions
         .deleteProjectsLocationsFunctions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

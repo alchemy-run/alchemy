@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class ImagePipelineUnexpectedResponse extends Data.TaggedError(
+  "ImagePipelineUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Image test settings applied to builds of the pipeline. Mirrors the wire
@@ -183,15 +191,15 @@ export const ImagePipelineProvider = () =>
       const getPipeline = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImagePipeline({ imagePipelineArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imagePipeline;
       });
 
       const toAttrs = Effect.fn(function* (pipeline: imagebuilder.ImagePipeline) {
         if (!pipeline.arn || !pipeline.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder image pipeline is missing its ARN or name"),
-          );
+          return yield* new ImagePipelineUnexpectedResponse({
+            message: "Image Builder image pipeline is missing its ARN or name",
+          });
         }
         return {
           imagePipelineName: pipeline.name,
@@ -275,14 +283,12 @@ export const ImagePipelineProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getPipeline(created?.imagePipelineArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder pipeline '${name}' is not readable`),
-              );
+              return yield* new ImagePipelineUnexpectedResponse({
+                message: `created Image Builder pipeline '${name}' is not readable`,
+              });
             }
           }
 

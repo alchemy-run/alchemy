@@ -137,7 +137,7 @@ export const TerminologyProvider = () =>
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getTerminology({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

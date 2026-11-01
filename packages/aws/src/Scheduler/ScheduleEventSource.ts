@@ -4,6 +4,7 @@ import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
 import * as IAM from "../IAM/index.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
+import { qualifiedArnOf } from "../Lambda/QualifiedArn.ts";
 import type { ScheduleBuilder, ScheduleBuilderState } from "./builders.ts";
 import { Schedule } from "./Schedule.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
@@ -246,7 +247,7 @@ export const createScheduleRoute = (
             {
               Effect: "Allow",
               Action: ["lambda:InvokeFunction"],
-              Resource: [fn.functionArn],
+              Resource: [qualifiedArnOf(fn)],
             },
           ],
         },
@@ -265,7 +266,7 @@ export const createScheduleRoute = (
       flexibleTimeWindow: props.flexibleTimeWindow ?? { Mode: "OFF" },
       actionAfterCompletion: props.actionAfterCompletion,
       target: {
-        Arn: fn.functionArn as any,
+        Arn: qualifiedArnOf(fn) as any,
         RoleArn: role.roleArn as any,
         // EventBridge Scheduler substitutes the <aws.scheduler.*> context
         // attributes into this template at invocation time; the resulting

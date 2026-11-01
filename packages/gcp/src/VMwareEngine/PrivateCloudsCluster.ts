@@ -313,12 +313,12 @@ const toAttrs = (item: vmwareengine.Cluster, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateCloudsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getParentCloud = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateClouds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const defaultNodeTypeConfigs = (value: Record<string, NodeTypeConfig | undefined> | undefined) =>
   value ?? {
@@ -436,7 +436,7 @@ export const PrivateCloudsClusterProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -445,7 +445,7 @@ export const PrivateCloudsClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -495,7 +495,7 @@ export const PrivateCloudsClusterProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

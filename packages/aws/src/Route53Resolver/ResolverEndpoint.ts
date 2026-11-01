@@ -221,7 +221,7 @@ export const ResolverEndpointProvider = () =>
       const getEndpoint = (endpointId: string) =>
         r53r.getResolverEndpoint({ ResolverEndpointId: endpointId }).pipe(
           Effect.map((r) => r.ResolverEndpoint),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Observe by the cached endpoint ID first, falling back to the

@@ -136,7 +136,7 @@ export const CodeInterpreterProvider = () =>
       const getLiveOrUndefined = Effect.fn(function* (codeInterpreterId: string) {
         const found = yield* control
           .getCodeInterpreter({ codeInterpreterId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return found === undefined || found.status === "DELETED" || found.status === "DELETING"
           ? undefined
           : found;
@@ -233,7 +233,7 @@ export const CodeInterpreterProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             ci =
               created === undefined
@@ -266,7 +266,7 @@ export const CodeInterpreterProvider = () =>
             })
             .pipe(
               retryWhileConflict,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           // Deletion completes quickly (soft-delete to DELETED); wait until
           // it is out of the live set so a re-create of the same name works.

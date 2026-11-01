@@ -106,7 +106,7 @@ export const ContactChannelProvider = () =>
       const getChannel = (arn: string) =>
         contacts
           .getContactChannel({ ContactChannelId: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // A channel's ARN embeds a generated UUID, so without cached output we
       // fall back to searching the owning contact's channels by name + type.
@@ -116,7 +116,7 @@ export const ContactChannelProvider = () =>
           Stream.take(1),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)[0]),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const buildAttrs = (channel: {

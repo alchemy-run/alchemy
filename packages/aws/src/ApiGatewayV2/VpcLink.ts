@@ -110,7 +110,7 @@ export const VpcLinkProvider = () =>
       const getVpcLinkSafe = (vpcLinkId: string) =>
         agw2
           .getVpcLink({ VpcLinkId: vpcLinkId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return VpcLink.Provider.of({
         stables: ["vpcLinkId"],

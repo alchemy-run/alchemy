@@ -486,6 +486,11 @@ export interface DBInstance extends Resource<
      */
     deletionProtection: boolean | undefined;
     /**
+     * Whether minor engine upgrades are applied automatically, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    autoMinorVersionUpgrade?: boolean;
+    /**
      * Immutable region-unique instance resource ID (used in IAM auth ARNs).
      */
     dbiResourceId: string | undefined;
@@ -1070,6 +1075,7 @@ const toAttrs = ({
   enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
   enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
   deletionProtection: instance.DeletionProtection,
+  autoMinorVersionUpgrade: instance.AutoMinorVersionUpgrade,
   dbiResourceId: instance.DbiResourceId,
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
@@ -1633,7 +1639,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return response?.DBInstances?.[0];
       });
 
@@ -1662,6 +1668,26 @@ export const DBInstanceProvider = () =>
           Effect.retry({
             while: (error) => error._tag === "DBInstancePending",
             schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+          }),
+        );
+      });
+
+      // RDS can keep reporting `available` for a few seconds after accepting
+      // a modify, so `waitForInstance` may return before the previous change
+      // starts and the next modify reaches a busy instance. Wait it out and
+      // resend.
+      const modifyInstance = Effect.fn(function* (
+        instanceId: string,
+        request: rds.ModifyDBInstanceMessage,
+      ) {
+        return yield* rds.modifyDBInstance(request).pipe(
+          Effect.catchTag("InvalidDBInstanceStateFault", (error) =>
+            waitForInstance(instanceId).pipe(Effect.andThen(Effect.fail(error))),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "InvalidDBInstanceStateFault",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
           }),
         );
       });
@@ -1790,7 +1816,7 @@ export const DBInstanceProvider = () =>
       const readObservedSecretPolicy = (instance: rds.DBInstance) =>
         instance.MasterUserSecret?.SecretArn === undefined ||
         instance.DBClusterIdentifier !== undefined
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : readMasterSecretPolicy(instance.MasterUserSecret.SecretArn).pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceNotFoundException",
@@ -2185,7 +2211,7 @@ export const DBInstanceProvider = () =>
               coreDirty = true;
             }
             if (coreDirty) {
-              yield* rds.modifyDBInstance(core);
+              yield* modifyInstance(identifier, core);
               observed = yield* waitForInstance(identifier);
               if (
                 core.DBParameterGroupName !== undefined ||
@@ -2209,7 +2235,7 @@ export const DBInstanceProvider = () =>
           }
           desiredStorage = yield* resolveStorage(news, observed.AllocatedStorage);
           if (desiredStorage && !storageConverged(observed, desiredStorage)) {
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               ...desiredStorage.request,
               MaxAllocatedStorage:
@@ -2234,7 +2260,7 @@ export const DBInstanceProvider = () =>
               });
             }
             // AWS disables autoscaling when the ceiling equals live allocation.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               MaxAllocatedStorage: ceiling,
               ApplyImmediately: true,
@@ -2256,7 +2282,7 @@ export const DBInstanceProvider = () =>
                 });
               }
               // Port changes restart immediately without applying unrelated pending settings.
-              yield* rds.modifyDBInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBPortNumber: port,
                 ApplyImmediately: false,
@@ -2276,7 +2302,7 @@ export const DBInstanceProvider = () =>
               });
             }
             if (parameterChanged || securityChanged) {
-              yield* rds.modifyDBInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBParameterGroupName: parameterChanged
                   ? associations.dbParameterGroupName
@@ -2296,7 +2322,7 @@ export const DBInstanceProvider = () =>
           if (iamChanged || networkChanged) {
             // IAM and network changes honor maintenance scheduling. AWS cannot
             // selectively apply one queued change without applying the rest.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               EnableIAMDatabaseAuthentication:
                 iamChanged && iamPending !== security.iamAuthentication
@@ -2318,7 +2344,7 @@ export const DBInstanceProvider = () =>
           if (publicChanged || protectionChanged || logDelta) {
             // These fields apply immediately even with false; leave unrelated
             // maintenance-window changes queued rather than flushing them.
-            yield* rds.modifyDBInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               PubliclyAccessible: publicChanged ? security.publiclyAccessible : undefined,
               DeletionProtection: protectionChanged ? security.deletionProtection : undefined,

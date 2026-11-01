@@ -97,7 +97,7 @@ export const TargetAccountConfigurationProvider = () =>
       const observe = (experimentTemplateId: string, accountId: string) =>
         fis.getTargetAccountConfiguration({ experimentTemplateId, accountId }).pipe(
           Effect.map((r) => r.targetAccountConfiguration),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const toAttrs = (experimentTemplateId: string, config: fis.TargetAccountConfiguration) => ({

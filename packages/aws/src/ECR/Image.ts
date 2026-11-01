@@ -6,11 +6,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ImageUnexpectedResponse extends Data.TaggedError("ImageUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Docker login credentials for the account's private ECR registry, in the
@@ -103,10 +109,12 @@ export interface ImageProps {
    */
   repositoryUri?: string;
   /**
-   * Docker build context directory. Every file under the context (plus the
-   * Dockerfile, platform, and build args) participates in the content hash
-   * that identifies the image. An existing image with the same hash is reused;
-   * missing images are rebuilt and pushed to the desired repository.
+   * Docker build context directory. The files Docker receives from the
+   * context (after `.dockerignore`), plus the Dockerfile, platform, and build
+   * args, participate in the content hash that identifies the image. Ignored
+   * files are never read and never change the tag. An existing image with the
+   * same hash is reused; missing images are rebuilt and pushed to the desired
+   * repository.
    */
   context: string;
   /**
@@ -189,6 +197,22 @@ export interface Image extends Resource<
  * Dockerfile, platform, build-argument, and repository changes still update
  * the image. A deleted image or auto-created repository is recreated on deploy.
  *
+ * ### Ignoring Files with `.dockerignore`
+ * **Example:** Build from the repository root
+ * ```typescript
+ * // .dockerignore next to the context keeps node_modules/ and target/ out
+ * const image = yield* AWS.ECR.Image("ServiceImage", {
+ *   repositoryUri: repository.repositoryUri,
+ *   context: "..",
+ *   dockerfile: "docker/service.Dockerfile",
+ * });
+ * ```
+ *
+ * The content hash covers only the files Docker receives, so ignored trees
+ * are never read and a local `bun install` or `cargo build` does not change
+ * the tag. A `<Dockerfile>.dockerignore` takes precedence over the context's
+ * `.dockerignore`, as in Docker.
+ *
  * ### Build Configuration
  * **Example:** Custom Dockerfile, Platform, and Build Args
  * ```typescript
@@ -232,7 +256,7 @@ export const ImageProvider = () =>
         });
 
       // Content hash over everything that affects the built image: the
-      // Dockerfile, every file in the build context (relative path + bytes),
+      // Dockerfile, the context files `.dockerignore` keeps (relative path + bytes),
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
@@ -244,7 +268,7 @@ export const ImageProvider = () =>
             platform: props.platform ?? "linux/amd64",
             buildArgs: props.buildArgs,
           },
-          "all",
+          "effective",
         );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
@@ -255,8 +279,9 @@ export const ImageProvider = () =>
             imageIds: [{ imageTag }],
           })
           .pipe(
-            Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["ImageNotFoundException", "RepositoryNotFoundException"],
+              () => Effect.undefined,
             ),
           );
         return described?.imageDetails?.[0];
@@ -284,9 +309,9 @@ export const ImageProvider = () =>
           );
         const repositoryUri = created.repository?.repositoryUri;
         if (!repositoryUri) {
-          return yield* Effect.fail(
-            new Error(`Failed to create or read ECR repository '${repositoryName}'`),
-          );
+          return yield* new ImageUnexpectedResponse({
+            message: `Failed to create or read ECR repository '${repositoryName}'`,
+          });
         }
         return repositoryUri;
       });
@@ -374,7 +399,9 @@ export const ImageProvider = () =>
 
           const pushed = yield* describeImage(repositoryName, imageTag);
           if (!pushed?.imageDigest) {
-            return yield* Effect.fail(new Error(`Image ${imageUri} not found in ECR after push`));
+            return yield* new ImageUnexpectedResponse({
+              message: `Image ${imageUri} not found in ECR after push`,
+            });
           }
           yield* session.note(imageUri);
           return {

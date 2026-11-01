@@ -132,7 +132,7 @@ export const toAttrs = (index: datastore.GoogleDatastoreAdminV1Index, project: s
 export const getById = (projectId: string, indexId: string) =>
   datastore
     .getProjectsIndexes({ projectId, indexId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listIndexes = (projectId: string) =>
   datastore.listProjectsIndexes

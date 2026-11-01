@@ -1,12 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -31,23 +32,13 @@ const repoName = (repository: GitHub.Repository) =>
 
 const getProtection = (branch: string, repository: string = repo) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.getBranchProtection({
-            owner,
-            repo: repository,
-            branch,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    return yield* gh(
+      Repos.getBranchProtection({
+        owner,
+        repo: repository,
+        branch,
+      }),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
 const hostRepository = GitHub.Repository("Repo", {
@@ -119,6 +110,42 @@ test.provider(
       });
       expect(recovered?.url).toEqual(created.url);
       expect(recovered?.enforceAdmins).toBe(true);
+
+      // Both props are set. GitHub rejects a body that sends `contexts` and
+      // `checks` together, so this update must send `checks` alone. The
+      // read-back still fills `contexts` from the stored checks.
+      const withChecks = yield* stack.deploy(
+        Effect.gen(function* () {
+          const repository = yield* hostRepository;
+
+          return yield* GitHub.BranchProtection("Protection", {
+            owner,
+            repository: repoName(repository),
+            branch: repository.defaultBranch,
+            requiredStatusChecks: {
+              strict: false,
+              contexts: ["ci"],
+              checks: [{ context: "Verify" }, { context: "API tests" }],
+            },
+            requiredPullRequestReviews: {
+              requiredApprovingReviewCount: 1,
+              dismissStaleReviews: true,
+            },
+            enforceAdmins: true,
+            requiredLinearHistory: true,
+            requiredConversationResolution: true,
+          }).pipe(destroy());
+        }),
+      );
+
+      expect(withChecks.url).toEqual(created.url);
+      const afterChecks = yield* getProtection(created.branch);
+      const storedChecks = ["Verify", "API tests"];
+      expect(afterChecks?.required_status_checks?.strict).toBe(false);
+      expect(afterChecks?.required_status_checks?.contexts).toEqual(storedChecks);
+      expect(afterChecks?.required_status_checks?.checks?.map((check) => check.context)).toEqual(
+        storedChecks,
+      );
 
       // Update — drop reviews and status checks, relax admin enforcement,
       // allow force pushes, and require signed commits (the aspect that lives

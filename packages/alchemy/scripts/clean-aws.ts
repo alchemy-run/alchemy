@@ -7,9 +7,15 @@ import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import { NodeServices } from "@effect/platform-node";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+
+export class CleanAwsNotReady extends Data.TaggedError("CleanAwsNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -280,7 +286,8 @@ const deleteNatGateways = Effect.gen(function* () {
 
   yield* Effect.forEach(
     ids,
-    (id) => ignoreFailure(`NAT gateway ${id}`, ec2.deleteNatGateway({ NatGatewayId: id } as any)),
+    (id) =>
+      ignoreFailure(`NAT gateway ${String(id)}`, ec2.deleteNatGateway({ NatGatewayId: id } as any)),
     { concurrency: 1, discard: true },
   );
 
@@ -314,16 +321,14 @@ const deleteNetworkInterfaces = Effect.gen(function* () {
   );
 
   if (blocked.length > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Network interfaces still in use: ${blocked
-          .map(
-            (networkInterface: any) =>
-              `${networkInterface.NetworkInterfaceId}(status=${networkInterface.Status ?? "unknown"}, requesterManaged=${networkInterface.RequesterManaged ?? false}, attachment=${networkInterface.Attachment?.AttachmentId ?? "none"})`,
-          )
-          .join(", ")}`,
-      ),
-    );
+    return yield* new CleanAwsNotReady({
+      message: `Network interfaces still in use: ${blocked
+        .map(
+          (networkInterface: any) =>
+            `${networkInterface.NetworkInterfaceId}(status=${networkInterface.Status ?? "unknown"}, requesterManaged=${networkInterface.RequesterManaged ?? false}, attachment=${networkInterface.Attachment?.AttachmentId ?? "none"})`,
+        )
+        .join(", ")}`,
+    });
   }
 
   const ids = uniq(interfaces.map((networkInterface: any) => networkInterface.NetworkInterfaceId));

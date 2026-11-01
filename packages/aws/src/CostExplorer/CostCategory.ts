@@ -136,7 +136,7 @@ export const CostCategoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.CostCategory),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Fallback observation when no ARN is cached: scan currently-effective
@@ -153,7 +153,7 @@ export const CostCategoryProvider = () =>
             const reference = Array.from(chunk)[0];
             return reference?.CostCategoryArn !== undefined
               ? getByArn(reference.CostCategoryArn)
-              : Effect.succeed(undefined);
+              : Effect.undefined;
           }),
         );
 

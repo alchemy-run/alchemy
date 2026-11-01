@@ -379,7 +379,7 @@ export const CertificateAuthorityProvider = () =>
       const describeCa = Effect.fn(function* (arn: string) {
         return yield* acmpca.describeCertificateAuthority({ CertificateAuthorityArn: arn }).pipe(
           Effect.map((r) => r.CertificateAuthority),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

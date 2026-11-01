@@ -196,7 +196,7 @@ export const JobProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getJob({ JobName: name }).pipe(
           Effect.map((r) => r.Job),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 

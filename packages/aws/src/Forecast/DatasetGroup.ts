@@ -97,7 +97,7 @@ export const DatasetGroupProvider = () =>
       const describe = Effect.fn(function* (datasetGroupArn: string) {
         return yield* forecast
           .describeDatasetGroup({ DatasetGroupArn: datasetGroupArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (group: forecast.DescribeDatasetGroupResponse) => ({

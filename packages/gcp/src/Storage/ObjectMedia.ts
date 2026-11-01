@@ -85,7 +85,7 @@ const transportFailure = (bucket: string, object: string) => (cause: { message?:
     bucket,
     object,
     status: 0,
-    message: cause.message ?? String(cause),
+    message: cause.message ?? "HTTP transport failure",
   });
 
 /**

@@ -1,5 +1,5 @@
 import { makePostgresState } from "@alchemy.run/sql/PostgresState";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { StateStoreError, type StateService } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

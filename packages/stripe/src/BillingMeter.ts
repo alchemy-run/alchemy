@@ -245,7 +245,7 @@ const toAttrs = (meter: StripeBillingMeter): BillingMeterAttributes => ({
 const isMissingMeter = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingMeter({ id }).pipe(Effect.catchIf(isMissingMeter, () => Effect.succeed(undefined)));
+  GetBillingMeter({ id }).pipe(Effect.catchIf(isMissingMeter, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: BillingMeterStatus) {
   const meters: StripeBillingMeter[] = [];

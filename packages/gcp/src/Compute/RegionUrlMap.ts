@@ -308,7 +308,7 @@ const needsUpdate = (current: compute.UrlMap, desired: compute.UrlMap) =>
 const getByName = (project: string, region: string, urlMap: string) =>
   compute
     .getRegionUrlMaps({ project, region, urlMap })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RegionUrlMapProvider = () =>
   Provider.succeed(RegionUrlMap, {
@@ -383,7 +383,7 @@ export const RegionUrlMapProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, region, urlMapName);
       }
@@ -419,7 +419,7 @@ export const RegionUrlMapProvider = () =>
           region,
           urlMap: output.urlMapName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

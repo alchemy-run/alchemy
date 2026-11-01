@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

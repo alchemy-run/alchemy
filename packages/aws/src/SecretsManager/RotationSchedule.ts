@@ -155,7 +155,7 @@ export const RotationScheduleProvider = () =>
       const readRotation = Effect.fn(function* (secretId: string) {
         return yield* secretsmanager
           .describeSecret({ SecretId: secretId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

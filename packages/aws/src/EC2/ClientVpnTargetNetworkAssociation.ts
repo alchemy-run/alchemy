@@ -227,7 +227,7 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                     "ClientVpnEndpointAssociationExists",
                     "InvalidClientVpnDuplicateAssociationException",
                   ],
-                  () => Effect.succeed(undefined),
+                  () => Effect.undefined,
                 ),
                 (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
               );

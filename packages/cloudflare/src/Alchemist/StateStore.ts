@@ -6,10 +6,8 @@ import type {
   StateStoreLogEntry,
 } from "alchemy/Contributions";
 import * as Provisioning from "alchemy/State/Provisioning";
-import { fileLogger } from "alchemy/Util/FileLogger";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Stream from "effect/Stream";
 import * as CloudflareAccess from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
@@ -32,7 +30,6 @@ export const stateStoreScope = Effect.fn(function* (name: string | undefined) {
     CloudflareCredentials.fromAuthProvider(),
     CloudflareEnvironment.fromProfile(),
     CloudflareAccess.AccessLive,
-    Logger.layer([fileLogger("cloudflare-state-store.log")], { mergeWithExisting: true }),
   );
   const { accountId } = yield* Effect.flatten(CloudflareEnvironment.CloudflareEnvironment).pipe(
     Effect.provide(layer),

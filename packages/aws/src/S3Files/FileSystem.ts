@@ -188,7 +188,7 @@ export const FileSystemProvider = () =>
       const observe = (fileSystemId: string) =>
         s3files
           .getFileSystem({ fileSystemId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observedTags = (fileSystemId: string) =>
         s3files.listTagsForResource.items({ resourceId: fileSystemId }).pipe(
@@ -263,7 +263,7 @@ export const FileSystemProvider = () =>
       ) {
         const current = yield* s3files.getFileSystemPolicy({ fileSystemId }).pipe(
           Effect.map((r) => r.policy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         const desiredJson = desired !== undefined ? JSON.stringify(desired) : undefined;
         if (desiredJson !== undefined) {
@@ -343,7 +343,7 @@ export const FileSystemProvider = () =>
                 clientToken,
                 tags: toTagList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             live =
               created?.fileSystemId !== undefined
                 ? yield* observe(created.fileSystemId)

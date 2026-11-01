@@ -2,10 +2,11 @@ import * as Binding from "alchemy/Binding";
 import type * as lambda from "aws-lambda";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import type { Queue } from "./Queue.ts";
 
 export type SQSRecord = lambda.SQSRecord;
+
+export type SQSEvent = lambda.SQSEvent;
 
 export interface MessagesProps extends QueueEventSourceProps {
   /**
@@ -22,46 +23,90 @@ export interface MessagesProps extends QueueEventSourceProps {
   maxNumberOfMessages?: number;
 }
 
-type MessagesHandler<Req> = (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>;
+/**
+ * Lambda's partial-batch response for SQS. Every message listed in
+ * `batchItemFailures` (by `itemIdentifier` = `messageId`) is retried; every
+ * other message in the batch is deleted.
+ */
+export type SQSBatchResponse = lambda.SQSBatchResponse;
 
 /**
- * Subscribe an Effect handler to messages produced by an SQS {@link Queue}.
+ * Handler for one delivered batch of SQS messages: receives the
+ * {@link SQSEvent} and returns Lambda's {@link SQSBatchResponse} (or `void`
+ * when every message succeeded). A failure or defect retries the whole batch.
+ */
+export type QueueMessagesHandler<E = never, Req = never> = (
+  event: SQSEvent,
+) => Effect.Effect<SQSBatchResponse | void, E, Req>;
+
+/**
+ * Subscribe an Effect handler to batches of messages delivered from an SQS
+ * {@link Queue}.
+ *
+ * The handler receives the {@link SQSEvent} and returns Lambda's
+ * {@link SQSBatchResponse}: list the `messageId` of each message that failed
+ * in `batchItemFailures` and only those are retried. Return `void` when every
+ * message succeeded. If the handler fails, the whole batch is retried.
+ *
+ * Each batch runs inside a `process <queue>` span (`SpanKind.CONSUMER`) linked
+ * to the `traceparent` message attribute of each message that carries one.
  *
  * @param queue The SQS queue to consume messages from.
  * @param props Optional event-source configuration.
- * @param process The handler invoked with a stream of SQS records (last argument).
+ * @param process The batch handler (last argument).
  *
- * @example
+ * @example Report only the failed messages
  * ```typescript
- * yield* SQS.consumeQueueMessages(queue, (records) =>
- *   records.pipe(Stream.runForEach((record) => Effect.log(record.body))),
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   Effect.fn(function* (event) {
+ *     const failed = yield* Effect.filter(
+ *       event.Records,
+ *       (record) =>
+ *         Effect.try(() => JSON.parse(record.body)).pipe(
+ *           Effect.flatMap((order) => putItem({ Item: { id: { S: order.id } } })),
+ *           Effect.as(false),
+ *           Effect.catchCause(() => Effect.succeed(true)),
+ *         ),
+ *       { concurrency: "unbounded" },
+ *     );
+ *     return {
+ *       batchItemFailures: failed.map((record) => ({ itemIdentifier: record.messageId })),
+ *     };
+ *   }),
  * );
  * ```
  *
- * @example With batching configuration
+ * @example Process the whole batch at once
  * ```typescript
- * yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (records) =>
- *   records.pipe(
- *     Stream.map((record) => ({ MessageBody: record.body })),
- *     Stream.run(sink),
- *     Effect.orDie,
- *   ),
+ * const sink = yield* SQS.QueueSink(results);
+ *
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   { batchSize: 10 },
+ *   Effect.fn(function* (event) {
+ *     // a failure retries the whole batch
+ *     yield* Stream.fromIterable(event.Records).pipe(
+ *       Stream.map((record) => ({ MessageBody: record.body })),
+ *       Stream.run(sink),
+ *     );
+ *   }),
  * );
  * ```
  */
-export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+export function consumeQueueMessages<Q extends Queue, E = never, Req = never, ResourceReq = never>(
   queue: Q | Effect.Effect<Q, never, ResourceReq>,
-  process: MessagesHandler<Req>,
+  process: QueueMessagesHandler<E, Req>,
 ): Effect.Effect<void, never, QueueEventSource | ResourceReq>;
-export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+export function consumeQueueMessages<Q extends Queue, E = never, Req = never, ResourceReq = never>(
   queue: Q | Effect.Effect<Q, never, ResourceReq>,
   props: MessagesProps,
-  process: MessagesHandler<Req>,
+  process: QueueMessagesHandler<E, Req>,
 ): Effect.Effect<void, never, QueueEventSource | ResourceReq>;
-export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq = never>(
+export function consumeQueueMessages<Q extends Queue, E = never, Req = never, ResourceReq = never>(
   queue: Q | Effect.Effect<Q, never, ResourceReq>,
-  propsOrProcess: MessagesProps | MessagesHandler<Req>,
-  maybeProcess?: MessagesHandler<Req>,
+  propsOrProcess: MessagesProps | QueueMessagesHandler<E, Req>,
+  maybeProcess?: QueueMessagesHandler<E, Req>,
 ): Effect.Effect<void, never, QueueEventSource | ResourceReq> {
   const [props, process] =
     typeof propsOrProcess === "function"
@@ -91,10 +136,14 @@ export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq =
  *     const queue = yield* SQS.Queue("Jobs");
  *
  *     // registers the event-source mapping and the runtime dispatcher
- *     yield* SQS.consumeQueueMessages(queue, { batchSize: 10 }, (records) =>
- *       records.pipe(
- *         Stream.runForEach((record) => Effect.log(record.body)),
- *       ),
+ *     yield* SQS.consumeQueueMessages(
+ *       queue,
+ *       { batchSize: 10 },
+ *       Effect.fn(function* (event) {
+ *         for (const record of event.Records) {
+ *           yield* Effect.log(record.body);
+ *         }
+ *       }),
  *     );
  *   }).pipe(Effect.provide(Lambda.QueueEventSource)),
  * );
@@ -125,8 +174,8 @@ export interface QueueEventSourceProps {
   maximumBatchingWindow?: Duration.Input;
 }
 
-export type QueueEventSourceService = <Req = never>(
-  bucket: Queue,
+export type QueueEventSourceService = <E = never, Req = never>(
+  queue: Queue,
   props: MessagesProps,
-  process: (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>,
+  process: QueueMessagesHandler<E, Req>,
 ) => Effect.Effect<void, never, never>;

@@ -26,6 +26,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:"

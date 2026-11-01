@@ -155,7 +155,7 @@ export const IdentityProviderProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.IdentityProvider),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

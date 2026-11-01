@@ -12,6 +12,16 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class NodegroupOperationFailed extends Data.TaggedError("NodegroupOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class NodegroupUnexpectedResponse extends Data.TaggedError("NodegroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface NodegroupProps {
   /**
    * Name of the EKS cluster that owns this managed node group.
@@ -320,7 +330,7 @@ export const NodegroupProvider = () =>
       }) {
         const described = yield* eks
           .describeNodegroup({ clusterName, nodegroupName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const nodegroup = described?.nodegroup;
         if (
           !nodegroup?.nodegroupArn ||
@@ -335,20 +345,22 @@ export const NodegroupProvider = () =>
 
       const waitForNodegroupActive = (clusterName: string, nodegroupName: string) =>
         readNodegroup({ clusterName, nodegroupName }).pipe(
-          Effect.flatMap((state) => {
-            if (!state) {
-              return Effect.fail(new NodegroupNotReady({ status: undefined }));
-            }
-            if (state.status === "ACTIVE") {
-              return Effect.succeed(state);
-            }
-            if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
-              return Effect.fail(
-                new Error(`EKS node group '${nodegroupName}' entered ${state.status}`),
-              );
-            }
-            return Effect.fail(new NodegroupNotReady({ status: state.status }));
-          }),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (state) {
+              if (!state) {
+                return yield* new NodegroupNotReady({ status: undefined });
+              }
+              if (state.status === "ACTIVE") {
+                return state;
+              }
+              if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
+                return yield* new NodegroupOperationFailed({
+                  message: `EKS node group '${nodegroupName}' entered ${state.status}`,
+                });
+              }
+              return yield* new NodegroupNotReady({ status: state.status });
+            }),
+          ),
           Effect.retry({
             while: (error) => error instanceof NodegroupNotReady,
             schedule: waitSchedule,
@@ -358,7 +370,7 @@ export const NodegroupProvider = () =>
       const waitForNodegroupDeleted = (clusterName: string, nodegroupName: string) =>
         readNodegroup({ clusterName, nodegroupName }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new NodegroupStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new NodegroupStillExists()) : Effect.undefined,
           ),
           Effect.retry({
             while: (error) => error instanceof NodegroupStillExists,
@@ -368,19 +380,19 @@ export const NodegroupProvider = () =>
 
       const waitForUpdate = (clusterName: string, nodegroupName: string, updateId: string) =>
         eks.describeUpdate({ name: clusterName, nodegroupName, updateId }).pipe(
-          Effect.flatMap(({ update }) => {
-            if (update?.status === "Successful") {
-              return Effect.succeed(update);
-            }
-            if (update?.status === "Failed" || update?.status === "Cancelled") {
-              return Effect.fail(
-                new Error(
-                  `EKS node group update '${updateId}' failed with status '${update?.status}'`,
-                ),
-              );
-            }
-            return Effect.fail(new NodegroupUpdateNotComplete({ status: update?.status }));
-          }),
+          Effect.flatMap(
+            Effect.fnUntraced(function* ({ update }) {
+              if (update?.status === "Successful") {
+                return update;
+              }
+              if (update?.status === "Failed" || update?.status === "Cancelled") {
+                return yield* new NodegroupOperationFailed({
+                  message: `EKS node group update '${updateId}' failed with status '${update?.status}'`,
+                });
+              }
+              return yield* new NodegroupUpdateNotComplete({ status: update?.status });
+            }),
+          ),
           Effect.retry({
             while: (error) => error instanceof NodegroupUpdateNotComplete,
             schedule: waitSchedule,
@@ -567,9 +579,9 @@ export const NodegroupProvider = () =>
 
           const final = yield* readNodegroup({ clusterName, nodegroupName });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`EKS node group '${nodegroupName}' could not be read after reconcile`),
-            );
+            return yield* new NodegroupUnexpectedResponse({
+              message: `EKS node group '${nodegroupName}' could not be read after reconcile`,
+            });
           }
           return final;
         }),

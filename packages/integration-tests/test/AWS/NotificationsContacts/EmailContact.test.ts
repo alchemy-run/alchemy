@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { EmailContact } from "@alchemy.run/aws/NotificationsContacts";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as contacts from "@distilled.cloud/aws/notificationscontacts";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

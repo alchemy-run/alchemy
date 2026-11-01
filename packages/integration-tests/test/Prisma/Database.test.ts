@@ -1,4 +1,6 @@
 import * as Prisma from "@alchemy.run/prisma";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   getBranch,
   getDatabase,
@@ -6,9 +8,7 @@ import {
   getProjectBranches,
   updateDatabase,
 } from "@distilled.cloud/prisma/management";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";

@@ -494,7 +494,7 @@ class RuleManager {
       : Array.isArray(pattern)
         ? pattern
         : [pattern as Ignore | PatternParams];
-    patterns.forEach(this._add, this);
+    patterns.forEach((p) => this._add(p));
 
     return this._added;
   }
@@ -566,7 +566,7 @@ const throwError: InvalidPathHandler = (message, Ctor) => {
 };
 
 interface CheckPath {
-  (path: unknown, originalPath: unknown, doThrow: InvalidPathHandler): boolean;
+  (path: unknown, originalPath: string, doThrow: InvalidPathHandler): boolean;
   isNotRelative: (path: string) => boolean;
   convert: (path: string) => string;
 }

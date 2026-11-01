@@ -88,7 +88,7 @@ export const GroupProvider = () =>
       const getGroup = Effect.fn(function* (userPoolId: string, groupName: string) {
         return yield* cip.getGroup({ UserPoolId: userPoolId, GroupName: groupName }).pipe(
           Effect.map((r) => r.Group),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

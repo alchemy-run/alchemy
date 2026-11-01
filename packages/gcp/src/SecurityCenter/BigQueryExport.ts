@@ -116,7 +116,7 @@ export const BigQueryExport = Resource<BigQueryExport>("GCP.SecurityCenter.BigQu
 export class BigQueryExportNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.BigQueryExportNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, exportId: string) =>
@@ -141,10 +141,10 @@ const toAttrs = (exp: scc.GoogleCloudSecuritycenterV1BigQueryExport, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsBigQueryExports({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BigQueryExportProvider = () =>
   Provider.succeed(BigQueryExport, {
@@ -211,7 +211,7 @@ export const BigQueryExportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BigQueryExportNotResolved({ name });
+        return yield* new BigQueryExportNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

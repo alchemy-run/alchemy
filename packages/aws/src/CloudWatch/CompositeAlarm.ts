@@ -4,12 +4,20 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
+
+export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
+  "CompositeAlarmUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type CompositeAlarmName = string;
 
@@ -171,9 +179,9 @@ export const CompositeAlarmProvider = () =>
 
           const state = yield* readCompositeAlarm(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled composite alarm '${name}'`),
-            );
+            return yield* new CompositeAlarmUnexpectedResponse({
+              message: `failed to read reconciled composite alarm '${name}'`,
+            });
           }
 
           return {

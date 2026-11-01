@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { eq, sql } from "drizzle-orm";
 import { integer, pgTable, QueryBuilder } from "drizzle-orm/pg-core";
 import * as Effect from "effect/Effect";

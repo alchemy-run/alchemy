@@ -147,7 +147,7 @@ export const DevelopersAppsKey = Resource<DevelopersAppsKey>("GCP.Apigee.Develop
 export class DevelopersAppsKeyNotResolved extends Data.TaggedError(
   "GCP.Apigee.DevelopersAppsKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const developerEmailOf = (developer: string) =>
@@ -206,7 +206,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersAppsKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listDeveloperEmails = (organization: string) =>
   apigee
@@ -356,7 +356,7 @@ export const DevelopersAppsKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DevelopersAppsKeyNotResolved({ name });
+        return yield* new DevelopersAppsKeyNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);

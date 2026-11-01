@@ -132,7 +132,7 @@ export const IdNamespaceProvider = () =>
       const getByName = Effect.fn(function* (idNamespaceName: string) {
         return yield* entityresolution
           .getIdNamespace({ idNamespaceName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

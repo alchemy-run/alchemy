@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { ParallelData } from "@alchemy.run/aws/Translate/ParallelData";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as translate from "@distilled.cloud/aws/translate";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

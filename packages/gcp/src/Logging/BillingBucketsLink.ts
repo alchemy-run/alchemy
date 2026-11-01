@@ -128,7 +128,7 @@ export const BillingBucketsLink = Resource<BillingBucketsLink>("GCP.Logging.Bill
 export class BillingBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (
@@ -186,19 +186,19 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (link === undefined || isDeleted(link)) {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -212,7 +212,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new BillingBucketsLinkNotResolved({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new BillingBucketsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
@@ -336,7 +338,7 @@ export const BillingBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BillingBucketsLinkNotResolved({ name });
+        return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, billingAccountId, location, bucketId);

@@ -201,7 +201,7 @@ export const Organization = Resource<Organization>("GCP.Apigee.Organization");
 export class OrganizationNotResolved extends Data.TaggedError(
   "GCP.Apigee.OrganizationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toOrgId = (project: string, organizationId: string | undefined, existing?: string) =>
@@ -242,7 +242,7 @@ const toAttrs = (organization: apigee.GoogleCloudApigeeV1Organization, project: 
 const getByName = (name: string) =>
   apigee
     .getOrganizations({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   props: OrganizationProps,
@@ -354,7 +354,7 @@ export const OrganizationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationNotResolved({ name });
+        return yield* new OrganizationNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, desiredDescription, analyticsRegion);
@@ -388,9 +388,7 @@ export const OrganizationProvider = () =>
           name: output.name,
           retention: "MINIMUM",
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, {
           notFoundOk: true,

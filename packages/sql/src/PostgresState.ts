@@ -23,7 +23,6 @@ import { resolveConnectionOptions } from "./PostgresTls.ts";
 // `SQL/Postgres.ts` does) so that `postgresState({ client })` — which takes
 // any `@effect/sql` client — works without the optional peer installed at
 // all. Only `postgresState({ url })`, which builds a pool, needs it.
-// `@effect/sql-pg` depends on `pg` itself, so `pg` is never imported here.
 const importPgClient = () =>
   import("@effect/sql-pg/PgClient").catch((cause) => {
     throw new Error(

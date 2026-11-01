@@ -5,7 +5,7 @@
  * determinism (the `normalizeDefinition` drift obligation).
  */
 import { Sfn } from "@alchemy.run/aws/StepFunctions";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

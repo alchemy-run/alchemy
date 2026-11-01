@@ -5,6 +5,7 @@ export * from "./BusSinkHttp.ts";
 export * from "./CancelReplay.ts";
 export * from "./CancelReplayHttp.ts";
 export * from "./Connection.ts";
+export * from "./Endpoint.ts";
 export * from "./DescribeEventBus.ts";
 export * from "./DescribeEventBusHttp.ts";
 export * from "./DescribeReplay.ts";

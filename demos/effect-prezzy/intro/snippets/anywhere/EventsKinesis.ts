@@ -1,6 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 // #region show
 export default AWS.Lambda.Function(
@@ -9,8 +8,12 @@ export default AWS.Lambda.Function(
   Effect.gen(function* () {
     const source = yield* AWS.Kinesis.Stream("Messages");
 
-    yield* AWS.Kinesis.consumeStreamRecords(source, { startingPosition: "LATEST" }, (records) =>
-      records.pipe(Stream.runForEach(Effect.log)),
+    yield* AWS.Kinesis.consumeStreamRecords(
+      source,
+      { startingPosition: "LATEST" },
+      Effect.fn(function* (event) {
+        yield* Effect.log(event.Records);
+      }),
     );
 
     return {};

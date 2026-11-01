@@ -300,9 +300,7 @@ const needsUpdate = (current: compute.UrlMap, desired: compute.UrlMap) =>
   !subsetEqual(current.tests, desired.tests);
 
 const getByName = (project: string, urlMap: string) =>
-  compute
-    .getUrlMaps({ project, urlMap })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  compute.getUrlMaps({ project, urlMap }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const UrlMapProvider = () =>
   Provider.succeed(UrlMap, {
@@ -358,7 +356,7 @@ export const UrlMapProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, urlMapName);
       }
@@ -391,7 +389,7 @@ export const UrlMapProvider = () =>
           project: env.project,
           urlMap: output.urlMapName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

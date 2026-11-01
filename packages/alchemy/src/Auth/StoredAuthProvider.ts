@@ -188,12 +188,11 @@ export const makeStoredAuthProvider = <Resolved>(config: StoredAuthProviderConfi
   const layer = AuthProviderLayer<StoredAuthConfig, Resolved>()(
     provider,
     Effect.gen(function* () {
-      const interaction = Interaction.accessors;
       const persist = (_profileName: string, values: StoredValues) =>
         Effect.gen(function* () {
           const complete = config.complete?.(values) ?? Effect.succeed(values);
           const completed = yield* complete;
-          yield* interaction.output.success(`${provider}: credentials saved.`);
+          yield* Interaction.success(`${provider}: credentials saved.`);
           return {
             method: "stored" as const,
             ...Object.fromEntries(

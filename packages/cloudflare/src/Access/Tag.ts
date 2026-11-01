@@ -108,7 +108,7 @@ export const TagProvider = () =>
       const name = yield* createTagName(id, output?.name ?? olds?.name);
       const existing = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
       if (!existing) return undefined;
       return { name: existing.name, accountId: acct };
     }),
@@ -120,7 +120,7 @@ export const TagProvider = () =>
       // Observe — the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
 
       // Ensure — create when missing; a create race resolves to the same tag.
       if (!observed) {

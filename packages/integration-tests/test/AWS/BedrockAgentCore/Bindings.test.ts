@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -85,7 +85,7 @@ describe.skipIf(!!process.env.FAST).sequential(
       { timeout: 420_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+    afterAll(sharedStack.destroy(), { timeout: 420_000 });
 
     describe("CreateEvent", () => {
       test.provider("records a conversational event", (_stack) =>

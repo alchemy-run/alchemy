@@ -333,7 +333,7 @@ type ApiSelector = tokenValidation.CreateRuleRequest["selector"];
 const getRule = (zoneId: string, ruleId: string) =>
   tokenValidation.getRule({ zoneId, ruleId }).pipe(
     Effect.map((r): ObservedRule | undefined => r),
-    Effect.catchTag("TokenValidationRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TokenValidationRuleNotFound", () => Effect.undefined),
   );
 
 /**
@@ -374,11 +374,19 @@ const toApiSelector = (selector: RuleSelector): ApiSelector => ({
     : {}),
 });
 
+const compareStrings = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const compareJoined = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+  compareStrings(a.join(","), b.join(","));
+
 /** Canonical, order-insensitive form of a selector for diffing. */
 const canonicalSelector = (selector: ObservedRule["selector"] | ApiSelector) =>
   JSON.stringify({
-    include: (selector.include ?? []).map((entry) => [...(entry.host ?? [])].sort()).sort(),
-    exclude: (selector.exclude ?? []).map((entry) => [...(entry.operationIds ?? [])].sort()).sort(),
+    include: (selector.include ?? [])
+      .map((entry) => [...(entry.host ?? [])].sort(compareStrings))
+      .sort(compareJoined),
+    exclude: (selector.exclude ?? [])
+      .map((entry) => [...(entry.operationIds ?? [])].sort(compareStrings))
+      .sort(compareJoined),
   });
 
 const sameSelector = (observed: ObservedRule["selector"], desired: ApiSelector) =>

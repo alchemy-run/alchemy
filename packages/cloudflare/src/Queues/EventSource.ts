@@ -36,8 +36,16 @@ export interface MessagesProps {
    * forwarded to Cloudflare.
    */
   retryDelay?: Duration.Input;
-  /** Optional dead-letter queue name. */
-  deadLetterQueue?: string;
+  /**
+   * Queue that receives messages after `maxRetries` failed deliveries.
+   * Pass the Queue resource, a `Queue.ref(...)` to one, or a queue name.
+   *
+   * Cloudflare does not drain or alert on a dead-letter queue. A message
+   * left there expires after the queue's retention period, so call
+   * `consumeQueueMessages` on the dead-letter queue as well to log,
+   * persist, or alert on what arrives.
+   */
+  deadLetterQueue?: string | Queue;
 }
 
 /**
@@ -83,13 +91,18 @@ export type Message<Body = unknown> = cf.Message<Body>;
  * settings before dead-lettering. Per-message control is still
  * available by calling `msg.ack()` / `msg.retry()` inside the
  * handler.
- * **Example:** Example
- * ```typescript
- * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import * as Duration from "effect/Duration";
- * import * as Effect from "effect/Effect";
- * import * as Stream from "effect/Stream";
  *
+ * ### Consuming a Queue
+ * **Example:** Handle each batch as a Stream
+ * ```typescript
+ * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(queueResource, (stream) =>
+ *   Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
+ * );
+ * ```
+ *
+ * ### Tuning Batching and Retries
+ * **Example:** Batch size, wait time, and retry backoff
+ * ```typescript
  * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(
  *   queueResource,
  *   {
@@ -98,18 +111,55 @@ export type Message<Body = unknown> = cf.Message<Body>;
  *     maxWaitTime: "5 seconds",
  *     retryDelay: Duration.seconds(30),
  *   },
- *   (stream) =>
- *     Stream.runForEach(stream, (msg) =>
- *       Effect.log(`event ${msg.body.id}`),
- *     ),
+ *   (stream) => Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
  * );
  * ```
  *
- * **Example:** Example
+ * ### Dead-Lettering Failed Messages
+ * A message that fails `maxRetries` times moves to `deadLetterQueue`.
+ * Cloudflare does not drain or alert on that queue, so consume it too.
+ * Otherwise the message expires there unseen.
+ *
+ * **Example:** Dead-letter to a Queue resource and consume it
  * ```typescript
- * // Without options — handler is the second argument.
- * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(queueResource, (stream) =>
- *   Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
+ * const deadLetters = yield* Cloudflare.Queues.Queue("DeadLetters");
+ *
+ * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(
+ *   queueResource,
+ *   { maxRetries: 3, deadLetterQueue: deadLetters },
+ *   (stream) => Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
+ * );
+ *
+ * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(deadLetters, (stream) =>
+ *   Stream.runForEach(stream, (msg) =>
+ *     Effect.logError(`dead-lettered ${msg.body.id} after ${msg.attempts} attempts`),
+ *   ),
+ * );
+ * ```
+ *
+ * **Example:** Dead-letter to a queue in another stack
+ * ```typescript
+ * // Deploy the "shared" stack first; its Worker consumes the dead-letter queue.
+ * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(
+ *   queueResource,
+ *   {
+ *     maxRetries: 3,
+ *     deadLetterQueue: yield* Cloudflare.Queues.Queue.ref("DeadLetters", {
+ *       stack: "shared",
+ *       stage: "production",
+ *     }),
+ *   },
+ *   (stream) => Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
+ * );
+ * ```
+ *
+ * **Example:** Dead-letter to a queue by name
+ * ```typescript
+ * // A queue Alchemy doesn't manage; something else must consume it.
+ * yield* Cloudflare.Queues.consumeQueueMessages<MyEvent>(
+ *   queueResource,
+ *   { maxRetries: 3, deadLetterQueue: "orders-dead-letters" },
+ *   (stream) => Stream.runForEach(stream, (msg) => Effect.log(`event ${msg.body.id}`)),
  * );
  * ```
  *
@@ -197,7 +247,10 @@ export const EventSourceLive = Layer.effect(
             queueId: queue.queueId,
             scriptName: host.workerName,
             settings: toConsumerSettings(props),
-            deadLetterQueue: props.deadLetterQueue,
+            deadLetterQueue:
+              typeof props.deadLetterQueue === "string"
+                ? props.deadLetterQueue
+                : props.deadLetterQueue?.queueName,
           }),
         );
       }

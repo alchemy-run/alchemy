@@ -23,12 +23,15 @@ export const SmokeWorkerFunctionLive = SmokeWorkerFunction.make(
     const { jobsQueue, resultsQueue } = yield* ServerlessResources;
     const sink = yield* AWS.SQS.QueueSink(resultsQueue);
 
-    yield* AWS.SQS.consumeQueueMessages(jobsQueue, { batchSize: 10 }, (records) =>
-      records.pipe(
-        Stream.map((record) => ({ MessageBody: `processed:${record.body}` })),
-        Stream.run(sink),
-        Effect.orDie,
-      ),
+    yield* AWS.SQS.consumeQueueMessages(
+      jobsQueue,
+      { batchSize: 10 },
+      Effect.fn(function* (event) {
+        yield* Stream.fromIterable(event.Records).pipe(
+          Stream.map((record) => ({ MessageBody: `processed:${record.body}` })),
+          Stream.run(sink),
+        );
+      }),
     );
   }).pipe(
     Effect.provide(

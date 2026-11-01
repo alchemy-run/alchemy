@@ -106,7 +106,7 @@ export type Release = Resource<
 export const Release = Resource<Release>("GCP.FirebaseRules.Release");
 
 export class ReleaseNotResolved extends Data.TaggedError("GCP.FirebaseRules.ReleaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (release: firebaserules.Release, project: string) => {
@@ -179,7 +179,7 @@ export const ReleaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReleaseNotResolved({ name });
+        return yield* new ReleaseNotResolved({ resourceName: name });
       }
 
       if (!sameText(current.rulesetName, desiredRuleset)) {

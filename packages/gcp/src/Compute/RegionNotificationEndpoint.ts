@@ -231,7 +231,7 @@ const getByName = (project: string, region: string, notificationEndpoint: string
       region,
       notificationEndpoint,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const immutableChanged = (
   news: RegionNotificationEndpointProps,
@@ -374,7 +374,7 @@ export const RegionNotificationEndpointProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, region, notificationEndpointName);
       }
@@ -398,7 +398,7 @@ export const RegionNotificationEndpointProvider = () =>
           region,
           notificationEndpoint: output.notificationEndpointName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

@@ -241,7 +241,7 @@ export const PrefixProvider = () =>
 const getPrefix = (accountId: string, prefixId: string) =>
   addressing
     .getPrefix({ accountId, prefixId })
-    .pipe(Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PrefixNotFound", () => Effect.undefined));
 
 /**
  * Find a prefix by exact CIDR — unique per account.

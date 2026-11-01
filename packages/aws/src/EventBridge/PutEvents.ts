@@ -1,6 +1,7 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import type { Endpoint } from "./Endpoint.ts";
 import type { EventBus } from "./EventBus.ts";
 
 export interface PutEventsRequest extends Omit<eventbridge.PutEventsRequest, "Entries"> {
@@ -12,8 +13,10 @@ export interface PutEventsRequest extends Omit<eventbridge.PutEventsRequest, "En
  *
  * Bind this operation to an {@link EventBus} inside a function runtime to get
  * a callable that automatically injects the bus name into every entry. Omit
- * the bus argument to publish to the account's default event bus. Provide the
- * `PutEventsHttp` layer on the Function to satisfy the binding.
+ * the bus argument to publish to the account's default event bus, or bind a
+ * global {@link Endpoint} to publish through it (EventBridge routes each
+ * event to the healthy region's bus). Provide the `PutEventsHttp` layer on
+ * the Function to satisfy the binding.
  * ### Publishing Events
  * **Example:** Publish an Event from a Handler
  * ```typescript
@@ -55,13 +58,29 @@ export interface PutEventsRequest extends Omit<eventbridge.PutEventsRequest, "En
  * });
  * ```
  *
+ * ### Publishing Through a Global Endpoint
+ * **Example:** Publish to a Multi-Region Endpoint
+ * ```typescript
+ * const putEvents = yield* AWS.EventBridge.PutEvents(endpoint);
+ *
+ * yield* putEvents({
+ *   Entries: [
+ *     {
+ *       Source: "my.app",
+ *       DetailType: "OrderCreated",
+ *       Detail: JSON.stringify({ orderId: "123" }),
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * @binding
  */
 export interface PutEvents extends Binding.Service<
   PutEvents,
   "AWS.EventBridge.PutEvents",
   (
-    bus?: EventBus,
+    target?: EventBus | Endpoint,
   ) => Effect.Effect<
     (
       request: PutEventsRequest,

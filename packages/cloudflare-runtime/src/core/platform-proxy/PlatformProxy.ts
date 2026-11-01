@@ -54,7 +54,13 @@ import * as Text from "../bindings/Text.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import * as Runtime from "../Runtime.ts";
 import { ConfigError, type RuntimeError, SystemError } from "../RuntimeError.shared.ts";
-import type { Assets, BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
+import type {
+  Assets,
+  BindingHooks,
+  DurableObjectNamespace,
+  Module,
+  WorkerdOptions,
+} from "../RuntimeWorker.ts";
 import type { ConnectedPlatformProxy, ConnectInfo } from "./connect.ts";
 import { connect } from "./connect.ts";
 import { BINDING_PLATFORM_PROXY_TOKEN } from "./PlatformProxyProtocol.shared.ts";
@@ -103,6 +109,8 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
    * answers every request made to the proxy itself.
    */
   readonly assets?: Assets;
+  /** Overrides for the `workerd` process hosting the proxy. */
+  readonly workerd?: WorkerdOptions;
 }
 
 export interface PlatformProxyInstance<
@@ -194,6 +202,7 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
     modules,
     durableObjectNamespaces: options.durableObjectNamespaces,
     assets: options.assets && { ...options.assets, runWorkerFirst: true },
+    workerd: options.workerd,
   });
   const connectInfo: ConnectInfo = { url: url.href, token };
   const connected = yield* connectToInstance<Env>(connectInfo);

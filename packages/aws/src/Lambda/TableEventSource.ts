@@ -3,14 +3,15 @@ import * as Output from "alchemy/Output";
 import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import {
   TableEventSource as DynamoDBTableEventSource,
   type StreamRecord,
   type StreamsProps,
+  type TableChangesHandler,
   type TableEventSourceService,
 } from "../DynamoDB/Stream.ts";
 import type { Table } from "../DynamoDB/Table.ts";
+import { processBatch } from "../internal/EventSourceBatch.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -26,12 +27,10 @@ export const TableEventSource = Layer.effect(
     const host = yield* Lambda.eventSourceHost("AWS.Lambda.TableEventSource");
     const Mapping = yield* EventSourceMapping;
 
-    return Effect.fn(function* <Data = unknown, StreamReq = never, Req = never>(
+    return Effect.fn(function* <E = never, Req = never>(
       table: Table,
       props: StreamsProps,
-      process: (
-        stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
-      ) => Effect.Effect<void, never, Req>,
+      process: TableChangesHandler<E, Req>,
     ) {
       const TableArn = yield* table.tableArn;
 
@@ -93,7 +92,7 @@ export const TableEventSource = Layer.effect(
             });
 
             yield* Mapping(`AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${table.LogicalId})`, {
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               eventSourceArn: latestStreamArn,
               batchSize: props.batchSize,
               maximumBatchingWindow: props.maximumBatchingWindow,
@@ -121,7 +120,16 @@ export const TableEventSource = Layer.effect(
                 (record) => record.eventSourceARN?.startsWith(streamArnPrefix) === true,
               );
               if (records.length > 0) {
-                return process(Stream.fromArray(records as StreamRecord<Data>[])).pipe(
+                return process({
+                  Records: records as StreamRecord<Record<string, lambda.AttributeValue>>[],
+                }).pipe(
+                  Effect.map((response) => response ?? { batchItemFailures: [] }),
+                  processBatch({
+                    system: "aws_dynamodb",
+                    destination: tableArn.split("/")[1] ?? tableArn,
+                    count: records.length,
+                  }),
+                  // A failure fails the invocation, so Lambda retries the whole batch.
                   Effect.orDie,
                 );
               }

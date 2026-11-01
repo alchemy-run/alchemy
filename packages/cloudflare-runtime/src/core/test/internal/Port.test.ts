@@ -71,6 +71,15 @@ describe("Port.check", () => {
   );
 });
 
+const occupyBelowEphemeralRange = Effect.gen(function* () {
+  const base = 20_000 + Math.floor(Math.random() * 10_000);
+  for (let port = base; port < base + 100; port++) {
+    const occupied = yield* Effect.exit(PortHelpers.occupy(port, "127.0.0.1"));
+    if (occupied._tag === "Success") return occupied.value;
+  }
+  return yield* Effect.die(`no free port in ${base}-${base + 99}`);
+});
+
 describe("Port.find", () => {
   it.effect("returns a free port when the requested port is 0", () =>
     Effect.gen(function* () {
@@ -91,7 +100,10 @@ describe("Port.find", () => {
 
   it.effect("skips a port in use and returns the next available one", () =>
     Effect.gen(function* () {
-      const occupied = yield* PortHelpers.occupy(0, "127.0.0.1");
+      // Occupy a port below every OS's ephemeral range. Windows hands out
+      // ephemeral ports in sequence, so a scan starting just past an
+      // ephemeral port collides with its own connect probes' client ports.
+      const occupied = yield* occupyBelowEphemeralRange;
       const ports = yield* Port.make({ cache: false });
       const next = yield* ports.find(occupied.port);
       expect(next).toBeGreaterThan(occupied.port);

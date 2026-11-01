@@ -355,7 +355,7 @@ export const HelmChartProvider = () =>
               Effect.gen(function* () {
                 const key = kubernetesObjectKey(object);
                 const observed = yield* readObject({ transport, object }).pipe(
-                  Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)),
+                  Effect.catchTag("KubernetesNotFound", () => Effect.undefined),
                 );
                 if (!observed) return `missing:${key}`;
                 // Older rows stored no selection. Re-rendering the chart is

@@ -199,7 +199,7 @@ export const AgentsIntent = Resource<AgentsIntent>("GCP.Dialogflow.AgentsIntent"
 export class AgentsIntentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsIntentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, intentId: string) => `${agent}/intents/${intentId}`;
@@ -260,10 +260,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsIntents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedIntent = (intent: dialogflow.GoogleCloudDialogflowCxV3Intent) =>
   hasOwnershipMarker(intent.displayName) ||
@@ -290,7 +290,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
       Stream.filter((intent) => intent.displayName === displayName),
       Stream.runHead,
       Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 export const AgentsIntentProvider = () =>
@@ -384,7 +384,7 @@ export const AgentsIntentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsIntentNotResolved({ name });
+        return yield* new AgentsIntentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

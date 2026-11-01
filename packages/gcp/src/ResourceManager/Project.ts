@@ -1,4 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as resourcemanagerV1 from "@distilled.cloud/gcp/unstable/cloudresourcemanager_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -25,9 +26,10 @@ import {
   isDeleteRequested,
   lastSegment,
   projectIdFromOperation,
-  resolveParent,
+  normalizeHierarchyParent,
   resourceNameFromOperation,
   sameHierarchyParent,
+  tryResolveParent,
   waitForOperation,
   waitForCreate,
 } from "./internal.ts";
@@ -42,7 +44,8 @@ export type ProjectProps = {
   projectId?: string;
   /**
    * Parent `organizations/{org}` or `folders/{folder}`. Defaults to the
-   * current project's parent. Changing parent moves the project.
+   * current project's parent; when the current project has none, the
+   * project is created standalone. Changing parent moves the project.
    */
   parent?: string;
   /**
@@ -65,8 +68,8 @@ export type Project = Resource<
     name: string;
     /** User-assigned project id. */
     projectId: string;
-    /** Parent `organizations/{org}` or `folders/{folder}`. */
-    parent: string;
+    /** Parent `organizations/{org}` or `folders/{folder}`; `undefined` when standalone. */
+    parent: string | undefined;
     /** User-assigned display name. */
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
@@ -114,6 +117,17 @@ export type Project = Resource<
  * });
  * ```
  *
+ * **Example:** Standalone project without an organization or folder
+ * ```typescript
+ * // With no `parent`, the project lands under the current project's
+ * // organization or folder. When the current project has none, it is
+ * // created standalone and `parent` is `undefined`. Google only lets user
+ * // credentials create standalone projects, not service accounts.
+ * const project = yield* GCP.ResourceManager.Project("Sandbox", {
+ *   displayName: "Sandbox",
+ * });
+ * ```
+ *
  * ### Updating a Project
  * **Example:** Change display name and labels
  * ```typescript
@@ -130,11 +144,11 @@ export type Project = Resource<
 export const Project = Resource<Project>("GCP.ResourceManager.Project");
 
 export class ProjectNotResolved extends Data.TaggedError("GCP.ResourceManager.ProjectNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ProjectStillExists extends Data.TaggedError("GCP.ResourceManager.ProjectStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -172,7 +186,7 @@ const toProjectId = (id: string, projectId: string | undefined, existing?: strin
 const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
   const source = (value ?? fallback).trim();
   let next = source
-    .replace(/[^a-zA-Z0-9 '"\-\!]/g, " ")
+    .replace(/[^a-zA-Z0-9 '"\-!]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (next.length === 0) next = fallback;
@@ -186,7 +200,7 @@ const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
 const toAttrs = (project: resourcemanager.Project) => ({
   name: project.name ?? "",
   projectId: project.projectId ?? lastSegment(project.name ?? ""),
-  parent: project.parent ?? "",
+  parent: project.parent || undefined,
   displayName: project.displayName,
   labels: userLabels(project.labels),
   state: project.state,
@@ -200,7 +214,7 @@ const toAttrs = (project: resourcemanager.Project) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getProjects({ name })
-    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined));
 
 const observe = (resourceName: string | undefined, projectId: string) =>
   Effect.gen(function* () {
@@ -217,7 +231,7 @@ const waitUntilExists = (resourceName: string | undefined, projectId: string) =>
       (project): project is resourcemanager.Project => project !== undefined,
       () =>
         new ProjectNotResolved({
-          name: resourceName ?? `projects/${projectId}`,
+          resourceName: resourceName ?? `projects/${projectId}`,
         }),
     ),
     Effect.retry({
@@ -232,7 +246,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((project) =>
       project === undefined || isDeleteRequested(project.state)
         ? Effect.void
-        : Effect.fail(new ProjectStillExists({ name })),
+        : Effect.fail(new ProjectStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.ProjectStillExists",
@@ -253,6 +267,21 @@ const ensureActive = (project: resourcemanager.Project) =>
     yield* waitForOperation(operation);
     return yield* waitUntilExists(project.name, project.projectId ?? lastSegment(project.name));
   });
+
+// Unlike folders, a project may be standalone (no organization or folder).
+// No parent omits `parent` on create and never moves the project. A deployed
+// project keeps the parent it has, so a standalone one stays out of the
+// current project's hierarchy.
+const resolveProjectParent = Effect.fn(function* (
+  explicit: string | undefined,
+  output: { readonly parent: string | undefined } | undefined,
+) {
+  if (explicit) return normalizeHierarchyParent(explicit);
+  if (output !== undefined) {
+    return output.parent ? normalizeHierarchyParent(output.parent) : undefined;
+  }
+  return yield* tryResolveParent();
+});
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
@@ -296,7 +325,7 @@ export const ProjectProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const projectId = yield* toProjectId(id, news.projectId, output?.projectId);
-      const parent = yield* resolveParent(news.parent, output?.parent);
+      const parent = yield* resolveProjectParent(news.parent, output);
       const displayName = sanitizeDisplayName(news.displayName, projectId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -315,7 +344,7 @@ export const ProjectProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -330,7 +359,7 @@ export const ProjectProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ProjectNotResolved({
-          name: `projects/${projectId}`,
+          resourceName: `projects/${projectId}`,
         });
       }
 
@@ -343,29 +372,20 @@ export const ProjectProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
 
       if (labelsChanged || displayChanged) {
-        const mask = [
-          labelsChanged ? "labels" : undefined,
-          displayChanged ? "displayName" : undefined,
-        ]
-          .filter((field): field is string => field !== undefined)
-          .join(",");
-        const operation = yield* resourcemanager.patchProjects({
-          name: current.name ?? name,
-          updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            labels: desiredLabels,
-            etag: current.etag,
-          },
+        // v3 `projects.patch` merges labels, so it can never remove one.
+        // v1 `projects.update` replaces them (v1 calls the display name `name`).
+        const id = current.projectId ?? projectId;
+        const observed = yield* resourcemanagerV1.getProjects({ projectId: id });
+        yield* resourcemanagerV1.updateProjects({
+          projectId: id,
+          body: { ...observed, name: displayName, labels: desiredLabels },
         });
-        yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, projectId);
       }
 
       if (
         current.parent !== undefined &&
-        parent.length > 0 &&
+        parent !== undefined &&
         !sameHierarchyParent(current.parent, parent)
       ) {
         const operation = yield* resourcemanager.moveProjects({
@@ -378,7 +398,7 @@ export const ProjectProvider = () =>
 
       if (current === undefined) {
         return yield* new ProjectNotResolved({
-          name: `projects/${projectId}`,
+          resourceName: `projects/${projectId}`,
         });
       }
 
@@ -392,7 +412,7 @@ export const ProjectProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

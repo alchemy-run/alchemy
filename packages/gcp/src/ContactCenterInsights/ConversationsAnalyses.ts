@@ -90,7 +90,7 @@ export const ConversationsAnalyses = Resource<ConversationsAnalyses>(
 export class ConversationsAnalysesNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toSelector = (
@@ -134,17 +134,17 @@ const toAttrs = (analysis: cci.GoogleCloudContactcenterinsightsV1Analysis, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversationsAnalyses({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((analysis) =>
       analysis
         ? Effect.succeed(analysis)
-        : Effect.fail(new ConversationsAnalysesNotResolved({ name })),
+        : Effect.fail(new ConversationsAnalysesNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
@@ -227,7 +227,7 @@ export const ConversationsAnalysesProvider = () =>
               annotatorSelector: news.annotatorSelector,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? "";
@@ -244,7 +244,7 @@ export const ConversationsAnalysesProvider = () =>
 
       if (current === undefined) {
         return yield* new ConversationsAnalysesNotResolved({
-          name: output?.name ?? `${news.parent}/analyses/-`,
+          resourceName: output?.name ?? `${news.parent}/analyses/-`,
         });
       }
 

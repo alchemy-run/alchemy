@@ -19,6 +19,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@vercel/nft": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"

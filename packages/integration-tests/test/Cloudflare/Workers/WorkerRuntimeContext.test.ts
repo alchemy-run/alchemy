@@ -1,5 +1,5 @@
 import { makeWorkerRuntimeContext } from "@alchemy.run/cloudflare/Workers/WorkerRuntimeContext";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 describe(

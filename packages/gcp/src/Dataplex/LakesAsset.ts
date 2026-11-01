@@ -191,11 +191,11 @@ export type LakesAsset = Resource<
 export const LakesAsset = Resource<LakesAsset>("GCP.Dataplex.LakesAsset");
 
 export class LakesAssetNotResolved extends Data.TaggedError("GCP.Dataplex.LakesAssetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakesAssetStillExists extends Data.TaggedError("GCP.Dataplex.LakesAssetStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const zoneOf = (zone: string) => zone;
@@ -226,20 +226,20 @@ const toAttrs = (asset: dataplex.GoogleCloudDataplexV1Asset, project: string) =>
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataplex
         .getProjectsLocationsLakesZonesAssets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (asset): asset is dataplex.GoogleCloudDataplexV1Asset => asset !== undefined,
-      () => new LakesAssetNotResolved({ name }),
+      () => new LakesAssetNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (asset) => !isPendingState(asset.state),
-      () => new DataplexNotResolved({ name }),
+      () => new DataplexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -255,7 +255,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((asset) =>
-      asset === undefined ? Effect.void : Effect.fail(new LakesAssetStillExists({ name })),
+      asset === undefined
+        ? Effect.void
+        : Effect.fail(new LakesAssetStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesAssetStillExists",
@@ -384,7 +386,7 @@ export const LakesAssetProvider = () =>
               discoverySpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -392,7 +394,7 @@ export const LakesAssetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesAssetNotResolved({ name });
+        return yield* new LakesAssetNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -449,8 +451,8 @@ export const LakesAssetProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

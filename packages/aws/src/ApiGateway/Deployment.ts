@@ -268,7 +268,7 @@ export const DeploymentProvider = () =>
               restApiId: output.restApiId,
               deploymentId: output.deploymentId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!d?.id) return undefined;
           return {
             deploymentId: d.id,
@@ -296,7 +296,7 @@ export const DeploymentProvider = () =>
                   restApiId,
                   deploymentId: output.deploymentId,
                 })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create a new deployment if there isn't one yet.

@@ -3,9 +3,17 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class ParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "ParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ParameterGroupProps {
   /**
@@ -87,7 +95,7 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeParameterGroups({ ParameterGroupNames: [name] })
-          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 
@@ -164,9 +172,9 @@ export const ParameterGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`DAX parameter group '${name}' not found after create`),
-            );
+            return yield* new ParameterGroupUnexpectedResponse({
+              message: `DAX parameter group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync parameters — diff desired overrides against OBSERVED

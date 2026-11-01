@@ -287,7 +287,7 @@ export const Bucket: typeof BucketResource = Object.assign(
 );
 
 export class BucketNotCreated extends Data.TaggedError("Railway.BucketNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -331,6 +331,12 @@ const environmentIdOf = (value: unknown): string | undefined => {
 
 const redact = (value: string | undefined): Redacted.Redacted<string> | undefined =>
   value !== undefined && value.length > 0 ? Redacted.make(value) : undefined;
+
+/** Railway marks `secretAccessKey` sensitive, so it already arrives `Redacted`. */
+const nonEmpty = (
+  value: Redacted.Redacted<string> | undefined,
+): Redacted.Redacted<string> | undefined =>
+  value !== undefined && Redacted.value(value).length > 0 ? value : undefined;
 
 const keepSecret = (
   next: Redacted.Redacted<string> | undefined,
@@ -382,7 +388,7 @@ const toAttrs = (
   s3Region: extra.credentials?.region ?? extra.previous?.s3Region,
   accessKeyId: keepSecret(redact(extra.credentials?.accessKeyId), extra.previous?.accessKeyId),
   secretAccessKey: keepSecret(
-    redact(extra.credentials?.secretAccessKey),
+    nonEmpty(extra.credentials?.secretAccessKey),
     extra.previous?.secretAccessKey,
   ),
   createdAt: bucket.createdAt,
@@ -652,13 +658,13 @@ export const BucketProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
+          Effect.catchTag("RailwayValidationError", () => Effect.undefined),
         );
         current = created ?? (yield* findInProject(projectId, (bucket) => bucket.name === name));
       }
 
       if (current === undefined) {
-        return yield* new BucketNotCreated({ name, projectId });
+        return yield* new BucketNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

@@ -1,5 +1,5 @@
 import { makeLanguageModel, type LanguageModelOptions } from "@alchemy.run/neon/LanguageModel";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Effect from "effect/Effect";

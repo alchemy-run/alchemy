@@ -2,9 +2,17 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { collectPages, retryOrganizations, unredact } from "./common.ts";
+
+export class DelegatedAdministratorUnexpectedResponse extends Data.TaggedError(
+  "DelegatedAdministratorUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DelegatedAdministratorProps {
   /**
@@ -211,11 +219,9 @@ export const DelegatedAdministratorProvider = () =>
             );
             state = yield* readDelegatedAdministrator(news);
             if (!state) {
-              return yield* Effect.fail(
-                new Error(
-                  `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
-                ),
-              );
+              return yield* new DelegatedAdministratorUnexpectedResponse({
+                message: `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
+              });
             }
           }
 

@@ -166,7 +166,7 @@ export const CustomLogSourceProvider = () =>
           const observed = yield* findByName(sourceName, sourceVersion).pipe(
             Effect.catchTag(
               ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
           if (observed === undefined) return undefined;
@@ -246,7 +246,7 @@ export const CustomLogSourceProvider = () =>
               .pipe(
                 Effect.map((response) => response.source),
                 // A concurrent create won the race — keep cached attributes.
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             if (created !== undefined) {
               attrs = buildAttrs(created);

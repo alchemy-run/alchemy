@@ -360,14 +360,14 @@ export const FileSystemProvider = () =>
       const findByToken = Effect.fn(function* (token: string) {
         return yield* efs.describeFileSystems({ CreationToken: token }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 
       const findById = Effect.fn(function* (fileSystemId: string) {
         return yield* efs.describeFileSystems({ FileSystemId: fileSystemId }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 
@@ -513,7 +513,7 @@ export const FileSystemProvider = () =>
               .describeBackupPolicy({ FileSystemId: fileSystemId })
               .pipe(
                 Effect.map((r) => r.BackupPolicy?.Status),
-                Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("PolicyNotFound", () => Effect.undefined),
               );
             const observedBackup =
               observedBackupStatus === "ENABLED" || observedBackupStatus === "ENABLING";
@@ -553,7 +553,7 @@ export const FileSystemProvider = () =>
             .describeFileSystemPolicy({ FileSystemId: fileSystemId })
             .pipe(
               Effect.map((r) => r.Policy),
-              Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("PolicyNotFound", () => Effect.undefined),
             );
           const desiredPolicy =
             news.policy === undefined

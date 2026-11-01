@@ -1,4 +1,5 @@
 import type * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
@@ -20,6 +21,21 @@ export interface LayerOptions {
    */
   readonly serialization?: RpcSerialization.RpcSerialization["Service"];
 }
+
+type ProtocolOptions = NonNullable<LayerOptions["protocol"]>;
+
+/**
+ * Effect's pinger drops the connection when no frame arrived within
+ * `pingTimeout` of a ping tick, and `pingTimeout` defaults to the interval:
+ * a Pong that returns faster than the timer's own drift (any local server)
+ * then misses the deadline by a few milliseconds. Allow two intervals.
+ */
+const withPingTimeout = (protocol: LayerOptions["protocol"]): ProtocolOptions => ({
+  ...protocol,
+  pingTimeout:
+    protocol?.pingTimeout ??
+    Duration.times(Duration.fromInputUnsafe(protocol?.pingInterval ?? "5 seconds"), 2),
+});
 
 /**
  * Provide a typed RPC client and its WebSocket connection for the Layer's lifetime.
@@ -75,7 +91,7 @@ export const layer = <I, Rpcs extends Rpc.Any>(
 ): Layer.Layer<I, never, Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>> =>
   Layer.effect(service, RpcClient.make(group, options.client)).pipe(
     Layer.provide(
-      RpcClient.layerProtocolSocket(options.protocol).pipe(
+      RpcClient.layerProtocolSocket(withPingTimeout(options.protocol)).pipe(
         Layer.provide(
           Layer.mergeAll(
             Socket.layerWebSocket(url, options.socket),

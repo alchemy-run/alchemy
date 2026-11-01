@@ -200,7 +200,7 @@ const isMissingValueList = isMissingStripeResource;
 
 const getById = (valueList: string) =>
   GetRadarValueList({ value_list: valueList }).pipe(
-    Effect.catchIf(isMissingValueList, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingValueList, () => Effect.undefined),
   );
 
 const findByAlias = (alias: string) =>

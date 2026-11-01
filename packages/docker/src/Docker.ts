@@ -130,6 +130,12 @@ export class Docker extends Context.Service<
           platform?: string;
           target?: string;
           "build-arg"?: Record<string, string>;
+          /**
+           * BuildKit secrets, keyed by id (`RUN --mount=type=secret,id=<id>`).
+           * Values reach `docker` through its environment, never its argv,
+           * and are not written to the image.
+           */
+          secrets?: Record<string, string | Redacted.Redacted<string>>;
           "cache-from"?: Array<string>;
           "cache-to"?: Array<string>;
           args?: Array<string>;
@@ -327,10 +333,12 @@ export class Docker extends Context.Service<
         context?: string;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
+        /** Networks to detach, by name or id; applied before `network-add`. */
+        "network-rm"?: string[];
+        "network-add"?: string[];
         "constraint-add"?: string[];
         "constraint-rm"?: string[];
         "replicas-max-per-node"?: number;
-        "placement-pref"?: string[];
         "update-parallelism"?: number;
         "update-delay"?: string;
         "update-monitor"?: string;
@@ -356,13 +364,23 @@ export class Docker extends Context.Service<
         "health-start-period"?: string;
         "stop-grace-period"?: string;
         "mount-add"?: string[];
+        /** Mount targets to remove. */
+        "mount-rm"?: string[];
         "secret-add"?: string[];
+        /** Secret names to remove; applied before `secret-add`. */
+        "secret-rm"?: string[];
         "config-add"?: string[];
+        /** Config names to remove; applied before `config-add`. */
+        "config-rm"?: string[];
         "read-only"?: boolean;
         "publish-add"?: string[];
+        /** Published ports to remove, as `target=<port>,protocol=<p>,mode=<m>`. */
+        "publish-rm"?: string[];
         "label-add"?: Record<string, string>;
         "label-rm"?: string[];
         "env-add"?: Record<string, string>;
+        /** Environment variable names to remove. */
+        "env-rm"?: string[];
         args?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a service. */
@@ -606,12 +624,24 @@ const makeDocker = (options: DockerOptions) =>
         }),
       );
 
+    // Merge `credentials` into the ambient auth config: the process's
+    // DOCKER_AUTH_CONFIG, overlaid by one provided through DockerEnvironment
+    // (as `run` layers DockerEnvironment over the process environment).
+    // Merging, not replacing, keeps the user's own registry logins.
     const registryEnvironment = Effect.fn("registryEnvironment")(
       (credentials: RegistryCredentials) =>
-        Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
-          Config.withDefault(Redacted.make("{}")),
-          Effect.map((value) => Redacted.value(value) || "{}"),
-          Effect.flatMap(decodeRegistryAuthConfig),
+        Effect.gen(function* () {
+          const value = yield* Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
+            Config.withDefault(Redacted.make("{}")),
+          );
+          const base = yield* decodeRegistryAuthConfig(Redacted.value(value) || "{}");
+          const ambient = yield* DockerEnvironment;
+          const overlay =
+            ambient.DOCKER_AUTH_CONFIG === undefined
+              ? undefined
+              : yield* decodeRegistryAuthConfig(ambient.DOCKER_AUTH_CONFIG || "{}");
+          return { auths: { ...base.auths, ...overlay?.auths } };
+        }).pipe(
           // Schema diagnostics may include credential input. Do not retain them.
           Effect.mapError(() =>
             systemError({
@@ -698,6 +728,30 @@ const makeDocker = (options: DockerOptions) =>
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
+        // (same environment as the push) which context it would use, and copy just
+        // that context's metadata and TLS material in.
+        const selected =
+          context ??
+          (yield* run(["context", "show"]).pipe(
+            Effect.map((result) => result.stdout),
+            Effect.orElseSucceed(() => "default"),
+          ));
+        if (selected && selected !== "default") {
+          const inspected = yield* runInspect<{
+            Storage: { MetadataPath: string; TLSPath: string };
+          }>(["context", "inspect", selected]);
+          for (const [kind, source] of [
+            ["meta", inspected.Storage.MetadataPath],
+            ["tls", inspected.Storage.TLSPath],
+          ] as const) {
+            if (!(yield* fs.exists(source))) continue;
+            const target = path.join(dir, "contexts", kind, path.basename(source));
+            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+            yield* fs.copy(source, target);
+          }
+        }
+        const pushContext = selected && selected !== "default" ? selected : context;
         const config = yield* Effect.sync(() => {
           const password = Redacted.isRedacted(credentials.password)
             ? Redacted.value(credentials.password)
@@ -711,12 +765,19 @@ const makeDocker = (options: DockerOptions) =>
         const result =
           platform === undefined
             ? yield* run(
-                [...formatArgs({ context }), "push", ...digestArgs, ref],
+                [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               )
             : yield* run(
-                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                [
+                  ...formatArgs({ context: pushContext }),
+                  "push",
+                  "--platform",
+                  platform,
+                  ...digestArgs,
+                  ref,
+                ],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               ).pipe(
@@ -727,7 +788,7 @@ const makeDocker = (options: DockerOptions) =>
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
                   () =>
                     run(
-                      [...formatArgs({ context }), "push", ...digestArgs, ref],
+                      [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                       { DOCKER_CONFIG: dir },
                       outputTap(session),
                     ),
@@ -789,17 +850,21 @@ const makeDocker = (options: DockerOptions) =>
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, credentials, ...options },
+          { context: buildContext, engineContext, args, credentials, secrets, ...options },
           session,
           registry,
         ) {
           const tap = outputTap(session);
-          const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
+          const secret = buildSecrets(secrets);
+          const buildArgs = [buildContext, ...formatArgs(options), ...secret.args, ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
             return yield* run(
               [...engine, "image", "build", ...buildArgs],
-              credentials ? yield* registryEnvironment(credentials) : undefined,
+              {
+                ...(credentials ? yield* registryEnvironment(credentials) : undefined),
+                ...secret.env,
+              },
               tap,
             );
           }
@@ -810,7 +875,7 @@ const makeDocker = (options: DockerOptions) =>
             const env = yield* registryEnvironment(registry);
             return yield* run(
               [...engine, "buildx", "build", "--push", ...buildArgs],
-              env,
+              { ...env, ...secret.env },
               tap,
             ).pipe(Effect.mapError(classifyDockerRegistryError));
           }
@@ -826,7 +891,7 @@ const makeDocker = (options: DockerOptions) =>
               ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
               ...buildArgs,
             ],
-            undefined,
+            secret.env,
             tap,
           );
           const [tag, ...tags] =
@@ -1005,6 +1070,22 @@ const systemError = (input: {
     }),
   );
 
+/**
+ * `--secret id=<id>,env=<var>` per secret, with each value under a generated
+ * variable name: an id is the Dockerfile author's choice and may collide with
+ * the environment Docker itself reads (`PATH`, `DOCKER_HOST`).
+ */
+const buildSecrets = (secrets: Record<string, string | Redacted.Redacted<string>> | undefined) => {
+  const args: Array<string> = [];
+  const env: Record<string, string> = {};
+  Object.entries(secrets ?? {}).forEach(([id, value], index) => {
+    const variable = `ALCHEMY_BUILD_SECRET_${index}`;
+    args.push("--secret", `id=${id},env=${variable}`);
+    env[variable] = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  });
+  return { args, env };
+};
+
 /** Formats a set of options into a list of command-line arguments. */
 const formatArgs = (
   options: Record<
@@ -1014,7 +1095,9 @@ const formatArgs = (
 ) => {
   const args: Array<string> = [];
   for (const [key, value] of Object.entries(options)) {
-    if (!value) continue;
+    // `0` is meaningful (`--replicas 0`, `--update-parallelism 0`), so only
+    // absent, `false` and empty values are omitted.
+    if (value === undefined || value === false || value === "") continue;
     const prefix = key.length > 1 ? `--${key}` : `-${key}`;
     if (value === true) {
       args.push(prefix);

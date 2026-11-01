@@ -4,10 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
+
+export class ServiceNetworkServiceAssociationUnexpectedResponse extends Data.TaggedError(
+  "ServiceNetworkServiceAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceNetworkServiceAssociationProps {
   /**
@@ -91,7 +99,7 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           .getServiceNetworkServiceAssociation({
             serviceNetworkServiceAssociationIdentifier: id,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Discover an existing association between the pair (create-conflict
       // recovery / lost-state recovery).
@@ -101,9 +109,7 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           .pipe(
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
-            Effect.flatMap((items) =>
-              items[0]?.id ? observe(items[0].id) : Effect.succeed(undefined),
-            ),
+            Effect.flatMap((items) => (items[0]?.id ? observe(items[0].id) : Effect.undefined)),
           );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -181,9 +187,9 @@ export const ServiceNetworkServiceAssociationProvider = () =>
               ),
             );
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(
-                new Error("Failed to create service network service association"),
-              );
+              return yield* new ServiceNetworkServiceAssociationUnexpectedResponse({
+                message: "Failed to create service network service association",
+              });
             }
             assoc = yield* observe(created.id);
             if (!assoc?.arn || !assoc.id) {
@@ -197,9 +203,9 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           const associationId = assoc.id;
           const associationArn = assoc.arn;
           if (!associationId || !associationArn) {
-            return yield* Effect.fail(
-              new Error("Service network service association is missing its id/arn"),
-            );
+            return yield* new ServiceNetworkServiceAssociationUnexpectedResponse({
+              message: "Service network service association is missing its id/arn",
+            });
           }
 
           // Wait for the association to leave CREATE_IN_PROGRESS so

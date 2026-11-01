@@ -4,11 +4,24 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./common.ts";
+
+export class ServerCertificateConflict extends Data.TaggedError("ServerCertificateConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerCertificateUnexpectedResponse extends Data.TaggedError(
+  "ServerCertificateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServerCertificateProps {
   /**
@@ -101,7 +114,7 @@ export const ServerCertificateProvider = () =>
           .getServerCertificate({
             ServerCertificateName: name,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.ServerCertificate;
       });
 
@@ -174,18 +187,14 @@ export const ServerCertificateProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* readCertificate(name);
                     if (!existing?.ServerCertificateMetadata?.Arn) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Server certificate '${name}' already exists but could not be described`,
-                        ),
-                      );
+                      return yield* new ServerCertificateConflict({
+                        message: `Server certificate '${name}' already exists but could not be described`,
+                      });
                     }
                     if (!hasTags(desiredTags, existing.Tags)) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Server certificate '${name}' already exists and is not managed by alchemy`,
-                        ),
-                      );
+                      return yield* new ServerCertificateConflict({
+                        message: `Server certificate '${name}' already exists and is not managed by alchemy`,
+                      });
                     }
                     return {
                       ServerCertificateMetadata: existing.ServerCertificateMetadata,
@@ -194,7 +203,9 @@ export const ServerCertificateProvider = () =>
                 ),
               );
             if (!created.ServerCertificateMetadata?.Arn) {
-              return yield* Effect.fail(new Error(`uploadServerCertificate returned no metadata`));
+              return yield* new ServerCertificateUnexpectedResponse({
+                message: `uploadServerCertificate returned no metadata`,
+              });
             }
             cert = yield* readCertificate(name);
           }
@@ -219,9 +230,9 @@ export const ServerCertificateProvider = () =>
           const fresh = yield* readCertificate(name);
           const metadata = fresh?.ServerCertificateMetadata;
           if (!metadata?.Arn || !metadata.ServerCertificateName) {
-            return yield* Effect.fail(
-              new Error(`Server certificate '${name}' was not readable after sync`),
-            );
+            return yield* new ServerCertificateUnexpectedResponse({
+              message: `Server certificate '${name}' was not readable after sync`,
+            });
           }
 
           yield* session.note(metadata.Arn);

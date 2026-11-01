@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 /**
  * Hot reload for user-supplied Dockerfile/context Cloudflare Containers
  * under `alchemy dev`.
@@ -17,8 +16,8 @@ import { spawnSync } from "node:child_process";
  * Requires Docker; skipped when the daemon is unavailable.
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -33,14 +32,6 @@ import ReloadContainerWorker from "./fixtures/reload/worker.ts";
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const dockerfile = (marker: string) =>
   `FROM busybox:stable
@@ -115,7 +106,7 @@ describe.sequential(
     ],
   },
   () => {
-    test.provider.skipIf(!dockerAvailable)(
+    test.provider(
       "context/Dockerfile edits rebuild the running container — with and without a deploy",
       (stack) =>
         Effect.gen(function* () {
@@ -178,7 +169,7 @@ describe.sequential(
     // removed that container (and its networking sidecar) out from under
     // it: `Recovered running container without a running networking
     // sidecar`, then `container <id> is not running` on the next request.
-    test.provider.skipIf(!dockerAvailable)(
+    test.provider(
       "a running container keeps serving across Worker restarts",
       (stack) =>
         Effect.gen(function* () {

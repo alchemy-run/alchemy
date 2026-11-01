@@ -379,7 +379,7 @@ type ObservedProject =
 const getProject = (accountId: string, projectName: string) =>
   pages
     .getProject({ accountId, projectName })
-    .pipe(Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ProjectNotFound", () => Effect.undefined));
 
 /**
  * Pages project names form the `<name>.pages.dev` subdomain: lowercase

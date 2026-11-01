@@ -4,10 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
+
+export class RuleGroupsNamespaceNotReady extends Data.TaggedError("RuleGroupsNamespaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleGroupsNamespaceProps {
   /**
@@ -83,7 +89,7 @@ export const RuleGroupsNamespaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, name: string) {
         const response = yield* amp
           .describeRuleGroupsNamespace({ workspaceId, name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.ruleGroupsNamespace;
       });
 
@@ -105,11 +111,9 @@ export const RuleGroupsNamespaceProvider = () =>
           }),
         );
         if (ns.status.statusCode !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `AMP rule groups namespace ${name} did not become ACTIVE (status: ${ns.status.statusCode})`,
-            ),
-          );
+          return yield* new RuleGroupsNamespaceNotReady({
+            message: `AMP rule groups namespace ${name} did not become ACTIVE (status: ${ns.status.statusCode})`,
+          });
         }
         return ns;
       });

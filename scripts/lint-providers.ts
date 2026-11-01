@@ -1,6 +1,12 @@
-import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable/async";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Command } from "effect/cli";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ts from "tsrs/unstable/ast";
+import { API, TypeFlags, type Type, type Project } from "tsrs/unstable/async";
 
 /**
  * Lints every `Providers.ts` under a workspace package's `src` (alchemy's
@@ -15,21 +21,31 @@ import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable
  * call(s) whose requirements include `unknown`.
  */
 
-const packagesRoot = path.join(import.meta.dir, "../packages");
-
 /** Workspace packages with a `Providers.ts` anywhere under `src`. */
-const providerPackages = async (): Promise<ReadonlyArray<string>> => {
-  const found = new Set<string>();
-  for await (const file of new Bun.Glob("*/src/**/Providers.ts").scan(packagesRoot)) {
-    found.add(path.join(packagesRoot, file.split("/")[0]!));
+const providerPackages = Effect.fn(function* (packagesRoot: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const found: Array<string> = [];
+  for (const name of yield* fs.readDirectory(packagesRoot)) {
+    const src = path.join(packagesRoot, name, "src");
+    if (!(yield* fs.exists(src))) continue;
+    const files = yield* fs.readDirectory(src, { recursive: true });
+    if (files.some((file) => path.basename(file) === "Providers.ts")) {
+      found.push(path.join(packagesRoot, name));
+    }
   }
-  return [...found].sort((a, b) => a.localeCompare(b));
-};
+  return found.sort((a, b) => a.localeCompare(b));
+});
 
-export async function lintProviders(
+/**
+ * Lints one project's `Providers.ts` files, calling `log` per line of output.
+ * Resolves to `false` if any `providers()` factory leaks `unknown`/`any`.
+ */
+async function lintProviders(
   project: Project,
   srcRoot: string,
-  log: (message: string) => void = console.log,
+  relative: (file: string) => string,
+  log: (message: string) => void,
 ): Promise<boolean> {
   const { checker, program } = project;
   const providerPaths = (await program.getSourceFileNames())
@@ -60,7 +76,7 @@ export async function lintProviders(
   for (const file of providerPaths) {
     const sourceFile = await program.getSourceFile(file);
     if (!sourceFile) throw new Error(`Missing source file ${file}`);
-    const rel = path.relative(process.cwd(), sourceFile.fileName);
+    const rel = relative(sourceFile.fileName);
     const providersVar = sourceFile.statements
       .filter(ts.isVariableStatement)
       .flatMap((statement) => statement.declarationList.declarations)
@@ -136,24 +152,52 @@ export async function lintProviders(
   return !hadError;
 }
 
-if (import.meta.main) {
-  await using api = new API();
-  const packages = await providerPackages();
-  const tsConfigs = packages.map((dir) => path.join(dir, "tsconfig.json"));
-  const snapshot = await api.updateSnapshot({ openProjects: tsConfigs });
-  let ok = true;
-  for (const dir of packages) {
-    const tsConfig = path.join(dir, "tsconfig.json");
-    const project = snapshot.getProject(tsConfig);
-    if (!project) throw new Error(`Failed to open ${tsConfig}`);
-    ok = (await lintProviders(project, path.join(dir, "src"))) && ok;
-  }
-  if (!ok) {
-    console.error(
-      "\nProvider lint failed: one or more `providers()` factories have `unknown`/`any` requirements.",
+const command = Command.make(
+  "lint-providers",
+  {},
+  Effect.fn(function* () {
+    const path = yield* Path.Path;
+    const cwd = yield* Effect.sync(() => process.cwd());
+    const packages = yield* providerPackages(path.resolve(import.meta.dirname, "../packages"));
+    const api = yield* Effect.acquireRelease(
+      Effect.sync(() => new API()),
+      (api) => Effect.promise(() => api.close()),
     );
-    process.exitCode = 1;
-  } else {
-    console.log("\nAll provider factories have fully-resolved requirements.");
-  }
-}
+    const tsConfigs = packages.map((dir) => path.join(dir, "tsconfig.json"));
+    const snapshot = yield* Effect.promise(() => api.createSnapshot({ openProjects: tsConfigs }));
+    let ok = true;
+    for (const dir of packages) {
+      const tsConfig = path.join(dir, "tsconfig.json");
+      const project = snapshot.getConfiguredProject(tsConfig);
+      if (!project) return yield* Effect.die(new Error(`Failed to open ${tsConfig}`));
+      const lines: Array<string> = [];
+      const passed = yield* Effect.promise(() =>
+        lintProviders(
+          project,
+          path.join(dir, "src"),
+          (file) => path.relative(cwd, file),
+          (line) => lines.push(line),
+        ),
+      );
+      for (const line of lines) yield* Console.log(line);
+      ok = passed && ok;
+    }
+    if (!ok) {
+      return yield* Effect.fail(
+        new Error(
+          "Provider lint failed: one or more `providers()` factories have `unknown`/`any` requirements.",
+        ),
+      );
+    }
+    yield* Console.log("\nAll provider factories have fully-resolved requirements.");
+  }, Effect.scoped),
+).pipe(
+  Command.withDescription(
+    "Fail if any provider package's `providers()` factory leaks `unknown`/`any` requirements",
+  ),
+);
+
+Command.run(command, { version: "0.0.0" }).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

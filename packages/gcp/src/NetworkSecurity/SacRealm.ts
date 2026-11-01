@@ -123,18 +123,18 @@ export const SacRealm = Resource<SacRealm>("GCP.NetworkSecurity.SacRealm");
 export class SacRealmNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SacRealmNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SacRealmFailed extends Data.TaggedError("GCP.NetworkSecurity.SacRealmFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class SacRealmStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SacRealmStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) => state === "STATE_UNSPECIFIED";
@@ -169,21 +169,21 @@ const toAttrs = (realm: networksecurity.SACRealm, project: string) => {
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsSacRealms({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (realm): realm is networksecurity.SACRealm => realm !== undefined,
-      () => new SacRealmNotResolved({ name }),
+      () => new SacRealmNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (realm) => realm.state !== "KEY_EXPIRED",
-      (realm) => new SacRealmFailed({ name, state: realm.state }),
+      (realm) => new SacRealmFailed({ resourceName: name, state: realm.state }),
     ),
     Effect.filterOrFail(
       (realm) => !isPendingState(realm.state),
-      () => new SacRealmNotResolved({ name }),
+      () => new SacRealmNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacRealmNotResolved",
@@ -195,7 +195,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((realm) =>
-      realm === undefined ? Effect.void : Effect.fail(new SacRealmStillExists({ name })),
+      realm === undefined
+        ? Effect.void
+        : Effect.fail(new SacRealmStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacRealmStillExists",
@@ -300,7 +302,7 @@ export const SacRealmProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -309,7 +311,7 @@ export const SacRealmProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SacRealmNotResolved({ name });
+        return yield* new SacRealmNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -324,7 +326,7 @@ export const SacRealmProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

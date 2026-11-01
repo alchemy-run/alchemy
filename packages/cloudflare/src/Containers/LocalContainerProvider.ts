@@ -67,7 +67,7 @@ export const LocalContainerProvider = () =>
       // `makeAttributes` attaches the freshly-computed env instead.
       const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
-          yield* validateContainerImageProps(news);
+          yield* validateContainerImageProps(id, news);
           // Variant 1 — Effect-native program. Bundle `main` and write it
           // (plus the generated Dockerfile) into a stable build context
           // directory. `Docker.build` in cloudflare-runtime reads `dockerfile`
@@ -111,8 +111,9 @@ export const LocalContainerProvider = () =>
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: "Dockerfile",
+                buildArgs: news.build?.args,
               } as DevContainerImage,
-              hash: yield* sha256Object({ dockerfile: content }),
+              hash: yield* sha256Object({ dockerfile: content, buildArgs: news.build?.args }),
             };
           }
 
@@ -130,10 +131,12 @@ export const LocalContainerProvider = () =>
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
+              buildArgs: news.build?.args,
             } as DevContainerImage,
             hash: yield* sha256Object({
               contextHash,
               dockerfile: dockerfileContent,
+              buildArgs: news.build?.args,
             }),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
@@ -158,7 +161,8 @@ export const LocalContainerProvider = () =>
           handler: news.handler,
           isExternal: news.isExternal,
           external: news.external,
-          build: news.build,
+          // Secrets attach later (see `withBuildSecrets`) and stay out of the hash.
+          build: news.build === undefined ? undefined : { ...news.build, secrets: undefined },
           autoInstallExternals: news.autoInstallExternals,
         };
         if (!isResolved(picked)) return undefined;
@@ -173,6 +177,16 @@ export const LocalContainerProvider = () =>
         }
         return picked as AnyContainerApplicationProps;
       };
+
+      // Attached outside `prepareImage` for the same reason env is: secrets
+      // may be binding Outputs that have not resolved when its cache warms.
+      const withBuildSecrets = (
+        dev: DevContainerImage,
+        news: AnyContainerApplicationProps,
+      ): DevContainerImage =>
+        "dockerfile" in dev && news.build?.secrets !== undefined
+          ? { ...dev, buildSecrets: news.build.secrets }
+          : dev;
 
       const placeholderConfiguration = (
         props: AnyContainerApplicationProps,
@@ -229,7 +243,7 @@ export const LocalContainerProvider = () =>
             // workerd resolves each image by its key in the class's image
             // map, so locally the image reference is the Container's id.
             image: id,
-            dev,
+            dev: withBuildSecrets(dev, news),
             hash: { image: hash },
           } satisfies ContainerApplication["Attributes"];
         }
@@ -248,7 +262,7 @@ export const LocalContainerProvider = () =>
           durableObjects: undefined,
           createdAt: new Date().toISOString(),
           version: 1,
-          dev: { ...dev, env },
+          dev: { ...withBuildSecrets(dev, news), env },
           hash: { image: hash },
         } satisfies ContainerApplication["Attributes"];
       });

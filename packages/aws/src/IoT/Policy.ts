@@ -120,7 +120,7 @@ export const PolicyProvider = () =>
           const policyName = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getPolicy({ policyName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!found) return undefined;
           const attrs = {
             policyName,
@@ -143,7 +143,7 @@ export const PolicyProvider = () =>
           // OBSERVE
           let live = yield* iot
             .getPolicy({ policyName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE
           if (live === undefined) {

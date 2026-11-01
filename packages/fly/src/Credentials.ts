@@ -1,20 +1,12 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import {
-  FLY_AUTH_PROVIDER_NAME,
-  type FlyAuthConfig,
-  type FlyResolvedCredentials,
-} from "./AuthProvider.ts";
+import { FLY_AUTH_PROVIDER_NAME, type FlyResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -37,6 +29,9 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
       : yield* Credentials.pipe(
           Effect.flatMap((resolve) => resolve),
           Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+          // Binding initialization cannot fail; the engine reports this
+          // defect as `CredentialsRequired`.
+          orDieCredentialsUnavailable("Fly"),
         );
     yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
@@ -73,30 +68,8 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<FlyAuthConfig, FlyResolvedCredentials>(
-        FLY_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) => ({
-              apiKey: creds.apiKey,
-              apiBaseUrl: creds.apiBaseUrl,
-            })),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve Fly credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(FLY_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<FlyResolvedCredentials, ConfigError>()(FLY_AUTH_PROVIDER_NAME, (creds) => ({
+      apiKey: creds.apiKey,
+      apiBaseUrl: creds.apiBaseUrl,
+    })),
   );

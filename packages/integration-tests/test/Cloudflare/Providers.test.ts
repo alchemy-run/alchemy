@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { Credentials } from "@alchemy.run/cloudflare/Credentials";
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import * as CliKit from "alchemy/Cli/CliKit";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
+import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -36,7 +36,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
             name: "test",
@@ -55,7 +55,7 @@ it.live(
           FetchHttpClient.layer,
         ),
       ),
-      Effect.provide(CliKit.layer({ input: false })),
+      Effect.provide(Interaction.layerNonInteractive()),
     ),
   { tags: ["unit", "provider:cloudflare", "local"] },
 );
@@ -72,7 +72,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
             name: "test",
@@ -96,7 +96,7 @@ it.live(
           FetchHttpClient.layer,
         ),
       ),
-      Effect.provide(CliKit.layer({ input: false })),
+      Effect.provide(Interaction.layerNonInteractive()),
     ),
   { tags: ["unit", "provider:cloudflare", "local"] },
 );

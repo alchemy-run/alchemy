@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
+
+export class WirelessGatewayUnexpectedResponse extends Data.TaggedError(
+  "WirelessGatewayUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WirelessGatewayProps {
   /**
@@ -109,7 +117,7 @@ export const WirelessGatewayProvider = () =>
       const getBy = (identifier: string, type: iotw.WirelessGatewayIdType) =>
         iotw
           .getWirelessGateway({ Identifier: identifier, IdentifierType: type })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observe = Effect.fn(function* (
         output: WirelessGateway["Attributes"] | undefined,
@@ -128,9 +136,9 @@ export const WirelessGatewayProvider = () =>
 
       const toAttrs = Effect.fn(function* (gateway: iotw.GetWirelessGatewayResponse, name: string) {
         if (gateway.Id === undefined || gateway.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless gateway '${name}' returned without Id/Arn`),
-          );
+          return yield* new WirelessGatewayUnexpectedResponse({
+            message: `IoT Wireless gateway '${name}' returned without Id/Arn`,
+          });
         }
         return {
           wirelessGatewayId: gateway.Id,
@@ -203,16 +211,16 @@ export const WirelessGatewayProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             gateway =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessGatewayId")
                 : yield* observe(undefined, news);
           }
           if (gateway === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless gateway '${name}' not found after create`),
-            );
+            return yield* new WirelessGatewayUnexpectedResponse({
+              message: `IoT Wireless gateway '${name}' not found after create`,
+            });
           }
           const attrs = yield* toAttrs(gateway, name);
 
@@ -251,9 +259,9 @@ export const WirelessGatewayProvider = () =>
           // 4. RETURN fresh attributes.
           const final = yield* getBy(attrs.wirelessGatewayId, "WirelessGatewayId");
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless gateway '${name}' vanished during update`),
-            );
+            return yield* new WirelessGatewayUnexpectedResponse({
+              message: `IoT Wireless gateway '${name}' vanished during update`,
+            });
           }
           yield* session.note(attrs.wirelessGatewayId);
           return yield* toAttrs(final, name);

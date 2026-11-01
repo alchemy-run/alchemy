@@ -69,7 +69,7 @@ export const OutcomeProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getOutcomes({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.outcomes?.[0];
       });
 

@@ -7,11 +7,11 @@ import {
   Workspace,
 } from "@alchemy.run/aws/AMP";
 import * as Logs from "@alchemy.run/aws/Logs";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

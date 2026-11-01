@@ -1,11 +1,14 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
@@ -29,7 +32,7 @@ const collectorWorker = () =>
 interface CollectedSpan {
   name: string;
   kind?: number;
-  status?: { code?: number };
+  status?: { code?: number; message?: string };
   attributes?: { key: string; value: Record<string, unknown> }[];
 }
 
@@ -140,50 +143,98 @@ describe(
           // Log record shipped by the OTLP logger.
           yield* expectUrlContains(collected, "lambda-work-log");
 
-          // A timing-out invocation: the fixture's timeout is 5 s and `/slow`
-          // sleeps 60 s, so Lambda kills it and the Function URL answers with
-          // an error. 2 s before that the deadline flush ended the root
-          // span with the timeout and drained the exporters, so the trace
-          // exists. Without it Lambda kills the invocation and nothing below
-          // ever reaches the collector.
+          // An invocation that runs past its 3 s timeout is interrupted:
+          // its finalizer runs, the span of the call that hung ends, and the
+          // root span ends with the timeout — all exported. The invocation
+          // is then held until Lambda's own 5 s timeout ends it, so the
+          // caller sees Lambda's timeout error, not a response from the
+          // handler.
           const client = yield* HttpClient.HttpClient;
+          const slowStart = yield* Clock.currentTimeMillis;
           const slow = yield* client.get(`${fnUrl}/slow`);
+          const slowElapsed = (yield* Clock.currentTimeMillis) - slowStart;
           expect(slow.status).not.toBe(200);
-          yield* expectUrlContains(collected, "AWS.Lambda.InvocationTimeoutError", {
-            timeout: "120 seconds",
-            label: "timed-out invocation's root span",
-          });
-          yield* expectUrlContains(collected, "aws.lambda.timeout.imminent");
-          // The child span that ended before the sleep and its log travel in
-          // the same flush.
-          yield* expectUrlContains(collected, "lambda.slow-span");
-          yield* expectUrlContains(collected, "lambda-slow-log");
+          expect(slowElapsed).toBeGreaterThanOrEqual(4500);
 
-          // An invocation that finishes after the deadline flush but before
-          // the timeout: the response is untouched, and its root span is
-          // exported exactly once — by the flush, as timeout-imminent. The
-          // dispatcher flushes again before responding, so any second
-          // export has reached the collector by the time we see the 200.
+          // Lambda counts it as a real timeout and shuts the sandbox down
+          // (our shutdown extension logs the SIGTERM inside the invocation),
+          // so work that ignored the interruption cannot resume later.
+          const logGroupName = `/aws/lambda/${fn.functionName}`;
+          const slowRequestLines = yield* logs.filterLogEvents({ logGroupName }).pipe(
+            Effect.map((result) => (result.events ?? []).map((event) => event.message ?? "")),
+            Effect.map((lines) => {
+              const requestId = lines
+                .map((line) => /Lambda invocation (\S+) of .* timed out after/.exec(line)?.[1])
+                .find((id) => id !== undefined);
+              return requestId === undefined
+                ? []
+                : lines.filter((line) => line.includes(requestId));
+            }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (lines) => lines.some((line) => line.startsWith("REPORT")),
+              times: 30,
+            }),
+          );
+          expect(slowRequestLines.find((line) => line.startsWith("REPORT"))).toContain(
+            "Status: timeout",
+          );
+          expect(slowRequestLines.some((line) => line.includes("SIGTERM"))).toBe(true);
+          yield* expectUrlContains(collected, "lambda-slow-finalizer", {
+            timeout: "120 seconds",
+            label: "interrupted invocation's finalizer log",
+          });
+          yield* expectUrlContains(collected, "lambda-slow-log");
+          const slowBody = yield* client
+            .get(collected)
+            .pipe(Effect.flatMap((response) => response.json));
+          const slowRoots = rootSpansFor(slowBody, "/slow");
+          expect({ slowRoots: slowRoots.length, roots: rootSpanSummary(slowBody) }).toMatchObject({
+            slowRoots: 1,
+          });
+          expect(slowRoots[0]?.status).toMatchObject({
+            code: 2,
+            message: expect.stringContaining("timed out"),
+          });
+          // The span of the call that hung, ended by the interruption.
+          const hung = collectedSpans(slowBody).filter((span) => span.name === "lambda.slow-span");
+          expect(hung).toHaveLength(1);
+          expect(hung[0]?.attributes).toContainEqual({
+            key: "effect.fiber.interrupted",
+            value: { boolValue: true },
+          });
+
+          // An invocation that finishes just inside its timeout is never
+          // interrupted, and its root span is a plain success.
           const late = yield* client.get(`${fnUrl}/late`);
           expect(late.status).toBe(200);
           expect(yield* late.text).toContain("lambda-late-done");
-          const collectedBody = yield* client
+          const lateBody = yield* client
             .get(collected)
             .pipe(Effect.flatMap((response) => response.json));
-          const lateSpans = rootSpansFor(collectedBody, "/late");
-          expect({
-            lateSpans: lateSpans.length,
-            roots: rootSpanSummary(collectedBody),
-          }).toMatchObject({
+          const lateSpans = rootSpansFor(lateBody, "/late");
+          expect({ lateSpans: lateSpans.length, roots: rootSpanSummary(lateBody) }).toMatchObject({
             lateSpans: 1,
           });
-          expect(lateSpans[0]?.status?.code).toBe(2);
-          // The early-ended span still says which request it was.
-          expect(lateSpans[0]?.attributes).toContainEqual({
-            key: "http.request.method",
-            value: { stringValue: "GET" },
-          });
-          expect(lateSpans[0]?.attributes).toContainEqual({
+          expect(lateSpans[0]?.status?.code).not.toBe(2);
+
+          // An invocation whose finalizer hangs past Lambda's own timeout:
+          // Lambda kills it, but 500 ms before that the backstop flush ended
+          // the root span and drained the exporters.
+          const stuck = yield* client.get(`${fnUrl}/stuck`);
+          expect(stuck.status).not.toBe(200);
+          const stuckSpans = yield* client.get(collected).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.map((body) => rootSpansFor(body, "/stuck")),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (spans) => spans.length > 0,
+              times: 30,
+            }),
+          );
+          expect(stuckSpans).toHaveLength(1);
+          expect(stuckSpans[0]?.status?.code).toBe(2);
+          expect(stuckSpans[0]?.attributes).toContainEqual({
             key: "aws.lambda.timeout.imminent",
             value: { boolValue: true },
           });

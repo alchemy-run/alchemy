@@ -213,7 +213,7 @@ const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefi
 const getIncoming = (zoneId: string) =>
   dns
     .getZoneTransferIncoming({ zoneId })
-    .pipe(Effect.catchTag("IncomingZoneTransferNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("IncomingZoneTransferNotFound", () => Effect.undefined));
 
 const samePeers = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&

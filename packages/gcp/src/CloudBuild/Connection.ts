@@ -369,13 +369,13 @@ export const Connection = Resource<Connection>("GCP.CloudBuild.Connection");
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.ConnectionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ConnectionStillExists extends Data.TaggedError(
   "GCP.CloudBuild.ConnectionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type ScmKind = "github" | "githubEnterprise" | "gitlab" | "bitbucketDataCenter" | "bitbucketCloud";
@@ -824,7 +824,7 @@ const toAttrs = (connection: cloudbuild.Connection, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build connections long-running operation (seconds to a minute).
@@ -880,7 +880,9 @@ const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundO
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection ? Effect.succeed(connection) : Effect.fail(new ConnectionNotResolved({ name })),
+      connection
+        ? Effect.succeed(connection)
+        : Effect.fail(new ConnectionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionNotResolved",
@@ -892,7 +894,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection === undefined ? Effect.void : Effect.fail(new ConnectionStillExists({ name })),
+      connection === undefined
+        ? Effect.void
+        : Effect.fail(new ConnectionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionStillExists",
@@ -1000,7 +1004,7 @@ export const ConnectionProvider = () =>
               annotations: desiredAnnotations,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -1008,7 +1012,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);
@@ -1075,7 +1079,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* cloudbuild
             .createProjectsLocationsConnections({
@@ -1087,7 +1091,7 @@ export const ConnectionProvider = () =>
                 annotations: desiredAnnotations,
               }),
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -1098,7 +1102,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -1107,7 +1111,7 @@ export const ConnectionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnections({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

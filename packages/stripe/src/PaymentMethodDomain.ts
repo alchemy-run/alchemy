@@ -192,7 +192,7 @@ const isStripeManagedDomain = (domainName: string) =>
 const getById = (paymentMethodDomain: string) =>
   GetPaymentMethodDomain({
     payment_method_domain: paymentMethodDomain,
-  }).pipe(Effect.catchIf(isMissingDomain, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isMissingDomain, () => Effect.undefined));
 
 const listByEnabled = Effect.fn(function* (enabled: boolean, domainName?: string) {
   const domains: StripePaymentMethodDomain[] = [];

@@ -164,7 +164,7 @@ export const LinkProvider = () =>
       const getLinkByArn = Effect.fn(function* (linkArn: string) {
         return yield* oam
           .getLink({ Identifier: linkArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Link.Provider.of({

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { normalizePolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -177,7 +178,32 @@ export const TopicProvider = () =>
         topicName,
       });
       if (!state) return undefined;
-      return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+      // Reconcile manages (and returns) only the declared attributes; SNS
+      // also reports server-filled ones (`Policy`, `Owner`, subscription
+      // counters). Project onto the declared keys so an untouched topic
+      // does not read as drifted, keeping the persisted value wherever SNS
+      // returns an equivalent JSON document in its own form.
+      const declared = olds ? toAttributes(olds) : undefined;
+      const attrs = {
+        ...state,
+        attributes: declared
+          ? Object.fromEntries(
+              Object.entries(declared).flatMap(([name, value]) => {
+                const observed = state.attributes[name];
+                return observed === undefined
+                  ? []
+                  : [[name, sameDocument(value, observed) ? value : observed]];
+              }),
+            )
+          : state.attributes,
+        dataProtectionPolicy:
+          output?.dataProtectionPolicy !== undefined &&
+          state.dataProtectionPolicy !== undefined &&
+          sameDocument(output.dataProtectionPolicy, state.dataProtectionPolicy)
+            ? output.dataProtectionPolicy
+            : state.dataProtectionPolicy,
+      };
+      return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
     }),
     stables: ["topicArn", "topicName", "fifo"],
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
@@ -224,7 +250,7 @@ export const TopicProvider = () =>
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       const observedAttributes = toAttributeMap(observedState?.Attributes);
 
       for (const [name, value] of Object.entries(desiredAttributes)) {
@@ -286,8 +312,8 @@ export const TopicProvider = () =>
         observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
           Effect.map((r) => r.DataProtectionPolicy),
           Effect.catchTags({
-            NotFoundException: () => Effect.succeed(undefined),
-            InvalidParameterException: () => Effect.succeed(undefined),
+            NotFoundException: () => Effect.undefined,
+            InvalidParameterException: () => Effect.undefined,
           }),
         );
       }
@@ -345,6 +371,11 @@ const toAttributes = (props: TopicProps): Record<string, string> => ({
   ...(props.fifo ? { FifoTopic: "true" } : undefined),
 });
 
+// Whether two attribute values mean the same: equal strings, or JSON
+// documents (policies) that differ only in SNS's formatting.
+const sameDocument = (a: string, b: string) =>
+  a === b || normalizePolicyDocument(a) === normalizePolicyDocument(b);
+
 const toTagMap = (tags: sns.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
@@ -401,20 +432,23 @@ const readTopic = Effect.fn(function* ({
         })
         .pipe(
           Effect.map((response) => response.DataProtectionPolicy),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag(
+            ["NotFoundException", "FifoTopicDataProtectionUnsupported"],
+            () => Effect.undefined,
+          ),
         ),
     ],
     { concurrency: "unbounded" },
   ).pipe(
     Effect.catchTags({
-      NotFoundException: () => Effect.succeed(undefined),
-      InvalidParameterException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.undefined,
+      InvalidParameterException: () => Effect.undefined,
     }),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
   if (!topicState) {

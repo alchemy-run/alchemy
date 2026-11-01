@@ -94,7 +94,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
                 after: "5 minutes",
                 payload: { value: "future-preserved" },
               });
-              yield* storage.sql.exec("UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1");
+              yield* storage.sql.exec("UPDATE alchemy_alarm_schema SET version = 3 WHERE id = 1");
             } else {
               // Fail after the migration has created its first index and callback table.
               yield* storage.sql.exec("DROP INDEX idx_alchemy_scheduled_events_run_at");

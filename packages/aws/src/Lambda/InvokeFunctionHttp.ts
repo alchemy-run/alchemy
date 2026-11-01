@@ -9,5 +9,6 @@ export const InvokeFunctionHttp = Layer.effect(
     tag: "AWS.Lambda.InvokeFunction",
     operation: Lambda.invoke,
     actions: ["lambda:InvokeFunction"],
+    qualified: true,
   }),
 );

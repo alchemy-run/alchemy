@@ -183,7 +183,7 @@ const ensureCloudAssetServiceIdentity = (projectNumber: string) =>
       .generateServiceIdentityServices({
         parent: `projects/${projectNumber}/services/cloudasset.googleapis.com`,
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation === undefined) return;
     yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
       budget: "2 minutes",

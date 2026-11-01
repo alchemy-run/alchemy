@@ -146,7 +146,7 @@ export const ClustersAcl = Resource<ClustersAcl>("GCP.ManagedKafka.ClustersAcl")
 export class ClustersAclNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ClustersAclNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const clusterOf = (cluster: string, project: string, location: string) =>
@@ -285,7 +285,7 @@ export const ClustersAclProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClustersAclNotResolved({ name });
+        return yield* new ClustersAclNotResolved({ resourceName: name });
       }
 
       if (entriesKey(current.aclEntries) !== entriesKey(aclEntries)) {

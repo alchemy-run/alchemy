@@ -203,7 +203,7 @@ const getByName = (name: string) =>
     if (name.length === 0 || name.includes("//")) return undefined;
     return yield* file
       .getProjectsLocationsInstancesSnapshots({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const listViaInstances = (project: string) =>
@@ -335,7 +335,7 @@ export const InstancesSnapshotProvider = () =>
               tags: news.tags,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -343,7 +343,7 @@ export const InstancesSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -352,7 +352,7 @@ export const InstancesSnapshotProvider = () =>
         (item) => item.state,
       );
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -379,7 +379,7 @@ export const InstancesSnapshotProvider = () =>
           (item) => item.state,
         );
         if (current === undefined) {
-          return yield* new ResourceNotResolved({ name });
+          return yield* new ResourceNotResolved({ resourceName: name });
         }
       }
 
@@ -396,7 +396,7 @@ export const InstancesSnapshotProvider = () =>
             times: 8,
             schedule: Schedule.spaced("5 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

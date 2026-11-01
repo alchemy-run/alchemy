@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 
 const cli = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 

@@ -189,13 +189,16 @@ const viteHtmlExistsHandler =
       return json(null);
     }
 
-    const publicDirFilePath = `${publicDir}${pathname}`;
+    // Vite resolves a disabled `publicDir` to `""`; joining that would read
+    // the pathname as an absolute path on the host.
+    const publicDirFilePath = publicDir ? `${publicDir}${pathname}` : undefined;
     const rootDirFilePath = `${root}${pathname}`;
 
     // Beyond the public dir only HTML resolves: other files under the root are Vite's modules.
-    const candidates = pathname.endsWith(".html")
-      ? [publicDirFilePath, rootDirFilePath]
-      : [publicDirFilePath];
+    const candidates = [
+      publicDirFilePath,
+      pathname.endsWith(".html") ? rootDirFilePath : undefined,
+    ].filter((candidate) => candidate !== undefined);
     for (const resolved of candidates) {
       try {
         const stats = await NodeFs.stat(resolved);
@@ -235,6 +238,15 @@ const viteFetchHtmlHandler =
         res.end(body);
         return;
       }
+      // Vite's bundled dev mode (`experimental.bundledDev`) serves HTML from
+      // its in-memory bundle, as `@cloudflare/vite-plugin` reads it.
+      const bundledDev = isInPublicDir ? undefined : bundledDevOf(viteDevServer);
+      if (bundledDev) {
+        const source = await readBundledFile(bundledDev, pathname.slice(1));
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(typeof source === "string" ? source : Buffer.from(source));
+        return;
+      }
       let html = await NodeFs.readFile(resolved, "utf-8");
       if (!isInPublicDir) {
         html = await viteDevServer.transformIndexHtml(resolved, html);
@@ -246,6 +258,29 @@ const viteFetchHtmlHandler =
       res.end(`Unexpected error. Failed to load "${pathname}".`);
     }
   };
+
+interface BundledDev {
+  triggerBundleRegenerationIfStale(): Promise<unknown>;
+  memoryFiles: { get(key: string): { source: string | Uint8Array } | undefined };
+}
+
+const bundledDevOf = (viteDevServer: vite.ViteDevServer): BundledDev | undefined =>
+  (viteDevServer.environments.client as { bundledDev?: BundledDev } | undefined)?.bundledDev;
+
+/** A bundled file, once a regeneration the request triggered has written it. */
+const readBundledFile = async (bundledDev: BundledDev, key: string) => {
+  await bundledDev.triggerBundleRegenerationIfStale();
+  const deadline = Date.now() + 10_000;
+  let file = bundledDev.memoryFiles.get(key);
+  while (!file && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    file = bundledDev.memoryFiles.get(key);
+  }
+  if (!file) {
+    throw new Error(`No bundled file for "/${key}" after waiting for bundle regeneration.`);
+  }
+  return file.source;
+};
 
 /**
  * Runs a dev `ASSETS` request through Vite's middleware, as

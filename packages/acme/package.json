@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/acme",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "ACME (Let's Encrypt, ZeroSSL) certificates for Alchemy, with a Cloudflare DNS-01 solver.",
   "keywords": [
     "acme",

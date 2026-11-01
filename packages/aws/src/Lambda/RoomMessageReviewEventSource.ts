@@ -84,7 +84,7 @@ export const RoomMessageReviewEventSource = Layer.effect(
               }>;
             const permission = yield* Permission(`${room.LogicalId}-MessageReview-Permission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionArn,
+              functionName: Lambda.qualifiedArnOf(host),
               principal: "ivschat.amazonaws.com",
               sourceAccount: accountId,
               sourceArn: `arn:aws:ivschat:${region}:${accountId}:room/*`,

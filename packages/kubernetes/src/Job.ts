@@ -1,3 +1,5 @@
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -155,7 +157,7 @@ export interface BundledJobProps extends JobPropsBase {
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  build?: Bundle.BundleConfig;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -163,7 +165,7 @@ export interface BundledJobProps extends JobPropsBase {
 }
 
 /** Build the user's own Dockerfile (`context` + optional `dockerfile` path). */
-export interface DockerfileJobProps extends JobPropsBase {
+export interface DockerfileJobProps extends JobPropsBase, DockerfileBuildOptions {
   /** Docker build context directory. */
   context?: string;
   /**
@@ -207,6 +209,7 @@ export interface Job extends Resource<
      * adapter (on EKS: the pod-identity role + association; on GKE: the
      * Workload Identity principal and the IAM grants applied to it).
      */
+    // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
     identity: IdentityState | undefined;
     /**
      * Image-registry state provisioned by the cluster platform's adapter
@@ -263,6 +266,23 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * const migrate = yield* Kubernetes.Job("DbMigrate", {
  *   cluster,
  *   image: "ghcr.io/acme/migrator:v3",
+ *   backoffLimit: 2,
+ * });
+ * ```
+ *
+ * **Example:** Your own Dockerfile with build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const migrate = yield* Kubernetes.Job("DbMigrate", {
+ *   cluster,
+ *   context: "./migrator",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
  *   backoffLimit: 2,
  * });
  * ```
@@ -477,7 +497,7 @@ export const JobProvider = () =>
           const observed = yield* readObject({
             transport,
             object: anchor,
-          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.undefined));
           if (observed === undefined) return undefined;
           return output;
         }),

@@ -116,7 +116,7 @@ export const DetectorProvider = () =>
       const get = Effect.fn(function* (detectorId: string) {
         const response = yield* frauddetector
           .getDetectors({ detectorId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.detectors?.[0];
       });
 

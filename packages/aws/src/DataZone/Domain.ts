@@ -185,8 +185,8 @@ export const DomainProvider = () =>
       const getDomainOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* datazone.getDomain({ identifier }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            AccessDeniedException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
       });

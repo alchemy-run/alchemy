@@ -1,9 +1,9 @@
 import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Provider from "../../Alchemist/routes/provider.ts";
+import * as Alchemist from "../../Alchemist/index.ts";
 import * as Contributions from "../../Contributions.ts";
-import { CliKit } from "../CliKit/CliKit.ts";
+import { Interaction } from "../../Interaction.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -21,8 +21,8 @@ const checkEnvCommand = Command.make(
   { provider: checkedProviders, main: config, envFile, profile },
   instrumentCommand("provider.check-env")(
     Effect.fn(function* ({ provider: requested, main, envFile, profile }) {
-      const cli = yield* CliKit;
-      const result = yield* Provider.checkEnvironment({
+      const cli = yield* Interaction;
+      const result = yield* Alchemist.Provider.checkEnvironment({
         entrypoint: main,
         envFile: Option.getOrUndefined(envFile),
         profile,

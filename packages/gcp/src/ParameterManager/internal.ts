@@ -15,19 +15,19 @@ export const MAX_NAME_LENGTH = 63;
 export class ParameterNotResolved extends Data.TaggedError(
   "GCP.ParameterManager.ParameterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ParameterVersionNotResolved extends Data.TaggedError(
   "GCP.ParameterManager.ParameterVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ParameterVersionPayloadRequired extends Data.TaggedError(
   "GCP.ParameterManager.ParameterVersionPayloadRequired",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -169,12 +169,12 @@ export const samePayload = (left: string | undefined, right: string | undefined)
 export const getParameter = (name: string) =>
   parametermanager
     .getProjectsLocationsParameters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getVersion = (name: string) =>
   parametermanager
     .getProjectsLocationsParametersVersions({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const waitUntilParameterGone = (name: string) =>
   getParameter(name).pipe(

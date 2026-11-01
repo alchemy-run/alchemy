@@ -263,7 +263,7 @@ type ObservedDexTest = {
 const observeTest = (accountId: string, dexTestId: string) =>
   zeroTrust
     .getDeviceDexTest({ accountId, dexTestId })
-    .pipe(Effect.catchTag("DexTestNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DexTestNotFound", () => Effect.undefined));
 
 /**
  * Find a DEX test by exact name (names are unique per account).

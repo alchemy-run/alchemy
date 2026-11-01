@@ -241,7 +241,7 @@ export const SpaceProvider = () =>
       const getSpaceOrUndefined = Effect.fn(function* (spaceId: string) {
         return yield* repostspace
           .getSpace({ spaceId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Locate a live (not deleting/deleted) space by display name. Space
@@ -332,7 +332,7 @@ export const SpaceProvider = () =>
                 repostspace.getSpace({ spaceId: space.spaceId }).pipe(
                   Effect.flatMap((full) => toAttrs(full)),
                   // A space can vanish between enumeration and hydration.
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 4 },
             );

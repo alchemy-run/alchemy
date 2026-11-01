@@ -6,7 +6,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
-import type { TableBucketArn } from "./TableBucket.ts";
 
 /**
  * A field in an Apache Iceberg table schema.
@@ -33,7 +32,7 @@ export interface TableProps {
    * ARN of the table bucket that owns the table. Changing it replaces the
    * table.
    */
-  tableBucket: TableBucketArn | string;
+  tableBucket: string;
   /**
    * Name of the namespace that owns the table. Changing it replaces the
    * table.
@@ -170,7 +169,7 @@ export const TableProvider = () =>
           type: t.type,
           createdAt: t.createdAt,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -204,7 +203,7 @@ export const TableProvider = () =>
         .getTable({ tableBucketARN: tableBucketArn, namespace, name })
         .pipe(
           Effect.map((t) => t),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       // Ensure — create if missing, tolerating a concurrent create.

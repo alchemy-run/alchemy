@@ -162,7 +162,7 @@ export const GatewayProvider = () =>
       const getGatewayOrUndefined = Effect.fn(function* (gatewayIdentifier: string) {
         return yield* control
           .getGateway({ gatewayIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -334,7 +334,7 @@ export const GatewayProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteGateway({ gatewayIdentifier: output.gatewayId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* control.getGateway({ gatewayIdentifier: output.gatewayId }).pipe(
             Effect.map((g) => g.status as string),

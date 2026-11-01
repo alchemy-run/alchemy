@@ -9,6 +9,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { jsonEquals } from "./internal.ts";
 
+export class PipelineEndpointUnexpectedResponse extends Data.TaggedError(
+  "PipelineEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface PipelineEndpointVpcOptions {
   /**
    * Subnet IDs the endpoint's network interfaces are placed into. Changing
@@ -126,11 +133,9 @@ export const PipelineEndpointProvider = () =>
 
       const toAttrs = Effect.fn(function* (endpoint: osis.PipelineEndpoint) {
         if (!endpoint.EndpointId || !endpoint.PipelineArn) {
-          return yield* Effect.fail(
-            new Error(
-              `OSIS pipeline endpoint '${endpoint.EndpointId}' is missing its id or pipeline ARN`,
-            ),
-          );
+          return yield* new PipelineEndpointUnexpectedResponse({
+            message: `OSIS pipeline endpoint '${endpoint.EndpointId}' is missing its id or pipeline ARN`,
+          });
         }
         return {
           endpointId: endpoint.EndpointId,
@@ -198,9 +203,9 @@ export const PipelineEndpointProvider = () =>
               },
             });
             if (created.EndpointId === undefined) {
-              return yield* Effect.fail(
-                new Error("OSIS createPipelineEndpoint returned no EndpointId"),
-              );
+              return yield* new PipelineEndpointUnexpectedResponse({
+                message: "OSIS createPipelineEndpoint returned no EndpointId",
+              });
             }
             observed = yield* findEndpoint(created.EndpointId);
           }
@@ -211,9 +216,9 @@ export const PipelineEndpointProvider = () =>
             observed = yield* waitForSettled(findEndpoint(observed.EndpointId));
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error("OSIS pipeline endpoint disappeared while waiting for create"),
-            );
+            return yield* new PipelineEndpointUnexpectedResponse({
+              message: "OSIS pipeline endpoint disappeared while waiting for create",
+            });
           }
           if (observed.Status === "CREATE_FAILED") {
             return yield* new PipelineEndpointCreateFailed({

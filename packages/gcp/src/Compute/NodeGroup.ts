@@ -272,7 +272,7 @@ const toAttrs = (group: compute.NodeGroup, project: string): NodeGroup["Attribut
 const getByName = (project: string, zone: string, nodeGroup: string) =>
   compute
     .getNodeGroups({ project, zone, nodeGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, zone: string, nodeGroupName: string) =>
   getByName(project, zone, nodeGroupName).pipe(

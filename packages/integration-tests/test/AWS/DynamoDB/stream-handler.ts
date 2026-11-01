@@ -50,8 +50,8 @@ export default DynamoDBStreamFunction.make(
         startingPosition: "TRIM_HORIZON",
         batchSize: 10,
       },
-      (stream) =>
-        stream.pipe(
+      Effect.fn(function* (event) {
+        yield* Stream.fromIterable(event.Records).pipe(
           Stream.map((record) => ({
             MessageBody: JSON.stringify({
               eventName: record.eventName,
@@ -61,8 +61,8 @@ export default DynamoDBStreamFunction.make(
             }),
           })),
           Stream.run(sink),
-          Effect.orDie,
-        ),
+        );
+      }),
     );
   }).pipe(
     Effect.provide(

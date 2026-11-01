@@ -1,16 +1,18 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
+import { State } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -151,6 +153,47 @@ test.provider(
         }),
       );
       expect(noop.identityProviderId).toEqual(initial.identityProviderId);
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, initial.identityProviderId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
+);
+
+test.provider(
+  "a Redacted client secret stays out of state and a rotation updates in place",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const githubIdp = (clientSecret: Redacted.Redacted<string>) =>
+        Cloudflare.Access.IdentityProvider("RedactedSecret", {
+          type: "github",
+          config: { clientId: "alchemy-test-client", clientSecret },
+        });
+
+      const initial = yield* stack.deploy(githubIdp(Redacted.make("alchemy-redacted-secret-v1")));
+      const live = yield* getIdp(undefined, accountId, initial.identityProviderId);
+      expect(live.type).toEqual("github");
+
+      // Rotating the secret is a change even though both values are Redacted.
+      const rotated = githubIdp(Redacted.make("alchemy-redacted-secret-v2"));
+      const plan = yield* stack.plan(rotated);
+      expect(plan.resources.RedactedSecret?.action).toBe("update");
+      const updated = yield* stack.deploy(rotated);
+      expect(updated.identityProviderId).toEqual(initial.identityProviderId);
+
+      // Neither secret was persisted in plain text.
+      const state = yield* yield* State;
+      const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state.get({ stack: stack.name, stage: stack.stage, fqn }),
+      );
+      const persisted = yield* Effect.sync(() => JSON.stringify(rows));
+      expect(persisted).not.toContain("alchemy-redacted-secret-v1");
+      expect(persisted).not.toContain("alchemy-redacted-secret-v2");
 
       yield* stack.destroy();
       yield* expectGone(undefined, accountId, initial.identityProviderId);

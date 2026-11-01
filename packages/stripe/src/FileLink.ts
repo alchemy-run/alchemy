@@ -146,7 +146,7 @@ const toAttrs = (link: StripeFileLink) => ({
 const isMissingFileLink = isMissingStripeResource;
 
 const getById = (link: string) =>
-  GetFileLink({ link }).pipe(Effect.catchIf(isMissingFileLink, () => Effect.succeed(undefined)));
+  GetFileLink({ link }).pipe(Effect.catchIf(isMissingFileLink, () => Effect.undefined));
 
 const paginateFileLinks = Effect.fn(function* (query: { expired?: boolean; file?: string }) {
   const links: StripeFileLink[] = [];

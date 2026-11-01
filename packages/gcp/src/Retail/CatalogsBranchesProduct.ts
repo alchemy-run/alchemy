@@ -205,7 +205,7 @@ export const CatalogsBranchesProduct = Resource<CatalogsBranchesProduct>(
 export class CatalogsBranchesProductNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsBranchesProductNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const priceInfoOf = (
@@ -283,10 +283,10 @@ const toBody = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retail
         .getProjectsLocationsCatalogsBranchesProducts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CatalogsBranchesProductProvider = () =>
   Provider.succeed(CatalogsBranchesProduct, {
@@ -388,7 +388,7 @@ export const CatalogsBranchesProductProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsBranchesProductNotResolved({ name });
+        return yield* new CatalogsBranchesProductNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

@@ -5,11 +5,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyNotReady extends Data.TaggedError("DBProxyNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyProps {
   /**
@@ -202,7 +208,7 @@ export const DBProxyProvider = () =>
           .describeDBProxies({
             DBProxyName: name,
           })
-          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
         return response?.DBProxies?.[0];
       });
 
@@ -212,7 +218,7 @@ export const DBProxyProvider = () =>
           Effect.flatMap((proxy) =>
             proxy?.DBProxyArn
               ? Effect.succeed(proxy)
-              : Effect.fail(new Error(`DB proxy '${name}' not ready`)),
+              : Effect.fail(new DBProxyNotReady({ message: `DB proxy '${name}' not ready` })),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -239,7 +245,7 @@ export const DBProxyProvider = () =>
                   if (!proxy.DBProxyArn) return undefined;
                   const tagResponse = yield* rds
                     .listTagsForResource({ ResourceName: proxy.DBProxyArn })
-                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
                   if (tagResponse === undefined) return undefined;
                   const tags = Object.fromEntries(
                     (tagResponse.TagList ?? [])

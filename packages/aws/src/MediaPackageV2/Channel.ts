@@ -175,7 +175,7 @@ export const ChannelProvider = () =>
             ChannelGroupName: channelGroupName,
             ChannelName: channelName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
@@ -271,7 +271,7 @@ export const ChannelProvider = () =>
             })
             .pipe(
               Effect.map((response) => response.Policy as string | undefined),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (news.policy !== undefined) {
             if (!policiesEqual(observedPolicy, news.policy)) {

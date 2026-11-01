@@ -255,7 +255,7 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPrice({ price }).pipe(Effect.catchIf(isMissingPrice, () => Effect.succeed(undefined)));
+  GetPrice({ price }).pipe(Effect.catchIf(isMissingPrice, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const prices: StripePrice[] = [];

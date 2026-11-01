@@ -40,18 +40,6 @@ export interface KeyValueStore extends Resource<
      * Current comment.
      */
     comment: string;
-    /**
-     * Current status.
-     */
-    status: string;
-    /**
-     * Last modified time.
-     */
-    lastModifiedTime: Date | undefined;
-    /**
-     * Latest entity tag for update/delete operations.
-     */
-    etag: string | undefined;
   },
   never,
   Providers
@@ -91,7 +79,7 @@ export const KeyValueStoreProvider = () =>
         }
         return yield* cloudfront
           .describeKeyValueStore({ Name: store.Name })
-          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
       });
 
       return {
@@ -111,19 +99,16 @@ export const KeyValueStoreProvider = () =>
           if (!current?.KeyValueStore) {
             return undefined;
           }
-          return toAttrs(current.KeyValueStore, current.ETag, name);
+          return toAttrs(current.KeyValueStore, name);
         }),
         // CloudFront is global; `listKeyValueStores` enumerates every store in
-        // the account. The list summary carries no ETag, so it's undefined here
-        // (matches the `etag: string | undefined` attribute).
+        // the account.
         list: () =>
           cloudfront.listKeyValueStores.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.KeyValueStoreList?.Items ?? []).map((store) =>
-                  toAttrs(store, undefined, store.Name),
-                ),
+                (page.KeyValueStoreList?.Items ?? []).map((store) => toAttrs(store, store.Name)),
               ),
             ),
           ),
@@ -158,7 +143,7 @@ export const KeyValueStoreProvider = () =>
               return yield* Effect.die("createKeyValueStore returned no key value store");
             }
             yield* session.note(created.KeyValueStore.Id);
-            return toAttrs(created.KeyValueStore, created.ETag, name);
+            return toAttrs(created.KeyValueStore, name);
           }
 
           // Sync — patch the observed comment via `updateKeyValueStore`
@@ -172,13 +157,13 @@ export const KeyValueStoreProvider = () =>
             return yield* Effect.die("updateKeyValueStore returned no key value store");
           }
           yield* session.note(updated.KeyValueStore.Id);
-          return toAttrs(updated.KeyValueStore, updated.ETag, observed.KeyValueStore.Name);
+          return toAttrs(updated.KeyValueStore, observed.KeyValueStore.Name);
         }),
         delete: Effect.fn(
           function* ({ output }) {
             const current = yield* cloudfront
               .describeKeyValueStore({ Name: output.keyValueStoreName })
-              .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
 
             const etag = current?.ETag;
             if (!etag) {
@@ -212,16 +197,15 @@ const createName = (id: string, props: KeyValueStoreProps) =>
     ? Effect.succeed(props.name)
     : createPhysicalName({ id, maxLength: 64, lowercase: true });
 
+// Status, last-modified time and ETag change on their own (provisioning
+// finishes, every key write bumps them), so they are not attributes: drift
+// would never read a store as unchanged.
 const toAttrs = (
   store: cloudfront.KeyValueStore,
-  etag: string | undefined,
   fallbackName: string,
 ): KeyValueStore["Attributes"] => ({
   keyValueStoreId: store.Id,
   keyValueStoreArn: store.ARN,
   keyValueStoreName: store.Name || fallbackName,
   comment: store.Comment ?? "",
-  status: store.Status ?? "UNKNOWN",
-  lastModifiedTime: store.LastModifiedTime,
-  etag,
 });

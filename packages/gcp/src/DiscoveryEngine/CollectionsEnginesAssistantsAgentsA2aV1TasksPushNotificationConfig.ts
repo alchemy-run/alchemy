@@ -101,7 +101,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig 
 export class CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, configId: string) =>
@@ -113,7 +113,7 @@ const getByName = (tenant: string, name: string) =>
       tenant,
       name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   config: discoveryengine.A2aV1TaskPushNotificationConfig,
@@ -208,7 +208,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
 
       if (current === undefined) {
         return yield* new CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved(
-          { name: fallbackName },
+          { resourceName: fallbackName },
         );
       }
 

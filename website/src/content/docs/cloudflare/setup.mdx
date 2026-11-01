@@ -44,6 +44,12 @@ The OAuth flow asks whether you want to customize scopes — answer
 yes to pick exactly which ones to grant at a multiselect prompt (the
 default set covers typical use).
 
+On Cloudflare's consent page, turn on **Account API Token
+Provisioning** under **Sensitive scopes**. It's off by default, and
+alchemy needs it to mint scoped API tokens on your behalf.
+
+![Cloudflare's consent page with the Account API Token Provisioning toggle under Sensitive scopes](/cloudflare/oauth-api-token-provisioning.png)
+
 Either way the result is saved to your **`default`**
 [profile](/environments/profiles) at `~/.alchemy/profiles.json` — no
 environment variables and no `wrangler login` required.

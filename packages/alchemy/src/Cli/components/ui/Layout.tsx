@@ -19,7 +19,7 @@ export { VirtualList } from "@alchemy.run/sigil";
 
 export type BoxProps = ComponentProps<typeof SigilBox>;
 
-/** Theme-aware Sigil container used by CliKit layouts. */
+/** Theme-aware Sigil container used by CLI layouts. */
 export const Box: ForwardRefExoticComponent<PropsWithoutRef<BoxProps> & RefAttributes<DOMElement>> =
   forwardRef<DOMElement, BoxProps>(function Box(props, ref) {
     const { colors } = useCliEnvironment();

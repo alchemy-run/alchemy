@@ -109,10 +109,8 @@ export const PartnershipProvider = () =>
             head._tag === "Some"
               ? b2bi
                   .getPartnership({ partnershipId: head.value.partnershipId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
-              : Effect.succeed(undefined),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : Effect.undefined,
           ),
         );
 
@@ -134,7 +132,7 @@ export const PartnershipProvider = () =>
           const found = output?.partnershipId
             ? yield* b2bi
                 .getPartnership({ partnershipId: output.partnershipId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -150,7 +148,7 @@ export const PartnershipProvider = () =>
           let live = output?.partnershipId
             ? yield* b2bi
                 .getPartnership({ partnershipId: output.partnershipId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -205,7 +203,7 @@ export const PartnershipProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getPartnership({ partnershipId: s.partnershipId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               ),
             ),
             Stream.filter((item) => item !== undefined),

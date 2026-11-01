@@ -131,15 +131,13 @@ const policyHasOwnership = (policy: biglake.Policy | undefined) =>
 
 const getPolicy = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : biglake
         .getIamPolicyProjectsCatalogs({
           resource: name,
           "options.requestedPolicyVersion": 3,
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "BigLakeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BigLakeResourceNotFound"], () => Effect.undefined));
 
 const toCatalogId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
@@ -267,7 +265,7 @@ export const CatalogProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BiglakeNotResolved({ name });
+        return yield* new BiglakeNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

@@ -48,8 +48,9 @@ export const Parent = Workflow.make("Parent", {
 
 // Each step's name is in the execution's history, which is how the tests see what ran.
 export const WorkflowsLive = Layer.mergeAll(
-  Workflows.layer(Greet, ({ name }) =>
-    Effect.gen(function* () {
+  Workflows.layer(
+    Greet,
+    Effect.fn(function* ({ name }) {
       const greeting = yield* Activity.make({
         name: "greet",
         success: Schema.String,
@@ -59,8 +60,9 @@ export const WorkflowsLive = Layer.mergeAll(
       return greeting;
     }),
   ),
-  Workflows.layer(Nap, ({ seconds }) =>
-    Effect.gen(function* () {
+  Workflows.layer(
+    Nap,
+    Effect.fn(function* ({ seconds }) {
       yield* Activity.make({ name: "before", execute: Effect.void });
       yield* DurableClock.sleep({
         name: "nap",
@@ -71,16 +73,18 @@ export const WorkflowsLive = Layer.mergeAll(
       return "rested";
     }),
   ),
-  Workflows.layer(Approve, () =>
-    Effect.gen(function* () {
+  Workflows.layer(
+    Approve,
+    Effect.fn(function* () {
       yield* Activity.make({ name: "requested", execute: Effect.void });
       const by = yield* DurableDeferred.await(Approval);
       yield* Activity.make({ name: "approved", execute: Effect.void });
       return `approved by ${by}`;
     }),
   ),
-  Workflows.layer(Checkout, ({ decline }) =>
-    Effect.gen(function* () {
+  Workflows.layer(
+    Checkout,
+    Effect.fn(function* ({ decline }) {
       yield* Activity.make({ name: "reserve", execute: Effect.void }).pipe(
         Checkout.withCompensation(() => Activity.make({ name: "release", execute: Effect.void })),
       );
@@ -94,8 +98,9 @@ export const WorkflowsLive = Layer.mergeAll(
       });
     }),
   ),
-  Workflows.layer(Parent, ({ id }) =>
-    Effect.gen(function* () {
+  Workflows.layer(
+    Parent,
+    Effect.fn(function* ({ id }) {
       const greeting = yield* Greet.execute({ id: `${id}-child`, name: "child" });
       return `parent got ${greeting}`;
     }),

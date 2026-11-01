@@ -266,7 +266,7 @@ export const OriginEndpointProvider = () =>
             ChannelName: channelName,
             OriginEndpointName: originEndpointName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

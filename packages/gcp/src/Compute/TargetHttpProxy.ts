@@ -194,7 +194,7 @@ const toAttrs = (proxy: compute.TargetHttpProxy, project: string) => {
 const getByName = (project: string, targetHttpProxy: string) =>
   compute
     .getTargetHttpProxies({ project, targetHttpProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetHttpProxyProvider = () =>
   Provider.succeed(TargetHttpProxy, {
@@ -281,7 +281,7 @@ export const TargetHttpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, targetHttpProxyName);
       }
@@ -349,7 +349,7 @@ export const TargetHttpProxyProvider = () =>
           project: env.project,
           targetHttpProxy: output.targetHttpProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

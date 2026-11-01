@@ -262,13 +262,16 @@ export const Redis: typeof RedisResource = Object.assign(
   RedisResource,
 );
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Errors";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -385,13 +388,13 @@ const serviceDelete = Query.fn((id: string) => Railway.serviceDelete({ id }));
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -532,11 +535,14 @@ const toAttrs = (input: {
   deploymentStatus: input.instance?.latestDeployment?.status,
 });
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   command as redisCommand,
   connectionUrl as redisConnectionUrl,
   run as runRedisCommand,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Protocol";
 
 export const RedisProvider = () =>
   Provider.succeed(Redis, {
@@ -679,12 +685,12 @@ export const RedisProvider = () =>
           name,
           source: { image },
           variables: env,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new RedisNotCreated({ name, projectId });
+        return yield* new RedisNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

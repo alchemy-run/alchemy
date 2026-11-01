@@ -5,8 +5,8 @@ import {
   encodeValue,
   fieldPath,
 } from "@alchemy.run/gcp/Firestore/Values";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: GCP.providers() });

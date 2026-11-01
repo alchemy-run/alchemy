@@ -10,8 +10,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type TargetGroupName = string;
 export type TargetGroupArn =
@@ -84,6 +87,16 @@ export interface TargetGroup extends Resource<
     vpcId: string | undefined;
     /** The tags applied to the target group. */
     tags: Record<string, string>;
+    /**
+     * The live values of the keys declared in `attributes`. Undeclared
+     * attributes are left out so AWS defaults never register as drift.
+     */
+    attributes?: Record<string, string>;
+    /**
+     * The health-check settings the props declare, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    healthCheck?: Partial<HealthCheckSettings>;
   },
   never,
   Providers
@@ -141,6 +154,46 @@ export interface TargetGroup extends Resource<
  */
 export const TargetGroup = Resource<TargetGroup>("AWS.ELBv2.TargetGroup");
 
+type HealthCheckSettings = Pick<
+  elbv2.TargetGroup,
+  | "HealthCheckPath"
+  | "HealthCheckPort"
+  | "HealthCheckProtocol"
+  | "HealthCheckEnabled"
+  | "HealthCheckIntervalSeconds"
+  | "HealthCheckTimeoutSeconds"
+  | "HealthyThresholdCount"
+  | "UnhealthyThresholdCount"
+  | "Matcher"
+>;
+
+/**
+ * The health-check settings reconcile converges (those the props declare),
+ * taken from `settings`. `read` and `reconcile` share it so a converged
+ * target group reads unchanged.
+ */
+const observeHealthCheck = (
+  settings: HealthCheckSettings,
+  props: TargetGroupProps | undefined,
+): Partial<HealthCheckSettings> =>
+  plainJson({
+    HealthCheckPath: props?.healthCheckPath === undefined ? undefined : settings.HealthCheckPath,
+    HealthCheckPort: props?.healthCheckPort === undefined ? undefined : settings.HealthCheckPort,
+    HealthCheckProtocol:
+      props?.healthCheckProtocol === undefined ? undefined : settings.HealthCheckProtocol,
+    HealthCheckEnabled:
+      props?.healthCheckEnabled === undefined ? undefined : settings.HealthCheckEnabled,
+    HealthCheckIntervalSeconds:
+      props?.healthCheckInterval === undefined ? undefined : settings.HealthCheckIntervalSeconds,
+    HealthCheckTimeoutSeconds:
+      props?.healthCheckTimeout === undefined ? undefined : settings.HealthCheckTimeoutSeconds,
+    HealthyThresholdCount:
+      props?.healthyThresholdCount === undefined ? undefined : settings.HealthyThresholdCount,
+    UnhealthyThresholdCount:
+      props?.unhealthyThresholdCount === undefined ? undefined : settings.UnhealthyThresholdCount,
+    Matcher: props?.matcher === undefined ? undefined : settings.Matcher,
+  });
+
 export const TargetGroupProvider = () =>
   Provider.effect(
     TargetGroup,
@@ -149,6 +202,19 @@ export const TargetGroupProvider = () =>
         props.name
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
+
+      // The observed values of the declared attribute keys; skips the call
+      // when nothing is declared.
+      const readAttributes = Effect.fn(function* (
+        targetGroupArn: string,
+        declared: Record<string, string> | undefined,
+      ) {
+        if (!declared || Object.keys(declared).length === 0) return undefined;
+        const observed = yield* elbv2.describeTargetGroupAttributes({
+          TargetGroupArn: targetGroupArn,
+        });
+        return observedAttributes(declared, observed.Attributes);
+      });
 
       return {
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
@@ -180,7 +246,7 @@ export const TargetGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           if (!output) {
             return undefined;
           }
@@ -188,9 +254,21 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               TargetGroupArns: [output.targetGroupArn],
             })
-            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
           const targetGroup = described?.TargetGroups?.[0];
           if (!targetGroup?.TargetGroupArn) {
+            return undefined;
+          }
+          const attributes = yield* readAttributes(output.targetGroupArn, olds?.attributes).pipe(
+            Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(null)),
+          );
+          if (attributes === null) {
+            return undefined;
+          }
+          const tags = yield* readElbTags(output.targetGroupArn).pipe(
+            Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
             return undefined;
           }
           return {
@@ -199,6 +277,9 @@ export const TargetGroupProvider = () =>
             protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
             vpcId: targetGroup.VpcId,
+            tags,
+            attributes,
+            healthCheck: observeHealthCheck(targetGroup, olds),
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -223,11 +304,7 @@ export const TargetGroupProvider = () =>
                 Effect.gen(function* () {
                   const tagDescriptions = yield* elbv2
                     .describeTags({ ResourceArns: [tg.TargetGroupArn] })
-                    .pipe(
-                      Effect.catchTag("TargetGroupNotFoundException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    );
+                    .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
                   const tags = Object.fromEntries(
                     (tagDescriptions?.TagDescriptions?.[0]?.Tags ?? [])
                       .filter(
@@ -261,7 +338,7 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               Names: [name],
             })
-            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
           let targetGroup = described?.TargetGroups?.[0];
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,
@@ -334,16 +411,19 @@ export const TargetGroupProvider = () =>
             });
           }
 
-          // Sync attributes — observed ↔ desired. Always apply when desired
-          // attrs are non-empty.
-          if (news.attributes && Object.keys(news.attributes).length > 0) {
-            yield* elbv2.modifyTargetGroupAttributes({
+          // Sync attributes — diff the observed values of the declared keys
+          // against desired and apply only the delta.
+          let attributes = yield* readAttributes(targetGroupArn, news.attributes);
+          const attributeChanges = attributeDelta(news.attributes, attributes);
+          if (attributeChanges.length > 0) {
+            const modified = yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: targetGroupArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: attributeChanges,
             });
+            attributes = {
+              ...attributes,
+              ...observedAttributes(news.attributes, modified.Attributes),
+            };
           }
 
           // Sync tags — diff observed cloud tags against desired.
@@ -381,6 +461,8 @@ export const TargetGroupProvider = () =>
             targetType: targetGroup.TargetType!,
             vpcId: targetGroup.VpcId,
             tags: desiredTags,
+            attributes,
+            healthCheck: observeHealthCheck(desiredHc, news),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

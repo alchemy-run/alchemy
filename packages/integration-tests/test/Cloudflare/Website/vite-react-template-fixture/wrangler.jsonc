@@ -1,0 +1,9 @@
+{
+	"name": "react-app",
+	"main": "worker/index.ts",
+	"compatibility_date": "2025-10-08",
+	"assets": { "not_found_handling": "single-page-application" },
+	"observability": {
+		"enabled": true
+	}
+}

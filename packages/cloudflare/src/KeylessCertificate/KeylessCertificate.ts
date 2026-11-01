@@ -392,7 +392,7 @@ const getKeylessCertificate = (zoneId: string, keylessCertificateId: string) =>
     Effect.map((observed): ObservedKeyless | undefined =>
       observed.status === "deleted" ? undefined : observed,
     ),
-    Effect.catchTag("KeylessCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("KeylessCertificateNotFound", () => Effect.undefined),
   );
 
 /**

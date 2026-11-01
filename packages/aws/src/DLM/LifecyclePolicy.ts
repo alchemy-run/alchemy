@@ -634,7 +634,7 @@ export const LifecyclePolicyProvider = () =>
       const getOrUndefined = Effect.fn(function* (policyId: string) {
         return yield* dlm.getLifecyclePolicy({ PolicyId: policyId }).pipe(
           Effect.map((r) => r.Policy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -703,7 +703,7 @@ export const LifecyclePolicyProvider = () =>
               Policies ?? [],
               (summary) =>
                 summary.PolicyId === undefined
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : getOrUndefined(summary.PolicyId).pipe(
                       Effect.map((policy) =>
                         policy?.PolicyId !== undefined &&

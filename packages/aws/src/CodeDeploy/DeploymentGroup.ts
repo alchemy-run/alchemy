@@ -255,7 +255,7 @@ export const DeploymentGroupProvider = () =>
           .pipe(
             Effect.catchTag(
               ["DeploymentGroupDoesNotExistException", "ApplicationDoesNotExistException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
         return response?.deploymentGroupInfo;
@@ -349,9 +349,7 @@ export const DeploymentGroupProvider = () =>
                 })),
               }),
             ).pipe(
-              Effect.catchTag("DeploymentGroupAlreadyExistsException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("DeploymentGroupAlreadyExistsException", () => Effect.undefined),
             );
             group = yield* getGroup(appName, name);
           } else {

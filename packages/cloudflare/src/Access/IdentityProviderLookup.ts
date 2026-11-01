@@ -44,7 +44,7 @@ export const getIdp = (zoneId: string | undefined, accountId: string, identityPr
     : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
   ).pipe(
     Effect.map((idp): ObservedIdp | undefined => idp as ObservedIdp),
-    Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.undefined),
   );
 
 /**

@@ -1,8 +1,12 @@
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Teams from "@distilled.cloud/github/teams";
+import * as Users from "@distilled.cloud/github/users";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface EnvironmentProps {
@@ -125,7 +129,7 @@ export interface Environment extends Resource<
  * repositories require GitHub Pro, Team, or Enterprise, and protection
  * rules on private repositories require Team or Enterprise.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope.
  * ### Creating an Environment
@@ -238,216 +242,144 @@ export const EnvironmentProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news, olds }) {
+        const scope = { owner: news.owner, repo: news.repository, environment_name: news.name };
 
-      // Resolve reviewer logins/slugs to the numeric IDs the API expects.
-      const reviewers = yield* Effect.tryPromise({
-        try: async () => {
-          if (news.reviewers === undefined) return null;
-          const users = await Promise.all(
-            (news.reviewers.users ?? []).map(async (username) => {
-              const { data } = await octokit.rest.users.getByUsername({
-                username,
-              });
-              return { type: "User" as const, id: data.id };
-            }),
-          );
-          const teams = await Promise.all(
-            (news.reviewers.teams ?? []).map(async (team_slug) => {
-              const { data } = await octokit.rest.teams.getByName({
-                org: news.owner,
-                team_slug,
-              });
-              return { type: "Team" as const, id: data.id };
-            }),
-          );
-          return [...users, ...teams];
-        },
-        catch: (e) => e as Error,
-      });
+        // Resolve reviewer logins/slugs to the numeric IDs the API expects.
+        const reviewers =
+          news.reviewers === undefined
+            ? null
+            : [
+                ...(yield* Effect.forEach(news.reviewers.users ?? [], (username) =>
+                  Users.getByUsername({ username }).pipe(
+                    Effect.map((user) => ({ type: "User" as const, id: user.id })),
+                  ),
+                )),
+                ...(yield* Effect.forEach(news.reviewers.teams ?? [], (team_slug) =>
+                  Teams.getByName({ org: news.owner, team_slug }).pipe(
+                    Effect.map((team) => ({ type: "Team" as const, id: team.id })),
+                  ),
+                )),
+              ];
 
-      // Ensure & Sync — the PUT is a full upsert of the environment's
-      // protection configuration. Protection rules are only sent when set now
-      // or previously (olds): on private repos without GitHub Enterprise,
-      // sending them at all — even as defaults — is rejected as a billing
-      // error. A prop that was set before and is now removed is sent as its
-      // explicit default so it converges. `prevent_self_review` and
-      // `reviewers` are sent together: GitHub rejects the former when the
-      // latter is omitted (an explicit `null` is accepted).
-      const sendWaitTimer = news.waitTimer !== undefined || olds?.waitTimer !== undefined;
-      const sendReviewers =
-        news.reviewers !== undefined ||
-        news.preventSelfReview !== undefined ||
-        olds?.reviewers !== undefined ||
-        olds?.preventSelfReview !== undefined;
-      const environment = yield* Effect.tryPromise({
-        try: async () => {
-          const { data } = await octokit.rest.repos.createOrUpdateEnvironment({
-            owner: news.owner,
-            repo: news.repository,
-            environment_name: news.name,
-            ...(sendWaitTimer ? { wait_timer: news.waitTimer ?? 0 } : {}),
-            ...(sendReviewers
-              ? {
-                  prevent_self_review: news.preventSelfReview ?? false,
-                  reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
-                }
-              : {}),
-            deployment_branch_policy:
-              news.deploymentBranchPolicy === undefined
-                ? null
-                : "protectedBranches" in news.deploymentBranchPolicy
-                  ? { protected_branches: true, custom_branch_policies: false }
-                  : { protected_branches: false, custom_branch_policies: true },
-          });
-          return data;
-        },
-        catch: (e) => e as Error,
-      });
-
-      // Sync — custom branch policies live behind dedicated endpoints. Diff
-      // the observed patterns against the desired list; create the missing
-      // ones and delete the extras. Skipped entirely unless the policy mode
-      // is custom (GitHub drops the policies itself when the mode changes).
-      if (
-        news.deploymentBranchPolicy !== undefined &&
-        "customBranchPolicies" in news.deploymentBranchPolicy
-      ) {
-        const desired = news.deploymentBranchPolicy.customBranchPolicies;
-        yield* Effect.tryPromise({
-          try: async () => {
-            const observed = await octokit.paginate(
-              octokit.rest.repos.listDeploymentBranchPolicies,
-              {
-                owner: news.owner,
-                repo: news.repository,
-                environment_name: news.name,
-                per_page: 100,
-              },
-            );
-            const observedNames = new Set(observed.map((policy) => policy.name));
-            for (const name of desired) {
-              if (!observedNames.has(name)) {
-                await octokit.rest.repos.createDeploymentBranchPolicy({
-                  owner: news.owner,
-                  repo: news.repository,
-                  environment_name: news.name,
-                  name,
-                  type: "branch",
-                });
+        // Ensure & Sync — the PUT is a full upsert of the environment's
+        // protection configuration. Protection rules are only sent when set now
+        // or previously (olds): on private repos without GitHub Enterprise,
+        // sending them at all — even as defaults — is rejected as a billing
+        // error. A prop that was set before and is now removed is sent as its
+        // explicit default so it converges. `prevent_self_review` and
+        // `reviewers` are sent together: GitHub rejects the former when the
+        // latter is omitted (an explicit `null` is accepted).
+        const sendWaitTimer = news.waitTimer !== undefined || olds?.waitTimer !== undefined;
+        const sendReviewers =
+          news.reviewers !== undefined ||
+          news.preventSelfReview !== undefined ||
+          olds?.reviewers !== undefined ||
+          olds?.preventSelfReview !== undefined;
+        const environment = yield* Repos.createOrUpdateEnvironment({
+          ...scope,
+          ...(sendWaitTimer ? { wait_timer: news.waitTimer ?? 0 } : {}),
+          ...(sendReviewers
+            ? {
+                prevent_self_review: news.preventSelfReview ?? false,
+                reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
               }
-            }
-            for (const policy of observed) {
-              if (
-                policy.id !== undefined &&
-                policy.name !== undefined &&
-                !desired.includes(policy.name)
-              ) {
-                await octokit.rest.repos.deleteDeploymentBranchPolicy({
-                  owner: news.owner,
-                  repo: news.repository,
-                  environment_name: news.name,
-                  branch_policy_id: policy.id,
-                });
-              }
-            }
-          },
-          catch: (e) => e as Error,
+            : {}),
+          deployment_branch_policy:
+            news.deploymentBranchPolicy === undefined
+              ? null
+              : "protectedBranches" in news.deploymentBranchPolicy
+                ? { protected_branches: true, custom_branch_policies: false }
+                : { protected_branches: false, custom_branch_policies: true },
         });
-      }
 
-      return {
-        environmentId: environment.id,
-        nodeId: environment.node_id,
-        name: environment.name,
-        htmlUrl: environment.html_url,
-        createdAt: environment.created_at,
-        updatedAt: environment.updated_at,
-      };
-    }),
+        // Sync — custom branch policies live behind dedicated endpoints. Diff
+        // the observed patterns against the desired list; create the missing
+        // ones and delete the extras. Skipped entirely unless the policy mode
+        // is custom (GitHub drops the policies itself when the mode changes).
+        if (
+          news.deploymentBranchPolicy !== undefined &&
+          "customBranchPolicies" in news.deploymentBranchPolicy
+        ) {
+          const desired = news.deploymentBranchPolicy.customBranchPolicies;
+          const observed = yield* Stream.runCollect(
+            Repos.listDeploymentBranchPolicies.items({ ...scope, per_page: 100 }),
+          );
+          const observedNames = new Set(observed.map((policy) => policy.name));
+          for (const name of desired) {
+            if (!observedNames.has(name)) {
+              yield* Repos.createDeploymentBranchPolicy({ ...scope, name, type: "branch" });
+            }
+          }
+          for (const policy of observed) {
+            if (
+              policy.id !== undefined &&
+              policy.name !== undefined &&
+              !desired.includes(policy.name)
+            ) {
+              yield* Repos.deleteDeploymentBranchPolicy({ ...scope, branch_policy_id: policy.id });
+            }
+          }
+        }
+
+        return {
+          environmentId: environment.id,
+          nodeId: environment.node_id,
+          name: environment.name,
+          htmlUrl: environment.html_url,
+          createdAt: environment.created_at,
+          updatedAt: environment.updated_at,
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every environment across the repositories the token can see —
     // environments are keyed by {owner, repository, name} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                // `octokit.paginate` can't flatten this endpoint's
-                // `{ total_count, environments }` envelope, so page manually
-                // until a short page signals the end.
-                const environments = [];
-                for (let page = 1; ; page++) {
-                  const { data } = await octokit.rest.repos.getAllEnvironments({
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                    page,
-                  });
-                  const batch = data.environments ?? [];
-                  environments.push(
-                    ...batch.map((environment) => ({
-                      environmentId: environment.id,
-                      nodeId: environment.node_id,
-                      name: environment.name,
-                      htmlUrl: environment.html_url,
-                      createdAt: environment.created_at,
-                      updatedAt: environment.updated_at,
-                    })),
-                  );
-                  if (batch.length < 100) break;
-                }
-                return environments;
-              } catch (error: any) {
-                // Repos without environments support (plan limits) or where
-                // the token lacks access reject with 403/404 — skip them
-                // rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Stream.runCollect(
+            Repos.getAllEnvironments.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
+          ).pipe(
+            Effect.map((environments) =>
+              environments.map((environment) => ({
+                environmentId: environment.id,
+                nodeId: environment.node_id,
+                name: environment.name,
+                htmlUrl: environment.html_url,
+                createdAt: environment.created_at,
+                updatedAt: environment.updated_at,
+              })),
+            ),
+            // Repos without environments support (plan limits) or where the
+            // token lacks access reject with 403/404 — skip them rather than
+            // failing the whole enumeration.
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.deleteAnEnvironment({
-              owner: olds.owner,
-              repo: olds.repository,
-              environment_name: olds.name,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.deleteAnEnvironment({
+          owner: olds.owner,
+          repo: olds.repository,
+          environment_name: olds.name,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

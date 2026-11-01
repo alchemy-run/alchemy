@@ -1,6 +1,6 @@
 ---
 title: React Router
-description: Deploy React Router v7 — including React Server Components — to Cloudflare with Cloudflare.Website.Vite and viteEnvironments.
+description: Deploy React Router v8 — including React Server Components — to Cloudflare with Cloudflare.Website.Vite and viteEnvironments.
 sidebar:
   order: 6
 ---
@@ -10,7 +10,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 export const deps = `react react-dom react-router`;
 export const devDeps = `vite @vitejs/plugin-react @vitejs/plugin-rsc`;
 
-[React Router](https://reactrouter.com) v7 builds through Vite, so
+[React Router](https://reactrouter.com) v8 builds through Vite, so
 [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite) deploys it — one
 resource, no Wrangler config, no manual entrypoint. In React Server
 Components mode the build emits **multiple server environments** (`rsc`
@@ -41,7 +41,7 @@ renderer, and the Worker handler.
 
 ## Install the dependencies
 
-React Server Components need React Router 7.16+ and the RSC Vite
+React Server Components need React Router 8+ and the RSC Vite
 plugin:
 
 <PackageManagers add={deps} dev={devDeps} />

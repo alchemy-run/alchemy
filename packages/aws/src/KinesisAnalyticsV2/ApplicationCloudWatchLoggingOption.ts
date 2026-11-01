@@ -103,7 +103,7 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
 const describeApplicationDetail = Effect.fn(function* (applicationName: string) {
   const response = yield* analytics
     .describeApplication({ ApplicationName: applicationName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.ApplicationDetail;
 });
 

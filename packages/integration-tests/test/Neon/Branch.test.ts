@@ -3,6 +3,8 @@ import type { PostgresOrigin } from "@alchemy.run/neon/PostgresOrigin";
 import { Project } from "@alchemy.run/neon/Project";
 import { waitForOperations } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createProjectBranch,
   deleteProjectBranch,
@@ -14,11 +16,9 @@ import {
   updateProjectBranch,
   updateProjectEndpoint,
 } from "@distilled.cloud/neon";
-import { describe, expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
@@ -318,7 +318,7 @@ describe.concurrent(
             fqn: "ObservedBranch",
             instanceId: "observed-branch",
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
           };
           const news = {
             project: { projectId: initial.project.projectId },
@@ -493,8 +493,6 @@ describe.concurrent(
               output: undefined,
               bindings: [],
               session: {
-                emit: () => Effect.void,
-                done: () => Effect.void,
                 note: () => Effect.void,
               },
             })
@@ -742,7 +740,7 @@ describe.concurrent(
             fqn: "LateBranch",
             instanceId: "late-branch",
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
           };
           const news = { project: { projectId: initial.project.projectId }, name, protected: true };
           const late = yield* provider

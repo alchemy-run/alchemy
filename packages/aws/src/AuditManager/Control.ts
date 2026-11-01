@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
+
+export class ControlUnexpectedResponse extends Data.TaggedError("ControlUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The keyword used to search evidence for a control mapping source.
@@ -187,7 +193,7 @@ const toAttributes = (control: auditmanager.Control): Control["Attributes"] => (
 const readControlById = Effect.fn(function* (controlId: string) {
   const response = yield* auditmanager
     .getControl({ controlId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.control;
 });
 
@@ -278,9 +284,9 @@ export const ControlProvider = () =>
             });
             control = created.control;
             if (!control?.id) {
-              return yield* Effect.fail(
-                new Error(`CreateControl for '${name}' returned no control`),
-              );
+              return yield* new ControlUnexpectedResponse({
+                message: `CreateControl for '${name}' returned no control`,
+              });
             }
             yield* session.note(`Created control ${name} (${control.id})`);
           }

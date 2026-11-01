@@ -1,4 +1,6 @@
 import * as Namespace from "alchemy/Namespace";
+import { resolveAstroOutput } from "alchemy/Website/AstroOutput";
+import * as Effect from "effect/Effect";
 import {
   makeFrameworkSite,
   staticConfigFromAssets,
@@ -26,8 +28,10 @@ export interface AstroProps extends FrameworkSiteProps {
      * Astro output target. `"server"` renders pages on demand in the
      * container; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every page at
-     * build time and deploys assets-only (no framework handler).
-     * @default "server"
+     * build time and deploys assets-only (no framework handler). Overrides
+     * the `output` in your `astro.config.*`; leave it unset to use the
+     * file's value.
+     * @default the config file's `output`, else `"server"`
      */
     output?: "server" | "static";
     /** Source directory, relative to `rootDir`. @default "./src" */
@@ -46,9 +50,9 @@ export interface AstroProps extends FrameworkSiteProps {
  * SSR bundle (assets first, then the Astro fetch handler) on one
  * `Railway.Service`. Pages render on demand by default
  * (`output: "server"`); pages that `export const prerender = true` are
- * prerendered at build time and served as static files. With
- * `astro: { output: "static" }` every page is prerendered and the deploy
- * is assets-only.
+ * prerendered at build time and served as static files. When your
+ * `astro.config.*` or `astro: { output: "static" }` declares a static
+ * site, every page is prerendered and the deploy is assets-only.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
  * `@alchemy.run/frontend-frameworks/astro/node` deploy target (a Node
@@ -90,13 +94,16 @@ export interface AstroProps extends FrameworkSiteProps {
  * @resource
  * @product Website
  */
-export const Astro = (id: string, props: AstroProps = {}) => {
-  const output = props.astro?.output ?? "server";
-  return makeFrameworkSite(id, props, {
-    name: "Astro",
-    framework: ASTRO_FRAMEWORK_SPECIFIER,
-    target: ASTRO_NODE_TARGET_SPECIFIER,
-    options: { astro: { ...props.astro, output } },
-    static: output === "static" ? staticConfigFromAssets(props.assets) : undefined,
-  }).pipe(Namespace.push(id));
-};
+export const Astro = (id: string, props: AstroProps = {}) =>
+  resolveAstroOutput({ rootDir: props.rootDir, output: props.astro?.output }).pipe(
+    Effect.flatMap((output) =>
+      makeFrameworkSite(id, props, {
+        name: "Astro",
+        framework: ASTRO_FRAMEWORK_SPECIFIER,
+        target: ASTRO_NODE_TARGET_SPECIFIER,
+        options: { astro: { ...props.astro, output } },
+        static: output === "static" ? staticConfigFromAssets(props.assets) : undefined,
+      }),
+    ),
+    Namespace.push(id),
+  );

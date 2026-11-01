@@ -171,7 +171,7 @@ export const ContactProvider = () =>
       const getContact = (arn: string) =>
         contacts
           .getContact({ ContactId: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const readTags = (arn: string) =>
         contacts.listTagsForResource({ ResourceARN: arn }).pipe(
@@ -281,7 +281,7 @@ export const ContactProvider = () =>
               .getContactPolicy({ ContactArn: contact.ContactArn })
               .pipe(
                 Effect.map((r) => r.Policy),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
             if (
               observedPolicy === undefined ||

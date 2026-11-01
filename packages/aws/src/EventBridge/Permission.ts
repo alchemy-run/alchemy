@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 
@@ -62,6 +63,12 @@ export interface Permission extends Resource<
 
 export const Permission = Resource<Permission>("AWS.EventBridge.Permission");
 
+/** An event bus resource policy is not valid JSON. */
+export class InvalidEventBusPolicy extends Data.TaggedError("InvalidEventBusPolicy")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 export const PermissionProvider = () =>
   Provider.effect(
     Permission,
@@ -111,7 +118,8 @@ export const PermissionProvider = () =>
                       JSON.parse(res.Policy!) as {
                         Statement?: { Sid?: string } | { Sid?: string }[];
                       },
-                    catch: (cause) => new Error("invalid policy", { cause }),
+                    catch: (cause) =>
+                      new InvalidEventBusPolicy({ message: "invalid policy", cause }),
                   }).pipe(
                     // A malformed/non-JSON policy yields no permissions
                     // rather than failing the whole enumeration.

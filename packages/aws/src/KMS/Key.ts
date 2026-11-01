@@ -413,7 +413,7 @@ export const KeyProvider = () =>
       const remaining = yield* Effect.repeat(
         kms.describeKey({ KeyId: output.keyId }).pipe(
           Effect.map((response) => response.KeyMetadata?.KeyState),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         ),
         {
           schedule: Schedule.fixed("250 millis"),
@@ -439,7 +439,7 @@ const readKey = Effect.fn(function* ({
 }) {
   const described = yield* kms
     .describeKey({ KeyId: keyId })
-    .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
   const metadata = described?.KeyMetadata;
   if (!metadata?.Arn) return undefined;
@@ -552,9 +552,9 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
       periodInDays: response.RotationPeriodInDays,
     })),
     Effect.catchTags({
-      UnsupportedOperationException: () => Effect.succeed(undefined),
-      KMSInvalidStateException: () => Effect.succeed(undefined),
-      NotFoundException: () => Effect.succeed(undefined),
+      UnsupportedOperationException: () => Effect.undefined,
+      KMSInvalidStateException: () => Effect.undefined,
+      NotFoundException: () => Effect.undefined,
     }),
   );
 });
@@ -563,8 +563,8 @@ const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
     Effect.map((response) => response.Policy),
     Effect.catchTags({
-      KMSInvalidStateException: () => Effect.succeed(undefined),
-      NotFoundException: () => Effect.succeed(undefined),
+      KMSInvalidStateException: () => Effect.undefined,
+      NotFoundException: () => Effect.undefined,
     }),
   );
 });

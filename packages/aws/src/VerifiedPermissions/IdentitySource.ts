@@ -305,7 +305,7 @@ export const IdentitySourceProvider = () =>
       const observe = Effect.fn(function* (policyStoreId: string, identitySourceId: string) {
         return yield* avp
           .getIdentitySource({ policyStoreId, identitySourceId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return IdentitySource.Provider.of({

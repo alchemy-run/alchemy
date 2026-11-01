@@ -1,5 +1,4 @@
 import type * as s3control from "@distilled.cloud/aws/s3-control";
-import type * as sts from "@distilled.cloud/aws/sts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
@@ -30,10 +29,7 @@ export interface ListAccessPoints extends Binding.Service<
   () => Effect.Effect<
     (
       request?: Omit<s3control.ListAccessPointsRequest, "AccountId">,
-    ) => Effect.Effect<
-      s3control.ListAccessPointsResult,
-      s3control.ListAccessPointsError | sts.GetCallerIdentityError
-    >
+    ) => Effect.Effect<s3control.ListAccessPointsResult, s3control.ListAccessPointsError>
   >
 > {}
 export const ListAccessPoints = Binding.Service<ListAccessPoints>("AWS.S3Control.ListAccessPoints");

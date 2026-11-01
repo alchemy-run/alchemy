@@ -397,7 +397,7 @@ export const PipeProvider = () =>
       const describeOrUndefined = (pipeName: string) =>
         pipes
           .describePipe({ Name: pipeName })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       /**
        * Poll (bounded, ~60s) until the pipe leaves its transitional state.
