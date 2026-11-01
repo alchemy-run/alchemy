@@ -65,6 +65,8 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
           install: { rivetkit: RIVETKIT_VERSION },
         },
         public: false,
+        // Nodes only dial out: nothing listens for the proxy to check.
+        services: [],
         region: options.region ?? "iad",
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 1024 },

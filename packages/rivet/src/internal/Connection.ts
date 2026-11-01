@@ -23,7 +23,8 @@ export interface ConnectionProps {
  * Provide the Rivet SDK credentials for one control plane, and wait out a
  * control plane that is still starting: it refuses connections for a few
  * seconds, then reports healthy about a minute before its storage accepts
- * commands (`StorageOverloaded`). Behind a load balancer the same window
+ * commands (`StorageOverloaded`), and times storage commands out while its
+ * engines find each other (`CommandDeadlineElapsed`). Behind a load balancer the same window
  * shows up as 502/503/504 until its instances boot and pass health checks,
  * which takes several minutes on fresh instances (a three-engine cluster forms
  * after its engines boot). A resource reconciled
@@ -35,7 +36,7 @@ export const withConnection =
     options: {
       /**
        * How long to wait out a control plane that answers but is still
-       * forming (`StorageOverloaded`, 429).
+       * forming (`StorageOverloaded`, `CommandDeadlineElapsed`, 429).
        * @default "10 minutes"
        */
       readonly wait?: Duration.Input;
@@ -66,7 +67,10 @@ export const withConnection =
       }),
       // Answering but still forming: always worth the whole wait.
       Effect.retry({
-        while: (error) => error._tag === "StorageOverloaded" || error._tag === "TooManyRequests",
+        while: (error) =>
+          error._tag === "StorageOverloaded" ||
+          error._tag === "CommandDeadlineElapsed" ||
+          error._tag === "TooManyRequests",
         schedule: Schedule.spaced("5 seconds").pipe(
           Schedule.upTo({ duration: options.wait ?? "10 minutes" }),
         ),
