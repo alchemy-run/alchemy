@@ -13,10 +13,9 @@
  * state. The router's package contributes the {@link IngressAdapter} behind
  * the `type` through {@link Contributions.Contributions.ingress}, and the
  * resource's local provider resolves it inside the sidecar with
- * {@link origin} and {@link route}. Core and the resources never import a
- * router package.
+ * {@link route}. Core and the resources never import a router package.
  *
- * Both calls build the adapter from its {@link IngressFactory} on every
+ * {@link route} builds the adapter from its {@link IngressFactory} on every
  * call, so a factory's `make` stays cheap and anything shared between calls
  * (a routes file, a proxy handle) lives outside the adapter value.
  */
@@ -90,22 +89,13 @@ export interface IngressTarget {
 }
 
 /**
- * A router, as `alchemy dev` uses it. Every method fails with
- * {@link IngressError}.
+ * A router, as `alchemy dev` uses it. It fails with {@link IngressError}.
  */
 export interface IngressAdapter {
   /**
-   * Where `target` answers. A function of the target and the adapter's
-   * options only: it needs no listener, and it returns what {@link attach}
-   * returns for the same target. A caller that needs the address before the
-   * listener exists (a cycle's pre-create, a Worker binding to its own URL)
-   * asks here.
-   */
-  readonly origin: (target: IngressTarget) => Effect.Effect<string, IngressError>;
-  /**
-   * Route the target's {@link origin} to `listener` and return the origin.
-   * The route lasts until the `Scope` closes. Fail when the route can't be
-   * made, so the resource never advertises an origin that isn't routed.
+   * Route `target` to `listener` and return the origin it answers at. The
+   * route lasts until the `Scope` closes. Fail when the route can't be made,
+   * so the resource never advertises an origin that isn't routed.
    *
    * - Attaching the same `fqn` and `listener` again changes nothing.
    * - Attaching an `fqn` to a new listener replaces its route.
@@ -223,23 +213,10 @@ const adapterFor = Effect.fn("Ingress.adapterFor")(function* (config: IngressCon
 });
 
 /**
- * Where `target` answers under `config`'s adapter, before any listener
- * exists. Fails with {@link IngressAdapterNotFound} when the adapter can't be
- * resolved.
- */
-export const origin = Effect.fn("Ingress.origin")(function* (
-  config: IngressConfig,
-  target: IngressTarget,
-) {
-  const adapter = yield* adapterFor(config);
-  return yield* adapter.origin(target);
-});
-
-/**
- * Route `target`'s origin to `listener` until the `Scope` closes, and return
- * the origin. Fails with {@link IngressAdapterNotFound} when the adapter can't
- * be resolved and with {@link IngressError} when it can't route, so the caller
- * never advertises an unrouted URL.
+ * Route `target` to `listener` until the `Scope` closes, and return the
+ * origin it answers at. Fails with {@link IngressAdapterNotFound} when the
+ * adapter can't be resolved and with {@link IngressError} when it can't
+ * route, so the caller never advertises an unrouted URL.
  */
 export const route = Effect.fn("Ingress.route")(function* (
   config: IngressConfig,

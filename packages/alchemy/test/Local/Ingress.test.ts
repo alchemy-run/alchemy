@@ -36,27 +36,12 @@ const withForwarder = <A, E>(
   }).pipe(Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)), Effect.scoped);
 
 describe("Ingress", { tags: ["unit", "local"] }, () => {
-  it.live("origin answers before any listener exists", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const origin = yield* Ingress.origin(config, target);
-        expect(origin).toBe(`http://dev-alice.api.myapp.localhost:${forwarder.port}`);
-        expect(forwarder.routes().size).toBe(0);
-
-        // The listener shows up later; the origin does not move.
-        const listener = yield* makeListener("api");
-        const routed = yield* Ingress.route(config, target, listener);
-        expect(routed).toBe(origin);
-        expect(yield* Ingress.origin(config, target)).toBe(origin);
-      }),
-    ),
-  );
-
   it.live("route forwards the origin to the listener", () =>
-    withForwarder(() =>
+    withForwarder((forwarder) =>
       Effect.gen(function* () {
         const listener = yield* makeListener("api");
         const origin = yield* Ingress.route(config, target, listener);
+        expect(origin).toBe(`http://dev-alice.api.myapp.localhost:${forwarder.port}`);
         const answer = yield* getRouted(origin, "/hello");
         expect(answer.status).toBe(200);
         // The listener sees the routed host, as a browser's request would carry it.
@@ -158,9 +143,11 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
   it.live("options reach the adapter", () =>
     withForwarder((forwarder) =>
       Effect.gen(function* () {
-        const origin = yield* Ingress.origin(
+        const listener = yield* makeListener("api");
+        const origin = yield* Ingress.route(
           { type: FORWARDER_TYPE, options: { domain: "Shop" } },
           target,
+          listener,
         );
         expect(origin).toBe(`http://dev-alice.api.shop.localhost:${forwarder.port}`);
         expect(forwarder.made()).toEqual([{ domain: "Shop" }]);
@@ -170,24 +157,23 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
 
   it.live("an unknown type fails naming the type and the package to install", () =>
     Effect.gen(function* () {
-      const failures = [
-        yield* Effect.flip(Ingress.origin({ type: "nope" }, target)),
-        yield* Effect.flip(Ingress.route({ type: "nope" }, target, new URL("http://localhost:1"))),
-      ];
-      for (const error of failures) {
-        assert(error instanceof Ingress.IngressAdapterNotFound);
-        expect(error.type).toBe("nope");
-        expect(error.message).toContain('"nope"');
-        expect(error.message).toContain("@alchemy.run/nope");
-        expect(error.message).toContain("No installed package contributes an ingress adapter");
-      }
+      const error = yield* Effect.flip(
+        Ingress.route({ type: "nope" }, target, new URL("http://localhost:1")),
+      );
+      assert(error instanceof Ingress.IngressAdapterNotFound);
+      expect(error.type).toBe("nope");
+      expect(error.message).toContain('"nope"');
+      expect(error.message).toContain("@alchemy.run/nope");
+      expect(error.message).toContain("No installed package contributes an ingress adapter");
     }).pipe(Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)), Effect.scoped),
   );
 
   it.live("a type that is only an Object.prototype name is unknown", () =>
     withForwarder(() =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(Ingress.origin({ type: "toString" }, target));
+        const error = yield* Effect.flip(
+          Ingress.route({ type: "toString" }, target, new URL("http://localhost:1")),
+        );
         assert(error instanceof Ingress.IngressAdapterNotFound);
         expect(error.type).toBe("toString");
       }),
