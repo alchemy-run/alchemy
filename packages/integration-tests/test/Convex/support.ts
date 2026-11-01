@@ -34,6 +34,9 @@ export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R
 /** The fixture Convex app. */
 export const FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/backend");
 
+/** The fixture Convex app for self-hosted backends. */
+export const SELF_HOSTED_FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/selfhosted");
+
 /** Run the Convex CLI in the fixture app. The key goes through the environment, never argv. */
 export const convexCli = (args: ReadonlyArray<string>, env: Record<string, string>) =>
   Effect.sync(() => {
@@ -55,13 +58,13 @@ export const convexCli = (args: ReadonlyArray<string>, env: Record<string, strin
  * A private copy of the fixture app, so a test can change files and push them.
  * It lives under this package so the app finds the `convex` CLI.
  */
-export const scratchApp = Effect.fn(function* (name: string) {
+export const scratchApp = Effect.fn(function* (name: string, source: string = FIXTURE_DIR) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.join(import.meta.dirname, "../../.alchemy/convex-apps", name);
   yield* fs.remove(dir, { recursive: true, force: true });
   yield* fs.makeDirectory(path.dirname(dir), { recursive: true });
-  yield* fs.copy(FIXTURE_DIR, dir);
+  yield* fs.copy(source, dir);
   yield* fs.remove(path.join(dir, "convex/_generated"), { recursive: true, force: true });
   return dir;
 });
