@@ -118,7 +118,12 @@ export const AliasProviderLocal = () =>
         Routes.removeRoute({ stateDirectory, hostname, ownerPid: Host.pid }).pipe(
           withFileSystem,
           Effect.ignore,
-          Effect.andThen(Effect.sync(() => routed.delete(hostname))),
+          // Not a route that has since moved to another directory under the same name.
+          Effect.andThen(
+            Effect.sync(() => {
+              if (routed.get(hostname) === stateDirectory) routed.delete(hostname);
+            }),
+          ),
         );
       yield* Effect.addFinalizer(() =>
         Effect.forEach(
@@ -167,20 +172,35 @@ export const AliasProviderLocal = () =>
             ? ({ action: "noop" } as const)
             : ({ action: "update" } as const);
         }),
-        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
+        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, olds, output }) {
           const { hostname, port, origin } = yield* desired(id, news);
           if (yield* Mode.disabled) return { hostname, origin };
           const { stateDirectory } = news.proxy;
+
+          // Where the old route lives: the directory it was registered in, which the new
+          // props may no longer name.
+          const previous =
+            output === undefined
+              ? undefined
+              : {
+                  hostname: output.hostname,
+                  stateDirectory:
+                    routed.get(output.hostname) ?? olds?.proxy.stateDirectory ?? stateDirectory,
+                };
 
           const held = yield* Claims.claim(hostname, { instanceId, fqn });
           yield* Routes.addRoute({ stateDirectory, hostname, port, ownerPid: Host.pid }).pipe(
             Effect.onError(() => held.release),
           );
           routed.set(hostname, stateDirectory);
-          // An alias that moved to another name leaves the old route behind.
-          if (output !== undefined && output.hostname !== hostname) {
-            yield* Claims.release(output.hostname, instanceId);
-            yield* remove(output.hostname, stateDirectory);
+          // An alias that moved to another name, or to another proxy, leaves the old route behind.
+          if (previous !== undefined) {
+            if (previous.hostname !== hostname) {
+              yield* Claims.release(previous.hostname, instanceId);
+            }
+            if (previous.hostname !== hostname || previous.stateDirectory !== stateDirectory) {
+              yield* remove(previous.hostname, previous.stateDirectory);
+            }
           }
           return { hostname, origin };
         }),
