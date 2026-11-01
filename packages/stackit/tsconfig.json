@@ -23,6 +23,9 @@
     },
     {
       "path": "../alchemy/tsconfig.json"
-    }
+    },
+    { "path": "../docker/tsconfig.json" },
+    { "path": "../sql/tsconfig.json" },
+    { "path": "../kubernetes/tsconfig.json" }
   ]
 }

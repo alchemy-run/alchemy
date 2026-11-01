@@ -1,14 +1,24 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { StackitAuth } from "./AuthProvider.ts";
+// ── ContainerRegistry imports ──
+import {
+  Project as ContainerRegistryProject,
+  ProjectProvider as ContainerRegistryProjectProvider,
+} from "./ContainerRegistry/Project.ts";
+import { RobotAccount, RobotAccountProvider } from "./ContainerRegistry/RobotAccount.ts";
 import * as Credentials from "./Credentials.ts";
 // ── DNS imports ──
 import { RecordSet, RecordSetProvider } from "./DNS/RecordSet.ts";
 import { Zone, ZoneProvider } from "./DNS/Zone.ts";
 import { environmentFromAuthProvider } from "./Environment.ts";
+// ── Functions imports ──
+import { Function as FunctionsFunction, FunctionProvider } from "./Functions/Function.ts";
+import { PullCredential, PullCredentialProvider } from "./Functions/PullCredential.ts";
 // ── IaaS imports ──
 import { AffinityGroup, AffinityGroupProvider } from "./IaaS/AffinityGroup.ts";
 import { Backup, BackupProvider } from "./IaaS/Backup.ts";
@@ -50,6 +60,19 @@ import {
 import { Membership, MembershipProvider } from "./IAM/Membership.ts";
 import { ServiceAccount, ServiceAccountProvider } from "./IAM/ServiceAccount.ts";
 import { ServiceAccountKey, ServiceAccountKeyProvider } from "./IAM/ServiceAccountKey.ts";
+// ── KMS imports ──
+import { Key, KeyProvider } from "./KMS/Key.ts";
+import { KeyRing, KeyRingProvider } from "./KMS/KeyRing.ts";
+import { WrappingKey, WrappingKeyProvider } from "./KMS/WrappingKey.ts";
+// ── LoadBalancer imports ──
+import {
+  LoadBalancer as NlbLoadBalancer,
+  LoadBalancerProvider as NlbLoadBalancerProvider,
+} from "./LoadBalancer/LoadBalancer.ts";
+import {
+  ObservabilityCredential as NlbObservabilityCredential,
+  ObservabilityCredentialProvider as NlbObservabilityCredentialProvider,
+} from "./LoadBalancer/ObservabilityCredential.ts";
 // ── ObjectStorage imports ──
 import { AccessKey, AccessKeyProvider } from "./ObjectStorage/AccessKey.ts";
 import { Bucket, BucketProvider } from "./ObjectStorage/Bucket.ts";
@@ -59,12 +82,50 @@ import {
   Project as ObjectStorageProject,
   ProjectProvider as ObjectStorageProjectProvider,
 } from "./ObjectStorage/Project.ts";
+// ── PostgresFlex imports ──
+import {
+  Database as PostgresFlexDatabase,
+  DatabaseProvider as PostgresFlexDatabaseProvider,
+} from "./PostgresFlex/Database.ts";
+import {
+  Instance as PostgresFlexInstance,
+  InstanceProvider as PostgresFlexInstanceProvider,
+} from "./PostgresFlex/Instance.ts";
+import {
+  User as PostgresFlexUser,
+  UserProvider as PostgresFlexUserProvider,
+} from "./PostgresFlex/User.ts";
 // ── ResourceManager imports ──
 import { Folder, FolderProvider } from "./ResourceManager/Folder.ts";
 import { Organization, OrganizationProvider } from "./ResourceManager/Organization.ts";
 import { Project, ProjectProvider } from "./ResourceManager/Project.ts";
+// ── SecretsManager imports ──
+import {
+  AppRole as SecretsManagerAppRole,
+  AppRoleProvider as SecretsManagerAppRoleProvider,
+} from "./SecretsManager/AppRole.ts";
+import {
+  AppRoleSecretId as SecretsManagerAppRoleSecretId,
+  AppRoleSecretIdProvider as SecretsManagerAppRoleSecretIdProvider,
+} from "./SecretsManager/AppRoleSecretId.ts";
+import {
+  Instance as SecretsManagerInstance,
+  InstanceProvider as SecretsManagerInstanceProvider,
+} from "./SecretsManager/Instance.ts";
+import {
+  Secret as SecretsManagerSecret,
+  SecretProvider as SecretsManagerSecretProvider,
+} from "./SecretsManager/Secret.ts";
+import {
+  User as SecretsManagerUser,
+  UserProvider as SecretsManagerUserProvider,
+} from "./SecretsManager/User.ts";
 // ── ServiceEnablement imports ──
 import { Service, ServiceProvider } from "./ServiceEnablement/Service.ts";
+// ── SKE imports ──
+import { Cluster, ClusterProvider } from "./SKE/Cluster.ts";
+import { Kubeconfig, KubeconfigProvider } from "./SKE/Kubeconfig.ts";
+import { SkeKubernetesAdapter } from "./SKE/KubernetesAdapter.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Stackit") {}
 
@@ -157,6 +218,17 @@ const iaasProviders = () =>
     SecurityGroupRuleProvider(),
   );
 
+const functionsResources = [FunctionsFunction, PullCredential];
+const functionsProviders = () =>
+  Layer.mergeAll(Layer.empty, FunctionProvider(), PullCredentialProvider());
+
+const skeResources = [Cluster, Kubeconfig];
+const skeProviders = () => Layer.mergeAll(Layer.empty, ClusterProvider(), KubeconfigProvider());
+
+const containerRegistryResources = [ContainerRegistryProject, RobotAccount];
+const containerRegistryProviders = () =>
+  Layer.mergeAll(Layer.empty, ContainerRegistryProjectProvider(), RobotAccountProvider());
+
 const dnsResources = [RecordSet, Zone];
 const dnsProviders = () => Layer.mergeAll(Layer.empty, RecordSetProvider(), ZoneProvider());
 
@@ -177,28 +249,82 @@ const objectStorageProviders = () =>
     ObjectStorageProjectProvider(),
   );
 
+const loadBalancerResources = [NlbLoadBalancer, NlbObservabilityCredential];
+const loadBalancerProviders = () =>
+  Layer.mergeAll(Layer.empty, NlbLoadBalancerProvider(), NlbObservabilityCredentialProvider());
+
+const postgresFlexResources = [PostgresFlexDatabase, PostgresFlexInstance, PostgresFlexUser];
+const postgresFlexProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    PostgresFlexDatabaseProvider(),
+    PostgresFlexInstanceProvider(),
+    PostgresFlexUserProvider(),
+  );
+
+const kmsResources = [Key, KeyRing, WrappingKey];
+const kmsProviders = () =>
+  Layer.mergeAll(Layer.empty, KeyProvider(), KeyRingProvider(), WrappingKeyProvider());
+
+const secretsManagerResources = [
+  SecretsManagerAppRole,
+  SecretsManagerAppRoleSecretId,
+  SecretsManagerInstance,
+  SecretsManagerSecret,
+  SecretsManagerUser,
+];
+const secretsManagerProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    SecretsManagerAppRoleProvider(),
+    SecretsManagerAppRoleSecretIdProvider(),
+    SecretsManagerInstanceProvider(),
+    SecretsManagerSecretProvider(),
+    SecretsManagerUserProvider(),
+  );
+
 const makeProviders = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      ...kmsResources,
       ...serviceEnablementResources,
       ...resourceManagerResources,
       ...iamResources,
       ...iaasResources,
+      ...containerRegistryResources,
+      ...functionsResources,
+      ...skeResources,
       ...dnsResources,
       ...objectStorageResources,
+      ...secretsManagerResources,
+      ...postgresFlexResources,
+      ...loadBalancerResources,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        kmsProviders(),
         serviceEnablementProviders(),
         resourceManagerProviders(),
         iamProviders(),
         iaasProviders(),
+        containerRegistryProviders(),
+        functionsProviders(),
+        skeProviders(),
         dnsProviders(),
         objectStorageProviders(),
+        secretsManagerProviders(),
+        postgresFlexProviders(),
+        loadBalancerProviders(),
       ),
     ),
+    // The `stackit-ske` Kubernetes cluster adapter is provideMerged (not just
+    // provided) so the cluster-agnostic `Kubernetes.*` workload providers can
+    // resolve it from the ambient stack context.
+    Layer.provideMerge(SkeKubernetesAdapter()),
+    // `Stackit.Functions.Function` builds its image with Docker.
+    Layer.provideMerge(DockerLive),
     Layer.provideMerge(environmentFromAuthProvider()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(StackitAuth),

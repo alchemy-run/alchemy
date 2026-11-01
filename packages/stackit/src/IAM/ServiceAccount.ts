@@ -7,7 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
 import { isGeneratedServiceAccountName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
 import { listServiceAccounts } from "./internal/service_account.ts";
@@ -193,10 +193,14 @@ export const ServiceAccountProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
-      // Delete-first: the account is found by name, with no generation marker,
-      // and an unresolved prop can resolve to the current one.
+      // Delete-first for an explicit name: the account is found by it, and an
+      // unresolved prop can resolve to the current one. A generated name carries
+      // the generation, so it never collides.
       if (hasUnresolvedTrigger<ServiceAccountProps>(news, ["projectId", "name"])) {
-        return { action: "replace", deleteFirst: true } as const;
+        return {
+          action: "replace",
+          deleteFirst: rawProp<ServiceAccountProps>(news, "name") !== undefined,
+        } as const;
       }
       if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;

@@ -10866,6 +10866,15 @@ importers:
 
   packages/stackit:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -10878,7 +10887,13 @@ importers:
       rolldown:
         specifier: 1.2.13
         version: 1.2.13
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
     devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)

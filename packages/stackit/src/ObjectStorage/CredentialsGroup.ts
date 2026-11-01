@@ -7,7 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -185,12 +185,16 @@ export const CredentialsGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
-      // Delete-first: the group is found by name, with no generation marker,
-      // and an unresolved prop can resolve to the current one.
+      // Delete-first for an explicit name: the group is found by it, and an
+      // unresolved prop can resolve to the current one. A generated name carries
+      // the generation, so it never collides.
       if (
         hasUnresolvedTrigger<CredentialsGroupProps>(news, ["displayName", "projectId", "region"])
       ) {
-        return { action: "replace", deleteFirst: true } as const;
+        return {
+          action: "replace",
+          deleteFirst: rawProp<CredentialsGroupProps>(news, "displayName") !== undefined,
+        } as const;
       }
       if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;

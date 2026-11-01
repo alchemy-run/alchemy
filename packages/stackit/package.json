@@ -27,12 +27,20 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
+    "./ContainerRegistry": "./src/ContainerRegistry/index.ts",
     "./DNS": "./src/DNS/index.ts",
+    "./Functions": "./src/Functions/index.ts",
     "./IaaS": "./src/IaaS/index.ts",
     "./IAM": "./src/IAM/index.ts",
+    "./KMS": "./src/KMS/index.ts",
+    "./LoadBalancer": "./src/LoadBalancer/index.ts",
     "./ObjectStorage": "./src/ObjectStorage/index.ts",
+    "./PostgresFlex": "./src/PostgresFlex/index.ts",
     "./ResourceManager": "./src/ResourceManager/index.ts",
+    "./SecretsManager": "./src/SecretsManager/index.ts",
     "./ServiceEnablement": "./src/ServiceEnablement/index.ts",
+    "./SKE": "./src/SKE/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -44,11 +52,28 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
+      },
+      "./ContainerRegistry": {
+        "types": "./lib/ContainerRegistry/index.d.ts",
+        "bun": "./src/ContainerRegistry/index.ts",
+        "worker": "./src/ContainerRegistry/index.ts",
+        "default": "./lib/ContainerRegistry/index.js"
+      },
       "./DNS": {
         "types": "./lib/DNS/index.d.ts",
         "bun": "./src/DNS/index.ts",
         "worker": "./src/DNS/index.ts",
         "default": "./lib/DNS/index.js"
+      },
+      "./Functions": {
+        "types": "./lib/Functions/index.d.ts",
+        "bun": "./src/Functions/index.ts",
+        "worker": "./src/Functions/index.ts",
+        "default": "./lib/Functions/index.js"
       },
       "./IaaS": {
         "types": "./lib/IaaS/index.d.ts",
@@ -62,11 +87,29 @@
         "worker": "./src/IAM/index.ts",
         "default": "./lib/IAM/index.js"
       },
+      "./KMS": {
+        "types": "./lib/KMS/index.d.ts",
+        "bun": "./src/KMS/index.ts",
+        "worker": "./src/KMS/index.ts",
+        "default": "./lib/KMS/index.js"
+      },
+      "./LoadBalancer": {
+        "types": "./lib/LoadBalancer/index.d.ts",
+        "bun": "./src/LoadBalancer/index.ts",
+        "worker": "./src/LoadBalancer/index.ts",
+        "default": "./lib/LoadBalancer/index.js"
+      },
       "./ObjectStorage": {
         "types": "./lib/ObjectStorage/index.d.ts",
         "bun": "./src/ObjectStorage/index.ts",
         "worker": "./src/ObjectStorage/index.ts",
         "default": "./lib/ObjectStorage/index.js"
+      },
+      "./PostgresFlex": {
+        "types": "./lib/PostgresFlex/index.d.ts",
+        "bun": "./src/PostgresFlex/index.ts",
+        "worker": "./src/PostgresFlex/index.ts",
+        "default": "./lib/PostgresFlex/index.js"
       },
       "./ResourceManager": {
         "types": "./lib/ResourceManager/index.d.ts",
@@ -74,11 +117,23 @@
         "worker": "./src/ResourceManager/index.ts",
         "default": "./lib/ResourceManager/index.js"
       },
+      "./SecretsManager": {
+        "types": "./lib/SecretsManager/index.d.ts",
+        "bun": "./src/SecretsManager/index.ts",
+        "worker": "./src/SecretsManager/index.ts",
+        "default": "./lib/SecretsManager/index.js"
+      },
       "./ServiceEnablement": {
         "types": "./lib/ServiceEnablement/index.d.ts",
         "bun": "./src/ServiceEnablement/index.ts",
         "worker": "./src/ServiceEnablement/index.ts",
         "default": "./lib/ServiceEnablement/index.js"
+      },
+      "./SKE": {
+        "types": "./lib/SKE/index.d.ts",
+        "bun": "./src/SKE/index.ts",
+        "worker": "./src/SKE/index.ts",
+        "default": "./lib/SKE/index.js"
       },
       "./IAM/internal/*": null,
       "./internal/*": null,
@@ -98,12 +153,17 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/stackit": "workspace:*",
-    "rolldown": "catalog:"
+    "rolldown": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
@@ -111,11 +171,15 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
     "@effect/platform-node": {
       "optional": true
     }

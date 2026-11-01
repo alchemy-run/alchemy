@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -180,12 +180,16 @@ export const AffinityGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
-      // Delete-first: the group has no generation marker, and an unresolved
-      // prop can resolve to the name and policy it already has.
+      // Delete-first for an explicit name: the group is found by it, and an
+      // unresolved prop can resolve to the name and policy it already has. A
+      // generated name carries the generation, so it never collides.
       if (
         hasUnresolvedTrigger<AffinityGroupProps>(news, ["projectId", "region", "policy", "name"])
       ) {
-        return { action: "replace", deleteFirst: true } as const;
+        return {
+          action: "replace",
+          deleteFirst: rawProp<AffinityGroupProps>(news, "name") !== undefined,
+        } as const;
       }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
