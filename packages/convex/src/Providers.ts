@@ -1,5 +1,6 @@
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Command from "alchemy/Command";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -7,6 +8,7 @@ import { ConvexAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { DeployKey, DeployKeyProvider } from "./DeployKey.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
+import { EnvironmentVariables, EnvironmentVariablesProvider } from "./EnvironmentVariables.ts";
 import { PreviewDeployKey, PreviewDeployKeyProvider } from "./PreviewDeployKey.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 
@@ -31,16 +33,18 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Deployment, DeployKey, PreviewDeployKey, Project]),
+    Provider.collection([Deployment, DeployKey, EnvironmentVariables, PreviewDeployKey, Project]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
         DeploymentProvider(),
         DeployKeyProvider(),
+        EnvironmentVariablesProvider(),
         PreviewDeployKeyProvider(),
         ProjectProvider(),
       ),
     ),
+    Layer.provideMerge(Command.providers()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(ConvexAuth),

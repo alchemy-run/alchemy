@@ -4,6 +4,8 @@ import { Credentials, fromDeployment, team } from "@alchemy.run/convex/Credentia
 import * as convex from "@distilled.cloud/convex/convex";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
 const PREFIX = "alchemy-convex-test-";
@@ -38,8 +40,27 @@ export const convexCli = (args: ReadonlyArray<string>, env: Record<string, strin
     const cli = NodePath.join(import.meta.dirname, "../../node_modules/.bin/convex");
     const result = NodeChildProcess.spawnSync(cli, [...args], {
       cwd: FIXTURE_DIR,
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+      env: {
+        PATH: process.env.PATH ?? "",
+        HOME: process.env.HOME ?? "",
+        ...env,
+      } as NodeJS.ProcessEnv,
       encoding: "utf8",
     });
     return { code: result.status, output: `${result.stdout}${result.stderr}` };
   });
+
+/**
+ * A private copy of the fixture app, so a test can change files and push them.
+ * It lives under this package so the app finds the `convex` CLI.
+ */
+export const scratchApp = Effect.fn(function* (name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = path.join(import.meta.dirname, "../../.alchemy/convex-apps", name);
+  yield* fs.remove(dir, { recursive: true, force: true });
+  yield* fs.makeDirectory(path.dirname(dir), { recursive: true });
+  yield* fs.copy(FIXTURE_DIR, dir);
+  yield* fs.remove(path.join(dir, "convex/_generated"), { recursive: true, force: true });
+  return dir;
+});
