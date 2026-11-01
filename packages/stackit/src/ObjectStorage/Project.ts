@@ -1,10 +1,9 @@
 import * as objectStorage from "@distilled.cloud/stackit/object_storage";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { labelRecord, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -160,11 +159,11 @@ export const ProjectProvider = () =>
       if (hasUnresolvedTrigger<ProjectProps>(news, ["projectId", "region"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ProjectProps>(news);
       const env = yield* StackitEnvironment.current;
       if (
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region
       ) {
         return { action: "replace" } as const;
       }

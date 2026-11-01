@@ -1,5 +1,4 @@
 import * as lb from "@distilled.cloud/stackit/load_balancer";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
@@ -12,7 +11,7 @@ import {
   type ProjectScope,
   type ProjectScopedProps,
 } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
@@ -214,8 +213,8 @@ export const ObservabilityCredentialProvider = () =>
       if (hasUnresolvedTrigger<ObservabilityCredentialProps>(news, ["projectId", "region"])) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
+      const resolved = triggerProps<ObservabilityCredentialProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
       // Everything else updates in place (engine default: props changed).
       return undefined;
     }),

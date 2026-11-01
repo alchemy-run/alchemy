@@ -1,13 +1,12 @@
 import * as kms from "@distilled.cloud/stackit/kms";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { StackitEnvironment } from "../Environment.ts";
 import { projectScopeChanged, resolveProjectScope } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -402,18 +401,18 @@ export const KeyProvider = () =>
           deleteFirst: rawProp<KeyProps>(news, "displayName") !== undefined,
         };
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<KeyProps>(news);
       const nameChanged =
-        news.displayName !== undefined
-          ? news.displayName !== output.displayName
+        resolved.displayName !== undefined
+          ? resolved.displayName !== output.displayName
           : olds?.displayName !== undefined;
       const descriptionChanged = kmsDescriptionChanged(
-        news.description,
+        resolved.description,
         olds?.description,
         output.description,
       );
-      const scopeChanged = yield* projectScopeChanged(news, output);
-      const ringChanged = news.keyRingId !== output.keyRingId;
+      const scopeChanged = yield* projectScopeChanged(resolved, output);
+      const ringChanged = resolved.keyRingId !== output.keyRingId;
       // On adoption (no olds) an unset prop keeps what the key already has: an
       // omitted default must not schedule the deletion of an adopted key.
       const settable = <V>(value: V | undefined, fallback: V, current: unknown) =>
@@ -423,16 +422,16 @@ export const KeyProvider = () =>
         descriptionChanged ||
         scopeChanged ||
         ringChanged ||
-        news.algorithm !== output.algorithm ||
-        news.purpose !== output.purpose ||
-        settable(news.protection, DEFAULT_PROTECTION, output.protection) ||
-        settable(news.accessScope, DEFAULT_ACCESS_SCOPE, output.accessScope) ||
-        settable(news.importOnly, false, output.importOnly)
+        resolved.algorithm !== output.algorithm ||
+        resolved.purpose !== output.purpose ||
+        settable(resolved.protection, DEFAULT_PROTECTION, output.protection) ||
+        settable(resolved.accessScope, DEFAULT_ACCESS_SCOPE, output.accessScope) ||
+        settable(resolved.importOnly, false, output.importOnly)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            news.displayName !== undefined && !nameChanged && !ringChanged && !scopeChanged,
+            resolved.displayName !== undefined && !nameChanged && !ringChanged && !scopeChanged,
         };
       }
       return undefined;

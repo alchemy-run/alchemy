@@ -1,12 +1,11 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -223,14 +222,14 @@ export const NetworkAreaRouteProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<NetworkAreaRouteProps>(news);
       const env = yield* StackitEnvironment.current;
-      const organizationId = yield* desiredOrganizationId(news);
+      const organizationId = yield* desiredOrganizationId(resolved);
       if (
         (organizationId !== undefined && organizationId !== output.organizationId) ||
-        news.networkAreaId !== output.networkAreaId ||
-        (news.region ?? env.region) !== output.region ||
-        routeIdentityChanged(news, output)
+        resolved.networkAreaId !== output.networkAreaId ||
+        (resolved.region ?? env.region) !== output.region ||
+        routeIdentityChanged(resolved, output)
       ) {
         return { action: "replace" } as const;
       }

@@ -1,9 +1,8 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -134,9 +133,12 @@ export const ServerSecurityGroupAttachmentProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (news.serverId !== output.serverId || news.securityGroupId !== output.securityGroupId) {
+      const resolved = triggerProps<ServerSecurityGroupAttachmentProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (
+        resolved.serverId !== output.serverId ||
+        resolved.securityGroupId !== output.securityGroupId
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;

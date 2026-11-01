@@ -44,9 +44,11 @@ export const sqlLiteral = (value: unknown, dialect?: MigrationDialect): string =
   if (typeof value === "boolean") return value ? "1" : "0";
   const text = value instanceof Date ? value.toISOString() : scalarText(value);
   // GoogleSQL escapes with backslashes; `''` is two adjacent literals.
-  return dialect === "googlesql"
-    ? `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
-    : `'${text.replaceAll("'", "''")}'`;
+  if (dialect === "googlesql") {
+    return `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+  }
+  // T-SQL narrows a literal without `N` to the database's code page.
+  return `${dialect === "mssql" ? "N" : ""}'${text.replaceAll("'", "''")}'`;
 };
 
 /**
@@ -82,7 +84,7 @@ export const inlineSqlParams = (
       continue;
     }
     if (ch === "?" && paramIndex < params.length) {
-      out += sqlLiteral(params[paramIndex++]);
+      out += sqlLiteral(params[paramIndex++], dialect === "mssql" ? dialect : undefined);
       continue;
     }
     out += ch;
@@ -96,7 +98,9 @@ export const quoteIdentifier = (identifier: string, dialect: MigrationDialect): 
     ? `\`${identifier.replaceAll("`", "``")}\``
     : dialect === "googlesql"
       ? `\`${identifier.replaceAll("\\", "\\\\").replaceAll("`", "\\`")}\``
-      : `"${identifier.replaceAll('"', '""')}"`;
+      : dialect === "mssql"
+        ? `[${identifier.replaceAll("]", "]]")}]`
+        : `"${identifier.replaceAll('"', '""')}"`;
 
 /**
  * A bookkeeping column reference. GoogleSQL reserves `hash`, so its

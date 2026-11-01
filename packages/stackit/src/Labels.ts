@@ -143,6 +143,21 @@ export const desiredGenerationLabels = Effect.fn(function* (
 export const hasInstanceLabel = (instanceId: string, labels: unknown): boolean =>
   labelRecord(labels)[alchemyLabelKeys.instance] === instanceId;
 
+/** STACKIT reserves these label keys on load balancing APIs; they are neither compared nor removed. */
+const SYSTEM_LABEL_PREFIX = "stackit-";
+
+/** The labels STACKIT itself manages: sent back unchanged on a full-body update. */
+export const systemLabels = (labels: unknown): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(labelRecord(labels)).filter(([key]) => key.startsWith(SYSTEM_LABEL_PREFIX)),
+  );
+
+/** Drop the labels STACKIT itself manages. */
+export const withoutSystemLabels = (labels: unknown): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(labelRecord(labels)).filter(([key]) => !key.startsWith(SYSTEM_LABEL_PREFIX)),
+  );
+
 /** Drop Alchemy's ownership labels, leaving the user's. */
 export const stripInternalLabels = (labels: unknown): Record<string, string> =>
   Object.fromEntries(

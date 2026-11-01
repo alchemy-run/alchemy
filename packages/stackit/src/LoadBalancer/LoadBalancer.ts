@@ -1,6 +1,5 @@
 import * as lb from "@distilled.cloud/stackit/load_balancer";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
@@ -12,7 +11,7 @@ import {
   type ProjectScope,
   type ProjectScopedProps,
 } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
@@ -20,9 +19,10 @@ import {
   desiredLabels,
   hasAlchemyLabels,
   isAlchemyOwned,
-  labelRecord,
   labelsChanged,
   stripInternalLabels,
+  systemLabels,
+  withoutSystemLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -535,19 +535,6 @@ const DEFAULT_ROLE = "ROLE_LISTENERS_AND_TARGETS";
 /** How often a re-submitted load balancer may still report its old `STATUS_ERROR` (about 90s). */
 const STALE_ERROR_POLLS = 6;
 
-/** STACKIT reserves these label keys; they are neither compared nor removed. */
-const SYSTEM_LABEL_PREFIX = "stackit-";
-
-const systemLabels = (labels: unknown) =>
-  Object.fromEntries(
-    Object.entries(labelRecord(labels)).filter(([key]) => key.startsWith(SYSTEM_LABEL_PREFIX)),
-  );
-
-const withoutSystemLabels = (labels: unknown) =>
-  Object.fromEntries(
-    Object.entries(labelRecord(labels)).filter(([key]) => !key.startsWith(SYSTEM_LABEL_PREFIX)),
-  );
-
 const errorSummary = (loadBalancer: lb.LoadBalancer2) => {
   const errors = (loadBalancer.errors ?? []).map(
     (error) => `${error.type ?? "TYPE_UNSPECIFIED"}: ${error.description ?? ""}`,
@@ -651,32 +638,32 @@ export const LoadBalancerProvider = () =>
             rawProp<LoadBalancerProps>(news, "externalAddress") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<LoadBalancerProps>(news);
 
-      const name = news.name ?? output.loadBalancerName;
-      const scopeChanged = yield* projectScopeChanged(news, output);
+      const name = resolved.name ?? output.loadBalancerName;
+      const scopeChanged = yield* projectScopeChanged(resolved, output);
       const addressChanged =
-        news.externalAddress !== undefined
-          ? news.externalAddress !== output.externalAddress
+        resolved.externalAddress !== undefined
+          ? resolved.externalAddress !== output.externalAddress
           : olds?.externalAddress !== undefined;
       if (
         scopeChanged ||
         addressChanged ||
         name !== output.loadBalancerName ||
-        !sameMembers(networkKeys(news.networks), networkKeys(output.networks)) ||
-        (news.disableTargetSecurityGroupAssignment ?? false) !==
+        !sameMembers(networkKeys(resolved.networks), networkKeys(output.networks)) ||
+        (resolved.disableTargetSecurityGroupAssignment ?? false) !==
           output.disableTargetSecurityGroupAssignment ||
         // The previous props first: the API may not echo every option.
-        (news.options?.ephemeralAddress ?? false) !==
+        (resolved.options?.ephemeralAddress ?? false) !==
           (olds?.options?.ephemeralAddress ?? output.ephemeralAddress) ||
-        (news.options?.privateNetworkOnly ?? false) !==
+        (resolved.options?.privateNetworkOnly ?? false) !==
           (olds?.options?.privateNetworkOnly ?? output.privateNetworkOnly)
       ) {
         return {
           action: "replace",
           deleteFirst:
-            (news.name !== undefined && !scopeChanged && name === output.loadBalancerName) ||
-            (news.externalAddress !== undefined && !addressChanged),
+            (resolved.name !== undefined && !scopeChanged && name === output.loadBalancerName) ||
+            (resolved.externalAddress !== undefined && !addressChanged),
         } as const;
       }
       // Everything else updates in place (engine default: props changed).

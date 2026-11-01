@@ -12,6 +12,8 @@ export {
   probeExecutor,
   retryLogin,
   rowsFromCells,
+  withMssqlExecutor,
+  withMssqlPool,
   withMySqlConnection,
   withMySqlExecutor,
   withPgClient,
@@ -31,6 +33,7 @@ export {
   type SqlExecutor,
 } from "./Format.ts";
 export { classifyTable, tableColumns, type TableShape } from "./Introspect.ts";
+export { makeMssqlMigrationExecutor } from "./MssqlExecutor.ts";
 export { makeMySQLMigrationExecutor } from "./MySQLExecutor.ts";
 export { makePgMigrationExecutor } from "./PgExecutor.ts";
 export {
@@ -64,6 +67,7 @@ export {
 export {
   scanSqlScript,
   splitSqlScript,
+  splitTsqlBatches,
   type ScannedStatement,
   type ScriptDialect,
 } from "./Script.ts";

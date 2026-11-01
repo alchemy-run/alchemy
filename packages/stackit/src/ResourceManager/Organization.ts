@@ -1,12 +1,11 @@
 import * as resourceManager from "@distilled.cloud/stackit/resource_manager";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   desiredLabels,
@@ -176,9 +175,9 @@ export const OrganizationProvider = () =>
       if (hasUnresolvedTrigger<OrganizationProps>(news, ["organizationId"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<OrganizationProps>(news);
       const env = yield* StackitEnvironment.current;
-      const desired = news.organizationId ?? env.organizationId;
+      const desired = resolved.organizationId ?? env.organizationId;
       if (
         desired !== undefined &&
         desired !== output.organizationId &&

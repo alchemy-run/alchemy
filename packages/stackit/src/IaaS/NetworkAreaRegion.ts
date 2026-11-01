@@ -1,11 +1,10 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { isAlchemyOwned } from "../Labels.ts";
@@ -255,17 +254,17 @@ export const NetworkAreaRegionProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<NetworkAreaRegionProps>(news);
       const env = yield* StackitEnvironment.current;
-      const organizationId = yield* desiredOrganizationId(news);
+      const organizationId = yield* desiredOrganizationId(resolved);
       if (
         (organizationId !== undefined && organizationId !== output.organizationId) ||
-        news.networkAreaId !== output.networkAreaId ||
-        (news.region ?? env.region) !== output.region
+        resolved.networkAreaId !== output.networkAreaId ||
+        (resolved.region ?? env.region) !== output.region
       ) {
         return { action: "replace" } as const;
       }
-      if (news.transferNetwork !== output.transferNetwork) {
+      if (resolved.transferNetwork !== output.transferNetwork) {
         // One configuration per area and region: the old one must go first.
         return { action: "replace", deleteFirst: true } as const;
       }

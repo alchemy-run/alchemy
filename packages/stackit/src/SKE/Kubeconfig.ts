@@ -7,7 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import {
   getClusterOrUndefined,
@@ -192,16 +192,17 @@ export const KubeconfigProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<KubeconfigProps>(news);
       const env = yield* StackitEnvironment.current;
       if (
-        news.clusterName !== output.clusterName ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region ||
-        (news.expirationSeconds ?? DEFAULT_EXPIRATION_SECONDS) !== output.expirationSeconds
+        resolved.clusterName !== output.clusterName ||
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region ||
+        (resolved.expirationSeconds ?? DEFAULT_EXPIRATION_SECONDS) !== output.expirationSeconds
       ) {
         return { action: "replace" } as const;
       }
+      if (!isResolved(news)) return undefined;
       const stale = yield* staleReason(output, refreshWindowOf(news, output.expirationSeconds));
       return stale === undefined ? undefined : ({ action: "update" } as const);
     }),

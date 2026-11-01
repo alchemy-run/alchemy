@@ -1,6 +1,5 @@
 import * as kms from "@distilled.cloud/stackit/kms";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
@@ -8,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { StackitEnvironment } from "../Environment.ts";
 import { projectScopeChanged, resolveProjectScope } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { waitFor } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -284,21 +283,21 @@ export const KeyRingProvider = () =>
           deleteFirst: rawProp<KeyRingProps>(news, "displayName") !== undefined,
         };
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<KeyRingProps>(news);
       const nameChanged =
-        news.displayName !== undefined
-          ? news.displayName !== output.displayName
+        resolved.displayName !== undefined
+          ? resolved.displayName !== output.displayName
           : olds?.displayName !== undefined;
       const descriptionChanged = kmsDescriptionChanged(
-        news.description,
+        resolved.description,
         olds?.description,
         output.description,
       );
-      const scopeChanged = yield* projectScopeChanged(news, output);
+      const scopeChanged = yield* projectScopeChanged(resolved, output);
       if (nameChanged || descriptionChanged || scopeChanged) {
         return {
           action: "replace" as const,
-          deleteFirst: news.displayName !== undefined && !nameChanged && !scopeChanged,
+          deleteFirst: resolved.displayName !== undefined && !nameChanged && !scopeChanged,
         };
       }
       return undefined;

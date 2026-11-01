@@ -1,7 +1,7 @@
 {
   "name": "@alchemy.run/sql",
   "version": "2.0.0-beta.84",
-  "description": "Postgres and MySQL clients, SQL migrations, and the Postgres state store for Alchemy.",
+  "description": "Postgres and MySQL clients, SQL migrations (including SQL Server), and the Postgres state store for Alchemy.",
   "keywords": [
     "alchemy",
     "effect",
@@ -57,10 +57,12 @@
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@types/bun": "catalog:",
+    "@types/mssql": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "mssql": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
     "typescript": "catalog:"
@@ -71,6 +73,7 @@
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "mssql": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:"
   },
@@ -82,6 +85,9 @@
       "optional": true
     },
     "@effect/sql-pg": {
+      "optional": true
+    },
+    "mssql": {
       "optional": true
     },
     "mysql2": {

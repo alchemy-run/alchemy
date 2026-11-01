@@ -1,11 +1,10 @@
 import * as objectStorage from "@distilled.cloud/stackit/object_storage";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
 import { ensureObjectStorageEnabled, GROUP_NAME_MAX_LENGTH, toRedacted } from "./internal.ts";
@@ -178,13 +177,13 @@ export const AccessKeyProvider = () =>
       ) {
         return { action: "replace" as const };
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<AccessKeyProps>(news);
       const env = yield* StackitEnvironment.current;
       if (
-        news.credentialsGroupId !== output.credentialsGroupId ||
-        (olds !== undefined && news.expires !== olds.expires) ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region
+        resolved.credentialsGroupId !== output.credentialsGroupId ||
+        (olds !== undefined && resolved.expires !== olds.expires) ||
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region
       ) {
         return { action: "replace" as const };
       }

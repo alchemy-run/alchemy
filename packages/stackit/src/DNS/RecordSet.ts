@@ -1,6 +1,5 @@
 import * as dns from "@distilled.cloud/stackit/dns";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -8,7 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { isAlchemyOwned, labelRecord } from "../Labels.ts";
@@ -399,13 +398,13 @@ export const RecordSetProvider = () =>
       if (hasUnresolvedTrigger<RecordSetProps>(news, ["projectId", "zoneId", "name", "type"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<RecordSetProps>(news);
       const env = yield* StackitEnvironment.current;
-      const projectId = news.projectId ?? env.projectId;
-      const sameZone = news.zoneId === output.zoneId && projectId === output.projectId;
+      const projectId = resolved.projectId ?? env.projectId;
+      const sameZone = resolved.zoneId === output.zoneId && projectId === output.projectId;
       const sameName =
-        news.name === undefined || fqdnOf(news.name, output.zoneDnsName) === output.fqdn;
-      if (!sameZone || !sameName || news.type !== output.type) {
+        resolved.name === undefined || fqdnOf(resolved.name, output.zoneDnsName) === output.fqdn;
+      if (!sameZone || !sameName || resolved.type !== output.type) {
         // Same name in the same zone (a type change): delete first, since a
         // CNAME can't coexist with other records of that name.
         return { action: "replace", deleteFirst: sameZone && sameName } as const;

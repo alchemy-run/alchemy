@@ -77,6 +77,17 @@ const createTableSql = (
   name TEXT,
   applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`;
+    case "mssql":
+      // T-SQL has no `CREATE TABLE IF NOT EXISTS`. Unqualified, the table lands
+      // in the login's default schema, which is the one this checks.
+      return `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ${sqlLiteral(table, dialect)} AND TABLE_SCHEMA = SCHEMA_NAME())
+CREATE TABLE ${quoted} (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  hash NVARCHAR(MAX) NOT NULL,
+  created_at BIGINT,
+  name NVARCHAR(MAX),
+  applied_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+);`;
   }
 };
 
@@ -95,9 +106,12 @@ const insertSql = (
 };
 
 const renameSql = (from: string, to: string, dialect: MigrationDialect): string =>
-  dialect === "mysql"
-    ? `RENAME TABLE ${quoteIdentifier(from, dialect)} TO ${quoteIdentifier(to, dialect)};`
-    : `ALTER TABLE ${quoteIdentifier(from, dialect)} RENAME TO ${quoteIdentifier(to, dialect)};`;
+  dialect === "mssql"
+    ? // `sp_rename` keeps brackets in a new name as part of the name.
+      `EXEC sp_rename ${sqlLiteral(quoteIdentifier(from, dialect), dialect)}, ${sqlLiteral(to, dialect)};`
+    : dialect === "mysql"
+      ? `RENAME TABLE ${quoteIdentifier(from, dialect)} TO ${quoteIdentifier(to, dialect)};`
+      : `ALTER TABLE ${quoteIdentifier(from, dialect)} RENAME TO ${quoteIdentifier(to, dialect)};`;
 
 /**
  * Rebuild an in-place table (legacy Alchemy 3-column / oldest 2-column /

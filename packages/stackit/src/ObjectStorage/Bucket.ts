@@ -1,14 +1,14 @@
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as objectStorage from "@distilled.cloud/stackit/object_storage";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { type StackitWaitTimeout, waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -636,20 +636,21 @@ export const BucketProvider = () =>
           deleteFirst: rawProp<BucketProps>(news, "bucketName") !== undefined,
         };
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<BucketProps>(news);
       const env = yield* StackitEnvironment.current;
       const nameChanged =
-        news.bucketName !== undefined
-          ? news.bucketName !== output.bucketName
+        resolved.bucketName !== undefined
+          ? resolved.bucketName !== output.bucketName
           : olds?.bucketName !== undefined;
       if (
         nameChanged ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region ||
-        (news.objectLockEnabled ?? false) !== output.objectLockEnabled
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region ||
+        (resolved.objectLockEnabled ?? false) !== output.objectLockEnabled
       ) {
         // An explicit, unchanged name must be freed before it can be reused.
-        const sameName = news.bucketName !== undefined && news.bucketName === output.bucketName;
+        const sameName =
+          resolved.bucketName !== undefined && resolved.bucketName === output.bucketName;
         return { action: "replace" as const, deleteFirst: sameName };
       }
       return undefined;

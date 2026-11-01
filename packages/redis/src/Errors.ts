@@ -3,9 +3,13 @@ import * as Data from "effect/Data";
 /** No `REDIS_URL` in the Function/Service environment. */
 export class UrlMissing extends Data.TaggedError("Redis.UrlMissing")<{
   resourceName: string;
+  /** Why the value that is there can't be used. It must not quote the URL's secrets. */
+  reason?: string;
 }> {
   override get message() {
-    return `REDIS_URL missing for ${this.resourceName}`;
+    return this.reason === undefined
+      ? `REDIS_URL missing for ${this.resourceName}`
+      : `No usable Redis URL for ${this.resourceName}: ${this.reason}`;
   }
 }
 

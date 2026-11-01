@@ -1,12 +1,11 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { isAlchemyOwned } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -175,8 +174,8 @@ export const ImageShareProvider = () =>
       if (hasUnresolvedTrigger<ImageShareProps>(news, ["imageId", "projectId", "region"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (news.imageId !== output.imageId || (yield* projectScopeChanged(news, output))) {
+      const resolved = triggerProps<ImageShareProps>(news);
+      if (resolved.imageId !== output.imageId || (yield* projectScopeChanged(resolved, output))) {
         return { action: "replace" } as const;
       }
       return undefined;

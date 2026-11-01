@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
   desiredGenerationLabels,
@@ -317,18 +317,19 @@ export const VolumeProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (availabilityZoneOf(news, output.region) !== output.availabilityZone) {
+      const resolved = triggerProps<VolumeProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (availabilityZoneOf(resolved, output.region) !== output.availabilityZone) {
         return { action: "replace" } as const;
       }
       if (
-        news.performanceClass !== undefined &&
+        resolved.performanceClass !== undefined &&
         output.performanceClass !== undefined &&
-        news.performanceClass !== output.performanceClass
+        resolved.performanceClass !== output.performanceClass
       ) {
         return { action: "replace" } as const;
       }
+      if (!isResolved(news)) return undefined;
       // Shrinking replaces. Compare against the previously desired size, so
       // a volume grown out of band is never replaced (and its data lost).
       const previousSize = olds?.size ?? output.size;

@@ -1,12 +1,11 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -191,11 +190,11 @@ export const AffinityGroupProvider = () =>
           deleteFirst: rawProp<AffinityGroupProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (news.policy !== output.policy) return { action: "replace" } as const;
+      const resolved = triggerProps<AffinityGroupProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (resolved.policy !== output.policy) return { action: "replace" } as const;
       const renamed =
-        news.name !== undefined ? news.name !== output.name : olds?.name !== undefined;
+        resolved.name !== undefined ? resolved.name !== output.name : olds?.name !== undefined;
       if (renamed) return { action: "replace" } as const;
       return undefined;
     }),

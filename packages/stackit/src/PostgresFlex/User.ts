@@ -1,13 +1,12 @@
 import * as postgres from "@distilled.cloud/stackit/postgres_flex";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
 import { resolveProjectScope } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -279,10 +278,10 @@ export const UserProvider = () =>
           deleteFirst: rawProp<UserProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
-      const scope = yield* resolveProjectScope(news, undefined);
+      const resolved = triggerProps<UserProps>(news);
+      const scope = yield* resolveProjectScope(resolved, undefined);
       if (
-        news.instanceId !== output.instanceId ||
+        resolved.instanceId !== output.instanceId ||
         scope.projectId !== output.projectId ||
         scope.region !== output.region
       ) {

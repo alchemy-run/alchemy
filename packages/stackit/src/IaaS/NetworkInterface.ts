@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
@@ -270,12 +270,13 @@ export const NetworkInterfaceProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (output !== undefined && news.networkId !== output.networkId) {
+      if (output === undefined && !isResolved(news)) return undefined;
+      const resolved = triggerProps<NetworkInterfaceProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (output !== undefined && resolved.networkId !== output.networkId) {
         return { action: "replace" } as const;
       }
-      if (olds !== undefined && (news.ipv4 !== olds.ipv4 || news.ipv6 !== olds.ipv6)) {
+      if (olds !== undefined && (resolved.ipv4 !== olds.ipv4 || resolved.ipv6 !== olds.ipv6)) {
         return { action: "replace" } as const;
       }
       return undefined;

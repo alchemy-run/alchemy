@@ -1,10 +1,29 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Command from "alchemy/Command";
 import * as Provider from "alchemy/Provider";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "alchemy/Website/Server";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+// ── ALB imports ──
+import {
+  LoadBalancer as AlbLoadBalancer,
+  LoadBalancerProvider as AlbLoadBalancerProvider,
+} from "./ALB/LoadBalancer.ts";
+import {
+  ObservabilityCredential as AlbObservabilityCredential,
+  ObservabilityCredentialProvider as AlbObservabilityCredentialProvider,
+} from "./ALB/ObservabilityCredential.ts";
 import { StackitAuth } from "./AuthProvider.ts";
+// ── CDN imports ──
+import { CustomDomain, CustomDomainProvider } from "./CDN/CustomDomain.ts";
+import { Distribution, DistributionProvider } from "./CDN/Distribution.ts";
+// ── Certificates imports ──
+import { Certificate, CertificateProvider } from "./Certificates/Certificate.ts";
 // ── ContainerRegistry imports ──
 import {
   Project as ContainerRegistryProject,
@@ -60,6 +79,8 @@ import {
 import { Membership, MembershipProvider } from "./IAM/Membership.ts";
 import { ServiceAccount, ServiceAccountProvider } from "./IAM/ServiceAccount.ts";
 import { ServiceAccountKey, ServiceAccountKeyProvider } from "./IAM/ServiceAccountKey.ts";
+// ── IPLists imports ──
+import { IPList, IPListProvider } from "./IPLists/IPList.ts";
 // ── KMS imports ──
 import { Key, KeyProvider } from "./KMS/Key.ts";
 import { KeyRing, KeyRingProvider } from "./KMS/KeyRing.ts";
@@ -73,6 +94,33 @@ import {
   ObservabilityCredential as NlbObservabilityCredential,
   ObservabilityCredentialProvider as NlbObservabilityCredentialProvider,
 } from "./LoadBalancer/ObservabilityCredential.ts";
+// ── LogMe imports ──
+import {
+  Credential as LogMeCredential,
+  CredentialProvider as LogMeCredentialProvider,
+} from "./LogMe/Credential.ts";
+import {
+  Instance as LogMeInstance,
+  InstanceProvider as LogMeInstanceProvider,
+} from "./LogMe/Instance.ts";
+// ── MariaDB imports ──
+import {
+  Credential as MariaDBCredential,
+  CredentialProvider as MariaDBCredentialProvider,
+} from "./MariaDB/Credential.ts";
+import {
+  Instance as MariaDBInstance,
+  InstanceProvider as MariaDBInstanceProvider,
+} from "./MariaDB/Instance.ts";
+// ── MongoDBFlex imports ──
+import {
+  Instance as MongoDBFlexInstance,
+  InstanceProvider as MongoDBFlexInstanceProvider,
+} from "./MongoDBFlex/Instance.ts";
+import {
+  User as MongoDBFlexUser,
+  UserProvider as MongoDBFlexUserProvider,
+} from "./MongoDBFlex/User.ts";
 // ── ObjectStorage imports ──
 import { AccessKey, AccessKeyProvider } from "./ObjectStorage/AccessKey.ts";
 import { Bucket, BucketProvider } from "./ObjectStorage/Bucket.ts";
@@ -82,6 +130,15 @@ import {
   Project as ObjectStorageProject,
   ProjectProvider as ObjectStorageProjectProvider,
 } from "./ObjectStorage/Project.ts";
+// ── OpenSearch imports ──
+import {
+  Credential as OpenSearchCredential,
+  CredentialProvider as OpenSearchCredentialProvider,
+} from "./OpenSearch/Credential.ts";
+import {
+  Instance as OpenSearchInstance,
+  InstanceProvider as OpenSearchInstanceProvider,
+} from "./OpenSearch/Instance.ts";
 // ── PostgresFlex imports ──
 import {
   Database as PostgresFlexDatabase,
@@ -95,6 +152,15 @@ import {
   User as PostgresFlexUser,
   UserProvider as PostgresFlexUserProvider,
 } from "./PostgresFlex/User.ts";
+// ── RabbitMQ imports ──
+import {
+  Credential as RabbitMQCredential,
+  CredentialProvider as RabbitMQCredentialProvider,
+} from "./RabbitMQ/Credential.ts";
+import {
+  Instance as RabbitMQInstance,
+  InstanceProvider as RabbitMQInstanceProvider,
+} from "./RabbitMQ/Instance.ts";
 // ── ResourceManager imports ──
 import { Folder, FolderProvider } from "./ResourceManager/Folder.ts";
 import { Organization, OrganizationProvider } from "./ResourceManager/Organization.ts";
@@ -126,6 +192,45 @@ import { Service, ServiceProvider } from "./ServiceEnablement/Service.ts";
 import { Cluster, ClusterProvider } from "./SKE/Cluster.ts";
 import { Kubeconfig, KubeconfigProvider } from "./SKE/Kubeconfig.ts";
 import { SkeKubernetesAdapter } from "./SKE/KubernetesAdapter.ts";
+// ── SQLServerFlex imports ──
+import {
+  Database as SqlServerFlexDatabase,
+  DatabaseProvider as SqlServerFlexDatabaseProvider,
+} from "./SQLServerFlex/Database.ts";
+import {
+  Instance as SqlServerFlexInstance,
+  InstanceProvider as SqlServerFlexInstanceProvider,
+} from "./SQLServerFlex/Instance.ts";
+import {
+  User as SqlServerFlexUser,
+  UserProvider as SqlServerFlexUserProvider,
+} from "./SQLServerFlex/User.ts";
+// ── Valkey imports ──
+import {
+  Credential as ValkeyCredential,
+  CredentialProvider as ValkeyCredentialProvider,
+} from "./Valkey/Credential.ts";
+import {
+  Instance as ValkeyInstance,
+  InstanceProvider as ValkeyInstanceProvider,
+} from "./Valkey/Instance.ts";
+// ── WAF imports ──
+import {
+  Configuration as WafConfiguration,
+  ConfigurationProvider as WafConfigurationProvider,
+} from "./WAF/Configuration.ts";
+import {
+  CustomRuleGroup as WafCustomRuleGroup,
+  CustomRuleGroupProvider as WafCustomRuleGroupProvider,
+} from "./WAF/CustomRuleGroup.ts";
+import {
+  ManagedRuleSet as WafManagedRuleSet,
+  ManagedRuleSetProvider as WafManagedRuleSetProvider,
+} from "./WAF/ManagedRuleSet.ts";
+// ── Website imports ──
+import { AssetDeployment, AssetDeploymentProvider } from "./Website/AssetDeployment.ts";
+import { CachePurge, CachePurgeProvider } from "./Website/CachePurge.ts";
+import { ServerImage, ServerImageProvider } from "./Website/ServerImage.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Stackit") {}
 
@@ -262,6 +367,27 @@ const postgresFlexProviders = () =>
     PostgresFlexUserProvider(),
   );
 
+const sqlServerFlexResources = [SqlServerFlexDatabase, SqlServerFlexInstance, SqlServerFlexUser];
+const sqlServerFlexProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    SqlServerFlexDatabaseProvider(),
+    SqlServerFlexInstanceProvider(),
+    SqlServerFlexUserProvider(),
+  );
+
+const mongoDBFlexResources = [MongoDBFlexInstance, MongoDBFlexUser];
+const mongoDBFlexProviders = () =>
+  Layer.mergeAll(Layer.empty, MongoDBFlexInstanceProvider(), MongoDBFlexUserProvider());
+
+const mariaDBResources = [MariaDBCredential, MariaDBInstance];
+const mariaDBProviders = () =>
+  Layer.mergeAll(Layer.empty, MariaDBCredentialProvider(), MariaDBInstanceProvider());
+
+const valkeyResources = [ValkeyCredential, ValkeyInstance];
+const valkeyProviders = () =>
+  Layer.mergeAll(Layer.empty, ValkeyCredentialProvider(), ValkeyInstanceProvider());
+
 const kmsResources = [Key, KeyRing, WrappingKey];
 const kmsProviders = () =>
   Layer.mergeAll(Layer.empty, KeyProvider(), KeyRingProvider(), WrappingKeyProvider());
@@ -283,10 +409,60 @@ const secretsManagerProviders = () =>
     SecretsManagerUserProvider(),
   );
 
+const albResources = [AlbLoadBalancer, AlbObservabilityCredential];
+const albProviders = () =>
+  Layer.mergeAll(Layer.empty, AlbLoadBalancerProvider(), AlbObservabilityCredentialProvider());
+
+const wafResources = [WafConfiguration, WafCustomRuleGroup, WafManagedRuleSet];
+const wafProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    WafConfigurationProvider(),
+    WafCustomRuleGroupProvider(),
+    WafManagedRuleSetProvider(),
+  );
+
+const ipListsResources = [IPList];
+const ipListsProviders = () => Layer.mergeAll(Layer.empty, IPListProvider());
+
+const cdnResources = [CustomDomain, Distribution];
+const cdnProviders = () =>
+  Layer.mergeAll(Layer.empty, CustomDomainProvider(), DistributionProvider());
+
+const certificatesResources = [Certificate];
+const certificatesProviders = () => Layer.mergeAll(Layer.empty, CertificateProvider());
+
+const rabbitmqResources = [RabbitMQCredential, RabbitMQInstance];
+const rabbitmqProviders = () =>
+  Layer.mergeAll(Layer.empty, RabbitMQCredentialProvider(), RabbitMQInstanceProvider());
+
+const openSearchResources = [OpenSearchInstance, OpenSearchCredential];
+const openSearchProviders = () =>
+  Layer.mergeAll(Layer.empty, OpenSearchInstanceProvider(), OpenSearchCredentialProvider());
+
+const logMeResources = [LogMeInstance, LogMeCredential];
+const logMeProviders = () =>
+  Layer.mergeAll(Layer.empty, LogMeInstanceProvider(), LogMeCredentialProvider());
+
+const websiteResources = [AssetDeployment, CachePurge, ServerImage, WebsiteServer];
+const websiteProviders = () =>
+  Layer.mergeAll(
+    Layer.empty,
+    AssetDeploymentProvider(),
+    CachePurgeProvider(),
+    ServerImageProvider(),
+    WebsiteServerProvider(),
+  );
+
 const makeProviders = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      ...websiteResources,
+      ...openSearchResources,
+      ...logMeResources,
+      ...cdnResources,
+      ...certificatesResources,
       ...kmsResources,
       ...serviceEnablementResources,
       ...resourceManagerResources,
@@ -299,11 +475,24 @@ const makeProviders = () =>
       ...objectStorageResources,
       ...secretsManagerResources,
       ...postgresFlexResources,
+      ...sqlServerFlexResources,
+      ...mariaDBResources,
+      ...valkeyResources,
+      ...rabbitmqResources,
+      ...mongoDBFlexResources,
       ...loadBalancerResources,
+      ...albResources,
+      ...wafResources,
+      ...ipListsResources,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        websiteProviders(),
+        openSearchProviders(),
+        logMeProviders(),
+        cdnProviders(),
+        certificatesProviders(),
         kmsProviders(),
         serviceEnablementProviders(),
         resourceManagerProviders(),
@@ -316,13 +505,23 @@ const makeProviders = () =>
         objectStorageProviders(),
         secretsManagerProviders(),
         postgresFlexProviders(),
+        sqlServerFlexProviders(),
+        mariaDBProviders(),
+        valkeyProviders(),
+        rabbitmqProviders(),
+        mongoDBFlexProviders(),
         loadBalancerProviders(),
+        albProviders(),
+        wafProviders(),
+        ipListsProviders(),
       ),
     ),
     // The `stackit-ske` Kubernetes cluster adapter is provideMerged (not just
     // provided) so the cluster-agnostic `Kubernetes.*` workload providers can
     // resolve it from the ambient stack context.
     Layer.provideMerge(SkeKubernetesAdapter()),
+    // `Stackit.Website.StaticSite` builds with a command.
+    Layer.provideMerge(Command.providers()),
     // `Stackit.Functions.Function` builds its image with Docker.
     Layer.provideMerge(DockerLive),
     Layer.provideMerge(environmentFromAuthProvider()),

@@ -1,11 +1,10 @@
 import * as authorization from "@distilled.cloud/stackit/authorization";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -180,13 +179,13 @@ export const MembershipProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<MembershipProps>(news);
       const env = yield* StackitEnvironment.current;
-      const scope = yield* resolveScope(news, env);
+      const scope = yield* resolveScope(resolved, env);
       if (
         !sameScope(scope, output) ||
-        news.role !== output.role ||
-        !sameSubject(news.subject, output.subject)
+        resolved.role !== output.role ||
+        !sameSubject(resolved.subject, output.subject)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }

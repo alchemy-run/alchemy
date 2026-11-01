@@ -1,11 +1,10 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -199,12 +198,12 @@ export const NetworkAreaProvider = () =>
       if (hasUnresolvedTrigger<NetworkAreaProps>(news, ["organizationId", "routingTables"])) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      const organizationId = yield* desiredOrganizationId(news);
+      const resolved = triggerProps<NetworkAreaProps>(news);
+      const organizationId = yield* desiredOrganizationId(resolved);
       if (organizationId !== undefined && organizationId !== output.organizationId) {
         return { action: "replace" } as const;
       }
-      if ((news.routingTables ?? false) !== output.routingTables) {
+      if ((resolved.routingTables ?? false) !== output.routingTables) {
         return { action: "replace" } as const;
       }
       return undefined;

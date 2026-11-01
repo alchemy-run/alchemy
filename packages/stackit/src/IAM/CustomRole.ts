@@ -6,7 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { StackitResourceFailed, waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -204,12 +204,13 @@ export const CustomRoleProvider = () =>
       if (hasUnresolvedTrigger<CustomRoleProps>(news, ["resourceType", "resourceId"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<CustomRoleProps>(news);
       const env = yield* StackitEnvironment.current;
-      const scope = yield* resolveScope(news, env);
+      const scope = yield* resolveScope(resolved, env);
       if (!sameScope(scope, output)) {
         return { action: "replace" as const, deleteFirst: false };
       }
+      if (!isResolved(news)) return undefined;
       // `name` is stable unless this update renames the role, so a membership
       // granting `role.name` isn't replaced when only the permissions change.
       if ((news.name === undefined || news.name === output.name) && havePropsChanged(olds, news)) {

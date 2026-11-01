@@ -1,6 +1,5 @@
 import * as functions from "@distilled.cloud/stackit/functions";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -9,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
 import { findOwnedByName, readGeneration } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import {
   desiredGenerationLabels,
@@ -214,9 +213,9 @@ export const PullCredentialProvider = () =>
           deleteFirst: rawProp<PullCredentialProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<PullCredentialProps>(news);
       const env = yield* StackitEnvironment.current;
-      if ((news.projectId ?? env.projectId) !== output.projectId) {
+      if ((resolved.projectId ?? env.projectId) !== output.projectId) {
         return { action: "replace" } as const;
       }
       // Everything else updates in place (engine default: props changed).

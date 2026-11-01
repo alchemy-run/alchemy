@@ -26,6 +26,7 @@
     },
     { "path": "../docker/tsconfig.json" },
     { "path": "../sql/tsconfig.json" },
+    { "path": "../redis/tsconfig.json" },
     { "path": "../kubernetes/tsconfig.json" }
   ]
 }

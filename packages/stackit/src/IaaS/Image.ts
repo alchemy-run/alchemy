@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
@@ -13,7 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
   desiredGenerationLabels,
@@ -646,10 +645,10 @@ export const ImageProvider = () =>
       if (hasUnresolvedTrigger<ImageProps>(news, ["projectId", "region", "diskFormat", "source"])) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (news.diskFormat !== output.diskFormat) return { action: "replace" } as const;
-      const source = news.source;
+      const resolved = triggerProps<ImageProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (resolved.diskFormat !== output.diskFormat) return { action: "replace" } as const;
+      const source = resolved.source;
       const volume = source.type === "volume" ? source : undefined;
       const file = source.type === "file" ? yield* inspectFile(source.path) : undefined;
       return sameSource(output, volume, file) ? undefined : ({ action: "replace" } as const);

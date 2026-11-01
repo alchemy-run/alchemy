@@ -1,12 +1,11 @@
 import * as harbor from "@distilled.cloud/stackit/registry_harbor";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -374,10 +373,14 @@ export const RobotAccountProvider = () =>
           deleteFirst: rawProp<RobotAccountProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
-      const sameName = (news.name ?? output.name) === output.name;
-      if (!sameName || news.project !== output.project || news.registryUrl !== output.registryUrl) {
-        return { action: "replace", deleteFirst: sameName && news.name !== undefined } as const;
+      const resolved = triggerProps<RobotAccountProps>(news);
+      const sameName = (resolved.name ?? output.name) === output.name;
+      if (
+        !sameName ||
+        resolved.project !== output.project ||
+        resolved.registryUrl !== output.registryUrl
+      ) {
+        return { action: "replace", deleteFirst: sameName && resolved.name !== undefined } as const;
       }
       return undefined;
     }),

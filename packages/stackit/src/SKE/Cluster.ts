@@ -8,7 +8,7 @@ import { Resource } from "alchemy/Resource";
 import { unwrapRedacted } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
@@ -785,20 +785,24 @@ export const ClusterProvider = () =>
           deleteFirst: rawProp<ClusterProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ClusterProps>(news);
       const env = yield* StackitEnvironment.current;
-      const projectId = news.projectId ?? env.projectId;
-      const region = news.region ?? env.region;
-      const clusterName = yield* resolveClusterName(id, news, output);
+      const projectId = resolved.projectId ?? env.projectId;
+      const region = resolved.region ?? env.region;
+      const clusterName = yield* resolveClusterName(id, resolved, output);
       const sameIdentity =
         clusterName === output.clusterName &&
         projectId === output.projectId &&
         region === output.region;
-      if (!sameIdentity || networkIdentityChanged(news.network, output)) {
+      if (!sameIdentity || networkIdentityChanged(resolved.network, output)) {
         // A generated name is new for every generation, so only an explicit one
         // can collide with the cluster being replaced.
-        return { action: "replace", deleteFirst: sameIdentity && news.name !== undefined } as const;
+        return {
+          action: "replace",
+          deleteFirst: sameIdentity && resolved.name !== undefined,
+        } as const;
       }
+      if (!isResolved(news)) return undefined;
       // `registry` and `architecture` live on `connection`, so it isn't stable
       // while they change. Everything else takes the engine's default.
       if (comparableConnection(olds) !== comparableConnection(news)) {

@@ -180,6 +180,20 @@ describe("makeNodeTarget", () => {
     expect(source).not.toContain("worker/index.ts");
   });
 
+  it("rewrites the host ahead of vinext behind a CDN, and trusts the proxy before it loads", () => {
+    const source = makeVinextServeEntrySource({
+      behindCdn: { forwardedHostSuffix: ".cdn.onstackit.cloud" },
+    });
+    expect(source).toContain('".cdn.onstackit.cloud"');
+    expect(source.indexOf("req.headers.host = siteHost")).toBeLessThan(
+      source.indexOf("listener.call(server, req, res)"),
+    );
+    expect(source.indexOf("VINEXT_TRUST_PROXY")).toBeLessThan(
+      source.indexOf('await import("vinext/server/prod-server")'),
+    );
+    expect(source).not.toContain('from "vinext/server/prod-server"');
+  });
+
   it("installs vinext and React at runtime instead of bundling them", () => {
     expect(VINEXT_NODE_INSTALL).toContain("vinext");
     expect(VINEXT_NODE_INSTALL).toContain("react");

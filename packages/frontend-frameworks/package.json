@@ -34,6 +34,12 @@
       "worker": "./dist/*/neon.js",
       "import": "./dist/*/neon.js"
     },
+    "./*/stackit": {
+      "types": "./dist/*/stackit.d.ts",
+      "bun": "./dist/*/stackit.js",
+      "worker": "./dist/*/stackit.js",
+      "import": "./dist/*/stackit.js"
+    },
     "./aws-lambda": {
       "types": "./dist/aws-lambda/index.d.ts",
       "bun": "./dist/aws-lambda/index.js",

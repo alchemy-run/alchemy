@@ -1,6 +1,5 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { recordsEqual } from "alchemy/Util/equal";
@@ -8,7 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -532,27 +531,27 @@ export const ServerProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
+      const resolved = triggerProps<ServerProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
       if (olds !== undefined) {
-        if (createOnlyKey(news) === createOnlyKey(olds)) return undefined;
-        return reusesExclusiveDevice(news, olds)
+        if (createOnlyKey(resolved) === createOnlyKey(olds)) return undefined;
+        return reusesExclusiveDevice(resolved, olds)
           ? ({ action: "replace", deleteFirst: true } as const)
           : ({ action: "replace" } as const);
       }
       // Adopted without previous props: compare what the server reports.
-      if (news.imageId !== undefined && news.imageId !== output.imageId) {
+      if (resolved.imageId !== undefined && resolved.imageId !== output.imageId) {
         return { action: "replace" } as const;
       }
-      if (news.keypairName !== undefined && news.keypairName !== output.keypairName) {
+      if (resolved.keypairName !== undefined && resolved.keypairName !== output.keypairName) {
         return { action: "replace" } as const;
       }
-      if (news.affinityGroup !== undefined && news.affinityGroup !== output.affinityGroup) {
+      if (resolved.affinityGroup !== undefined && resolved.affinityGroup !== output.affinityGroup) {
         return { action: "replace" } as const;
       }
       if (
-        news.availabilityZone !== undefined &&
-        news.availabilityZone !== output.availabilityZone
+        resolved.availabilityZone !== undefined &&
+        resolved.availabilityZone !== output.availabilityZone
       ) {
         return { action: "replace" } as const;
       }

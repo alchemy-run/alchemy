@@ -17,6 +17,19 @@ export default defineConfig([
       "vite/neon": "src/vite/neon.ts",
       "waku/neon": "src/waku/neon.ts",
       "vocs/neon": "src/vocs/neon.ts",
+      "astro/stackit": "src/astro/stackit.ts",
+      "foldkit/stackit": "src/foldkit/stackit.ts",
+      "nextjs/stackit": "src/nextjs/stackit.ts",
+      "nuxt/stackit": "src/nuxt/stackit.ts",
+      "octane/stackit": "src/octane/stackit.ts",
+      "react-router/stackit": "src/react-router/stackit.ts",
+      "solidstart/stackit": "src/solidstart/stackit.ts",
+      "tanstack-start/stackit": "src/tanstack-start/stackit.ts",
+      "sveltekit/stackit": "src/sveltekit/stackit.ts",
+      "vinext/stackit": "src/vinext/stackit.ts",
+      "vite/stackit": "src/vite/stackit.ts",
+      "waku/stackit": "src/waku/stackit.ts",
+      "vocs/stackit": "src/vocs/stackit.ts",
       // Standalone child-process entries (spawned by BuildChild.ts /
       // DevChild.ts, never imported) — must keep their own stable files at
       // dist/core/.

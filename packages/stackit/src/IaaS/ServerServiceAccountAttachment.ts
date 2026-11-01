@@ -1,9 +1,8 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -127,13 +126,13 @@ export const ServerServiceAccountAttachmentProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) {
+      const resolved = triggerProps<ServerServiceAccountAttachmentProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) {
         return { action: "replace", deleteFirst: true } as const;
       }
       if (
-        news.serverId !== output.serverId ||
-        news.serviceAccountEmail !== output.serviceAccountEmail
+        resolved.serverId !== output.serverId ||
+        resolved.serviceAccountEmail !== output.serviceAccountEmail
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }

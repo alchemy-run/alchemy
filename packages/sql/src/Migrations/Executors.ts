@@ -1,11 +1,14 @@
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import type { ConnectionPool, config as MssqlConfig } from "mssql";
 import type { Connection, ConnectionOptions } from "mysql2/promise";
 import type { Client, ClientConfig } from "pg";
+import { importMssql } from "../MssqlDriver.ts";
 import { importMySql } from "../MySQLDriver.ts";
 import { importPg } from "../PostgresDriver.ts";
 import { MigrationError, type MigrationDialect, type SqlExecutor } from "./Format.ts";
+import { makeMssqlMigrationExecutor } from "./MssqlExecutor.ts";
 import { makeMySQLMigrationExecutor } from "./MySQLExecutor.ts";
 import { makePgMigrationExecutor } from "./PgExecutor.ts";
 import { inlineSqlParams } from "./Utils.ts";
@@ -139,7 +142,55 @@ export const withMySqlExecutor = <A, E, R>(
 ): Effect.Effect<A, MigrationError | E, R> =>
   withMySqlConnection(config, (connection) => use(makeMySQLMigrationExecutor(connection)), options);
 
+/**
+ * Open an `mssql` connection pool for the scope of `use`; it always closes
+ * afterwards, including when connecting fails. `config` goes to
+ * `new ConnectionPool(config)` unchanged. Prefer {@link withMssqlExecutor}.
+ */
+export const withMssqlPool = <A, E, R>(
+  config: MssqlConfig,
+  use: (pool: ConnectionPool) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
+): Effect.Effect<A, MigrationError | E, R> =>
+  Effect.acquireUseRelease(
+    retryingConnect(
+      Effect.tryPromise({
+        try: async () => {
+          const { ConnectionPool } = await importMssql();
+          const pool = new ConnectionPool(config);
+          // The pool reports idle socket failures as events; the next query
+          // fails through the error channel instead of crashing the process.
+          pool.on("error", () => {});
+          try {
+            await pool.connect();
+          } catch (error) {
+            await pool.close().catch(() => {});
+            throw error;
+          }
+          return pool;
+        },
+        catch: migrationError(`Connecting to sql server at ${config.server}`),
+      }),
+      options,
+    ),
+    use,
+    (pool) => Effect.promise(() => pool.close().catch(() => {})),
+  );
+
+/** {@link withMssqlPool} handing over the pool as a {@link SqlExecutor}. */
+export const withMssqlExecutor = <A, E, R>(
+  config: MssqlConfig,
+  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
+): Effect.Effect<A, MigrationError | E, R> =>
+  withMssqlPool(config, (pool) => use(makeMssqlMigrationExecutor(pool)), options);
+
 export type Rows = Array<Record<string, unknown>>;
+
+const BEGIN_TRANSACTION: Partial<Record<MigrationDialect, string>> = {
+  mysql: "START TRANSACTION;",
+  mssql: "BEGIN TRANSACTION;",
+};
 
 /** Each statement ends with exactly one `;`, so several share one request. */
 const terminated = (statement: string) => {
@@ -156,7 +207,7 @@ const terminated = (statement: string) => {
  *
  * `batch` sets how a migration and its bookkeeping row commit together:
  * - `"transaction"` — one request wrapped in `BEGIN`/`COMMIT`
- *   (`START TRANSACTION` on MySQL).
+ *   (`START TRANSACTION` on MySQL, `BEGIN TRANSACTION` on SQL Server).
  * - `"atomic"` — one request the API already commits as a unit.
  */
 export const makeStatementExecutor = (options: {
@@ -171,7 +222,7 @@ export const makeStatementExecutor = (options: {
     return options
       .execute(
         (options.batch === "transaction"
-          ? [options.dialect === "mysql" ? "START TRANSACTION;" : "BEGIN;", ...body, "COMMIT;"]
+          ? [BEGIN_TRANSACTION[options.dialect] ?? "BEGIN;", ...body, "COMMIT;"]
           : body
         ).join("\n"),
       )

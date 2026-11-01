@@ -8,7 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
@@ -382,20 +382,20 @@ export const ProjectProvider = () =>
           deleteFirst: rawProp<ProjectProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ProjectProps>(news);
       const env = yield* StackitEnvironment.current;
-      const name = yield* resolveName(id, news, output);
+      const name = yield* resolveName(id, resolved, output);
       const sameName = name === output.name;
       if (
         !sameName ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region ||
-        (news.proxy === undefined) !== (output.proxy === undefined) ||
-        news.proxy?.registryType !== output.proxy?.registryType
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region ||
+        (resolved.proxy === undefined) !== (output.proxy === undefined) ||
+        resolved.proxy?.registryType !== output.proxy?.registryType
       ) {
         return {
           action: "replace",
-          deleteFirst: sameName && news.name !== undefined,
+          deleteFirst: sameName && resolved.name !== undefined,
         } as const;
       }
       return undefined;

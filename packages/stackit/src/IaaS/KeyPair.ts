@@ -1,10 +1,9 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -137,18 +136,18 @@ export const KeyPairProvider = () =>
           deleteFirst: rawProp<KeyPairProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<KeyPairProps>(news);
       // An explicit name is the identity; a generated name stays stable
       // until a replacement mints a new one.
       const renamed =
-        news.name !== undefined ? news.name !== output.name : olds?.name !== undefined;
+        resolved.name !== undefined ? resolved.name !== output.name : olds?.name !== undefined;
       if (renamed) return { action: "replace" } as const;
       const previousKey = olds?.publicKey ?? output.publicKey;
-      if (keyMaterial(news.publicKey) !== keyMaterial(previousKey)) {
+      if (keyMaterial(resolved.publicKey) !== keyMaterial(previousKey)) {
         // Key pair names are unique per user: under an explicit name the old
         // key pair must go first. A generated name changes with the new
         // generation, so create-before-delete is safe.
-        return news.name !== undefined
+        return resolved.name !== undefined
           ? ({ action: "replace", deleteFirst: true } as const)
           : ({ action: "replace" } as const);
       }

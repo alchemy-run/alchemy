@@ -1,9 +1,8 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -136,11 +135,11 @@ export const ServerNetworkInterfaceAttachmentProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ServerNetworkInterfaceAttachmentProps>(news);
       if (
-        (yield* projectScopeChanged(news, output)) ||
-        news.serverId !== output.serverId ||
-        news.networkInterfaceId !== output.networkInterfaceId
+        (yield* projectScopeChanged(resolved, output)) ||
+        resolved.serverId !== output.serverId ||
+        resolved.networkInterfaceId !== output.networkInterfaceId
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }

@@ -110,6 +110,7 @@
     "hono": "catalog:",
     "iovalkey": "catalog:",
     "isbot": "catalog:",
+    "mssql": "catalog:",
     "next": "catalog:",
     "nitropack": "catalog:",
     "nuxt": "catalog:",

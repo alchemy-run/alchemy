@@ -1,4 +1,4 @@
-import { hasUnresolvedTrigger, rawProp } from "@alchemy.run/stackit/internal/diff";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "@alchemy.run/stackit/internal/diff";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
@@ -35,5 +35,13 @@ describe("hasUnresolvedTrigger", () => {
         "prefix",
       ]),
     ).toBe(false);
+  });
+});
+
+describe("triggerProps", () => {
+  it("reads a resolved trigger even while another prop is unresolved", () => {
+    const news = { serverId: "new", region: unresolved };
+    expect(hasUnresolvedTrigger<Props>(news, ["serverId"])).toBe(false);
+    expect(triggerProps<Props>(news).serverId).toEqual("new");
   });
 });

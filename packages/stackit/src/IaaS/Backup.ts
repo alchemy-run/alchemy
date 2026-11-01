@@ -1,12 +1,11 @@
 import * as iaas from "@distilled.cloud/stackit/iaas";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -209,12 +208,14 @@ export const BackupProvider = () =>
       if (hasUnresolvedTrigger<BackupProps>(news, ["projectId", "region", "source"])) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (olds !== undefined && sourceKey(news.source) !== sourceKey(olds.source)) {
+      const resolved = triggerProps<BackupProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if (olds !== undefined && sourceKey(resolved.source) !== sourceKey(olds.source)) {
         return { action: "replace" } as const;
       }
-      if (!fromSource(news.source)({ volumeId: output.volumeId, snapshotId: output.snapshotId })) {
+      if (
+        !fromSource(resolved.source)({ volumeId: output.volumeId, snapshotId: output.snapshotId })
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;

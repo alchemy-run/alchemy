@@ -16,7 +16,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
 import { resolveProjectScope } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -272,15 +272,16 @@ export const DatabaseProvider = () =>
           deleteFirst: rawProp<DatabaseProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
-      const scope = yield* resolveProjectScope(news, undefined);
+      const resolved = triggerProps<DatabaseProps>(news);
+      const scope = yield* resolveProjectScope(resolved, undefined);
       if (
-        news.instanceId !== output.instanceId ||
+        resolved.instanceId !== output.instanceId ||
         scope.projectId !== output.projectId ||
         scope.region !== output.region
       ) {
         return { action: "replace", deleteFirst: false } as const;
       }
+      if (!isResolved(news)) return undefined;
       // Pending files or a table move update in place, never replace.
       if (yield* diffMigrations({ news, output })) return { action: "update" } as const;
       return undefined;

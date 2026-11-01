@@ -2,6 +2,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 
 /**
  * A STACKIT resource did not reach the awaited state within its time budget.
@@ -144,3 +145,21 @@ export const waitUntilGone = <A, E, R>(options: {
     interval: options.interval,
     maxInterval: options.maxInterval,
   }).pipe(Effect.asVoid);
+
+/**
+ * Retry a delete STACKIT refuses with a 400 while something still references the
+ * object, for about a minute: a load balancer that was just deleted can take a
+ * moment to let go. Use it only on an operation whose spec documents that 400 as
+ * the in-use signal and nothing else. A reference that stays fails with the
+ * operation's `BadRequest`.
+ */
+export const retryWhileInUse = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "BadRequest",
+      schedule: Schedule.spaced("10 seconds"),
+      times: 6,
+    }),
+  );

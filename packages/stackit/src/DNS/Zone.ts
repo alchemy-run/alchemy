@@ -1,6 +1,5 @@
 import * as dns from "@distilled.cloud/stackit/dns";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -8,7 +7,7 @@ import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
@@ -486,16 +485,16 @@ export const ZoneProvider = () =>
       ) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ZoneProps>(news);
       const env = yield* StackitEnvironment.current;
-      const projectId = news.projectId ?? env.projectId;
-      const dnsName = yield* resolveDnsName(id, news, output);
+      const projectId = resolved.projectId ?? env.projectId;
+      const dnsName = yield* resolveDnsName(id, resolved, output);
       const sameName = dnsName === output.dnsName;
       if (
         !sameName ||
         projectId !== output.projectId ||
-        (news.type ?? DEFAULT_TYPE) !== output.type ||
-        (news.isReverseZone ?? false) !== output.isReverseZone
+        (resolved.type ?? DEFAULT_TYPE) !== output.type ||
+        (resolved.isReverseZone ?? false) !== output.isReverseZone
       ) {
         // The same dnsName can't exist twice: delete the old zone first.
         return { action: "replace", deleteFirst: sameName } as const;

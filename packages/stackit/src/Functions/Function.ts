@@ -1,9 +1,7 @@
-import { Docker } from "@alchemy.run/docker/Docker";
 import {
   makeContainerImageSource,
   type ImageRegistryTarget,
 } from "@alchemy.run/docker/ImageSource";
-import { publishedRepoDigest } from "@alchemy.run/docker/Registry";
 import * as functions from "@distilled.cloud/stackit/functions";
 import { Unowned } from "alchemy/AdoptPolicy";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -26,8 +24,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
 import { findOwnedByName, readGeneration } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
+import { pushedDigestReference } from "../internal/pushImage.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
   desiredGenerationLabels,
@@ -58,6 +57,7 @@ import {
 } from "./internal.ts";
 
 export type { InferEnv } from "../InferEnv.ts";
+export { FunctionImageDigestMissing } from "../internal/pushImage.ts";
 
 /** Where the image built from `main` is pushed. */
 export interface FunctionRegistry {
@@ -586,15 +586,6 @@ export class FunctionImageNotPinned extends Data.TaggedError(
   readonly message: string;
 }> {}
 
-/** The image was pushed, but neither the push nor the engine reported its digest. */
-export class FunctionImageDigestMissing extends Data.TaggedError(
-  "Stackit.Functions.FunctionImageDigestMissing",
-)<{
-  readonly resourceName: string;
-  readonly image: string;
-  readonly message: string;
-}> {}
-
 /** The API returned a function or revision with no id; the spec marks it optional. */
 export class FunctionIdMissing extends Data.TaggedError("Stackit.Functions.FunctionIdMissing")<{
   readonly resourceName: string;
@@ -654,41 +645,6 @@ const imageSourceOf = (news: FunctionProps, main: string) => ({
     news.isExternal === true
       ? asyncEntry(news.handler ?? "default")
       : effectEntry(news.handler ?? "default"),
-});
-
-/** The digest-pinned reference of an image pushed from this machine. */
-const pushedDigestReference = Effect.fn(function* (args: {
-  id: string;
-  imageUri: string;
-  registry: FunctionRegistry;
-}) {
-  const docker = yield* Docker;
-  const { imageUri, registry } = args;
-  // Pushing an image the build just pushed uploads nothing. It's here for its
-  // output: the only place the engine reports the digest it published. Without
-  // credentials, the push uses the machine's own registry login.
-  const pushed = yield* docker.image.push(
-    imageUri,
-    registry.username !== undefined && registry.password !== undefined
-      ? {
-          // Docker keys credentials by host.
-          server: registry.repository.split("/")[0]!,
-          username: registry.username,
-          password: registry.password,
-        }
-      : undefined,
-    FUNCTION_PLATFORM,
-  );
-  const inspected = yield* docker.image.inspect(imageUri);
-  const reference = publishedRepoDigest(imageUri, pushed, inspected.RepoDigests);
-  if (reference === undefined) {
-    return yield* new FunctionImageDigestMissing({
-      resourceName: args.id,
-      image: imageUri,
-      message: `${args.id}: pushed ${imageUri}, but the container engine reported no digest for it`,
-    });
-  }
-  return reference;
 });
 
 /**
@@ -924,13 +880,13 @@ export const FunctionProvider = () =>
           deleteFirst: rawProp<FunctionProps>(desired, "name") !== undefined,
         } as const;
       }
+      const env = yield* StackitEnvironment.current;
+      if ((triggerProps<FunctionProps>(desired).projectId ?? env.projectId) !== output.projectId) {
+        return { action: "replace" } as const;
+      }
       // Runtime exports are covered by the bundle hash, not infrastructure inputs.
       const news = stripEffects(desired);
       if (news === undefined || !isResolved(news)) return undefined;
-      const env = yield* StackitEnvironment.current;
-      if ((news.projectId ?? env.projectId) !== output.projectId) {
-        return { action: "replace" } as const;
-      }
       // A code-only change leaves the props untouched: hash the program so it
       // still surfaces as an update.
       if (news.main !== undefined) {

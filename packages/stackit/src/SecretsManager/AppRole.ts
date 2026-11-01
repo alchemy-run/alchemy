@@ -1,11 +1,10 @@
 import * as secretsManager from "@distilled.cloud/stackit/secrets_manager";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import { DESCRIPTION_MAX_LENGTH, listInstanceAppRoles, sameDuration } from "./internal.ts";
 
@@ -175,11 +174,11 @@ export const AppRoleProvider = () =>
       if (hasUnresolvedTrigger<AppRoleProps>(news, ["instanceId", "projectId"])) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<AppRoleProps>(news);
       const env = yield* StackitEnvironment.current;
       if (
-        news.instanceId !== output.instanceId ||
-        (news.projectId ?? env.projectId) !== output.projectId
+        resolved.instanceId !== output.instanceId ||
+        (resolved.projectId ?? env.projectId) !== output.projectId
       ) {
         return { action: "replace" } as const;
       }

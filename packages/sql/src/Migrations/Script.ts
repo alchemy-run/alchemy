@@ -240,3 +240,60 @@ export const scanSqlScript = (
 /** Statements of a SQL script with comments removed; see {@link scanSqlScript}. */
 export const splitSqlScript = (sql: string, dialect: ScriptDialect): string[] =>
   scanSqlScript(sql, dialect).map((statement) => statement.text);
+
+/** A `GO` line, as `sqlcmd` reads one: alone, with an optional count and comment. */
+const GO_LINE = /^[ \t]*GO(?:[ \t]+(\d+))?[ \t]*(?:--.*)?\r?$/i;
+
+/**
+ * Split a T-SQL script into the batches its `GO` lines separate. `GO` is not
+ * T-SQL: client tools act on it and the server rejects it. `GO 3` repeats the
+ * batch three times, as `sqlcmd` does. A `GO` inside a string, quoted identifier
+ * or comment doesn't count, and a batch holding only comments is dropped. The
+ * `;` terminators stay: one T-SQL batch holds any number of statements.
+ */
+export const splitTsqlBatches = (sql: string): string[] => {
+  const batches: string[] = [];
+  let start = 0;
+  let hasCode = false;
+  const flush = (end: number, count: number) => {
+    const batch = sql.slice(start, end).trim();
+    if (hasCode) for (let n = 0; n < count; n++) batches.push(batch);
+    hasCode = false;
+  };
+  const spanOptions = { backslashEscapes: false, doubledEscapes: true };
+
+  let i = 0;
+  let lineStart = true;
+  while (i < sql.length) {
+    if (lineStart) {
+      lineStart = false;
+      const end = endOfLine(sql, i);
+      const go = GO_LINE.exec(sql.slice(i, end));
+      if (go) {
+        flush(i, go[1] === undefined ? 1 : Number.parseInt(go[1], 10));
+        start = end;
+        i = end;
+        continue;
+      }
+    }
+    const ch = sql[i]!;
+    const next = sql[i + 1];
+    if (ch === "-" && next === "-") {
+      i = endOfLine(sql, i);
+    } else if (ch === "/" && next === "*") {
+      i = blockComment(sql, i, true).end;
+    } else if (ch === "'" || ch === '"') {
+      hasCode = true;
+      i = quoted(sql, i, ch, spanOptions).end;
+    } else if (ch === "[") {
+      hasCode = true;
+      i = quoted(sql, i, "]", spanOptions).end;
+    } else {
+      if (ch === "\n") lineStart = true;
+      else if (!/\s/.test(ch)) hasCode = true;
+      i++;
+    }
+  }
+  flush(sql.length, 1);
+  return batches;
+};

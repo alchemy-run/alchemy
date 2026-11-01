@@ -69,6 +69,23 @@ export const tableColumns = (
           ),
           Effect.orElseSucceed(() => []),
         );
+    case "mssql":
+      return executor
+        .query(
+          `SELECT COLUMN_NAME AS name, DATA_TYPE AS type
+             FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = ${sqlLiteral(table, "mssql")}
+              AND TABLE_SCHEMA = ${schema ? sqlLiteral(schema, "mssql") : "SCHEMA_NAME()"}
+            ORDER BY ORDINAL_POSITION;`,
+        )
+        .pipe(
+          Effect.map((rows) =>
+            rows.map((row) => ({
+              name: scalarText(row.name),
+              type: scalarText(row.type ?? "").toUpperCase(),
+            })),
+          ),
+        );
     case "googlesql":
       // The default schema is the empty string; named schemas qualify tables.
       return executor

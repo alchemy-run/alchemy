@@ -1,11 +1,10 @@
 import * as serviceAccount from "@distilled.cloud/stackit/service_account";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import { hasServiceAccount } from "./internal/service_account.ts";
 
@@ -315,23 +314,23 @@ export const ServiceAccountKeyProvider = () =>
       ) {
         return { action: "replace" as const };
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ServiceAccountKeyProps>(news);
       const env = yield* StackitEnvironment.current;
-      if ((news.projectId ?? env.projectId) !== output.projectId) {
+      if ((resolved.projectId ?? env.projectId) !== output.projectId) {
         return { action: "replace" as const };
       }
-      if (news.serviceAccountEmail !== output.serviceAccountEmail) {
+      if (resolved.serviceAccountEmail !== output.serviceAccountEmail) {
         return { action: "replace" as const };
       }
       if (olds !== undefined) {
-        if (news.publicKey !== olds.publicKey) return { action: "replace" as const };
-        if (news.publicKey === undefined && news.algorithm !== olds.algorithm) {
+        if (resolved.publicKey !== olds.publicKey) return { action: "replace" as const };
+        if (resolved.publicKey === undefined && resolved.algorithm !== olds.algorithm) {
           // Unset means STACKIT's default (RSA_2048): only a real change replaces.
           const before = olds.algorithm ?? output.keyAlgorithm;
-          const after = news.algorithm ?? "RSA_2048";
+          const after = resolved.algorithm ?? "RSA_2048";
           if (before !== after) return { action: "replace" as const };
         }
-      } else if (news.algorithm !== undefined && news.algorithm !== output.keyAlgorithm) {
+      } else if (resolved.algorithm !== undefined && resolved.algorithm !== output.keyAlgorithm) {
         return { action: "replace" as const };
       }
       if (materialLost(output)) return { action: "replace" as const };

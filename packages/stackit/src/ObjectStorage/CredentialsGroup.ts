@@ -1,13 +1,12 @@
 import * as objectStorage from "@distilled.cloud/stackit/object_storage";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -196,16 +195,16 @@ export const CredentialsGroupProvider = () =>
           deleteFirst: rawProp<CredentialsGroupProps>(news, "displayName") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<CredentialsGroupProps>(news);
       const env = yield* StackitEnvironment.current;
       const nameChanged =
-        news.displayName !== undefined
-          ? news.displayName !== output.displayName
+        resolved.displayName !== undefined
+          ? resolved.displayName !== output.displayName
           : olds?.displayName !== undefined;
       if (
         nameChanged ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        (news.region ?? env.region) !== output.region
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        (resolved.region ?? env.region) !== output.region
       ) {
         return { action: "replace" as const };
       }

@@ -7,7 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
 import { readGeneration, resolveProjectScope } from "../IaaS/internal.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
@@ -484,22 +484,35 @@ export const InstanceProvider = () =>
       ) {
         return { action: "replace", deleteFirst } as const;
       }
-      if (!isResolved(news)) return undefined;
-      const scope = yield* resolveProjectScope(news, undefined);
+      const resolved = triggerProps<InstanceProps>(news);
+      const scope = yield* resolveProjectScope(resolved, undefined);
+      // Compared with the props last deployed where there are any: the API may answer
+      // with a default the props never asked for, or leave an optional value out, and an
+      // unchanged deploy must not replace, and so empty, the instance. Only an adoption
+      // has nothing but the live values, where a prop that is unset keeps what the
+      // instance has, and a value the API doesn't report is unknown, not different.
+      const deployedClass = olds?.storage.class ?? output.storageClass;
+      const accessScopeChanged =
+        olds !== undefined
+          ? (resolved.accessScope ?? DEFAULT_ACCESS_SCOPE) !==
+            (olds.accessScope ?? DEFAULT_ACCESS_SCOPE)
+          : resolved.accessScope !== undefined && resolved.accessScope !== output.accessScope;
+      const encryptionChanged =
+        olds !== undefined
+          ? encryptionKey(resolved.encryption) !== encryptionKey(olds.encryption)
+          : resolved.encryption !== undefined &&
+            output.encryption !== undefined &&
+            encryptionKey(resolved.encryption) !== encryptionKey(output.encryption);
       if (
         scope.projectId !== output.projectId ||
         scope.region !== output.region ||
-        // A storage class the API doesn't report is unknown, not different.
-        (output.storageClass !== undefined && news.storage.class !== output.storageClass) ||
-        // On adoption (no olds) an unset prop keeps what the instance already has.
-        ((olds !== undefined || news.accessScope !== undefined) &&
-          (news.accessScope ?? DEFAULT_ACCESS_SCOPE) !== output.accessScope) ||
-        ((olds !== undefined || news.encryption !== undefined) &&
-          encryptionKey(news.encryption) !== encryptionKey(output.encryption)) ||
+        (deployedClass !== undefined && resolved.storage.class !== deployedClass) ||
+        accessScopeChanged ||
+        encryptionChanged ||
         // Removing `cloneFrom` keeps the data; only a new source replaces.
         (olds !== undefined &&
-          news.cloneFrom !== undefined &&
-          cloneKey(news.cloneFrom) !== cloneKey(olds.cloneFrom))
+          resolved.cloneFrom !== undefined &&
+          cloneKey(resolved.cloneFrom) !== cloneKey(olds.cloneFrom))
       ) {
         return { action: "replace", deleteFirst } as const;
       }

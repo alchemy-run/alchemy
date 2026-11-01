@@ -1,7 +1,6 @@
 import * as secretsManager from "@distilled.cloud/stackit/secrets_manager";
 import * as kv from "@distilled.cloud/stackit/secrets_manager_kv";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -9,7 +8,7 @@ import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { desiredLabels, hasAlchemyLabels, labelRecord } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { getInstanceOrUndefined, withDeployVault } from "./internal.ts";
@@ -254,14 +253,14 @@ export const SecretProvider = () =>
           deleteFirst: rawProp<SecretProps>(news, "path") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<SecretProps>(news);
       const env = yield* StackitEnvironment.current;
-      const projectId = news.projectId ?? env.projectId;
-      const path = news.path ?? output.path;
+      const projectId = resolved.projectId ?? env.projectId;
+      const path = resolved.path ?? output.path;
       // A resolved move can't collide with the old secret: another instance or
       // another path. So the new one is written before the old one is destroyed.
       if (
-        news.instanceId !== output.instanceId ||
+        resolved.instanceId !== output.instanceId ||
         projectId !== output.projectId ||
         path !== output.path
       ) {

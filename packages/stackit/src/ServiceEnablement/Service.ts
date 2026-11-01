@@ -3,7 +3,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { disableService, ensureServiceEnabled, getServiceStatus } from "../internal/enable.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -135,17 +135,18 @@ export const ServiceProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      if (!isResolved(news)) return undefined;
+      if (output === undefined && !isResolved(news)) return undefined;
+      const resolved = triggerProps<ServiceProps>(news);
       const env = yield* StackitEnvironment.current;
-      const projectId = news.projectId ?? env.projectId;
-      const region = news.region ?? env.region;
+      const projectId = resolved.projectId ?? env.projectId;
+      const region = resolved.region ?? env.region;
       const previous = {
         serviceId: output?.serviceId ?? olds?.serviceId,
         projectId: output?.projectId ?? olds?.projectId,
         region: output?.region ?? olds?.region,
       };
       if (
-        (previous.serviceId !== undefined && previous.serviceId !== news.serviceId) ||
+        (previous.serviceId !== undefined && previous.serviceId !== resolved.serviceId) ||
         (previous.projectId !== undefined && previous.projectId !== projectId) ||
         (previous.region !== undefined && previous.region !== region)
       ) {

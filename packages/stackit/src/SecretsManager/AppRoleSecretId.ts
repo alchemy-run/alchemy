@@ -1,12 +1,11 @@
 import * as secretsManager from "@distilled.cloud/stackit/secrets_manager";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import { DESCRIPTION_MAX_LENGTH, MissingCredentialInResponse, toRedacted } from "./internal.ts";
 
@@ -181,13 +180,13 @@ export const AppRoleSecretIdProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<AppRoleSecretIdProps>(news);
       const env = yield* StackitEnvironment.current;
       if (
-        news.instanceId !== output.instanceId ||
-        news.roleId !== output.roleId ||
-        (news.projectId ?? env.projectId) !== output.projectId ||
-        news.rotationKey !== olds?.rotationKey
+        resolved.instanceId !== output.instanceId ||
+        resolved.roleId !== output.roleId ||
+        (resolved.projectId ?? env.projectId) !== output.projectId ||
+        resolved.rotationKey !== olds?.rotationKey
       ) {
         return { action: "replace" } as const;
       }

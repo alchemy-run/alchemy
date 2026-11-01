@@ -1,11 +1,10 @@
 import * as resourceManager from "@distilled.cloud/stackit/resource_manager";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, triggerProps } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, isAlchemyOwned, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -280,12 +279,12 @@ export const ProjectProvider = () =>
       if (hasUnresolvedTrigger<ProjectProps>(news, ["networkAreaId"])) {
         return { action: "replace", deleteFirst: true } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ProjectProps>(news);
       // `networkArea` is immutable. On adoption (no olds) an unset prop
       // keeps whatever network area the project already has.
       if (
-        (olds !== undefined || news.networkAreaId !== undefined) &&
-        (news.networkAreaId ?? undefined) !== output.networkAreaId
+        (olds !== undefined || resolved.networkAreaId !== undefined) &&
+        (resolved.networkAreaId ?? undefined) !== output.networkAreaId
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }

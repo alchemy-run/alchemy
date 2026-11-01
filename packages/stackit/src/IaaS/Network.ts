@@ -5,7 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
@@ -402,16 +402,17 @@ export const NetworkProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if ((news.isolated ?? false) !== (output?.isolated ?? olds?.isolated ?? false)) {
+      if (output === undefined && !isResolved(news)) return undefined;
+      const resolved = triggerProps<NetworkProps>(news);
+      if (yield* projectScopeChanged(resolved, output)) return { action: "replace" } as const;
+      if ((resolved.isolated ?? false) !== (output?.isolated ?? olds?.isolated ?? false)) {
         return { action: "replace" } as const;
       }
       if (olds !== undefined) {
         if (
-          news.vpcId !== olds.vpcId ||
-          ipIdentityChanged(news.ipv4, olds.ipv4) ||
-          ipIdentityChanged(news.ipv6, olds.ipv6)
+          resolved.vpcId !== olds.vpcId ||
+          ipIdentityChanged(resolved.ipv4, olds.ipv4) ||
+          ipIdentityChanged(resolved.ipv6, olds.ipv6)
         ) {
           return { action: "replace" } as const;
         }

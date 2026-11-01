@@ -1,13 +1,12 @@
 import * as serviceAccount from "@distilled.cloud/stackit/service_account";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { hasUnresolvedTrigger, rawProp, triggerProps } from "../internal/diff.ts";
 import { isGeneratedServiceAccountName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
 import { listServiceAccounts } from "./internal/service_account.ts";
@@ -202,14 +201,14 @@ export const ServiceAccountProvider = () =>
           deleteFirst: rawProp<ServiceAccountProps>(news, "name") !== undefined,
         } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const resolved = triggerProps<ServiceAccountProps>(news);
       const env = yield* StackitEnvironment.current;
-      if ((news.projectId ?? env.projectId) !== output.projectId) {
+      if ((resolved.projectId ?? env.projectId) !== output.projectId) {
         return { action: "replace" as const };
       }
       // An unset name keeps the generated one; dropping an explicit name
       // switches to a generated one, which is a rename.
-      const desiredName = news.name ?? (olds?.name === undefined ? output.name : undefined);
+      const desiredName = resolved.name ?? (olds?.name === undefined ? output.name : undefined);
       if (desiredName !== output.name) return { action: "replace" as const };
       return undefined;
     }),
