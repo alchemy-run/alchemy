@@ -10858,6 +10858,9 @@ importers:
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../gcp
+      '@alchemy.run/hetzner':
+        specifier: workspace:*
+        version: link:../hetzner
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes

@@ -35,6 +35,7 @@
     "./Docker": "./src/Docker/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./GCP": "./src/GCP/index.ts",
+    "./Hetzner": "./src/Hetzner/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -77,6 +78,12 @@
         "worker": "./src/GCP/index.ts",
         "default": "./lib/GCP/index.js"
       },
+      "./Hetzner": {
+        "types": "./lib/Hetzner/index.d.ts",
+        "bun": "./src/Hetzner/index.ts",
+        "worker": "./src/Hetzner/index.ts",
+        "default": "./lib/Hetzner/index.js"
+      },
       "./Kubernetes": {
         "types": "./lib/Kubernetes/index.d.ts",
         "bun": "./src/Kubernetes/index.ts",
@@ -110,6 +117,7 @@
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
@@ -121,6 +129,7 @@
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
@@ -133,6 +142,9 @@
       "optional": true
     },
     "@alchemy.run/fly": {
+      "optional": true
+    },
+    "@alchemy.run/hetzner": {
       "optional": true
     },
     "@alchemy.run/gcp": {

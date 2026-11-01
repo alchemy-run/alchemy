@@ -9,8 +9,15 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Cluster } from "../Cluster.ts";
+import {
+  objectStorageEnvironment,
+  ObjectStorageRequired,
+  type ObjectStorage,
+} from "../internal/ObjectStorage.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+
+export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetKubernetes.ControlPlane` runs by default. */
 export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
@@ -18,31 +25,6 @@ export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0-preview.4";
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
 const PEER_PORT = 6421;
-
-/**
- * Where the control plane keeps the durable copy of every actor's data. The
- * engine reaches it over HTTPS only.
- */
-export type ObjectStorage =
-  | {
-      /** An S3 (or S3-compatible, e.g. R2) bucket. */
-      readonly kind: "s3";
-      readonly bucket: Input<string>;
-      readonly region?: Input<string>;
-      /** An HTTPS endpoint for an S3-compatible service. */
-      readonly endpoint?: Input<string>;
-      readonly accessKeyId?: Input<string>;
-      readonly secretAccessKey?: Input<Redacted.Redacted<string>>;
-      readonly prefix?: string;
-    }
-  | {
-      /** A Google Cloud Storage bucket. */
-      readonly kind: "gcs";
-      readonly bucket: Input<string>;
-      /** A service account key (JSON). Defaults to application default credentials. */
-      readonly serviceAccountKey?: Input<Redacted.Redacted<string>>;
-      readonly prefix?: string;
-    };
 
 /** How the control plane's API is reached from outside the cluster. */
 export type ControlPlaneExposure =
@@ -116,47 +98,21 @@ export interface ControlPlaneProps {
   name?: string;
 }
 
-/** More than one engine with nowhere to share data. */
-export class ObjectStorageRequired extends Data.TaggedError(
-  "RivetKubernetes.ObjectStorageRequired",
-)<{
-  readonly message: string;
-}> {}
-
 /** The control plane's load balancer never got an address. */
 export class LoadBalancerNotReady extends Data.TaggedError("RivetKubernetes.LoadBalancerNotReady")<{
   readonly message: string;
 }> {}
 
 /** The engine environment for the chosen object storage. */
-const storageEnvironment = (storage: ObjectStorage | undefined) => {
-  if (storage === undefined) {
-    return [
-      {
-        name: "RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH",
-        value: `${DATA_PATH}/objects`,
-      },
-    ];
-  }
-  const prefix = storage.prefix === undefined ? [] : [["PREFIX", storage.prefix] as const];
-  const entries: ReadonlyArray<readonly [string, unknown]> =
-    storage.kind === "s3"
-      ? [
-          ["BUCKET", storage.bucket],
-          ["REGION", storage.region],
-          ["ENDPOINT", storage.endpoint],
-          ["ACCESS_KEY_ID", storage.accessKeyId],
-          ["SECRET_ACCESS_KEY", storage.secretAccessKey],
-          ...prefix,
-        ]
-      : [["BUCKET", storage.bucket], ["SERVICE_ACCOUNT_KEY", storage.serviceAccountKey], ...prefix];
-  return entries
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => ({
-      name: `RIVET__OBJECT_STORAGE__PRIMARY__${storage.kind.toUpperCase()}__${key}`,
-      value,
-    }));
-};
+const storageEnvironment = (storage: ObjectStorage | undefined) =>
+  storage === undefined
+    ? [
+        {
+          name: "RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH",
+          value: `${DATA_PATH}/objects` as unknown,
+        },
+      ]
+    : objectStorageEnvironment(storage).map(([name, value]) => ({ name, value }));
 
 /**
  * A Rivet control plane on Kubernetes, as a `Rivet.Cluster` Layer: a

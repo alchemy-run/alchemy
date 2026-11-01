@@ -1,16 +1,10 @@
 import * as Fly from "@alchemy.run/fly";
-import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
-import * as Bundle from "alchemy/Bundle/Bundle";
-import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import {
+  bundleNodes,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
-  stackDnsLabel,
-  type PoolNodes,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -65,7 +59,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
-      const main = yield* bundleNodes(id, nodes);
+      const main = yield* bundleNodes("fly", id, nodes);
       yield* Fly.Service(`${id}Nodes`, {
         main: main as unknown as string,
         build: { install: { rivetkit: RIVETKIT_VERSION } },
@@ -79,32 +73,3 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
       });
     }),
   });
-
-/**
- * Bundle the node program into a directory of its own, once the pool knows
- * its classes. A Fly Service without an Effect implementation runs its
- * `main` as it is, so it is handed the built entry.
- */
-const bundleNodes = Effect.fn(function* (id: string, nodes: PoolNodes<unknown>) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "fly", yield* stackDnsLabel(id));
-  const { external, plugins } = nodes.program.build.input;
-  return Output.mapEffect((resolved: Parameters<typeof Bundle.build>[0]["plugins"]) =>
-    Effect.gen(function* () {
-      yield* fs.remove(dir, { recursive: true, force: true });
-      yield* fs.makeDirectory(dir, { recursive: true });
-      yield* Bundle.build(
-        {
-          input: nodes.program.main,
-          platform: "node",
-          external,
-          resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          plugins: resolved,
-        },
-        { dir, format: "esm", entryFileNames: "node.mjs", codeSplitting: false },
-      );
-      return path.join(dir, "node.mjs");
-    }).pipe(Effect.orDie),
-  )(plugins);
-});

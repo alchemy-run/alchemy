@@ -8,6 +8,8 @@
  */
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import * as Bundle from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import type { Provider } from "alchemy/Provider";
@@ -15,7 +17,9 @@ import { Self } from "alchemy/Self";
 import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { Cluster, type ClusterShape } from "../Cluster.ts";
 import {
@@ -248,3 +252,36 @@ const nodeEntry = () =>
   fileURLToPath(
     new URL(import.meta.url.endsWith(".ts") ? "./node.ts" : "./node.js", import.meta.url),
   );
+
+/**
+ * Bundle the node program into a directory of its own, once the pool knows
+ * its classes, and resolve to the built entry. For hosts that run a `main`
+ * as it is (a Fly or Hetzner Service without an Effect implementation).
+ */
+export const bundleNodes = Effect.fn(function* (
+  host: string,
+  id: string,
+  nodes: PoolNodes<unknown>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", host, yield* stackDnsLabel(id));
+  const { external, plugins } = nodes.program.build.input;
+  return Output.mapEffect((resolved: Parameters<typeof Bundle.build>[0]["plugins"]) =>
+    Effect.gen(function* () {
+      yield* fs.remove(dir, { recursive: true, force: true });
+      yield* fs.makeDirectory(dir, { recursive: true });
+      yield* Bundle.build(
+        {
+          input: nodes.program.main,
+          platform: "node",
+          external,
+          resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
+          plugins: resolved,
+        },
+        { dir, format: "esm", entryFileNames: "node.mjs", codeSplitting: false },
+      );
+      return path.join(dir, "node.mjs");
+    }).pipe(Effect.orDie),
+  )(plugins);
+});
