@@ -92,6 +92,7 @@ const inTransit = <A>(call: Effect.Effect<A>): Effect.Effect<A> =>
 /**
  * Send an event to an instance, retrying any failure for about a minute: a run
  * takes each signal and interrupt at most once, so sending one again is safe.
+ * A finished instance takes no more events, and needs none.
  */
 const sendEvent = (
   handle: WorkflowHandle,
@@ -101,6 +102,15 @@ const sendEvent = (
   handle.get(id).pipe(
     Effect.flatMap((instance) => instance.sendEvent(event)),
     Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.catch((error) =>
+      Effect.flatMap(statusOf(handle, id), (status) =>
+        status?.status === "complete" ||
+        status?.status === "errored" ||
+        status?.status === "terminated"
+          ? Effect.void
+          : Effect.fail(error),
+      ),
+    ),
     Effect.retry({
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
