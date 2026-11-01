@@ -135,6 +135,17 @@ test(
   }),
 );
 
+test(
+  "Portless.disabled is true for PORTLESS=0, false and skip, and false otherwise",
+  Effect.gen(function* () {
+    for (const value of ["0", "false", "skip"]) {
+      expect(yield* Portless.disabled.pipe(withEnv({ PORTLESS: value }))).toBe(true);
+    }
+    expect(yield* Portless.disabled.pipe(withEnv({}))).toBe(false);
+    expect(yield* Portless.disabled.pipe(withEnv({ PORTLESS: "1" }))).toBe(false);
+  }),
+);
+
 describe("the container that holds a port", () => {
   const ps = [
     "alchemy-floci\t0.0.0.0:4566->4566/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp",

@@ -109,3 +109,50 @@ test.provider(
     }).pipe(Effect.scoped),
   { tags: ["local"], timeout: 120_000 },
 );
+
+test.provider(
+  "Alias removes its old route from the directory it registered it in",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const fs = yield* FileSystem.FileSystem;
+      const existing = yield* listener("emulator");
+      const home = yield* proxy.stateDirectory;
+      const elsewhere = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-portless-alias-" });
+      const program = (name: string, stateDirectory: string) =>
+        Effect.gen(function* () {
+          const running = yield* Portless.Proxy("Proxy", { domain: "alias-moves" });
+          // The same proxy under another state directory, as when PORTLESS_STATE_DIR changes.
+          return yield* Portless.Alias("Floci", {
+            proxy: {
+              domain: running.domain,
+              port: running.port,
+              certificateAuthority: running.certificateAuthority,
+              stateDirectory,
+            },
+            url: existing.url,
+            name,
+          });
+        });
+
+      const first = yield* stack.deploy(program("Emulator", home));
+      expect(first.hostname).toBe("dev-alice.emulator.alias-moves.localhost");
+      expect(yield* routeOf(home, first.hostname)).toMatchObject({ port: existing.port });
+
+      // Renamed and moved in one update: the old route goes from the directory it was in.
+      const second = yield* stack.deploy(program("Admin", elsewhere));
+      expect(second.hostname).toBe("dev-alice.admin.alias-moves.localhost");
+      expect(yield* routeOf(elsewhere, second.hostname)).toMatchObject({ port: existing.port });
+      expect(yield* routeOf(home, first.hostname)).toBeUndefined();
+      expect(yield* routeOf(elsewhere, first.hostname)).toBeUndefined();
+
+      // Moved back under the same name: the route leaves the directory it was in.
+      yield* stack.deploy(program("Admin", home));
+      expect(yield* routeOf(home, second.hostname)).toMatchObject({ port: existing.port });
+      expect(yield* routeOf(elsewhere, second.hostname)).toBeUndefined();
+
+      yield* stack.destroy();
+      expect(yield* routeOf(home, second.hostname)).toBeUndefined();
+    }).pipe(Effect.scoped),
+  { tags: ["local"], timeout: 120_000 },
+);

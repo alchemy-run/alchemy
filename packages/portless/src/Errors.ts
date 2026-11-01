@@ -140,16 +140,6 @@ export class ProxyNotRunning extends Data.TaggedError("ProxyNotRunning")<{
   }
 }
 
-/** The proxy serves a certificate chain that its own CA file doesn't verify. */
-export class ProxyCertificateMismatch extends Data.TaggedError("ProxyCertificateMismatch")<{
-  readonly port: number;
-  readonly certificateAuthority: string;
-}> {
-  override get message() {
-    return `The Portless proxy on port ${this.port} serves certificates that ${this.certificateAuthority} doesn't verify: it was started before the CA was regenerated, or with a custom certificate. Alchemy never restarts it. Stop it with \`portless proxy stop\`, then rerun.`;
-  }
-}
-
 /** Chromium can't be made to trust the Portless CA on Linux without `certutil`. */
 export class ProxyTrustToolMissing extends Data.TaggedError("ProxyTrustToolMissing")<{
   readonly tool: string;
