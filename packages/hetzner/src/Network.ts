@@ -228,6 +228,9 @@ const busyRetry = {
 const alreadyThere = (e: { readonly _tag: string }): boolean =>
   e._tag === "Conflict" || e._tag === "UnprocessableEntity";
 
+/** Another Network already has the name (`uniqueness_error`). */
+const nameTaken = (e: { readonly _tag: string }): boolean => e._tag === "Conflict";
+
 const alreadyGone = (e: { readonly _tag: string }): boolean =>
   e._tag === "NotFound" || e._tag === "UnprocessableEntity";
 
@@ -400,11 +403,35 @@ const syncSubnets = (
       networkZone: subnet.network_zone,
       vswitchId: subnet.vswitch_id ?? undefined,
     }));
-    const observedKeys = new Set(observedMapped.map(subnetKey));
-    const desiredKeys = new Set(desired.map(subnetKey));
+    // A desired subnet without a range is satisfied by any observed one of
+    // the same type, zone and vSwitch that no ranged subnet claims —
+    // Hetzner picked its range when it was added.
+    const unranged = (subnet: { type: string; networkZone: string; vswitchId?: number | null }) =>
+      `${subnet.type}|${subnet.networkZone}|${subnet.vswitchId ?? ""}`;
+    const rangedKeys = new Set(
+      desired.filter((subnet) => subnet.ipRange !== undefined).map(subnetKey),
+    );
+    const kept = new Set<string>();
+    const satisfied = new Set<NetworkSubnet>();
+    for (const subnet of observedMapped) {
+      if (rangedKeys.has(subnetKey(subnet))) kept.add(subnetKey(subnet));
+    }
+    for (const want of desired) {
+      if (want.ipRange !== undefined) {
+        if (kept.has(subnetKey(want))) satisfied.add(want);
+        continue;
+      }
+      const match = observedMapped.find(
+        (subnet) => !kept.has(subnetKey(subnet)) && unranged(subnet) === unranged(want),
+      );
+      if (match !== undefined) {
+        kept.add(subnetKey(match));
+        satisfied.add(want);
+      }
+    }
 
     for (const subnet of observedMapped) {
-      if (desiredKeys.has(subnetKey(subnet))) continue;
+      if (kept.has(subnetKey(subnet))) continue;
       if (subnet.ipRange === undefined) continue;
       yield* runAction(
         Hetzner.networkActions.deleteNetworkSubnet({
@@ -415,7 +442,7 @@ const syncSubnets = (
     }
 
     for (const subnet of desired) {
-      if (observedKeys.has(subnetKey(subnet))) continue;
+      if (satisfied.has(subnet)) continue;
       yield* runAction(
         Hetzner.networkActions.addNetworkSubnet({
           id: networkId,
@@ -505,7 +532,7 @@ export const NetworkProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name = yield* createNetworkName(
+      let name = yield* createNetworkName(
         id,
         news.name ?? (output === undefined ? undefined : output.name),
       );
@@ -530,6 +557,8 @@ export const NetworkProvider = () =>
         !cidrContains(news.ipRange, current.ip_range)
       ) {
         current = undefined;
+        // The outgoing generation keeps its name until it is deleted.
+        name = yield* createNetworkName(id, news.name);
       }
 
       // Ensure — create when missing. A name-collision race is treated as
@@ -540,12 +569,16 @@ export const NetworkProvider = () =>
             name,
             ip_range: news.ipRange,
             labels: desiredLabels,
-            subnets: desiredSubnets.map((subnet) => ({
-              type: subnet.type,
-              ip_range: subnet.ipRange,
-              network_zone: subnet.networkZone,
-              vswitch_id: subnet.vswitchId,
-            })),
+            // Creating a Network takes ranged subnets only; the rest are
+            // added below, where Hetzner picks the first free `/24`.
+            subnets: desiredSubnets
+              .filter((subnet) => subnet.ipRange !== undefined)
+              .map((subnet) => ({
+                type: subnet.type,
+                ip_range: subnet.ipRange,
+                network_zone: subnet.networkZone,
+                vswitch_id: subnet.vswitchId,
+              })),
             routes: desiredRoutes.map((route) => ({
               destination: route.destination,
               gateway: route.gateway,
@@ -555,7 +588,7 @@ export const NetworkProvider = () =>
           .pipe(
             Effect.retry(busyRetry),
             Effect.map((response) => response.network),
-            Effect.catchIf(alreadyThere, () => findByName(name)),
+            Effect.catchIf(nameTaken, () => findByName(name)),
           );
         current = created;
       }
