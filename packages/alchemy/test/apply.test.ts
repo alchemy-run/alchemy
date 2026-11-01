@@ -997,6 +997,178 @@ describe("FQN separator in logical ID", { tags: ["unit", "local"] }, () => {
   );
 });
 
+// A ref to a resource the same program declares (current stack and stage) is
+// a dependency like a direct reference. Each case slows the side a missing
+// edge would let run first, so a race shows up as a wrong order instead of
+// passing by luck.
+describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, () => {
+  const program = (shared: TestResourceProps, withConsumer = true) =>
+    Effect.gen(function* () {
+      const declared = yield* TestResource("Shared", shared);
+      if (!withConsumer) return { shared: declared, consumer: undefined };
+      const ref = yield* TestResource.ref("Shared");
+      const consumer = yield* TestResource("Consumer", { string: ref.string });
+      return { shared: declared, consumer };
+    });
+
+  // Target first, then the dependent: a ref that already resolves from state,
+  // so the later assertions isolate ordering and freshness from the
+  // same-deploy create case.
+  const deployInPhases = (
+    stack: { deploy: <A, E, R>(program: Effect.Effect<A, E, R>) => Effect.Effect<A, any, any> },
+    shared: TestResourceProps,
+  ) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(program(shared, false));
+      return yield* stack.deploy(program(shared));
+    });
+
+  const recorder = () => {
+    const events: string[] = [];
+    const record = (event: string, slow?: string) => (id: string) =>
+      Effect.gen(function* () {
+        if (id === slow) yield* Effect.sleep("100 millis");
+        events.push(`${event} ${id}`);
+      });
+    return { events, record };
+  };
+
+  test.provider("deploys a ref to a resource created in the same deploy, target first", (stack) =>
+    Effect.gen(function* () {
+      const { events, record } = recorder();
+      const output = yield* program({ string: "v1" }).pipe(
+        stack.deploy,
+        hook({ create: record("create", "Shared") }),
+      );
+
+      expect(output.consumer!.string).toEqual("v1");
+      expect(events).toEqual(["create Shared", "create Consumer"]);
+      // The edge is persisted, so a later destroy orders deletes without the program.
+      expect((yield* getState("Shared"))?.downstream).toContain("Consumer");
+    }),
+  );
+
+  test.provider("destroy deletes the ref's dependent before its target", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack.destroy().pipe(hook({ delete: record("delete", "Consumer") }));
+
+      expect(events).toEqual(["delete Consumer", "delete Shared"]);
+      expect(yield* listState()).toEqual([]);
+    }),
+  );
+
+  test.provider("removing both from the program deletes the dependent first", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack
+        .deploy(Effect.gen(function* () {}))
+        .pipe(hook({ delete: record("delete", "Consumer") }));
+
+      expect(events).toEqual(["delete Consumer", "delete Shared"]);
+    }),
+  );
+
+  test.provider("removing only the dependent keeps the target", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const { events, record } = recorder();
+      yield* stack
+        .deploy(program({ string: "v1" }, false))
+        .pipe(hook({ delete: record("delete") }));
+
+      expect(events).toEqual(["delete Consumer"]);
+      expect((yield* getState("Shared"))?.status).toEqual("created");
+      expect((yield* getState("Shared"))?.downstream ?? []).not.toContain("Consumer");
+    }),
+  );
+
+  test.provider("an update to the target reaches the dependent fresh, never stale", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1" });
+
+      const seen: string[] = [];
+      const output = yield* program({ string: "v2" }).pipe(
+        stack.deploy,
+        hook({
+          update: (id, props) =>
+            Effect.gen(function* () {
+              if (id === "Shared") yield* Effect.sleep("100 millis");
+              if (id === "Consumer" && typeof props.string === "string") seen.push(props.string);
+            }),
+        }),
+      );
+
+      expect(output.consumer!.string).toEqual("v2");
+      expect(seen).toEqual(["v2"]);
+    }),
+  );
+
+  test.provider("a replaced target hands the dependent its new generation", (stack) =>
+    Effect.gen(function* () {
+      yield* deployInPhases(stack, { string: "v1", replaceString: "a" });
+
+      const { events, record } = recorder();
+      const output = yield* program({ string: "v2", replaceString: "b" }).pipe(
+        stack.deploy,
+        hook({
+          create: record("create", "Shared"),
+          update: record("update"),
+          delete: record("delete"),
+        }),
+      );
+
+      expect(output.shared.replaceString).toEqual("b");
+      expect(output.consumer!.string).toEqual("v2");
+      // Create-first replacement: new generation, then the dependent, then
+      // the old generation is retired.
+      expect(events).toEqual(["create Shared", "update Consumer", "delete Shared"]);
+    }),
+  );
+
+  test.provider(
+    "a resource's ref to itself reads its persisted state without waiting on itself",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(TestResource("Self", { string: "v1" }));
+
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const self = yield* TestResource.ref("Self");
+            return yield* TestResource("Self", { string: "v2", stringArray: [self.string] });
+          }),
+        );
+
+        expect(output.string).toEqual("v2");
+        expect(output.stringArray).toEqual(["v1"]);
+        expect((yield* getState("Self"))?.downstream ?? []).not.toContain("Self");
+      }),
+  );
+
+  test.provider("a ref used only in a binding persists the binding edge", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(TestResource("Shared", { string: "v1" }));
+      const output = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Shared", { string: "v1" });
+          const ref = yield* TestResource.ref("Shared");
+          const host = yield* BindingTarget("Host", { name: "host" });
+          yield* host.bind("Shared", { env: { SHARED: ref.string } });
+          return host;
+        }),
+      );
+
+      expect(output.env.SHARED).toEqual("v1");
+      expect((yield* getState("Shared"))?.downstream).toContain("Host");
+    }),
+  );
+});
+
 describe("linear update propagation", { tags: ["unit", "local"] }, () => {
   // Regression: in a linear chain (A -> B with no cycle), an update to A
   // followed by an update to B must let B see A's *post-update* attr, never
