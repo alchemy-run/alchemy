@@ -156,6 +156,61 @@ describe.concurrent.each([
     { timeout: 90_000 },
   );
 
+  // Cloudflare Workflows retries a native step with its own policy; this
+  // pins the alarm backoff the Durable Object engine retries runs with.
+  test.skipIf(engine === "native")(
+    "wakes on time after its run recovers from failures",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("flaky");
+      const started = yield* Clock.currentTimeMillis;
+      const run = yield* start(url, "Flaky", id, "?seconds=1");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "recovered" });
+      // Two failed runs back off 5 + 10 seconds, then a one-second sleep. A
+      // wake-up that inherited the failed runs' budget waits 20 seconds more,
+      // and the run after it 40.
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(30_000);
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual([
+        "attempt",
+        "attempt",
+        "attempt",
+        "after",
+      ]);
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "a signal sent twice completes the wait once",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("approve-twice");
+      const run = yield* start(url, "Approve", id);
+      yield* request<string[]>(`${url}/journal/${id}`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (entries) => entries.length > 0,
+          times: 30,
+        }),
+      );
+      for (const by of ["first", "second"]) {
+        yield* request(
+          `${url}/approve/Approve/${id}?executionId=${run.executionId}&by=${by}`,
+          "POST",
+        );
+      }
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Completed",
+        result: "approved by first",
+      });
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual([
+        "requested",
+        "approved:first",
+      ]);
+    }),
+    { timeout: 90_000 },
+  );
+
   test(
     "waits for a signal from outside",
     Effect.gen(function* () {

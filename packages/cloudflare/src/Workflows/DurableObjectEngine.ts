@@ -425,14 +425,17 @@ const executionObject = (registration: Registration) =>
 
       // A wake-up scheduled from inside a callback inherits that callback's
       // retry budget unless it reports progress. Each new journal entry that
-      // schedules a wake-up advances this cursor, so a wake-up after a
-      // successful step runs on time instead of waiting out a backoff.
+      // schedules a wake-up advances this cursor in the same transaction, so a
+      // wake-up after a successful step runs on time instead of waiting out a
+      // backoff.
       const advance = Effect.map(
         query<{ seq: number }>(
           "INSERT INTO workflow_progress (id, seq) VALUES (1, 0) ON CONFLICT (id) DO UPDATE SET seq = seq + 1 RETURNING seq",
         ),
         (rows) => rows[0]!.seq,
       );
+      const transaction = <A>(effect: Effect.Effect<A, never, RuntimeContext>) =>
+        state.storage.transaction(effect).pipe(Effect.orDie, Effect.provide(context));
 
       // Every wake-up (a start, a completed deferred, a fired clock, an
       // interrupt) records what changed and schedules this one job. Jobs run
@@ -444,15 +447,20 @@ const executionObject = (registration: Registration) =>
           .pipe(Effect.orDie, Effect.provide(context));
 
       const complete = (deferredName: string, exit: string) =>
-        Effect.gen(function* () {
-          const inserted = yield* query(
-            "INSERT OR IGNORE INTO workflow_deferred (name, exit) VALUES (?, ?) RETURNING name",
-            deferredName,
-            exit,
-          );
-          // A deferred completed again isn't progress.
-          yield* wake(inserted.length > 0 ? yield* advance : undefined);
-        });
+        transaction(
+          Effect.gen(function* () {
+            const inserted = yield* query(
+              "INSERT OR IGNORE INTO workflow_deferred (name, exit) VALUES (?, ?) RETURNING name",
+              deferredName,
+              exit,
+            );
+            if (inserted.length > 0) return yield* wake(yield* advance);
+            // Completed already, and that completion woke the run. Replacing a
+            // pending wake-up here would hand it this caller's retry budget.
+            const pending = yield* runs.getStatus(RUN).pipe(Effect.orDie);
+            if (pending === undefined) yield* wake();
+          }),
+        );
 
       const clocks = yield* makeCallback(
         "clock",
@@ -465,16 +473,23 @@ const executionObject = (registration: Registration) =>
       // Replays reach the same sleep again: a clock that's done or already
       // pending is left alone.
       const scheduleClock = (name: string, deferredName: string, due: number) =>
-        Effect.gen(function* () {
-          const done = yield* query("SELECT 1 FROM workflow_deferred WHERE name = ?", deferredName);
-          if (done.length > 0) return;
-          const pending = yield* clocks.getStatus(name).pipe(Effect.orDie, Effect.provide(context));
-          if (pending !== undefined) return;
-          const progress = yield* advance;
-          yield* clocks
-            .schedule(name, { at: due, payload: { deferred: deferredName }, progress })
-            .pipe(Effect.orDie, Effect.provide(context));
-        });
+        transaction(
+          Effect.gen(function* () {
+            const done = yield* query(
+              "SELECT 1 FROM workflow_deferred WHERE name = ?",
+              deferredName,
+            );
+            if (done.length > 0) return;
+            if ((yield* clocks.getStatus(name).pipe(Effect.orDie)) !== undefined) return;
+            yield* clocks
+              .schedule(name, {
+                at: due,
+                payload: { deferred: deferredName },
+                progress: yield* advance,
+              })
+              .pipe(Effect.orDie);
+          }),
+        );
 
       const run: Effect.Effect<void> = Effect.gen(function* () {
         const row = yield* readExecution;

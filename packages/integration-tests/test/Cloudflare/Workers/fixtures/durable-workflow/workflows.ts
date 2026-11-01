@@ -31,6 +31,16 @@ export const Naps = Workflow.make("Naps", {
   idempotencyKey: ({ id }) => id,
 });
 
+/**
+ * Its first activity dies twice before it succeeds, then it sleeps. A defect
+ * fails the run instead of the workflow, so the engine retries the run.
+ */
+export const Flaky = Workflow.make("Flaky", {
+  payload: { id: Schema.String, seconds: Schema.Number },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+}).annotate(Workflow.CaptureDefects, false);
+
 /** Waits for someone outside to approve it. */
 export const Approval = DurableDeferred.make("approval", { success: Schema.String });
 
@@ -63,6 +73,16 @@ const Recorder = Effect.gen(function* () {
     journals
       .getByName(id)
       .append(entry)
+      .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }), Effect.orDie);
+});
+
+/** Reads a run's journal. */
+const Reader = Effect.gen(function* () {
+  const journals = yield* Journal;
+  return (id: string) =>
+    journals
+      .getByName(id)
+      .list()
       .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }), Effect.orDie);
 });
 
@@ -113,6 +133,31 @@ export const NapsLive = Workflows.layer(
       }
       yield* Activity.make({ name: "after", execute: record(id, "after") });
       return "rested";
+    });
+  }),
+);
+
+export const FlakyLive = Workflows.layer(
+  Flaky,
+  Effect.gen(function* () {
+    const record = yield* Recorder;
+    const read = yield* Reader;
+    return Effect.fn(function* ({ id, seconds }) {
+      yield* Activity.make({
+        name: "flaky",
+        execute: Effect.gen(function* () {
+          yield* record(id, "attempt");
+          const attempts = (yield* read(id)).filter((entry) => entry === "attempt").length;
+          if (attempts < 3) return yield* Effect.die(`attempt ${attempts} died`);
+        }),
+      });
+      yield* DurableClock.sleep({
+        name: "after-flaky",
+        duration: `${seconds} seconds`,
+        inMemoryThreshold: 0,
+      });
+      yield* Activity.make({ name: "after", execute: record(id, "after") });
+      return "recovered";
     });
   }),
 );
@@ -168,6 +213,7 @@ export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
   NapLive,
   NapsLive,
+  FlakyLive,
   ApproveLive,
   CheckoutLive,
   ParentLive,
