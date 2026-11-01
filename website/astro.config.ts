@@ -42,6 +42,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Convex", link: "/convex" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1352,6 +1353,42 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Turso"),
+          ],
+        },
+        {
+          label: "Convex",
+          items: [
+            { label: "Overview", link: "/convex" },
+            { label: "Setup", link: "/convex/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "convex/tutorial" } }],
+            },
+            {
+              label: "Deployments",
+              items: [
+                { label: "Projects", link: "/convex/deployments/projects" },
+                { label: "Deployments", link: "/convex/deployments/deployments" },
+                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
+                { label: "Custom domains", link: "/convex/deployments/custom-domains" },
+                { label: "Canonical URLs", link: "/convex/deployments/canonical-urls" },
+                { label: "Usage limits", link: "/convex/deployments/usage-limits" },
+              ],
+            },
+            {
+              label: "Functions",
+              items: [
+                { label: "Push functions", link: "/convex/functions/functions" },
+                { label: "Environment variables", link: "/convex/functions/environment-variables" },
+                { label: "Connect", link: "/convex/functions/connect" },
+                { label: "Calling functions", link: "/convex/functions/calling-functions" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Log streams", link: "/convex/observability/log-streams" }],
+            },
+            providerResourcesEntry("Convex"),
           ],
         },
         {

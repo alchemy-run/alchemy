@@ -147,6 +147,72 @@ export type Deployment = Resource<
  * const preview = yield* Convex.Deployment("Preview", { project, type: "preview" });
  * ```
  *
+ * **Example:** A dev deployment with its own reference
+ * ```typescript
+ * const dev = yield* Convex.Deployment("Dev", {
+ *   project,
+ *   type: "dev",
+ *   reference: "dev/sam",
+ * });
+ * ```
+ *
+ * ### Choosing a Region and Class
+ * Changing `region` replaces the deployment and starts it with no data.
+ *
+ * **Example:** A deployment in Europe
+ * ```typescript
+ * const eu = yield* Convex.Deployment("Eu", {
+ *   project,
+ *   type: "prod",
+ *   region: "aws-eu-west-1",
+ * });
+ * ```
+ *
+ * ### Moving Between Projects
+ * **Example:** Point `project` at another project
+ * ```typescript
+ * const deployment = yield* Convex.Deployment("Backend", {
+ *   project: newProject,
+ *   type: "dev",
+ * });
+ * ```
+ *
+ * ### Pausing
+ * A paused deployment keeps its data, and function calls fail until it resumes.
+ * Scheduled jobs queue, and crons are skipped.
+ *
+ * **Example:** Pause a deployment
+ * ```typescript
+ * const deployment = yield* Convex.Deployment("Backend", {
+ *   project,
+ *   type: "prod",
+ *   paused: true,
+ * });
+ * ```
+ *
+ * ### Deleting a Prod Deployment
+ * **Example:** Turn protection off, deploy, then destroy
+ * ```typescript
+ * const prod = yield* Convex.Deployment("Prod", {
+ *   project,
+ *   type: "prod",
+ *   deletionProtection: false,
+ * });
+ * ```
+ *
+ * ### Calling Functions from a Runtime
+ * **Example:** Run a query in a Worker
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const list = yield* Convex.Query(Backend);
+ *   return {
+ *     fetch: Effect.gen(function* () {
+ *       return yield* HttpServerResponse.json(yield* list("messages:list"));
+ *     }),
+ *   };
+ * }).pipe(Effect.provide(Convex.QueryHttp));
+ * ```
+ *
  * @resource
  * @product Deployment
  */

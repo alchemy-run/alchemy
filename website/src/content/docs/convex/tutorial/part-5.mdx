@@ -1,0 +1,66 @@
+---
+title: "Part 5: CI/CD"
+description: Deploy from GitHub Actions with a Convex access token.
+sidebar:
+  order: 5
+---
+
+Deploy a preview for each pull request, and remove it when the pull request closes.
+
+## Add the secret
+
+Create a team access token for CI in your Convex team settings, then add it to your repository as `CONVEX_ACCESS_TOKEN`. Convex recommends a service account.
+
+## Deploy on pull requests
+
+```yaml
+# .github/workflows/preview.yml
+name: Preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy deploy --stage pr-${{ github.event.number }} --yes
+        env:
+          CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+```
+
+In CI, Alchemy reads `CONVEX_ACCESS_TOKEN` instead of a profile.
+
+## Remove previews on close
+
+```yaml
+# .github/workflows/cleanup.yml
+name: Cleanup
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy destroy --stage pr-${{ github.event.number }} --yes
+        env:
+          CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+```
+
+## Keep state between runs
+
+`Alchemy.localState()` doesn't survive a CI run. Use a [remote state store](/state-store) so `destroy` can find what `deploy` made.
+
+## Where next
+
+- [Deployments](/convex/deployments/deployments)
+- [Environment variables](/convex/functions/environment-variables)
+- [CI](/environments/ci)

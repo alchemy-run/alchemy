@@ -80,6 +80,47 @@ export type Project = Resource<"Convex.Project", ProjectProps, ProjectAttributes
  * });
  * ```
  *
+ * ### Keeping or Removing a Project
+ * **Example:** Remove the project on destroy
+ * ```typescript
+ * const project = yield* Convex.Project("App").pipe(RemovalPolicy.destroy());
+ * ```
+ *
+ * **Example:** Remove it in every stage but prod
+ * ```typescript
+ * const stack = yield* Stack;
+ * const project = yield* Convex.Project("App").pipe(
+ *   RemovalPolicy.retain(stack.stage === "prod"),
+ * );
+ * ```
+ *
+ * ### Renaming a Project
+ * Changing `name` renames the project in place. The slug stays unless you set
+ * `slug`, so URLs that use it keep working.
+ *
+ * **Example:** Rename and set a new slug
+ * ```typescript
+ * const project = yield* Convex.Project("App", {
+ *   name: "My App",
+ *   slug: "my-app",
+ * });
+ * ```
+ *
+ * ### Adding Deployments
+ * **Example:** A project with one preview per stage
+ * ```typescript
+ * const project = yield* Convex.Project("App");
+ * const preview = yield* Convex.Deployment("Preview", { project, type: "preview" });
+ * ```
+ *
+ * ### Adoption and Deletion
+ * Convex allows two projects with one name, so a deploy looks for the name
+ * first. A project of that name without Alchemy's tag fails with
+ * `OwnedBySomeoneElse` unless you deploy with `--adopt`.
+ *
+ * Deleting a project deletes its deployments and their data, so a project with
+ * a prod deployment refuses until that deployment is gone.
+ *
  * @see https://docs.convex.dev/management-api
  *
  * @resource

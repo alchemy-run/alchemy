@@ -1,0 +1,68 @@
+---
+title: Deployments
+description: Create prod, dev and preview deployments, move them between projects, and pause them.
+---
+
+A deployment is one database and set of functions.
+
+## Create a deployment
+
+```typescript
+const prod = yield* Convex.Deployment("Prod", { project, type: "prod" });
+```
+
+`url` is what clients connect to, and `siteUrl` serves HTTP actions.
+
+## Create one preview per stage
+
+```typescript
+const preview = yield* Convex.Deployment("Preview", { project, type: "preview" });
+```
+
+The stage names the preview. A preview that expires comes back on the next deploy, with a new name and URL and no data.
+
+## Protect production
+
+Prod deployments have `deletionProtection` on, so `alchemy destroy` fails rather than deleting data. To delete one, turn it off and deploy first:
+
+```typescript
+const prod = yield* Convex.Deployment("Prod", {
+  project,
+  type: "prod",
+  deletionProtection: false,
+});
+```
+
+A prod deployment deleted outside Alchemy fails your next deploy, rather than quietly coming back empty.
+
+## Choose a region
+
+```typescript
+const eu = yield* Convex.Deployment("Eu", {
+  project,
+  type: "prod",
+  region: "aws-eu-west-1",
+});
+```
+
+Changing `region` replaces the deployment and starts it with no data. With `deletionProtection` on, the plan fails before anything is deleted.
+
+## Move to another project
+
+Change `project`. The deployment keeps its data, name and URL:
+
+```typescript
+const deployment = yield* Convex.Deployment("Backend", { project: newProject, type: "dev" });
+```
+
+## Pause a deployment
+
+```typescript
+const deployment = yield* Convex.Deployment("Backend", {
+  project,
+  type: "prod",
+  paused: true,
+});
+```
+
+A paused deployment keeps its data, and function calls fail. Scheduled jobs queue, and crons are skipped. Convex has no API that reports this, so `paused` is what you last declared.

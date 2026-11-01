@@ -1,0 +1,83 @@
+---
+title: Calling functions
+description: Run queries, mutations and actions from a Worker or Lambda, and read usage, audit logs and data.
+---
+
+These bindings call Convex from any host. Each one takes the deployment, and returns a client you call at runtime.
+
+## Run a query
+
+```typescript
+Effect.gen(function* () {
+  const list = yield* Convex.Query(Backend);
+  return {
+    fetch: Effect.gen(function* () {
+      return yield* HttpServerResponse.json(yield* list("messages:list"));
+    }),
+  };
+}).pipe(Effect.provide(Convex.QueryHttp));
+```
+
+`Query`, `Mutation`, `Action` and `QueryBatch` grant nothing: public functions need no credentials.
+
+## Run a mutation
+
+```typescript
+const add = yield* Convex.Mutation(Backend);
+yield* add("messages:add", { body: "hello" });
+```
+
+## Run an action
+
+```typescript
+const ping = yield* Convex.Action(Backend);
+const reply = yield* ping("messages:ping", { n: 41 });
+```
+
+## Run several queries together
+
+```typescript
+const batch = yield* Convex.QueryBatch(Backend);
+const [messages, user] = yield* batch([{ path: "messages:list" }, { path: "users:me" }]);
+```
+
+Every query sees the same snapshot.
+
+## Handle a failure
+
+A function that throws fails with `ConvexFunctionError`:
+
+```typescript
+yield* list("messages:list").pipe(
+  Effect.catchTag("ConvexFunctionError", (error) => Effect.log(error.path, error.message)),
+);
+```
+
+Values use Convex's JSON format, so `Int64` and `Bytes` arrive as tagged objects.
+
+## Read usage
+
+```typescript
+const usage = yield* Convex.GetCurrentUsage(Backend);
+const { metrics } = yield* usage();
+```
+
+The host gets a deploy key limited to `deployment:usage:view` on this deployment.
+
+## Read the audit log
+
+```typescript
+const audit = yield* Convex.ListAuditLogEvents(Backend);
+const page = yield* audit({ from: Date.now() - 3_600_000 });
+```
+
+The host gets a deploy key limited to `deployment:auditLog:view` on this deployment. On a plan that keeps no audit logs, this fails with `AuditLogsTooOld`.
+
+## Export data
+
+```typescript
+const data = yield* Convex.DataSync(Backend);
+const page = yield* data.sync({});
+```
+
+The host gets a deploy key limited to `deployment:data:view` on this deployment, which reads every table. This needs the Professional plan. Below it, calls fail with `StreamingExportNotEnabled`.

@@ -69,7 +69,7 @@ export const pushCommand = (rootDir: string) =>
  *
  * @see https://docs.convex.dev/production/hosting
  *
- * ### Pushing functions
+ * ### Pushing Functions
  * **Example:** Push to a Convex Cloud deployment
  * ```typescript
  * yield* Convex.Functions("Functions", {
@@ -78,6 +78,60 @@ export const pushCommand = (rootDir: string) =>
  *   env: { RESEND_API_KEY: resendKey },
  * });
  * ```
+ *
+ * ### Environment Variables
+ * Alchemy sets `env` before the push, because `auth.config.ts` may read it. A
+ * name you remove is deleted from the deployment, and a variable set by hand
+ * is left alone.
+ *
+ * Convex refuses to delete a variable the pushed `auth.config.ts` reads. Stop
+ * reading it and deploy, then remove it and deploy again.
+ *
+ * **Example:** Pass a secret
+ * ```typescript
+ * const secret = yield* Config.redacted("RESEND_API_KEY");
+ * yield* Convex.Functions("Functions", {
+ *   deployment,
+ *   rootDir: ".",
+ *   env: { RESEND_API_KEY: secret },
+ * });
+ * ```
+ *
+ * ### Deciding When to Push
+ * A push runs when a file not ignored by git changes, or when a variable does.
+ *
+ * **Example:** Watch only some files
+ * ```typescript
+ * yield* Convex.Functions("Functions", {
+ *   deployment,
+ *   rootDir: ".",
+ *   memo: { include: ["convex/**", "package.json"] },
+ * });
+ * ```
+ *
+ * ### Pushing to a Self-Hosted Backend
+ * **Example:** Pass the backend instead of a deployment
+ * ```typescript
+ * yield* Convex.Functions("Functions", {
+ *   backend: { url: backend.url, adminKey: backend.adminKey },
+ *   rootDir: ".",
+ * });
+ * ```
+ *
+ * ### Project Layout
+ * `rootDir` holds the `convex/` folder and a `package.json` that lists `convex`.
+ * In a monorepo, point it at the package.
+ *
+ * **Example:** A package in a monorepo
+ * ```typescript
+ * yield* Convex.Functions("Functions", {
+ *   deployment,
+ *   rootDir: "./packages/backend",
+ * });
+ * ```
+ *
+ * @resource
+ * @product Functions
  */
 export const Functions = (id: string, props: FunctionsProps) =>
   Namespace.push(

@@ -1,0 +1,102 @@
+---
+title: "Part 2: Add a Worker"
+description: Call your Convex functions from a Cloudflare Worker with the Query and Mutation bindings.
+sidebar:
+  order: 2
+---
+
+You have a deployment with functions in it. Now add a Worker that calls them.
+
+## Bind a query
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Convex from "@alchemy.run/convex";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Backend } from "./Backend.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const list = yield* Convex.Query(Backend);
+
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* list("messages:list"));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Convex.QueryHttp)),
+) {}
+```
+
+`Convex.Query` grants nothing: the Worker gets the deployment's URL, and public functions need no credentials.
+
+## Bind a mutation
+
+```diff lang="typescript"
+// src/Api.ts
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
++import * as Layer from "effect/Layer";
+
+  Effect.gen(function* () {
+    const list = yield* Convex.Query(Backend);
++    const add = yield* Convex.Mutation(Backend);
+
+    return {
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        if (request.method === "POST") {
++          yield* add("messages:add", { body: yield* request.text });
++        }
+        return yield* HttpServerResponse.json(yield* list("messages:list"));
+      }).pipe(Effect.orDie),
+    };
+-  }).pipe(Effect.provide(Convex.QueryHttp)),
++  }).pipe(Effect.provide(Layer.mergeAll(Convex.QueryHttp, Convex.MutationHttp))),
+```
+
+`POST` adds a message, and every request lists them.
+
+## Add the Worker to your Stack
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Backend } from "./src/Backend.ts";
+
+export default Alchemy.Stack(
+  "CloudflareConvexWorkerExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Convex.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const deployment = yield* Backend;
+    yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+    const api = yield* Api;
+    return { url: api.url.as<string>() };
+  }),
+);
+```
+
+## Deploy and try it
+
+```sh
+bun alchemy deploy
+```
+
+Post a message to the Worker's URL:
+
+```sh
+curl -X POST -d "hello" https://your-worker.workers.dev
+```
+
+The response lists every message, including yours.

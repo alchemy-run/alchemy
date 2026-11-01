@@ -1,0 +1,25 @@
+---
+title: Log streams
+description: Send a Convex deployment's logs to a webhook or another service.
+---
+
+Log streams need the Convex Professional plan. Below it, a deploy fails with `LogStreamingNotEnabled`.
+
+## Send logs to a webhook
+
+```typescript
+const stream = yield* Convex.LogStream("Logs", {
+  deployment,
+  config: {
+    logStreamType: "webhook",
+    url: "https://example.com/logs",
+    format: "json",
+  },
+});
+```
+
+`stream.hmacSecret` signs each request. Convex returns it only at creation, so Alchemy keeps it in state.
+
+## Change where logs go
+
+Update `config` and deploy. Changing `logStreamType` replaces the stream. A deployment has one stream of each type.

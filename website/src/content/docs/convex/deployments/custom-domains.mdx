@@ -1,0 +1,22 @@
+---
+title: Custom domains
+description: Serve a Convex deployment from your own domain.
+---
+
+Custom domains need the Convex Professional plan. Below it, a deploy fails with `VanityDomainsDisabled`.
+
+## Add a domain
+
+```typescript
+yield* Convex.CustomDomain("Api", {
+  deployment,
+  domain: "api.example.com",
+  requestDestination: "convexCloud",
+});
+```
+
+`convexCloud` serves the API, and `convexSite` serves HTTP actions. Changing any prop replaces the domain.
+
+## Make it canonical
+
+Functions see the default URL until you set a [canonical URL](/convex/deployments/canonical-urls).

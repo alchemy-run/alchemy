@@ -1,0 +1,35 @@
+---
+title: Deploy keys
+description: Create deploy keys for CI, and preview keys that create previews.
+---
+
+A deploy key lets a tool act on one deployment.
+
+## Create a deploy key
+
+```typescript
+const key = yield* Convex.DeployKey("Deploy", {
+  deployment: prod,
+  allowedActions: ["deployment:deploy"],
+});
+```
+
+`key.value` is `Redacted`. Convex shows a key only when it's created, so Alchemy keeps it in state. Changing any prop replaces the key.
+
+## Create a preview key
+
+A preview key belongs to a project, and creates previews:
+
+```typescript
+const key = yield* Convex.PreviewDeployKey("Previews", { project });
+```
+
+Use it with the Convex CLI:
+
+```sh
+CONVEX_DEPLOY_KEY=... npx convex deploy --preview-create my-branch
+```
+
+## Adopt a key
+
+Convex can't show an existing key, so adopting one deletes it and creates a new one with the same name. Anything using the old value stops working.

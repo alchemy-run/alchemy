@@ -32,6 +32,7 @@ const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
   "./examples/cloudflare-worker-async",
+  "./examples/cloudflare-convex-worker",
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
