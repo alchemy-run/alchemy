@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -166,7 +167,20 @@ export const MembershipProvider = () =>
     stables: ["subject", "role", "resourceType", "resourceId"],
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Delete-first: the membership is its identity, with no generation
+      // marker, and an unresolved prop can resolve to the current one.
+      if (
+        hasUnresolvedTrigger<MembershipProps>(news, [
+          "resourceType",
+          "resourceId",
+          "subject",
+          "role",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const scope = yield* resolveScope(news, env);
       if (
@@ -183,10 +197,11 @@ export const MembershipProvider = () =>
       const subject = output?.subject ?? olds?.subject;
       const role = output?.role ?? olds?.role;
       if (subject === undefined || role === undefined) return undefined;
+      const env = yield* StackitEnvironment.current;
       const scope: AuthorizationScope =
         output !== undefined
           ? { resourceType: output.resourceType, resourceId: output.resourceId }
-          : yield* resolveScope(olds ?? {}, yield* StackitEnvironment.current);
+          : yield* resolveScope(olds ?? {}, env);
       const present = yield* hasMember(scope, subject, role);
       if (!present) return undefined;
       const attrs: MembershipAttributes = {

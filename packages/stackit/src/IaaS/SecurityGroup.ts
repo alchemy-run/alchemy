@@ -6,8 +6,9 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -16,6 +17,7 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
   type ProjectScope,
 } from "./internal.ts";
@@ -174,18 +176,17 @@ const observe = Effect.fn(function* (
   scope: ProjectScope,
   securityGroupId: string | undefined,
   stateful: boolean | undefined,
+  instanceId: string | undefined,
 ) {
   if (securityGroupId !== undefined) {
     const byId = yield* getGroup(scope, securityGroupId);
     if (byId !== undefined) return byId;
   }
   const { items } = yield* iaas.listSecurityGroups(scope);
-  return yield* findOwnedByName(
-    id,
-    name,
-    items,
-    (group) => stateful === undefined || (group.stateful ?? true) === stateful,
-  );
+  return yield* findOwnedByName(id, name, items, {
+    instanceId,
+    compatible: (group) => stateful === undefined || (group.stateful ?? true) === stateful,
+  });
 });
 
 export const SecurityGroupProvider = () =>
@@ -200,6 +201,12 @@ export const SecurityGroupProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
+      if (
+        output !== undefined &&
+        hasUnresolvedTrigger<SecurityGroupProps>(news, ["projectId", "region", "stateful"])
+      ) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (output !== undefined && (news.stateful ?? true) !== output.stateful) {
@@ -208,22 +215,30 @@ export const SecurityGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
-      const observed = yield* observe(id, name, scope, output?.securityGroupId, olds?.stateful);
+      const observed = yield* observe(
+        id,
+        name,
+        scope,
+        output?.securityGroupId,
+        // An unset prop means the default, not "any".
+        olds === undefined ? undefined : (olds.stateful ?? true),
+        readGeneration({ instanceId, output, previous }),
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const stateful = news.stateful ?? true;
 
-      let current = yield* observe(id, name, scope, output?.securityGroupId, stateful);
+      let current = yield* observe(id, name, scope, output?.securityGroupId, stateful, instanceId);
       if (current === undefined) {
         current = yield* iaas.createSecurityGroup({
           ...scope,

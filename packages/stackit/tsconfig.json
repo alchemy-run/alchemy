@@ -13,6 +13,9 @@
   },
   "references": [
     {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/stackit/tsconfig.json"
     },
     {

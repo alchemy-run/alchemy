@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import { hasServiceAccount } from "./internal/service_account.ts";
 
@@ -255,7 +256,18 @@ export const FederatedIdentityProviderProvider = () =>
     nuke: { dependsOn: ["Stackit.IAM.ServiceAccount"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Delete-first: the provider is found by name, with no generation
+      // marker, and an unresolved account can resolve to the current one.
+      if (
+        hasUnresolvedTrigger<FederatedIdentityProviderProps>(news, [
+          "projectId",
+          "serviceAccountEmail",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       if (
         (news.projectId ?? env.projectId) !== output.projectId ||
@@ -266,7 +278,7 @@ export const FederatedIdentityProviderProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* StackitEnvironment.current;
       const projectId = output?.projectId ?? olds?.projectId ?? env.projectId;
       const serviceAccountEmail = output?.serviceAccountEmail ?? olds?.serviceAccountEmail;
@@ -284,7 +296,9 @@ export const FederatedIdentityProviderProvider = () =>
         projectId,
         serviceAccountEmail,
       });
-      return found.federationId === output?.federationId || name === generated
+      return found.federationId === output?.federationId ||
+        found.federationId === previous?.federationId ||
+        name === generated
         ? attrs
         : Unowned(attrs);
     }),

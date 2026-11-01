@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -156,6 +157,14 @@ export const PublicIpProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
+      // Delete-first: a public IP has no name, so recovery matches on labels
+      // alone, and an unresolved scope can resolve to the current one.
+      if (
+        output !== undefined &&
+        hasUnresolvedTrigger<PublicIpProps>(news, ["projectId", "region"])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       return undefined;

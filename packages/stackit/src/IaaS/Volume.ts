@@ -6,8 +6,14 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, labelsChanged, stripInternalLabels } from "../Labels.ts";
+import {
+  desiredGenerationLabels,
+  hasAlchemyLabels,
+  labelsChanged,
+  stripInternalLabels,
+} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -16,6 +22,7 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
   type ProjectScope,
   type ProjectScopedProps,
@@ -200,8 +207,8 @@ export type Volume = Resource<
  * ### Replacement
  * Changing `availabilityZone`, `performanceClass`, `source`, `encryption`,
  * `projectId` or `region`, or shrinking `size`, creates a new volume and
- * deletes the old one, **with its data**. Snapshot or back up the volume
- * first.
+ * deletes the old one, **with its data**, including when `name` stays the
+ * same. Snapshot or back up the volume first.
  *
  * @resource
  * @product STACKIT Block Storage
@@ -224,6 +231,9 @@ const availabilityZoneOf = (news: VolumeProps, region: string) =>
 const toSource = (source: iaas.BackupSource | undefined) =>
   source === undefined ? undefined : { type: source.type, id: source.id };
 
+const sourceKey = (source: { readonly type: string; readonly id: string } | undefined) =>
+  source === undefined ? "" : `${source.type}:${source.id}`;
+
 const toAttrs = (volume: iaas.Volume, scope: ProjectScope, name: string): VolumeAttributes => ({
   volumeId: volume.id ?? "",
   name: volume.name ?? name,
@@ -243,11 +253,16 @@ const toAttrs = (volume: iaas.Volume, scope: ProjectScope, name: string): Volume
 const getVolume = (scope: ProjectScope, volumeId: string) =>
   iaas.getVolume({ ...scope, volumeId }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-/** A listed volume can take the desired props in place. */
+/**
+ * A listed volume can take the desired props in place. The encryption key
+ * can't be observed; the generation label rules out a replaced volume instead.
+ */
 const compatible = (news: VolumeProps, region: string) => (volume: iaas.Volume) =>
   volume.availabilityZone === availabilityZoneOf(news, region) &&
   (news.performanceClass === undefined || volume.performanceClass === news.performanceClass) &&
-  (news.size === undefined || (volume.size ?? 0) <= news.size);
+  (news.size === undefined || (volume.size ?? 0) <= news.size) &&
+  (news.source === undefined || sourceKey(toSource(volume.source)) === sourceKey(news.source)) &&
+  (news.encryption === undefined || volume.encrypted === true);
 
 const observe = Effect.fn(function* (args: {
   id: string;
@@ -255,6 +270,7 @@ const observe = Effect.fn(function* (args: {
   scope: ProjectScope;
   volumeId: string | undefined;
   news: VolumeProps | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.volumeId !== undefined) {
     const byId = yield* getVolume(args.scope, args.volumeId);
@@ -262,16 +278,11 @@ const observe = Effect.fn(function* (args: {
   }
   // Crash recovery: a create whose state was never persisted.
   const { items } = yield* iaas.listVolumes(args.scope);
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    args.news === undefined ? undefined : compatible(args.news, args.scope.region),
-  );
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: args.news === undefined ? undefined : compatible(args.news, args.scope.region),
+  });
 });
-
-const sourceKey = (source: VolumeSource | undefined) =>
-  source === undefined ? "" : `${source.type}:${source.id}`;
 
 const encryptionKey = (encryption: VolumeEncryption | undefined) =>
   encryption === undefined
@@ -281,7 +292,9 @@ const encryptionKey = (encryption: VolumeEncryption | undefined) =>
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
     stables: ["volumeId", "projectId", "region", "availabilityZone"],
-    nuke: { dependsOn: ["Stackit.IaaS.Server"] },
+    nuke: { dependsOn: ["Stackit.IaaS.Image"] },
+    // Nuke ordering: `Stackit.IaaS.Server` declares a dependency on this type,
+    // so servers go first and an attached volume is free when its turn comes.
 
     list: Effect.fn(function* () {
       const env = yield* StackitEnvironment.current;
@@ -291,8 +304,20 @@ export const VolumeProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      if (
+        hasUnresolvedTrigger<VolumeProps>(news, [
+          "projectId",
+          "region",
+          "availabilityZone",
+          "performanceClass",
+          "source",
+          "encryption",
+        ])
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (availabilityZoneOf(news, output.region) !== output.availabilityZone) {
         return { action: "replace" } as const;
@@ -321,24 +346,38 @@ export const VolumeProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
-      const observed = yield* observe({ id, name, scope, volumeId: output?.volumeId, news: olds });
+      const observed = yield* observe({
+        id,
+        name,
+        scope,
+        volumeId: output?.volumeId,
+        news: olds,
+        instanceId: readGeneration({ instanceId, output, previous }),
+      });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, name);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const resource = `STACKIT volume ${name}`;
 
-      // Observe — `output.volumeId` is a cache; fall back to ownership
+      // Observe — `output.volumeId` is a cache; fall back to this generation's
       // labels + name for a create whose state was never persisted.
-      let current = yield* observe({ id, name, scope, volumeId: output?.volumeId, news });
+      let current = yield* observe({
+        id,
+        name,
+        scope,
+        volumeId: output?.volumeId,
+        news,
+        instanceId,
+      });
 
       // Ensure — create when missing.
       if (current === undefined) {

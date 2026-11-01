@@ -5,8 +5,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger, rawProp } from "../internal/diff.ts";
+import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, labelsChanged, stripInternalLabels } from "../Labels.ts";
+import {
+  desiredGenerationLabels,
+  hasAlchemyLabels,
+  labelsChanged,
+  stripInternalLabels,
+} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -15,8 +22,8 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
-  sameMembers,
 } from "./internal.ts";
 
 /** IPv4 or IPv6 configuration of a {@link Network}. */
@@ -279,7 +286,11 @@ const getNetwork = (scope: { projectId: string; region: string }, networkId: str
     .getNetwork({ projectId: scope.projectId, region: scope.region, networkId })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-/** Whether an observed network can take the desired replace-only props. */
+/**
+ * Whether an observed network can take the desired replace-only props.
+ * `isolated` and `vpcNetworkRangeId` can't be observed; the generation label
+ * rules out a replaced network instead.
+ */
 const prefixCompatible = (
   desired: NetworkIpConfig | undefined,
   observed: ReadonlyArray<string> | undefined,
@@ -302,6 +313,7 @@ const observe = Effect.fn(function* (args: {
   scope: { projectId: string; region: string };
   networkId: string | undefined;
   news: NetworkProps | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.networkId !== undefined) {
     const byId = yield* getNetwork(args.scope, args.networkId);
@@ -312,12 +324,10 @@ const observe = Effect.fn(function* (args: {
     projectId: args.scope.projectId,
     region: args.scope.region,
   });
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    args.news === undefined ? undefined : compatible(args.news),
-  );
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: args.news === undefined ? undefined : compatible(args.news),
+  });
 });
 
 const createIpv4 = (config: NetworkIpConfig | undefined): iaas.CreateNetworkIPv4 | undefined => {
@@ -366,6 +376,9 @@ const ipIdentityChanged = (news: NetworkIpConfig | undefined, olds: NetworkIpCon
   (news?.prefix === undefined && news?.prefixLength !== olds?.prefixLength) ||
   news?.vpcNetworkRangeId !== olds?.vpcNetworkRangeId;
 
+/** The fields of an address family that replace the network when they change. */
+const IP_TRIGGERS = ["prefix", "prefixLength", "vpcNetworkRangeId"] as const;
+
 export const NetworkProvider = () =>
   Provider.succeed(Network, {
     stables: ["networkId", "projectId", "region", "isolated"],
@@ -381,6 +394,14 @@ export const NetworkProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      if (
+        output !== undefined &&
+        (hasUnresolvedTrigger<NetworkProps>(news, ["projectId", "region", "isolated", "vpcId"]) ||
+          hasUnresolvedTrigger<NetworkIpConfig>(rawProp<NetworkProps>(news, "ipv4"), IP_TRIGGERS) ||
+          hasUnresolvedTrigger<NetworkIpConfig>(rawProp<NetworkProps>(news, "ipv6"), IP_TRIGGERS))
+      ) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if ((news.isolated ?? false) !== (output?.isolated ?? olds?.isolated ?? false)) {
@@ -398,7 +419,7 @@ export const NetworkProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
       const observed = yield* observe({
@@ -407,20 +428,21 @@ export const NetworkProvider = () =>
         scope,
         networkId: output?.networkId,
         news: olds,
+        instanceId: readGeneration({ instanceId, output, previous }),
       });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, output?.isolated ?? olds?.isolated ?? false);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const isolated = news.isolated ?? false;
       const resource = `STACKIT network ${name}`;
 
-      // Observe — `output.networkId` is a cache; fall back to ownership
+      // Observe — `output.networkId` is a cache; fall back to this generation's
       // labels + name for a create whose state was never persisted.
       let current = yield* observe({
         id,
@@ -428,6 +450,7 @@ export const NetworkProvider = () =>
         scope,
         networkId: output?.networkId,
         news,
+        instanceId,
       });
 
       // Ensure — create when missing.

@@ -4,12 +4,14 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { requireOrganizationId, StackitEnvironment } from "../Environment.ts";
+import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, isAlchemyOwned, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   containerName,
+  desiredParent,
   isParent,
   labelsUpdate,
   listChildProjects,
@@ -225,10 +227,20 @@ const waitUntilProjectGone = (id: string) =>
     maxInterval: "30 seconds",
   });
 
-/** The Alchemy-owned project for logical id `id` under `parentId`, if any. */
-const findOwned = Effect.fn(function* (id: string, parentId: string) {
+/**
+ * The Alchemy-owned project for logical id `id` under `parentId`, if any. The
+ * Network Area must match too: it can't change in place, so a project in
+ * another area is the generation being replaced, which garbage collection
+ * deletes, along with everything in it, once the replacement exists.
+ */
+const findOwned = Effect.fn(function* (
+  id: string,
+  parentId: string,
+  networkAreaId: string | undefined,
+) {
   for (const project of yield* listChildProjects(parentId)) {
     if (project.lifecycleState === "DELETING") continue;
+    if (toAttrs(project).networkAreaId !== networkAreaId) continue;
     if (yield* hasAlchemyLabels(id, project.labels)) return project;
   }
   return undefined;
@@ -243,19 +255,14 @@ const observe = Effect.fn(function* (input: {
   id: string;
   projectId: string | undefined;
   parentId: string;
+  networkAreaId: string | undefined;
 }) {
   if (input.projectId !== undefined) {
     const byId = yield* getProject(input.projectId);
     if (byId !== undefined && byId.lifecycleState !== "DELETING") return byId;
     if (byId !== undefined) yield* waitUntilProjectGone(input.projectId);
   }
-  return yield* findOwned(input.id, input.parentId);
-});
-
-const desiredParent = Effect.fn(function* (parentId: string | undefined) {
-  if (parentId !== undefined) return parentId;
-  const env = yield* StackitEnvironment.current;
-  return yield* requireOrganizationId(env);
+  return yield* findOwned(input.id, input.parentId, input.networkAreaId);
 });
 
 export const ProjectProvider = () =>
@@ -266,7 +273,14 @@ export const ProjectProvider = () =>
     nuke: { dependsOn: ["Stackit.ResourceManager.Folder"] },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // An unresolved area is one being replaced or created. Delete-first, because
+      // it can resolve to the current area, and a create-first replacement would
+      // then reclaim the old project, which garbage collection deletes.
+      if (hasUnresolvedTrigger<ProjectProps>(news, ["networkAreaId"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       // `networkArea` is immutable. On adoption (no olds) an unset prop
       // keeps whatever network area the project already has.
       if (
@@ -278,27 +292,33 @@ export const ProjectProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       if (output?.projectId !== undefined) {
         const byId = yield* getProject(output.projectId);
         if (byId === undefined || byId.lifecycleState === "DELETING") return undefined;
         return toAttrs(byId);
       }
       const parentId = yield* desiredParent(olds?.parentId);
-      const owned = yield* findOwned(id, parentId);
+      const owned = yield* findOwned(id, parentId, olds?.networkAreaId);
       if (owned !== undefined) return toAttrs(owned);
       // A same-named project without our labels: report it, but as foreign.
+      // The generation being replaced isn't: it keeps its name until it's gone.
       if (olds?.name === undefined) return undefined;
       const children = yield* listChildProjects(parentId);
       const named = children.find(
-        (project) => project.name === olds.name && project.lifecycleState !== "DELETING",
+        (project) =>
+          project.name === olds.name &&
+          project.lifecycleState !== "DELETING" &&
+          project.projectId !== previous?.projectId,
       );
       return named === undefined ? undefined : Unowned(toAttrs(named));
     }),
 
     list: Effect.fn(function* () {
       const env = yield* StackitEnvironment.current;
-      const organizationId = yield* requireOrganizationId(env);
+      // A profile without an organization has nothing in scope to enumerate.
+      const organizationId = env.organizationId;
+      if (organizationId === undefined) return [];
       const folders = yield* listFolderTree(organizationId);
       const projects: ReturnType<typeof toAttrs>[] = [];
       for (const container of [organizationId, ...folders.map((folder) => folder.containerId)]) {
@@ -323,6 +343,7 @@ export const ProjectProvider = () =>
         id,
         projectId: output?.projectId,
         parentId,
+        networkAreaId: news.networkAreaId,
       });
 
       // 2. Ensure

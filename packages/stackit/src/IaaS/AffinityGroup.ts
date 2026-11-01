@@ -5,9 +5,13 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  IAAS_NAME_MAX_LENGTH,
   iaasName,
   projectScopeChanged,
   resolveProjectScope,
@@ -89,7 +93,8 @@ export type AffinityGroup = Resource<
  * group by the id in state, or by the generated physical name (which
  * embeds the resource's instance id). A group with an explicit `name` found
  * without state is reported as unowned and needs `--adopt`. `alchemy
- * unsafe nuke` does not enumerate affinity groups.
+ * unsafe nuke` enumerates only groups whose name has the generated shape,
+ * so a group with a hand-chosen name of that shape is deleted too.
  *
  * ### Spreading servers over hosts
  * **Example:** Anti-affinity for a replicated service
@@ -157,11 +162,32 @@ const observe = Effect.fn(function* (
 export const AffinityGroupProvider = () =>
   Provider.succeed(AffinityGroup, {
     stables: ["affinityGroupId", "name", "policy", "projectId", "region"],
-    nuke: { dependsOn: ["Stackit.IaaS.Server"] },
+    // Nuke ordering: `Stackit.IaaS.Server` declares a dependency on this type,
+    // so a group's member servers go first.
+
+    // No labels: only groups with a generated name are enumerated.
+    list: Effect.fn(function* () {
+      const env = yield* StackitEnvironment.current;
+      const scope = { projectId: env.projectId, region: env.region };
+      const { items } = yield* iaas.listAffinityGroups(scope);
+      return items
+        .filter(
+          (group) =>
+            group.id !== undefined && isGeneratedPhysicalName(group.name, IAAS_NAME_MAX_LENGTH),
+        )
+        .map((group) => toAttrs(group, scope));
+    }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      // Delete-first: the group has no generation marker, and an unresolved
+      // prop can resolve to the name and policy it already has.
+      if (
+        hasUnresolvedTrigger<AffinityGroupProps>(news, ["projectId", "region", "policy", "name"])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (news.policy !== output.policy) return { action: "replace" } as const;
       const renamed =
@@ -170,15 +196,19 @@ export const AffinityGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
       const observed = yield* observe(scope, name, olds?.policy, output?.affinityGroupId);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope);
-      // Owned when state recorded it, or when it carries the generated name
-      // (which embeds this resource's instance id).
-      const owned = output !== undefined || olds?.name === undefined;
+      // Owned when state recorded it, when it carries the generated name
+      // (which embeds this resource's instance id), or when it is the
+      // generation being replaced.
+      const owned =
+        output !== undefined ||
+        olds?.name === undefined ||
+        previous?.affinityGroupId === attrs.affinityGroupId;
       return owned ? attrs : Unowned(attrs);
     }),
 

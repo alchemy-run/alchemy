@@ -3,6 +3,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { disableService, ensureServiceEnabled, getServiceStatus } from "../internal/enable.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -125,6 +126,15 @@ export const ServiceProvider = () =>
     nuke: { singleton: true },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      // Delete-first: an unresolved prop can resolve to the current service,
+      // and a create-first replacement would see it enabled, record that
+      // Alchemy didn't enable it, and let the old generation disable it.
+      if (
+        output !== undefined &&
+        hasUnresolvedTrigger<ServiceProps>(news, ["serviceId", "projectId", "region"])
+      ) {
+        return { action: "replace" as const, deleteFirst: true };
+      }
       if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const projectId = news.projectId ?? env.projectId;

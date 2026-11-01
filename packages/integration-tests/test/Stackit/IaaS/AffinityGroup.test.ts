@@ -1,6 +1,7 @@
 import * as Stackit from "@alchemy.run/stackit";
 import { expect } from "@alchemy.run/test";
 import * as iaas from "@distilled.cloud/stackit/iaas";
+import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { logLevel, makeStackitTest, stackitEnvironment, stackitTags } from "../helpers.ts";
 import { expectGone, GONE, PRESENT } from "./compute.ts";
@@ -51,6 +52,11 @@ test.provider(
       expect(replaced.affinityGroupId).not.toEqual(created.affinityGroupId);
       expect(replaced.policy).toEqual("soft-affinity");
       yield* expectGone(presence(projectId, region, created.affinityGroupId));
+
+      // nuke sees the generated name.
+      const provider = yield* Provider.findProvider(Stackit.IaaS.AffinityGroup);
+      const listed = yield* provider.list();
+      expect(listed.map((group) => group.affinityGroupId)).toContain(replaced.affinityGroupId);
 
       yield* stack.destroy();
       yield* expectGone(presence(projectId, region, replaced.affinityGroupId));

@@ -8,6 +8,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { isAlchemyOwned, labelRecord } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -17,7 +19,6 @@ import {
   getZoneOrUndefined,
   isSucceeded,
   normalizeDnsName,
-  sameStringSet,
 } from "./internal.ts";
 
 /** DNS record type of a STACKIT record set. */
@@ -294,7 +295,7 @@ interface DesiredRecordSet {
 /** The mutable aspects that differ between the observed and desired record set. */
 const recordSetDelta = (rrset: dns.RecordSet, desired: DesiredRecordSet) => {
   const patch: { records?: dns.RecordPayload[]; ttl?: number; comment?: string } = {};
-  if (!sameStringSet(contentsOf(rrset), desired.records)) {
+  if (!sameMembers(contentsOf(rrset), desired.records)) {
     patch.records = desired.records.map((content) => ({ content }));
   }
   if (desired.ttl !== undefined && rrset.ttl !== desired.ttl) patch.ttl = desired.ttl;
@@ -392,8 +393,13 @@ export const RecordSetProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      // A record set has no generation marker, and an unresolved prop can
+      // resolve to the name and type it already has: the old one goes first.
+      if (hasUnresolvedTrigger<RecordSetProps>(news, ["projectId", "zoneId", "name", "type"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const projectId = news.projectId ?? env.projectId;
       const sameZone = news.zoneId === output.zoneId && projectId === output.projectId;
@@ -408,7 +414,7 @@ export const RecordSetProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* StackitEnvironment.current;
       const projectId = output?.projectId ?? olds?.projectId ?? env.projectId;
       const zoneId = output?.zoneId ?? olds?.zoneId;
@@ -433,9 +439,10 @@ export const RecordSetProvider = () =>
       if (rrset === undefined) return undefined;
       const attrs = toAttrs(projectId, zoneId, zone.dnsName, name, rrset);
       // No labels on record sets: one found without a recorded id may be
-      // foreign (see the resource docs). With an id in state, the record of
-      // that name and type is the one Alchemy manages.
-      return output !== undefined ? attrs : Unowned(attrs);
+      // foreign (see the resource docs). With an id in state, or as the
+      // generation being replaced, the record of that name and type is the
+      // one Alchemy manages.
+      return output !== undefined || previous?.rrSetId === rrset.id ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -518,8 +525,15 @@ export const RecordSetProvider = () =>
         });
       }
 
-      // 3. Sync — records, TTL and comment against the observed record set.
-      const patch = recordSetDelta(rrset, desired);
+      // 3. Sync — records, TTL and comment against the observed record set. A
+      // failed record set is patched even with nothing drifted, so it either
+      // recovers or the deploy fails; it is never returned as if it were healthy.
+      const delta = recordSetDelta(rrset, desired);
+      const patch: ReturnType<typeof recordSetDelta> =
+        Object.keys(delta).length === 0 &&
+        (rrset.state === "UPDATE_FAILED" || rrset.state === "DELETE_FAILED")
+          ? { records: desired.records.map((content) => ({ content })) }
+          : delta;
       if (Object.keys(patch).length > 0) {
         const updateStartedBefore = rrset.updateStarted;
         yield* dns.partialUpdateRecordSet({ projectId, zoneId, rrSetId, ...patch });

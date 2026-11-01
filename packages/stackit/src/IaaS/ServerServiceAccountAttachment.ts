@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -114,9 +115,19 @@ export const ServerServiceAccountAttachmentProvider = () =>
     nuke: { dependsOn: ["Stackit.IaaS.Server", "Stackit.IAM.ServiceAccount"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       // One service account per server: the old attachment goes first.
+      if (
+        hasUnresolvedTrigger<ServerServiceAccountAttachmentProps>(news, [
+          "projectId",
+          "region",
+          "serverId",
+          "serviceAccountEmail",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) {
         return { action: "replace", deleteFirst: true } as const;
       }

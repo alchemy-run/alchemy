@@ -1,11 +1,12 @@
 import * as authorization from "@distilled.cloud/stackit/authorization";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
+import { havePropsChanged, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { StackitResourceFailed, waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -196,21 +197,36 @@ export const CustomRoleProvider = () =>
   Provider.succeed(CustomRole, {
     stables: ["roleId", "resourceType", "resourceId"],
 
-    diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (output === undefined) return undefined;
+      // Delete-first: role names are unique in a scope, and an unresolved scope
+      // can resolve to the current one.
+      if (hasUnresolvedTrigger<CustomRoleProps>(news, ["resourceType", "resourceId"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const scope = yield* resolveScope(news, env);
       if (!sameScope(scope, output)) {
         return { action: "replace" as const, deleteFirst: false };
       }
+      // `name` is stable unless this update renames the role, so a membership
+      // granting `role.name` isn't replaced when only the permissions change.
+      if ((news.name === undefined || news.name === output.name) && havePropsChanged(olds, news)) {
+        return {
+          action: "update" as const,
+          stables: ["roleId", "resourceType", "resourceId", "name"],
+        };
+      }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ olds, output, previous }) {
+      const env = yield* StackitEnvironment.current;
       const scope: AuthorizationScope =
         output !== undefined
           ? { resourceType: output.resourceType, resourceId: output.resourceId }
-          : yield* resolveScope(olds ?? {}, yield* StackitEnvironment.current);
+          : yield* resolveScope(olds ?? {}, env);
       // With state, track the recorded id. Without it, only an explicit
       // name can be looked up (a generated name is per-instance).
       const by: { roleId?: string; name?: string } =

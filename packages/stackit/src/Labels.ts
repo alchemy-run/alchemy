@@ -34,6 +34,7 @@ export const alchemyLabelKeys = {
   stack: "alchemy.stack",
   stage: "alchemy.stage",
   id: "alchemy.id",
+  instance: "alchemy.instance",
 } as const;
 
 const TAG_PREFIX = "alchemy::";
@@ -107,7 +108,8 @@ export const fromLabelList = (
 
 /** Alchemy's ownership labels for logical id `id` in the current stack/stage. */
 export const createInternalLabels = Effect.fn(function* (id: string) {
-  return toLabels(yield* createInternalTags(id));
+  const tags = yield* createInternalTags(id);
+  return toLabels(tags);
 });
 
 /**
@@ -121,6 +123,25 @@ export const desiredLabels = Effect.fn(function* (
   const internal = yield* createInternalLabels(id);
   return { ...toLabels(userLabels), ...internal };
 });
+
+/**
+ * {@link desiredLabels} plus the resource's instance id, which marks the
+ * generation. Use it where names don't identify a generation: a replacement
+ * shares its logical id (and an explicit name) with the object it replaces,
+ * and only this label tells them apart in a crash-recovery lookup.
+ */
+export const desiredGenerationLabels = Effect.fn(function* (
+  id: string,
+  instanceId: string,
+  userLabels: Record<string, string> | undefined,
+) {
+  const labels = yield* desiredLabels(id, userLabels);
+  return { ...labels, [alchemyLabelKeys.instance]: instanceId };
+});
+
+/** Whether observed labels mark the object as generation `instanceId`. */
+export const hasInstanceLabel = (instanceId: string, labels: unknown): boolean =>
+  labelRecord(labels)[alchemyLabelKeys.instance] === instanceId;
 
 /** Drop Alchemy's ownership labels, leaving the user's. */
 export const stripInternalLabels = (labels: unknown): Record<string, string> =>

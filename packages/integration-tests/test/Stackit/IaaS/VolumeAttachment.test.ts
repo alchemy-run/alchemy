@@ -7,8 +7,8 @@ import { expectGone, GONE, MACHINE_TYPE, PRESENT, slow, ubuntuImageId } from "./
 
 const { test } = makeStackitTest();
 
-// Needs a running server (g1.1 about EUR 0.02-0.03/h; this suite holds one
-// for about 8 minutes, < EUR 0.01 per run): gated behind STACKIT_TEST_SLOW.
+// Needs running servers (g1.1 about EUR 0.02-0.03/h; this suite holds three
+// for about 8 minutes each, < EUR 0.02 per run): gated behind STACKIT_TEST_SLOW.
 const options = { tags: stackitTags("iaas", "volumeattachment"), timeout: 1_800_000 } as const;
 
 const attachmentPresence = (
@@ -75,6 +75,63 @@ test.provider.skipIf(slow)(
 
       yield* stack.destroy();
       yield* expectGone(attachmentPresence(projectId, region, serverId, volumeId));
+    }).pipe(logLevel),
+  options,
+);
+
+// Both servers stay deployed across steps, so the move never removes the
+// dependency it is moving away from.
+const moveStack = (imageId: string, region: string, target: "first" | "second") =>
+  Effect.gen(function* () {
+    const zone = `${region}-1`;
+    const network = yield* Stackit.IaaS.Network("MoveNetwork", {
+      ipv4: { prefix: "10.231.44.0/24" },
+    });
+    const server = (id: string) =>
+      Stackit.IaaS.Server(id, {
+        machineType: MACHINE_TYPE,
+        availabilityZone: zone,
+        bootVolume: { size: 10, source: { type: "image", id: imageId } },
+        networking: { networkId: network.networkId },
+      });
+    const first = yield* server("MoveFirst");
+    const second = yield* server("MoveSecond");
+    const volume = yield* Stackit.IaaS.Volume("MoveVolume", { size: 1, availabilityZone: zone });
+    const attachment = yield* Stackit.IaaS.VolumeAttachment("Move", {
+      serverId: target === "first" ? first.serverId : second.serverId,
+      volumeId: volume.volumeId,
+    });
+    return { first, second, volume, attachment };
+  });
+
+test.provider.skipIf(slow)(
+  "move a volume to another server",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
+      const imageId = yield* ubuntuImageId(projectId, region);
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(moveStack(imageId, region, "first"));
+      const { volumeId } = created.volume;
+      expect(created.attachment.serverId).toEqual(created.first.serverId);
+      expect((yield* iaas.getVolume({ projectId, region, volumeId })).serverId).toEqual(
+        created.first.serverId,
+      );
+
+      const moved = yield* stack.deploy(moveStack(imageId, region, "second"));
+      expect(moved.volume.volumeId).toEqual(volumeId);
+      expect(moved.attachment.serverId).toEqual(moved.second.serverId);
+      const volume = yield* iaas.getVolume({ projectId, region, volumeId });
+      expect(volume.serverId).toEqual(moved.second.serverId);
+      expect(volume.status).toEqual("ATTACHED");
+      yield* expectGone(attachmentPresence(projectId, region, moved.first.serverId, volumeId));
+      expect(yield* attachmentPresence(projectId, region, moved.second.serverId, volumeId)).toEqual(
+        PRESENT,
+      );
+
+      yield* stack.destroy();
+      yield* expectGone(attachmentPresence(projectId, region, moved.second.serverId, volumeId));
     }).pipe(logLevel),
   options,
 );

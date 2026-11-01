@@ -7,7 +7,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { requireOrganizationId, StackitEnvironment } from "../Environment.ts";
-import { hasAlchemyLabels, isAlchemyOwned, labelsChanged } from "../Labels.ts";
+import { hasAlchemyLabels, hasInstanceLabel, isAlchemyOwned, labelsChanged } from "../Labels.ts";
 
 /** Props shared by every project + region scoped IaaS resource. */
 export interface ProjectScopedProps {
@@ -91,35 +91,62 @@ export const listOrganizationId = Effect.gen(function* () {
 });
 
 /**
- * Physical name for an IaaS object. STACKIT IaaS names are at most 63
- * characters of `[A-Za-z0-9]` separated by single `-`, `_`, `.` or spaces.
+ * STACKIT IaaS names are at most 63 characters of `[A-Za-z0-9]` separated by
+ * single `-`, `_`, `.` or spaces.
  */
+export const IAAS_NAME_MAX_LENGTH = 63;
+
+/** Physical name for an IaaS object. */
 export const iaasName = Effect.fn(function* (id: string, name: string | undefined) {
   if (name !== undefined) return name;
-  return yield* createPhysicalName({ id, maxLength: 63, lowercase: true });
+  return yield* createPhysicalName({ id, maxLength: IAAS_NAME_MAX_LENGTH, lowercase: true });
 });
 
 /**
  * Pick the crash-recovery candidate among listed objects: the one carrying
  * this logical id's ownership labels and the expected name, and (via
- * `compatible`) able to take the desired props in place. A replacement's
- * new generation shares the logical id with the old one, so `compatible`
- * must reject anything whose replace-only aspects differ.
+ * `compatible`) able to take the desired props in place.
+ *
+ * A replacement's new generation shares the logical id, and an explicit
+ * name, with the one it replaces, and garbage collection deletes the old
+ * one afterwards, so reclaiming it would delete the live resource. Not
+ * every replace-only prop can be observed, so `instanceId` is what rules
+ * that out: when set, only an object labeled as that generation matches
+ * (see {@link readGeneration} and `desiredGenerationLabels`).
  */
 export const findOwnedByName = <A extends { readonly name?: string; readonly labels?: unknown }>(
   id: string,
   name: string,
   items: ReadonlyArray<A>,
-  compatible: (item: A) => boolean = () => true,
+  options: {
+    readonly instanceId?: string | undefined;
+    readonly compatible?: ((item: A) => boolean) | undefined;
+  } = {},
 ) =>
   Effect.gen(function* () {
     for (const item of items) {
       if (item.name !== name) continue;
-      if (!compatible(item)) continue;
+      if (options.compatible !== undefined && !options.compatible(item)) continue;
+      if (options.instanceId !== undefined && !hasInstanceLabel(options.instanceId, item.labels)) {
+        continue;
+      }
       if (yield* hasAlchemyLabels(id, item.labels)) return item;
     }
     return undefined;
   });
+
+/**
+ * The generation `read` may recover by name. A cold start (state lost, or an
+ * interrupted create) accepts any generation: ownership labels are all it
+ * has, and the engine's `instanceId` for a cold start is new. Once state or
+ * a replacement's `previous` exists, only this generation may match.
+ */
+export const readGeneration = (input: {
+  readonly instanceId: string;
+  readonly output: unknown;
+  readonly previous: unknown;
+}): string | undefined =>
+  input.output === undefined && input.previous === undefined ? undefined : input.instanceId;
 
 /** Items that carry any Alchemy ownership marker (for `list`/nuke). */
 export const ownedOnly = <A extends { readonly labels?: unknown }>(items: ReadonlyArray<A>) =>
@@ -132,16 +159,6 @@ export const ownedOnly = <A extends { readonly labels?: unknown }>(items: Readon
  */
 export const labelsPatch = (observed: unknown, desired: Record<string, string>) =>
   labelsChanged(observed, desired) ? desired : undefined;
-
-/** Whether two string lists hold the same members (order-insensitive). */
-export const sameMembers = (
-  a: ReadonlyArray<string> | null | undefined,
-  b: ReadonlyArray<string> | null | undefined,
-): boolean => {
-  const left = [...(a ?? [])].sort();
-  const right = [...(b ?? [])].sort();
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-};
 
 // ── Routes (network area routes and routing table routes) ──
 

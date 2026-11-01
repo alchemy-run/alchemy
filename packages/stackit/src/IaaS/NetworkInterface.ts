@@ -6,8 +6,10 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { sameMembers } from "../internal/equal.ts";
 import { waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   findOwnedByName,
@@ -15,8 +17,8 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
-  sameMembers,
   type ProjectScope,
 } from "./internal.ts";
 
@@ -225,6 +227,7 @@ const observe = Effect.fn(function* (args: {
   nicId: string | undefined;
   ipv4: string | undefined;
   ipv6: string | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.nicId !== undefined) {
     const byId = yield* getNic(args.scope, args.networkId, args.nicId);
@@ -233,19 +236,18 @@ const observe = Effect.fn(function* (args: {
   const { items } = yield* iaas
     .listNics({ ...args.scope, networkId: args.networkId })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed({ items: [] })));
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    (nic) =>
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: (nic) =>
       (args.ipv4 === undefined || nic.ipv4 === args.ipv4) &&
       (args.ipv6 === undefined || nic.ipv6 === args.ipv6),
-  );
+  });
 });
 
 export const NetworkInterfaceProvider = () =>
   Provider.succeed(NetworkInterface, {
-    stables: ["networkInterfaceId", "networkId", "projectId", "region", "mac"],
+    // `ipv4`/`ipv6` are assigned at creation and only change with a replacement.
+    stables: ["networkInterfaceId", "networkId", "projectId", "region", "mac", "ipv4", "ipv6"],
     nuke: { dependsOn: ["Stackit.IaaS.Network", "Stackit.IaaS.SecurityGroup"] },
 
     list: Effect.fn(function* () {
@@ -256,6 +258,18 @@ export const NetworkInterfaceProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      if (
+        output !== undefined &&
+        hasUnresolvedTrigger<NetworkInterfaceProps>(news, [
+          "projectId",
+          "region",
+          "networkId",
+          "ipv4",
+          "ipv6",
+        ])
+      ) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (output !== undefined && news.networkId !== output.networkId) {
@@ -267,7 +281,7 @@ export const NetworkInterfaceProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const networkId = output?.networkId ?? olds?.networkId;
       if (networkId === undefined) return undefined;
       const scope = yield* resolveProjectScope(olds, output);
@@ -280,16 +294,17 @@ export const NetworkInterfaceProvider = () =>
         nicId: output?.networkInterfaceId,
         ipv4: olds?.ipv4,
         ipv6: olds?.ipv6,
+        instanceId: readGeneration({ instanceId, output, previous }),
       });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, networkId);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const networkId = news.networkId;
       const nicSecurity = news.nicSecurity ?? true;
 
@@ -301,6 +316,7 @@ export const NetworkInterfaceProvider = () =>
         nicId: output?.networkId === networkId ? output.networkInterfaceId : undefined,
         ipv4: news.ipv4,
         ipv6: news.ipv6,
+        instanceId,
       });
       if (current === undefined) {
         current = yield* iaas.createNic({

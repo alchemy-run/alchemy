@@ -118,17 +118,6 @@ test.provider.skipIf(!owner)(
       );
       expect(noop.resources.Sandbox).toMatchObject({ action: "noop" });
 
-      // The network area is immutable: changing it plans a replacement.
-      const replace = yield* stack.plan(
-        Stackit.ResourceManager.Project("Sandbox", {
-          name: renamed,
-          owner: owner!,
-          labels: { env: "prod" },
-          networkAreaId: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(replace.resources.Sandbox).toMatchObject({ action: "replace" });
-
       yield* stack.destroy();
       yield* expectGone(created.projectId);
 
@@ -137,6 +126,45 @@ test.provider.skipIf(!owner)(
       expect(sandbox.lifecycleState).toEqual("ACTIVE");
     }).pipe(logLevel),
   options,
+);
+
+test.provider.skipIf(!owner)(
+  "changing the network area replaces the project and deletes the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Both areas stay deployed across the replacement, so no step removes a
+      // dependency while replacing its dependant.
+      const inArea = (area: "first" | "second") =>
+        Effect.gen(function* () {
+          const first = yield* Stackit.IaaS.NetworkArea("ProjectAreaFirst", {});
+          const second = yield* Stackit.IaaS.NetworkArea("ProjectAreaSecond", {});
+          const project = yield* Stackit.ResourceManager.Project("InArea", {
+            owner: owner!,
+            networkAreaId: area === "first" ? first.networkAreaId : second.networkAreaId,
+          });
+          return { first, second, project };
+        });
+
+      const created = yield* stack.deploy(inArea("first"));
+      expect(created.project.networkAreaId).toEqual(created.first.networkAreaId);
+      const fetched = yield* getObserved(created.project.projectId);
+      expect(fetched.labels?.networkArea).toEqual(created.first.networkAreaId);
+
+      const replaced = yield* stack.deploy(inArea("second"));
+      expect(replaced.project.projectId).not.toEqual(created.project.projectId);
+      expect(replaced.project.networkAreaId).toEqual(replaced.second.networkAreaId);
+      const refetched = yield* getObserved(replaced.project.projectId);
+      expect(refetched.lifecycleState).toEqual("ACTIVE");
+      expect(refetched.labels?.networkArea).toEqual(replaced.second.networkAreaId);
+      yield* expectGone(created.project.projectId);
+
+      yield* stack.destroy();
+      yield* expectGone(replaced.project.projectId);
+    }).pipe(logLevel),
+  // Two project creates and two deletes, each taking minutes.
+  { ...options, timeout: 1_800_000 },
 );
 
 test.provider.skipIf(!owner)(

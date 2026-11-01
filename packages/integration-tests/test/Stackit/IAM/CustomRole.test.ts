@@ -96,20 +96,63 @@ test.provider(
       expect(renamedRole?.name).toEqual("alchemy-test-iam-role");
       expect(permissionsOf(renamedRole)).toEqual([first]);
 
-      // Moving the role to another resource replaces it.
-      const replacePlan = yield* stack.plan(
-        Stackit.IAM.CustomRole("Role", {
-          name: "alchemy-test-iam-role",
-          description: "Alchemy test role",
-          permissions: [first],
-          resourceType: "organization",
-          resourceId: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(replacePlan.resources.Role).toMatchObject({ action: "replace" });
-
       yield* stack.destroy();
       expect(yield* waitUntilRoleGone(projectId, created.roleId)).toBeUndefined();
+    }).pipe(logLevel),
+  options,
+);
+
+test.provider(
+  "moving a role to another resource replaces it and deletes the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, organizationId } = yield* stackitEnvironment;
+      const organization = organizationId ?? "";
+      expect(organization).not.toEqual("");
+      yield* stack.destroy();
+      const [permission] = yield* pickPermissions;
+      const { permissions } = yield* authorization.listPermissions({
+        resourceType: "organization",
+      });
+      const organizationPermission = permissions.map(({ name }) => name).sort()[0]!;
+
+      const onProject = yield* stack.deploy(
+        Stackit.IAM.CustomRole("Moved", {
+          name: "alchemy-test-iam-moved",
+          permissions: [permission],
+        }),
+      );
+      expect(onProject.resourceType).toEqual("project");
+
+      const onOrganization = yield* stack.deploy(
+        Stackit.IAM.CustomRole("Moved", {
+          name: "alchemy-test-iam-moved",
+          permissions: [organizationPermission],
+          resourceType: "organization",
+        }),
+      );
+      expect(onOrganization.roleId).not.toEqual(onProject.roleId);
+      expect(onOrganization.resourceType).toEqual("organization");
+      expect(onOrganization.resourceId).toEqual(organization);
+      const listRolesOfOrganization = authorization
+        .listRoles({ resourceType: "organization", resourceId: organization })
+        .pipe(
+          Effect.map((response) =>
+            response.roles.find((role) => role.id === onOrganization.roleId),
+          ),
+        );
+      expect((yield* listRolesOfOrganization)?.name).toEqual("alchemy-test-iam-moved");
+      expect(yield* waitUntilRoleGone(projectId, onProject.roleId)).toBeUndefined();
+
+      yield* stack.destroy();
+      const gone = yield* listRolesOfOrganization.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (role) => role === undefined,
+          times: 15,
+        }),
+      );
+      expect(gone).toBeUndefined();
     }).pipe(logLevel),
   options,
 );

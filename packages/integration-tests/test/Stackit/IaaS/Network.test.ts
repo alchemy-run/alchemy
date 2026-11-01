@@ -146,13 +146,47 @@ test.provider(
       expect(network.isolated).toEqual(true);
       expect(network.ipv4Prefixes).toEqual(["192.168.231.0/24"]);
 
-      const plan = yield* stack.plan(
-        Stackit.IaaS.Network("Isolated", { ipv4: { prefix: "192.168.231.0/24" } }),
+      // Isolation can't change in place: it replaces the network.
+      const routed = yield* stack.deploy(
+        Stackit.IaaS.Network("Isolated", { ipv4: { prefix: "192.168.232.0/24" } }),
       );
-      expect(plan.resources.Isolated).toMatchObject({ action: "replace" });
+      expect(routed.networkId).not.toEqual(network.networkId);
+      expect(routed.isolated).toEqual(false);
+      yield* expectGone(projectId, region, network.networkId);
 
       yield* stack.destroy();
-      yield* expectGone(projectId, region, network.networkId);
+      yield* expectGone(projectId, region, routed.networkId);
+    }).pipe(logLevel),
+  options,
+);
+
+test.provider(
+  "replacing a network with an explicit name creates a new one and deletes the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
+      const name = "alchemy-iaas-network-explicit";
+      yield* stack.destroy();
+
+      const first = yield* stack.deploy(
+        Stackit.IaaS.Network("Explicit", { name, ipv4: { prefix: "10.231.4.0/24" } }),
+      );
+      expect(first.name).toEqual(name);
+
+      const second = yield* stack.deploy(
+        Stackit.IaaS.Network("Explicit", { name, ipv4: { prefix: "10.231.5.0/24" } }),
+      );
+      expect(second.networkId).not.toEqual(first.networkId);
+      expect(second.name).toEqual(name);
+      expect(second.ipv4Prefixes).toEqual(["10.231.5.0/24"]);
+      yield* expectGone(projectId, region, first.networkId);
+
+      const fetched = yield* iaas.getNetwork({ projectId, region, networkId: second.networkId });
+      expect(fetched.name).toEqual(name);
+      expect(fetched.status).toEqual("CREATED");
+
+      yield* stack.destroy();
+      yield* expectGone(projectId, region, second.networkId);
     }).pipe(logLevel),
   options,
 );

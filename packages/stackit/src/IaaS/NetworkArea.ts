@@ -5,8 +5,9 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -16,6 +17,7 @@ import {
   labelsPatch,
   listOrganizationId,
   ownedOnly,
+  readGeneration,
   resolveOrganizationId,
 } from "./internal.ts";
 
@@ -149,8 +151,12 @@ const getArea = (organizationId: string, areaId: string) =>
     .getNetworkArea({ organizationId, areaId })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const desiredAreaLabels = Effect.fn(function* (id: string, news: NetworkAreaProps) {
-  const labels = yield* desiredLabels(id, news.labels);
+const desiredAreaLabels = Effect.fn(function* (
+  id: string,
+  instanceId: string,
+  news: NetworkAreaProps,
+) {
+  const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
   return news.routingTables === true
     ? { ...labels, [ROUTING_TABLES_PREVIEW_LABEL]: "true" }
     : labels;
@@ -162,20 +168,19 @@ const observe = Effect.fn(function* (args: {
   organizationId: string;
   areaId: string | undefined;
   routingTables: boolean | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.areaId !== undefined) {
     const byId = yield* getArea(args.organizationId, args.areaId);
     if (byId !== undefined) return byId;
   }
   const { items } = yield* iaas.listNetworkAreas({ organizationId: args.organizationId });
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    (area) =>
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: (area) =>
       args.routingTables === undefined ||
       toAttrs(area, args.organizationId).routingTables === args.routingTables,
-  );
+  });
 });
 
 export const NetworkAreaProvider = () =>
@@ -190,7 +195,11 @@ export const NetworkAreaProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      if (hasUnresolvedTrigger<NetworkAreaProps>(news, ["organizationId", "routingTables"])) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const organizationId = yield* desiredOrganizationId(news);
       if (organizationId !== undefined && organizationId !== output.organizationId) {
         return { action: "replace" } as const;
@@ -201,7 +210,7 @@ export const NetworkAreaProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const organizationId = yield* resolveOrganizationId(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
       const observed = yield* observe({
@@ -209,17 +218,19 @@ export const NetworkAreaProvider = () =>
         name,
         organizationId,
         areaId: output?.networkAreaId,
-        routingTables: olds?.routingTables,
+        // An unset prop means the default, not "any".
+        routingTables: olds === undefined ? undefined : (olds.routingTables ?? false),
+        instanceId: readGeneration({ instanceId, output, previous }),
       });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, organizationId);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const organizationId = yield* resolveOrganizationId(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredAreaLabels(id, news);
+      const labels = yield* desiredAreaLabels(id, instanceId, news);
 
       let current = yield* observe({
         id,
@@ -227,6 +238,7 @@ export const NetworkAreaProvider = () =>
         organizationId,
         areaId: output?.networkAreaId,
         routingTables: news.routingTables ?? false,
+        instanceId,
       });
       if (current === undefined) {
         current = yield* iaas.createNetworkArea({ organizationId, name, labels });

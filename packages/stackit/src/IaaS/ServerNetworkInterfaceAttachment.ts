@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,7 +92,8 @@ export type ServerNetworkInterfaceAttachment = Resource<
  *
  * ### Replacement
  * Changing `serverId`, `networkInterfaceId`, `projectId` or `region`
- * detaches the interface and attaches the new pair.
+ * detaches the interface first and then attaches the new pair, since an
+ * interface attaches to one server at a time.
  *
  * @resource
  * @product STACKIT Compute Engine
@@ -119,14 +121,28 @@ export const ServerNetworkInterfaceAttachmentProvider = () =>
     nuke: { dependsOn: ["Stackit.IaaS.Server", "Stackit.IaaS.NetworkInterface"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
+      // An interface attaches to one server at a time, so a move detaches
+      // first. Delete-first also covers an unresolved id that resolves to the
+      // same pair: this pair has no generation marker, so a create-first
+      // replacement would claim it and garbage collection would then detach it.
       if (
+        hasUnresolvedTrigger<ServerNetworkInterfaceAttachmentProps>(news, [
+          "projectId",
+          "region",
+          "serverId",
+          "networkInterfaceId",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
+      if (
+        (yield* projectScopeChanged(news, output)) ||
         news.serverId !== output.serverId ||
         news.networkInterfaceId !== output.networkInterfaceId
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

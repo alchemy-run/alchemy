@@ -1,6 +1,8 @@
 // Resources and bindings of the STACKIT IaaS namespace are re-exported here.
 export * from "./AffinityGroup.ts";
 export * from "./Backup.ts";
+export * from "./Image.ts";
+export * from "./ImageShare.ts";
 export * from "./KeyPair.ts";
 export * from "./Server.ts";
 export * from "./ServerNetworkInterfaceAttachment.ts";
@@ -19,4 +21,18 @@ export * from "./RoutingTable.ts";
 export * from "./RoutingTableRoute.ts";
 export * from "./SecurityGroup.ts";
 export * from "./SecurityGroupRule.ts";
+export * from "./AssociatePublicIp.ts";
+export * from "./AssociatePublicIpHttp.ts";
+export * from "./GetServerConsole.ts";
+export * from "./GetServerConsoleHttp.ts";
+export * from "./GetServerLog.ts";
+export * from "./GetServerLogHttp.ts";
+export * from "./RebootServer.ts";
+export * from "./RebootServerHttp.ts";
+export * from "./RescueServer.ts";
+export * from "./RescueServerHttp.ts";
+export * from "./RestoreBackup.ts";
+export * from "./RestoreBackupHttp.ts";
+export * from "./UnrescueServer.ts";
+export * from "./UnrescueServerHttp.ts";
 export type { RouteDestination, RouteNexthop } from "./internal.ts";

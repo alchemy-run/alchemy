@@ -6,8 +6,9 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   desiredOrganizationId,
@@ -16,6 +17,7 @@ import {
   labelsPatch,
   listOrganizationId,
   ownedOnly,
+  readGeneration,
   resolveOrganizationId,
 } from "./internal.ts";
 
@@ -197,13 +199,14 @@ const observe = Effect.fn(function* (
   name: string,
   scope: AreaScope,
   routingTableId: string | undefined,
+  instanceId: string | undefined,
 ) {
   if (routingTableId !== undefined) {
     const byId = yield* getTable(scope, routingTableId);
     if (byId !== undefined) return byId;
   }
   const { items } = yield* iaas.listRoutingTablesOfArea(request(scope));
-  return yield* findOwnedByName(id, name, items);
+  return yield* findOwnedByName(id, name, items, { instanceId });
 });
 
 export const RoutingTableProvider = () =>
@@ -235,7 +238,13 @@ export const RoutingTableProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      if (
+        hasUnresolvedTrigger<RoutingTableProps>(news, ["organizationId", "networkAreaId", "region"])
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const organizationId = yield* desiredOrganizationId(news);
       if (
@@ -248,25 +257,31 @@ export const RoutingTableProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       if (olds === undefined && output === undefined) return undefined;
       const scope = yield* resolveScope(olds, output);
       if (scope.networkAreaId === "") return undefined;
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
-      const observed = yield* observe(id, name, scope, output?.routingTableId);
+      const observed = yield* observe(
+        id,
+        name,
+        scope,
+        output?.routingTableId,
+        readGeneration({ instanceId, output, previous }),
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const dynamicRoutes = news.dynamicRoutes ?? true;
       const systemRoutes = news.systemRoutes ?? true;
 
-      let current = yield* observe(id, name, scope, output?.routingTableId);
+      let current = yield* observe(id, name, scope, output?.routingTableId, instanceId);
       if (current === undefined) {
         current = yield* iaas.addRoutingTableToArea({
           ...request(scope),

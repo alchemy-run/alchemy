@@ -13,13 +13,6 @@ export const DNS_TIMEOUT = "5 minutes";
 /** Normalize a DNS name for comparison: lowercase, no trailing dot. */
 export const normalizeDnsName = (name: string): string => name.toLowerCase().replace(/\.+$/, "");
 
-/** Order-insensitive equality of two string lists. */
-export const sameStringSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean => {
-  const left = [...a].sort();
-  const right = [...b].sort();
-  return left.length === right.length && left.every((value, i) => value === right[i]);
-};
-
 /** A DNS create/update finished. */
 export const isSucceeded = (state: string | undefined): boolean =>
   state === "CREATE_SUCCEEDED" || state === "UPDATE_SUCCEEDED";

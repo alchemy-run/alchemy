@@ -8,7 +8,9 @@ import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { ensureServiceEnabled } from "../internal/enable.ts";
+import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import {
   desiredLabels,
@@ -24,7 +26,6 @@ import {
   getZoneOrUndefined,
   isSucceeded,
   normalizeDnsName,
-  sameStringSet,
 } from "./internal.ts";
 
 /** STACKIT DNS zone type. */
@@ -110,6 +111,12 @@ export interface ZoneProps {
    */
   acl?: string;
   /**
+   * Id of the STACKIT Observability instance the zone exports its query logs
+   * to. Updates in place. When omitted, the live setting is left alone, so
+   * removing this prop does not stop an export already running.
+   */
+  observabilityInstanceId?: string;
+  /**
    * User labels. Alchemy's ownership labels (`alchemy.stack`,
    * `alchemy.stage`, `alchemy.id`) are always merged in. Updates in place.
    */
@@ -152,6 +159,10 @@ export interface ZoneAttributes {
   isReverseZone: boolean;
   /** Access control list. */
   acl: string;
+  /** Observability instance the zone exports its query logs to, if any. */
+  observabilityInstanceId: string | undefined;
+  /** State of the log export: `CREATING`, `CREATE_SUCCEEDED` or `ERROR`. */
+  observabilityState: string | undefined;
   /** Primary (SOA) name server of the zone, an FQDN. Delegate the parent domain here. */
   primaryNameServer: string;
   /** SOA serial number. */
@@ -249,6 +260,17 @@ export type Zone = Resource<"Stackit.DNS.Zone", ZoneProps, ZoneAttributes, never
  * });
  * ```
  *
+ * ### Exporting query logs
+ * **Example:** Send the zone's query logs to an Observability instance
+ * ```typescript
+ * import * as Stackit from "@alchemy.run/stackit";
+ *
+ * const zone = yield* Stackit.DNS.Zone("Zone", {
+ *   dnsName: "example.com",
+ *   observabilityInstanceId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * ```
+ *
  * ### Replacement Cautions
  * **Example:** Changing the dnsName creates a new zone
  * ```typescript
@@ -273,6 +295,9 @@ const DEFAULT_TYPE: ZoneType = "primary";
 
 const isGone = (zone: dns.Zone | undefined) =>
   zone === undefined || zone.state === "DELETE_SUCCEEDED";
+
+/** A zone update or delete failed; the zone still exists. */
+const isFailedChange = (state: string) => state === "UPDATE_FAILED" || state === "DELETE_FAILED";
 
 const resolveDnsName = (
   id: string,
@@ -302,6 +327,8 @@ const toAttrs = (projectId: string, zone: dns.Zone): ZoneAttributes => ({
   primaries: [...(zone.primaries ?? [])],
   isReverseZone: zone.isReverseZone ?? false,
   acl: zone.acl,
+  observabilityInstanceId: zone.extensions?.observabilityExtension?.observabilityInstanceId,
+  observabilityState: zone.extensions?.observabilityExtension?.state,
   primaryNameServer: zone.primaryNameServer,
   serialNumber: zone.serialNumber,
   state: zone.state,
@@ -419,7 +446,16 @@ const zoneDelta = (
     patch.negativeCache = news.negativeCache;
   }
   if (news.acl !== undefined && zone.acl !== news.acl) patch.acl = news.acl;
-  if (news.primaries !== undefined && !sameStringSet(zone.primaries ?? [], news.primaries)) {
+  if (
+    news.observabilityInstanceId !== undefined &&
+    zone.extensions?.observabilityExtension?.observabilityInstanceId !==
+      news.observabilityInstanceId
+  ) {
+    patch.extensions = {
+      observabilityExtension: { observabilityInstanceId: news.observabilityInstanceId },
+    };
+  }
+  if (news.primaries !== undefined && !sameMembers(zone.primaries, news.primaries)) {
     patch.primaries = [...news.primaries];
   }
   // `labelsMap` carries the full desired set (user + ownership labels).
@@ -442,8 +478,15 @@ export const ZoneProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ id, news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      // An unresolved identity can resolve to the name the zone already has,
+      // and the same dnsName can't exist twice: delete the old zone first.
+      if (
+        hasUnresolvedTrigger<ZoneProps>(news, ["dnsName", "projectId", "type", "isReverseZone"])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const projectId = news.projectId ?? env.projectId;
       const dnsName = yield* resolveDnsName(id, news, output);
@@ -461,7 +504,7 @@ export const ZoneProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* StackitEnvironment.current;
       const projectId = output?.projectId ?? olds?.projectId ?? env.projectId;
       let zone: dns.Zone | undefined;
@@ -474,12 +517,21 @@ export const ZoneProvider = () =>
       if (zone === undefined && dnsName !== undefined) {
         zone = yield* findZoneByDnsName(projectId, dnsName);
       }
-      if (zone === undefined) {
-        // A crashed create with a generated name: find it by its labels.
-        zone = yield* findZoneByOwnership(projectId, id);
+      // A generated name with nothing recorded. Labels can't tell generations
+      // apart, and garbage collection deletes the generation being replaced,
+      // so a replacement only looks for its own (instance-id-bearing) name.
+      // Otherwise it is a crashed create or lost state: find it by its labels.
+      if (zone === undefined && output === undefined && olds?.dnsName === undefined) {
+        if (previous !== undefined) {
+          const generated = yield* resolveDnsName(id, {}, undefined);
+          zone = yield* findZoneByDnsName(projectId, generated);
+        } else {
+          zone = yield* findZoneByOwnership(projectId, id);
+        }
       }
       if (zone === undefined) return undefined;
       const attrs = toAttrs(projectId, zone);
+      if (previous?.zoneId === zone.id) return attrs;
       return (yield* hasAlchemyLabels(id, observedLabels(zone))) ? attrs : Unowned(attrs);
     }),
 
@@ -492,9 +544,10 @@ export const ZoneProvider = () =>
 
       yield* ensureServiceEnabled({ projectId, region: env.region, serviceId: DNS_SERVICE_ID });
 
-      // 1. Observe — by cached id, then by dnsName.
+      // 1. Observe — by cached id, then by dnsName. `output` is a cache: the
+      // recorded id only counts while it still names the desired zone.
       let zone: dns.Zone | undefined;
-      if (output?.zoneId !== undefined) {
+      if (output?.projectId === projectId && output.dnsName === dnsName) {
         zone = yield* getZoneOrUndefined(projectId, output.zoneId);
       }
       if (zone === undefined) zone = yield* findZoneByDnsName(projectId, dnsName);
@@ -529,6 +582,15 @@ export const ZoneProvider = () =>
             ...(news.acl !== undefined ? { acl: news.acl } : {}),
             ...(news.primaries !== undefined ? { primaries: [...news.primaries] } : {}),
             ...(news.isReverseZone !== undefined ? { isReverseZone: news.isReverseZone } : {}),
+            ...(news.observabilityInstanceId !== undefined
+              ? {
+                  extensions: {
+                    observabilityExtension: {
+                      observabilityInstanceId: news.observabilityInstanceId,
+                    },
+                  },
+                }
+              : {}),
           })
           .pipe(
             Effect.map(({ zone }) => zone),
@@ -548,8 +610,8 @@ export const ZoneProvider = () =>
       const zoneId = zone.id;
 
       // Wait out an in-flight create/update before syncing. A zone left in
-      // UPDATE_FAILED / DELETE_FAILED is synced as is: the PATCH below
-      // re-applies the desired state.
+      // UPDATE_FAILED / DELETE_FAILED is synced as is: a PATCH below re-applies
+      // the desired state.
       if (zone.state === "CREATING" || zone.state === "UPDATING") {
         zone = yield* waitFor({
           resource: `STACKIT DNS zone ${zoneId}`,
@@ -565,8 +627,12 @@ export const ZoneProvider = () =>
       }
 
       // 3. Sync — one PATCH carrying every drifted aspect, diffed against
-      // the observed zone (labels against observed labels).
-      const patch = zoneDelta(zone, news, dnsName, labels);
+      // the observed zone (labels against observed labels). A failed zone is
+      // patched even with nothing drifted, so it either recovers or the deploy
+      // fails; it is never returned as if it were healthy.
+      const delta = zoneDelta(zone, news, dnsName, labels);
+      const patch: ZonePatch =
+        Object.keys(delta).length === 0 && isFailedChange(zone.state) ? { name: zone.name } : delta;
       if (Object.keys(patch).length > 0) {
         const updateStartedBefore = zone.updateStarted;
         yield* dns.partialUpdateZone({ projectId, zoneId, ...patch });
@@ -588,6 +654,24 @@ export const ZoneProvider = () =>
           },
           updateStartedBefore,
         );
+      }
+
+      // The zone can report success while its log export is still starting,
+      // or after it failed.
+      const exportState = zone.extensions?.observabilityExtension?.state;
+      if (
+        news.observabilityInstanceId !== undefined &&
+        (exportState === "CREATING" || exportState === "ERROR")
+      ) {
+        zone = yield* waitFor({
+          resource: `STACKIT DNS zone ${zoneId} log export`,
+          read: dns.getZone({ projectId, zoneId }).pipe(Effect.map(({ zone }) => zone)),
+          ready: (observed) => observed.extensions?.observabilityExtension?.state !== "CREATING",
+          failed: (observed) =>
+            observed.extensions?.observabilityExtension?.state === "ERROR" ? "ERROR" : undefined,
+          state: (observed) => observed.extensions?.observabilityExtension?.state,
+          timeout: DNS_TIMEOUT,
+        });
       }
 
       // 4. Return

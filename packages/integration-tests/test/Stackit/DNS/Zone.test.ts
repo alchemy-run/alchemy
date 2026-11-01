@@ -166,6 +166,54 @@ test.provider(
   options,
 );
 
+// The Observability namespace doesn't exist yet, so the instance is external.
+const observabilityInstanceId = process.env.STACKIT_TEST_OBSERVABILITY_INSTANCE_ID;
+
+test.provider.skipIf(!observabilityInstanceId)(
+  "export query logs to an Observability instance",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId } = yield* stackitEnvironment;
+      yield* stack.destroy();
+
+      // Added by an update, so the PATCH path runs.
+      const created = yield* stack.deploy(Stackit.DNS.Zone("LogZone", {}));
+      expect(created.observabilityInstanceId).toBeUndefined();
+
+      const updated = yield* stack.deploy(
+        Stackit.DNS.Zone("LogZone", { observabilityInstanceId: observabilityInstanceId! }),
+      );
+      expect(updated.zoneId).toEqual(created.zoneId);
+      expect(updated.observabilityInstanceId).toEqual(observabilityInstanceId);
+      expect(updated.observabilityState).toEqual("CREATE_SUCCEEDED");
+
+      const fetched = yield* getZone(projectId, created.zoneId);
+      expect(fetched.extensions?.observabilityExtension?.observabilityInstanceId).toEqual(
+        observabilityInstanceId,
+      );
+
+      const plan = yield* stack.plan(
+        Stackit.DNS.Zone("LogZone", { observabilityInstanceId: observabilityInstanceId! }),
+      );
+      expect(plan.resources.LogZone).toMatchObject({ action: "noop" });
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilZoneGone(projectId, created.zoneId)).toEqual("gone");
+
+      // Set at creation, so the create path runs.
+      const direct = yield* stack.deploy(
+        Stackit.DNS.Zone("LogZone", { observabilityInstanceId: observabilityInstanceId! }),
+      );
+      expect(direct.observabilityInstanceId).toEqual(observabilityInstanceId);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilZoneGone(projectId, direct.zoneId)).toEqual("gone");
+    }).pipe(logLevel),
+  options,
+);
+
 test.provider(
   "list enumerates the deployed zone",
   (stack) =>

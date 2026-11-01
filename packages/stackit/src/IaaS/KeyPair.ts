@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -126,8 +127,13 @@ export const KeyPairProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      // Key pair names are unique per user, and an unresolved one can resolve
+      // to the current name: the old key pair goes first.
+      if (hasUnresolvedTrigger<KeyPairProps>(news, ["name", "publicKey"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       // An explicit name is the identity; a generated name stays stable
       // until a replacement mints a new one.
       const renamed =

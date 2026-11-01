@@ -250,15 +250,32 @@ const getRule = (scope: ProjectScope, securityGroupId: string, securityGroupRule
     .getSecurityGroupRule({ ...scope, securityGroupId, securityGroupRuleId })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
+const deleteRule = (scope: ProjectScope, securityGroupId: string, securityGroupRuleId: string) =>
+  Effect.gen(function* () {
+    yield* iaas
+      .deleteSecurityGroupRule({ ...scope, securityGroupId, securityGroupRuleId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    yield* waitUntilGone({
+      resource: `STACKIT security group rule ${securityGroupRuleId}`,
+      read: getRule(scope, securityGroupId, securityGroupRuleId),
+      timeout: "1 minute",
+    });
+  });
+
 export const SecurityGroupRuleProvider = () =>
   Provider.succeed(SecurityGroupRule, {
     stables: ["securityGroupRuleId", "securityGroupId", "projectId", "region"],
     nuke: { dependsOn: ["Stackit.IaaS.SecurityGroup"] },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      // Rules have no update API: any change replaces, so any unresolved field
+      // does too. Delete-first, because it can resolve to the current value,
+      // and STACKIT rejects a duplicate rule.
+      if (output !== undefined && !isResolved(news)) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      // Rules have no update API: any change replaces.
       if (olds === undefined) return undefined;
       if (functionalKey(news) !== functionalKey(olds)) return { action: "replace" } as const;
       if ((news.description ?? "") !== (olds.description ?? "")) {
@@ -289,6 +306,12 @@ export const SecurityGroupRuleProvider = () =>
         output?.securityGroupId === securityGroupId ? output.securityGroupRuleId : undefined;
       let current: ObservedRule | undefined =
         recordedId === undefined ? undefined : yield* getRule(scope, securityGroupId, recordedId);
+      // No update API: a recorded rule that no longer has the desired effect
+      // goes, and the desired one is created below.
+      if (current !== undefined && recordedId !== undefined && !sameRule(current, news)) {
+        yield* deleteRule(scope, securityGroupId, recordedId);
+        current = undefined;
+      }
       if (current === undefined) {
         const { items } = yield* iaas.listSecurityGroupRules({ ...scope, securityGroupId });
         current = items.find((rule) => sameRule(rule, news));
@@ -320,17 +343,6 @@ export const SecurityGroupRuleProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const scope = { projectId: output.projectId, region: output.region };
-      yield* iaas
-        .deleteSecurityGroupRule({
-          ...scope,
-          securityGroupId: output.securityGroupId,
-          securityGroupRuleId: output.securityGroupRuleId,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      yield* waitUntilGone({
-        resource: `STACKIT security group rule ${output.securityGroupRuleId}`,
-        read: getRule(scope, output.securityGroupId, output.securityGroupRuleId),
-        timeout: "1 minute",
-      });
+      yield* deleteRule(scope, output.securityGroupId, output.securityGroupRuleId);
     }),
   });

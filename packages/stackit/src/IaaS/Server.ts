@@ -3,12 +3,14 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { recordsEqual } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -17,6 +19,7 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
   type ProjectScope,
   type ProjectScopedProps,
@@ -300,10 +303,12 @@ export type Server = Resource<
  * ### Replacement
  * Changing `imageId`, `bootVolume`, `networking`, `availabilityZone`,
  * `affinityGroup`, `keypairName`, `userData`, `agent`, `configDrive`,
- * `projectId` or `region` creates a new server and deletes the old one.
- * The old boot volume is deleted with it unless
- * `bootVolume.deleteOnTermination` is `false`; keep data on a separate
- * `Volume` attached with `VolumeAttachment`.
+ * `projectId` or `region` creates a new server and deletes the old one,
+ * including when `name` stays the same. A replacement that keeps a
+ * `networkInterfaceIds` entry or a `volume` boot source deletes the old
+ * server first, since those attach to one server at a time. The old boot
+ * volume is deleted with it unless `bootVolume.deleteOnTermination` is
+ * `false`; keep data on a separate `Volume` attached with `VolumeAttachment`.
  *
  * Power actions that are not a state (reboot, rescue, console access) are
  * not resource properties; they are runtime operations on the server.
@@ -342,11 +347,6 @@ const metadataRecord = (metadata: unknown): Record<string, string> => {
   return record;
 };
 
-const sameRecord = (a: Record<string, string>, b: Record<string, string>) => {
-  const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
-};
-
 const toAttrs = (
   server: iaas.ServerOutput,
   scope: ProjectScope,
@@ -382,11 +382,30 @@ const getServer = (scope: ProjectScope, serverId: string) =>
     .getServer({ ...scope, serverId, details: true })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-/** A listed server can take the desired props in place. */
+const networkingCompatible = (
+  networking: ServerNetworking | undefined,
+  server: iaas.ServerOutput,
+) => {
+  if (networking === undefined) return true;
+  const nics = server.nics ?? [];
+  return "networkId" in networking
+    ? nics.some((nic) => nic.networkId === networking.networkId)
+    : networking.networkInterfaceIds.every((id) => nics.some((nic) => nic.nicId === id));
+};
+
+/**
+ * A listed server can take the desired props in place. `userData`, `agent`,
+ * `configDrive` and an image-backed `bootVolume` can't be observed; the
+ * generation label rules out a replaced server instead.
+ */
 const compatible = (news: ServerProps) => (server: iaas.ServerOutput) =>
   (news.imageId === undefined || server.imageId === news.imageId) &&
-  (news.keypairName === undefined || server.keypairName === news.keypairName) &&
-  (news.availabilityZone === undefined || server.availabilityZone === news.availabilityZone);
+  server.keypairName === news.keypairName &&
+  server.affinityGroup === news.affinityGroup &&
+  (news.availabilityZone === undefined || server.availabilityZone === news.availabilityZone) &&
+  networkingCompatible(news.networking, server) &&
+  (news.bootVolume?.source.type !== "volume" ||
+    server.bootVolume?.id === news.bootVolume.source.id);
 
 const observe = Effect.fn(function* (args: {
   id: string;
@@ -394,6 +413,7 @@ const observe = Effect.fn(function* (args: {
   scope: ProjectScope;
   serverId: string | undefined;
   news: ServerProps | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.serverId !== undefined) {
     const byId = yield* getServer(args.scope, args.serverId);
@@ -401,12 +421,10 @@ const observe = Effect.fn(function* (args: {
   }
   // Crash recovery: a create whose state was never persisted.
   const { items } = yield* iaas.listServers({ ...args.scope, details: true });
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    args.news === undefined ? undefined : compatible(args.news),
-  );
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: args.news === undefined ? undefined : compatible(args.news),
+  });
 });
 
 const toNetworking = (
@@ -457,6 +475,23 @@ const createOnlyKey = (props: ServerProps) =>
     props.configDrive ?? null,
   ]);
 
+/** The network interfaces and volume a server's props take over exclusively. */
+const exclusiveDevices = (props: ServerProps) => [
+  ...(props.networking !== undefined && "networkInterfaceIds" in props.networking
+    ? props.networking.networkInterfaceIds
+    : []),
+  ...(props.bootVolume?.source.type === "volume" ? [props.bootVolume.source.id] : []),
+];
+
+/**
+ * An interface or volume attaches to one server at a time: a replacement
+ * that keeps one can only take it once the old server has let go.
+ */
+const reusesExclusiveDevice = (news: ServerProps, olds: ServerProps) => {
+  const previous = new Set(exclusiveDevices(olds));
+  return exclusiveDevices(news).some((device) => previous.has(device));
+};
+
 export const ServerProvider = () =>
   Provider.succeed(Server, {
     stables: ["serverId", "projectId", "region"],
@@ -466,6 +501,8 @@ export const ServerProvider = () =>
         "Stackit.IaaS.Network",
         "Stackit.IaaS.SecurityGroup",
         "Stackit.IaaS.KeyPair",
+        "Stackit.IaaS.Volume",
+        "Stackit.IaaS.AffinityGroup",
       ],
     },
 
@@ -477,12 +514,31 @@ export const ServerProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      if (
+        hasUnresolvedTrigger<ServerProps>(news, [
+          "projectId",
+          "region",
+          "imageId",
+          "bootVolume",
+          "networking",
+          "availabilityZone",
+          "affinityGroup",
+          "keypairName",
+          "userData",
+          "agent",
+          "configDrive",
+        ])
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (olds !== undefined) {
-        if (createOnlyKey(news) !== createOnlyKey(olds)) return { action: "replace" } as const;
-        return undefined;
+        if (createOnlyKey(news) === createOnlyKey(olds)) return undefined;
+        return reusesExclusiveDevice(news, olds)
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       // Adopted without previous props: compare what the server reports.
       if (news.imageId !== undefined && news.imageId !== output.imageId) {
@@ -503,24 +559,38 @@ export const ServerProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
-      const observed = yield* observe({ id, name, scope, serverId: output?.serverId, news: olds });
+      const observed = yield* observe({
+        id,
+        name,
+        scope,
+        serverId: output?.serverId,
+        news: olds,
+        instanceId: readGeneration({ instanceId, output, previous }),
+      });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, name);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
       const resource = `STACKIT server ${name}`;
 
-      // Observe — `output.serverId` is a cache; fall back to ownership
+      // Observe — `output.serverId` is a cache; fall back to this generation's
       // labels + name for a create whose state was never persisted.
-      let current = yield* observe({ id, name, scope, serverId: output?.serverId, news });
+      let current = yield* observe({
+        id,
+        name,
+        scope,
+        serverId: output?.serverId,
+        news,
+        instanceId,
+      });
 
       // Ensure — create when missing.
       let created = false;
@@ -581,7 +651,7 @@ export const ServerProvider = () =>
       if (labelPatch !== undefined) patch.labels = labelPatch;
       if (
         news.metadata !== undefined &&
-        !sameRecord(metadataRecord(observed.metadata), news.metadata)
+        !recordsEqual(metadataRecord(observed.metadata), news.metadata)
       ) {
         patch.metadata = news.metadata;
       }

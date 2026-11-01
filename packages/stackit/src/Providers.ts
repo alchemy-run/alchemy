@@ -12,6 +12,8 @@ import { environmentFromAuthProvider } from "./Environment.ts";
 // ── IaaS imports ──
 import { AffinityGroup, AffinityGroupProvider } from "./IaaS/AffinityGroup.ts";
 import { Backup, BackupProvider } from "./IaaS/Backup.ts";
+import { Image, ImageProvider } from "./IaaS/Image.ts";
+import { ImageShare, ImageShareProvider } from "./IaaS/ImageShare.ts";
 import { KeyPair, KeyPairProvider } from "./IaaS/KeyPair.ts";
 import { Network, NetworkProvider } from "./IaaS/Network.ts";
 import { NetworkArea, NetworkAreaProvider } from "./IaaS/NetworkArea.ts";
@@ -53,8 +55,13 @@ import { AccessKey, AccessKeyProvider } from "./ObjectStorage/AccessKey.ts";
 import { Bucket, BucketProvider } from "./ObjectStorage/Bucket.ts";
 import { ComplianceLock, ComplianceLockProvider } from "./ObjectStorage/ComplianceLock.ts";
 import { CredentialsGroup, CredentialsGroupProvider } from "./ObjectStorage/CredentialsGroup.ts";
+import {
+  Project as ObjectStorageProject,
+  ProjectProvider as ObjectStorageProjectProvider,
+} from "./ObjectStorage/Project.ts";
 // ── ResourceManager imports ──
 import { Folder, FolderProvider } from "./ResourceManager/Folder.ts";
+import { Organization, OrganizationProvider } from "./ResourceManager/Organization.ts";
 import { Project, ProjectProvider } from "./ResourceManager/Project.ts";
 // ── ServiceEnablement imports ──
 import { Service, ServiceProvider } from "./ServiceEnablement/Service.ts";
@@ -78,9 +85,9 @@ const serviceEnablementResources = [Service];
 const serviceEnablementProviders = () => Layer.mergeAll(Layer.empty, ServiceProvider());
 
 // Replace `[] as const` with `[A, B]` when adding the first resource.
-const resourceManagerResources = [Folder, Project];
+const resourceManagerResources = [Folder, Organization, Project];
 const resourceManagerProviders = () =>
-  Layer.mergeAll(Layer.empty, FolderProvider(), ProjectProvider());
+  Layer.mergeAll(Layer.empty, FolderProvider(), OrganizationProvider(), ProjectProvider());
 
 const iamResources = [
   CustomRole,
@@ -102,6 +109,8 @@ const iamProviders = () =>
 const iaasResources = [
   AffinityGroup,
   Backup,
+  Image,
+  ImageShare,
   KeyPair,
   Server,
   ServerNetworkInterfaceAttachment,
@@ -126,6 +135,8 @@ const iaasProviders = () =>
     Layer.empty,
     AffinityGroupProvider(),
     BackupProvider(),
+    ImageProvider(),
+    ImageShareProvider(),
     KeyPairProvider(),
     ServerProvider(),
     ServerNetworkInterfaceAttachmentProvider(),
@@ -149,7 +160,13 @@ const iaasProviders = () =>
 const dnsResources = [RecordSet, Zone];
 const dnsProviders = () => Layer.mergeAll(Layer.empty, RecordSetProvider(), ZoneProvider());
 
-const objectStorageResources = [AccessKey, Bucket, ComplianceLock, CredentialsGroup];
+const objectStorageResources = [
+  AccessKey,
+  Bucket,
+  ComplianceLock,
+  CredentialsGroup,
+  ObjectStorageProject,
+];
 const objectStorageProviders = () =>
   Layer.mergeAll(
     Layer.empty,
@@ -157,6 +174,7 @@ const objectStorageProviders = () =>
     BucketProvider(),
     ComplianceLockProvider(),
     CredentialsGroupProvider(),
+    ObjectStorageProjectProvider(),
   );
 
 const makeProviders = () =>

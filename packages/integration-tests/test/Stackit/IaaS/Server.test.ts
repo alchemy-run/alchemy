@@ -17,8 +17,8 @@ import {
 const { test } = makeStackitTest();
 
 // Servers are billed per hour by machine type (g1.1/g1.2 about EUR
-// 0.02-0.05/h plus a 10 GB boot volume). This suite boots two servers for
-// about 15 minutes in total (< EUR 0.05 per run): gated behind
+// 0.02-0.05/h plus a 10 GB boot volume). This suite boots four servers for
+// about 25 minutes in total (< EUR 0.10 per run): gated behind
 // STACKIT_TEST_SLOW.
 const options = { tags: stackitTags("iaas", "server"), timeout: 2_400_000 } as const;
 
@@ -144,6 +144,45 @@ test.provider.skipIf(slow)(
       yield* stack.destroy();
       yield* expectGone(serverPresence(projectId, region, replaced.server.serverId));
       yield* expectGone(volumePresence(projectId, region, replaced.server.bootVolumeId!));
+    }).pipe(logLevel),
+  options,
+);
+
+test.provider.skipIf(slow)(
+  "replacing a server with an explicit name creates a new one and deletes the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
+      const imageId = yield* ubuntuImageId(projectId, region);
+      const name = "alchemy-iaas-server-explicit";
+      yield* stack.destroy();
+
+      // User data can't be read back, and the name stays the same: only the
+      // new generation's label keeps the old server from being reclaimed.
+      const created = yield* stack.deploy(
+        serverStack(imageId, {
+          name,
+          machineType: MACHINE_TYPE,
+          userData: "#cloud-config\nruncmd:\n  - echo first > /tmp/alchemy\n",
+        }),
+      );
+      expect(created.server.name).toEqual(name);
+
+      const replaced = yield* stack.deploy(
+        serverStack(imageId, {
+          name,
+          machineType: MACHINE_TYPE,
+          userData: "#cloud-config\nruncmd:\n  - echo second > /tmp/alchemy\n",
+        }),
+      );
+      expect(replaced.server.serverId).not.toEqual(created.server.serverId);
+      expect(replaced.server.name).toEqual(name);
+      expect(replaced.server.status).toEqual("ACTIVE");
+      yield* expectGone(serverPresence(projectId, region, created.server.serverId));
+      expect(yield* serverPresence(projectId, region, replaced.server.serverId)).toEqual(PRESENT);
+
+      yield* stack.destroy();
+      yield* expectGone(serverPresence(projectId, region, replaced.server.serverId));
     }).pipe(logLevel),
   options,
 );

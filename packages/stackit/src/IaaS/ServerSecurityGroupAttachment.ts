@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -119,8 +120,21 @@ export const ServerSecurityGroupAttachmentProvider = () =>
     nuke: { dependsOn: ["Stackit.IaaS.Server", "Stackit.IaaS.SecurityGroup"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      // Delete-first: an unresolved id can resolve to the same pair, which has
+      // no generation marker. A create-first replacement would claim it, and
+      // garbage collection would then remove the group from the server.
+      if (
+        hasUnresolvedTrigger<ServerSecurityGroupAttachmentProps>(news, [
+          "projectId",
+          "region",
+          "serverId",
+          "securityGroupId",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (news.serverId !== output.serverId || news.securityGroupId !== output.securityGroupId) {
         return { action: "replace" } as const;

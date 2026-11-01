@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import type { Providers } from "../Providers.ts";
 import { hasServiceAccount } from "./internal/service_account.ts";
 
@@ -303,7 +304,18 @@ export const ServiceAccountKeyProvider = () =>
     nuke: { dependsOn: ["Stackit.IAM.ServiceAccount"] },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      if (
+        hasUnresolvedTrigger<ServiceAccountKeyProps>(news, [
+          "projectId",
+          "serviceAccountEmail",
+          "publicKey",
+          "algorithm",
+        ])
+      ) {
+        return { action: "replace" as const };
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       if ((news.projectId ?? env.projectId) !== output.projectId) {
         return { action: "replace" as const };

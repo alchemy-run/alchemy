@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -208,7 +209,21 @@ export const NetworkAreaRouteProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Delete-first: a route's identity is its destination and next hop, and
+      // an unresolved prop can resolve to the route that exists.
+      if (
+        hasUnresolvedTrigger<NetworkAreaRouteProps>(news, [
+          "organizationId",
+          "networkAreaId",
+          "region",
+          "destination",
+          "nexthop",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const organizationId = yield* desiredOrganizationId(news);
       if (

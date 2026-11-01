@@ -81,6 +81,30 @@ test.provider(
 );
 
 test.provider(
+  "replacing a volume with an explicit name creates a new one and deletes the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
+      const name = "alchemy-iaas-volume-explicit";
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(Stackit.IaaS.Volume("Explicit", { name, size: 2 }));
+      expect(created.name).toEqual(name);
+
+      const shrunk = yield* stack.deploy(Stackit.IaaS.Volume("Explicit", { name, size: 1 }));
+      expect(shrunk.volumeId).not.toEqual(created.volumeId);
+      expect(shrunk.name).toEqual(name);
+      expect(shrunk.size).toEqual(1);
+      yield* expectGone(presence(projectId, region, created.volumeId));
+      expect(yield* presence(projectId, region, shrunk.volumeId)).toEqual(PRESENT);
+
+      yield* stack.destroy();
+      yield* expectGone(presence(projectId, region, shrunk.volumeId));
+    }).pipe(logLevel),
+  options,
+);
+
+test.provider(
   "shrinking a volume replaces it",
   (stack) =>
     Effect.gen(function* () {

@@ -7,7 +7,8 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
-import { isGeneratedPhysicalName } from "../internal/names.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { isGeneratedServiceAccountName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
 import { listServiceAccounts } from "./internal/service_account.ts";
 
@@ -70,7 +71,8 @@ export type ServiceAccount = Resource<
  * Ownership: service accounts have no labels or description, so Alchemy
  * marks its own through the generated name: an account without an explicit
  * `name` is named `<id prefix>-<16 chars of the instance id>`. `alchemy
- * unsafe nuke` enumerates only accounts with such a name. An account with
+ * unsafe nuke` enumerates only accounts with a name of that shape, including
+ * a hand-chosen one. An account with
  * an explicit `name` that already exists in the project is reported as
  * unowned and adopted only with `--adopt`.
  *
@@ -136,7 +138,7 @@ type Attributes = ServiceAccount["Attributes"];
 
 /**
  * `<id prefix>-<16 chars>`: exactly 20 characters at most, the API's limit,
- * and shaped so `isGeneratedPhysicalName` recognizes it.
+ * and shaped so `isGeneratedServiceAccountName` recognizes it.
  */
 const generatedName = (id: string) =>
   Effect.gen(function* () {
@@ -190,7 +192,13 @@ export const ServiceAccountProvider = () =>
     stables: ["id", "email", "name", "projectId", "internal"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Delete-first: the account is found by name, with no generation marker,
+      // and an unresolved prop can resolve to the current one.
+      if (hasUnresolvedTrigger<ServiceAccountProps>(news, ["projectId", "name"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       if ((news.projectId ?? env.projectId) !== output.projectId) {
         return { action: "replace" as const };
@@ -202,7 +210,7 @@ export const ServiceAccountProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* StackitEnvironment.current;
       const projectId = output?.projectId ?? olds?.projectId ?? env.projectId;
       const generated = yield* generatedName(id);
@@ -210,9 +218,12 @@ export const ServiceAccountProvider = () =>
       const found = yield* observe({ projectId, email: output?.email, name });
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, name);
-      // Our recorded email, or our generated (instance-id-bearing) name, is
-      // ours; a match on a user-chosen name may belong to someone else.
-      return found.email === output?.email || name === generated ? attrs : Unowned(attrs);
+      // Our recorded email, our generated (instance-id-bearing) name, or the
+      // generation being replaced is ours; a match on a user-chosen name may
+      // belong to someone else.
+      return found.email === output?.email || found.email === previous?.email || name === generated
+        ? attrs
+        : Unowned(attrs);
     }),
 
     list: () =>
@@ -222,7 +233,8 @@ export const ServiceAccountProvider = () =>
         return accounts
           .filter(
             (account) =>
-              !account.internal && isGeneratedPhysicalName(serviceAccountNameOf(account.email)),
+              !account.internal &&
+              isGeneratedServiceAccountName(serviceAccountNameOf(account.email)),
           )
           .map((account) => toAttrs(account, serviceAccountNameOf(account.email)));
       }),

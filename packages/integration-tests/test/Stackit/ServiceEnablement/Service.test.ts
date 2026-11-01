@@ -11,6 +11,8 @@ const { test } = makeStackitTest();
 // concurrent test. Every case toggles the same service, so they share an
 // exclusive label and run one at a time.
 const THROWAWAY_SERVICE = "cloud.stackit.model-experiments";
+// The other service of the replacement case. No suite depends on it either.
+const OTHER_SERVICE = "cloud.stackit.ske";
 const options = {
   tags: stackitTags("serviceenablement", "service"),
   timeout: 420_000,
@@ -151,19 +153,30 @@ test.provider(
 );
 
 test.provider(
-  "changing the service id replaces the resource",
+  "changing the service id replaces the resource and disables the old service",
   (stack) =>
     Effect.gen(function* () {
+      const { projectId, region } = yield* stackitEnvironment;
       yield* stack.destroy();
+      yield* setState(projectId, region, THROWAWAY_SERVICE, "DISABLED");
+
       const service = yield* stack.deploy(
         Stackit.ServiceEnablement.Service("Throwaway", { serviceId: THROWAWAY_SERVICE }),
       );
-      const plan = yield* stack.plan(
-        Stackit.ServiceEnablement.Service("Throwaway", { serviceId: "cloud.stackit.other" }),
-      );
-      expect(plan.resources.Throwaway).toMatchObject({ action: "replace" });
       expect(service.serviceId).toEqual(THROWAWAY_SERVICE);
+      expect(service.enabledByAlchemy).toEqual(true);
+
+      const replaced = yield* stack.deploy(
+        Stackit.ServiceEnablement.Service("Throwaway", { serviceId: OTHER_SERVICE }),
+      );
+      expect(replaced.serviceId).toEqual(OTHER_SERVICE);
+      expect(replaced.state).toEqual("ENABLED");
+      expect(yield* stateOf(projectId, region, OTHER_SERVICE)).toEqual("ENABLED");
+      expect(yield* waitForState(projectId, region, THROWAWAY_SERVICE, "DISABLED")).toEqual(
+        "DISABLED",
+      );
+
       yield* stack.destroy();
     }).pipe(logLevel),
-  options,
+  { ...options, timeout: 720_000 },
 );

@@ -98,18 +98,27 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/stackit": "workspace:*"
+    "@distilled.cloud/stackit": "workspace:*",
+    "rolldown": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

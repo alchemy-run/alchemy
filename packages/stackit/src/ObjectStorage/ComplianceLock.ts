@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import { ensureObjectStorageEnabled } from "./internal.ts";
@@ -99,7 +100,13 @@ export const ComplianceLockProvider = () =>
     nuke: { skip: true },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // One lock per project and region: delete-first, since an unresolved
+      // scope can resolve to the current one.
+      if (hasUnresolvedTrigger<ComplianceLockProps>(news, ["projectId", "region"])) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       if (
         (news.projectId ?? env.projectId) !== output.projectId ||
@@ -110,13 +117,16 @@ export const ComplianceLockProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* StackitEnvironment.current;
       const projectId = output?.projectId ?? olds?.projectId ?? env.projectId;
       const region = output?.region ?? olds?.region ?? env.region;
       const lock = yield* getLock(projectId, region);
       if (lock === undefined) return undefined;
-      return output !== undefined ? lock : Unowned(lock);
+      return output !== undefined ||
+        (previous?.projectId === projectId && previous.region === region)
+        ? lock
+        : Unowned(lock);
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {

@@ -6,8 +6,9 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   findOwnedByName,
@@ -15,6 +16,7 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
   type ProjectScope,
   type ProjectScopedProps,
@@ -174,6 +176,7 @@ const observe = Effect.fn(function* (args: {
   scope: ProjectScope;
   backupId: string | undefined;
   source: BackupSource | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.backupId !== undefined) {
     const byId = yield* getBackup(args.scope, args.backupId);
@@ -181,7 +184,10 @@ const observe = Effect.fn(function* (args: {
   }
   // Crash recovery: a create whose state was never persisted.
   const { items } = yield* iaas.listBackups(args.scope);
-  return yield* findOwnedByName(args.id, args.name, items, fromSource(args.source));
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: fromSource(args.source),
+  });
 });
 
 const sourceKey = (source: BackupSource) => `${source.type}:${source.id}`;
@@ -199,8 +205,11 @@ export const BackupProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      if (hasUnresolvedTrigger<BackupProps>(news, ["projectId", "region", "source"])) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (olds !== undefined && sourceKey(news.source) !== sourceKey(olds.source)) {
         return { action: "replace" } as const;
@@ -211,7 +220,7 @@ export const BackupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
       const observed = yield* observe({
@@ -220,16 +229,17 @@ export const BackupProvider = () =>
         scope,
         backupId: output?.backupId,
         source: olds?.source,
+        instanceId: readGeneration({ instanceId, output, previous }),
       });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, name);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
 
       // Observe — a recorded backup only counts for the same source.
       const recordedId =
@@ -243,6 +253,7 @@ export const BackupProvider = () =>
         scope,
         backupId: recordedId,
         source: news.source,
+        instanceId,
       });
 
       // Ensure — create when missing.

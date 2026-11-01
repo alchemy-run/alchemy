@@ -3,6 +3,7 @@ export * from "./Credentials.ts";
 export * from "./Environment.ts";
 export * from "./Labels.ts";
 export * from "./Providers.ts";
+export * as StackitBindings from "./StackitBindings.ts";
 
 // ── Namespaces (one line each; keep this order) ──
 export * as ServiceEnablement from "./ServiceEnablement/index.ts";

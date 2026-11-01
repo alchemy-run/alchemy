@@ -16,9 +16,9 @@ Every resource deploys into the project and region of your
 [profile](/stackit/setup). Pass `projectId` or `region` on a resource to
 deploy it elsewhere; changing either replaces the resource.
 
-STACKIT switches each product on per project. The resources enable the
-service they need on their own, so a fresh project deploys without manual
-setup. To enable a service explicitly, declare it:
+STACKIT switches each product on per project. DNS and Object Storage
+resources enable their service on their own; compute and networking
+resources don't enable anything. To enable a service explicitly, declare it:
 
 ```typescript
 // alchemy.run.ts
@@ -47,9 +47,46 @@ enabled it; a service that was already on stays on.
 ## Ownership
 
 Alchemy marks the resources it creates with `alchemy.stack`,
-`alchemy.stage`, and `alchemy.id` labels. A resource without them is
-refused unless you deploy with `--adopt`, and `alchemy unsafe nuke` only
-deletes labeled resources.
+`alchemy.stage`, and `alchemy.id` labels, and compute and networking
+resources also get `alchemy.instance`. A labeled resource without them is
+refused unless you deploy with `--adopt`.
+
+Some resources can't carry labels:
+
+- Buckets, credentials groups, service accounts, and affinity groups are
+  recognized by their generated name, or by state. One with an explicit
+  name is refused without `--adopt`.
+- DNS record sets, custom roles, and memberships are recognized by state.
+  One found without state is refused without `--adopt`.
+- Security group rules and server attachments are identified by what they
+  connect. A deploy without state takes over an identical one silently.
+
+`alchemy unsafe nuke` deletes labeled resources, the record sets of labeled
+zones, and buckets, credentials groups, service accounts, and affinity
+groups whose name has the generated shape. The shape match can't tell a
+hand-chosen name that looks generated, such as
+`acme-prod-eu-a2b3c4d5e6f7g2h3`, from a generated one, so that resource is
+deleted too.
+
+## Out of scope
+
+These parts of the STACKIT API have no resource:
+
+- DNS zone restore, clone, and move: imperative workflows that would desync
+  deployed state.
+- Deprecated DNS label operations, superseded by `labelsMap`.
+- Network area ranges: a duplicate, synced by
+  `Stackit.IaaS.NetworkAreaRegion`'s `networkRanges`.
+- Server public IP attachments: a duplicate of `PublicIp`'s
+  `networkInterfaceId`.
+- Server network attachments: a duplicate. Use `NetworkInterface` and
+  `ServerNetworkInterfaceAttachment`.
+- Image share consumers: an opt-out of another project's share, with nothing
+  to create.
+- IaaS event sources: the management API exposes none.
+- Long-lived IAM access tokens: deprecated, and absent from the v2 API.
+- Short-lived IAM access tokens: used internally to exchange service account
+  keys.
 
 ## Reference
 

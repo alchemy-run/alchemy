@@ -5,6 +5,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
+import { sameMembers } from "../internal/equal.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { isAlchemyOwned } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -14,7 +16,6 @@ import {
   listOrganizationId,
   ownedOnly,
   resolveOrganizationId,
-  sameMembers,
 } from "./internal.ts";
 
 export interface NetworkAreaRegionProps {
@@ -241,7 +242,20 @@ export const NetworkAreaRegionProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // One configuration per area and region: delete-first, since an
+      // unresolved prop can resolve to the configuration that exists.
+      if (
+        hasUnresolvedTrigger<NetworkAreaRegionProps>(news, [
+          "organizationId",
+          "networkAreaId",
+          "region",
+          "transferNetwork",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const organizationId = yield* desiredOrganizationId(news);
       if (
@@ -258,13 +272,21 @@ export const NetworkAreaRegionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (olds === undefined && output === undefined) return undefined;
       const scope = yield* resolveScope(olds, output);
       if (scope.networkAreaId === "") return undefined;
       const observed = yield* getRegional(scope);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope);
+      // The generation being replaced is ours, whoever owns the area.
+      if (
+        previous?.organizationId === scope.organizationId &&
+        previous.networkAreaId === scope.networkAreaId &&
+        previous.region === scope.region
+      ) {
+        return attrs;
+      }
       return (yield* areaOwned(scope.organizationId, scope.networkAreaId)) ? attrs : Unowned(attrs);
     }),
 

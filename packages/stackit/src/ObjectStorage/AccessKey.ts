@@ -5,9 +5,10 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import type { Providers } from "../Providers.ts";
-import { ensureObjectStorageEnabled, toRedacted } from "./internal.ts";
+import { ensureObjectStorageEnabled, GROUP_NAME_MAX_LENGTH, toRedacted } from "./internal.ts";
 
 export interface AccessKeyProps {
   /**
@@ -166,7 +167,18 @@ export const AccessKeyProvider = () =>
     nuke: { dependsOn: ["Stackit.ObjectStorage.CredentialsGroup"] },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      if (
+        hasUnresolvedTrigger<AccessKeyProps>(news, [
+          "credentialsGroupId",
+          "expires",
+          "projectId",
+          "region",
+        ])
+      ) {
+        return { action: "replace" as const };
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       if (
         news.credentialsGroupId !== output.credentialsGroupId ||
@@ -206,7 +218,7 @@ export const AccessKeyProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed([])),
         );
       const perGroup = yield* Effect.forEach(
-        groups.filter((group) => isGeneratedPhysicalName(group.displayName)),
+        groups.filter((group) => isGeneratedPhysicalName(group.displayName, GROUP_NAME_MAX_LENGTH)),
         (group) =>
           listKeys(env.projectId, env.region, group.credentialsGroupId).pipe(
             Effect.map((keys) =>

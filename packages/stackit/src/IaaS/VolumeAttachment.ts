@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -94,8 +95,9 @@ export type VolumeAttachment = Resource<
  *
  * ### Replacement
  * Changing `serverId`, `volumeId`, `projectId` or `region` detaches the
- * volume and attaches the new pair. Unmount the device in the guest first:
- * a detach under I/O can lose writes.
+ * volume first and then attaches the new pair, since a volume attaches to
+ * one server at a time. Unmount the device in the guest first: a detach
+ * under I/O can lose writes.
  *
  * @resource
  * @product STACKIT Block Storage
@@ -119,11 +121,8 @@ const getAttachment = (scope: ProjectScope, serverId: string, volumeId: string) 
     .getAttachedVolume({ ...scope, serverId, volumeId })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const getVolumeStatus = (scope: ProjectScope, volumeId: string) =>
-  iaas.getVolume({ ...scope, volumeId }).pipe(
-    Effect.map((volume) => volume.status),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+const getVolumeOrUndefined = (scope: ProjectScope, volumeId: string) =>
+  iaas.getVolume({ ...scope, volumeId }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const VolumeAttachmentProvider = () =>
   Provider.succeed(VolumeAttachment, {
@@ -131,11 +130,28 @@ export const VolumeAttachmentProvider = () =>
     nuke: { dependsOn: ["Stackit.IaaS.Server", "Stackit.IaaS.Volume"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
-      if (news.serverId !== output.serverId || news.volumeId !== output.volumeId) {
-        return { action: "replace" } as const;
+      // A volume attaches to one server at a time, so a move detaches first.
+      // Delete-first also covers an unresolved id that resolves to the same
+      // pair: this pair has no generation marker, so a create-first
+      // replacement would claim it and garbage collection would then detach it.
+      if (
+        hasUnresolvedTrigger<VolumeAttachmentProps>(news, [
+          "projectId",
+          "region",
+          "serverId",
+          "volumeId",
+        ])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
+      if (
+        (yield* projectScopeChanged(news, output)) ||
+        news.serverId !== output.serverId ||
+        news.volumeId !== output.volumeId
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -162,15 +178,18 @@ export const VolumeAttachmentProvider = () =>
         current = yield* iaas
           .addVolumeToServer({ ...scope, ...ids, deleteOnTermination })
           .pipe(Effect.retry(conflictRetry));
-        yield* waitFor({
-          resource: `STACKIT volume ${ids.volumeId} on server ${ids.serverId}`,
-          read: getVolumeStatus(scope, ids.volumeId),
-          ready: (status) => status === "ATTACHED",
-          failed: (status) => (status === "ERROR" ? status : undefined),
-          state: (status) => status,
-          timeout: "5 minutes",
-        });
       }
+
+      // Every path waits: a crash right after the attach call finds the
+      // attachment on the next run with the volume still attaching.
+      yield* waitFor({
+        resource: `STACKIT volume ${ids.volumeId} on server ${ids.serverId}`,
+        read: getVolumeOrUndefined(scope, ids.volumeId),
+        ready: (volume) => volume?.status === "ATTACHED",
+        failed: (volume) => (volume?.status === "ERROR" ? volume.status : undefined),
+        state: (volume) => volume?.status,
+        timeout: "5 minutes",
+      });
 
       // Sync — the only mutable aspect.
       if ((current.deleteOnTermination ?? false) !== deleteOnTermination) {
@@ -181,26 +200,32 @@ export const VolumeAttachmentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const scope = { projectId: output.projectId, region: output.region };
-      yield* iaas
-        .removeVolumeFromServer({
-          ...scope,
-          serverId: output.serverId,
-          volumeId: output.volumeId,
-        })
-        .pipe(
-          Effect.retry(conflictRetry),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
-      // Gone once the attachment is unknown and the volume finished
-      // detaching (or no longer exists).
+      // Observe first: a volume moved to another server has nothing to detach here.
+      if ((yield* getAttachment(scope, output.serverId, output.volumeId)) !== undefined) {
+        yield* iaas
+          .removeVolumeFromServer({
+            ...scope,
+            serverId: output.serverId,
+            volumeId: output.volumeId,
+          })
+          .pipe(
+            Effect.retry(conflictRetry),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
+      }
+      // Gone once the attachment is unknown and the volume finished detaching,
+      // no longer exists, or already belongs to another server.
       yield* waitUntilGone({
         resource: `STACKIT volume ${output.volumeId} on server ${output.serverId}`,
         read: Effect.gen(function* () {
           const attachment = yield* getAttachment(scope, output.serverId, output.volumeId);
-          const status = yield* getVolumeStatus(scope, output.volumeId);
-          return attachment === undefined && (status === undefined || status === "AVAILABLE")
-            ? undefined
-            : (status ?? "ATTACHED");
+          const volume = yield* getVolumeOrUndefined(scope, output.volumeId);
+          if (attachment !== undefined) return volume?.status ?? "ATTACHED";
+          if (volume === undefined || volume.status === "AVAILABLE") return undefined;
+          if (volume.serverId !== undefined && volume.serverId !== output.serverId) {
+            return undefined;
+          }
+          return volume.status ?? "DETACHING";
         }),
         state: (status) => status,
         timeout: "5 minutes",

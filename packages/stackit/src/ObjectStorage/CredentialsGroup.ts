@@ -7,10 +7,11 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { isGeneratedPhysicalName } from "../internal/names.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import type { Providers } from "../Providers.ts";
-import { ensureObjectStorageEnabled } from "./internal.ts";
+import { ensureObjectStorageEnabled, GROUP_NAME_MAX_LENGTH } from "./internal.ts";
 
 export interface CredentialsGroupProps {
   /**
@@ -39,11 +40,14 @@ export type CredentialsGroup = Resource<
     credentialsGroupId: string;
     /** Display name of the credentials group. */
     displayName: string;
-    /** Credentials group URN. */
+    /**
+     * Credentials group URN. Use it as the principal in S3 bucket policies
+     * (`{ AWS: group.urn }`) to name this group's access keys.
+     */
     urn: string;
     /**
-     * URN of the group's StorageGRID user. Use it as the principal in S3
-     * bucket policies to grant this group's access keys access to a bucket.
+     * URN of the group's StorageGRID user. STACKIT uses this form as the
+     * principal of a trust policy, not of a bucket policy.
      */
     userUrn: string;
     /** Project the group belongs to. */
@@ -57,8 +61,8 @@ export type CredentialsGroup = Resource<
 
 /**
  * A STACKIT Object Storage credentials group: a named set of S3 access
- * keys that share one identity (the group's `userUrn`). Bucket policies
- * grant access to a group; {@link AccessKey}s are created inside it.
+ * keys that share one identity. Bucket policies name a group by its `urn`;
+ * {@link AccessKey}s are created inside it.
  *
  * Every project also has a `default` credentials group created by STACKIT;
  * Alchemy never manages or deletes it.
@@ -67,7 +71,8 @@ export type CredentialsGroup = Resource<
  * is in the stack's state or carries the generated display name (which
  * embeds the resource's instance id); an existing group with an explicit
  * `displayName` and no state is reported as unowned. `alchemy unsafe nuke`
- * lists only groups with generated names in the profile's project and region.
+ * lists only groups whose name has the generated shape in the profile's
+ * project and region, so a hand-chosen name of that shape is listed too.
  *
  * ### Creating a Credentials Group
  * **Example:** Group with a generated name
@@ -119,7 +124,7 @@ export class CredentialsGroupNotResolved extends Data.TaggedError(
 type Attributes = CredentialsGroup["Attributes"];
 
 const groupPhysicalName = (id: string) =>
-  createPhysicalName({ id, maxLength: 63, lowercase: true });
+  createPhysicalName({ id, maxLength: GROUP_NAME_MAX_LENGTH, lowercase: true });
 
 const getGroup = (projectId: string, region: string, groupId: string) =>
   objectStorage.getCredentialsGroup({ projectId, region, groupId }).pipe(
@@ -179,7 +184,15 @@ export const CredentialsGroupProvider = () =>
     // the keys first.
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Delete-first: the group is found by name, with no generation marker,
+      // and an unresolved prop can resolve to the current one.
+      if (
+        hasUnresolvedTrigger<CredentialsGroupProps>(news, ["displayName", "projectId", "region"])
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
+      if (!isResolved(news)) return undefined;
       const env = yield* StackitEnvironment.current;
       const nameChanged =
         news.displayName !== undefined
@@ -220,7 +233,7 @@ export const CredentialsGroupProvider = () =>
       const env = yield* StackitEnvironment.current;
       const groups = yield* listGroups(env.projectId, env.region);
       const owned = yield* Effect.forEach(
-        groups.filter((group) => isGeneratedPhysicalName(group.displayName)),
+        groups.filter((group) => isGeneratedPhysicalName(group.displayName, GROUP_NAME_MAX_LENGTH)),
         (group) => getGroup(env.projectId, env.region, group.credentialsGroupId),
         { concurrency: 4 },
       );

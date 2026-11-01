@@ -4,12 +4,13 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { requireOrganizationId, StackitEnvironment } from "../Environment.ts";
+import { StackitEnvironment } from "../Environment.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
 import { desiredLabels, hasAlchemyLabels, isAlchemyOwned, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   containerName,
+  desiredParent,
   isParent,
   labelsUpdate,
   listChildFolders,
@@ -161,12 +162,6 @@ const findOwned = Effect.fn(function* (id: string, parentId: string) {
   return undefined;
 });
 
-const desiredParent = Effect.fn(function* (parentId: string | undefined) {
-  if (parentId !== undefined) return parentId;
-  const env = yield* StackitEnvironment.current;
-  return yield* requireOrganizationId(env);
-});
-
 export const FolderProvider = () =>
   Provider.succeed(Folder, {
     stables: ["folderId", "containerId", "creationTime"],
@@ -188,7 +183,9 @@ export const FolderProvider = () =>
 
     list: Effect.fn(function* () {
       const env = yield* StackitEnvironment.current;
-      const organizationId = yield* requireOrganizationId(env);
+      // A profile without an organization has nothing in scope to enumerate.
+      const organizationId = env.organizationId;
+      if (organizationId === undefined) return [];
       const folders = yield* listFolderTree(organizationId);
       return folders.filter((folder) => isAlchemyOwned(folder.labels)).map(toAttrs);
     }),

@@ -6,8 +6,9 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { StackitEnvironment } from "../Environment.ts";
+import { hasUnresolvedTrigger } from "../internal/diff.ts";
 import { waitFor, waitUntilGone } from "../internal/wait.ts";
-import { desiredLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
+import { desiredGenerationLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   conflictRetry,
@@ -16,6 +17,7 @@ import {
   labelsPatch,
   ownedOnly,
   projectScopeChanged,
+  readGeneration,
   resolveProjectScope,
   type ProjectScope,
   type ProjectScopedProps,
@@ -152,6 +154,7 @@ const observe = Effect.fn(function* (args: {
   scope: ProjectScope;
   snapshotId: string | undefined;
   volumeId: string | undefined;
+  instanceId: string | undefined;
 }) {
   if (args.snapshotId !== undefined) {
     const byId = yield* getSnapshot(args.scope, args.snapshotId);
@@ -159,12 +162,10 @@ const observe = Effect.fn(function* (args: {
   }
   // Crash recovery: a create whose state was never persisted.
   const { items } = yield* iaas.listSnapshotsInProject(args.scope);
-  return yield* findOwnedByName(
-    args.id,
-    args.name,
-    items,
-    (snapshot) => args.volumeId === undefined || snapshot.volumeId === args.volumeId,
-  );
+  return yield* findOwnedByName(args.id, args.name, items, {
+    instanceId: args.instanceId,
+    compatible: (snapshot) => args.volumeId === undefined || snapshot.volumeId === args.volumeId,
+  });
 });
 
 export const SnapshotProvider = () =>
@@ -180,14 +181,17 @@ export const SnapshotProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
+      if (hasUnresolvedTrigger<SnapshotProps>(news, ["projectId", "region", "volumeId"])) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (yield* projectScopeChanged(news, output)) return { action: "replace" } as const;
       if (news.volumeId !== output.volumeId) return { action: "replace" } as const;
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
       const scope = yield* resolveProjectScope(olds, output);
       const name = output?.name ?? (yield* iaasName(id, olds?.name));
       const observed = yield* observe({
@@ -196,16 +200,17 @@ export const SnapshotProvider = () =>
         scope,
         snapshotId: output?.snapshotId,
         volumeId: olds?.volumeId,
+        instanceId: readGeneration({ instanceId, output, previous }),
       });
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed, scope, name);
       return (yield* hasAlchemyLabels(id, observed.labels)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const scope = yield* resolveProjectScope(news, output);
       const name = yield* iaasName(id, news.name);
-      const labels = yield* desiredLabels(id, news.labels);
+      const labels = yield* desiredGenerationLabels(id, instanceId, news.labels);
 
       // Observe — a recorded snapshot only counts for the same volume.
       const recordedId = output?.volumeId === news.volumeId ? output.snapshotId : undefined;
@@ -215,6 +220,7 @@ export const SnapshotProvider = () =>
         scope,
         snapshotId: recordedId,
         volumeId: news.volumeId,
+        instanceId,
       });
 
       // Ensure — create when missing; `Conflict` while the volume is busy.

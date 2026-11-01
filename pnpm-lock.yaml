@@ -10866,13 +10866,22 @@ importers:
 
   packages/stackit:
     dependencies:
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/stackit':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stackit
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

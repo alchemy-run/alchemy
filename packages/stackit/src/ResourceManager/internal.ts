@@ -2,6 +2,7 @@ import * as resourceManager from "@distilled.cloud/stackit/resource_manager";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { requireOrganizationId, StackitEnvironment } from "../Environment.ts";
 import { diffLabels, labelRecord } from "../Labels.ts";
 
 /**
@@ -15,6 +16,13 @@ export const containerName = (id: string, name: string | undefined) =>
   name !== undefined
     ? Effect.succeed(name)
     : createPhysicalName({ id, maxLength: CONTAINER_NAME_MAX_LENGTH });
+
+/** The parent to deploy into: the prop, else the profile's organization. */
+export const desiredParent = Effect.fn(function* (parentId: string | undefined) {
+  if (parentId !== undefined) return parentId;
+  const env = yield* StackitEnvironment.current;
+  return yield* requireOrganizationId(env);
+});
 
 /** A Resource Manager list kept returning full pages past {@link MAX_PAGES}. */
 export class ResourceManagerPaginationLimit extends Data.TaggedError(
