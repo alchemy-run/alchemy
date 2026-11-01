@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as Portless from "@alchemy.run/portless";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -226,13 +225,6 @@ test.provider(
 // A LAN proxy serves `.local` names, and only those. It publishes them with a tool of the platform;
 // without it LAN mode never starts. The proxy pins `127.0.0.1` as its address, so nothing here
 // depends on, or advertises, this machine's network.
-const mdnsTool = { darwin: ["dns-sd", "-h"], linux: ["avahi-publish-address", "--help"] }[
-  process.platform as "darwin" | "linux"
-];
-const hasMdnsTool =
-  mdnsTool !== undefined &&
-  (spawnSync(mdnsTool[0]!, mdnsTool.slice(1)).error as NodeJS.ErrnoException | undefined)?.code !==
-    "ENOENT";
 
 const lan = TestProxy.make({ PORTLESS_LAN_IP: "127.0.0.1" }, { lan: true });
 const lanFile = Test.make({
@@ -243,7 +235,7 @@ const lanFile = Test.make({
 });
 lanFile.afterAll(lan.stop);
 
-lanFile.test.provider.skipIf(!hasMdnsTool)(
+lanFile.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   "Ingress under a LAN proxy routes a .local name, the one Origin gives",
   (stack) =>
     Effect.gen(function* () {
