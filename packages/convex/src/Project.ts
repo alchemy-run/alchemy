@@ -139,9 +139,11 @@ export const ProjectProvider = () =>
           return found[0] && Unowned(toAttrs(found[0]));
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name = yield* projectName(id, news.name ?? output?.name);
+          // A project takes no required props, so `news` may be undefined.
+          const props: ProjectProps = news ?? {};
+          const name = yield* projectName(id, props.name ?? output?.name);
           const tag = yield* tagFor(id);
-          const tags = [...new Set([...(news.tags ?? []), tag])].toSorted();
+          const tags = [...new Set([...(props.tags ?? []), tag])].toSorted();
 
           // Observe
           const teamId = yield* team;
@@ -169,7 +171,9 @@ export const ProjectProvider = () =>
           // Sync. `tags` replaces the whole list.
           const patch = {
             ...(project.name !== name ? { name } : {}),
-            ...(news.slug !== undefined && news.slug !== project.slug ? { slug: news.slug } : {}),
+            ...(props.slug !== undefined && props.slug !== project.slug
+              ? { slug: props.slug }
+              : {}),
             ...(!deepEqual([...(project.tags ?? [])].toSorted(), tags) ? { tags } : {}),
           };
           if (Object.keys(patch).length > 0) {

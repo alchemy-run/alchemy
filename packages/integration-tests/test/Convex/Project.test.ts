@@ -51,6 +51,21 @@ test.provider(
 );
 
 test.provider(
+  "takes no props at all",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const project = yield* stack.deploy(Convex.Project("App").pipe(RemovalPolicy.destroy()));
+      expect(project.name.length).toBeGreaterThan(0);
+      const redeployed = yield* stack.deploy(Convex.Project("App").pipe(RemovalPolicy.destroy()));
+      expect(redeployed.projectId).toBe(project.projectId);
+      yield* stack.destroy();
+      expect(yield* projectsNamed(project.name)).toEqual([]);
+    }),
+  options,
+);
+
+test.provider(
   "renames in place and keeps user tags beside the ownership tag",
   (stack) =>
     Effect.gen(function* () {
