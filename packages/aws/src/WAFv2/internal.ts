@@ -1,9 +1,9 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { withGlobalRegion } from "../Region.ts";
 
 /**
  * Scope of a WAFv2 resource.
@@ -12,30 +12,24 @@ import * as Schedule from "effect/Schedule";
  *   Cognito user pool, App Runner, Verified Access) and follows the ambient
  *   AWS region.
  * - `CLOUDFRONT` — protects CloudFront distributions and must live in
- *   `us-east-1`; the providers pin the region automatically.
+ *   the partition's global region (`us-east-1` in `aws`); the providers pin
+ *   the region automatically.
  */
 export type WafScope = "REGIONAL" | "CLOUDFRONT";
 
-const CLOUDFRONT_REGION = "us-east-1" as const;
-
 /**
- * WAFv2 `CLOUDFRONT`-scoped resources exist exclusively in `us-east-1`
- * (like ACM certificates for CloudFront). Pin the distilled `Region`
- * service for CLOUDFRONT scope; REGIONAL scope follows the ambient region.
- *
- * `AwsRegion`'s service value is an `Effect<RegionName>` (see
- * `@distilled.cloud/aws/Region`), so it must be provided as an effect, not a
- * bare string.
+ * WAFv2 `CLOUDFRONT`-scoped resources exist exclusively in the partition's
+ * global region, `us-east-1` in `aws` (like ACM certificates for
+ * CloudFront). Pin it for CLOUDFRONT scope; REGIONAL scope follows the
+ * ambient region. Outside `aws` the request stays in the stack's partition
+ * instead of carrying its credentials to `us-east-1`.
  *
  * @internal
  */
 export const withWafScope = <A, E, R>(
   scope: WafScope,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  scope === "CLOUDFRONT"
-    ? effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(CLOUDFRONT_REGION)))
-    : effect;
+): Effect.Effect<A, E, R> => (scope === "CLOUDFRONT" ? withGlobalRegion(effect) : effect);
 
 /**
  * WAFv2 mutations (update/delete) use `LockToken` optimistic concurrency.
