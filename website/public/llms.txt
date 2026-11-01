@@ -693,6 +693,9 @@ Convex projects, deployments, keys and functions as Stack resources, with bindin
 - [Connect](https://alchemy.run/convex/functions/connect) — Give a Worker or Lambda your deployment's URLs for the convex client.
 - [Calling functions](https://alchemy.run/convex/functions/calling-functions) — Run queries, mutations and actions from a Worker or Lambda, and read usage, audit logs and data.
 - [Log streams](https://alchemy.run/convex/observability/log-streams) — Send a Convex deployment's logs to a webhook or another service.
+- [Backend](https://alchemy.run/convex/self-hosted/backend) — Run one self-hosted Convex backend on AWS, with its own network, buckets and TLS.
+- [Platform](https://alchemy.run/convex/self-hosted/platform) — Share one network, load balancer, database server and buckets between stages.
+- [Two AWS accounts](https://alchemy.run/convex/self-hosted/two-accounts) — Keep production in its own account and share a development account between every other stage.
 
 ## Turso
 
