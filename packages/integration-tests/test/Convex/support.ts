@@ -41,10 +41,11 @@ export const convexCli = (args: ReadonlyArray<string>, env: Record<string, strin
     const result = NodeChildProcess.spawnSync(cli, [...args], {
       cwd: FIXTURE_DIR,
       env: {
+        NODE_ENV: "production",
         PATH: process.env.PATH ?? "",
         HOME: process.env.HOME ?? "",
         ...env,
-      } as NodeJS.ProcessEnv,
+      },
       encoding: "utf8",
     });
     return { code: result.status, output: `${result.stdout}${result.stderr}` };

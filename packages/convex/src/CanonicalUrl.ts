@@ -51,6 +51,7 @@ export type CanonicalUrl = Resource<
  * ```
  *
  * @see https://docs.convex.dev/deployment-api/update-canonical-url
+ *
  * @resource
  * @product Deployment
  */

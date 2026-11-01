@@ -70,6 +70,7 @@ export type UsageLimit = Resource<
  * ```
  *
  * @see https://docs.convex.dev/deployment-api/create-usage-limit
+ *
  * @resource
  * @product Deployment
  */

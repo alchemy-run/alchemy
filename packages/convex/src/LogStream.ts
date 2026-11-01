@@ -62,6 +62,7 @@ export type LogStream = Resource<
  * ```
  *
  * @see https://docs.convex.dev/production/integrations/log-streams
+ *
  * @resource
  * @product Observability
  */

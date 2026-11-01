@@ -57,6 +57,7 @@ export type DefaultEnvironmentVariables = Resource<
  * ```
  *
  * @see https://docs.convex.dev/management-api/update-default-environment-variables
+ *
  * @resource
  * @product Projects
  */

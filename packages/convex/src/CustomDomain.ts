@@ -60,6 +60,7 @@ export type CustomDomain = Resource<
  * ```
  *
  * @see https://docs.convex.dev/production/hosting/custom
+ *
  * @resource
  * @product Deployment
  */

@@ -81,6 +81,7 @@ export type Project = Resource<"Convex.Project", ProjectProps, ProjectAttributes
  * ```
  *
  * @see https://docs.convex.dev/management-api
+ *
  * @resource
  * @product Projects
  */
