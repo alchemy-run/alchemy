@@ -3749,6 +3749,272 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
   );
 });
 
+// A ref to a resource the same program declares, in the current stack and
+// stage, is a dependency exactly like a direct reference: an edge in the plan
+// DAG (create waits for the target, delete runs the dependent first) and an
+// unknown value while the target is created or changes. Every other ref keeps
+// reading persisted state and carries no edge.
+describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, () => {
+  const seedAt = (stack: string, stage: string, resources: Record<string, ResourceState>) =>
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      for (const [fqn, value] of Object.entries(resources)) {
+        yield* state.set({ stack, stage, fqn, value });
+      }
+    });
+
+  const row = (
+    fqn: string,
+    props: TestResourceProps,
+    attr: Partial<TestResource["Attributes"]> = {},
+    downstream: string[] = [],
+  ): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn.split("/").at(-1)!,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created" as ResourceStatus,
+      props,
+      attr: {
+        string: props.string ?? fqn,
+        stringArray: [],
+        stableString: "stable",
+        stableArray: [],
+        replaceString: props.replaceString,
+        redacted: undefined,
+        redactedArray: undefined,
+        ...attr,
+      },
+      bindings: [],
+      downstream,
+    }) as ResourceState;
+
+  // The same consumer written with a ref and with a direct reference.
+  const viaRef = (sharedProps: TestResourceProps) =>
+    Effect.gen(function* () {
+      yield* TestResource("Shared", sharedProps);
+      const shared = yield* TestResource.ref("Shared");
+      yield* TestResource("Consumer", { string: shared.string });
+    });
+  const viaDirect = (sharedProps: TestResourceProps) =>
+    Effect.gen(function* () {
+      const shared = yield* TestResource("Shared", sharedProps);
+      yield* TestResource("Consumer", { string: shared.string });
+    });
+
+  test(
+    "a ref to a resource created in the same deploy plans like a direct reference",
+    Effect.gen(function* () {
+      const plan = yield* viaRef({ string: "shared-string" }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.action).toBe("create");
+      expect(plan.resources.Consumer!.action).toBe("create");
+      expect(plan.resources.Shared!.downstream).toContain("Consumer");
+      expect(plan.resources.Consumer!.downstream).not.toContain("Shared");
+      // Unknown until Shared is created, instead of an InvalidReferenceError.
+      expect(Output.isExpr((plan.resources.Consumer as any).props.string)).toBe(true);
+    }),
+  );
+
+  const scenarios: [
+    name: string,
+    seeded: Record<string, ResourceState>,
+    shared: TestResourceProps,
+  ][] = [
+    ["both new", {}, { string: "shared-string" }],
+    [
+      "nothing changes",
+      {
+        Shared: row("Shared", { string: "shared-string" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string" },
+    ],
+    [
+      "the target updates",
+      {
+        Shared: row("Shared", { string: "shared-string" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string-v2" },
+    ],
+    [
+      "the target is replaced",
+      {
+        Shared: row("Shared", { string: "shared-string", replaceString: "a" }, {}, ["Consumer"]),
+        Consumer: row("Consumer", { string: "shared-string" }),
+      },
+      { string: "shared-string", replaceString: "b" },
+    ],
+  ];
+
+  for (const [name, seeded, shared] of scenarios) {
+    test(
+      `plans the same actions, props and edges as a direct reference when ${name}`,
+      Effect.gen(function* () {
+        yield* seed(seeded);
+        const direct = yield* viaDirect(shared).pipe(makePlan);
+        const ref = yield* viaRef(shared).pipe(makePlan);
+
+        for (const fqn of ["Shared", "Consumer"] as const) {
+          expect(ref.resources[fqn]!.action).toBe(direct.resources[fqn]!.action);
+          expect(ref.resources[fqn]!.downstream).toEqual(direct.resources[fqn]!.downstream);
+        }
+        // A noop node carries no props; a changing one carries the resolved
+        // (or still unknown) value the consumer reads.
+        if (direct.resources.Consumer!.action !== "noop") {
+          const consumerString = (plan: typeof ref) =>
+            (plan.resources.Consumer as any).props.string;
+          expect(Output.isExpr(consumerString(ref))).toBe(Output.isExpr(consumerString(direct)));
+          if (!Output.isExpr(consumerString(direct))) {
+            expect(consumerString(ref)).toEqual(consumerString(direct));
+          }
+        }
+      }),
+    );
+  }
+
+  test(
+    "a ref naming the current stack and stage explicitly is an edge",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared", { stack: TEST_STACK, stage: TEST_STAGE });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Consumer");
+    }),
+  );
+
+  test(
+    "a ref to another stage is not an edge, even when this program declares the same id",
+    Effect.gen(function* () {
+      yield* seedAt(TEST_STACK, "other", {
+        Shared: row("Shared", { string: "other-stage-string" }),
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "this-stage-string" });
+        const shared = yield* TestResource.ref("Shared", { stage: "other" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).not.toContain("Consumer");
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "other-stage-string",
+      });
+    }),
+  );
+
+  test(
+    "a ref to another stack is not an edge, even when this program declares the same id",
+    Effect.gen(function* () {
+      yield* seedAt("other-stack", TEST_STAGE, {
+        Shared: row("Shared", { string: "other-stack-string" }),
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "this-stack-string" });
+        const shared = yield* TestResource.ref("Shared", { stack: "other-stack" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).not.toContain("Consumer");
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "other-stack-string",
+      });
+    }),
+  );
+
+  test(
+    "a ref to a resource only in state (not declared) reads state and is not an edge",
+    Effect.gen(function* () {
+      yield* seed({ Shared: row("Shared", { string: "state-only-string" }) });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared).toBeUndefined();
+      expect((plan.resources.Consumer as any).props).toMatchObject({
+        string: "state-only-string",
+      });
+    }),
+  );
+
+  test(
+    "a resource's ref to itself reads its persisted state and is not an edge",
+    Effect.gen(function* () {
+      yield* seed({ Self: row("Self", { string: "self-v1" }) });
+      const plan = yield* Effect.gen(function* () {
+        const self = yield* TestResource.ref("Self");
+        yield* TestResource("Self", { string: "self-v2", stringArray: [self.string] });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Self!.action).toBe("update");
+      expect(plan.resources.Self!.downstream).not.toContain("Self");
+      expect((plan.resources.Self as any).props).toMatchObject({ stringArray: ["self-v1"] });
+    }),
+  );
+
+  test(
+    "a ref is matched by the target's full FQN, not its logical id",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "nested" }).pipe(Namespace.push("Ns"));
+        const shared = yield* TestResource.ref("Ns/Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+      expect(plan.resources["Ns/Shared"]!.downstream).toContain("Consumer");
+
+      const bare = yield* Effect.exit(
+        Effect.gen(function* () {
+          yield* TestResource("Shared", { string: "nested" }).pipe(Namespace.push("Ns"));
+          const shared = yield* TestResource.ref("Shared");
+          yield* TestResource("Consumer", { string: shared.string });
+        }).pipe(makePlan),
+      );
+      // `Shared` names no declared resource: it stays a state lookup.
+      expect(Exit.isFailure(bare)).toBe(true);
+      if (Exit.isFailure(bare)) {
+        expect((Cause.squash(bare.cause) as Output.InvalidReferenceError)._tag).toBe(
+          "InvalidReferenceError",
+        );
+      }
+    }),
+  );
+
+  test(
+    "a ref used only in a binding is a binding edge",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared");
+        const host = yield* BindingTarget("Host", { name: "host" });
+        yield* host.bind("Shared", { env: { SHARED: shared.string } });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Host");
+    }),
+  );
+
+  test(
+    "a ref in an Action's input is an edge to the Action",
+    Effect.gen(function* () {
+      const Compute = Action("Compute", (_: { name: string }) => Effect.succeed({ value: "v" }));
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("Shared", { string: "shared-string" });
+        const shared = yield* TestResource.ref("Shared");
+        yield* Compute({ name: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Shared!.downstream).toContain("Compute");
+    }),
+  );
+});
+
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {
   const setStackOutput = (stack: string, stage: string, value: unknown) =>
     Effect.gen(function* () {
