@@ -135,7 +135,6 @@ export const makeForwarder = Effect.gen(function* () {
         const origin = (target: IngressTarget) =>
           `http://${hostOf(domain ?? target.stack, target)}:${port}`;
         return {
-          origin: (target) => Effect.succeed(origin(target)),
           attach: (target, listener) =>
             listener.protocol !== "http:"
               ? Effect.fail(
