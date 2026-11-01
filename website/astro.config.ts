@@ -37,6 +37,7 @@ function providersSidebarEntry() {
       { label: "GCP", link: "/gcp" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
+      { label: "STACKIT", link: "/stackit" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
       { label: "PlanetScale", link: "/planetscale" },
@@ -1110,6 +1111,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Hetzner"),
+          ],
+        },
+        {
+          label: "STACKIT",
+          items: [
+            { label: "Overview", link: "/stackit" },
+            { label: "Setup", link: "/stackit/setup" },
+            providerResourcesEntry("Stackit"),
           ],
         },
         {

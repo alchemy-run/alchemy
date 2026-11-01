@@ -1,0 +1,119 @@
+{
+  "name": "@alchemy.run/stackit",
+  "version": "2.0.0-beta.84",
+  "description": "STACKIT (Schwarz Group's German cloud) projects, networks, DNS and object storage for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "infrastructure-as-code",
+    "stackit"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/stackit"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./DNS": "./src/DNS/index.ts",
+    "./IaaS": "./src/IaaS/index.ts",
+    "./IAM": "./src/IAM/index.ts",
+    "./ObjectStorage": "./src/ObjectStorage/index.ts",
+    "./ResourceManager": "./src/ResourceManager/index.ts",
+    "./ServiceEnablement": "./src/ServiceEnablement/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "worker": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
+      },
+      "./IaaS": {
+        "types": "./lib/IaaS/index.d.ts",
+        "bun": "./src/IaaS/index.ts",
+        "worker": "./src/IaaS/index.ts",
+        "default": "./lib/IaaS/index.js"
+      },
+      "./IAM": {
+        "types": "./lib/IAM/index.d.ts",
+        "bun": "./src/IAM/index.ts",
+        "worker": "./src/IAM/index.ts",
+        "default": "./lib/IAM/index.js"
+      },
+      "./ObjectStorage": {
+        "types": "./lib/ObjectStorage/index.d.ts",
+        "bun": "./src/ObjectStorage/index.ts",
+        "worker": "./src/ObjectStorage/index.ts",
+        "default": "./lib/ObjectStorage/index.js"
+      },
+      "./ResourceManager": {
+        "types": "./lib/ResourceManager/index.d.ts",
+        "bun": "./src/ResourceManager/index.ts",
+        "worker": "./src/ResourceManager/index.ts",
+        "default": "./lib/ResourceManager/index.js"
+      },
+      "./ServiceEnablement": {
+        "types": "./lib/ServiceEnablement/index.d.ts",
+        "bun": "./src/ServiceEnablement/index.ts",
+        "worker": "./src/ServiceEnablement/index.ts",
+        "default": "./lib/ServiceEnablement/index.js"
+      },
+      "./IAM/internal/*": null,
+      "./internal/*": null,
+      "./*/internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/stackit": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/stackit/Contributions"
+    ]
+  }
+}

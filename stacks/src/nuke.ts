@@ -7,6 +7,7 @@ import * as Neon from "@alchemy.run/neon";
 import * as Planetscale from "@alchemy.run/planetscale";
 import * as Prisma from "@alchemy.run/prisma";
 import * as Railway from "@alchemy.run/railway";
+import * as Stackit from "@alchemy.run/stackit";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Turso from "@alchemy.run/turso";
 import * as Alchemy from "alchemy";
@@ -26,6 +27,7 @@ export default Alchemy.Stack(
       Planetscale.providers(),
       Prisma.providers(),
       Railway.providers(),
+      Stackit.providers(),
       Stripe.providers(),
       Turso.providers(),
     ),

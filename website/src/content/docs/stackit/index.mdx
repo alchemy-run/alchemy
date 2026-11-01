@@ -1,0 +1,56 @@
+---
+title: STACKIT
+description: STACKIT, Schwarz Group's sovereign German cloud, as code — projects, IAM, networks, DNS, and object storage declared in one Effect program.
+---
+
+[STACKIT](https://www.stackit.de) is the cloud of the Schwarz Group
+(Lidl, Kaufland), operated from data centers in Germany and Austria.
+With `@alchemy.run/stackit` you declare STACKIT resources in the same
+Stack as the code that uses them.
+
+New here? [Set up credentials](/stackit/setup) first.
+
+## Projects, regions, and services
+
+Every resource deploys into the project and region of your
+[profile](/stackit/setup). Pass `projectId` or `region` on a resource to
+deploy it elsewhere; changing either replaces the resource.
+
+STACKIT switches each product on per project. The resources enable the
+service they need on their own, so a fresh project deploys without manual
+setup. To enable a service explicitly, declare it:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Stackit from "@alchemy.run/stackit";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Stackit.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const ske = yield* Stackit.ServiceEnablement.Service("Ske", {
+      serviceId: "cloud.stackit.ske",
+    });
+    return { state: ske.state };
+  }),
+);
+```
+
+Destroying the stack disables the service again only if this resource
+enabled it; a service that was already on stays on.
+
+## Ownership
+
+Alchemy marks the resources it creates with `alchemy.stack`,
+`alchemy.stage`, and `alchemy.id` labels. A resource without them is
+refused unless you deploy with `--adopt`, and `alchemy unsafe nuke` only
+deletes labeled resources.
+
+## Reference
+
+Browse every resource in the [API reference](/providers/stackit).

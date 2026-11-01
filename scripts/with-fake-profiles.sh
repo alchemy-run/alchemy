@@ -47,6 +47,9 @@ export PLANETSCALE_ORGANIZATION=alchemy-local
 export PRISMA_SERVICE_TOKEN=alchemy-fake-local-prisma-token
 export PRISMA_API_TOKEN="$PRISMA_SERVICE_TOKEN"
 export RAILWAY_API_TOKEN=alchemy-fake-local-railway-token
+
+export STACKIT_SERVICE_ACCOUNT_KEY='{"id":"00000000-0000-0000-0000-000000000000","credentials":{"kid":"00000000-0000-0000-0000-000000000000","iss":"alchemy-local@sa.stackit.cloud","sub":"00000000-0000-0000-0000-000000000000","aud":"https://stackit-service-account-prod.apps.01.cf.eu01.stackit.cloud","privateKey":"alchemy-fake-local-stackit-key"}}'
+export STACKIT_PROJECT_ID=00000000-0000-0000-0000-000000000000
 export STRIPE_API_KEY=sk_test_alchemy_fake_local
 
 # exec preserves arguments, signals, and the wrapped command's exit status.

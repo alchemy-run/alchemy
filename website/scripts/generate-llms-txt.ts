@@ -419,6 +419,14 @@ const SECTIONS: Section[] = [
     pages: { directory: "hetzner/frontend" },
   },
   {
+    heading: "STACKIT — start here",
+    intro:
+      "The STACKIT hub: overview (projects, networks, DNS, object storage) and setup (customer account, project, service-account key, profile).",
+    pages: {
+      slugs: ["stackit/index", "stackit/setup"],
+    },
+  },
+  {
     heading: "Railway — start here",
     intro:
       "The Railway hub: overview (Projects, Services, databases), setup (workspace, API token, profile), and networking.",
