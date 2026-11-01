@@ -1,4 +1,4 @@
-import { team } from "@alchemy.run/convex/Credentials";
+import { Credentials, fromDeployment, team } from "@alchemy.run/convex/Credentials";
 import * as convex from "@distilled.cloud/convex/convex";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
@@ -19,3 +19,10 @@ export const projectsNamed = Effect.fn(function* (name: string) {
   const items = yield* Stream.runCollect(convex.listProjects.items({ team_id: teamId, q: name }));
   return Array.from(items).filter((project) => project.name === name);
 });
+
+/** Run a Deployment API call against one deployment with the test token. */
+export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const { token } = yield* yield* Credentials;
+    return yield* effect.pipe(Effect.provide(fromDeployment({ url, token })));
+  });

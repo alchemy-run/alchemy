@@ -86,7 +86,7 @@ export type Project = Resource<"Convex.Project", ProjectProps, ProjectAttributes
  */
 export const Project = Resource<Project>("Convex.Project", { defaultRemovalPolicy: "retain" });
 
-const toAttrs = (project: convex.GetProjectResponse): ProjectAttributes => ({
+const toAttrs = (project: convex.ProjectResponse): ProjectAttributes => ({
   projectId: project.id,
   name: project.name,
   slug: project.slug,

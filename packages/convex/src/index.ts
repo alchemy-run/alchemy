@@ -11,5 +11,6 @@ export {
   Team,
   TeamTokenRequired,
 } from "./Credentials.ts";
+export * from "./Deployment.ts";
 export * from "./Project.ts";
 export * from "./Providers.ts";
