@@ -10,9 +10,8 @@ import { listener } from "./fixtures/Listener.ts";
 import { routeOf } from "./fixtures/Processes.ts";
 import * as TestProxy from "./fixtures/TestProxy.ts";
 
-// The adapter, through the same calls a resource's local provider makes: `Ingress.origin` and
-// `Ingress.route` resolve it from the package's contributions. The consumers (a Worker, a
-// `Website.Server`) call exactly these.
+// The adapter, through the call a resource's local provider makes: `Ingress.route` resolves it
+// from the package's contributions. The consumers (a Worker, a `Website.Server`) call exactly this.
 const proxy = TestProxy.make();
 const { test, afterAll } = Test.make({
   providers: proxy.providers(),
@@ -75,7 +74,6 @@ test.provider(
         Effect.provideService(Stage, "dev_alice"),
       );
       expect(expected).toBe(`https://dev-alice.web.ingress-adapter.localhost:${deployed.port}`);
-      expect(yield* Ingress.origin(config, targetOf(config, "Web"))).toBe(expected);
 
       const web = yield* listener("web");
       const attached = yield* attach(config, "Web", web.url);
@@ -152,10 +150,9 @@ test.provider(
       const deployed = yield* stack.deploy(program);
       const config = Portless.Ingress(deployed, { name: "Site" });
       expect(config.name).toBe("Site");
-      expect(yield* Ingress.origin(config, targetOf(config, "Website"))).toBe(
-        `https://dev-alice.site.ingress-adapter.localhost:${deployed.port}`,
-      );
-    }),
+      const site = yield* attach(config, "Website", (yield* listener("site")).url);
+      expect(site.origin).toBe(`https://dev-alice.site.ingress-adapter.localhost:${deployed.port}`);
+    }).pipe(Effect.scoped),
   { tags: ["local"], timeout: 120_000 },
 );
 
@@ -219,13 +216,6 @@ test.provider(
         Effect.provide(off.config),
       );
       expect(origin).toBe(`${web.url}/`);
-
-      // The origin is known only once there is a listener.
-      const unknown = yield* Effect.flip(
-        Ingress.origin(config, targetOf(config, "Web")).pipe(Effect.provide(off.config)),
-      );
-      expect(unknown).toBeInstanceOf(Ingress.IngressError);
-      expect(unknown.message).toContain("PORTLESS=0");
     }),
   { tags: ["local"], timeout: 120_000 },
 );

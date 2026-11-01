@@ -58,15 +58,6 @@ export const factory: IngressFactory = {
       const settings = disabled ? undefined : yield* settingsOf(options);
 
       return {
-        origin: Effect.fn(function* (target) {
-          if (settings === undefined) {
-            return yield* fail({
-              message: `PORTLESS=0: ${target.label} has no Portless name. Its origin is the address it listens on, which is known once it does.`,
-            });
-          }
-          return originOf(yield* hostnameFor(settings, target), settings.port);
-        }),
-
         attach: Effect.fn(function* (target, listener) {
           if (settings === undefined) return listener.href;
           const hostname = yield* hostnameFor(settings, target);
