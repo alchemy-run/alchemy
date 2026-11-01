@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as Portless from "@alchemy.run/portless";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -64,6 +65,7 @@ test.provider(
         type: "portless",
         options: {
           domain: "ingress-adapter",
+          tld: "localhost",
           port: deployed.port,
           stateDirectory: deployed.stateDirectory,
         },
@@ -207,6 +209,7 @@ test.provider(
       yield* stack.destroy();
       const config = Portless.Ingress({
         domain: "ingress-adapter",
+        tld: "localhost",
         port: 443,
         stateDirectory: yield* off.stateDirectory,
       });
@@ -217,5 +220,61 @@ test.provider(
       );
       expect(origin).toBe(`${web.url}/`);
     }),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+// A LAN proxy serves `.local` names, and only those. It publishes them with a tool of the platform;
+// without it LAN mode never starts. The proxy pins `127.0.0.1` as its address, so nothing here
+// depends on, or advertises, this machine's network.
+const mdnsTool = { darwin: ["dns-sd", "-h"], linux: ["avahi-publish-address", "--help"] }[
+  process.platform as "darwin" | "linux"
+];
+const hasMdnsTool =
+  mdnsTool !== undefined &&
+  (spawnSync(mdnsTool[0]!, mdnsTool.slice(1)).error as NodeJS.ErrnoException | undefined)?.code !==
+    "ENOENT";
+
+const lan = TestProxy.make({ PORTLESS_LAN_IP: "127.0.0.1" }, { lan: true });
+const lanFile = Test.make({
+  providers: lan.providers(),
+  dev: true,
+  stage: "dev_alice",
+  sidecar: false,
+});
+lanFile.afterAll(lan.stop);
+
+lanFile.test.provider.skipIf(!hasMdnsTool)(
+  "Ingress under a LAN proxy routes a .local name, the one Origin gives",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { proxy: deployed, ingress: config } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
+          return { proxy, ingress: Portless.Ingress(proxy) };
+        }),
+      );
+      expect(deployed.tld).toBe("local");
+      expect(config.options).toMatchObject({ tld: "local" });
+
+      const expected = yield* Portless.Origin("Web", { proxy: deployed }).pipe(
+        Effect.provideService(Stage, "dev_alice"),
+      );
+      expect(expected).toBe(`https://dev-alice.web.ingress-adapter.local:${deployed.port}`);
+
+      const web = yield* listener("web");
+      const attached = yield* attach(config, "Web", web.url);
+      expect(attached.origin).toBe(expected);
+
+      const response = yield* TestProxy.serving(expected, deployed);
+      expect(JSON.parse(response.body)).toEqual({ listener: "web" });
+      expect(yield* routeOf(deployed.stateDirectory, new URL(expected).hostname)).toMatchObject({
+        port: web.port,
+      });
+
+      yield* attached.close;
+      yield* TestProxy.answers(expected, deployed, 404);
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
   { tags: ["local"], timeout: 120_000 },
 );

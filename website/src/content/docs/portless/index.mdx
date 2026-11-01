@@ -133,7 +133,8 @@ worker.url; // "https://dev-alice.builder.myapp.localhost"
 ```
 
 The name is the one `Origin` gives the same id, or the `name` you pass
-(`Portless.Ingress(proxy, { name: "Site" })`). The raw listener stays the
+(`Portless.Ingress(proxy, { name: "Site" })`), and ends in `.local` when the
+proxy is in LAN mode. The raw listener stays the
 address everything inside the dev session dials. The route belongs to the dev
 sidecar and goes with the resource. With `PORTLESS=0` nothing is routed and the
 resource keeps its own address.

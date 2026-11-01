@@ -11,6 +11,8 @@ import * as Routes from "./Routes.ts";
 /** What `Portless.Ingress(proxy)` puts in the config: where the proxy is and what it names things under. */
 interface Settings {
   readonly domain: string;
+  /** `localhost`, or `local` for a LAN proxy. */
+  readonly tld: string;
   readonly port: number;
   readonly stateDirectory: string;
 }
@@ -20,11 +22,12 @@ const fail = (error: { readonly message: string }) =>
 
 const settingsOf = (options: Readonly<Record<string, unknown>> | undefined) =>
   Effect.suspend(() => {
-    const { domain, port, stateDirectory } = options ?? {};
+    const { domain, tld, port, stateDirectory } = options ?? {};
     return typeof domain === "string" &&
+      typeof tld === "string" &&
       typeof port === "number" &&
       typeof stateDirectory === "string"
-      ? Effect.succeed<Settings>({ domain, port, stateDirectory })
+      ? Effect.succeed<Settings>({ domain, tld, port, stateDirectory })
       : Effect.fail(
           fail({
             message:
@@ -33,12 +36,14 @@ const settingsOf = (options: Readonly<Record<string, unknown>> | undefined) =>
         );
   });
 
-/** The hostname Portless.Origin gives the same id: `<stage>.<kebab label>.<domain>.localhost`. */
+/** The hostname Portless.Origin gives the same id: `<stage>.<kebab label>.<domain>.<tld>`. */
 const hostnameFor = (
   settings: Settings,
   target: { readonly label: string; readonly stage: string },
 ) =>
-  hostnameOf(routedName(target.label, target.stage, settings.domain)).pipe(Effect.mapError(fail));
+  hostnameOf(routedName(target.label, target.stage, settings.domain), settings.tld).pipe(
+    Effect.mapError(fail),
+  );
 
 /**
  * The Portless adapter for `alchemy dev`'s ingress contract. It runs in the

@@ -14,8 +14,8 @@ export interface IngressInput {
 /**
  * Gives a local resource's dev URL a stable Portless name. Pass the result as
  * the resource's `dev.ingress`: its `url` becomes the proxy's origin, such as
- * `https://dev-alice.builder.myapp.localhost`, while the raw listener stays
- * the address everything inside the dev session dials.
+ * `https://dev-alice.builder.myapp.localhost` (`.local` in LAN mode), while the
+ * raw listener stays the address everything inside the dev session dials.
  *
  * The name is the one `Portless.Origin` gives the same id, so it can be handed
  * to other resources before the resource starts. The route belongs to the dev
@@ -37,13 +37,14 @@ export interface IngressInput {
  * @primitive
  */
 export const Ingress = (
-  proxy: Pick<Proxy | ProxyAttributes, "domain" | "port" | "stateDirectory">,
+  proxy: Pick<Proxy | ProxyAttributes, "domain" | "tld" | "port" | "stateDirectory">,
   input?: IngressInput,
 ): IngressConfig<"portless"> => ({
   type: "portless",
   ...(input?.name === undefined ? {} : { name: input.name }),
   options: {
     domain: proxy.domain,
+    tld: proxy.tld,
     port: proxy.port,
     stateDirectory: proxy.stateDirectory,
   },
