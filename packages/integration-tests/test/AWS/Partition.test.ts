@@ -145,18 +145,21 @@ const regionUnder = (
   region: string,
   pin: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R | Region.Region>,
   { provideRegion = true }: { provideRegion?: boolean } = {},
-) =>
-  pin(Effect.flatMap(Effect.service(Region.Region), (current) => current)).pipe(
+) => {
+  const pinned = pin(Effect.flatMap(Effect.service(Region.Region), (current) => current)).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        provideRegion ? Region.of(region) : Layer.empty,
-        fromCredentials(
-          { accessKeyId: Redacted.make("AKIDEXAMPLE"), secretAccessKey: Redacted.make("secret") },
-          region,
-        ),
+      fromCredentials(
+        { accessKeyId: Redacted.make("AKIDEXAMPLE"), secretAccessKey: Redacted.make("secret") },
+        region,
       ),
     ),
   );
+  // Without a provided Region, the pin derives one from the credentials, which
+  // its type does not express.
+  return provideRegion
+    ? pinned.pipe(Effect.provide(Region.of(region)))
+    : (pinned as Effect.Effect<string, unknown>);
+};
 
 describe("withGlobalRegion", tags, () => {
   const expected = {
