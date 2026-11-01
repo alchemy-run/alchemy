@@ -32,59 +32,70 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
       return backend;
     });
 
+  const run = (stack: Test.ScratchStack, rootDir: string) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // deletionProtection defaults on.
+      const backend = yield* stack.deploy(app(rootDir, undefined));
+      yield* assertRuntime({
+        url: backend.url,
+        siteUrl: backend.siteUrl,
+        text: `written to ${engine}`,
+      });
+
+      const { services } = yield* ecs.describeServices({
+        cluster: backend.service.clusterArn,
+        services: [backend.service.serviceArn],
+      });
+      const network = services![0]!.networkConfiguration!.awsvpcConfiguration!;
+      const { Subnets } = yield* ec2.describeSubnets({ SubnetIds: network.subnets });
+
+      const { DBInstances } = yield* rds.describeDBInstances({});
+      const instance = DBInstances!.find(
+        (candidate) => candidate.DBSubnetGroup?.VpcId === Subnets![0]!.VpcId,
+      )!;
+
+      // Database is in the task's availability zone.
+      expect(instance.AvailabilityZone).toBe(Subnets![0]!.AvailabilityZone);
+      expect(instance.PubliclyAccessible).toBe(false);
+      expect(instance.DeletionProtection).toBe(true);
+
+      // Database admits only the backend security group.
+      const { SecurityGroups } = yield* ec2.describeSecurityGroups({
+        GroupIds: instance.VpcSecurityGroups!.map((group) => group.VpcSecurityGroupId!),
+      });
+      const rules = SecurityGroups!.flatMap((group) => group.IpPermissions ?? []);
+      expect(rules.flatMap((rule) => rule.IpRanges ?? [])).toEqual([]);
+      expect(
+        rules.flatMap((rule) => rule.UserIdGroupPairs ?? []).map((pair) => pair.GroupId),
+      ).toEqual(network.securityGroups ?? []);
+
+      // A protected database refuses to go.
+      const refused = yield* stack.destroy().pipe(Effect.result);
+      expect(Result.isFailure(refused)).toBe(true);
+      const still = yield* rds.describeDBInstances({
+        DBInstanceIdentifier: instance.DBInstanceIdentifier,
+      });
+      expect(still.DBInstances?.length).toBe(1);
+    });
+
   test.provider.skipIf(skipPaid)(
     `${engine} backend end to end on AWS`,
     (stack) =>
       Effect.gen(function* () {
         yield* assertDevAccount;
-        yield* stack.destroy();
         const rootDir = yield* selfHostedApp(`backend-${engine}`);
-
-        // deletionProtection defaults on.
-        const backend = yield* stack.deploy(app(rootDir, undefined));
-        yield* assertRuntime({
-          url: backend.url,
-          siteUrl: backend.siteUrl,
-          text: `written to ${engine}`,
-        });
-
-        const { services } = yield* ecs.describeServices({
-          cluster: backend.service.clusterArn,
-          services: [backend.service.serviceArn],
-        });
-        const network = services![0]!.networkConfiguration!.awsvpcConfiguration!;
-        const { Subnets } = yield* ec2.describeSubnets({ SubnetIds: network.subnets });
-
-        const { DBInstances } = yield* rds.describeDBInstances({});
-        const instance = DBInstances!.find(
-          (candidate) => candidate.DBSubnetGroup?.VpcId === Subnets![0]!.VpcId,
-        )!;
-
-        // Database is in the task's availability zone.
-        expect(instance.AvailabilityZone).toBe(Subnets![0]!.AvailabilityZone);
-        expect(instance.PubliclyAccessible).toBe(false);
-        expect(instance.DeletionProtection).toBe(true);
-
-        // Database admits only the backend security group.
-        const { SecurityGroups } = yield* ec2.describeSecurityGroups({
-          GroupIds: instance.VpcSecurityGroups!.map((group) => group.VpcSecurityGroupId!),
-        });
-        const rules = SecurityGroups!.flatMap((group) => group.IpPermissions ?? []);
-        expect(rules.flatMap((rule) => rule.IpRanges ?? [])).toEqual([]);
-        expect(
-          rules.flatMap((rule) => rule.UserIdGroupPairs ?? []).map((pair) => pair.GroupId),
-        ).toEqual(network.securityGroups ?? []);
-
-        // A protected database refuses to go.
-        const refused = yield* stack.destroy().pipe(Effect.result);
-        expect(Result.isFailure(refused)).toBe(true);
-        const still = yield* rds.describeDBInstances({
-          DBInstanceIdentifier: instance.DBInstanceIdentifier,
-        });
-        expect(still.DBInstances?.length).toBe(1);
-
-        yield* stack.deploy(app(rootDir, false));
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
+        yield* run(stack, rootDir).pipe(
+          // A protected database refuses to go, so a run that stopped early
+          // has to lift protection before it can clean up.
+          Effect.ensuring(
+            stack
+              .deploy(app(rootDir, false))
+              .pipe(Effect.ignore, Effect.andThen(stack.destroy()), Effect.ignore),
+          ),
+        );
+      }),
     { timeout: 3_000_000 },
   );
 };

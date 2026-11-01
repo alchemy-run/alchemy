@@ -131,6 +131,12 @@ export interface OwnedBackendProps extends BackendCommonProps {
 export interface PlatformBackendProps extends BackendCommonProps {
   /** A shared `Convex.Platform`. The backend gets its own database, user and host names. */
   platform: PlatformHandle | Output.ToOutput<PlatformHandle>;
+  /**
+   * The DNS host for this stage's records, such as `Cloudflare.DNS.Adapter()`.
+   * Pass the one the platform uses.
+   * @default Route 53
+   */
+  dns?: DnsConfig;
   domain?: never;
   db?: never;
   /**
@@ -446,7 +452,7 @@ export const Backend = (id: string, props: BackendProps) =>
         ],
       });
       const dns = yield* resolveDomainDns(
-        platform.dns as DnsConfig | undefined,
+        props.platform === undefined ? props.domain.dns : props.dns,
         platform.hostedZoneId as Input<string> | undefined,
       );
       for (const [recordId, name] of [

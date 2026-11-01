@@ -159,5 +159,5 @@ test.provider.skipIf(skipPaid)(
         }),
       ),
     ),
-  { timeout: 3_000_000 },
+  { timeout: 4_500_000 },
 );

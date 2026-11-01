@@ -53,8 +53,6 @@ export interface PlatformHandle {
   domain: string;
   /** The Route 53 hosted zone for `domain`, when Route 53 is the DNS host. */
   hostedZoneId?: string;
-  /** The DNS host for `domain`, when it isn't Route 53. */
-  dns?: DnsConfig;
   /** The VPC. */
   vpcId: string;
   /** The private subnet in the database's availability zone. */
@@ -223,7 +221,6 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
   const handle: PlatformInputs = {
     domain: props.domain,
     hostedZoneId,
-    dns: props.dns as never,
     vpcId: network.vpcId,
     subnetId,
     clusterArn: cluster.clusterArn,

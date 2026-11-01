@@ -83,6 +83,22 @@ alchemy deploy --stage alice
 
 Hosts stay flat under the domain so one wildcard certificate covers them. That's why a stage name can't end in `-cloud` or `-site`.
 
+## Use another DNS host
+
+Pass the same adapter to the platform and to each stage. An adapter can't cross stacks, so a stage doesn't inherit it:
+
+```typescript
+const convex = yield* Convex.Platform("Convex", { domain, db, dns: Cloudflare.DNS.Adapter() });
+```
+
+```typescript
+const backend = yield* Convex.Backend("Backend", {
+  platform: convex,
+  image,
+  dns: Cloudflare.DNS.Adapter(),
+});
+```
+
 ## Keep stages apart
 
 A stage connects to its own database as its own user. It reads and writes its own objects under `<instance>-<uuid>/` in the shared buckets, and the IAM pattern matches the UUID exactly, so stage `pr` can't reach `pr-42-<uuid>/`.
