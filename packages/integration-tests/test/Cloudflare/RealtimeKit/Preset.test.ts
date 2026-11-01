@@ -54,7 +54,7 @@ const expectGone = (accountId: string, appId: string, presetId: string) =>
 // name: the suites run concurrently (`sequence.concurrent`) and a shared
 // preset name would make two stacks create the same preset in the same app
 // and race to a 409.
-const APP_NAME = testName("alchemy-rtk-test-app");
+const APP_NAME = "alchemy-rtk-test-app";
 const LIFECYCLE_PRESET_NAME = testName("alchemy-rtk-test-preset-lifecycle");
 const LIST_PRESET_NAME = testName("alchemy-rtk-test-preset-list");
 

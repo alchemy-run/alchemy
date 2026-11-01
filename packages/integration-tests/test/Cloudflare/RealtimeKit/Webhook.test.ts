@@ -55,7 +55,7 @@ const expectGone = (accountId: string, appId: string, webhookId: string) =>
 // adopt the same singleton app, so they'd otherwise create webhooks in the
 // same app. RealtimeKit enforces a unique webhook url per app, so two suites
 // sharing a url race to a 409 (a shared name alone is not enough to collide).
-const APP_NAME = testName("alchemy-rtk-test-app");
+const APP_NAME = "alchemy-rtk-test-app";
 const LIFECYCLE_WEBHOOK_NAME = testName("alchemy-rtk-test-webhook-lifecycle");
 const LIST_WEBHOOK_NAME = testName("alchemy-rtk-test-webhook-list");
 const LIFECYCLE_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-lifecycle";

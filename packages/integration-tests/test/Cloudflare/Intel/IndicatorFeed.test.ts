@@ -7,7 +7,6 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -42,7 +41,7 @@ const getFeed = (accountId: string, feedId: number) =>
 
 // Deterministic name — feeds cannot be deleted, so every run of this suite
 // adopts the same feed instead of leaking a new one.
-const FEED_NAME = testName("alchemy-intel-test-feed");
+const FEED_NAME = "alchemy-intel-test-feed";
 
 test.provider.skipIf(entitled)(
   "unentitled accounts surface the typed IndicatorFeedsNotEntitled error",
